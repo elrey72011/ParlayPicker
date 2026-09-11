@@ -1,4 +1,4 @@
-"""Owner-only, explicit Drive restore and one-day public-result grading."""
+"""Owner history loading, consolidated grading, and advanced recovery controls."""
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import streamlit as st
@@ -19,44 +19,69 @@ def history(setting):
     return History(site, folder)
 
 
+def restore_history(setting):
+    site=str(setting("PARLAYPICKER_NETLIFY_SITE_ID")).strip()
+    key="public_results_"+site
+    stage = 'opening history storage'
+    try:
+        store=history(setting)
+        stage = 'recovering unconfirmed publications'
+        # Recover known deployments after a Streamlit restart. Only the
+        # site's currently published deployment can be confirmed.
+        from app_core.netlify_publishing import deployment_status
+        token=str(setting('PARLAYPICKER_NETLIFY_TOKEN')).strip()
+        for pending in store.all('deployments'):
+            try:
+                store.read('confirmed/'+pending['deploy_id']+'.json')
+            except Exception:
+                status = None
+                try:
+                    if pending['deploy_id'].startswith('sftp-'):
+                        from app_core import sftp_publishing
+                        status=sftp_publishing.deployment_status(pending['deploy_id'],sftp_publishing.configuration(setting))
+                    elif token:
+                        status=deployment_status(pending['deploy_id'],site,token)
+                except (ValueError,RuntimeError):
+                    st.warning('An unconfirmed hosting publication could not be verified. Continuing to restore confirmed history; the unverified publication will not be counted.')
+                if status and status['state']=='ready':
+                    # Storage/integrity failures must still stop restore.
+                    store.confirm(pending['deploy_id'],pending['package_hash'])
+        stage = 'reading saved publications and results'
+        pubs=store.publications();revisions=store.all('scores');imports=store.all('imports');locks=store.all('locks')
+        st.session_state[key]={'publications':pubs,'revisions':revisions,'imports':imports,'grading_runs':store.all('grading_runs'),'prop_revisions':store.all('prop_stats'),'prop_imports':store.all('prop_imports'),'locks':locks,'rows':report(pubs,revisions,imports,locks)}
+        st.success('Public history restored.')
+        return True
+    except Exception as exc:
+        from app_core.evidence_config import safe_error
+        detail = safe_error(exc, 'History restore while ' + stage)
+        st.error('Public history restore failed while ' + stage + '. ' + detail + ' No saved history was replaced.')
+        return False
+
+
 def render_history(setting):
     site=str(setting('PARLAYPICKER_NETLIFY_SITE_ID')).strip()
     key='public_results_'+site
-    with st.expander('Public results history', expanded=False):
-        st.caption('Only confirmed, fresh pregame publications count. Restore from Drive, grade a date, then build and publish a new preview to update the public tracker. These controls do not run during navigation.')
+    attempt='history_restore_attempt_'+site
+    refresh_requested=st.session_state.pop('history_refresh_requested',False)
+    if refresh_requested or (key not in st.session_state and not st.session_state.get(attempt)):
+        st.session_state[attempt]=True
+        with st.spinner('Loading saved picks and results...'):
+            restore_history(setting)
+    saved=st.session_state.get(key)
+    if st.button('Update results and publish',key='public_update_all',disabled=saved is None):
+        try:
+            if not restore_history(setting):
+                raise RuntimeError('History unavailable')
+            saved=st.session_state[key]
+            update_pending_results(setting,saved)
+            st.session_state['publish_results_requested']=True
+            st.success('Results saved. Preparing the updated website.')
+        except Exception:
+            st.error('Results update did not complete. Saved records are retained; no website upload was requested.')
+    with st.expander('History, imports and individual grading', expanded=False):
+        st.caption('Saved history loads automatically once per session. Use Update results and publish for outstanding game and MLB prop results. MLB collection uses bounded batches; unresolved entries remain pending or need review. Imports and individual grading are available below.')
         if st.button('Restore public history from Drive',key='public_history_restore'):
-            stage = 'opening history storage'
-            try:
-                store=history(setting)
-                stage = 'recovering unconfirmed publications'
-                # Recover known deployments after a Streamlit restart. Only the
-                # site's currently published deployment can be confirmed.
-                from app_core.netlify_publishing import deployment_status
-                token=str(setting('PARLAYPICKER_NETLIFY_TOKEN')).strip()
-                for pending in store.all('deployments'):
-                    try:
-                        store.read('confirmed/'+pending['deploy_id']+'.json')
-                    except Exception:
-                        status = None
-                        try:
-                            if pending['deploy_id'].startswith('sftp-'):
-                                from app_core import sftp_publishing
-                                status=sftp_publishing.deployment_status(pending['deploy_id'],sftp_publishing.configuration(setting))
-                            elif token:
-                                status=deployment_status(pending['deploy_id'],site,token)
-                        except (ValueError,RuntimeError):
-                            st.warning('An unconfirmed hosting publication could not be verified. Continuing to restore confirmed history; the unverified publication will not be counted.')
-                        if status and status['state']=='ready':
-                            # Storage/integrity failures must still stop restore.
-                            store.confirm(pending['deploy_id'],pending['package_hash'])
-                stage = 'reading saved publications and results'
-                pubs=store.publications();revisions=store.all('scores');imports=store.all('imports');locks=store.all('locks')
-                st.session_state[key]={'publications':pubs,'revisions':revisions,'imports':imports,'grading_runs':store.all('grading_runs'),'prop_revisions':store.all('prop_stats'),'prop_imports':store.all('prop_imports'),'locks':locks,'rows':report(pubs,revisions,imports,locks)}
-                st.success('Public history restored.')
-            except Exception as exc:
-                from app_core.evidence_config import safe_error
-                detail = safe_error(exc, 'History restore while ' + stage)
-                st.error('Public history restore failed while ' + stage + '. ' + detail + ' No saved history was replaced.')
+            restore_history(setting)
         saved=st.session_state.get(key)
         if saved is None:
             st.info('Restore history before publishing so the public tracker includes its existing record.')
@@ -177,3 +202,33 @@ def render_prop_history(setting,saved,day):
                     st.info('No unambiguous final player statistics found. Props remain pending.')
         except Exception:
             st.error('MLB prop grading or backup failed. Existing results remain available; retry explicitly.')
+
+
+def update_pending_results(setting,saved):
+    """Grade outstanding game records by date; persist each successful revision."""
+    from app_core.imported_recaps import imported_selections
+    from app_core.locked_picks import locked_selections
+    entries=selections(saved['publications'])+imported_selections(saved.get('imports',[]))+locked_selections(saved.get('locks',[]))
+    pending={r['id'] for r in saved['rows'] if r['outcome']=='PENDING'}
+    today=datetime.now(ZoneInfo('America/New_York')).date().isoformat()
+    dates=sorted({r['date'] for r in entries if r['id'] in pending and r['date']<=today})
+    store=history(setting)
+    for day in dates:
+        sports={leg['sport'] for r in entries if r['date']==day and r['id'] in pending for leg in r['legs']}
+        revision=fetch_scores(datetime.fromisoformat(day).date(),sports)
+        store.put('scores/'+digest(revision)+'.json',revision)
+        saved['revisions'].append(revision)
+        saved['rows']=report(saved['publications'],saved['revisions'],saved.get('imports',[]),saved.get('locks',[]))
+
+    from app_core import public_prop_history as props
+    prop_entries=props.selections(saved['publications'],saved.get('prop_imports',[]))
+    prop_rows=props.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[]))
+    prop_pending={r['id'] for r in prop_rows if r['outcome']=='PENDING'}
+    for day in sorted({r['date'] for r in prop_entries if r['id'] in prop_pending and r['date']<=today}):
+        selected=[r for r in prop_entries if r['id'] in prop_pending and r['date']==day]
+        checked={entry_id:r['recorded_at'] for r in sorted(saved.get('prop_revisions',[]),key=lambda r:r['recorded_at']) for entry_id in r.get('checked',[])}
+        selected.sort(key=lambda e:(checked.get(e['id'],''),e['id']))
+        revision=props.fetch_actuals(datetime.fromisoformat(day).date(),selected)
+        if revision['actuals'] or revision.get('checked'):
+            store.put('prop_stats/'+digest(revision)+'.json',revision)
+            saved.setdefault('prop_revisions',[]).append(revision)

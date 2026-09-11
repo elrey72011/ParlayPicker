@@ -102,14 +102,14 @@ def test_ui_archives_before_upload_and_confirms_only_verified_page(monkeypatch):
     monkeypatch.setattr(remote,'deployment_status',lambda identity,c:{'state':'ready'})
     at=AppTest.from_function(ui_app).run()
     assert not at.exception and not calls
-    at.button(key='sftp_verify').click().run()
     assert not calls
     at.button(key='sftp_publish').click().run()
     assert not at.exception
-    assert calls==['archive','submitted','upload'] and not at.success
-    at.button(key='sftp_status').click().run()
     assert calls==['archive','submitted','upload','confirmed']
-    assert at.success and not at.exception
+    assert not at.exception
+    assert at.button(key='sftp_publish').disabled
+    at.run()
+    assert calls==['archive','submitted','upload','confirmed']
 
 
 def test_transport_pins_key_before_auth_and_closes_client(monkeypatch):
@@ -148,7 +148,6 @@ def test_failed_backup_does_not_upload_or_retry_on_rerun(monkeypatch):
     monkeypatch.setattr(remote,'site_info',lambda c:{'url':c['url']})
     monkeypatch.setattr(remote,'deploy',lambda *a:calls.append('upload'))
     at=AppTest.from_function(ui_app).run()
-    at.button(key='sftp_verify').click().run()
     at.button(key='sftp_publish').click().run()
     at.run()
     assert not calls and not at.exception

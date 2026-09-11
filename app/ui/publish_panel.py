@@ -30,8 +30,8 @@ def source_fingerprint(games, candidates, props, dfs, options):
 
 
 def render_publish_panel(games, candidates, props=None, dfs=None):
-    st.subheader('Preview & Publish')
-    st.caption('Private publishing workspace. Preview first, then choose local output or the separate configured public website controls below. Local output on Streamlit Cloud stays on the server; download the HTML to keep a copy.')
+    st.subheader('Publish board')
+    st.caption('History and previews load automatically. Lock selected picks to save and publish them, or review the board below and publish it. Player props and DraftKings options are included as selected.')
     token = str(setting('PARLAYPICKER_PUBLISH_TOKEN'))
     if len(token) < 16:
         st.info('Publishing is locked. Configure PARLAYPICKER_PUBLISH_TOKEN with at least 16 characters in Streamlit secrets or the local environment. Never put it in the repository.')
@@ -42,10 +42,27 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
         return
     from app.ui.public_results import render_history
     public_results = render_history(setting)
+    publish_results_requested = st.session_state.pop('publish_results_requested', False)
     if st.session_state.pop('lock_saved_notice', False):
-        st.success('Picks locked in Drive. Build a new preview and publish to update the Locked results on your website.')
+        st.success('Picks locked in Drive. Earlier locks keep their original selections and odds.')
+        notice=st.session_state.pop('lock_publish_notice', None)
+        if notice:
+            st.info(notice)
     if games is None or games.empty:
-        st.info('Run Game Analysis to prepare game picks first.')
+        if publish_results_requested:
+            from copy import deepcopy
+            from app.ui.sftp_publish import publish_action
+            record=st.session_state.get('public_results_'+str(setting('PARLAYPICKER_NETLIFY_SITE_ID')).strip(),{})
+            pubs=record.get('publications',[])
+            if pubs:
+                package=deepcopy(max(pubs,key=lambda p:p['confirmed_at'])['package'])
+                package['schema_version']=5
+                package.setdefault('parlays',[])
+                package['results']=public_results or []
+                st.info(publish_action(package,setting))
+            else:
+                st.info('Results saved. Refresh picks to create your first public board.')
+        st.info('Use Refresh picks to prepare game picks.')
         return
     props = props if isinstance(props,pd.DataFrame) else pd.DataFrame()
     def describe_dates(frame):
@@ -68,7 +85,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     if prop_date and pd.Timestamp.now(tz='UTC') - pd.Timestamp(prop_date) > pd.Timedelta(minutes=15):
         st.warning('Saved player props are older than 15 minutes. Run Player Props to refresh them before including them as current selections.')
     dfs = dfs or {}
-    include_props = st.checkbox('Include saved player props', value=False, disabled=props.empty)
+    include_props = st.checkbox('Include saved player props', value=bool(prop_date and pd.Timestamp.now(tz='UTC')-pd.Timestamp(prop_date)<=pd.Timedelta(minutes=15)), disabled=props.empty)
     choices = ['None', *sorted(k for k,v in dfs.items() if isinstance(v,pd.DataFrame) and not v.empty)]
     chosen = st.selectbox('DraftKings slate to include', choices)
     slate = start = ''
@@ -84,8 +101,9 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     if saved and saved['fingerprint'] != fingerprint:
         st.session_state.pop('publication_preview', None)
         saved = None
-        st.info('Inputs changed. Build and review a new preview before publishing.')
-    if st.button('Build preview', key='publication_build'):
+        st.info('Preview updated to reflect your latest inputs.')
+    rebuild = st.button('Refresh preview', key='publication_build')
+    if saved is None or rebuild:
         try:
             boards = [per_game_board(games,candidates,family) for family in ('overall','sides','totals')]
             package = build_package(*boards, props=selected_props,
@@ -101,23 +119,29 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
             saved = None
             st.error('Preview could not be built: '+str(exc))
     if not saved:
+        if publish_results_requested:
+            st.error('Results were saved, but the preview could not be prepared. Correct the inputs and click Publish board.')
         return
     package = saved['package']
+    if publish_results_requested:
+        from app.ui.sftp_publish import publish_action
+        st.info(publish_action(package, setting))
     st.write(f"{len(package['games']['overall'])} games · {len(package['props'])} props · {len(package['dfs'])} DFS lineups")
     import streamlit.components.v1 as components
     components.html(saved['html'], height=650, scrolling=True)
     from app.ui.lock_picks import render_lock_picks
     render_lock_picks(package, setting)
-    st.download_button('Download preview HTML', saved['html'], 'parlaypicker-preview.html','text/html')
-    st.download_button('Download public data', json.dumps(package,indent=2), 'public-board.json','application/json')
-    destination = Path(str(setting('PARLAYPICKER_PUBLICATION_DIR', str(ROOT/'outputs/public-board-site'))))
-    st.caption('Local output: '+str(destination))
-    if st.button('Publish reviewed board locally', key='publication_publish'):
-        try:
-            publish_package(package,destination)
-            st.success('Published locally. This local action does not update the public website. Download the HTML or use the separate public publish controls below.')
-        except (OSError,ValueError) as exc:
-            st.error('Local publication failed: '+str(exc))
+    with st.expander('Downloads and local copy', expanded=False):
+        st.download_button('Download preview HTML', saved['html'], 'parlaypicker-preview.html','text/html')
+        st.download_button('Download public data', json.dumps(package,indent=2), 'public-board.json','application/json')
+        destination = Path(str(setting('PARLAYPICKER_PUBLICATION_DIR', str(ROOT/'outputs/public-board-site'))))
+        st.caption('Local output: '+str(destination))
+        if st.button('Publish reviewed board locally', key='publication_publish'):
+            try:
+                publish_package(package,destination)
+                st.success('Published locally. This local action does not update the public website. Download the HTML or use the separate public publish controls below.')
+            except (OSError,ValueError) as exc:
+                st.error('Local publication failed: '+str(exc))
 
     from app.ui.remote_publish import render_remote_publish
     if public_results is None:

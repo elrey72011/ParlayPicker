@@ -39,9 +39,10 @@ def test_preview_explicit_publish_and_invalidation(tmp_path, monkeypatch):
     at.session_state['test_pick']='Under 8.5'
     at.run()
     assert not at.exception
-    assert all(b.key!='publication_publish' for b in at.button)
+    assert any(b.key=='publication_publish' for b in at.button)
+    assert at.session_state['publication_preview']['package']['games']['overall'][0]['pick']=='Under 8.5'
     assert (tmp_path/'site/index.html').read_text(encoding='utf-8')==original
-    assert any('Inputs changed' in i.value for i in at.info)
+    assert any('Preview updated' in i.value for i in at.info)
 
 
 def test_wrong_token_cannot_publish(monkeypatch):
