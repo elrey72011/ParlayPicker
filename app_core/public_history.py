@@ -238,6 +238,7 @@ def report(publications, revisions, imports=None, locks=None):
         rows.append({**{k:v for k,v in item.items() if k!='legs'},'outcome':outcome,
                      'picks':' + '.join(x['game']+': '+x['pick'] for x in item['legs']),
                      'odds':' / '.join(str(x['odds']) for x in item['legs']),
+                     **({'sport':item['legs'][0]['sport']} if item['group']=='Locked' else {}),
                      **({'quote_source':item['legs'][0]['quote_source']} if item['group']=='Locked' and item['legs'][0].get('quote_source') else {}),
                      'final_score':' / '.join(x[1] or 'Pending' for x in graded)})
     return rows

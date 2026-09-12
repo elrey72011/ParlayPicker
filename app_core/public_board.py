@@ -197,7 +197,7 @@ def validate_package(package):
             raise ValueError('Invalid public results')
         seen=set()
         for row in package['results']:
-            exact(row, 'id category date group published_at outcome picks odds final_score' + (' quote_source' if 'quote_source' in row else '') + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
+            exact(row, 'id category date group published_at outcome picks odds final_score' + (' quote_source' if 'quote_source' in row else '') + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' sport' if row.get('group')=='Locked' and row.get('category')=='overall' and package['schema_version']==5 and 'sport' in row else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
             projection_metric(row)
             if not all(isinstance(v,str) for k,v in row.items() if k != 'expected_stat') or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
