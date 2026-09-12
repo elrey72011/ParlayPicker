@@ -3859,10 +3859,13 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     if best_picks_df is None or best_picks_df.empty:
         return best_picks_df
     out = best_picks_df.copy()
+    def boolean_flag(name, default):
+        # Fill scalars explicitly instead of relying on pandas object downcasting.
+        values = pd.Series(out.get(name, default), index=out.index)
+        return values.map(lambda value: default if pd.isna(value) else bool(value)).astype(bool)
+
     status = _string_series(out, "Pick_Status").str.strip()
-    production_eligible = pd.Series(
-        out.get("production_eligible", False), index=out.index
-    ).fillna(False).astype(bool)
+    production_eligible = boolean_flag("production_eligible", False)
     production_bet = (
         _numeric_series(out, "production_bet_amount", 0.0)
         if "production_bet_amount" in out.columns
@@ -3877,18 +3880,10 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     production_edge = production_edge.fillna(_numeric_series(out, "effective_edge"))
     production_edge = production_edge.fillna(_numeric_series(out, "edge"))
     line_source = _string_series(out, "market_line_source").str.strip().str.lower()
-    line_ok = pd.Series(
-        out.get("line_consistency_flag", True), index=out.index
-    ).fillna(True).astype(bool)
-    event_ok = pd.Series(
-        out.get("line_event_identity_match_flag", True), index=out.index
-    ).fillna(True).astype(bool)
-    gemini_gate_enabled = pd.Series(
-        out.get("gemini_gate_enabled", False), index=out.index
-    ).fillna(False).astype(bool)
-    gemini_approved = pd.Series(
-        out.get("gemini_approved", False), index=out.index
-    ).fillna(False).astype(bool)
+    line_ok = boolean_flag("line_consistency_flag", True)
+    event_ok = boolean_flag("line_event_identity_match_flag", True)
+    gemini_gate_enabled = boolean_flag("gemini_gate_enabled", False)
+    gemini_approved = boolean_flag("gemini_approved", False)
     gemini_ok = ~gemini_gate_enabled | gemini_approved
 
     funded_approved = (
@@ -3936,9 +3931,7 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         & event_ok
         & gemini_ok
     )
-    controlled_marker = pd.Series(
-        out.get("controlled_card_recovery", False), index=out.index
-    ).fillna(False).astype(bool)
+    controlled_marker = boolean_flag("controlled_card_recovery", False)
     controlled_value = funded_approved & controlled_marker
     premium = funded_approved & ~controlled_marker
     approved = premium | controlled_value

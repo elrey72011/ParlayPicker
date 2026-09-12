@@ -603,3 +603,23 @@ def test_resolved_model_direction_survives_overlays_and_both_ranking_stages(monk
     assert bool(winner.best_available_selection_verified)
     assert audit.loc[audit.market_type.eq('total_under'), 'model_direction_guard_applied'].all()
     assert not audit.wager_approved.any()
+
+
+def test_classification_nullable_boolean_flags_without_downcasting_warnings():
+    import warnings
+    base = dict(best_pick='Over 8.5', Pick_Status='Actionable', production_eligible=True,
+                production_bet_amount=5.0, production_expected_value=.05,
+                production_edge=.03,market_line_source='live')
+    frame=pd.DataFrame([base,base,base,base])
+    frame['line_consistency_flag']=pd.Series([None,True,pd.NA,True],dtype=object)
+    frame['line_event_identity_match_flag']=pd.Series([None,pd.NA,True,True],dtype=object)
+    frame['gemini_gate_enabled']=pd.Series([None,True,True,False],dtype=object)
+    frame['gemini_approved']=pd.Series([None,None,True,False],dtype=object)
+    frame['controlled_card_recovery']=pd.Series([None,None,True,False],dtype=object)
+    frame['production_eligible']=pd.Series([True,True,True,None],dtype=object)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error',FutureWarning)
+        result=classify_best_available_picks(frame)
+    assert result.wager_approved.tolist()==[True,False,True,False]
+    assert result.sellable_as_premium.tolist()==[True,False,False,False]
+    assert result.sellable_as_value_card.tolist()==[False,False,True,False]

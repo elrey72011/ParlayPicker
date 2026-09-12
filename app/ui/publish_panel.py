@@ -149,9 +149,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     st.write(f"{len(package['games']['overall'])} games · {len(package['props'])} props · {len(package['dfs'])} DFS lineups")
     from app.ui.lock_picks import render_lock_picks
     render_lock_picks(package, setting)
-    import streamlit.components.v1 as components
     with st.expander('Website preview', expanded=False):
-        components.html(saved['html'], height=650, scrolling=True)
+        st.iframe(saved['html'], height=650)
     with st.expander('Downloads and local copy', expanded=False):
         st.download_button('Download preview HTML', saved['html'], 'parlaypicker-preview.html','text/html')
         st.download_button('Download public data', json.dumps(package,indent=2), 'public-board.json','application/json')
