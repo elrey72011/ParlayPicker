@@ -133,6 +133,8 @@ def main():
     at.text_input(key='publication_token').set_value('test-only-publish-token').run()
     assert not at.exception and not calls
     assert not at.button(key='public_update_all').disabled
+    assert not any(b.key=='public_history_grade' for b in at.button)
+    at.checkbox(key='public_history_tools').check().run()
     assert at.button(key='public_history_grade')
     at.button(key='public_update_all').click().run()
     assert not at.exception and len(calls)==2 and calls[0]=='grade'

@@ -200,3 +200,19 @@ def test_recommendations_fail_closed_on_incomplete_data_and_nonpositive_edge():
         assert row.status=='PASS' and row.Play_Stake==0
         assert row['pick']==base['best_pick']
         assert row['qualification_reason']
+
+
+def test_public_quote_checks_only_matching_games(monkeypatch):
+    from app_core import per_game_boards as module
+    count=20
+    board=pd.DataFrame([final(gid=f'g{i}',export_run_id='20260911T200000.000000Z') for i in range(count)])
+    audit=pd.DataFrame([quoted_candidate(matchup_id=f'g{i}') for i in range(count)])
+    checked=[]
+    original=module.public_quote
+    def tracked(row,*args):
+        checked.append(row['matchup_id'])
+        return original(row,*args)
+    monkeypatch.setattr(module,'public_quote',tracked)
+    result=module.per_game_board(board,audit,novig_only=True)
+    assert len(result)==count and result.quote_source.eq('Novig').all()
+    assert len(checked)==2*count  # Eligibility and selected-row metadata, not count squared.

@@ -94,6 +94,7 @@ def test_explicit_restore_and_grade_no_rerun_requests(monkeypatch):
     monkeypatch.setattr(ui,'fetch_scores',lambda day,sports: calls.append((day,sports)) or {'recorded_at':'2026-09-10T00:00:00Z','scores':scores()})
     at=AppTest.from_string("from app.ui.public_results import render_history\nrender_history(lambda key: 'site-1234' if key=='PARLAYPICKER_NETLIFY_SITE_ID' else 'folder')").run()
     assert not at.exception and not calls
+    at.checkbox(key='public_history_tools').check().run()
     at.button(key='public_history_restore').click().run()
     from datetime import date
     at.date_input(key='public_results_day').set_value(date(2026,9,9)).run()
@@ -128,6 +129,7 @@ def test_old_netlify_failure_does_not_block_confirmed_history(monkeypatch):
     def fail(*args):raise RuntimeError('private-token provider error')
     monkeypatch.setattr(remote,'deployment_status',fail)
     at=AppTest.from_string("from app.ui.public_results import render_history\nrender_history(lambda key: 'site-1234' if key=='PARLAYPICKER_NETLIFY_SITE_ID' else 'folder')").run()
+    at.checkbox(key='public_history_tools').check().run()
     at.button(key='public_history_restore').click().run()
     assert not at.exception and not at.error and at.success and at.warning
     assert 'private-token' not in str(at.warning)
@@ -150,6 +152,7 @@ def test_restore_error_identifies_stage_without_exposing_exception(monkeypatch):
     def fail(setting):raise RuntimeError('private signing key')
     monkeypatch.setattr(ui,'history',fail)
     at=AppTest.from_string("from app.ui.public_results import render_history\nrender_history(lambda key: 'site-1234')").run()
+    at.checkbox(key='public_history_tools').check().run()
     at.button(key='public_history_restore').click().run()
     assert not at.exception
     assert 'opening history storage' in at.error[0].value

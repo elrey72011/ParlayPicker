@@ -81,7 +81,16 @@ def render_history(setting):
             st.success('Results saved. Preparing the updated website.')
         except Exception:
             st.error('Results update did not complete. Saved records are retained; no website upload was requested.')
-    with st.expander('History, imports and individual grading', expanded=False):
+    # Collapsing a Streamlit expander alone does not defer its Python work.
+    # Keep detailed imports/grading tables off the normal path to locking.
+    saved=st.session_state.get(key)
+    if not st.checkbox('Show history, imports and individual grading', key='public_history_tools'):
+        if saved is None:
+            st.info('History is unavailable. Open history tools to retry restoring it.')
+            return None
+        from app_core import public_prop_history as prop_history
+        return current_records(saved['rows']+prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[])))
+    with st.expander('History, imports and individual grading', expanded=True):
         st.caption('Saved history loads automatically once per session. Use Update results and publish for outstanding game and MLB prop results. MLB collection uses bounded batches; unresolved entries remain pending or need review. Imports and individual grading are available below.')
         if st.button('Restore public history from Drive',key='public_history_restore'):
             restore_history(setting)
