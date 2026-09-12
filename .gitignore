@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 .test-deps/
 .pytest_cache/
 .pytest-tmp/
@@ -76,5 +77,10 @@ streamlit_app.py.bak*
 # Append-only prediction evidence belongs on persistent runtime storage.
 data/prediction_evidence/
 
-# Generated private previews and sanitized local publications
-outputs/public-board*/
+# Local research datasets, generated previews, test reports, and audit captures.
+# Keep curated data/, model artifacts, fixtures, and documentation tracked.
+/outputs/
+/output/
+/.codex-export-audit/
+/test-results/
+/data/parlay_log/

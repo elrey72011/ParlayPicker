@@ -1,68 +1,100 @@
 # ParlayPicker
 
-ParlayPicker is a robust, data-driven sports betting pipeline designed to generate +EV (Expected Value) betting recommendations. It combines live market odds, statistical baselines, and machine learning predictions to identify actionable edges across multiple sports leagues (NFL, NCAAF, NBA, WNBA, NHL, MLB, and NCAAB).
+ParlayPicker is a Streamlit workspace for sports analysis, saved research picks,
+player props, DraftKings Classic lineups, and graded public results. The owner
+chooses which picks to lock and publishes a static website to Namecheap/SFTP.
+Research selections and estimated probabilities are distinct from approved
+wagers and observed results.
 
-## Current Architecture & Operation
+## Run locally
 
-The system operates entirely autonomously using the following pipeline:
+Use Python 3.12 to match GitHub CI. Create and activate a virtual environment,
+then run:
 
-### 1. Data Ingestion
-The system pulls live market odds from **TheOddsAPI** and merges them with statistical baseline data from **TheOver** (via uploaded CSVs or API).
+```sh
+python -m pip install -r requirements.txt
+python -m streamlit run streamlit_app.py
+```
 
-### 2. Identity Resolution
-We use strict string sanitization, canonical game keys (`League|Home|Away|Date`), and fuzzy matching (`difflib`/`SequenceMatcher`) to safely resolve team names (e.g., "St. Louis" vs "Saint Louis") and intra-city matchups across different data sources.
+Configure provider credentials in environment variables or the local
+`.streamlit/secrets.toml`; never put credentials in tracked files. See
+[the quick start](docs/QUICKSTART.md), [Drive evidence setup](docs/evidence-storage-setup.md),
+and [Namecheap publication setup](docs/namecheap-publishing.md).
 
-### 3. ML Prediction Engine
-We use a cached XGBoost `PredictionEngine` to generate win probabilities.
-* **Resilience:** If the ML engine fails or feature matrices are empty, the system gracefully and unconditionally falls back to statistical baseline probabilities without crashing.
-* **Target Integrity:** The game-winner model is used only for moneylines. Spread and total rows require a separately validated target-specific model; otherwise ML stays unavailable and the blend uses each remaining independent source once.
+## Daily workflow
 
-### 4. Expected Value (EV) Engine
-* **Probability Calibration:** We do not blindly trust the ML. We calibrate probabilities using a conservative split (typically 30% Model / 70% Market) to respect efficient markets.
-* **Synthetic De-Vigging:** If a market lacks opposing lines, we simulate a standard 4.5% sportsbook vig to calculate true market probability.
-* **Sanity Clamps:** Any game showing an Expected Value > 0.40 (40% edge) is flagged as a "Data Error / Suspended Line" and forced to "No Play".
+1. Click **Refresh picks** for game analysis. **Run Player Props** is a separate
+   action with its own saved results and timestamp.
+2. Open **Workspace → Preview & Publish** and enter the publishing token.
+   Saved history loads automatically once per session.
+3. Choose the games under **Lock Overall Best Picks**, then click
+   **Lock selected picks**. This saves the original selections to Drive and
+   publishes the reviewed board. Deselect any eligible options you want to leave
+   for later. Existing locks retain their original picks and prices.
+4. Include saved props or a generated DraftKings slate as needed. Use
+   **Publish board** for changes that do not create new locks.
+5. To grade outstanding results, click **Update results and publish**. This can
+   be done without running new game analysis. Unresolved results remain pending
+   or need review.
 
-### 5. Pick Filtering & Tiers
-Picks are graded into specific statuses based on strict logic:
-* `Actionable`
-* `High Variance/Speculative` (EV between 0.25 and 0.40)
-* `Below Threshold`
-* `Fallback / Low Confidence`
-* `Missing Line`
-* `No Play`
+Game locks require the game date in Eastern time, a game that has not started,
+and analysis plus a supported quote/observation within the 30-minute window.
+**Refresh preview** does not fetch fresh odds. ESPN college research picks may
+use **Observed at ... via ESPN**, which measures when the snapshot was fetched;
+the sportsbook's own update time remains unknown. These picks remain research
+selections, not wager approvals.
 
-### 6. Triple Filter Ranking
-Valid picks are sorted by Tier (S, A, B, C, D) and then strictly ranked by their Expected Value.
+See [the complete publishing workflow](docs/publishing-workflow.md),
+[lock eligibility explanations](docs/lock-eligibility-audit.md),
+[separate game and prop analysis](docs/separate-analysis.md), and
+[player-prop grading](docs/public-prop-results.md).
 
-### 7. Performance Dashboard
-The `results_dashboard.py` auto-grades historical exports. It uses safe boolean extraction to prevent string-matching bugs (e.g., ensuring empty strings don't evaluate to True) and calculates Overall Win Rate, Total Net Profit, and Picks Evaluated for both "Actionable" and "All Picks".
+## Website and results
 
-### 8. Infrastructure Resilience
-The pipeline is hardened for headless/server deployment. It catches unhandled network timeouts, safely defaults zero-division errors in odds math to `-110`, and skips rate-limited APIs without crashing the main loop.
+The public site includes Picks, Player Props, Parlays, Results, DraftKings DFS,
+and How Picks Work. Locked selections retain their saved line, price, source,
+and timing. The Results page separates the locked overall record from first
+published Overall Best Picks, Sides, Totals, and Parlays. Categories overlap and
+must not be added together. The first qualifying published Top 10 cohort of a
+day is tracked separately; later updates do not rewrite that cohort.
 
-### 9. Gemini Wager Review
+Win percentages exclude pushes, pending results, and unresolved cases. Locking
+is a record of an owner-selected pick; it does not place a bet or establish that
+the selection passed the wager-approval checks.
 
-Gemini is integrated as a bounded secondary reviewer for both game picks and
-player props. When **Require Gemini Review for Bets** is enabled:
+## Code map
 
-* A funded wager must receive a structured Gemini review that selects the exact
-  same pick with `MEDIUM` or `HIGH` confidence and no blocking risk flag.
-* `HIGH` confidence preserves the deterministic stake; `MEDIUM` uses 75% of it.
-* Disagreement, low confidence, missing live inputs, invalid JSON, quota/API
-  failure, or a missing key holds the wager at `$0`.
-* Gemini can never promote a model-rejected row or flip to an opposing pick
-  without a separately validated sportsbook line and price.
+| Path | Responsibility |
+| --- | --- |
+| `streamlit_app.py` | Active Streamlit entry point |
+| `app/ui/` | Owner controls, publishing, history, and lock panels |
+| `core/streamlit_pipeline.py` | Shared game-analysis orchestration |
+| `app_core/` | Provider adapters, modeling, evidence, props, and public records |
+| `publishing/board.html` | Static public website template |
+| `scripts/` | Maintained command-line tools and scheduled workflow entry points |
+| `tests/` | Automated pytest suite used by CI |
+| `data/`, `models/` | Curated datasets, calibration inputs, and model artifacts |
+| `archive/experimental_scripts/` | Historical experiments; not the active application |
 
-Set either `GOOGLE_API_KEY` or `GEMINI_API_KEY` in Streamlit secrets or the
-deployment environment. Never commit the key to this repository.
+Gemini is an optional bounded secondary reviewer. Enabling it does not replace
+quote verification or the deterministic wager checks. See
+[Gemini review](docs/gemini-review.md), [selector validation](docs/selector-validation.md),
+[qualified-pick evaluation](docs/qualified-picks-evaluation.md), and
+[scheduled research/grading](docs/research-scheduler.md).
 
-## Selector validation
+## Tests and maintenance
 
-Generate provenance-gated Markdown/JSON reports, compare the exported selector
-against market probability on the same games, and separate approved wagers from
-coverage picks. See [the validation guide](docs/selector-validation.md) for CSV
-contracts and the `scripts/validate_selector.py` report/freeze commands.
+```sh
+python -m pip install pytest
+python -m pytest -q
+```
 
-Master Analysis now saves immutable prediction evidence automatically. Performance
-Recap grades the saved decisions and refreshes per-version validation reports.
-See the live evidence workflow in the validation guide for storage and CLI details.
+Default discovery targets `tests/`, matching the CI suite. Root-level diagnostics
+are manual tools and may perform provider calls or write data; run only the
+specific tool you intend. For timing reports and isolated CI shards, see
+[CI test execution](docs/ci-test-execution.md).
+
+Local `output/`, `outputs/`, audit captures, and runtime parlay logs are ignored
+by Git. Curated data, model artifacts, calibration files, and historical records
+are retained. See [repository maintenance](docs/repository-maintenance.md) before
+removing research outputs or changing dependencies and shared pipeline code.

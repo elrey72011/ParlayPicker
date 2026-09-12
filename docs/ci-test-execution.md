@@ -6,7 +6,24 @@ New commits cancel superseded runs on the same pull request. Pushes to main reta
 
 Each test job prints the 30 slowest test phases. JUnit XML reports include individual test durations and remain downloadable from the workflow artifacts for seven days, including after a test failure. Dependency installation already uses the pip download cache.
 
-Local verification:
+## Local verification
+
+Install the same application dependencies as CI, plus pytest:
+
+```sh
+python -m pip install -r requirements.txt pytest
+python -m pytest -q
+# One selected module:
+python -m pytest -q tests/test_locked_picks.py
+```
+
+`pytest.ini` sets default discovery to `tests/`, matching CI. Root-level manual
+diagnostics and archived experiments are not collected by default. An explicit
+file path can still be supplied when intentional. The obsolete `run_tests.py`
+dummy and unittest-based `run_all_tests.py` have been removed; neither ran the
+maintained pytest suite correctly.
+
+To reproduce the CI partitions:
 
 ```sh
 python scripts/run_ci_tests.py --shard 1 --shards 2 -q tests --durations=30 --junitxml=test-results/full-suite-1.xml
