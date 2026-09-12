@@ -2,6 +2,7 @@
 from collections import Counter
 import math
 
+from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES
 import pandas as pd
 
 from core.selector_validation import timestamp
@@ -37,7 +38,7 @@ def probability(value):
     return value if value is not None and 0 <= value <= 1 else None
 
 
-def build_readiness(audit, final=None, *, quote_warning_minutes=15, diagnostics=None):
+def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MINUTES, diagnostics=None):
     """One diagnostic row per supplied snapshot/game, including failed games.
 
     Quote age is measured at capture, not at report opening. The warning limit

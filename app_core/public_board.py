@@ -1,5 +1,6 @@
 """Allowlisted public data built from finalized exports; no provider requests."""
 from app_core.public_quote_policy import supported_quote
+from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES, package_age_minutes
 import math
 import re
 from datetime import datetime, timezone
@@ -119,7 +120,7 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
     from app_core.public_prop_timing import with_game_starts
     public_props=[] if props is None else [pick_record(row, prop=True, as_of=props_as_of) for _,row in props.iterrows()]
     public_props=with_game_starts(public_props,games['overall'])
-    return {'schema_version':2, 'selection_policy':'qualified-v1', 'parlays':build_parlays(games['overall'], built_at, qualified_only=True), 'built_at':built_at.isoformat(), 'stale_after_minutes':15,
+    return {'schema_version':2, 'selection_policy':'qualified-v1', 'parlays':build_parlays(games['overall'], built_at, qualified_only=True), 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
             'games':games, 'props':public_props,
             'dfs':lineups}
 
@@ -134,7 +135,8 @@ def validate_package(package):
         if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
             raise ValueError('Invalid expected statistic')
     exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' selection_policy' if 'selection_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else ''))
-    if package['schema_version'] not in {1,2,3,4,5} or package['stale_after_minutes'] != 15:
+    package_age_minutes(package)
+    if package['schema_version'] not in {1,2,3,4,5}:
         raise ValueError('Unsupported public package version/policy')
     if 'selection_policy' in package and package['selection_policy'] != 'qualified-v1':
         raise ValueError('Unsupported selection policy')
@@ -187,7 +189,7 @@ def validate_package(package):
                 raise ValueError('Invalid player fields')
     if package['schema_version'] in {2,3,4,5}:
         from app_core.public_parlays import build_parlays
-        expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_only=package.get('selection_policy')=='qualified-v1')
+        expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_only=package.get('selection_policy')=='qualified-v1', max_age_minutes=package_age_minutes(package))
         if package['parlays'] != expected:
             raise ValueError('Parlays must match the original disjoint selections and estimates')
     if package['schema_version'] in {3,4,5}:

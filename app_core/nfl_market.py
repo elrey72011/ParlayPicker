@@ -1,6 +1,7 @@
 """NFL market snapshots and score comparisons, not model predictions or wagers."""
 from collections import Counter
 from datetime import datetime, timezone, timedelta
+from app_core.quote_freshness import QUOTE_MAX_AGE_SECONDS
 import math
 from app_core import nfl_market_store as store
 from app_core.research_api_budget import BudgetLimit
@@ -72,7 +73,7 @@ def quotes(event, observed):
                 raise ValueError("nfl_duplicate_market")
             markets_seen.add(kind)
             at = timestamp(market.get("last_update"))
-            if at is None or not 0 <= (observed - at).total_seconds() <= 900:
+            if at is None or not 0 <= (observed - at).total_seconds() <= QUOTE_MAX_AGE_SECONDS:
                 rejected["missing_or_stale_market_timestamp"] += 1
                 continue
             try:

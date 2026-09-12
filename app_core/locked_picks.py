@@ -2,6 +2,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from app_core.public_history import eligible, event_key, digest
+from app_core.quote_freshness import package_age_minutes
 
 
 def lock_candidates(package, at):
@@ -11,7 +12,7 @@ def lock_candidates(package, at):
     today = clock.astimezone(ZoneInfo('America/New_York')).date().isoformat()
     rows = {}
     for leg in package['games']['overall']:
-        if not eligible(leg, clock):
+        if not eligible(leg, clock, max_age_minutes=package_age_minutes(package)):
             continue
         date = datetime.fromisoformat(leg['start']).astimezone(ZoneInfo('America/New_York')).date().isoformat()
         if date != today:

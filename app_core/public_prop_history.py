@@ -5,6 +5,7 @@ import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from app_core.public_history import digest, now
+from app_core.quote_freshness import package_age_minutes
 
 REVIEW_REASONS={
     'Ambiguous or missing game match',
@@ -36,16 +37,16 @@ def matchup(value):
 def selections(publications,imports=()):
     from app_core.public_prop_timing import with_game_starts
     chosen={}
-    sources=[(p['confirmed_at'],p['package_hash'],with_game_starts(p['package'].get('props',[]),p['package']['games']['overall']),False) for p in publications]
-    sources += [(b['as_of'],b['id'],b['props'],True) for b in imports]
-    for confirmed,key,legs,imported in sorted(sources):
+    sources=[(p['confirmed_at'],p['package_hash'],with_game_starts(p['package'].get('props',[]),p['package']['games']['overall']),False,package_age_minutes(p['package'])) for p in publications]
+    sources += [(b['as_of'],b['id'],b['props'],True,15) for b in imports]
+    for confirmed,key,legs,imported,max_age_minutes in sorted(sources):
         for leg in legs:
             parsed=terms(leg)
             if not parsed or not matchup(leg['game']):continue
             try:
                 start=datetime.fromisoformat(leg['start']);at=datetime.fromisoformat(leg['as_of']);published=datetime.fromisoformat(confirmed)
                 if not start.tzinfo or not at.tzinfo or not published.tzinfo:continue
-                if at>=start or (not imported and not(at<=published<start and (published-at).total_seconds()<=900)):continue
+                if at>=start or (not imported and not(at<=published<start and (published-at).total_seconds()<=max_age_minutes * 60)):continue
                 if leg['odds'] is None or not math.isfinite(leg['odds']) or abs(leg['odds'])<100:continue
             except (ValueError,TypeError):continue
             day=start.astimezone(ZoneInfo('America/New_York')).date().isoformat()

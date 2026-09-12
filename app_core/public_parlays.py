@@ -1,11 +1,12 @@
 """Deterministic, disjoint two-leg research combinations from public game picks."""
+from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES
 import itertools
 import math
 import re
 from datetime import datetime, timezone
 
 
-def build_parlays(rows, now=None, *, qualified_only=False):
+def build_parlays(rows, now=None, *, qualified_only=False, max_age_minutes=QUOTE_MAX_AGE_MINUTES):
     now = now or datetime.now(timezone.utc)
     candidates = []
     for row in rows:
@@ -23,12 +24,12 @@ def build_parlays(rows, now=None, *, qualified_only=False):
             if 'quote_source' in row:
                 if row['quote_source'] != 'Novig' or not row.get('quote_time'):
                     continue
-                if not 0 <= (now-datetime.fromisoformat(row['quote_time'])).total_seconds() <= 900:
+                if not 0 <= (now-datetime.fromisoformat(row['quote_time'])).total_seconds() <= max_age_minutes * 60:
                     continue
             age = (now-datetime.fromisoformat(row['as_of'])).total_seconds()
             start = datetime.fromisoformat(row['start'])
             p, odds = row['win_estimate'], row['odds']
-            if not (0 <= age <= 900 and start > now and 0 < p < 1 and abs(odds) >= 100):
+            if not (0 <= age <= max_age_minutes * 60 and start > now and 0 < p < 1 and abs(odds) >= 100):
                 continue
             decimal = 1 + (odds/100 if odds > 0 else 100/abs(odds))
             if not math.isfinite(decimal):

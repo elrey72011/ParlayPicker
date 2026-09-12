@@ -33,7 +33,7 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
         report = build_readiness(audit, final, diagnostics=diagnostics)
         counts = report["counts"]
         st.write(f"Games: {counts['games']} · Evidence ready for grading: {counts['ready_for_grading']} · Approved wagers: {counts['approved_wagers']}")
-        st.caption("Quote age warning: 15 minutes at capture, for diagnostics only. Feature freshness is unavailable without a source timestamp.")
+        st.caption(f"Quote age warning: {report['quote_warning_minutes']} minutes at capture, for diagnostics only. Feature freshness is unavailable without a source timestamp.")
         table = game_table(report)
         visible = ["league", "matchup", "selected_pick", "readiness", "wager_decision", "displayed_probability",
                    "production_probability", "independent_model_probability", "verified_quote_candidates", "candidate_count",
