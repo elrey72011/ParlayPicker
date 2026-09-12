@@ -1,8 +1,41 @@
 """Immutable owner-selected overall picks, distinct from published/approved history."""
+from collections import Counter
 from datetime import datetime
+import re
 from zoneinfo import ZoneInfo
 from app_core.public_history import eligible, event_key, digest
 from app_core.quote_freshness import package_age_minutes
+
+
+def _identity(leg):
+    key = event_key(leg)
+    if not key:
+        return None
+    start = datetime.fromisoformat(leg['start'])
+    if not start.tzinfo:
+        return None
+    day = start.astimezone(ZoneInfo('America/New_York')).date().isoformat()
+    return digest(('locked-overall', *key[:3], day))
+
+
+def _duplicate_ids(package):
+    # The immutable lock identity is teams/date, including same-day doubleheaders.
+    # Never choose an arbitrary row, and never block unrelated games.
+    counts = Counter(_identity(leg) for leg in package['games']['overall'])
+    return {key for key, count in counts.items() if key and count > 1}
+
+
+def _resolved_pick(leg):
+    pick = str(leg.get('pick') or '').strip()
+    market = leg.get('market', '')
+    if not pick or any(token in pick.lower() for token in ('unresolved', 'unavailable', 'no line', 'no bet')):
+        return False
+    if market.startswith('spread_'):
+        return bool(re.fullmatch(r'.+\s+[+-]\d+(?:\.\d+)?', pick))
+    if market.startswith('total_'):
+        match = re.fullmatch(r'(Over|Under)\s+\d+(?:\.\d+)?', pick, re.I)
+        return bool(match and match[1].lower() == market.split('_')[1])
+    return True
 
 
 def lock_candidates(package, at):
@@ -11,15 +44,16 @@ def lock_candidates(package, at):
     clock = datetime.fromisoformat(at)
     today = clock.astimezone(ZoneInfo('America/New_York')).date().isoformat()
     rows = {}
+    duplicates = _duplicate_ids(package)
     for leg in package['games']['overall']:
-        if not eligible(leg, clock, max_age_minutes=package_age_minutes(package)):
+        if not _resolved_pick(leg) or not eligible(leg, clock, max_age_minutes=package_age_minutes(package)):
             continue
         date = datetime.fromisoformat(leg['start']).astimezone(ZoneInfo('America/New_York')).date().isoformat()
         if date != today:
             continue
-        identity = digest(('locked-overall', *event_key(leg)[:3], date))
-        if identity in rows:
-            raise ValueError('Multiple games have the same teams and date; lock needs an unambiguous game.')
+        identity = _identity(leg)
+        if identity in duplicates:
+            continue
         rows[identity] = {'id': identity, 'category': 'overall', 'date': date, 'group': 'Locked',
                           'published_at': at, 'legs': [dict(leg)]}
     return list(rows.values())
@@ -48,7 +82,7 @@ def locked_selections(locks):
 
 
 def lock_audit(package, at, locks=()):
-    """Explain every current board row without changing eligibility or saved locks."""
+    """Explain every current board row using the new-lock checks; preserve saved locks."""
     from app_core.public_board import validate_package
     from app_core.public_quote_policy import supported_quote
     validate_package(package)
@@ -57,7 +91,7 @@ def lock_audit(package, at, locks=()):
     today = clock.astimezone(eastern).date().isoformat()
     limit = package_age_minutes(package)
     existing = {r['id'] for r in locks}
-    seen, result = set(), []
+    duplicates, result = _duplicate_ids(package), []
     def parsed(value):
         try:
             value = datetime.fromisoformat(value)
@@ -71,11 +105,10 @@ def lock_audit(package, at, locks=()):
         key = event_key(leg) if start else None
         day = start.astimezone(eastern).date().isoformat() if start else ''
         identity = digest(('locked-overall', *key[:3], day)) if key else None
-        event = (*key[:3], start) if key else None
-        if event and event in seen:
-            status, detail = 'Duplicate game entry', 'Same normalized teams and start time already appear in this board.'
-        elif identity in existing:
+        if identity in existing:
             status, detail = 'Already locked', 'Original selection and odds remain saved; no new lock is needed.'
+        elif identity in duplicates:
+            status, detail = 'Duplicate game entry', 'Multiple rows share these teams and game date. Only this game is excluded; other eligible games can still be locked.'
         elif not start or not key:
             status, detail = 'Missing game timing', 'A valid start time and identifiable away/home teams are required.'
         elif day != today:
@@ -92,12 +125,12 @@ def lock_audit(package, at, locks=()):
             status, detail = 'Invalid analysis time', 'Analysis time is missing or ahead of the current time.'
         elif (clock - analysis).total_seconds() > limit * 60:
             status, detail = 'Stale analysis', f'Game analysis is older than {limit} minutes; refresh game picks.'
+        elif not _resolved_pick(leg):
+            status, detail = 'Unresolved pick', 'A complete selection and line are required before a new lock can be saved.'
         elif not eligible(leg, clock, max_age_minutes=limit):
             status, detail = 'Invalid market or odds', 'The saved market or price is not supported for locking.'
         else:
             status, detail = 'Eligible now', 'Select this game below to save its current pick and price.'
-        if event:
-            seen.add(event)
         result.append({'League':leg['sport'], 'Game':leg['game'], 'Lock status':status,
                        'Reason':detail, 'Pick':leg['pick'], 'Sportsbook':leg.get('quote_source','Not recorded'),
                        'Start (Eastern)':display(start), 'Analysis (Eastern)':display(analysis),

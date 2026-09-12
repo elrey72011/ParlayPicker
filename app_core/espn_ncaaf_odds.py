@@ -174,7 +174,10 @@ def _canonical_team(value: Any) -> str:
     # Share the pipeline's exact aliases before comparing event identities so
     # recovery cannot append a second game (or displace the primary quote).
     normalized = normalize_team_name(str(value or "")).lower()
-    return re.sub(r"[^a-z0-9]", "", normalized)
+    compact = re.sub(r"[^a-z0-9]", "", normalized)
+    # Explicit school aliases used by the primary and ESPN college feeds.
+    return {"gramblingstate": "grambling", "gramblingstatetigers": "grambling",
+            "southernuniversity": "southern", "southernjaguars": "southern"}.get(compact, compact)
 
 
 def _game_key(game: dict[str, Any]) -> tuple[str, str]:
