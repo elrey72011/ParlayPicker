@@ -83,3 +83,64 @@ def test_update_button_publishes_once_not_on_navigation(monkeypatch):
     assert not at.exception and calls==['grade','publish']
     at.run()
     assert calls==['grade','publish']
+
+
+def test_empty_analysis_app_branch_grades_and_publishes_saved_board(monkeypatch):
+    """Execute the actual app's early-return branch with the real publishing UI."""
+    import ast
+    import textwrap
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+    tree=ast.parse(Path('streamlit_app.py').read_text(encoding='utf-8'))
+    branch=next(node for node in ast.walk(tree) if isinstance(node,ast.If)
+                and ast.unparse(node.test)=='analysis_df is None or analysis_df.empty'
+                and 'saved_props' in ast.unparse(node))
+    source="""
+import pandas as pd
+import streamlit as st
+
+def main():
+    analysis_df = None
+    publication_games = pd.DataFrame()
+    publication_props = pd.DataFrame()
+    publication_dfs = {}
+    diagnostics = {}
+    tab3, publish_tab = st.tabs(['Full Pick Board', 'Preview & Publish'])
+"""+textwrap.indent(ast.unparse(branch),'    ')+"\nmain()\n"
+    old=pub()
+    expected=deepcopy(old['package'])
+    calls=[]
+    def restore(setting):
+        import streamlit as st
+        st.session_state['public_results_']={'publications':[deepcopy(old)],'revisions':[],
+            'imports':[],'locks':[],'rows':report([old],[])}
+        return True
+    def grade(setting,saved):
+        calls.append('grade')
+        saved['rows']=report(saved['publications'],[{'recorded_at':'2026-09-10T00:00:00Z','scores':scores()}])
+    def publish(package,setting):
+        calls.append(deepcopy(package))
+        return 'Published'
+    monkeypatch.setattr(public_results,'restore_history',restore)
+    monkeypatch.setattr(public_results,'update_pending_results',grade)
+    monkeypatch.setattr(sftp_publish,'publish_action',publish)
+    monkeypatch.setattr('app_core.public_record.START_DATE','2026-09-09')
+    monkeypatch.setenv('PARLAYPICKER_PUBLISH_TOKEN','test-only-publish-token')
+    monkeypatch.setenv('PARLAYPICKER_NETLIFY_SITE_ID','')
+    at=AppTest.from_string(source).run()
+    assert not at.exception
+    assert at.text_input(key='publication_token')
+    at.text_input(key='publication_token').set_value('test-only-publish-token').run()
+    assert not at.exception and not calls
+    assert not at.button(key='public_update_all').disabled
+    assert at.button(key='public_history_grade')
+    at.button(key='public_update_all').click().run()
+    assert not at.exception and len(calls)==2 and calls[0]=='grade'
+    sent=calls[1]
+    assert sent['games']==expected['games']
+    assert sent['built_at']==expected['built_at']
+    assert sent['props']==expected['props'] and sent['dfs']==expected['dfs']
+    assert sent['results'] and all(row['outcome']!='PENDING' for row in sent['results'])
+    assert old['package']==expected
+    at.run()
+    assert len(calls)==2
