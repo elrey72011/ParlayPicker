@@ -605,6 +605,11 @@ BEST_PICK_COLUMNS = [
 from app_core.prediction_evidence import PROVENANCE_COLUMNS as _EVIDENCE_EXPORT_COLUMNS
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _EVIDENCE_EXPORT_COLUMNS + ["matchup_id"]))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _EVIDENCE_EXPORT_COLUMNS))
+# Preserve per-row quality evidence through the public recommendation boundary.
+_PUBLIC_QUALITY_COLUMNS = ['stats_source', 'stats_resolution_status', 'stats_fallback_reason',
+                           'feature_stats_fallback', 'degraded_feature_subset_flag', 'model_status']
+REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _PUBLIC_QUALITY_COLUMNS))
+BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _PUBLIC_QUALITY_COLUMNS))
 
 
 CANONICAL_BET_COLUMNS = [

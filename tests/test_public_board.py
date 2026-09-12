@@ -224,7 +224,7 @@ def test_published_category_overview_keeps_locked_record_separate(tmp_path):
     node=os.environ.get('NODE_BINARY') or shutil.which('node')
     if not node: pytest.skip('Node unavailable')
     html=Path('publishing/board.html').read_text(encoding='utf-8')
-    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function matchesResultGroup(', 'function renderLockedWinRate(', 'function renderResults(')))
+    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function matchesResultGroup(', 'function renderLockedWinRate(', 'function flatStakeMetrics(', 'function renderResults(')))
     script=r"""
 const assert=require('node:assert/strict');
 class Element {constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.value='';} append(...v){this.children.push(...v)} replaceChildren(...v){this.children=[...v]} }
@@ -244,7 +244,7 @@ document.getElementById('resultGroup').value='Published picks';
 """+funcs+r"""
 renderResults();
 const summary=document.getElementById('resultSummary').children.find(n=>n.className==='panel scroll').children[0];
-assert.deepEqual(summary.children.slice(1).map(r=>r.children.map(c=>c.textContent)),[
+assert.deepEqual(summary.children.slice(1).map(r=>r.children.slice(0,7).map(c=>c.textContent)),[
  ['Overall Best Picks',1,0,0,0,1,'100.0%'],['Sides',0,1,0,0,1,'0.0%'],
  ['Totals',1,0,0,0,1,'100.0%'],['Parlays',0,1,0,0,1,'0.0%']]);
 assert.equal(document.getElementById('lockedWinSummary').children[1].textContent,'0.0%');
@@ -258,3 +258,31 @@ assert.ok(!JSON.stringify(document.getElementById('resultDetails')).includes('pu
     target=tmp_path/'category-results.cjs';target.write_text(script,encoding='utf-8')
     subprocess.run([node,str(target)],check=True,capture_output=True,text=True)
     assert "const preferred=['Published picks','Locked'" in html
+
+
+def test_flat_stake_returns_and_qualified_browser_view(tmp_path):
+    import os, shutil, subprocess
+    from pathlib import Path
+    node=os.environ.get('NODE_BINARY') or shutil.which('node')
+    if not node: pytest.skip('Node unavailable')
+    html=Path('publishing/board.html').read_text(encoding='utf-8')
+    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function flatStakeMetrics(', 'function qualifiedPick(')))
+    script=r"""
+const assert=require('node:assert/strict');
+const data={selection_policy:'qualified-v1'};
+const state=r=>r.status;const supportedQuote=r=>r.quote_source==='Novig';
+"""+funcs+r"""
+const q={status:'APPROVED',quote_source:'Novig',ev:.1};
+assert.equal(qualifiedPick(q),true);assert.equal(qualifiedPick({...q,status:'PASS'}),false);
+assert.equal(qualifiedPick({...q,ev:-.1}),false);delete data.selection_policy;assert.equal(qualifiedPick(q),false);
+const leg=(outcome,odds,category='overall')=>({outcome,odds,category});
+const result=flatStakeMetrics([leg('WIN','-150'),leg('LOSS','+120'),leg('PUSH','-110'),
+ leg('PENDING','-110'),leg('WIN','-110 / -120','parlays'),leg('WIN','Unavailable')]);
+assert.equal(result.priced,3);assert.ok(Math.abs(result.net+1/3)<1e-10);
+assert.ok(Math.abs(result.roi+1/9)<1e-10);
+assert.equal(flatStakeMetrics([leg('WIN','+200')]).net,2);
+assert.equal(flatStakeMetrics([leg('LOSS','-110','parlays')]).roi,null);
+"""
+    target=tmp_path/'qualification-returns.cjs';target.write_text(script,encoding='utf-8')
+    subprocess.run([node,str(target)],check=True)
+    assert 'No qualifying picks today' in html and 'Full research board' in html

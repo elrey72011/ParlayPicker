@@ -64,6 +64,8 @@ def pick_record(row, *, prop=False, as_of=None):
             'market':text(row, 'market_type'), 'odds':odds, 'win_estimate':probability,
             'ev':number(row, 'expected_value' if prop else 'ev'),
             'status':'APPROVED' if approved else 'PASS', 'start':start, 'as_of':at}
+    if not prop and 'qualification_reason' in row:
+        record['qualification_reason'] = text(row, 'qualification_reason')
     if not prop and 'quote_source' in row:
         record['quote_source'] = text(row, 'quote_source')
         record['quote_time'] = timestamp(text(row, 'quote_time'))
@@ -117,7 +119,7 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
     from app_core.public_prop_timing import with_game_starts
     public_props=[] if props is None else [pick_record(row, prop=True, as_of=props_as_of) for _,row in props.iterrows()]
     public_props=with_game_starts(public_props,games['overall'])
-    return {'schema_version':2, 'parlays':build_parlays(games['overall'], built_at), 'built_at':built_at.isoformat(), 'stale_after_minutes':15,
+    return {'schema_version':2, 'selection_policy':'qualified-v1', 'parlays':build_parlays(games['overall'], built_at, qualified_only=True), 'built_at':built_at.isoformat(), 'stale_after_minutes':15,
             'games':games, 'props':public_props,
             'dfs':lineups}
 
@@ -131,17 +133,21 @@ def validate_package(package):
         value = row.get('expected_stat')
         if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
             raise ValueError('Invalid expected statistic')
-    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else ''))
+    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' selection_policy' if 'selection_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else ''))
     if package['schema_version'] not in {1,2,3,4,5} or package['stale_after_minutes'] != 15:
         raise ValueError('Unsupported public package version/policy')
+    if 'selection_policy' in package and package['selection_policy'] != 'qualified-v1':
+        raise ValueError('Unsupported selection policy')
     timestamp(package['built_at'])
     exact(package['games'], 'overall sides totals')
     for rows in [*package['games'].values(), package['props']]:
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
             projection_metric(row)
+            if 'qualification_reason' in row and not isinstance(row['qualification_reason'],str):
+                raise ValueError('Invalid qualification reason')
             if 'quote_reason' in row and not isinstance(row['quote_reason'],str):
                 raise ValueError('Invalid quote reason')
             if 'quote_source' in row:
@@ -181,7 +187,7 @@ def validate_package(package):
                 raise ValueError('Invalid player fields')
     if package['schema_version'] in {2,3,4,5}:
         from app_core.public_parlays import build_parlays
-        expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']))
+        expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_only=package.get('selection_policy')=='qualified-v1')
         if package['parlays'] != expected:
             raise ValueError('Parlays must match the original disjoint selections and estimates')
     if package['schema_version'] in {3,4,5}:

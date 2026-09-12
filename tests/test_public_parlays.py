@@ -43,3 +43,25 @@ def test_saved_pairs_validated_and_legacy_supported():
     with pytest.raises(ValueError):validate_package(package)
     package.pop('parlays');package['schema_version']=1
     validate_package(package)
+
+
+def test_strict_parlays_require_qualified_positive_exact_quotes():
+    good=[dict(row(i),quote_source='Novig',quote_time=NOW.isoformat()) for i in range(2)]
+    assert len(build_parlays(good,NOW,qualified_only=True))==1
+    for changes in ({'status':'PASS'},{'ev':-.01},{'win_estimate':.40},
+                    {'quote_source':'DraftKings'},{'quote_time':None},
+                    {'quote_time':'2026-09-09T15:00:00+00:00'}):
+        assert build_parlays([good[0],dict(good[1],**changes)],NOW,qualified_only=True)==[]
+    assert build_parlays([good[0]],NOW,qualified_only=True)==[]
+
+
+def test_strict_policy_cannot_publish_legacy_pass_pairs():
+    rows=[dict(row(i),status='PASS') for i in range(2)]
+    package=dict(schema_version=5,selection_policy='qualified-v1',built_at=NOW.isoformat(),stale_after_minutes=15,
+                 games={k:deepcopy(rows) for k in ('overall','sides','totals')},props=[],dfs=[],results=[],parlays=build_parlays(rows,NOW))
+    with pytest.raises(ValueError):validate_package(package)
+    package['parlays']=[]
+    validate_package(package)
+    del package['selection_policy']
+    package['parlays']=build_parlays(rows,NOW)
+    validate_package(package)

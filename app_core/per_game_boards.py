@@ -157,6 +157,12 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 approval_reason += '; estimated EV is not positive'
         elif not approval_reason or approval_reason.lower() == 'qualified':
             approval_reason = 'No final wager authorization with a positive approved stake'
+        if novig_only:
+            from app_core.recommendation_quality import quality_reason, positive_price_edge
+            quality = quality_reason(final)
+            if quality or not quote or not positive_price_edge(probability, number(source, 'odds_american') if source is not None else None, ev):
+                approved = False
+                approval_reason = quality or 'No verified positive estimated edge at the quoted price'
         rows.append({'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
                      'matchup_id':text(final,'matchup_id'),'game_date':text(final,'Local Date','game_date'),
                      'start':text(final,'Commence (Local)','game_time_est'),
@@ -168,6 +174,6 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'status':'APPROVED' if approved else 'PASS', 'win_probability':probability,'probability_basis':basis,
                      'edge':edge,'ev':ev,'selection_score':number(selected,'best_available_score') if selected is not None else None,
                      'reason':reason,'approval_reason':approval_reason,
-                     **({'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('College fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else ('No exact fresh Novig or supported sportsbook quote in this analysis' if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
+                     **({'qualification_reason':approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('College fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else ('No exact fresh Novig or supported sportsbook quote in this analysis' if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)
