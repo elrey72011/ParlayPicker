@@ -155,6 +155,10 @@ def test_espn_fcs_fallback_parses_complete_draftkings_markets(monkeypatch):
     assert requested[0][1]["groups"] == "81"
     assert games[0]["odds_feed_source"] == "espn_ncaaf_fcs_scoreboard"
     assert games[0]["game_time_est"] == "2026-08-27 6:00 PM ET"
+    # ESPN supplies prices but no quote update time. Never manufacture a fresh
+    # timestamp from the request clock or the scheduled kickoff.
+    assert "last_update" not in games[0]["bookmakers"][0]
+    assert all("last_update" not in market for market in games[0]["bookmakers"][0]["markets"])
     markets = {item["key"]: item for item in games[0]["bookmakers"][0]["markets"]}
     assert markets["spreads"]["outcomes"][0]["point"] == 4.5
     assert markets["totals"]["outcomes"][0]["point"] == 50.5

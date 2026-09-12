@@ -216,3 +216,27 @@ def test_public_quote_checks_only_matching_games(monkeypatch):
     result=module.per_game_board(board,audit,novig_only=True)
     assert len(result)==count and result.quote_source.eq('Novig').all()
     assert len(checked)==2*count  # Eligibility and selected-row metadata, not count squared.
+
+
+def test_college_missing_espn_timestamp_is_explained_and_cannot_be_locked():
+    import json
+    from app_core.public_board import build_package
+    from app_core.locked_picks import lock_candidates, lock_audit
+    board = pd.DataFrame([final(league='NCAAF', export_run_id='20260911T200000.000000Z', game_time_est='2026-09-11 7:00 PM ET')])
+    candidate = quoted_candidate('draftkings', league='NCAAF', odds_feed_source='espn_ncaaf_fcs_scoreboard')
+    quotes = json.loads(candidate['provider_quotes'])
+    for quote in quotes:
+        quote['recorded_at'] = None
+    candidate['provider_quotes'] = json.dumps(quotes)
+    audit = pd.DataFrame([candidate])
+    boards = [per_game_board(board, audit, f, novig_only=True, college_fallback=True) for f in ('overall', 'sides', 'totals')]
+    assert boards[0].iloc[0].quote_reason == 'DraftKings via ESPN: quote timestamp missing; freshness cannot be verified'
+    assert pd.isna(boards[0].iloc[0].odds)
+    package = build_package(*boards)
+    at = '2026-09-11T20:01:00+00:00'
+    assert lock_candidates(package, at) == []
+    assert 'timestamp missing' in lock_audit(package, at)[0]['Reason']
+    for changes in ({'odds_american': -199}, {'export_run_id': 'another-run'}, {'home_team': 'Other School'}):
+        other = pd.DataFrame([dict(candidate, **changes)])
+        row = per_game_board(board, other, novig_only=True, college_fallback=True).iloc[0]
+        assert 'timestamp missing' not in row.quote_reason

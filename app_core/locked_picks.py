@@ -45,3 +45,61 @@ def locked_selections(locks):
             raise ValueError('Conflicting locked picks')
         result[row['id']] = row
     return list(result.values())
+
+
+def lock_audit(package, at, locks=()):
+    """Explain every current board row without changing eligibility or saved locks."""
+    from app_core.public_board import validate_package
+    from app_core.public_quote_policy import supported_quote
+    validate_package(package)
+    clock = datetime.fromisoformat(at)
+    eastern = ZoneInfo('America/New_York')
+    today = clock.astimezone(eastern).date().isoformat()
+    limit = package_age_minutes(package)
+    existing = {r['id'] for r in locks}
+    seen, result = set(), []
+    def parsed(value):
+        try:
+            value = datetime.fromisoformat(value)
+            return value if value.tzinfo else None
+        except (TypeError, ValueError):
+            return None
+    def display(value):
+        return value.astimezone(eastern).strftime('%Y-%m-%d %I:%M %p') if value else 'Unavailable'
+    for leg in package['games']['overall']:
+        start, analysis, quote = (parsed(leg.get(k)) for k in ('start', 'as_of', 'quote_time'))
+        key = event_key(leg) if start else None
+        day = start.astimezone(eastern).date().isoformat() if start else ''
+        identity = digest(('locked-overall', *key[:3], day)) if key else None
+        event = (*key[:3], start) if key else None
+        if event and event in seen:
+            status, detail = 'Duplicate game entry', 'Same normalized teams and start time already appear in this board.'
+        elif identity in existing:
+            status, detail = 'Already locked', 'Original selection and odds remain saved; no new lock is needed.'
+        elif not start or not key:
+            status, detail = 'Missing game timing', 'A valid start time and identifiable away/home teams are required.'
+        elif day != today:
+            status, detail = 'Other date', 'Locks are available only on the game date in Eastern time.'
+        elif start <= clock:
+            status, detail = 'Started', 'Scheduled start time has passed; the app cannot create a pregame lock.'
+        elif 'quote_source' in leg and (not supported_quote(leg) or not quote):
+            status, detail = 'Quote unavailable', leg.get('quote_reason') or 'No verified supported sportsbook quote is saved for this pick.'
+        elif quote and quote > clock:
+            status, detail = 'Future quote timestamp', 'The saved sportsbook timestamp is ahead of the current time.'
+        elif quote and (clock - quote).total_seconds() > limit * 60:
+            status, detail = 'Stale quote', f'Sportsbook quote is older than {limit} minutes; refresh game picks.'
+        elif not analysis or analysis > clock:
+            status, detail = 'Invalid analysis time', 'Analysis time is missing or ahead of the current time.'
+        elif (clock - analysis).total_seconds() > limit * 60:
+            status, detail = 'Stale analysis', f'Game analysis is older than {limit} minutes; refresh game picks.'
+        elif not eligible(leg, clock, max_age_minutes=limit):
+            status, detail = 'Invalid market or odds', 'The saved market or price is not supported for locking.'
+        else:
+            status, detail = 'Eligible now', 'Select this game below to save its current pick and price.'
+        if event:
+            seen.add(event)
+        result.append({'League':leg['sport'], 'Game':leg['game'], 'Lock status':status,
+                       'Reason':detail, 'Pick':leg['pick'], 'Sportsbook':leg.get('quote_source','Not recorded'),
+                       'Start (Eastern)':display(start), 'Analysis (Eastern)':display(analysis),
+                       'Quote (Eastern)':display(quote)})
+    return result
