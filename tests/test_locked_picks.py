@@ -134,3 +134,67 @@ def test_public_lock_league_comes_from_original_lock_not_current_board(store):
     validate_package(legacy)
     package['results'][0]['sport']=123
     with pytest.raises(ValueError):validate_package(package)
+
+
+def test_lock_audit_reconciles_rows_and_preserves_original_locks():
+    from app_core.locked_picks import lock_audit
+    from collections import Counter
+    package=pub()['package']
+    original=package['games']['overall'][0]
+    rows=[]
+    def add(name, **changes):
+        rows.append(dict(original, game=name+' at Boston', **changes))
+    add('Ready')
+    add('Started', start=AT)
+    add('Tomorrow', start='2026-09-10T20:00:00Z')
+    add('Missing', quote_source='Unavailable', quote_time=None, quote_reason='Provider snapshot has no exact market')
+    add('Stale quote', quote_source='Novig', quote_time='2026-09-09T19:00:00Z')
+    add('Stale analysis', as_of='2026-09-09T19:00:00Z')
+    add('Invalid market', market='unknown')
+    add('No start', start=None)
+    add('Future quote', quote_source='Novig', quote_time='2026-09-09T19:59:00Z')
+    add('Future analysis', as_of='2026-09-09T19:59:00Z')
+    package['games']['overall']=rows
+    before=deepcopy(package)
+    audit=lock_audit(package,AT)
+    counts=Counter(r['Lock status'] for r in audit)
+    assert len(counts)==10 and sum(counts.values())==10
+    candidates=lock_candidates(package,AT)
+    assert len(candidates)==counts['Eligible now']==1
+    assert candidates[0]['legs'][0]['game']==audit[0]['Game']
+    assert audit[3]['Reason']=='Provider snapshot has no exact market'
+    assert package==before
+    rows[0]['as_of']='2026-09-09T19:00:00Z'
+    assert lock_audit(package,AT,candidates)[0]['Lock status']=='Already locked'
+    assert candidates[0]['legs'][0]['as_of']==original['as_of']
+
+
+def test_lock_audit_duplicate_and_thirty_minute_boundary():
+    from app_core.locked_picks import lock_audit
+    package=pub()['package'];package['stale_after_minutes']=30
+    row=package['games']['overall'][0]
+    row.update(as_of='2026-09-09T19:26:00Z',quote_source='Novig',quote_time='2026-09-09T19:26:00Z')
+    assert lock_audit(package,AT)[0]['Lock status']=='Eligible now'
+    assert lock_audit(package,'2026-09-09T19:56:01Z')[0]['Lock status']=='Stale quote'
+    package['games']['overall'].append(deepcopy(row))
+    assert [r['Lock status'] for r in lock_audit(package,AT)]==['Eligible now','Duplicate game entry']
+    with pytest.raises(ValueError): lock_candidates(package,AT)  # Existing ambiguity guard remains.
+
+
+def test_lock_ui_explains_missing_quotes_without_requesting_pointless_refresh(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from app.ui import lock_picks
+    monkeypatch.setattr(lock_picks,'now',lambda:AT)
+    package=pub()['package']
+    package['games']['overall'][0].update(quote_source='Unavailable',quote_time=None,quote_reason='No matching exact quote')
+    code="""import streamlit as st
+from app.ui.lock_picks import render_lock_picks
+st.session_state['public_results_site']={'publications':[],'revisions':[],'locks':[]}
+render_lock_picks(PACKAGE,lambda key:'site')
+""".replace('PACKAGE',repr(package))
+    app=AppTest.from_string(code).run()
+    assert not app.exception
+    assert any('Quote unavailable: 1' in r.value for r in app.caption)
+    assert 'Click Refresh picks' not in ' '.join(r.value for r in app.info)
+    assert app.button(key='lock_picks_action').disabled
+    assert any(r.label=='Why games cannot be locked' for r in app.expander)

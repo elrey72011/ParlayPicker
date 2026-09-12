@@ -84,6 +84,39 @@ def novig_unavailable_reason(final, candidates, family):
             else 'Novig market missing from this API snapshot')
 
 
+def college_unavailable_reason(final, candidates, family):
+    """Explain untimestamped exact offers without treating retrieval as quote time."""
+    import json
+    offers = []
+    for row in [final, *(r for _, r in candidates.iterrows())]:
+        if (text(row, 'matchup_id') != text(final, 'matchup_id')
+                or text(row, 'export_run_id') != text(final, 'export_run_id')
+                or identity(row) != identity(final)):
+            continue
+        if family != 'overall' and family_of(row) != family:
+            continue
+        try:
+            quotes = json.loads(row.get('provider_quotes') or '[]')
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(quotes, list):
+            continue
+        market = text(row, 'market_type')
+        line = number(row, 'total_line' if market.startswith('total') else 'spread_line')
+        price = number(row, 'odds_american')
+        for quote in quotes:
+            if not isinstance(quote, dict) or quote.get('book') not in {'novig', 'draftkings', 'fanduel', 'betmgm'}:
+                continue
+            same_line = market.startswith('moneyline') or (line is not None and number(quote, 'point') == line)
+            if quote.get('market_type') == market and price is not None and number(quote, 'price') == price and same_line:
+                offers.append((quote, text(row, 'odds_feed_source')))
+    if offers and all(pd.isna(pd.to_datetime(q.get('recorded_at'), utc=True, errors='coerce')) for q, _ in offers):
+        if all(q['book'] == 'draftkings' and source == 'espn_ncaaf_fcs_scoreboard' for q, source in offers):
+            return 'DraftKings via ESPN: quote timestamp missing; freshness cannot be verified'
+        return 'Sportsbook quote timestamp missing; freshness cannot be verified'
+    return 'No exact fresh Novig or supported sportsbook quote in this analysis'
+
+
 def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     if board is None or board.empty: return pd.DataFrame()
@@ -177,6 +210,6 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'status':'APPROVED' if approved else 'PASS', 'win_probability':probability,'probability_basis':basis,
                      'edge':edge,'ev':ev,'selection_score':number(selected,'best_available_score') if selected is not None else None,
                      'reason':reason,'approval_reason':approval_reason,
-                     **({'qualification_reason':approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('College fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else ('No exact fresh Novig or supported sportsbook quote in this analysis' if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
+                     **({'qualification_reason':approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('College fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else (college_unavailable_reason(final,candidates,family) if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)

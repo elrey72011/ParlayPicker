@@ -3,7 +3,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
-from app_core.locked_picks import lock_candidates
+from app_core.locked_picks import lock_candidates, lock_audit
 from app_core.quote_freshness import package_age_minutes
 from app_core.public_history import now, report, digest
 from app_core.public_record import current_records
@@ -35,16 +35,23 @@ def render_lock_picks(package, setting):
                 'Locked at (UTC)':r['published_at'],
                 'Website':'Published' if r['id'] in published_ids else 'Not verified as published'} for r in existing]), hide_index=True)
         render_lock_correction(package, setting, saved)
+        checked_at = now()
         try:
-            choices = {r['id']:r for r in lock_candidates(package, now()) if r['id'] not in {x['id'] for x in existing}}
+            audit = lock_audit(package, checked_at, existing)
+            render_lock_audit(audit, checked_at)
+            choices = {r['id']:r for r in lock_candidates(package, checked_at) if r['id'] not in {x['id'] for x in existing}}
         except ValueError:
             st.info('Rebuild a valid preview before locking picks.')
             return
-        today=datetime.now(ZoneInfo('America/New_York')).date().isoformat()
+        today=datetime.fromisoformat(checked_at).astimezone(ZoneInfo('America/New_York')).date().isoformat()
         locked_today=sum(r['date']==today for r in existing)
         st.caption(f'Locked today: {locked_today} · Not locked and eligible now: {len(choices)}')
         if not choices:
-            st.info(f'No new eligible picks to lock. Click Refresh picks in the sidebar, then return here and select picks within {package_age_minutes(package)} minutes. Run Player Props and Refresh preview do not refresh game quotes. Games without a verified sportsbook quote or that have started cannot be locked. Existing locks remain saved.')
+            blocked = {r['Lock status'] for r in audit}
+            if blocked & {'Stale quote', 'Stale analysis'}:
+                st.info('No new eligible picks to lock. Some saved prices or analysis are stale; click Refresh picks, then return here. Refresh preview and Run Player Props do not refresh game quotes. See Why games cannot be locked for each reason.')
+            else:
+                st.info('No new eligible picks to lock. See Why games cannot be locked for the current breakdown. Existing locks remain saved; started games cannot be locked, and other-date games must wait until their game day.')
             st.button('Lock selected picks', key='lock_picks_action', disabled=True)
             return
         selected = st.multiselect('Picks to lock', list(choices), default=list(choices),
@@ -101,3 +108,16 @@ def render_lock_correction(package, setting, saved):
                 st.rerun()
             except Exception:
                 st.error('Correction or publication could not complete. Restore history to check saved changes before retrying.')
+
+
+def render_lock_audit(rows, at):
+    from collections import Counter
+    counts = Counter(r['Lock status'] for r in rows)
+    st.caption('Current board: ' + str(len(rows)) + ' rows · ' + ' · '.join(f'{status}: {count}' for status, count in counts.items()))
+    with st.expander('Why games cannot be locked', expanded=False):
+        st.caption('Checked ' + datetime.fromisoformat(at).astimezone(ZoneInfo('America/New_York')).strftime('%I:%M:%S %p Eastern') + '. One status per board row; existing locks take priority over current price age. Locks from other boards or dates are not included in this breakdown.')
+        frame = pd.DataFrame(rows)
+        if rows:
+            st.dataframe(frame, hide_index=True)
+            st.download_button('Download lock eligibility audit', frame.to_csv(index=False).encode('utf-8'),
+                               'lock-eligibility-audit.csv', 'text/csv', key='lock_eligibility_audit_download')
