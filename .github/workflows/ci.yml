@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# New commits supersede checks on the same PR. Each main push keeps its own run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   production-safety:
     runs-on: ubuntu-latest
@@ -26,7 +31,7 @@ jobs:
         run: python -m compileall -q app app_core core scripts/train_xgboost_model.py streamlit_app.py
       - name: Run production-safety regressions
         run: >
-          python -m pytest -q
+          python -m pytest -q --durations=30 --junitxml=test-results/production-safety.xml
           tests/test_best_picks_kelly_attach.py
           tests/test_portfolio_calibration_and_caps.py
           tests/test_novig_fetch_no_hardcoded_date.py
@@ -62,7 +67,20 @@ jobs:
           tests/test_lean_card.py
           tests/test_regression_kalshi_and_results.py::test_results_recap_upload_reset_behavior
 
-  full-suite:
+      - name: Upload production-safety test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-safety-test-results
+          path: test-results/production-safety.xml
+          retention-days: 7
+          if-no-files-found: warn
+
+  full-suite-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -75,6 +93,26 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest
-      - name: Run complete application test suite
-        run: python -m pytest -q tests
+      - name: Run application test shard
+        run: python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 2 -q tests --durations=30 --junitxml=test-results/full-suite-${{ matrix.shard }}.xml
+      - name: Upload full-suite test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-suite-test-results-${{ matrix.shard }}
+          path: test-results/full-suite-${{ matrix.shard }}.xml
+          retention-days: 7
+          if-no-files-found: warn
 
+
+  # Preserve the existing required check name; every shard must pass.
+  full-suite:
+    needs: full-suite-tests
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every application test shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.full-suite-tests.result }}
+        run: test "$SHARD_RESULT" = success
