@@ -9,7 +9,7 @@ must never be treated as Novig execution prices or production-approved wagers.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import re
 from typing import Any, Iterable
@@ -221,6 +221,7 @@ def fetch_espn_ncaaf_fcs_odds(target_date: str | None = None) -> list[dict[str, 
         response = requests.get(ESPN_NCAAF_SCOREBOARD_URL, params=params, timeout=15)
         response.raise_for_status()
         payload = response.json()
+        observed_at = datetime.now(timezone.utc).isoformat()
     except Exception as exc:
         logger.warning("ESPN NCAAF FCS odds fallback failed closed: %s", exc)
         return []
@@ -281,7 +282,8 @@ def fetch_espn_ncaaf_fcs_odds(target_date: str | None = None) -> list[dict[str, 
             markets = _market_outcomes(odds, home_team, away_team)
             if markets:
                 bookmakers.append(
-                    {"key": "draftkings", "title": "DraftKings", "markets": markets}
+                    {"key": "draftkings", "title": "DraftKings", "markets": markets,
+                     "observed_at": observed_at, "observation_source": ESPN_FALLBACK_SOURCE}
                 )
                 break
         if not bookmakers:

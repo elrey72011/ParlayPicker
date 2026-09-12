@@ -150,6 +150,8 @@ def event_key(leg):
 
 def eligible(leg, confirmed, *, max_age_minutes=QUOTE_MAX_AGE_MINUTES):
     try:
+        if 'quote_time_basis' in leg and (not supported_quote(leg) or leg.get('status') != 'PASS' or datetime.fromisoformat(leg.get('quote_time')) > datetime.fromisoformat(leg.get('as_of'))):
+            return False
         if 'quote_source' in leg:
             if not supported_quote(leg) or not leg.get('quote_time'):
                 return False
@@ -241,6 +243,7 @@ def report(publications, revisions, imports=None, locks=None):
                      'odds':' / '.join(str(x['odds']) for x in item['legs']),
                      **({'sport':item['legs'][0]['sport']} if item['group']=='Locked' else {}),
                      **({'quote_source':item['legs'][0]['quote_source']} if item['group']=='Locked' and item['legs'][0].get('quote_source') else {}),
+                     **({k:item['legs'][0][k] for k in ('quote_time', 'quote_time_basis')} if item['group']=='Locked' and item['legs'][0].get('quote_time_basis') == 'espn_observed' else {}),
                      'final_score':' / '.join(x[1] or 'Pending' for x in graded)})
     return rows
 

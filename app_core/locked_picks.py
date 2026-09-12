@@ -101,5 +101,5 @@ def lock_audit(package, at, locks=()):
         result.append({'League':leg['sport'], 'Game':leg['game'], 'Lock status':status,
                        'Reason':detail, 'Pick':leg['pick'], 'Sportsbook':leg.get('quote_source','Not recorded'),
                        'Start (Eastern)':display(start), 'Analysis (Eastern)':display(analysis),
-                       'Quote (Eastern)':display(quote)})
+                       'Quote (Eastern)':display(quote), 'Time basis':'Observed via ESPN; sportsbook update unknown' if leg.get('quote_time_basis') == 'espn_observed' else 'Provider update'})
     return result

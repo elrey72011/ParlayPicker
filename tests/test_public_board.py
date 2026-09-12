@@ -110,7 +110,7 @@ const root=new Element('div');const document={getElementById:()=>root};
 const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());
 const original={group:'Locked',category:'overall',date:today,picks:'A at B: Over 65.5',odds:'-115',published_at:new Date().toISOString(),outcome:'PENDING'};
 const availableResults=[original,{...original,group:'Research',picks:'A at B: Under 63.5'},{...original,date:'2000-01-01'}];
-""" + 'function lockedRows(' + functions + r"""
+""" + next(line for line in template.splitlines() if line.startswith('function quoteLabel(')) + '\nfunction lockedRows(' + functions + r"""
 renderLockedPicks();
 const content=JSON.stringify(root);
 assert.ok(content.includes('Over 65.5'));
@@ -137,6 +137,10 @@ delete original.sport;
 assert.equal(JSON.stringify(original),before);
 assert.equal(lockedRows(availableResults,today,'MLB').length,0); // No guessing for legacy rows.
 
+availableResults.length=0;
+availableResults.push({...original,sport:'NCAAF',quote_source:'DraftKings',quote_time:original.published_at,quote_time_basis:'espn_observed'});
+renderLockedPicks();assert.ok(JSON.stringify(root).includes('Observed at'));
+assert.ok(JSON.stringify(root).includes('sportsbook update time unknown'));
 availableResults.length=0;renderLockedPicks();assert.ok(JSON.stringify(root).includes('No locked picks for today'));
 """
     target=tmp_path/'locked-render.cjs'
@@ -218,7 +222,7 @@ def test_browser_college_fallback_label_and_freshness():
     node=os.environ.get('NODE_BINARY') or shutil.which('node')
     if not node: pytest.skip('Node unavailable')
     html=Path('publishing/board.html').read_text(encoding='utf-8')
-    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function supportedQuote(', 'function state(')))
+    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function quoteLabel(', 'function supportedQuote(', 'function state(')))
     script="""
 const assert=require('node:assert/strict');
 const data={stale_after_minutes:15};
@@ -236,10 +240,16 @@ assert.equal(state({...row,quote_time:new Date(now-20*60000).toISOString()}),'PA
 assert.equal(state({...row,quote_time:new Date(now-30*60000).toISOString()}),'PASS');
 assert.equal(state({...row,quote_time:new Date(now-30*60000-1).toISOString()}),'STALE');
 assert.equal(state({...row,as_of:new Date(now-30*60000-1).toISOString()}),'STALE');
+const observed={...row,quote_source:'DraftKings',quote_time_basis:'espn_observed'};
+assert.equal(state(observed),'PASS');assert.match(quoteLabel(observed),/Observed at .* via ESPN/);
+assert.match(quoteLabel(observed),/sportsbook update time unknown/);
+assert.equal(state({...observed,quote_time:new Date(now-30*60000-1).toISOString()}),'STALE');
+assert.equal(state({...observed,quote_time_basis:'invented'}),'UNAVAILABLE');
+
 """
     subprocess.run([node,'-e',script],check=True)
-    assert "supportedQuote(r)?r.quote_source+' · '" in html
-    assert "r.quote_source||'Not recorded'" in html
+    assert "supportedQuote(r)?quoteLabel(r)" in html
+    assert "r.quote_source?quoteLabel(r):'Not recorded'" in html
 
 
 def test_published_category_overview_keeps_locked_record_separate(tmp_path):
@@ -327,7 +337,7 @@ def test_top_ten_cross_league_ranking_and_rendering(tmp_path):
         pytest.skip('Node unavailable')
     html = Path('publishing/board.html').read_text(encoding='utf-8')
     funcs = '\n'.join(line for line in html.splitlines() if line.startswith((
-        'function supportedQuote(', 'function state(', 'function qualifiedPick(',
+        'function quoteLabel(', 'function supportedQuote(', 'function state(', 'function qualifiedPick(',
         'function easternDay(', 'function topPicks(', 'function renderTopPicks(', 'function table(')))
     script = r"""
 const assert=require('node:assert/strict');
