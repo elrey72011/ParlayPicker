@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 from app_core.locked_picks import lock_candidates
+from app_core.quote_freshness import package_age_minutes
 from app_core.public_history import now, report, digest
 from app_core.public_record import current_records
 
@@ -17,7 +18,7 @@ def render_lock_picks(package, setting):
     if saved is None:
         return
     with st.expander('Lock Overall Best Picks', expanded=True):
-        st.caption('Lock selected picks saves the original selections to Drive and publishes the board below, including your selected props and DFS slate. Existing locks cannot be replaced. Prices must be under 15 minutes old and games must not have started. Locking does not place a bet.')
+        st.caption(f'Lock selected picks saves the original selections to Drive and publishes the board below, including your selected props and DFS slate. Existing locks cannot be replaced. Prices must be at most {package_age_minutes(package)} minutes old and games must not have started. Locking does not place a bet.')
         existing = saved.get('locks', [])
         published_ids=set()
         pubs=saved.get('publications',[])
@@ -43,7 +44,7 @@ def render_lock_picks(package, setting):
         locked_today=sum(r['date']==today for r in existing)
         st.caption(f'Locked today: {locked_today} · Not locked and eligible now: {len(choices)}')
         if not choices:
-            st.info('No new eligible picks to lock. Click Refresh picks in the sidebar, then return here and select picks within 15 minutes. Run Player Props and Refresh preview do not refresh game quotes. Games without a verified sportsbook quote or that have started cannot be locked. Existing locks remain saved.')
+            st.info(f'No new eligible picks to lock. Click Refresh picks in the sidebar, then return here and select picks within {package_age_minutes(package)} minutes. Run Player Props and Refresh preview do not refresh game quotes. Games without a verified sportsbook quote or that have started cannot be locked. Existing locks remain saved.')
             st.button('Lock selected picks', key='lock_picks_action', disabled=True)
             return
         selected = st.multiselect('Picks to lock', list(choices), default=list(choices),

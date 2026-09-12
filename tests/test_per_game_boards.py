@@ -140,7 +140,7 @@ def test_novig_quote_age_and_roundtrip_public_metadata():
     leg=package['games']['overall'][0]
     assert leg['quote_source']=='Novig' and leg['quote_time']=='2026-09-11T19:59:00+00:00'
     assert eligible(leg,datetime.fromisoformat('2026-09-11T20:01:00+00:00'))
-    assert not eligible(leg,datetime.fromisoformat('2026-09-11T20:14:30+00:00'))
+    assert not eligible(leg,datetime.fromisoformat('2026-09-11T20:29:30+00:00'))
 
 
 def test_college_fallback_prefers_novig_then_exact_ranked_sportsbook():
@@ -175,7 +175,7 @@ def test_college_sportsbook_package_lock_and_report_preserve_source():
     at='2026-09-11T20:01:00+00:00'
     assert eligible(leg,datetime.fromisoformat(at))
     assert not eligible(dict(leg,sport='MLB'),datetime.fromisoformat(at))
-    assert not eligible(leg,datetime.fromisoformat('2026-09-11T20:16:00+00:00'))
+    assert not eligible(leg,datetime.fromisoformat('2026-09-11T20:30:00+00:00'))
     locks=lock_candidates(package,at)
     assert len(locks)==1 and locked_selections(locks)[0]['legs'][0]['quote_source']=='FanDuel'
     result=report([],[],locks=locks)[0]

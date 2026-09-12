@@ -1,5 +1,6 @@
 """Immutable, site-scoped public publication records and conservative result grading."""
 from app_core.public_quote_policy import supported_quote
+from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES, package_age_minutes
 import hashlib
 import json
 import math
@@ -147,16 +148,16 @@ def event_key(leg):
     return (leg['sport'].upper(), *(team_name(t,leg['sport']) for t in teams), datetime.fromisoformat(leg['start']).isoformat())
 
 
-def eligible(leg, confirmed):
+def eligible(leg, confirmed, *, max_age_minutes=QUOTE_MAX_AGE_MINUTES):
     try:
         if 'quote_source' in leg:
             if not supported_quote(leg) or not leg.get('quote_time'):
                 return False
             age=(confirmed-datetime.fromisoformat(leg['quote_time'])).total_seconds()
-            if not 0 <= age <= 900:
+            if not 0 <= age <= max_age_minutes * 60:
                 return False
         at=datetime.fromisoformat(leg['as_of']);start=datetime.fromisoformat(leg['start'])
-        return event_key(leg) is not None and at<=confirmed<start and (confirmed-at).total_seconds()<=900 and leg.get('market') in {'spread_home','spread_away','total_over','total_under','moneyline_home','moneyline_away','h2h_home','h2h_away'} and leg.get('odds') is not None and abs(leg['odds'])>=100
+        return event_key(leg) is not None and at<=confirmed<start and (confirmed-at).total_seconds()<=max_age_minutes * 60 and leg.get('market') in {'spread_home','spread_away','total_over','total_under','moneyline_home','moneyline_away','h2h_home','h2h_away'} and leg.get('odds') is not None and abs(leg['odds'])>=100
     except (TypeError,ValueError):
         return False
 
@@ -170,7 +171,7 @@ def selections(publications):
         entries=[(family,[leg],leg['status']=='APPROVED') for family,rows in package['games'].items() for leg in rows]
         entries += [('parlays',p['legs'],False) for p in package.get('parlays',[])]
         for category,legs,approved in entries:
-            if not legs or not all(eligible(leg,confirmed) for leg in legs):
+            if not legs or not all(eligible(leg,confirmed,max_age_minutes=package_age_minutes(package)) for leg in legs):
                 continue
             if len({datetime.fromisoformat(x['start']).astimezone(ZoneInfo('America/New_York')).date() for x in legs})!=1:
                 continue

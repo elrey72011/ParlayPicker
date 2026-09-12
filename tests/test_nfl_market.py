@@ -37,7 +37,7 @@ def test_fresh_complete_pairs_only():
     e = event(); q, rejected = n.quotes(e, NOW)
     assert len(q) == 6 and not rejected
     bad = deepcopy(e)
-    bad['bookmakers'][0]['markets'][0]['last_update'] = (NOW - timedelta(minutes=16)).isoformat()
+    bad['bookmakers'][0]['markets'][0]['last_update'] = (NOW - timedelta(minutes=31)).isoformat()
     bad['bookmakers'][0]['markets'][1]['outcomes'][1]['point'] = 4
     bad['bookmakers'][0]['markets'][2]['outcomes'][0]['price'] = float('nan')
     q, rejected = n.quotes(bad, NOW)

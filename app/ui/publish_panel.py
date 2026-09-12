@@ -6,6 +6,7 @@ import os
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 from pathlib import Path
+from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES
 import pandas as pd
 import streamlit as st
 from app_core.per_game_boards import per_game_board
@@ -101,10 +102,10 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     game_date, prop_date = describe_dates(games), describe_dates(props)
     st.caption('Game analysis (UTC): ' + str(game_date or 'Unknown') +
                ' · Player props (UTC): ' + str(prop_date or 'Not run'))
-    if prop_date and pd.Timestamp.now(tz='UTC') - pd.Timestamp(prop_date) > pd.Timedelta(minutes=15):
-        st.warning('Saved player props are older than 15 minutes. Run Player Props to refresh them before including them as current selections.')
+    if prop_date and pd.Timestamp.now(tz='UTC') - pd.Timestamp(prop_date) > pd.Timedelta(minutes=QUOTE_MAX_AGE_MINUTES):
+        st.warning(f'Saved player props are older than {QUOTE_MAX_AGE_MINUTES} minutes. Run Player Props to refresh them before including them as current selections.')
     dfs = dfs or {}
-    include_props = st.checkbox('Include saved player props', value=bool(prop_date and pd.Timestamp.now(tz='UTC')-pd.Timestamp(prop_date)<=pd.Timedelta(minutes=15)), disabled=props.empty)
+    include_props = st.checkbox('Include saved player props', value=bool(prop_date and pd.Timestamp.now(tz='UTC')-pd.Timestamp(prop_date)<=pd.Timedelta(minutes=QUOTE_MAX_AGE_MINUTES)), disabled=props.empty)
     choices = ['None', *sorted(k for k,v in dfs.items() if isinstance(v,pd.DataFrame) and not v.empty)]
     chosen = st.selectbox('DraftKings slate to include', choices)
     slate = start = ''

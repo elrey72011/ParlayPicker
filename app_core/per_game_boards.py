@@ -1,4 +1,5 @@
 """One finalized pick and one independently ranked side/total per game."""
+from app_core.quote_freshness import QUOTE_MAX_AGE_SECONDS
 import math
 import pandas as pd
 
@@ -41,7 +42,7 @@ def exact_book_quote(row, book):
     at = pd.to_datetime(run, utc=True, errors='coerce')
     if pd.isna(at):
         at = pd.to_datetime(run, format='%Y%m%dT%H%M%S.%fZ', utc=True, errors='coerce')
-    if pd.isna(at) or not 0 <= (at-quoted).total_seconds() <= 900:
+    if pd.isna(at) or not 0 <= (at-quoted).total_seconds() <= QUOTE_MAX_AGE_SECONDS:
         return None
     return bound['odds_recorded_at']
 

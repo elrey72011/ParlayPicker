@@ -212,6 +212,12 @@ assert.equal(state({...row,sport:'MLB'}),'UNAVAILABLE');
 assert.equal(state({...row,quote_source:'Unknown'}),'UNAVAILABLE');
 assert.equal(state({...row,quote_time:new Date(now-16*60000).toISOString()}),'STALE');
 assert.equal(state({...row,start:new Date(now-1000).toISOString()}),'STARTED');
+Date.now=()=>now;
+data.stale_after_minutes=30;
+assert.equal(state({...row,quote_time:new Date(now-20*60000).toISOString()}),'PASS');
+assert.equal(state({...row,quote_time:new Date(now-30*60000).toISOString()}),'PASS');
+assert.equal(state({...row,quote_time:new Date(now-30*60000-1).toISOString()}),'STALE');
+assert.equal(state({...row,as_of:new Date(now-30*60000-1).toISOString()}),'STALE');
 """
     subprocess.run([node,'-e',script],check=True)
     assert "supportedQuote(r)?r.quote_source+' · '" in html
