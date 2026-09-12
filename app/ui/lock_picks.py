@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 from app_core.locked_picks import lock_candidates, lock_audit
 from app_core.quote_freshness import package_age_minutes
-from app_core.public_history import now, report, digest
+from app_core.public_history import now, report, digest, lock_stage
 from app_core.public_record import current_records
 
 
@@ -62,18 +62,31 @@ def render_lock_picks(package, setting):
             key='lock_pick_selection')
         if st.button('Lock selected picks', key='lock_picks_action', disabled=not selected):
             try:
-                store = history(setting)
-                store.lock_picks(package, selected)
-                # Restore authoritative records: a concurrent first lock may differ.
-                locks = store.all('locks')
-                saved['locks'] = locks
-                saved['rows'] = report(saved['publications'], saved['revisions'], saved.get('imports',[]), locks)
-                from copy import deepcopy
-                from app_core import public_prop_history
-                from app.ui.sftp_publish import publish_action
-                updated=deepcopy(package)
-                updated['results']=current_records(saved['rows']+public_prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[])))
-                st.session_state['lock_publish_notice']=publish_action(updated,setting)
+                with st.status('Saving locks...', expanded=True) as saving:
+                    def show_progress(label, done, total):
+                        saving.update(label=f'{label} ({done}/{total})' if total else label)
+                    with lock_stage('open_storage'):
+                        store = history(setting)
+                    store.lock_picks(package, selected, progress=show_progress)
+                    saving.update(label='Checking saved locks...')
+                    # Fresh authoritative read retains concurrent locks/removals.
+                    with lock_stage('verify_lock_history'):
+                        locks = store.all('locks')
+                    saved['locks'] = locks
+                    saving.update(label='Locks saved and verified', state='complete')
+                st.success('Your locks are saved. Preparing and publishing the website now.')
+                with st.status('Publishing website...', expanded=True) as publishing:
+                    with lock_stage('rebuild_results'):
+                        saved['rows'] = report(saved['publications'], saved['revisions'], saved.get('imports',[]), locks)
+                        from copy import deepcopy
+                        from app_core import public_prop_history
+                        from app.ui.sftp_publish import publish_action
+                        updated=deepcopy(package)
+                        updated['results']=current_records(saved['rows']+public_prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[])))
+                    with lock_stage('publish_website'):
+                        notice = publish_action(updated,setting)
+                        st.session_state['lock_publish_notice'] = notice
+                    publishing.update(label=notice, state='complete' if notice.startswith(('Published:', 'Records saved.')) else 'error')
                 st.session_state.pop('publication_preview', None)
                 st.session_state['lock_saved_notice'] = True
                 st.rerun()
