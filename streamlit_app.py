@@ -1925,6 +1925,11 @@ def main() -> None:
         render_readiness_dashboard(diagnostics.get("candidate_audit_df"), best_picks_df, diagnostics)
 
     if analysis_df is None or analysis_df.empty:
+        # History grading and republication must remain available after a restart,
+        # even before today's analysis has produced a game board.
+        with publish_tab:
+            from app.ui.publish_panel import render_publish_panel
+            render_publish_panel(publication_games, diagnostics.get("candidate_audit_df"), publication_props, publication_dfs)
         saved_props = st.session_state.get("strikeout_prop_card", pd.DataFrame())
         if not saved_props.empty:
             with tab3:

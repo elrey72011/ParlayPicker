@@ -81,7 +81,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
                 st.info(publish_action(package,setting))
             else:
                 st.info('Results saved. Refresh picks to create your first public board.')
-        st.info('Use Refresh picks to prepare game picks.')
+        st.info('No game analysis is loaded in this session. You can score saved picks with Update results and publish above. Use Refresh picks only when you want a new game board.')
         return
     props = props if isinstance(props,pd.DataFrame) else pd.DataFrame()
     def describe_dates(frame):
