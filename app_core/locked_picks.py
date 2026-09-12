@@ -1,9 +1,8 @@
 """Immutable owner-selected overall picks, distinct from published/approved history."""
 from collections import Counter
 from datetime import datetime
-import re
 from zoneinfo import ZoneInfo
-from app_core.public_history import eligible, event_key, digest
+from app_core.public_history import eligible, event_key, digest, resolved_pick
 from app_core.quote_freshness import package_age_minutes
 
 
@@ -25,18 +24,6 @@ def _duplicate_ids(package):
     return {key for key, count in counts.items() if key and count > 1}
 
 
-def _resolved_pick(leg):
-    pick = str(leg.get('pick') or '').strip()
-    market = leg.get('market', '')
-    if not pick or any(token in pick.lower() for token in ('unresolved', 'unavailable', 'no line', 'no bet')):
-        return False
-    if market.startswith('spread_'):
-        return bool(re.fullmatch(r'.+\s+[+-]\d+(?:\.\d+)?', pick))
-    if market.startswith('total_'):
-        match = re.fullmatch(r'(Over|Under)\s+\d+(?:\.\d+)?', pick, re.I)
-        return bool(match and match[1].lower() == market.split('_')[1])
-    return True
-
 
 def lock_candidates(package, at):
     from app_core.public_board import validate_package
@@ -46,7 +33,7 @@ def lock_candidates(package, at):
     rows = {}
     duplicates = _duplicate_ids(package)
     for leg in package['games']['overall']:
-        if not _resolved_pick(leg) or not eligible(leg, clock, max_age_minutes=package_age_minutes(package)):
+        if not resolved_pick(leg) or not eligible(leg, clock, max_age_minutes=package_age_minutes(package)):
             continue
         date = datetime.fromisoformat(leg['start']).astimezone(ZoneInfo('America/New_York')).date().isoformat()
         if date != today:
@@ -125,7 +112,7 @@ def lock_audit(package, at, locks=()):
             status, detail = 'Invalid analysis time', 'Analysis time is missing or ahead of the current time.'
         elif (clock - analysis).total_seconds() > limit * 60:
             status, detail = 'Stale analysis', f'Game analysis is older than {limit} minutes; refresh game picks.'
-        elif not _resolved_pick(leg):
+        elif not resolved_pick(leg):
             status, detail = 'Unresolved pick', 'A complete selection and line are required before a new lock can be saved.'
         elif not eligible(leg, clock, max_age_minutes=limit):
             status, detail = 'Invalid market or odds', 'The saved market or price is not supported for locking.'

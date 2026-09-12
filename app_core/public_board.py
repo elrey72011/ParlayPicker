@@ -118,12 +118,14 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
                             'salary':salary, 'salary_remaining':50000-salary,
                             'projected_points':number(row, 'Projected Points'),
                             'projection_basis':text(row, 'Projection Sources') or 'Unavailable'})
-    from app_core.public_parlays import build_parlays
+    from app_core.public_parlays import build_parlays, build_research_parlays
     built_at = datetime.now(timezone.utc)
     from app_core.public_prop_timing import with_game_starts
     public_props=[] if props is None else [pick_record(row, prop=True, as_of=props_as_of) for _,row in props.iterrows()]
     public_props=with_game_starts(public_props,games['overall'])
-    return {'schema_version':2, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':build_parlays(games['overall'], built_at, qualified_only=True), 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
+    qualified_parlays = build_parlays(games['overall'], built_at, qualified_only=True)
+    research_parlays = build_research_parlays(games['overall'], built_at, qualified_parlays=qualified_parlays)
+    return {'schema_version':2, 'research_parlay_policy':'positive-edge-v1', 'research_parlays':research_parlays, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':qualified_parlays, 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
             'games':games, 'props':public_props,
             'dfs':lineups}
 
@@ -137,12 +139,14 @@ def validate_package(package):
         value = row.get('expected_stat')
         if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
             raise ValueError('Invalid expected statistic')
-    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else ''))
+    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' research_parlay_policy research_parlays' if 'research_parlay_policy' in package else '') + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else ''))
     package_age_minutes(package)
     if package['schema_version'] not in {1,2,3,4,5}:
         raise ValueError('Unsupported public package version/policy')
     if 'selection_policy' in package and package['selection_policy'] != 'qualified-v1':
         raise ValueError('Unsupported selection policy')
+    if 'research_parlay_policy' in package and (package['research_parlay_policy'] != 'positive-edge-v1' or package.get('selection_policy') != 'qualified-v1' or package['schema_version'] not in {2,3,4,5}):
+        raise ValueError('Unsupported research parlay policy')
     if 'top_ten_policy' in package and (package['top_ten_policy'] != 'first-publication-v1' or package.get('selection_policy') != 'qualified-v1'):
         raise ValueError('Unsupported Top 10 policy')
     timestamp(package['built_at'])
@@ -199,6 +203,11 @@ def validate_package(package):
         expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_only=package.get('selection_policy')=='qualified-v1', max_age_minutes=package_age_minutes(package))
         if package['parlays'] != expected:
             raise ValueError('Parlays must match the original disjoint selections and estimates')
+        if 'research_parlay_policy' in package:
+            from app_core.public_parlays import build_research_parlays
+            research = build_research_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_parlays=expected, max_age_minutes=package_age_minutes(package))
+            if package['research_parlays'] != research:
+                raise ValueError('Research parlays must match the original eligible selections and estimates')
     if package['schema_version'] in {3,4,5}:
         if not isinstance(package['results'], list):
             raise ValueError('Invalid public results')
