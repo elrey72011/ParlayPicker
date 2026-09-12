@@ -181,7 +181,8 @@ def selections(publications):
             date=min(datetime.fromisoformat(x['start']) for x in legs).astimezone(ZoneInfo('America/New_York')).date().isoformat()
             chosen[identity]={'id':digest(identity),'category':category,'date':date,'group':'Approved' if approved else 'Research',
                               'published_at':pub['confirmed_at'],'legs':legs}
-    return list(chosen.values())
+    from app_core.top_ten_history import top_ten_selections
+    return list(chosen.values()) + top_ten_selections(publications)
 
 
 def grade_leg(leg, scores, *, imported=False):

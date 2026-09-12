@@ -270,11 +270,18 @@ renderResults();
 const summary=document.getElementById('resultSummary').children.find(n=>n.className==='panel scroll').children[0];
 assert.deepEqual(summary.children.slice(1).map(r=>r.children.slice(0,7).map(c=>c.textContent)),[
  ['Overall Best Picks',1,0,0,0,1,'100.0%'],['Sides',0,1,0,0,1,'0.0%'],
- ['Totals',1,0,0,0,1,'100.0%'],['Parlays',0,1,0,0,1,'0.0%']]);
+ ['Totals',1,0,0,0,1,'100.0%'],['Parlays',0,1,0,0,1,'0.0%'],['Top 10',0,0,0,0,0,'No tracked picks']]);
 assert.equal(document.getElementById('lockedWinSummary').children[1].textContent,'0.0%');
 const details=JSON.stringify(document.getElementById('resultDetails'));
 assert.ok(details.includes('published-parlay'));
 assert.ok(!details.includes('locked-overall')&&!details.includes('imported-total'));
+availableResults.push(...['WIN','LOSS','PUSH','PENDING'].map(outcome=>({group:'Approved',category:'top10',outcome,picks:'top-ten-'+outcome,date:'2026-09-11',odds:'-110',final_score:'saved score'})));
+document.getElementById('resultGroup').value='Top 10';document.getElementById('resultPeriod').value='1';renderResults();
+const topSummary=document.getElementById('resultSummary').children.find(n=>n.className==='panel scroll').children[0];
+assert.deepEqual(topSummary.children[1].children.slice(0,7).map(c=>c.textContent),['Yesterday’s Top 10',1,1,1,1,3,'50.0%']);
+assert.equal(topSummary.children.length,2);
+assert.ok(JSON.stringify(document.getElementById('resultDetails')).includes('top-ten-WIN'));
+assert.ok(!JSON.stringify(document.getElementById('resultDetails')).includes('published-overall'));
 document.getElementById('resultGroup').value='Locked';renderResults();
 assert.ok(JSON.stringify(document.getElementById('resultDetails')).includes('locked-overall'));
 assert.ok(!JSON.stringify(document.getElementById('resultDetails')).includes('published-overall'));
@@ -321,7 +328,7 @@ def test_top_ten_cross_league_ranking_and_rendering(tmp_path):
     html = Path('publishing/board.html').read_text(encoding='utf-8')
     funcs = '\n'.join(line for line in html.splitlines() if line.startswith((
         'function supportedQuote(', 'function state(', 'function qualifiedPick(',
-        'function topPicks(', 'function renderTopPicks(', 'function table(')))
+        'function easternDay(', 'function topPicks(', 'function renderTopPicks(', 'function table(')))
     script = r"""
 const assert=require('node:assert/strict');
 let now=Date.parse('2026-09-12T16:00:00Z');Date.now=()=>now;
@@ -338,7 +345,7 @@ const a=row('A',.7,.1),b=row('B',.7,.2,'NCAAF'),c=row('C',.75);
 const invalid=[{...row('Pass',.99),status:'PASS'}, {...row('Started',.99),start:'2026-09-12T16:00:00Z'},
  {...row('Stale quote',.99),quote_time:'2026-09-12T15:00:00Z'},
  {...row('Stale analysis',.99),as_of:'2026-09-12T15:00:00Z'},
- {...row('Missing quote',.99),quote_source:''},row('No edge',.99,0),row('Null probability',null),row('Invalid probability',1.1)];
+ {...row('Missing quote',.99),quote_source:''},{...row('Tomorrow',.99),start:'2026-09-13T18:00:00Z'},row('No edge',.99,0),row('Null probability',null),row('Invalid probability',1.1)];
 const rows=[a,...invalid,c,b];const before=JSON.stringify(rows);
 assert.deepEqual(topPicks(rows).map(r=>r.game),['C','B','A']);assert.equal(JSON.stringify(rows),before);
 assert.equal(topPicks(Array.from({length:15},(_,i)=>row('Game '+i,.5+i/100))).length,10);

@@ -120,7 +120,7 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
     from app_core.public_prop_timing import with_game_starts
     public_props=[] if props is None else [pick_record(row, prop=True, as_of=props_as_of) for _,row in props.iterrows()]
     public_props=with_game_starts(public_props,games['overall'])
-    return {'schema_version':2, 'selection_policy':'qualified-v1', 'parlays':build_parlays(games['overall'], built_at, qualified_only=True), 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
+    return {'schema_version':2, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':build_parlays(games['overall'], built_at, qualified_only=True), 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
             'games':games, 'props':public_props,
             'dfs':lineups}
 
@@ -134,12 +134,14 @@ def validate_package(package):
         value = row.get('expected_stat')
         if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
             raise ValueError('Invalid expected statistic')
-    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' selection_policy' if 'selection_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else ''))
+    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else ''))
     package_age_minutes(package)
     if package['schema_version'] not in {1,2,3,4,5}:
         raise ValueError('Unsupported public package version/policy')
     if 'selection_policy' in package and package['selection_policy'] != 'qualified-v1':
         raise ValueError('Unsupported selection policy')
+    if 'top_ten_policy' in package and (package['top_ten_policy'] != 'first-publication-v1' or package.get('selection_policy') != 'qualified-v1'):
+        raise ValueError('Unsupported Top 10 policy')
     timestamp(package['built_at'])
     exact(package['games'], 'overall sides totals')
     for rows in [*package['games'].values(), package['props']]:
@@ -202,8 +204,10 @@ def validate_package(package):
             if not all(isinstance(v,str) for k,v in row.items() if k != 'expected_stat') or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
             seen.add(row['id'])
-            if row['category'] not in ({'overall','sides','totals','parlays','props'} if package['schema_version'] in {4,5} else {'overall','sides','totals','parlays'}) or row['group'] not in ({'Approved','Research','Imported research','Locked'} if package['schema_version']==5 else {'Approved','Research','Imported research'}) or row['outcome'] not in ({'WIN','LOSS','PUSH','PENDING','NEEDS_REVIEW'} if package['schema_version']==5 and row['category']=='props' else {'WIN','LOSS','PUSH','PENDING'}):
+            if row['category'] not in (({'overall','sides','totals','parlays','props'} | ({'top10'} if package['schema_version']==5 else set())) if package['schema_version'] in {4,5} else {'overall','sides','totals','parlays'}) or row['group'] not in ({'Approved','Research','Imported research','Locked'} if package['schema_version']==5 else {'Approved','Research','Imported research'}) or row['outcome'] not in ({'WIN','LOSS','PUSH','PENDING','NEEDS_REVIEW'} if package['schema_version']==5 and row['category']=='props' else {'WIN','LOSS','PUSH','PENDING'}):
                 raise ValueError('Invalid result category or outcome')
+            if row['category']=='top10' and row['group']!='Approved':
+                raise ValueError('Top 10 results must be approved published selections')
             if row['group']=='Locked' and row['category']!='overall':
                 raise ValueError('Only overall picks can be locked')
             if row['category']=='props':
