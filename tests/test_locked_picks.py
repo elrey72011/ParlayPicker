@@ -38,7 +38,7 @@ def test_stale_empty_unknown_and_duplicate_games_fail_closed(store):
     package['games']['overall'][0]['as_of']='2026-09-09T19:30:00+00:00'
     assert lock_candidates(package,AT)==[]
     package=pub()['package'];package['games']['overall'].append(deepcopy(package['games']['overall'][0]))
-    with pytest.raises(ValueError):lock_candidates(package,AT)
+    assert lock_candidates(package,AT)==[]
     assert store.all('locks')==[]
 
 def test_restore_rejects_date_tampering(store):
@@ -177,8 +177,8 @@ def test_lock_audit_duplicate_and_thirty_minute_boundary():
     assert lock_audit(package,AT)[0]['Lock status']=='Eligible now'
     assert lock_audit(package,'2026-09-09T19:56:01Z')[0]['Lock status']=='Stale quote'
     package['games']['overall'].append(deepcopy(row))
-    assert [r['Lock status'] for r in lock_audit(package,AT)]==['Eligible now','Duplicate game entry']
-    with pytest.raises(ValueError): lock_candidates(package,AT)  # Existing ambiguity guard remains.
+    assert [r['Lock status'] for r in lock_audit(package,AT)]==['Duplicate game entry','Duplicate game entry']
+    assert lock_candidates(package,AT)==[]  # Ambiguity excludes only this game.
 
 
 def test_lock_ui_explains_missing_quotes_without_requesting_pointless_refresh(monkeypatch):
@@ -198,3 +198,62 @@ render_lock_picks(PACKAGE,lambda key:'site')
     assert 'Click Refresh picks' not in ' '.join(r.value for r in app.info)
     assert app.button(key='lock_picks_action').disabled
     assert any(r.label=='Why games cannot be locked' for r in app.expander)
+
+
+@pytest.mark.parametrize('second_start', [None, '2026-09-09T22:00:00Z'])
+def test_duplicate_group_does_not_block_unrelated_lock(store, second_start):
+    from app_core.locked_picks import lock_audit
+    package = pub()['package']
+    duplicate = deepcopy(package['games']['overall'][0])
+    if second_start:
+        duplicate['start'] = second_start
+    other = dict(duplicate, game='Ready at Boston')
+    package['games']['overall'].extend([duplicate, other])
+    candidates = lock_candidates(package, AT)
+    assert [r['legs'][0]['game'] for r in candidates] == ['Ready at Boston']
+    audit = lock_audit(package, AT)
+    assert [r['Lock status'] for r in audit] == ['Duplicate game entry'] * 2 + ['Eligible now']
+    assert store.lock_picks(package, [candidates[0]['id']]) == candidates
+
+
+def test_existing_alias_duplicates_do_not_hide_new_selector(store, monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from app.ui import lock_picks
+    from app_core.locked_picks import lock_audit
+    package = pub()['package']
+    original = package['games']['overall'][0]
+    original.update(sport='NCAAF', game='Grambling State at Tcu', pick='Tcu -20.5')
+    saved = store.lock_picks(package, [r['id'] for r in lock_candidates(package, AT)])
+    before = deepcopy(saved)
+    package['games']['overall'].extend([dict(original, game='Grambling at Tcu'),
+                                       dict(original, game='Ready at Tcu')])
+    assert [r['Lock status'] for r in lock_audit(package, AT, saved)] == ['Already locked', 'Already locked', 'Eligible now']
+    monkeypatch.setattr(lock_picks, 'now', lambda: AT)
+    code = "import streamlit as st\nfrom app.ui.lock_picks import render_lock_picks\n"
+    code += "st.session_state['public_results_site']=" + repr(dict(publications=[], revisions=[], locks=saved)) + "\n"
+    code += "render_lock_picks(" + repr(package) + ", lambda key: 'site')"
+    app = AppTest.from_string(code).run()
+    assert not app.exception
+    assert len(app.multiselect(key='lock_pick_selection').value) == 1
+    assert not app.button(key='lock_picks_action').disabled
+    assert store.all('locks') == before
+
+
+@pytest.mark.parametrize('pick,market', [('Cal Poly line unresolved','spread_away'),
+    ('Cal Poly','spread_away'), ('Over','total_over'), ('Under 48.5','total_over')])
+def test_unresolved_new_pick_is_not_lockable(store, pick, market):
+    from app_core.locked_picks import lock_audit
+    package = pub()['package']
+    package['games']['overall'][0].update(pick=pick, market=market)
+    assert lock_candidates(package, AT) == []
+    assert lock_audit(package, AT)[0]['Lock status'] == 'Unresolved pick'
+    with pytest.raises(ValueError):
+        store.lock_picks(package, ['invalid'])
+    assert store.all('locks') == []
+
+
+def test_new_pick_validation_does_not_rewrite_archived_locks():
+    saved = lock_candidates(pub()['package'], AT)
+    saved[0]['legs'][0]['pick'] = 'Boston line unresolved'
+    before = deepcopy(saved)
+    assert locked_selections(saved) == before
