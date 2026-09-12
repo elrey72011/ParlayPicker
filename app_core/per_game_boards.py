@@ -47,6 +47,28 @@ def exact_book_quote(row, book):
     return bound['odds_recorded_at']
 
 
+def espn_observed_quote(row):
+    """Owner-authorized NCAAF research snapshot; not sportsbook update evidence."""
+    from app_core.prediction_evidence import matching_quotes
+    from core.selector_validation import timestamp
+    if text(row, 'league', 'League').upper() != 'NCAAF' or text(row, 'odds_feed_source') != 'espn_ncaaf_fcs_scoreboard':
+        return None
+    matches = matching_quotes(dict(row, opposing_odds_source='draftkings'))
+    if len(matches) != 1:
+        return None
+    quote = matches[0]
+    if quote.get('observation_source') != 'espn_ncaaf_fcs_scoreboard' or quote.get('recorded_at'):
+        return None
+    observed = timestamp(quote.get('observed_at'))
+    run = text(row, 'export_run_id')
+    at = pd.to_datetime(run, utc=True, errors='coerce')
+    if pd.isna(at):
+        at = pd.to_datetime(run, format='%Y%m%dT%H%M%S.%fZ', utc=True, errors='coerce')
+    if pd.isna(observed) or pd.isna(at) or not 0 <= (at-observed).total_seconds() <= QUOTE_MAX_AGE_SECONDS:
+        return None
+    return observed.isoformat()
+
+
 def novig_quote(row):
     return exact_book_quote(row, 'novig')
 
@@ -59,6 +81,10 @@ def public_quote(row, college_fallback=False):
         at = exact_book_quote(row, book)
         if at:
             return label, at
+    if college_fallback:
+        observed = espn_observed_quote(row)
+        if observed:
+            return 'DraftKings', observed
     return None
 
 
@@ -162,6 +188,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 reason='No matching ranked '+family+' candidate available; rerun analysis to refresh the audit'
         quote = public_quote(selected, allow_fallback) if selected is not None and novig_only else None
         fallback_selected = quote is not None and quote[0] != 'Novig'
+        observed_selected = bool(quote and quote[0] == 'DraftKings' and not exact_book_quote(selected, 'draftkings') and espn_observed_quote(selected))
         same = selected is not None and family_of(selected)==family_of(final) and text(selected,'best_pick')==text(final,'best_pick') and number(selected,'odds_american')==number(final,'odds_american') and text(selected,'odds_source')==text(final,'odds_source')
         # Only the exact final ticket can inherit the finalized approval or stake.
         source=selected if novig_only else final if same or family=='overall' else selected
@@ -184,7 +211,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         if source is None:
             approval_reason = 'No matching ranked market available; refresh analysis'
         elif fallback_selected:
-            approval_reason = 'College sportsbook fallback; research selection, not wager approval'
+            approval_reason = ('ESPN snapshot; sportsbook update time unknown; research selection, not wager approval' if observed_selected else 'College sportsbook fallback; research selection, not wager approval')
         elif approved:
             approval_reason = 'Passed final wager checks with a positive approved stake'
         elif not final_ticket:
@@ -211,5 +238,6 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'edge':edge,'ev':ev,'selection_score':number(selected,'best_available_score') if selected is not None else None,
                      'reason':reason,'approval_reason':approval_reason,
                      **({'qualification_reason':approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('College fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else (college_unavailable_reason(final,candidates,family) if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
+                     **({'quote_time_basis':'espn_observed'} if observed_selected else {}),
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)

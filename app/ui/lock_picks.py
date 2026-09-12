@@ -18,7 +18,9 @@ def render_lock_picks(package, setting):
     if saved is None:
         return
     with st.expander('Lock Overall Best Picks', expanded=True):
-        st.caption(f'Lock selected picks saves the original selections to Drive and publishes the board below, including your selected props and DFS slate. Existing locks cannot be replaced. Prices must be at most {package_age_minutes(package)} minutes old and games must not have started. Locking does not place a bet.')
+        st.caption(f'Lock selected picks saves the original selections to Drive and publishes the board below, including your selected props and DFS slate. Existing locks cannot be replaced. Quote updates or labeled ESPN observations must be at most {package_age_minutes(package)} minutes old and games must not have started. Locking does not place a bet.')
+        if any(r.get('quote_time_basis') == 'espn_observed' for r in package['games']['overall']):
+            st.caption('ESPN college research picks use the time we observed the snapshot. DraftKings update time is unknown. Refresh preview does not renew the observation time.')
         existing = saved.get('locks', [])
         published_ids=set()
         pubs=saved.get('publications',[])
@@ -32,6 +34,7 @@ def render_lock_picks(package, setting):
             st.dataframe(pd.DataFrame([{'Date':r['date'], 'Game':r['legs'][0]['game'],
                 'Locked pick':r['legs'][0]['pick'], 'Odds':r['legs'][0]['odds'],
                 'Sportsbook':r['legs'][0].get('quote_source','Not recorded'),
+                **({'Observed at (UTC)':r['legs'][0]['quote_time']} if r['legs'][0].get('quote_time_basis') == 'espn_observed' else {}),
                 'Locked at (UTC)':r['published_at'],
                 'Website':'Published' if r['id'] in published_ids else 'Not verified as published'} for r in existing]), hide_index=True)
         render_lock_correction(package, setting, saved)

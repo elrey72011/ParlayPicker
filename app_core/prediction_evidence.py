@@ -101,7 +101,7 @@ def begin_run(controls, *, path=None, root=ROOT):
 
 
 def provider_quotes(game):
-    """Keep actual per-book/per-market source times; never stamp a download as a quote."""
+    """Keep provider update times and explicitly separate ESPN observation times."""
     quotes = []
     for book in game.get("bookmakers", []):
         name = str(book.get("key", "")).lower()
@@ -123,13 +123,15 @@ def provider_quotes(game):
                 else:
                     continue
                 quotes.append({"book": name, "market_type": kind, "point": outcome.get("point"),
-                               "price": outcome.get("price"), "recorded_at": market.get("last_update") or book.get("last_update")})
+                               "price": outcome.get("price"), "recorded_at": market.get("last_update") or book.get("last_update"),
+                               **({"observed_at": book["observed_at"], "observation_source": "espn_ncaaf_fcs_scoreboard"}
+                                  if name == "draftkings" and game.get("odds_feed_source") == "espn_ncaaf_fcs_scoreboard"
+                                  and book.get("observation_source") == "espn_ncaaf_fcs_scoreboard" and book.get("observed_at") else {})})
     return json.dumps(quotes, sort_keys=True)
 
 
-def bind_quote(row):
-    """A timestamp is usable only for the exact offered side, line, price and book."""
-    from core.selector_validation import timestamp
+def matching_quotes(row):
+    """Return exact offered side, line, price and book matches without changing evidence."""
 
     kind = str(row.get("market_type", ""))
     price = pd.to_numeric(row.get("odds_american"), errors="coerce")
@@ -140,7 +142,11 @@ def bind_quote(row):
     except (TypeError, ValueError):
         quotes = []
     matches = []
+    if not isinstance(quotes, list):
+        return matches
     for quote in quotes:
+        if not isinstance(quote, dict):
+            continue
         qprice = pd.to_numeric(quote.get("price"), errors="coerce")
         qline = pd.to_numeric(quote.get("point"), errors="coerce")
         same_line = kind.startswith("moneyline") or (pd.notna(line) and pd.notna(qline) and abs(line - qline) < 1e-8)
@@ -148,6 +154,13 @@ def bind_quote(row):
             if preferred in {"novig", "fanduel", "draftkings", "betmgm"} and quote.get("book") != preferred:
                 continue
             matches.append(quote)
+    return matches
+
+
+def bind_quote(row):
+    """Production evidence requires a provider update time, never observation time."""
+    from core.selector_validation import timestamp
+    matches = matching_quotes(row)
     # Without a known book, multiple matching sources are ambiguous.
     if len(matches) != 1 or pd.isna(timestamp(matches[0].get("recorded_at"))):
         return {"odds_recorded_at": "", "quote_bookmaker": "", "quote_binding_verified": False}

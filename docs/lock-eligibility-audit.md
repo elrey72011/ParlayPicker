@@ -15,3 +15,13 @@ All 33 missing-quote games had DraftKings offers from `espn_ncaaf_fcs_scoreboard
 The candidate CSV does not contain saved lock records. It cannot establish the exact relationship to the earlier screenshot's 81 locks. The new panel performs that comparison using the owner's saved history. Older public-board snapshots are not substitutes for the current owner session.
 
 Timestamped coverage from a supported provider is still required to make the 33 untimestamped games lockable. Refreshing alone cannot repair absent provider timestamps. This diagnostic change does not supply that missing feed coverage or alter saved locks.
+
+## Owner-authorized ESPN observation policy
+
+The owner subsequently selected labeled snapshot times for college research locks. On a successful ESPN scoreboard fetch, the adapter records an aware UTC `observed_at` beside each DraftKings book. It leaves `last_update` and serialized `recorded_at` absent/null. Capturing or re-rendering an analysis never synthesizes this metadata for older exports.
+
+The public selection layer accepts the observation only for exact NCAAF DraftKings side/line/price matches tagged with the ESPN FCS source, after trying supported provider-update quotes. It requires an aware observation timestamp no later than the analysis run and within 30 minutes. Locking also enforces the age at click time, same-day pregame timing, and existing immutable lock rules.
+
+Public data stores the selected freshness time in `quote_time` with mandatory `quote_time_basis: espn_observed` for this path. The website displays **Observed at ... via ESPN (sportsbook update time unknown)** on the current board and saved locked selection. The lock history retains both fields. These rows remain PASS/research, never production-approved; production evidence binding still requires a genuine provider update timestamp. Novig and other provider-timestamp behavior is unchanged.
+
+This measures observation age, not when DraftKings last changed the price. No per-game recovery requests are added. After deploying, run **Refresh picks** once to capture new observations, then select and lock the eligible games within 30 minutes. Existing untimestamped exports cannot be repaired by refreshing the preview. Already-started games remain ineligible.

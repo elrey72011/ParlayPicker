@@ -70,6 +70,9 @@ def pick_record(row, *, prop=False, as_of=None):
     if not prop and 'quote_source' in row:
         record['quote_source'] = text(row, 'quote_source')
         record['quote_time'] = timestamp(text(row, 'quote_time'))
+        if text(row, 'quote_time_basis'):
+            record['quote_time_basis'] = text(row, 'quote_time_basis')
+            record['status'] = 'PASS'
         if 'quote_reason' in row:
             record['quote_reason'] = text(row, 'quote_reason')
     if prop:
@@ -148,7 +151,7 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
             projection_metric(row)
             if 'qualification_reason' in row and not isinstance(row['qualification_reason'],str):
                 raise ValueError('Invalid qualification reason')
@@ -159,6 +162,8 @@ def validate_package(package):
                     raise ValueError('Invalid quote source')
                 if supported_quote(row) and not timestamp(row['quote_time']):
                     raise ValueError('Missing sportsbook quote time')
+                if 'quote_time_basis' in row and (not supported_quote(row) or row['status'] != 'PASS' or not timestamp(row['as_of']) or timestamp(row['quote_time']) > timestamp(row['as_of'])):
+                    raise ValueError('Invalid research observation provenance')
             for key in ('sport','game','pick','player','market','status'):
                 if not isinstance(row[key], str):
                     raise ValueError('Public labels must be text')
@@ -199,7 +204,7 @@ def validate_package(package):
             raise ValueError('Invalid public results')
         seen=set()
         for row in package['results']:
-            exact(row, 'id category date group published_at outcome picks odds final_score' + (' quote_source' if 'quote_source' in row else '') + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' sport' if row.get('group')=='Locked' and row.get('category')=='overall' and package['schema_version']==5 and 'sport' in row else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
+            exact(row, 'id category date group published_at outcome picks odds final_score' + (' quote_source' if 'quote_source' in row else '') + (' quote_time quote_time_basis' if 'quote_time_basis' in row else '') + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' sport' if row.get('group')=='Locked' and row.get('category')=='overall' and package['schema_version']==5 and 'sport' in row else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
             projection_metric(row)
             if not all(isinstance(v,str) for k,v in row.items() if k != 'expected_stat') or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
@@ -214,6 +219,8 @@ def validate_package(package):
                 from app_core.public_prop_history import MARKETS
                 if row['sport']!='MLB' or row['market'] not in MARKETS:raise ValueError('Unsupported prop results')
             datetime.strptime(row['date'], '%Y-%m-%d')
+            if 'quote_time_basis' in row and (row['group'] != 'Locked' or not supported_quote(row) or not timestamp(row['quote_time'])):
+                raise ValueError('Invalid locked observation provenance')
             if 'quote_source' in row and (row['group'] != 'Locked' or row['quote_source'] not in {'Novig', 'DraftKings', 'FanDuel', 'BetMGM'}):
                 raise ValueError('Invalid locked sportsbook label')
             if row['group'] != 'Imported research' and not timestamp(row['published_at']):
