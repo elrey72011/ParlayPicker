@@ -216,3 +216,45 @@ assert.equal(state({...row,start:new Date(now-1000).toISOString()}),'STARTED');
     subprocess.run([node,'-e',script],check=True)
     assert "supportedQuote(r)?r.quote_source+' · '" in html
     assert "r.quote_source||'Not recorded'" in html
+
+
+def test_published_category_overview_keeps_locked_record_separate(tmp_path):
+    import os, shutil, subprocess
+    from pathlib import Path
+    node=os.environ.get('NODE_BINARY') or shutil.which('node')
+    if not node: pytest.skip('Node unavailable')
+    html=Path('publishing/board.html').read_text(encoding='utf-8')
+    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function matchesResultGroup(', 'function renderLockedWinRate(', 'function renderResults(')))
+    script=r"""
+const assert=require('node:assert/strict');
+class Element {constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.value='';} append(...v){this.children.push(...v)} replaceChildren(...v){this.children=[...v]} }
+const elements={};const document={getElementById:id=>elements[id]||(elements[id]=new Element('div'))};
+const el=(tag,text)=>new Element(tag,text);const fmt=(x,p=false)=>p?(x*100).toFixed(1)+'%':String(x);
+const availableResults=[
+ {group:'Research',category:'overall',outcome:'WIN',picks:'published-overall'},
+ {group:'Approved',category:'sides',outcome:'LOSS',picks:'published-side'},
+ {group:'Research',category:'totals',outcome:'WIN',picks:'published-total'},
+ {group:'Research',category:'parlays',outcome:'LOSS',picks:'published-parlay'},
+ {group:'Locked',category:'overall',outcome:'LOSS',picks:'locked-overall'},
+ {group:'Imported research',category:'totals',outcome:'WIN',picks:'imported-total'}
+].map(r=>({...r,date:'2026-09-11',odds:'-110',final_score:'1-0'}));
+const resultWindow=()=>({bounds:['2026-09-11','2026-09-11'],rows:availableResults});
+document.getElementById('resultKind').value='games';
+document.getElementById('resultGroup').value='Published picks';
+"""+funcs+r"""
+renderResults();
+const summary=document.getElementById('resultSummary').children.find(n=>n.className==='panel scroll').children[0];
+assert.deepEqual(summary.children.slice(1).map(r=>r.children.map(c=>c.textContent)),[
+ ['Overall Best Picks',1,0,0,0,1,'100.0%'],['Sides',0,1,0,0,1,'0.0%'],
+ ['Totals',1,0,0,0,1,'100.0%'],['Parlays',0,1,0,0,1,'0.0%']]);
+assert.equal(document.getElementById('lockedWinSummary').children[1].textContent,'0.0%');
+const details=JSON.stringify(document.getElementById('resultDetails'));
+assert.ok(details.includes('published-parlay'));
+assert.ok(!details.includes('locked-overall')&&!details.includes('imported-total'));
+document.getElementById('resultGroup').value='Locked';renderResults();
+assert.ok(JSON.stringify(document.getElementById('resultDetails')).includes('locked-overall'));
+assert.ok(!JSON.stringify(document.getElementById('resultDetails')).includes('published-overall'));
+"""
+    target=tmp_path/'category-results.cjs';target.write_text(script,encoding='utf-8')
+    subprocess.run([node,str(target)],check=True,capture_output=True,text=True)
+    assert "const preferred=['Published picks','Locked'" in html
