@@ -188,6 +188,19 @@ def event_key(leg):
     return (leg['sport'].upper(), *(team_name(t,leg['sport']) for t in teams), datetime.fromisoformat(leg['start']).isoformat())
 
 
+def resolved_pick(leg):
+    pick = str(leg.get('pick') or '').strip()
+    market = leg.get('market', '')
+    if not pick or any(token in pick.lower() for token in ('unresolved', 'unavailable', 'no line', 'no bet')):
+        return False
+    if market.startswith('spread_'):
+        return bool(re.fullmatch(r'.+\s+[+-]\d+(?:\.\d+)?', pick))
+    if market.startswith('total_'):
+        match = re.fullmatch(r'(Over|Under)\s+\d+(?:\.\d+)?', pick, re.I)
+        return bool(match and match[1].lower() == market.split('_')[1])
+    return True
+
+
 def eligible(leg, confirmed, *, max_age_minutes=QUOTE_MAX_AGE_MINUTES):
     try:
         if 'quote_time_basis' in leg and (not supported_quote(leg) or leg.get('status') != 'PASS' or datetime.fromisoformat(leg.get('quote_time')) > datetime.fromisoformat(leg.get('as_of'))):
@@ -211,7 +224,7 @@ def selections(publications):
         confirmed=datetime.fromisoformat(pub['confirmed_at'])
         package=pub['package']
         entries=[(family,[leg],leg['status']=='APPROVED') for family,rows in package['games'].items() for leg in rows]
-        entries += [('parlays',p['legs'],False) for p in package.get('parlays',[])]
+        entries += [('parlays',p['legs'],False) for p in [*package.get('parlays',[]), *package.get('research_parlays',[])]]
         for category,legs,approved in entries:
             if not legs or not all(eligible(leg,confirmed,max_age_minutes=package_age_minutes(package)) for leg in legs):
                 continue
