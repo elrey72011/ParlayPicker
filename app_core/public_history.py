@@ -1,6 +1,9 @@
 """Immutable, site-scoped public publication records and conservative result grading."""
 from app_core.public_quote_policy import supported_quote
 from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES, package_age_minutes
+from contextlib import contextmanager
+from time import perf_counter
+import logging
 import hashlib
 import json
 import math
@@ -22,6 +25,19 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+@contextmanager
+def lock_stage(name, records=0):
+    started = perf_counter()
+    outcome = 'error'
+    try:
+        yield
+        outcome = 'ok'
+    finally:
+        logging.getLogger(__name__).warning(
+            'PERFORMANCE lock_stage=%s seconds=%.3f records=%d outcome=%s',
+            name, perf_counter() - started, records, outcome)
+
+
 class History:
     def __init__(self, site, folder, client=None):
         from app_core.netlify_publishing import identifier
@@ -31,21 +47,23 @@ class History:
         self.client = client or DriveStore(folder)
         self.prefix = 'parlaypicker/public-history-v1/' + identifier(site) + '/'
 
-    def read(self, key):
-        body=self.client.get_object(Key=self.prefix+key)['Body']
+    def read(self, key, *, client=None):
+        client = self.client if client is None else client
+        body=client.get_object(Key=self.prefix+key)['Body']
         try:
             return json.loads(body.read())
         finally:
             body.close()
 
-    def put(self, key, value, first=False):
+    def put(self, key, value, first=False, *, client=None):
+        client = self.client if client is None else client
         raw=encoded(value)
         try:
-            self.client.put_object(Key=self.prefix+key,Body=raw,IfNoneMatch='*')
+            client.put_object(Key=self.prefix+key,Body=raw,IfNoneMatch='*')
         except Exception as exc:
             if getattr(exc,'response',{}).get('Error',{}).get('Code') not in {'412','PreconditionFailed'}:
                 raise
-        saved=self.read(key)
+        saved=self.read(key, client=client)
         if not first and saved!=value:
             raise ValueError('Public history conflict; preserve the existing record.')
         return saved
@@ -71,6 +89,8 @@ class History:
         return saved
 
     def _all(self, kind):
+        if hasattr(self.client, 'read_objects'):
+            return [json.loads(raw) for _, raw in self.client.read_objects(Prefix=self.prefix+kind+'/')]
         values=[]
         for page in self.client.get_paginator('list_objects_v2').paginate(Prefix=self.prefix+kind+'/'):
             for item in page.get('Contents',[]):
@@ -97,27 +117,47 @@ class History:
                       'removed_at':now(), 'reason':reason.strip(), 'lock':originals[key]}, first=True)
         return self.all('locks')
 
-    def lock_picks(self, package, selected_ids):
+    def lock_picks(self, package, selected_ids, *, progress=None):
         from app_core.locked_picks import lock_candidates
-        # Server time is authoritative; the caller cannot backdate a lock.
+        # One authoritative server acceptance time, unchanged by I/O completion.
         at = now()
         choices = {row['id']: row for row in lock_candidates(package, at)}
         requested = set(selected_ids)
         if not requested or not requested <= choices.keys():
             raise ValueError('Selections changed, started or became stale. Rebuild the preview before locking.')
-        self.archive(package)
-        saved = []
-        active = {r['id']:r for r in self.all('locks')}
-        removals = self._all('lock_removals')
+        def update(label, done=0, total=0):
+            if progress:
+                progress(label, done, total)
+        update('Saving reviewed board')
+        with lock_stage('archive_board'):
+            self.archive(package)
+        update('Reading existing locks')
+        with lock_stage('read_existing_locks'):
+            originals = self._all('locks')
+            removals = self._all('lock_removals')
+            removed = {r['lock_hash'] for r in removals}
+            active = {r['id']: r for r in originals if digest(r) not in removed}
+        pending = []
         for identity in sorted(requested):
             # First write wins, including concurrent clicks and later previews.
             if identity in active:
-                saved.append(active[identity])
                 continue
             generation = sorted(r['lock_hash'] for r in removals if r['lock_id']==identity)
             suffix = '-'+digest(generation) if generation else ''
-            saved.append(self.put('locks/' + identity + suffix + '.json', choices[identity], first=True))
-        return saved
+            pending.append(('locks/' + identity + suffix + '.json', choices[identity]))
+        update('Saving and verifying locks', 0, len(pending))
+        with lock_stage('save_verified_locks', len(pending)):
+            if hasattr(self.client, 'run_parallel'):
+                saved = self.client.run_parallel(
+                    lambda worker, item: self.put(item[0], item[1], first=True, client=worker),
+                    pending, progress=lambda done, total: update('Saving and verifying locks', done, total))
+            else:
+                saved = []
+                for key, value in pending:
+                    saved.append(self.put(key, value, first=True))
+                    update('Saving and verifying locks', len(saved), len(pending))
+        active.update({r['id']: r for r in saved})
+        return [active[identity] for identity in sorted(requested)]
 
     def publications(self):
         result=[]

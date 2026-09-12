@@ -1,4 +1,6 @@
 """Create/read-only evidence objects in a Google Workspace Shared Drive folder."""
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import local
 from io import BytesIO
 import json
 import re
@@ -13,6 +15,21 @@ class AlreadyExists(Exception):
     response = {"Error": {"Code": "PreconditionFailed"}}
 
 
+def _authorized_session():
+    from google.oauth2.service_account import Credentials
+    from google.auth.transport.requests import AuthorizedSession
+    from app_core.evidence_config import service_account_info, EvidenceConfigurationError
+    info = service_account_info()
+    try:
+        credentials = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
+    except (ValueError, TypeError) as exc:
+        raise EvidenceConfigurationError(
+            "Service-account JSON parsed, but its signing key could not be loaded. "
+            "Replace the secret with the complete original downloaded JSON in triple single quotes; "
+            "do not edit the private-key contents.") from None
+    return AuthorizedSession(credentials)
+
+
 class DriveStore:
     """Small object-store interface used by the evidence replication layer.
 
@@ -24,19 +41,9 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
             raise EvidenceStorageError("Use the Shared Drive folder ID, not a URL")
         self.folder = folder
         self.created_ids = {}
+        self._session_factory = _authorized_session if session is None else None
         if session is None:
-            from google.oauth2.service_account import Credentials
-            from google.auth.transport.requests import AuthorizedSession
-            from app_core.evidence_config import service_account_info, EvidenceConfigurationError
-            info = service_account_info()
-            try:
-                credentials = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
-            except (ValueError, TypeError) as exc:
-                raise EvidenceConfigurationError(
-                    "Service-account JSON parsed, but its signing key could not be loaded. "
-                    "Replace the secret with the complete original downloaded JSON in triple single quotes; "
-                    "do not edit the private-key contents.") from None
-            session = AuthorizedSession(credentials)
+            session = self._session_factory()
         self.session = session
         response = self.session.get(f"{API}/{folder}", params={"supportsAllDrives": "true", "fields": "id,driveId,mimeType,trashed"}, timeout=20)
         response.raise_for_status()
@@ -75,6 +82,9 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
             files.append({"id": created_id, "name": Key})
         if not files:
             raise EvidenceStorageError("Remote evidence object is missing")
+        return {"Body": BytesIO(self._read_files(files))}
+
+    def _read_files(self, files):
         contents = []
         for item in files:
             response = self.session.get(f"{API}/{item['id']}", params={"alt": "media", "supportsAllDrives": "true"}, timeout=20)
@@ -82,7 +92,66 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
             contents.append(response.content)
         if any(raw != contents[0] for raw in contents):
             raise EvidenceStorageError("Drive contains conflicting duplicate evidence names")
-        return {"Body": BytesIO(contents[0])}
+        return contents[0]
+
+    def run_parallel(self, operation, items, progress=None):
+        """Bounded I/O with a separate authenticated session per worker.
+
+        Callbacks run on the caller thread. Injected sessions stay sequential
+        unless their owner explicitly supplies a worker-session factory.
+        """
+        items = list(items)
+        if not items:
+            return []
+        if self._session_factory is None or len(items) == 1:
+            result = []
+            for item in items:
+                result.append(operation(self, item))
+                if progress:
+                    progress(len(result), len(items))
+            return result
+        state, sessions = local(), []
+        def run(item):
+            if not hasattr(state, 'store'):
+                worker = object.__new__(DriveStore)
+                worker.folder, worker.drive = self.folder, self.drive
+                worker.created_ids = self.created_ids
+                worker._session_factory = None
+                worker.session = self._session_factory()
+                sessions.append(worker.session)
+                state.store = worker
+            return operation(state.store, item)
+        pool = ThreadPoolExecutor(max_workers=min(4, len(items)))
+        futures = {}
+        try:
+            futures = {pool.submit(run, item): i for i, item in enumerate(items)}
+            result = [None] * len(items)
+            for done, future in enumerate(as_completed(futures), 1):
+                result[futures[future]] = future.result()
+                if progress:
+                    progress(done, len(items))
+            return result
+        finally:
+            # Failed/uncertain writes are never retried. Finish running calls
+            # before reporting an error; cancel calls that have not started.
+            for future in futures:
+                future.cancel()
+            pool.shutdown(wait=True, cancel_futures=True)
+            for session in sessions:
+                session.close()
+
+    def read_objects(self, *, Prefix):
+        """One fresh listing, then verified reads by ID; no persistent cache."""
+        grouped = {}
+        for item in self._files():
+            if item['name'].startswith(Prefix):
+                grouped.setdefault(item['name'], {})[item['id']] = item
+        for name, file_id in self.created_ids.items():
+            if name.startswith(Prefix):
+                grouped.setdefault(name, {})[file_id] = {'id': file_id, 'name': name}
+        return self.run_parallel(
+            lambda worker, name: (name, worker._read_files(list(grouped[name].values()))),
+            sorted(grouped))
 
     def put_object(self, *, Key, Body, IfNoneMatch, **kwargs):
         if IfNoneMatch != "*":
