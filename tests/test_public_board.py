@@ -119,6 +119,24 @@ assert.ok(content.includes('LOCKED'));
 assert.ok(!content.includes('Under 63.5'));
 assert.equal(lockedRows(availableResults,today).length,1);
 assert.equal(original.outcome,'PENDING');
+const before=JSON.stringify(original);
+original.sport='MLB';
+availableResults.push({...original,sport:'NCAAF',picks:'College at Team: Over 45.5'});
+root.value='MLB';renderLockedPicks();
+assert.ok(JSON.stringify(root).includes('Over 65.5'));
+assert.ok(!JSON.stringify(root).includes('Over 45.5'));
+assert.ok(JSON.stringify(root).includes("Today's locked picks · 1"));
+root.value='NCAAF';renderLockedPicks();
+assert.ok(JSON.stringify(root).includes('Over 45.5'));
+assert.ok(!JSON.stringify(root).includes('Over 65.5'));
+root.value='NFL';renderLockedPicks();
+assert.ok(JSON.stringify(root).includes('No locked picks for NFL today'));
+root.value='';renderLockedPicks();
+assert.ok(JSON.stringify(root).includes("Today's locked picks · 2"));
+delete original.sport;
+assert.equal(JSON.stringify(original),before);
+assert.equal(lockedRows(availableResults,today,'MLB').length,0); // No guessing for legacy rows.
+
 availableResults.length=0;renderLockedPicks();assert.ok(JSON.stringify(root).includes('No locked picks for today'));
 """
     target=tmp_path/'locked-render.cjs'

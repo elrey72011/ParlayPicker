@@ -119,3 +119,18 @@ def test_correction_preserves_other_lock_exactly(store):
     second=store.lock_picks(other,[r['id'] for r in lock_candidates(other,AT)])[0]
     assert store.remove_locks([history.digest(first)],'Keep PIT/CHC')==[second]
     with pytest.raises(ValueError):store.remove_locks(['unknown'],'Bad request')
+
+
+def test_public_lock_league_comes_from_original_lock_not_current_board(store):
+    from app_core.public_board import validate_package
+    package=pub()['package']
+    locks=lock_candidates(package,AT)
+    rows=history.report([],[],locks=locks)
+    assert rows[0]['sport']==locks[0]['legs'][0]['sport']=='MLB'
+    package.update(schema_version=5,parlays=[],results=rows)
+    validate_package(package)
+    legacy=deepcopy(package)
+    del legacy['results'][0]['sport']
+    validate_package(legacy)
+    package['results'][0]['sport']=123
+    with pytest.raises(ValueError):validate_package(package)
