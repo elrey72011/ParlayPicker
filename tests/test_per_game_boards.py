@@ -184,3 +184,19 @@ def test_college_sportsbook_package_lock_and_report_preserve_source():
 
     package.update(schema_version=5,results=[result])
     validate_package(package)
+
+
+def test_recommendations_fail_closed_on_incomplete_data_and_nonpositive_edge():
+    import json
+    base=final(export_run_id='20260911T200000.000000Z',stats_source='live',stats_resolution_status='resolved',spread_line=-1.5)
+    base['provider_quotes']=json.dumps([{'book':'novig','market_type':'spread_home','point':-1.5,'price':-110,'recorded_at':'2026-09-11T19:59:00Z'}])
+    clean=per_game_board(pd.DataFrame([base]),novig_only=True).iloc[0]
+    assert clean.status=='APPROVED'
+    for updates in ({'stats_source':'fallback'},{'stats_resolution_status':'unresolved'},
+                    {'stats_source':''},{'feature_stats_fallback':True},
+                    {'degraded_feature_subset_flag':True},{'model_status':'model failure'},
+                    {'production_expected_value':-.01},{'production_win_probability':.4}):
+        row=per_game_board(pd.DataFrame([dict(base,**updates)]),novig_only=True).iloc[0]
+        assert row.status=='PASS' and row.Play_Stake==0
+        assert row['pick']==base['best_pick']
+        assert row['qualification_reason']

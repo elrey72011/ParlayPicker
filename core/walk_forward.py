@@ -108,3 +108,49 @@ def walk_forward_evaluate(
         "provenance_note": "Ordering alone does not establish training provenance; use scripts/validate_selector.py for provenance checks.",
     })
     return metrics
+
+
+def compare_by_league(frame, date_col, probability_col, outcome_col, market_probability_col,
+                      *, league_col='league', min_train_rows=100, test_fraction=.20):
+    """Compare paired saved forecasts on later slates, separately by league.
+
+    No fitting or weight changes occur here. A date split cannot prove that the
+    submitted forecasts were generated out of sample; training provenance must
+    be checked separately with validate_selector.py.
+    """
+    required={date_col,probability_col,outcome_col,market_probability_col,league_col}
+    if not required.issubset(frame.columns):
+        raise ValueError('Missing evaluation columns: '+', '.join(sorted(required-set(frame.columns))))
+    result={}
+    for league, rows in frame.groupby(league_col, dropna=False):
+        label=str(league)
+        rows=rows.copy()
+        outcomes=rows[outcome_col].map(lambda x: {'WIN':1,'LOSS':0,'W':1,'L':0}.get(x,x))
+        y=pd.to_numeric(outcomes,errors='coerce')
+        model=pd.to_numeric(rows[probability_col],errors='coerce')
+        market=pd.to_numeric(rows[market_probability_col],errors='coerce')
+        # Report coverage: never compare differently filtered model/market sets.
+        valid=y.isin([0,1]) & model.between(0,1) & market.between(0,1)
+        excluded=int((~valid).sum())
+        rows=rows.loc[valid].copy()
+        rows[outcome_col]=y.loc[valid]
+        rows[probability_col]=model.loc[valid]
+        rows[market_probability_col]=market.loc[valid]
+        base={'paired_rows':len(rows),'excluded_rows':excluded,'out_of_sample':False,
+              'note':'Saved forecasts only; training provenance must be verified separately. No weights changed.'}
+        if not len(rows):
+            result[label]={**base,'status':'insufficient_history'}
+            continue
+        try:
+            train,test=chronological_split(rows,date_col,min_train_rows=min_train_rows,test_fraction=test_fraction)
+        except ValueError as exc:
+            result[label]={**base,'status':'insufficient_history','reason':str(exc)}
+            continue
+        model_metrics=probability_metrics(test[probability_col],test[outcome_col])
+        market_metrics=probability_metrics(test[market_probability_col],test[outcome_col])
+        result[label]={**base,'status':'evaluated','train_rows':len(train),'test_rows':len(test),
+                       'train_end':str(pd.to_datetime(train[date_col],utc=True).max()),
+                       'test_start':str(pd.to_datetime(test[date_col],utc=True).min()),
+                       'model':model_metrics,'market':market_metrics,
+                       'model_minus_market':{k:model_metrics[k]-market_metrics[k] for k in ('brier','log_loss')}}
+    return result

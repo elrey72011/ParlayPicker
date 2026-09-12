@@ -5,10 +5,14 @@ import re
 from datetime import datetime, timezone
 
 
-def build_parlays(rows, now=None):
+def build_parlays(rows, now=None, *, qualified_only=False):
     now = now or datetime.now(timezone.utc)
     candidates = []
     for row in rows:
+        if qualified_only:
+            from app_core.recommendation_quality import positive_price_edge
+            if row.get('status') != 'APPROVED' or not row.get('quote_time') or row.get('quote_source') != 'Novig' or not positive_price_edge(row.get('win_estimate'), row.get('odds'), row.get('ev')):
+                continue
         teams = re.split(r'\s+(?:at|@)\s+', row['game'], flags=re.I)
         if len(teams) != 2:
             continue
