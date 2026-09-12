@@ -1,6 +1,6 @@
 # ParlayDesk AI Enhanced - v10.0 with Historical Data
 
-> **Update:** This document describes the legacy enhanced build. The primary `streamlit_app.py` now embeds all of these capabilities; use this README as a reference for how the merged features work under the hood.
+> **Historical reference:** This describes an earlier enhanced build. Use the [current quick start](QUICKSTART.md) and [daily publishing workflow](publishing-workflow.md) for supported controls and setup; the instructions and performance examples below are not the current workflow.
 
 ## 🚀 What's New
 
