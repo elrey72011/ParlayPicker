@@ -310,3 +310,52 @@ assert.equal(flatStakeMetrics([leg('LOSS','-110','parlays')]).roi,null);
     target=tmp_path/'qualification-returns.cjs';target.write_text(script,encoding='utf-8')
     subprocess.run([node,str(target)],check=True)
     assert 'No qualifying picks today' in html and 'Full research board' in html
+
+
+def test_top_ten_cross_league_ranking_and_rendering(tmp_path):
+    import os, shutil, subprocess
+    from pathlib import Path
+    node = os.environ.get('NODE_BINARY') or shutil.which('node')
+    if not node:
+        pytest.skip('Node unavailable')
+    html = Path('publishing/board.html').read_text(encoding='utf-8')
+    funcs = '\n'.join(line for line in html.splitlines() if line.startswith((
+        'function supportedQuote(', 'function state(', 'function qualifiedPick(',
+        'function topPicks(', 'function renderTopPicks(', 'function table(')))
+    script = r"""
+const assert=require('node:assert/strict');
+let now=Date.parse('2026-09-12T16:00:00Z');Date.now=()=>now;
+const data={selection_policy:'qualified-v1',stale_after_minutes:30,games:{overall:[]}};
+const el=(tag,text)=>({tag,text,children:[],append(...nodes){this.children.push(...nodes)},replaceChildren(){this.children=[]}});
+const fmt=(x,percent=false)=>percent?(x*100).toFixed(1)+'%':String(x);
+const host=el('div');let selectedLeague='MLB';
+const document={getElementById(id){if(id==='topPicks')return host;if(id==='gameLeague')return {value:selectedLeague};throw Error(id)}};
+""" + funcs + r"""
+const row=(game,p,ev=.1,sport='MLB')=>({game,pick:'Saved selection',win_estimate:p,ev,sport,
+ status:'APPROVED',quote_source:sport==='NCAAF'?'DraftKings':'Novig',odds:-110,
+ as_of:'2026-09-12T15:45:00Z',quote_time:'2026-09-12T15:45:00Z',start:'2026-09-12T18:00:00Z'});
+const a=row('A',.7,.1),b=row('B',.7,.2,'NCAAF'),c=row('C',.75);
+const invalid=[{...row('Pass',.99),status:'PASS'}, {...row('Started',.99),start:'2026-09-12T16:00:00Z'},
+ {...row('Stale quote',.99),quote_time:'2026-09-12T15:00:00Z'},
+ {...row('Stale analysis',.99),as_of:'2026-09-12T15:00:00Z'},
+ {...row('Missing quote',.99),quote_source:''},row('No edge',.99,0),row('Null probability',null),row('Invalid probability',1.1)];
+const rows=[a,...invalid,c,b];const before=JSON.stringify(rows);
+assert.deepEqual(topPicks(rows).map(r=>r.game),['C','B','A']);assert.equal(JSON.stringify(rows),before);
+assert.equal(topPicks(Array.from({length:15},(_,i)=>row('Game '+i,.5+i/100))).length,10);
+assert.deepEqual(topPicks([row('Z',.7),row('D',.7)]).map(r=>r.game),['D','Z']);
+data.games.overall=rows;renderTopPicks();
+const text=n=>[n.text||'',...n.children.map(text)].join(' ');
+assert.match(text(host),/Showing 3 qualifying picks/);assert.match(text(host),/NCAAF/);
+const rendered=JSON.stringify(host);selectedLeague='NFL';renderTopPicks();assert.equal(JSON.stringify(host),rendered);
+const tableNode=host.children.at(-1).children[0];
+assert.deepEqual(tableNode.children[0].children[0].children.slice(0,2).map(n=>n.text),['Rank','League']);
+assert.deepEqual(tableNode.children[1].children.map(n=>n.children[0].text),['1','2','3']);
+now=Date.parse('2026-09-12T16:16:00Z');renderTopPicks();assert.match(text(host),/No qualifying picks available/);
+assert.equal(JSON.stringify(rows),before);
+now=Date.parse('2026-09-12T16:00:00Z');delete data.selection_policy;assert.deepEqual(topPicks(rows),[]);
+"""
+    target = tmp_path/'top-ten.cjs'
+    target.write_text(script, encoding='utf-8')
+    subprocess.run([node, str(target)], check=True)
+    assert html.index('id="topPicks"') < html.index('id="gameLeague"')
+    assert 'function render(){renderTopPicks();renderLockedPicks();' in html
