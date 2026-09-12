@@ -35,6 +35,8 @@ ACTIVE_MODEL = "gemini-2.5-flash"
 GEMINI_STRUCTURED_BATCH_SIZE = 12
 GEMINI_REVIEW_TEMPERATURE = 0.0
 GEMINI_REVIEW_SEED = 0
+GEMINI_REVIEW_RUN_SECONDS = 90
+GEMINI_REVIEW_REQUEST_SECONDS = 30
 
 # Fallback list (still useful for internal tracking, though implementation focuses on ACTIVE_MODEL)
 MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
@@ -299,6 +301,7 @@ def generate_confidence_explanation(prompt: str, session_state: Optional[Any] = 
     Returns:
         Dictionary with confidence explanation, or empty dict on error
     """
+    deadline = _deadline if _deadline is not None else time.monotonic() + GEMINI_REVIEW_RUN_SECONDS
     # Check if Gemini is globally unavailable
     if not _GEMINI_AVAILABLE:
         return {}
@@ -388,6 +391,7 @@ def generate_batch_confidence_explanation(
     session_state: Optional[Any] = None,
     *,
     _retry_incomplete: bool = True,
+    _deadline: float | None = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Single Gemini call for all games at once (batch processing).
@@ -399,6 +403,7 @@ def generate_batch_confidence_explanation(
     Returns:
         Dict mapping game_id -> confidence assessment dict
     """
+    deadline = _deadline if _deadline is not None else time.monotonic() + GEMINI_REVIEW_RUN_SECONDS
     # Check if Gemini is globally unavailable
     if not _GEMINI_AVAILABLE or not games_data:
         return {}
@@ -425,6 +430,10 @@ def generate_batch_confidence_explanation(
     )
 
     for i in range(0, len(games_data), batch_size):
+        if time.monotonic() >= deadline:
+            if session_state is not None:
+                session_state["gemini_review_limit_status"] = "Review time limit reached; unfinished reviews remain held at $0"
+            return all_results
         batch = games_data[i:i + batch_size]
 
         # Build prompt
@@ -483,12 +492,18 @@ Return ONLY a JSON array of objects. No markdown formatting.
                 return all_results
             if session_state is not None:
                 session_state.pop("gemini_review_limit_status", None)
-            time.sleep(2.0)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return all_results
 
             resp = client.models.generate_content(
                 model=ACTIVE_MODEL,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
+                    http_options={
+                        "timeout": max(1, int(min(GEMINI_REVIEW_REQUEST_SECONDS, remaining) * 1000)),
+                        "retry_options": {"attempts": 1},
+                    },
                     temperature=GEMINI_REVIEW_TEMPERATURE,
                     seed=GEMINI_REVIEW_SEED,
                     response_mime_type="application/json",
@@ -554,7 +569,7 @@ Return ONLY a JSON array of objects. No markdown formatting.
              logger.warning(f"Gemini batch call failed: {exc_str}")
              # We continue to next batch
 
-    if _retry_incomplete:
+    if _retry_incomplete and time.monotonic() < deadline:
         incomplete = [
             game
             for game in games_data
@@ -569,6 +584,7 @@ Return ONLY a JSON array of objects. No markdown formatting.
                 incomplete,
                 session_state,
                 _retry_incomplete=False,
+                _deadline=deadline,
             )
             all_results.update(retried)
 

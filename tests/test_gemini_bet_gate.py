@@ -455,3 +455,40 @@ import pytest
 def isolated_review_budget(tmp_path, monkeypatch):
     monkeypatch.setenv("PARLAYPICKER_EVIDENCE_DIR", str(tmp_path / "evidence"))
     monkeypatch.setenv("PARLAYPICKER_GEMINI_DAILY_REQUESTS", "100")
+
+
+def test_review_deadline_bounds_batches_and_retry_without_promoting_missing(monkeypatch):
+    clock = [0.0]
+    configs = []
+    class Models:
+        def generate_content(self, **kwargs):
+            configs.append(kwargs['config'])
+            clock[0] += 46
+            return SimpleNamespace(text='[]')
+    monkeypatch.setattr(llm_assistant, '_GEMINI_AVAILABLE', True)
+    monkeypatch.setattr(llm_assistant, 'initialize_gemini', lambda: (SimpleNamespace(models=Models()), None))
+    monkeypatch.setattr(llm_assistant.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(llm_assistant, 'genai', SimpleNamespace(types=SimpleNamespace(GenerateContentConfig=lambda **kw:kw)))
+    state = {}
+    result = llm_assistant.generate_batch_confidence_explanation([{'game_id':str(i)} for i in range(40)], state)
+    assert result == {}
+    assert len(configs) == 2
+    assert all(0 < c['http_options']['timeout'] <= 30000 for c in configs)
+    assert all(c['http_options']['retry_options']['attempts'] == 1 for c in configs)
+    assert 'time limit' in state['gemini_review_limit_status']
+
+
+def test_retry_shares_original_deadline(monkeypatch):
+    clock = [0.0]
+    timeouts = []
+    class Models:
+        def generate_content(self, **kwargs):
+            timeouts.append(kwargs['config']['http_options']['timeout'])
+            clock[0] += 80
+            return SimpleNamespace(text='[]')
+    monkeypatch.setattr(llm_assistant, '_GEMINI_AVAILABLE', True)
+    monkeypatch.setattr(llm_assistant, 'initialize_gemini', lambda: (SimpleNamespace(models=Models()), None))
+    monkeypatch.setattr(llm_assistant.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(llm_assistant, 'genai', SimpleNamespace(types=SimpleNamespace(GenerateContentConfig=lambda **kw:kw)))
+    assert llm_assistant.generate_batch_confidence_explanation([{'game_id':'one'}]) == {}
+    assert timeouts == [30000,10000]

@@ -21,6 +21,18 @@ KEYS = {"bundles": (0,), "snapshots": (0,), "snapshot_runtime": (0,), "score_rev
 _lock = threading.RLock()
 _restored = set()
 _status = {}
+# Process-local receipts only: restored or read-back-verified immutable bytes.
+# Explicit sync remains a full remote verification and can detect external edits.
+_verified = {}
+
+
+def _scope(path):
+    from app_core.prediction_evidence import database_path
+    return (*settings(), str(Path(path or database_path()).resolve()))
+
+
+def _receipt(table, row):
+    return (_key(table, row), hashlib.sha256(_encode(table, row)).hexdigest())
 
 
 def settings():
@@ -143,6 +155,9 @@ def restore(path=None, *, client=None):
                 if not existing:
                     db.execute(f"INSERT INTO {table} ({','.join(TABLES[table])}) VALUES ({','.join('?' for _ in row)})", row)
                     imported += int(table == "snapshots")
+    with _lock:
+        _verified.setdefault(_scope(path), set()).update(
+            _receipt(table, row) for table, entries in rows.items() for row in entries)
     _status.update(status="restored", restored_snapshots=_status.get("restored_snapshots", 0) + imported, error=None)
     return imported
 
@@ -163,11 +178,13 @@ def restore_once(path=None):
                 raise RuntimeError(_status["error"]) from None
 
 
-def sync(path=None, *, client=None):
+def sync(path=None, *, client=None, incremental=False):
     from app_core.prediction_evidence import connect, database_path, now_utc
     if not settings()[0]:
         return False
     with _lock:
+        scope = _scope(path)
+        verified = _verified.setdefault(scope, set())
         try:
             client = client or _client()
             with closing(connect(path or database_path())) as db:
@@ -175,11 +192,17 @@ def sync(path=None, *, client=None):
                 records = {table: db.execute(f"SELECT {','.join(columns)} FROM {table}").fetchall() for table, columns in TABLES.items()}
             for table, rows in records.items():
                 for row in rows:
+                    receipt = _receipt(table, row)
+                    if incremental and receipt in verified:
+                        continue
                     _status["operation"] = f"upload_verify:{table}"
                     _put(client, table, row)
+                    verified.add(receipt)
             _status.update(status="synced", last_success_at=now_utc(), error=None, operation="complete")
             return True
         except Exception as exc:
+            if not incremental:
+                verified.clear()  # A failed full audit invalidates this scope's cached receipts.
             # Local evidence survives a network outage; the UI explicitly shows it
             # is pending replication and retries on the next capture or button.
             _status.update(status="error", error=safe_error(exc, "Backup") + " Local evidence is saved; retry synchronization after correcting the error.")

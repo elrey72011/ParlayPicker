@@ -88,6 +88,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     if board is None or board.empty: return pd.DataFrame()
     candidates=candidates if isinstance(candidates,pd.DataFrame) else pd.DataFrame()
+    candidate_rows = [row for _, row in candidates.iterrows()]
     rows=[]
     for _, final in board.iterrows():
         allow_fallback = college_fallback and text(final, 'league', 'League').upper() == 'NCAAF'
@@ -96,9 +97,8 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         if family!='overall' or novig_only:
             pool=[]
             key=identity(final)
-            for _, candidate in candidates.iterrows():
+            for candidate in candidate_rows:
                 if family!='overall' and family_of(candidate)!=family: continue
-                if novig_only and not public_quote(candidate, allow_fallback): continue
                 run, other_run=text(final,'export_run_id'),text(candidate,'export_run_id')
                 if run and other_run!=run: continue
                 fid,cid=text(final,'matchup_id'),text(candidate,'matchup_id')
@@ -106,6 +106,8 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                     if fid!=cid: continue
                     if all(key) and identity(candidate)!=key: continue
                 elif not all(key) or identity(candidate)!=key: continue
+                # Bind quotes only after matching the run and game identity.
+                if novig_only and not public_quote(candidate, allow_fallback): continue
                 rank=number(candidate,'best_available_rank' if family=='overall' else 'best_available_family_rank')
                 if rank is None or rank<1: continue
                 pool.append(candidate)

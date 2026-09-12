@@ -55,3 +55,17 @@ def test_wrong_token_cannot_publish(monkeypatch):
     at=AppTest.from_function(app).run()
     at.text_input[0].set_value('wrong').run()
     assert not at.button
+
+
+def test_locks_render_before_embedded_preview(monkeypatch):
+    from app.ui import public_results, lock_picks
+    import streamlit.components.v1 as components
+    calls=[]
+    monkeypatch.setattr(public_results,'render_history',lambda setting: [])
+    monkeypatch.setattr(lock_picks,'render_lock_picks',lambda *args: calls.append('locks'))
+    monkeypatch.setattr(components,'html',lambda *args,**kwargs: calls.append('preview'))
+    monkeypatch.setenv('PARLAYPICKER_PUBLISH_TOKEN','test-only-publish-token')
+    at=AppTest.from_function(app).run()
+    at.text_input(key='publication_token').set_value('test-only-publish-token').run()
+    assert not at.exception
+    assert calls==['locks','preview']
