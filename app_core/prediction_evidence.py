@@ -246,7 +246,7 @@ def capture_run(context, audit, final, inputs, *, path=None):
         db.execute("INSERT INTO snapshot_runtime VALUES (?, ?)", (context["snapshot_id"], PROCESS_INSTANCE))
     if path is None:
         from app_core.evidence_remote import sync
-        sync()
+        sync(incremental=True)
     return audit, final
 
 

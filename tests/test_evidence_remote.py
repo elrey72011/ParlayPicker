@@ -44,6 +44,7 @@ def cloud(monkeypatch):
     monkeypatch.setenv('PARLAYPICKER_DRIVE_FOLDER_ID', 'test-shared-folder')
     monkeypatch.setattr(remote, '_status', {})
     monkeypatch.setattr(remote, '_restored', set())
+    monkeypatch.setattr(remote, '_verified', {})
     client = MemoryObjectStore()
     monkeypatch.setattr(remote, '_client', lambda: client)
     return client
@@ -160,3 +161,53 @@ def test_default_capture_restores_and_preserves_existing_freeze(frozen, cloud, m
     assert len(restored) == 1
     assert restored[0][0] == saved.snapshot_id.iloc[0]
     assert evidence.begin_run({"use_ml": False}, root=root)["frozen_at"] == context["frozen_at"]
+
+
+def test_incremental_sync_skips_verified_history_but_full_sync_checks_remote(frozen, cloud, monkeypatch):
+    _, db, _ = frozen
+    save_fixture(frozen)
+    calls = []
+    original = cloud.put_object
+    def counted(**kwargs):
+        calls.append(kwargs['Key'])
+        return original(**kwargs)
+    monkeypatch.setattr(cloud, 'put_object', counted)
+    assert remote.sync(db, incremental=True)
+    assert calls
+    calls.clear()
+    assert remote.sync(db, incremental=True)
+    assert calls == []
+    key = next(k for k in cloud.objects if '/snapshot_runtime/' in k)
+    item = json.loads(cloud.objects[key]); item['row'][1] = 'changed externally'
+    cloud.objects[key] = json.dumps(item).encode()
+    assert not remote.sync(db)  # Explicit verification still detects tampering.
+    assert not remote.sync(db, incremental=True)  # Failed full check clears receipts.
+
+
+def test_restore_primes_incremental_sync_and_new_rows_still_upload(frozen, cloud, tmp_path, monkeypatch):
+    _, db, _ = frozen
+    save_fixture(frozen)
+    assert remote.sync(db)
+    fresh = tmp_path / 'restored.sqlite3'
+    remote.restore(fresh)
+    calls = []
+    original = cloud.put_object
+    def counted(**kwargs):
+        calls.append(kwargs['Key'])
+        return original(**kwargs)
+    monkeypatch.setattr(cloud, 'put_object', counted)
+    assert remote.sync(fresh, incremental=True)
+    assert calls == []
+    with evidence.connect(fresh) as con:
+        row = con.execute('SELECT * FROM snapshots').fetchone()
+        changed = ('new-run', *row[1:])
+        con.execute('INSERT INTO snapshots VALUES (?,?,?,?,?,?,?)', changed)
+        con.execute('INSERT INTO snapshot_runtime VALUES (?,?)', ('new-run','process'))
+    cloud.fail = True
+    assert not remote.sync(fresh, incremental=True)
+    calls.clear(); cloud.fail = False
+    assert remote.sync(fresh, incremental=True)
+    assert len(calls) == 2
+    calls.clear()
+    assert remote.sync(fresh, incremental=True)
+    assert calls == []
