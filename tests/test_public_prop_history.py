@@ -113,6 +113,8 @@ def test_owner_restore_and_explicit_grade_persist_to_drive(monkeypatch):
         return {'recorded_at':'2026-09-10T01:00:00+00:00','actuals':[{'id':e['id'],'value':2} for e in entries]}
     monkeypatch.setattr(props,'fetch_actuals',fetch)
     at=AppTest.from_function(history_app).run()
+    assert not any(b.key=='public_history_restore' for b in at.button)
+    at.checkbox(key='public_history_tools').check().run()
     at.button(key='public_history_restore').click().run()
     assert not at.exception and not calls
     assert any(r['category']=='props' and r['outcome']=='PENDING' for r in at.session_state['returned_rows'])
@@ -188,7 +190,9 @@ def test_review_recheck_requires_explicit_selection(monkeypatch):
     monkeypatch.setattr(public_results,'history',lambda _:store)
     calls=[]
     monkeypatch.setattr(props,'fetch_actuals',lambda day,entries:calls.append(entries) or {'recorded_at':'2026-09-10T02:00:00+00:00','actuals':[{'id':entry['id'],'value':2}]})
-    at=AppTest.from_function(history_app).run();at.button(key='public_history_restore').click().run()
+    at=AppTest.from_function(history_app).run()
+    at.checkbox(key='public_history_tools').check().run()
+    at.button(key='public_history_restore').click().run()
     at.date_input(key='public_results_day').set_value(date(2026,9,9)).run()
     at.button(key='public_props_grade').click().run()
     assert not at.exception and not calls
