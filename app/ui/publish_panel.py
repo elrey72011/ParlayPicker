@@ -113,8 +113,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
         slate = st.text_input('DFS slate name', help='Use the exact contest slate label.')
         start = render_dfs_lock_picker()
     st.caption('DFS lineups must be generated in Full Pick Board during this run. Only one Classic slate is included per publication. Empty sections remain visible as empty tabs.')
-    nfl_fallback = st.checkbox('Allow NFL sportsbook fallback for research locks', value=False, key='publication_nfl_fallback',
-                               help='Prefer Novig. If unavailable, use an exact fresh DraftKings, FanDuel or BetMGM quote, labeled with its source. This does not approve a wager.')
+    nfl_fallback = st.checkbox('Allow NFL sportsbook fallback for research locks', value=True, key='publication_nfl_fallback',
+                               help='Show a best available NFL pick when Novig is unavailable, using an exact fresh DraftKings, FanDuel or BetMGM quote labeled with its source. Novig remains preferred. These selections can be research-locked; this does not approve a wager.')
     selected_props = props if include_props else pd.DataFrame()
     selected_dfs = dfs.get(chosen)
     options = {'results':public_results, 'props':include_props, 'dfs':chosen, 'slate':slate, 'start':start, 'nfl_fallback':nfl_fallback}
