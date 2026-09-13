@@ -15,13 +15,16 @@ def store(monkeypatch):
 def test_original_pick_survives_rerun_and_separate_publication(store):
     package=pub()['package'];ids=[r['id'] for r in lock_candidates(package,AT)]
     original=store.lock_picks(package,ids)
-    newer=deepcopy(package);newer['games']['overall'][0].update(pick='Boston -1.5',odds=120)
+    newer=deepcopy(package);newer['games']['overall'][0].update(pick='Boston -1.5',odds=120,win_estimate=.85)
     assert store.lock_picks(newer,ids)==original
     rows=history.report([dict(pub(),package=newer)], [{'recorded_at':AT,'scores':scores()}],locks=store.all('locks'))
     locked=[r for r in rows if r['group']=='Locked']
     assert len(locked)==1 and locked[0]['outcome']=='WIN'
     assert 'Boston +1.5' in locked[0]['picks'] and locked[0]['odds']=='-110'
     assert locked[0]['published_at']==AT
+    assert locked[0]['original_win_estimate']==.6
+    assert locked[0]['market']=='spread_home'
+    assert any(r.get('original_win_estimate')==.85 for r in rows if r['group']=='Approved')
     assert any(r['group']=='Approved' and r['category']=='overall' and r['outcome']=='LOSS' for r in rows)
 
 @pytest.mark.parametrize('at',['2026-09-09T20:00:00+00:00','2026-09-10T19:56:00+00:00','2026-09-09T19:54:00+00:00'])
@@ -130,7 +133,8 @@ def test_public_lock_league_comes_from_original_lock_not_current_board(store):
     package.update(schema_version=5,parlays=[],results=rows)
     validate_package(package)
     legacy=deepcopy(package)
-    del legacy['results'][0]['sport']
+    for key in ('sport','market','original_win_estimate'):
+        legacy['results'][0].pop(key, None)
     validate_package(legacy)
     package['results'][0]['sport']=123
     with pytest.raises(ValueError):validate_package(package)

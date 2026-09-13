@@ -303,6 +303,14 @@ def grade_leg(leg, scores, *, imported=False):
     return ('WIN' if margin>0 else 'LOSS' if margin<0 else 'PUSH'),f'{a}–{h} (away–home)'
 
 
+def original_estimate(leg):
+    """Read only the saved probability, never a current quote or ranking score."""
+    value = leg.get('win_estimate')
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
+        return {}
+    return {'original_win_estimate': value}
+
+
 def report(publications, revisions, imports=None, locks=None):
     latest={}
     for revision in sorted(revisions,key=lambda x:x['recorded_at']):
@@ -319,7 +327,8 @@ def report(publications, revisions, imports=None, locks=None):
         rows.append({**{k:v for k,v in item.items() if k!='legs'},'outcome':outcome,
                      'picks':' + '.join(x['game']+': '+x['pick'] for x in item['legs']),
                      'odds':' / '.join(str(x['odds']) for x in item['legs']),
-                     **({'sport':item['legs'][0]['sport']} if item['group']=='Locked' else {}),
+                     **({k:item['legs'][0].get(k, '') for k in ('sport', 'market')} if len(item['legs']) == 1 else {}),
+                     **(original_estimate(item['legs'][0]) if len(item['legs']) == 1 and item['group'] != 'Imported research' else {}),
                      **({'quote_source':item['legs'][0]['quote_source']} if item['group']=='Locked' and item['legs'][0].get('quote_source') else {}),
                      **({k:item['legs'][0][k] for k in ('quote_time', 'quote_time_basis')} if item['group']=='Locked' and item['legs'][0].get('quote_time_basis') == 'espn_observed' else {}),
                      'final_score':' / '.join(x[1] or 'Pending' for x in graded)})

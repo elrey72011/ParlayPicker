@@ -4,7 +4,7 @@ import re
 import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from app_core.public_history import digest, now
+from app_core.public_history import digest, now, original_estimate
 from app_core.quote_freshness import package_age_minutes
 
 REVIEW_REASONS={
@@ -83,6 +83,7 @@ def report(publications,revisions=(),imports=()):
         rows.append({**{k:v for k,v in entry.items() if k!='leg'},'outcome':grade_side(side,line,value) if valid else 'NEEDS_REVIEW' if reasons.get(entry['id']) in REVIEW_REASONS else 'PENDING',
             'picks':leg['game']+': '+leg['pick'],'odds':str(leg['odds']),
             **({'expected_stat':leg['expected_stat']} if 'expected_stat' in leg else {}),
+            **(original_estimate(leg) if entry['group'] != 'Imported research' else {}),
             'final_score':str(value)+' '+market.removeprefix('batter_').removeprefix('pitcher_') if valid else reasons.get(entry['id'],'Pending player statistics')})
     return rows
 
