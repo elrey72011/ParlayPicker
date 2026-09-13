@@ -1,0 +1,244 @@
+{
+  "protocol": {
+    "train_seasons": [
+      2015,
+      2022
+    ],
+    "calibration_seasons": [
+      2023,
+      2023
+    ],
+    "evaluation_seasons": [
+      2024,
+      2025
+    ],
+    "prior_games": 16,
+    "minimum_prior_games": 4,
+    "ridge_penalty": 10.0,
+    "same_day_results_excluded": true,
+    "automatic_installation": false
+  },
+  "status": "research_only_not_installed",
+  "training_games": 2079,
+  "calibration_games": 272,
+  "evaluation_games": 544,
+  "model": {
+    "feature_names": [
+      "home_ppg",
+      "away_ppg",
+      "home_oppg",
+      "away_oppg",
+      "win_diff",
+      "home_field"
+    ],
+    "feature_mean": [
+      22.86017917267917,
+      22.948142135642136,
+      22.926166426166425,
+      22.89105339105339,
+      -0.003427128427128427,
+      0.9846079846079846
+    ],
+    "feature_scale": [
+      4.046368584336102,
+      4.058227653894791,
+      3.3780696128474275,
+      3.382214211201571,
+      0.2576822491269639,
+      0.12310605693542195
+    ],
+    "targets": {
+      "margin": {
+        "coefficients": [
+          1.5569985569985554,
+          2.169788055235835,
+          -3.093816132616136,
+          -1.8531704684262473,
+          1.113963093109978,
+          0.4802495322498167,
+          0.16397252779516225
+        ],
+        "sigma": 13.443483079951475
+      },
+      "total": {
+        "coefficients": [
+          45.765752765752765,
+          1.959142989656836,
+          1.0238203288776664,
+          1.1190291387181615,
+          0.9013412248436152,
+          -0.3068937644128861,
+          0.15283752484625493
+        ],
+        "sigma": 13.410749718180341
+      }
+    }
+  },
+  "evaluation": {
+    "margin": {
+      "games": 544,
+      "scored": 539,
+      "pushes_excluded": 5,
+      "missing_prices_or_line": 0,
+      "candidate": {
+        "ll": 0.7270652200405756,
+        "brier": 0.2657108149881487,
+        "auc": 0.4828018285966072
+      },
+      "market": {
+        "ll": 0.6937978997728744,
+        "brier": 0.25032514329991634,
+        "auc": 0.4945403723287068
+      },
+      "decision": {
+        "promotable": false,
+        "reasons": [
+          "candidate log loss does not beat market implied probability",
+          "candidate Brier score does not beat market implied probability"
+        ],
+        "log_loss_improvement": -0.033267320267701184,
+        "brier_improvement": -0.01538567168823235,
+        "auc_change": -0.011738543732099593
+      }
+    },
+    "total": {
+      "games": 544,
+      "scored": 541,
+      "pushes_excluded": 3,
+      "missing_prices_or_line": 0,
+      "candidate": {
+        "ll": 0.7004563889717893,
+        "brier": 0.25332134647893956,
+        "auc": 0.5286839145106862
+      },
+      "market": {
+        "ll": 0.6933361295213849,
+        "brier": 0.250094280014979,
+        "auc": 0.5073047271530083
+      },
+      "decision": {
+        "promotable": false,
+        "reasons": [
+          "candidate log loss does not beat market implied probability",
+          "candidate Brier score does not beat market implied probability"
+        ],
+        "log_loss_improvement": -0.007120259450404398,
+        "brier_improvement": -0.0032270664639605373,
+        "auc_change": 0.021379187357677853
+      }
+    }
+  },
+  "by_season": {
+    "2024": {
+      "margin": {
+        "games": 272,
+        "scored": 268,
+        "pushes_excluded": 4,
+        "missing_prices_or_line": 0,
+        "candidate": {
+          "ll": 0.7215098732421261,
+          "brier": 0.26313861880441364,
+          "auc": 0.4981333927675935
+        },
+        "market": {
+          "ll": 0.6952918193457777,
+          "brier": 0.2510718394824248,
+          "auc": 0.45478352928065974
+        },
+        "decision": {
+          "promotable": false,
+          "reasons": [
+            "candidate log loss does not beat market implied probability",
+            "candidate Brier score does not beat market implied probability"
+          ],
+          "log_loss_improvement": -0.02621805389634846,
+          "brier_improvement": -0.012066779321988852,
+          "auc_change": 0.04334986348693376
+        }
+      },
+      "total": {
+        "games": 272,
+        "scored": 269,
+        "pushes_excluded": 3,
+        "missing_prices_or_line": 0,
+        "candidate": {
+          "ll": 0.7003013036341638,
+          "brier": 0.25327350026075457,
+          "auc": 0.5274749721913237
+        },
+        "market": {
+          "ll": 0.6927062239462423,
+          "brier": 0.24977944777848377,
+          "auc": 0.5406006674082313
+        },
+        "decision": {
+          "promotable": false,
+          "reasons": [
+            "candidate log loss does not beat market implied probability",
+            "candidate Brier score does not beat market implied probability"
+          ],
+          "log_loss_improvement": -0.007595079687921502,
+          "brier_improvement": -0.003494052482270804,
+          "auc_change": -0.013125695216907651
+        }
+      }
+    },
+    "2025": {
+      "margin": {
+        "games": 272,
+        "scored": 271,
+        "pushes_excluded": 1,
+        "missing_prices_or_line": 0,
+        "candidate": {
+          "ll": 0.7325590685349832,
+          "brier": 0.26825453667538474,
+          "auc": 0.46895424836601307
+        },
+        "market": {
+          "ll": 0.6923205180550218,
+          "brier": 0.24958671312680836,
+          "auc": 0.5288398692810458
+        },
+        "decision": {
+          "promotable": false,
+          "reasons": [
+            "candidate log loss does not beat market implied probability",
+            "candidate Brier score does not beat market implied probability"
+          ],
+          "log_loss_improvement": -0.04023855047996139,
+          "brier_improvement": -0.01866782354857638,
+          "auc_change": -0.05988562091503269
+        }
+      },
+      "total": {
+        "games": 272,
+        "scored": 272,
+        "pushes_excluded": 0,
+        "missing_prices_or_line": 0,
+        "candidate": {
+          "ll": 0.7006097638093676,
+          "brier": 0.2533686649814828,
+          "auc": 0.5332069339111593
+        },
+        "market": {
+          "ll": 0.6939590876085665,
+          "brier": 0.2504056398371012,
+          "auc": 0.4880281690140845
+        },
+        "decision": {
+          "promotable": false,
+          "reasons": [
+            "candidate log loss does not beat market implied probability",
+            "candidate Brier score does not beat market implied probability"
+          ],
+          "log_loss_improvement": -0.0066506762008010645,
+          "brier_improvement": -0.002963025144381626,
+          "auc_change": 0.04517876489707473
+        }
+      }
+    }
+  },
+  "source_sha256": "566f092836accf6d93362ac9d30ce3f9c99a47bc13d6f0cd4a24520f85942e01",
+  "source_url": "https://raw.githubusercontent.com/nflverse/nfldata/66dc458eee31fa768bce0b6f58edc3c769e752c3/data/games.csv",
+  "source_revision": "66dc458eee31fa768bce0b6f58edc3c769e752c3"
+}
