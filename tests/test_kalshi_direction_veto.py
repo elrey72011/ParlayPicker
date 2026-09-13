@@ -1,11 +1,4 @@
-"""Kalshi direction veto (4 Jul): when Kalshi opposes an MLB total's direction
-with real conviction, its side wins the family finalist — the model can no
-longer out-vote it with its own (anti-informative) confidence.
-
-Backtest basis, graded archive n=248 totals picks (Jun 2 - Jul 3): model lean
-45.5% (39% in its own >=60% band); Kalshi's side 54.0% (74/137 at >=5 pts
-conviction); picks made against a convicted Kalshi hit 43%.
-"""
+"""Legacy Kalshi direction diagnostics cannot override probability-first selection."""
 from __future__ import annotations
 
 import sys
@@ -43,13 +36,14 @@ def _totals_pair(k_over: float | None, k_under: float | None,
     ])
 
 
-def test_convicted_kalshi_flips_direction_against_model():
+def test_kalshi_component_cannot_override_candidate_win_probability():
     # Kalshi prices the OVER at 42% (i.e. favors the Under by 8 pts) while the
-    # model likes the Over at 60%. The pick must be the Under — Kalshi's side.
+    # final candidate favors Over. The component must not override that estimate.
     best = build_best_picks_df(_totals_pair(k_over=0.42, k_under=0.58))
     totals = best[best["market_type"].astype(str).str.contains("total")]
     assert len(totals) == 1
-    assert totals.iloc[0]["market_type"] == "total_under"
+    assert totals.iloc[0]["market_type"] == "total_over"
+    assert totals.iloc[0]["best_available_probability"] > .55
 
 
 def test_weak_kalshi_does_not_veto():

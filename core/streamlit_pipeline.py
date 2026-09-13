@@ -591,7 +591,8 @@ BEST_PICK_COLUMNS = [
     # Verbatim per-book spread points + moneyline prices (see REQUIRED_BEST_PICK_EXPORT_COLUMNS);
     # listed here so it survives the BEST_PICK_COLUMNS reindex into the export.
     "raw_book_odds_diag",
-    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "selection_probability_used", "selection_probability_source", "selection_probability_pair_normalized", "mlb_spread_finalist_penalty_applied", "mlb_spread_finalist_penalty_value", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_applied", "recent_regime_penalty_value", "recent_regime_penalty_reason", "recent_regime_bucket", "recent_regime_bucket_n", "recent_regime_bucket_win_rate", "recent_regime_long_win_rate", "effective_expected_value", "effective_edge", "effective_win_probability",
+    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "best_available_probability", "best_available_probability_source", "best_available_probability_pair_normalized", "best_available_selection_policy",
+        "selection_probability_used", "selection_probability_source", "selection_probability_pair_normalized", "mlb_spread_finalist_penalty_applied", "mlb_spread_finalist_penalty_value", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_applied", "recent_regime_penalty_value", "recent_regime_penalty_reason", "recent_regime_bucket", "recent_regime_bucket_n", "recent_regime_bucket_win_rate", "recent_regime_long_win_rate", "effective_expected_value", "effective_edge", "effective_win_probability",
     "empirical_win_probability", "empirical_edge", "empirical_bucket", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
@@ -1546,6 +1547,7 @@ def _slate_as_of_timestamp(frame: pd.DataFrame | None) -> pd.Timestamp | None:
 def _normalize_complementary_selection_probabilities(
     pool: pd.DataFrame,
     probability_column: str = "_selection_probability",
+    *, clip: bool = True,
 ) -> tuple[pd.Series, pd.Series]:
     """No-vig complementary rank probabilities within each valid market pair.
 
@@ -1596,7 +1598,7 @@ def _normalize_complementary_selection_probabilities(
                 probabilities.loc[pair_index] = pair_probabilities / denominator
                 normalized.loc[pair_index] = True
 
-    return probabilities.clip(0.01, 0.99), normalized
+    return (probabilities.clip(0.01, 0.99) if clip else probabilities), normalized
 
 
 def _sync_selected_candidate_audit(
@@ -1660,6 +1662,8 @@ def _sync_selected_candidate_audit(
         "selection_probability_used",
         "selection_probability_source",
         "selection_probability_pair_normalized",
+        "best_available_probability", "best_available_probability_source",
+        "best_available_probability_pair_normalized", "best_available_selection_policy",
         "best_available_value_override_applied",
         "best_available_value_override_from_pick",
         "best_available_value_override_ev_gain",
@@ -1747,6 +1751,9 @@ def _neutralize_recovered_row_value(df: pd.DataFrame) -> pd.DataFrame:
     ):
         if c in df.columns:
             df.loc[rec, c] = np.nan
+    if "best_available_probability" in df:
+        df.loc[rec, "best_available_probability"] = np.nan
+        df.loc[rec, "best_available_probability_source"] = "unavailable_after_line_repair"
     if "odds_source" in df.columns:
         df.loc[rec, "odds_source"] = "unpriced_upload_fallback"
     for c in ("best_available_runner_up_score", "best_available_score_gap"):
@@ -3886,6 +3893,10 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     gemini_approved = boolean_flag("gemini_approved", False)
     gemini_ok = ~gemini_gate_enabled | gemini_approved
 
+    selector_probability_ok = (
+        ~_string_series(out, "best_available_selection_policy").eq("probability-first-v1")
+        | _numeric_series(out, "best_available_probability").between(0, 1)
+    )
     funded_approved = (
         status.eq("Actionable")
         & production_eligible
@@ -3896,6 +3907,7 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         & line_ok
         & event_ok
         & gemini_ok
+        & selector_probability_ok
     )
     selection_probability = _numeric_series(out, "selection_probability_used")
     selection_probability = selection_probability.fillna(
@@ -3930,6 +3942,7 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         & line_ok
         & event_ok
         & gemini_ok
+        & selector_probability_ok
     )
     controlled_marker = boolean_flag("controlled_card_recovery", False)
     controlled_value = funded_approved & controlled_marker
@@ -3970,6 +3983,7 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         "gemini_gate_reason",
         pd.Series("PASS: Gemini review did not approve this wager.", index=out.index),
     ).fillna("PASS: Gemini review did not approve this wager.")
+    out.loc[~selector_probability_ok, "qualification_reason"] = "PASS: candidate win estimate is unavailable."
     out.loc[lean, "qualification_reason"] = (
         "Qualified research lean: final calibrated probability and edge clear the offered price, but no production stake is funded."
     )
@@ -4121,6 +4135,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool["expected_value"] = pd.to_numeric(pool["expected_value"], errors="coerce")
+
+    # Preserve absent/invalid estimates before legacy status code fills defaults.
+    # This is the only probability used to choose a per-game candidate.
+    raw_probability = _numeric_series(pool, "calibrated_probability")
+    raw_values = pool.get("calibrated_probability", pd.Series(None, index=pool.index, dtype=object))
+    valid_probability = raw_probability.between(0, 1) & ~raw_values.map(lambda value: isinstance(value, (bool, np.bool_)))
+    pool["best_available_probability"] = raw_probability.where(valid_probability)
+    pool["best_available_probability"], pool["best_available_probability_pair_normalized"] = (
+        _normalize_complementary_selection_probabilities(pool, "best_available_probability", clip=False)
+    )
+    pool["best_available_probability_source"] = "calibrated_probability"
+    pool.loc[pool["best_available_probability_pair_normalized"], "best_available_probability_source"] = "calibrated_probability_pair_normalized"
+    pool.loc[pool["best_available_probability"].isna(), "best_available_probability_source"] = "unavailable"
+    pool["best_available_selection_policy"] = "probability-first-v1"
 
     # 2. Assign calibrated probability with a default
     pool["calibrated_probability"] = _numeric_series(pool, "calibrated_probability", 0.5)
@@ -4315,7 +4343,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["_absolute_probability_score"] = pool["_prob_numeric"].clip(0.01, 0.99)
     # Expected value and edge belong in wager qualification and deterministic
     # tiebreaks; they must not make a less-likely outcome the public Best Pick.
-    # Evidence penalties below remain active and adjust this probability score.
+    # Evidence penalties below adjust only the legacy diagnostic score; the
+    # probability-first selector uses best_available_probability.
     pool["final_family_score"] = pool["_absolute_probability_score"]
 
     for family in ["total", "side"]:
@@ -4485,14 +4514,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # 4. Deterministic ranking contract. Every valid pregame candidate receives an
     # auditable rank. The two-stage family comparison is mathematically equivalent
     # to the global argmax because both stages use this exact same sort contract.
+    # Legacy composite scores and penalties above are diagnostics only. They
+    # cannot overturn a higher candidate probability or break an exact tie.
+    # Missing probabilities sort last; stable identity makes ties repeatable.
+    pool["odds_source"] = _string_series(pool, "odds_source")
+    pool["odds_american"] = _numeric_series(pool, "odds_american")
     best_available_sort_columns = [
-        "final_family_score",
-        "selection_probability_used",
-        "tier_score",
-        "_ev_numeric",
-        "_edge_numeric",
+        "best_available_probability", "market_type", "best_pick", "odds_source", "odds_american",
     ]
-    best_available_sort_ascending = [False, False, True, False, False]
+    best_available_sort_ascending = [False, True, True, True, True]
 
     # Retain the legacy audit fields as an explicit, always-false compatibility
     # contract. Value belongs in wager qualification, never in Best Pick identity.
@@ -4518,12 +4548,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         .add(1)
         .astype("Int64")
     )
-    pool["best_available_score"] = pd.to_numeric(pool["final_family_score"], errors="coerce")
+    pool["best_available_score"] = pool["best_available_probability"]
     pool["best_available_finalist"] = pool["best_available_family_rank"].eq(1)
     pool["best_available_final_rank"] = pd.Series(pd.NA, index=pool.index, dtype="Int64")
     pool["best_available_selected"] = False
 
-    # 5. First Stage: best side finalist vs best total finalist per game.
+    # 5. First stage: highest-probability side vs highest-probability total.
     finalists = pool[pool["best_available_finalist"]].copy()
 
     finalist_counts = finalists["_market_family"].value_counts().to_dict()
@@ -4549,26 +4579,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         side_pick = side_row["best_pick"].iloc[0] if not side_row.empty else "None"
         side_ev = side_row["_ev_numeric"].iloc[0] if not side_row.empty else 0.0
         side_edge = side_row["_edge_numeric"].iloc[0] if not side_row.empty else 0.0
-        side_score = side_row["final_family_score"].iloc[0] if not side_row.empty else 0.0
+        side_score = side_row["best_available_probability"].iloc[0] if not side_row.empty else 0.0
         side_market_type = side_row["market_type"].iloc[0] if not side_row.empty else "None"
         side_candidate_source = side_row["candidate_source"].iloc[0] if not side_row.empty and "candidate_source" in side_row.columns else "None"
 
         total_pick = total_row["best_pick"].iloc[0] if not total_row.empty else "None"
         total_ev = total_row["_ev_numeric"].iloc[0] if not total_row.empty else 0.0
         total_edge = total_row["_edge_numeric"].iloc[0] if not total_row.empty else 0.0
-        total_score = total_row["final_family_score"].iloc[0] if not total_row.empty else 0.0
+        total_score = total_row["best_available_probability"].iloc[0] if not total_row.empty else 0.0
         total_market_type = total_row["market_type"].iloc[0] if not total_row.empty else "None"
         total_candidate_source = total_row["candidate_source"].iloc[0] if not total_row.empty and "candidate_source" in total_row.columns else "None"
 
         group_sorted = group.sort_values(
             by=best_available_sort_columns,
             ascending=best_available_sort_ascending,
-            na_position="last",
-            kind="mergesort",
-        )
-        group_sorted_no_mlb_spread_penalty = group.sort_values(
-            by=["final_family_score_no_mlb_spread_penalty", "selection_probability_used", "tier_score", "_ev_numeric", "_edge_numeric"],
-            ascending=[False, False, True, False, False],
             na_position="last",
             kind="mergesort",
         )
@@ -4590,7 +4614,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             # Fail closed: the exported pick is always the deterministic global argmax.
             winner_row = global_rank_one
 
-        winner_row_no_mlb_penalty = group_sorted_no_mlb_spread_penalty.iloc[0]
         final_winner_indices.append(winner_row.name)
         winner_by_matchup[matchup] = winner_row["best_pick"]
         candidate_count_by_matchup[matchup] = int(len(matchup_candidates))
@@ -4600,8 +4623,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             runner_up = matchup_candidates.iloc[1]
             runner_up_pick_by_matchup[matchup] = str(runner_up.get("best_pick", ""))
             runner_up_market_by_matchup[matchup] = str(runner_up.get("market_type", ""))
-            runner_score = pd.to_numeric(runner_up.get("final_family_score"), errors="coerce")
-            winner_score = pd.to_numeric(winner_row.get("final_family_score"), errors="coerce")
+            runner_score = pd.to_numeric(runner_up.get("best_available_probability"), errors="coerce")
+            winner_score = pd.to_numeric(winner_row.get("best_available_probability"), errors="coerce")
             runner_up_score_by_matchup[matchup] = float(runner_score) if pd.notna(runner_score) else float("nan")
             score_gap_by_matchup[matchup] = (
                 float(winner_score - runner_score)
@@ -4613,13 +4636,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             runner_up_market_by_matchup[matchup] = ""
             runner_up_score_by_matchup[matchup] = float("nan")
             score_gap_by_matchup[matchup] = float("nan")
-
-        if (
-            winner_row_no_mlb_penalty.name != winner_row.name
-            and str(winner_row_no_mlb_penalty.get("league", "")).upper() == "MLB"
-            and "spread" in str(winner_row_no_mlb_penalty.get("market_type", "")).lower()
-        ):
-            demoted_by_mlb_spread_finalist_penalty += 1
 
         winner_family = winner_row["_market_family"]
         winner_pick = winner_row["best_pick"]
@@ -4677,8 +4693,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_selection_verified"
     ].fillna(False).astype(bool)
     pool["best_available_selection_reason"] = (
-        "Highest evidence-adjusted win probability after validity, identity, and line-integrity gates"
+        "Highest candidate win probability after identity and line-integrity gates; unvalidated estimate"
     )
+    pool.loc[pool["best_available_probability"].isna(), "best_available_selection_reason"] = "Win probability unavailable; deterministic coverage selection only"
     pool["best_available_rejection_reason"] = "lower_score_within_market_family"
     pool.loc[
         pool["best_available_finalist"] & ~pool["best_available_selected"],
@@ -4696,6 +4713,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "ml_residual_scale", "ml_feature_quality", "ml_unavailable_reason", "theover_probability",
         "orientation_source", "raw_book_odds_diag",
         "blend_in_kalshi", "blend_in_market", "blend_in_theover", "blend_in_ml", "blend_tier",
+        "best_available_probability", "best_available_probability_source", "best_available_probability_pair_normalized", "best_available_selection_policy",
         "selection_probability_used", "selection_probability_source",
         "selection_probability_pair_normalized",
         "model_direction_pre_guard_score",
@@ -6968,6 +6986,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "line_event_identity_reason", pd.Series("line_event_identity_failed", index=best.index)
     ).fillna("line_event_identity_failed").replace("", "line_event_identity_failed")
     best.loc[_final_unresolved, "final_pick_valid_reason"] = "unresolved_pick_text"
+
+    # An unavailable forecast remains a coverage row, never a funded selection.
+    missing_forecast = _numeric_series(best, "best_available_probability").isna()
+    for column in ("production_eligible", "Bettable", "wager_approved"):
+        if column in best: best.loc[missing_forecast, column] = False
+    for column in ("production_bet_amount", "Kelly_Bet_Size", "Play_Stake", "recommended_bet", "Suggested_Stake"):
+        if column in best: best.loc[missing_forecast, column] = 0.0
 
     from app_core.prediction_evidence import PROVENANCE_COLUMNS
     evidence_columns = [c for c in PROVENANCE_COLUMNS if c in best and c not in BEST_PICK_COLUMNS]

@@ -228,7 +228,7 @@ def test_mlb_spread_finalist_penalty_is_zero_without_empirical_evidence(monkeypa
     assert diagnostics["mlb_spread_finalist_penalty"]["applied"] is False
 
 
-def test_mlb_spread_finalist_penalty_requires_large_fresh_family_samples(monkeypatch):
+def test_legacy_mlb_penalty_is_audited_but_does_not_break_probability_ties(monkeypatch):
     stats = {
         "overall": {"n": 200, "win_rate": 0.50},
         "buckets": {
@@ -254,8 +254,8 @@ def test_mlb_spread_finalist_penalty_requires_large_fresh_family_samples(monkeyp
 
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
 
-    assert out.iloc[0]["market_type"] == "total_over"
-    assert diagnostics["demoted_by_mlb_spread_finalist_score_penalty"] >= 1
+    assert out.iloc[0]["market_type"] == "spread_home"
+    assert diagnostics["demoted_by_mlb_spread_finalist_score_penalty"] == 0
     assert diagnostics["mlb_spread_finalist_penalty"]["applied"] is True
     assert diagnostics["mlb_spread_finalist_penalty"]["penalty"] == 0.05
 
