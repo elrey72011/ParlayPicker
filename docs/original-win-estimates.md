@@ -7,3 +7,7 @@ The public board labels model win estimates as not yet validated. Results detail
 Each band compares the mean saved probability and actual win rate for the same WIN/LOSS records. Coverage counts disclose settled records missing an estimate and excluded pushes, pending and review cases. Imported recaps and parlays are excluded. These descriptive comparisons, especially small samples, do not establish calibration or profitability; live probabilities, rankings and wager eligibility are unchanged.
 
 After deployment, restore original public history if the session has older report rows, then **Update results and publish** to regenerate reports and publish the display. Historical estimates can be recovered only when original archived or locked legs contain them. Missing or invalid historical estimates display **Not recorded**, with no inference from today's analysis. The additive result fields preserve compatibility with earlier public packages; immutable source records and their IDs are not rewritten.
+
+## Display order
+
+Overall picks, sides, totals and player props are listed from highest to lowest saved win estimate. Missing or invalid estimates are last; ties use stable pick identity, not estimated value or composite selection scores. Current tables show rank and league. Locked picks sort by their original saved probability, never a later analysis. League and market filters retain this ordering. This changes display order only; the per-game selector and original Top 10 tracking policy remain unchanged, and estimates are still unvalidated.

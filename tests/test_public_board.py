@@ -110,7 +110,7 @@ const root=new Element('div');const document={getElementById:()=>root};
 const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());
 const original={group:'Locked',category:'overall',date:today,picks:'A at B: Over 65.5',odds:'-115',published_at:new Date().toISOString(),outcome:'PENDING'};
 const availableResults=[original,{...original,group:'Research',picks:'A at B: Under 63.5'},{...original,date:'2000-01-01'}];
-""" + next(line for line in template.splitlines() if line.startswith('function quoteLabel(')) + '\n' + next(line for line in template.splitlines() if line.startswith('function originalEstimateLabel(')) + '\nfunction lockedRows(' + functions + r"""
+""" + next(line for line in template.splitlines() if line.startswith('function quoteLabel(')) + '\n' + next(line for line in template.splitlines() if line.startswith('function originalEstimateLabel(')) + '\n' + next(line for line in template.splitlines() if line.startswith('function probabilityOrder(')) + '\nfunction lockedRows(' + functions + r"""
 renderLockedPicks();
 const content=JSON.stringify(root);
 assert.ok(content.includes('Over 65.5'));
