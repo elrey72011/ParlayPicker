@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import re
+from functools import lru_cache
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from app_core.result_team_names import normalize_result_team
@@ -240,18 +241,42 @@ def selections(publications):
     return list(chosen.values()) + top_ten_selections(publications)
 
 
+@lru_cache(maxsize=8192)
+def grading_team_name(value, sport):
+    """Resolve result names without changing immutable publication/lock identities."""
+    if sport != 'NCAAF':
+        return team_name(value, sport)
+    from app_core.ncaaf_identity import normalize_ncaaf_team, _key
+    # Exact variants seen in archived picks and ESPN. Resolve before AND after
+    # the provider mapper: some legacy aliases map in opposite directions.
+    groups = (
+        ('massachusetts', 'umass', 'massachusetts minutemen', 'umass minutemen'),
+        ('wisconsin', 'wisconsin badgers'),
+        ('southern miss', 'southern mississippi golden', 'southern miss golden'),
+        ('florida am', 'florida a m', 'florida a m rattlers'),
+    )
+    aliases = {_key(alias): group[0] for group in groups for alias in group}
+    raw = _key(value)
+    if raw in aliases:
+        return aliases[raw]
+    mapped = normalize_ncaaf_team(value)
+    return aliases.get(mapped, mapped)
+
+
 def grade_leg(leg, scores, *, imported=False):
-    key=event_key(leg)
-    if not key:
+    teams=re.split(r'\s+(?:at|@)\s+',leg['game'],flags=re.I)
+    if len(teams)!=2 or not leg.get('start'):
         return 'PENDING',None
+    key=(leg['sport'],*(grading_team_name(t,leg['sport']) for t in teams))
     matches=[]
     for score in scores:
-        if (score['sport'],team_name(score['away'],score['sport']),team_name(score['home'],score['sport']))!=key[:3]:
+        if (score['sport'],grading_team_name(score['away'],score['sport']),grading_team_name(score['home'],score['sport']))!=key:
             continue
-        # Exact teams plus a narrow start-time tolerance disambiguate doubleheaders.
+        # College kickoffs can be delayed by hours. Exact teams, Eastern date
+        # and a unique event are required; retain the doubleheader guard elsewhere.
         score_start=datetime.fromisoformat(score['start']);leg_start=datetime.fromisoformat(leg['start'])
         same_day=score_start.astimezone(ZoneInfo('America/New_York')).date()==leg_start.astimezone(ZoneInfo('America/New_York')).date()
-        if (imported and same_day) or (not imported and abs((score_start-leg_start).total_seconds())<=1800):
+        if ((imported or leg['sport']=='NCAAF') and same_day) or (not imported and leg['sport']!='NCAAF' and abs((score_start-leg_start).total_seconds())<=1800):
             matches.append(score)
     unique={s['event_id']:s for s in matches}
     if len(unique)!=1:
@@ -265,13 +290,13 @@ def grade_leg(leg, scores, *, imported=False):
         margin=(a+h-float(match[2]))*(1 if market=='total_over' else -1)
     elif market.startswith('spread_'):
         match=re.fullmatch(r'(.+)\s+([+-]\d+(?:\.\d+)?)',pick)
-        team=team_name(score['home'] if market=='spread_home' else score['away'],leg['sport'])
-        if not match or team_name(match[1],leg['sport'])!=team:return 'PENDING',None
+        team=grading_team_name(score['home'] if market=='spread_home' else score['away'],leg['sport'])
+        if not match or grading_team_name(match[1],leg['sport'])!=team:return 'PENDING',None
         margin=(h-a if market=='spread_home' else a-h)+float(match[2])
     elif market in {'moneyline_home','h2h_home','moneyline_away','h2h_away'}:
-        team=team_name(score['home'] if market.endswith('home') else score['away'],leg['sport'])
+        team=grading_team_name(score['home'] if market.endswith('home') else score['away'],leg['sport'])
         name=re.sub(r'\s+(?:ML|Moneyline)$','',pick,flags=re.I)
-        if team_name(name,leg['sport'])!=team:return 'PENDING',None
+        if grading_team_name(name,leg['sport'])!=team:return 'PENDING',None
         margin=h-a if market.endswith('home') else a-h
     else:
         return 'PENDING',None
@@ -324,7 +349,9 @@ def fetch_scores(day, sports):
                         if not all(math.isfinite(n) and n>=0 and n.is_integer() for n in (a,h)):continue
                     except (ValueError,TypeError,KeyError):continue
                     scores[(sport,event['id'])]={'sport':sport,'event_id':event['id'],'start':start.replace('Z','+00:00'),
-                        'away':team_name(teams['away']['team']['displayName'],sport),
-                        'home':team_name(teams['home']['team']['displayName'],sport),
+                        # Preserve source names: generic normalization can lose the
+                        # college identity (e.g. Tennessee State -> Tennessee).
+                        'away':teams['away']['team']['displayName'],
+                        'home':teams['home']['team']['displayName'],
                         'away_score':int(a),'home_score':int(h)}
     return {'recorded_at':now(),'scores':list(scores.values())}
