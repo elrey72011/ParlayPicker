@@ -193,7 +193,7 @@ def test_wnba_under_guard_requires_fresh_settled_direction_history():
     assert diagnostics["under_rate"] == 0.125
 
 
-def test_fresh_wnba_under_regression_moves_close_finalist_to_side(monkeypatch):
+def test_legacy_wnba_penalty_cannot_displace_probability_winner(monkeypatch):
     stats = {
         "overall": {"n": 200, "win_rate": 0.54},
         "buckets": {
@@ -227,7 +227,7 @@ def test_fresh_wnba_under_regression_moves_close_finalist_to_side(monkeypatch):
 
     best = build_best_picks_df(analysis, diagnostics_out=diagnostics)
 
-    assert best.iloc[0]["market_type"] == "spread_home"
+    assert best.iloc[0]["market_type"] == "total_under"
     assert diagnostics["wnba_under_finalist_penalty"]["applied"] is True
     audit = diagnostics["candidate_audit_df"]
     under = audit[audit["market_type"].eq("total_under")].iloc[0]
@@ -238,7 +238,9 @@ def test_fresh_wnba_under_regression_moves_close_finalist_to_side(monkeypatch):
     )
 
 
-def test_recent_bucket_regression_demotes_stale_confidence_from_finalist(monkeypatch):
+    assert best.iloc[0]["best_available_probability"] == diagnostics["candidate_audit_df"]["best_available_probability"].max()
+
+def test_legacy_recent_bucket_penalty_cannot_displace_probability_winner(monkeypatch):
     stats = {
         "overall": {"n": 300, "win_rate": 0.54},
         "buckets": {
@@ -265,7 +267,7 @@ def test_recent_bucket_regression_demotes_stale_confidence_from_finalist(monkeyp
 
     best = build_best_picks_df(analysis, diagnostics_out=diagnostics)
 
-    assert best.iloc[0]["market_type"] == "total_over"
+    assert best.iloc[0]["market_type"] == "spread_home"
     assert diagnostics["recent_regime_penalty_count"] == 2
     audit = diagnostics["candidate_audit_df"]
     side = audit[audit["market_type"].eq("spread_home")].iloc[0]
@@ -274,7 +276,9 @@ def test_recent_bucket_regression_demotes_stale_confidence_from_finalist(monkeyp
     assert side["recent_regime_penalty_reason"] == "fresh_recent_bucket_regression"
 
 
-def test_recent_family_regression_demotes_sparse_over_buckets(monkeypatch):
+    assert best.iloc[0]["best_available_probability"] == diagnostics["candidate_audit_df"]["best_available_probability"].max()
+
+def test_legacy_family_penalty_cannot_displace_probability_winner(monkeypatch):
     stats = {
         "overall": {"n": 500, "win_rate": 0.54},
         "buckets": {
@@ -312,7 +316,7 @@ def test_recent_family_regression_demotes_sparse_over_buckets(monkeypatch):
 
     best = build_best_picks_df(analysis, diagnostics_out=diagnostics)
 
-    assert best.iloc[0]["market_type"] == "spread_home"
+    assert best.iloc[0]["market_type"] == "total_over"
     audit = diagnostics["candidate_audit_df"]
     over = audit[audit["market_type"].eq("total_over")].iloc[0]
     assert bool(over["recent_regime_penalty_applied"])
@@ -320,6 +324,8 @@ def test_recent_family_regression_demotes_sparse_over_buckets(monkeypatch):
         "fresh_recent_family_regression"
     )
 
+
+    assert best.iloc[0]["best_available_probability"] == diagnostics["candidate_audit_df"]["best_available_probability"].max()
 
 def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
     frame = pd.DataFrame([
@@ -585,7 +591,7 @@ def test_candidate_audit_retains_oriented_blend_inputs_for_all_alternatives(monk
     assert audit.blend_tier.eq('test').all()
     assert not audit.wager_approved.any()
 
-def test_resolved_model_direction_survives_overlays_and_both_ranking_stages(monkeypatch):
+def test_component_model_direction_does_not_override_final_candidate_probability(monkeypatch):
     monkeypatch.setattr('core.empirical_tiers.load_bucket_stats', lambda: {})
     monkeypatch.setattr('core.probability_calibration.load_calibration', lambda: None)
     rows = [_candidate('total_over', .49, .02), _candidate('total_under', .51, .02)]
@@ -595,7 +601,7 @@ def test_resolved_model_direction_survives_overlays_and_both_ranking_stages(monk
                    ml_feature_quality='resolved_team_scoring_stats')
     diagnostics = {}
     best = build_best_picks_df(pd.DataFrame(rows), diagnostics_out=diagnostics)
-    assert best.iloc[0].market_type == 'total_over'
+    assert best.iloc[0].market_type == 'total_under'
     audit = diagnostics['candidate_audit_df']
     winner = audit[audit.best_available_selected].iloc[0]
     assert winner.best_available_rank == 1
@@ -604,6 +610,8 @@ def test_resolved_model_direction_survives_overlays_and_both_ranking_stages(monk
     assert audit.loc[audit.market_type.eq('total_under'), 'model_direction_guard_applied'].all()
     assert not audit.wager_approved.any()
 
+
+    assert best.iloc[0]["best_available_probability"] == diagnostics["candidate_audit_df"]["best_available_probability"].max()
 
 def test_classification_nullable_boolean_flags_without_downcasting_warnings():
     import warnings

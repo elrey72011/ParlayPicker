@@ -213,10 +213,16 @@ def validate_package(package):
             raise ValueError('Invalid public results')
         seen=set()
         for row in package['results']:
-            exact(row, 'id category date group published_at outcome picks odds final_score' + (' quote_source' if 'quote_source' in row else '') + (' quote_time quote_time_basis' if 'quote_time_basis' in row else '') + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' sport' if row.get('group')=='Locked' and row.get('category')=='overall' and package['schema_version']==5 and 'sport' in row else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
+            exact(row, 'id category date group published_at outcome picks odds final_score' + (' quote_source' if 'quote_source' in row else '') + (' quote_time quote_time_basis' if 'quote_time_basis' in row else '') + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' sport' if row.get('category')!='props' and 'sport' in row else '') + (' market' if row.get('category')!='props' and 'market' in row else '') + (' original_win_estimate' if 'original_win_estimate' in row else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
             projection_metric(row)
-            if not all(isinstance(v,str) for k,v in row.items() if k != 'expected_stat') or row['id'] in seen:
+            if not all(isinstance(v,str) for k,v in row.items() if k not in {'expected_stat', 'original_win_estimate'}) or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
+            if 'original_win_estimate' in row:
+                value = row['original_win_estimate']
+                if (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+                        or not 0 <= value <= 1 or row['category'] == 'parlays' or row['group'] == 'Imported research'
+                        or not row.get('sport') or not row.get('market')):
+                    raise ValueError('Invalid original win estimate')
             seen.add(row['id'])
             if row['category'] not in (({'overall','sides','totals','parlays','props'} | ({'top10'} if package['schema_version']==5 else set())) if package['schema_version'] in {4,5} else {'overall','sides','totals','parlays'}) or row['group'] not in ({'Approved','Research','Imported research','Locked'} if package['schema_version']==5 else {'Approved','Research','Imported research'}) or row['outcome'] not in ({'WIN','LOSS','PUSH','PENDING','NEEDS_REVIEW'} if package['schema_version']==5 and row['category']=='props' else {'WIN','LOSS','PUSH','PENDING'}):
                 raise ValueError('Invalid result category or outcome')

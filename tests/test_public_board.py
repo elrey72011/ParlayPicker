@@ -110,7 +110,7 @@ const root=new Element('div');const document={getElementById:()=>root};
 const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());
 const original={group:'Locked',category:'overall',date:today,picks:'A at B: Over 65.5',odds:'-115',published_at:new Date().toISOString(),outcome:'PENDING'};
 const availableResults=[original,{...original,group:'Research',picks:'A at B: Under 63.5'},{...original,date:'2000-01-01'}];
-""" + next(line for line in template.splitlines() if line.startswith('function quoteLabel(')) + '\nfunction lockedRows(' + functions + r"""
+""" + next(line for line in template.splitlines() if line.startswith('function quoteLabel(')) + '\n' + next(line for line in template.splitlines() if line.startswith('function originalEstimateLabel(')) + '\n' + next(line for line in template.splitlines() if line.startswith('function probabilityOrder(')) + '\nfunction lockedRows(' + functions + r"""
 renderLockedPicks();
 const content=JSON.stringify(root);
 assert.ok(content.includes('Over 65.5'));
@@ -260,7 +260,7 @@ def test_published_category_overview_keeps_locked_record_separate(tmp_path):
     node=os.environ.get('NODE_BINARY') or shutil.which('node')
     if not node: pytest.skip('Node unavailable')
     html=Path('publishing/board.html').read_text(encoding='utf-8')
-    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function matchesResultGroup(', 'function renderLockedWinRate(', 'function flatStakeMetrics(', 'function renderResults(')))
+    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function matchesResultGroup(', 'function renderLockedWinRate(', 'function flatStakeMetrics(', 'function originalEstimateLabel(', 'function estimateComparison(', 'function renderEstimateComparison(', 'function renderResults(')))
     script=r"""
 const assert=require('node:assert/strict');
 class Element {constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.value='';} append(...v){this.children.push(...v)} replaceChildren(...v){this.children=[...v]} }

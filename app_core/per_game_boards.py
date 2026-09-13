@@ -208,6 +208,18 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 if probability is not None and odds is not None and abs(odds)>=100:
                     break_even=100/(100+odds) if odds>0 else abs(odds)/(100+abs(odds))
                     edge=probability-break_even
+            # New runs expose the same probability that chose the candidate.
+            # Production risk adjustments still govern funding independently.
+            if text(source, 'best_available_selection_policy') == 'probability-first-v1':
+                probability=number(source, 'best_available_probability')
+                basis='Candidate win estimate (pair-normalized)' if text(source, 'best_available_probability_source') == 'calibrated_probability_pair_normalized' else 'Candidate win estimate'
+                odds=number(source, 'odds_american')
+                edge=None;ev=None
+                if probability is None or not 0<=probability<=1: approved=False
+                if probability is not None and 0<=probability<=1 and odds is not None and abs(odds)>=100:
+                    decimal=1+odds/100 if odds>0 else 1+100/abs(odds)
+                    edge=probability-1/decimal
+                    ev=probability*decimal-1
             if probability is None or not 0<=probability<=1: probability=None;basis='Unavailable'
         approval_reason = text(final,'Production_Gate_Reason','Status_Reason','qualification_reason') if final_ticket else ''
         if source is None:
