@@ -573,6 +573,9 @@ def _render_candidate_results_recap(
             "the full candidate set will grade automatically."
         )
 
+    from app.ui.pick_accuracy import render_pick_accuracy
+    render_pick_accuracy(ledger)
+
     selected_results = selected_candidate_results(ledger)
     with st.expander("Gemini prospective review comparison", expanded=False):
         from app_core.gemini_review_comparison import review_comparison
