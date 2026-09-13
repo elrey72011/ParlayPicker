@@ -7279,6 +7279,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
             "basketball_nba",
             "basketball_wnba",
             "icehockey_nhl",
+            "americanfootball_nfl",
             "americanfootball_ncaaf",
             "baseball_mlb",
         ]
@@ -7295,6 +7296,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
         except Exception as e:
             logger.error(f"Network/API failure for {sk}: {e}")
             games = []
+
+        if sk == "americanfootball_nfl":
+            from app_core.nfl_novig import recover_nfl_novig
+            games = recover_nfl_novig(games, api_key)
 
         if sk == "americanfootball_ncaaf":
             from app_core.college_novig import recover_college_novig

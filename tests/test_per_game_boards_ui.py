@@ -23,7 +23,7 @@ def test_game_table_separates_selection_and_wager_explanation():
     from streamlit.testing.v1 import AppTest
     app = AppTest.from_function(_app).run()
     assert not app.exception
-    frame = app.dataframe[0].value
+    frame = next(d.value for d in app.dataframe if 'Wager status' in d.value.columns)
     assert list(frame.columns) == ['Game', 'Best pick', 'Odds', 'Win estimate', 'EV estimate', 'Wager status']
     assert frame.iloc[0]['Wager status'] == 'PASS'
-    assert app.dataframe[1].value.iloc[0]['approval_reason']
+    assert next(d.value for d in app.dataframe if 'approval_reason' in d.value.columns).iloc[0]['approval_reason']

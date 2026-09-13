@@ -473,6 +473,11 @@ TEAM_MAP.update({
 
 # Auto-injected exact mappings for Odds API full mascot names to standard names
 ODDS_API_EXACT_MAP = {
+    # Preserve NFL franchises in shared cities through repeated normalization.
+    "new york jets": "New York Jets", "ny jets": "New York Jets", "nyj": "New York Jets",
+    "new york giants": "New York Giants", "ny giants": "New York Giants", "nyg": "New York Giants",
+    "los angeles chargers": "Los Angeles Chargers", "la chargers": "Los Angeles Chargers", "lac": "Los Angeles Chargers",
+    "los angeles rams": "Los Angeles Rams", "la rams": "Los Angeles Rams", "lar": "Los Angeles Rams",
     # MLB multi-team cities — full official names from Odds API
     "chicago cubs": "Chicago Cubs",
     "chicago white sox": "Chicago White Sox",
@@ -984,6 +989,8 @@ def normalize_team_name(name: str) -> str:
             "new york yankees", "new york mets",
             "los angeles dodgers", "los angeles angels",
             "athletics",
+            "new york jets", "new york giants",
+            "los angeles chargers", "los angeles rams",
         }
         if mapped_name.lower() in _mlb_preserve:
             return mapped_name

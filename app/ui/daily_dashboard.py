@@ -21,6 +21,22 @@ def daily_board(frame: pd.DataFrame) -> pd.DataFrame:
     return label_wager_export(frame).reset_index(drop=True)
 
 
+def wager_rejection_summary(board):
+    """Count one primary saved blocker per unapproved game."""
+    from app_core.recommendation_quality import quality_reason
+    reasons = []
+    for _, row in board.iterrows():
+        if row.get('Bettable') is True or str(row.get('Bettable')).lower() == 'true':
+            continue
+        reason = quality_reason(row) or _text(
+            row, 'Production_Gate_Reason', 'status_blocker_reason', 'qualification_reason',
+            default='No funded wager remains after final checks')
+        reasons.append({'League': _text(row, 'league', 'League'), 'Reason': reason})
+    if not reasons:
+        return pd.DataFrame(columns=['League', 'Reason', 'Games'])
+    return pd.DataFrame(reasons).groupby(['League', 'Reason'], sort=False).size().reset_index(name='Games')
+
+
 def _render_game_board(board, candidates, family):
     from app_core.per_game_boards import per_game_board
     result = per_game_board(board, candidates, family)
@@ -52,6 +68,9 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.D
             a.metric("Games reviewed", len(board))
             b.metric("Approved game wagers", len(approved))
             c.metric("Games without an approved wager", len(board) - len(approved))
+            with st.expander("Why picks are not eligible for wagers", expanded=approved.empty):
+                st.dataframe(wager_rejection_summary(board), hide_index=True, width="stretch")
+                st.caption("One primary blocker per game from the saved analysis. Research locks preserve selections; they do not approve wagers. Refresh picks after an input fix to evaluate prices and eligibility again.")
             overall, sides, totals = st.tabs(["Overall Best Pick", "Sides", "Totals"], key="daily_market_navigation", on_change="rerun")
             with overall:
                 _render_game_board(board, candidates, "overall")

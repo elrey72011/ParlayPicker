@@ -368,6 +368,9 @@ def normalize_team_for_stats(team_name: str, league: Optional[str]) -> str:
         return value
 
     lg = str(league or "").upper().strip()
+    if lg == "NFL":
+        from core.nfl_teams import nfl_stats_identity
+        return nfl_stats_identity(team_name)
     raw = str(team_name or "").upper().strip()
     raw = re.sub(r"\s*[\(\[][0-9]+[\)\]]\s*", " ", raw).strip()
     raw = re.sub(r"\b(?:SAINT|ST\.?)(?!\w)", "ST", raw)
@@ -486,6 +489,10 @@ def resolve_stats_team_match(
         return canonical_alias_map[key], "canonical_alias", "resolved"
     if key in city_alias_map:
         return city_alias_map[key], "city_alias", "resolved"
+
+    if str(league).upper() == "NFL":
+        # NFL teams have exact aliases; never guess an ambiguous city.
+        return None, "unresolved", "after_alias"
 
     fuzzy_thresh = STATS_FUZZY_THRESHOLD_BY_LEAGUE.get(str(league).upper(), 70.0)
     if not stats_norm_map:
@@ -1792,6 +1799,7 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
     try:
         logger.info(f"Fetching NFL stats for season: {season_year}")
         # Use schedule data which has scores
+        from core.nfl_teams import nfl_stats_identity
         df = nfl.import_schedules([season_year])
 
         team_stats = {}
@@ -1843,7 +1851,7 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
             avg_tov = data['turnovers'] / games
 
             stats.append({
-                "team_norm": normalize_team_for_stats(str(team_code), league="NFL"),
+                "team_norm": nfl_stats_identity(team_code, schedule_code=True),
                 "league_key": "NFL",
                 "win_pct": w_pct,
                 "home_win_pct": w_pct,

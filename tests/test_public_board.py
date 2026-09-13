@@ -231,6 +231,8 @@ const now=Date.now();
 const row={sport:'NCAAF',quote_source:'FanDuel',quote_time:new Date(now-60000).toISOString(),as_of:new Date(now-30000).toISOString(),start:new Date(now+3600000).toISOString(),status:'PASS'};
 assert.equal(state(row),'PASS');
 assert.equal(state({...row,sport:'MLB'}),'UNAVAILABLE');
+assert.equal(state({...row,sport:'NFL'}),'PASS');
+assert.equal(state({...row,sport:'NFL',quote_time_basis:'espn_observed'}),'UNAVAILABLE');
 assert.equal(state({...row,quote_source:'Unknown'}),'UNAVAILABLE');
 assert.equal(state({...row,quote_time:new Date(now-16*60000).toISOString()}),'STALE');
 assert.equal(state({...row,start:new Date(now-1000).toISOString()}),'STARTED');

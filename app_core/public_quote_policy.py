@@ -7,4 +7,4 @@ def supported_quote(row):
     if 'quote_time_basis' in row:
         return row['quote_time_basis'] == 'espn_observed' and row.get('sport', '').upper() == 'NCAAF' and source == 'DraftKings'
 
-    return source == 'Novig' or (row.get('sport', '').upper() == 'NCAAF' and source in COLLEGE_BOOKS)
+    return source == 'Novig' or (row.get('sport', '').upper() in {'NCAAF', 'NFL'} and source in COLLEGE_BOOKS)

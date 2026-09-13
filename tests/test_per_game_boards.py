@@ -209,9 +209,9 @@ def test_public_quote_checks_only_matching_games(monkeypatch):
     audit=pd.DataFrame([quoted_candidate(matchup_id=f'g{i}') for i in range(count)])
     checked=[]
     original=module.public_quote
-    def tracked(row,*args):
+    def tracked(row,*args,**kwargs):
         checked.append(row['matchup_id'])
-        return original(row,*args)
+        return original(row,*args,**kwargs)
     monkeypatch.setattr(module,'public_quote',tracked)
     result=module.per_game_board(board,audit,novig_only=True)
     assert len(result)==count and result.quote_source.eq('Novig').all()

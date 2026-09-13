@@ -113,9 +113,11 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
         slate = st.text_input('DFS slate name', help='Use the exact contest slate label.')
         start = render_dfs_lock_picker()
     st.caption('DFS lineups must be generated in Full Pick Board during this run. Only one Classic slate is included per publication. Empty sections remain visible as empty tabs.')
+    nfl_fallback = st.checkbox('Allow NFL sportsbook fallback for research locks', value=False, key='publication_nfl_fallback',
+                               help='Prefer Novig. If unavailable, use an exact fresh DraftKings, FanDuel or BetMGM quote, labeled with its source. This does not approve a wager.')
     selected_props = props if include_props else pd.DataFrame()
     selected_dfs = dfs.get(chosen)
-    options = {'results':public_results, 'props':include_props, 'dfs':chosen, 'slate':slate, 'start':start}
+    options = {'results':public_results, 'props':include_props, 'dfs':chosen, 'slate':slate, 'start':start, 'nfl_fallback':nfl_fallback}
     fingerprint = source_fingerprint(games,candidates,selected_props,selected_dfs,options)
     saved = st.session_state.get('publication_preview')
     if saved and saved['fingerprint'] != fingerprint:
@@ -125,7 +127,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     rebuild = st.button('Refresh preview', key='publication_build')
     if saved is None or rebuild:
         try:
-            boards = [per_game_board(games,candidates,family,novig_only=True,college_fallback=True) for family in ('overall','sides','totals')]
+            boards = [per_game_board(games,candidates,family,novig_only=True,college_fallback=True,nfl_fallback=nfl_fallback) for family in ('overall','sides','totals')]
             package = build_package(*boards, props=selected_props,
                                     dfs=selected_dfs, dfs_sport=chosen if chosen!='None' else None,
                                     dfs_slate=slate, dfs_start=start)
