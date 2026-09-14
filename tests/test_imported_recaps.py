@@ -37,6 +37,6 @@ def test_import_time_change_accepts_only_unique_same_day_event():
     from app_core.result_team_names import normalize_result_team as norm
     batch=import_exports(*frames());leg=batch['games']['overall'][0]
     score={'sport':'MLB','away':norm('Seattle Mariners'),'home':norm('Boston'),'event_id':'1','start':'2026-09-08T22:00:00+00:00','away_score':4,'home_score':3}
-    assert grade_leg(leg,[score])[0]=='PENDING'
+    assert grade_leg(leg,[score])[0]=='WIN'  # Unique same-date delayed final now reconciles.
     assert grade_leg(leg,[score],imported=True)[0]=='WIN'
     assert grade_leg(leg,[score,{**score,'event_id':'2'}],imported=True)[0]=='PENDING'

@@ -566,6 +566,9 @@ Return ONLY a JSON array of objects. No markdown formatting.
                 logger.warning(f"⚠️ Gemini API key invalid. Disabling. Error: {exc_str}")
                 return all_results # Return what we have
 
+             if any(token in exc_str.upper() for token in ('DEADLINE_EXCEEDED','TIMEOUT','504','503','502','SERVICE_UNAVAILABLE')):
+                 for game in batch:
+                     all_results.setdefault(str(game.get('game_id','')), {'error':'SERVICE_TIMEOUT_OR_5XX'})
              logger.warning(f"Gemini batch call failed: {exc_str}")
              # We continue to next batch
 

@@ -81,6 +81,10 @@ def render_history(setting):
             st.success('Results saved. Preparing the updated website.')
         except Exception:
             st.error('Results update did not complete. Saved records are retained; no website upload was requested.')
+    if saved and saved.get('reconciliation_summary'):
+        st.write('Pending result reconciliation', saved['reconciliation_summary'])
+        if saved.get('pending_diagnostics'):
+            st.dataframe(saved['pending_diagnostics'],hide_index=True)
     # Collapsing a Streamlit expander alone does not defer its Python work.
     # Keep detailed imports/grading tables off the normal path to locking.
     saved=st.session_state.get(key)
@@ -225,13 +229,28 @@ def update_pending_results(setting,saved):
     today=datetime.now(ZoneInfo('America/New_York')).date().isoformat()
     dates=sorted({r['date'] for r in entries if r['id'] in pending and r['date']<=today})
     store=history(setting)
+    from app_core.result_reconciliation import revision_signature, pending_diagnostics, latest_scores, match_result
+    before_ids = set(pending)
     for day in dates:
         sports={leg['sport'] for r in entries if r['date']==day and r['id'] in pending for leg in r['legs']}
         revision=fetch_scores(datetime.fromisoformat(day).date(),sports)
-        store.put('scores/'+digest(revision)+'.json',revision)
-        saved['revisions'].append(revision)
+        if revision_signature(revision) not in {revision_signature(r) for r in saved['revisions']}:
+            store.put('scores/'+digest(revision)+'.json',revision)
+            saved['revisions'].append(revision)
         saved['rows']=report(saved['publications'],saved['revisions'],saved.get('imports',[]),saved.get('locks',[]))
 
+    from collections import Counter
+    after = {r['id']:r for r in saved['rows']}
+    resolved = {key for key in before_ids if key in after and after[key]['outcome'] != 'PENDING'}
+    sources = Counter()
+    current_scores = latest_scores(saved['revisions'])
+    for entry in entries:
+        if entry['id'] in resolved:
+            names = {match_result(leg,current_scores)[0].get('result_source','ESPN') for leg in entry['legs']}
+            sources[' / '.join(sorted(names))] += 1
+    if before_ids:
+        saved['pending_diagnostics'] = pending_diagnostics([e for e in entries if e['id'] in before_ids-resolved],saved['revisions'])
+        saved['reconciliation_summary'] = {'pending_before':len(before_ids),'resolved':len(resolved),'pending_after':len(before_ids-resolved),'resolved_by_source':dict(sources)}
     from app_core import public_prop_history as props
     prop_entries=props.selections(saved['publications'],saved.get('prop_imports',[]))
     prop_rows=props.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[]))

@@ -120,6 +120,7 @@ def _attach_gemini_results(
             and isinstance(raw_flags, list)
         )
 
+    result["gemini_error"] = [analyses.get(str(r),{}).get("error","") for r in row_ids]
     result["gemini_explanation"] = explanations
     result["gemini_risk_notes"] = risk_notes
     result["gemini_pick"] = picks

@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timezone
 
 
-def build_parlays(rows, now=None, *, qualified_only=False, max_age_minutes=QUOTE_MAX_AGE_MINUTES):
+def _legacy_build_parlays(rows, now=None, *, qualified_only=False, max_age_minutes=QUOTE_MAX_AGE_MINUTES):
     now = now or datetime.now(timezone.utc)
     candidates = []
     for row in rows:
@@ -126,3 +126,66 @@ def build_research_parlays(rows, now=None, *, qualified_parlays=(), max_age_minu
         if len(result) == 3:
             break
     return result
+
+
+def parlay_funnel(rows, now=None, *, max_age_minutes=QUOTE_MAX_AGE_MINUTES):
+    """Owner-only sequential counts and independent exclusion reasons."""
+    from collections import Counter
+    from app_core.public_history import eligible, event_key, resolved_pick
+    from app_core.public_quote_policy import supported_quote
+    from app_core.recommendation_quality import positive_price_edge
+    now = now or datetime.now(timezone.utc)
+    counts = Counter(input=len(rows)); reasons = Counter(); candidates = []
+    for row in rows:
+        failed=[]
+        market = production_market(row.get('market'))
+        price = isinstance(row.get('odds'),(int,float)) and not isinstance(row.get('odds'),bool) and math.isfinite(row['odds']) and 100 <= abs(row['odds']) <= 10000
+        value = positive_price_edge(row.get('win_estimate'),row.get('odds'),row.get('conservative_ev',row.get('ev')))
+        book = supported_quote(row) and bool(row.get('quote_time')) and not row.get('quote_time_basis')
+        fresh = eligible(row,now,max_age_minutes=max_age_minutes) and resolved_pick(row)
+        maturity = row.get('maturity')
+        mature = maturity in {'STANDARD','PREMIUM'} if maturity else row.get('status') == 'APPROVED'
+        approved = row.get('status') == 'APPROVED' and row.get('production_eligible',True) is True
+        gemini = row.get('gemini_review_status','')
+        if gemini in {'HOLD','OPPOSE','ABSTAIN','LOW_CONFIDENCE'}: failed.append('gemini_hard_veto')
+        if gemini in {'OUTAGE_CAPPED','UNAVAILABLE'}: failed.append('gemini_unavailable')
+        stages=[('spread_total',market,'moneyline_or_invalid_market'),('valid_price',price,'invalid_price'),('positive_ev',value,'nonpositive_ev'),('fresh_pregame',fresh,'stale_or_unresolved_quote'),('supported_book',book,'unsupported_book'),('production_eligible',approved,'not_approved'),('standard_premium',mature,'provisional_straight_only' if maturity=='PROVISIONAL' else 'research_maturity')]
+        reached=True
+        for stage,ok,reason in stages:
+            if not ok: failed.append(reason)
+            reached = reached and ok
+            if reached: counts[stage]+=1
+        key=event_key(row)
+        names={(key[0],key[1]),(key[0],key[2])} if key else set()
+        if len(names)!=2: failed.append('team_identity')
+        reasons.update(set(failed))
+        if not failed: candidates.append((row,names))
+    pairs=[]; partners=set()
+    for i,(a,at) in enumerate(candidates):
+        for j,(b,bt) in enumerate(candidates[i+1:],i+1):
+            if at & bt:
+                reasons['same_game_conflict' if at==bt else 'same_team_conflict']+=1;continue
+            if a['quote_source'] != b['quote_source']: continue
+            pairs.append((a,b));partners.update((i,j))
+    reasons['no_same_book_partner']=len(candidates)-len(partners)
+    counts['same_book_compatible']=len(partners);counts['valid_pairs']=len(pairs)
+    return {'counts':dict(counts),'exclusions':dict(reasons),'pairs':pairs}
+
+
+def build_parlays(rows, now=None, *, qualified_only=False, max_age_minutes=QUOTE_MAX_AGE_MINUTES, legacy=False):
+    if legacy or not qualified_only:
+        return _legacy_build_parlays(rows,now,qualified_only=qualified_only,max_age_minutes=max_age_minutes)
+    from app_core.public_history import event_key
+    funnel=parlay_funnel(rows,now,max_age_minutes=max_age_minutes)
+    def ranking(pair):
+        return (-pair[0]['win_estimate']*pair[1]['win_estimate'], pair[0]['game'],pair[1]['game'])
+    used=set();tickets=[]
+    for a,b in sorted(funnel['pairs'],key=ranking):
+        names={(event_key(r)[0],name) for r in (a,b) for name in event_key(r)[1:3]}
+        if used & names:continue
+        used.update(names)
+        probability=a['win_estimate']*b['win_estimate']
+        decimal=math.prod(1+(r['odds']/100 if r['odds']>0 else 100/abs(r['odds'])) for r in (a,b))
+        tickets.append({'legs':[a.copy(),b.copy()],'win_estimate':probability,'decimal_odds_estimate':decimal,'ev_estimate':probability*decimal-1,'approved_legs':True,'status':'RESEARCH ONLY'})
+        if len(tickets)==3:break
+    return tickets

@@ -149,6 +149,12 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
         from app.ui.sftp_publish import publish_action
         st.info(publish_action(package, setting))
     st.write(f"{len(package['games']['overall'])} games · {len(package['props'])} props · {len(package['dfs'])} DFS lineups")
+    from app_core.public_parlays import parlay_funnel
+    with st.expander('Parlay eligibility funnel', expanded=False):
+        funnel = parlay_funnel(package['games']['overall'])
+        st.write(funnel['counts'])
+        st.write(funnel['exclusions'])
+        st.caption('Leg-qualified pairs still require an actual ticket price and validated joint model before any parlay stake. Counts reflect the current clock.')
     from app.ui.lock_picks import render_lock_picks
     render_lock_picks(package, setting)
     with st.expander('Website preview', expanded=False):

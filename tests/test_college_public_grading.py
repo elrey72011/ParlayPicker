@@ -77,12 +77,13 @@ def test_delayed_college_kickoff_matches_same_eastern_day_only():
     assert grade_leg({**leg,"pick":"Clemson line unresolved","market":"spread_home"},[score])[0] == "PENDING"
 
 
-def test_baseball_doubleheader_time_guard_is_unchanged():
+def test_baseball_unique_delayed_final_is_not_a_doubleheader():
     leg=dict(sport="MLB",game="Seattle at Boston",pick="Over 7.5",market="total_over",
              start="2026-09-12T17:00:00+00:00")
     score=dict(sport="MLB",event_id="late-game",away="Seattle Mariners",home="Boston Red Sox",
                away_score=6,home_score=4,start="2026-09-12T23:00:00+00:00")
-    assert grade_leg(leg,[score])[0] == "PENDING"
+    assert grade_leg(leg,[score])[0] == "WIN"
+    assert grade_leg(leg,[score,{**score,"event_id":"other","start":"2026-09-12T22:00:00+00:00"}])[0] == "PENDING"
 
 
 def test_fetch_preserves_college_source_names_and_requires_final(monkeypatch):

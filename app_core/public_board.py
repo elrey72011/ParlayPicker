@@ -81,6 +81,12 @@ def pick_record(row, *, prop=False, as_of=None):
             record['status'] = 'PASS'
         if 'quote_reason' in row:
             record['quote_reason'] = text(row, 'quote_reason')
+    if not prop:
+        for field in ('maturity', 'gemini_review_status'):
+            if text(row,field): record[field] = text(row,field)
+        for field in ('espn_event_id','mlb_game_pk','game_number'):
+            if text(row,field): record[field] = text(row,field)
+        if number(row,'conservative_ev') is not None: record['conservative_ev'] = number(row,'conservative_ev')
     if prop:
         projection = number(row, 'expected_count')
         if record['sport'].upper() == 'NFL' and (number(row, 'FormSampleSize') or 0) <= 0:
@@ -131,7 +137,7 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
     public_props=with_game_starts(public_props,games['overall'])
     qualified_parlays = build_parlays(games['overall'], built_at, qualified_only=True)
     research_parlays = build_research_parlays(games['overall'], built_at, qualified_parlays=qualified_parlays)
-    return {'schema_version':2, 'research_parlay_policy':'positive-edge-v1', 'research_parlays':research_parlays, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':qualified_parlays, 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
+    return {'schema_version':2, 'parlay_policy':'supported-v2', 'research_parlay_policy':'positive-edge-v1', 'research_parlays':research_parlays, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':qualified_parlays, 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
             'games':games, 'props':public_props,
             'dfs':lineups}
 
@@ -145,7 +151,9 @@ def validate_package(package):
         value = row.get('expected_stat')
         if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
             raise ValueError('Invalid expected statistic')
-    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' research_parlay_policy research_parlays' if 'research_parlay_policy' in package else '') + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else ''))
+    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' research_parlay_policy research_parlays' if 'research_parlay_policy' in package else '') + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else '') + (' parlay_policy' if 'parlay_policy' in package else ''))
+    if package.get("parlay_policy", "supported-v2") != "supported-v2":
+        raise ValueError("Unsupported parlay policy")
     package_age_minutes(package)
     if package['schema_version'] not in {1,2,3,4,5}:
         raise ValueError('Unsupported public package version/policy')
@@ -161,8 +169,12 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','conservative_ev','espn_event_id','mlb_game_pk','game_number') if k in row))
             projection_metric(row)
+            if any(k in row and not isinstance(row[k],str) for k in ('maturity','gemini_review_status','espn_event_id','mlb_game_pk','game_number')):
+                raise ValueError('Invalid public review labels')
+            if 'conservative_ev' in row and (isinstance(row['conservative_ev'],bool) or not isinstance(row['conservative_ev'],(int,float)) or not math.isfinite(row['conservative_ev'])):
+                raise ValueError('Invalid conservative EV')
             if 'qualification_reason' in row and not isinstance(row['qualification_reason'],str):
                 raise ValueError('Invalid qualification reason')
             if 'quote_reason' in row and not isinstance(row['quote_reason'],str):
@@ -206,7 +218,7 @@ def validate_package(package):
                 raise ValueError('Invalid player fields')
     if package['schema_version'] in {2,3,4,5}:
         from app_core.public_parlays import build_parlays
-        expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_only=package.get('selection_policy')=='qualified-v1', max_age_minutes=package_age_minutes(package))
+        expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_only=package.get('selection_policy')=='qualified-v1', max_age_minutes=package_age_minutes(package), legacy='parlay_policy' not in package)
         if package['parlays'] != expected:
             raise ValueError('Parlays must match the original disjoint selections and estimates')
         if 'research_parlay_policy' in package:
