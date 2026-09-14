@@ -41,18 +41,8 @@ def main(argv=None):
         write_validation_reports(args.database)
         return 0
     if args.command == "refresh":
-        from app_core.performance_pipeline import grade_picks_with_live_results
-        yesterday = (pd.Timestamp.now(tz="America/New_York") - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-        frames = []
-        for _, _, final in load_snapshots(args.database):
-            starts = pd.to_datetime(final.game_start_utc, errors="coerce", utc=True)
-            frames.append(final[starts.dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d").eq(yesterday)])
-        pending = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-        if pending.empty:
-            print("No saved picks from yesterday to refresh")
-            return 0
-        graded = grade_picks_with_live_results(pending)
-        print(f"Saved {record_scores(graded, path=args.database)} score revisions")
+        from app_core.prediction_evidence import refresh_outcomes
+        print(json.dumps(refresh_outcomes(args.database)))
         write_validation_reports(args.database)
         return 0
     if not args.train_through:

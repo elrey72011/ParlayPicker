@@ -49,8 +49,10 @@ def connect(path=None):
             evidence_hash TEXT NOT NULL, recorded_at TEXT NOT NULL, scores TEXT NOT NULL,
             PRIMARY KEY(snapshot_id, evidence_hash));
     """)
+    db.execute('CREATE TABLE IF NOT EXISTS closing_observations (observation_id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL, candidate_id TEXT NOT NULL, payload TEXT NOT NULL)')
+    db.execute('CREATE TABLE IF NOT EXISTS validation_plans (plan_id TEXT PRIMARY KEY, sport TEXT NOT NULL, payload TEXT NOT NULL)')
     # Protect against accidental UPDATE/DELETE even from future application code.
-    for table in ("bundles", "snapshots", "score_revisions", "snapshot_runtime"):
+    for table in ("bundles", "snapshots", "score_revisions", "snapshot_runtime", "closing_observations", "validation_plans"):
         for action in ("UPDATE", "DELETE"):
             db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_{table}_{action} BEFORE {action} ON {table} "
                        "BEGIN SELECT RAISE(ABORT, 'prediction evidence is append-only'); END")
@@ -61,7 +63,7 @@ def artifact_manifest(controls, root=ROOT):
     root = Path(root)
     paths = set()
     for pattern in ("core/**/*.py", "app_core/**/*.py", "integrations/*.py", "models/*",
-                    "data/calibration/*", "data/backtest_exports/*", "data/tier_results/*.csv"):
+                    "data/calibration/*", "data/backtest_exports/*", "data/tier_results/*.csv", "data/policies/*.json", "config/**/*.json", "prompts/**/*"):
         paths.update(p for p in root.glob(pattern) if p.is_file())
     paths.update(p for p in root.glob("*.py") if p.is_file())
     dynamic = root / "data/dynamic_aliases.json"
@@ -122,7 +124,7 @@ def provider_quotes(game):
                     kind = ("spread_" if family == "spreads" else "moneyline_") + side
                 else:
                     continue
-                quotes.append({"book": name, "market_type": kind, "point": outcome.get("point"),
+                quotes.append({"provider_namespace": "odds_api" if game.get("odds_feed_source", "the_odds_api") == "the_odds_api" else game.get("odds_feed_source"), "provider_event_id": game.get("id"), "book": name, "market_type": kind, "point": outcome.get("point"),
                                "price": outcome.get("price"), "recorded_at": market.get("last_update") or book.get("last_update"),
                                **({"observed_at": book["observed_at"], "observation_source": "espn_ncaaf_fcs_scoreboard"}
                                   if name == "draftkings" and game.get("odds_feed_source") == "espn_ncaaf_fcs_scoreboard"
@@ -165,7 +167,8 @@ def bind_quote(row):
     if len(matches) != 1 or pd.isna(timestamp(matches[0].get("recorded_at"))):
         return {"odds_recorded_at": "", "quote_bookmaker": "", "quote_binding_verified": False}
     return {"odds_recorded_at": timestamp(matches[0]["recorded_at"]).isoformat(),
-            "quote_bookmaker": matches[0]["book"], "quote_binding_verified": True}
+            "quote_bookmaker": matches[0]["book"], "quote_binding_verified": True,
+            "provider_event_id": matches[0].get("provider_event_id"), "provider_namespace": matches[0].get("provider_namespace")}
 
 
 def capture_run(context, audit, final, inputs, *, path=None):
@@ -212,11 +215,16 @@ def capture_run(context, audit, final, inputs, *, path=None):
 
     for frame in (audit, final):
         frame["snapshot_id"] = context["snapshot_id"]
-        frame["prediction_generated_at"] = generated
-        frame["model_version"] = context["model_version"]
-        frame["model_trained_through"] = context["frozen_at"]
-        frame["model_available_at"] = context["frozen_at"]
-        frame["training_cutoff_basis"] = "frozen_artifact_information_upper_bound"
+        if "prediction_generated_at" not in frame: frame["prediction_generated_at"] = generated
+        frame["created_process_id"] = PROCESS_INSTANCE
+        frame["decision_bundle_version"] = context["model_version"]
+        # Preserve original trainer provenance when supplied. The legacy frozen
+        # artifact upper bound remains descriptive and is excluded by activation.
+        if "model_version" not in frame: frame["model_version"] = context["model_version"]
+        if "model_trained_through" not in frame:
+            frame["model_trained_through"] = context["frozen_at"]
+            frame["training_cutoff_basis"] = "frozen_artifact_information_upper_bound"
+        if "model_available_at" not in frame: frame["model_available_at"] = context["frozen_at"]
     for idx, row in audit.iterrows():
         for col, value in bind_quote(row).items():
             audit.at[idx, col] = value
@@ -248,6 +256,9 @@ def capture_run(context, audit, final, inputs, *, path=None):
     # No outcomes may enter the original prediction record.
     forbidden = [c for c in audit if c.startswith("actual_") or c in {"candidate_outcome", "candidate_graded", "candidate_ledger_key"}]
     audit = audit.drop(columns=forbidden, errors="ignore")
+    from core.activation_validation import enrich
+    audit = enrich(audit)
+    final = final.drop(columns=[c for c in final if c.startswith("actual_") or c in {"candidate_outcome", "outcome", "result"}], errors="ignore")
     payload = [audit.to_csv(index=False), final.to_csv(index=False), inputs.to_csv(index=False)]
     digest = hashlib.sha256("\0".join(payload).encode()).hexdigest()
     with closing(connect(path)) as db, db:
@@ -294,10 +305,10 @@ def record_scores(scored, *, path=None):
             if original is None:
                 continue
             ids = set(pd.read_csv(StringIO(original[0])).matchup_id)
-            scores = group[["matchup_id", "actual_home_score", "actual_away_score"]].copy()
+            scores = group[["matchup_id", "actual_home_score", "actual_away_score"] + [c for c in ("result_source", "result_provider_event_id", "result_provider_ids", "result_match_method") if c in group]].copy()
             for column in ("actual_home_score", "actual_away_score"):
                 scores[column] = pd.to_numeric(scores[column], errors="coerce")
-            scores = scores.dropna().drop_duplicates()
+            scores = scores.dropna(subset=["matchup_id", "actual_home_score", "actual_away_score"]).drop_duplicates()
             import math
             for column in ("actual_home_score", "actual_away_score"):
                 scores = scores[scores[column].map(lambda value: math.isfinite(value) and value >= 0 and float(value).is_integer())]
@@ -327,9 +338,11 @@ def materialize(path=None):
     audits, finals = [], []
     for sid, audit, final in load_snapshots(path):
         with closing(connect(path)) as db:
-            revisions = db.execute("SELECT scores FROM score_revisions WHERE snapshot_id=? ORDER BY recorded_at, evidence_hash", (sid,)).fetchall()
+            revisions = db.execute("SELECT scores, recorded_at, evidence_hash FROM score_revisions WHERE snapshot_id=? ORDER BY recorded_at, evidence_hash", (sid,)).fetchall()
         if revisions:
-            scores = pd.concat([pd.read_csv(StringIO(raw)) for (raw,) in revisions], ignore_index=True)
+            if any(hashlib.sha256(raw.encode()).hexdigest()!=expected for raw,recorded,expected in revisions):
+                raise ValueError("Score revision payload changed")
+            scores = pd.concat([pd.read_csv(StringIO(raw)).assign(outcome_recorded_at=recorded) for raw,recorded,expected in revisions], ignore_index=True)
             scores = scores.drop_duplicates("matchup_id", keep="last")
             audit = audit.merge(scores, on="matchup_id", how="left", validate="many_to_one")
         else:
@@ -380,3 +393,38 @@ def write_validation_reports(path=None):
         base.with_suffix(".md").write_text(render_markdown(report), encoding="utf-8")
         outputs.append(str(base.with_suffix(".md")))
     return outputs
+
+
+def refresh_outcomes(path=None, *, fetch=None):
+    """Explicit deterministic refresh of all unresolved saved games, not just yesterday."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from core.wager_decisions import aware
+    from app_core.result_reconciliation import match_result, latest_scores
+    from app_core.public_history import fetch_scores
+    fetch = fetch or fetch_scores
+    frame,_=materialize(path)
+    if frame.empty:return {'revisions':0,'unresolved':0,'reasons':{}}
+    now=datetime.now(timezone.utc);pending=[]
+    for r in frame.astype(object).where(frame.notna(),None).to_dict('records'):
+        start=aware(r.get('game_start_utc'))
+        if start and start<now and r.get('candidate_outcome') not in {'WIN','LOSS','PUSH','VOID'}:pending.append(r)
+    by_day={}
+    for r in pending:
+        day=aware(r['game_start_utc']).astimezone(ZoneInfo('America/New_York')).date()
+        by_day.setdefault(day,set()).add(r.get('sport') or r['league'])
+    results={day:latest_scores([fetch(day,sorted(sports))]) for day,sports in by_day.items()}
+    scored=[];reasons={};seen=set()
+    for r in pending:
+        key=(r['snapshot_id'],r['matchup_id'])
+        if key in seen:continue
+        seen.add(key);day=aware(r['game_start_utc']).astimezone(ZoneInfo('America/New_York')).date()
+        ids={r['provider_namespace']:str(r['provider_event_id'])} if r.get('provider_namespace') and r.get('provider_event_id') else {}
+        leg={'sport':r.get('sport') or r['league'],'start':r['game_start_utc'],'game':str(r['away_team'])+' at '+str(r['home_team']),'away':r['away_team'],'home':r['home_team'],'market':r['market_type'],'pick':r['best_pick'],'provider_ids':ids}
+        score,reason=match_result(leg,results[day])
+        if reason:
+            reasons[reason]=reasons.get(reason,0)+1;continue
+        scored.append({'snapshot_id':r['snapshot_id'],'matchup_id':r['matchup_id'],
+            'actual_home_score':score['home_score'],'actual_away_score':score['away_score'],
+            'result_source':score.get('result_source'),'result_provider_event_id':score.get('provider_event_id',score.get('event_id'))})
+    return {'revisions':record_scores(pd.DataFrame(scored),path=path),'unresolved':sum(reasons.values()),'reasons':reasons}

@@ -17,7 +17,7 @@ from app_core.public_board import pick_record
 NOW = datetime(2026, 9, 14, 15, tzinfo=timezone.utc)
 
 def policy(sport='NFL'):
-    return SportPolicy(sport, 'fixture-v1', validation_id='SYNTHETIC-TEST-ONLY',
+    return SportPolicy(sport, 'fixture-v1', validation_id='SYNTHETIC-TEST-ONLY', deployment_state='PREMIUM_VALIDATED',
         provisional_allowed=sport in {'NFL','NCAAF'}, provisional_stake_cap=.002,
         standard_stake_cap=.01, premium_stake_cap=.02, sport_exposure_cap=.03,
         kelly_fraction=.1, historical_prior_strength=1, historical_prior_decay=.5,
@@ -25,7 +25,7 @@ def policy(sport='NFL'):
 
 def candidate(**changes):
     return dict(dict(sport='NFL', game_id='one', market_type='spread_home', line=-2.5,
-        selection='Home -2.5', team_ids=['home','away'], odds_american=-110, book='testbook',
+        selection='Home -2.5', team_ids=['home','away'], odds_american=-110, book='DraftKings',
         conservative_probability=.58, mean_probability=.62,
         identity_verified=True, exact_quote_verified=True,
         start='2026-09-14T18:00:00Z', quote_time='2026-09-14T14:55:00Z',
@@ -78,7 +78,7 @@ def test_research_policies_are_isolated_and_cannot_fund_any_sport():
     for sport,p in policies.items():
         out=candidate_decision(candidate(sport=sport),p,NOW)
         assert out['recommended_fraction']==0 and 'unvalidated_sport_policy' in out['reason_for_pass']
-    with pytest.raises(ValueError): replace(policies['MLB'],provisional_allowed=True)
+    assert replace(policies['MLB'],provisional_allowed=True).deployment_state == 'UNVALIDATED'
 
 def test_provisional_stake_and_gemini_reduction_never_promote_or_increase():
     base=candidate_decision(candidate(maturity='PROVISIONAL'),policy(),NOW)

@@ -10526,6 +10526,9 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
     return parlays_df
 
 def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float = 1000.0) -> pd.DataFrame:
+    if best_picks_df is not None and "wager_contract" in best_picks_df.columns:
+        from core.live_wager_contract import enforce_frame
+        return enforce_frame(best_picks_df)
     if best_picks_df is None or best_picks_df.empty:
         return pd.DataFrame()
 

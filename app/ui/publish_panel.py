@@ -60,6 +60,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     if not hmac.compare_digest(supplied.encode(), token.encode()):
         st.info('Enter the publishing token to preview or publish.')
         return
+    from app.ui.activation_panel import render as render_activation
+    render_activation(games)
     from app.ui.public_results import render_history
     public_results = render_history(setting)
     publish_results_requested = st.session_state.pop('publish_results_requested', False)
@@ -151,12 +153,18 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     st.write(f"{len(package['games']['overall'])} games · {len(package['props'])} props · {len(package['dfs'])} DFS lineups")
     from app_core.public_parlays import parlay_funnel
     with st.expander('Parlay eligibility funnel', expanded=False):
-        funnel = parlay_funnel(package['games']['overall'])
+        if package.get('parlay_policy')=='canonical-v3':
+            from app_core.production_parlays import canonical_funnel
+            funnel=canonical_funnel(package['games']['overall'])
+        else:
+            funnel = parlay_funnel(package['games']['overall'])
         st.write(funnel['counts'])
         st.write(funnel['exclusions'])
         st.caption('Leg-qualified pairs still require an actual ticket price and validated joint model before any parlay stake. Counts reflect the current clock.')
     from app.ui.lock_picks import render_lock_picks
     render_lock_picks(package, setting)
+    from app.ui.activation_panel import render_ticket_confirmation
+    render_ticket_confirmation(package)
     with st.expander('Website preview', expanded=False):
         st.iframe(saved['html'], height=650)
     with st.expander('Downloads and local copy', expanded=False):

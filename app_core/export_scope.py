@@ -329,7 +329,8 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
     for column, value in diagnostic_values.items():
         if column in out.columns:
             out[column] = value
-    return out
+    from core.live_wager_contract import enforce_frame
+    return enforce_frame(out)
 
 
 def production_wagers(frame: pd.DataFrame) -> pd.DataFrame:

@@ -182,7 +182,9 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 pool=[]
             if pool:
                 pool.sort(key=lambda c:((0 if not novig_only or novig_quote(c) else 1),number(c,'best_available_rank' if family=='overall' else 'best_available_family_rank'),number(c,'best_available_rank') or math.inf,text(c,'best_pick')))
-                selected=pool[0]
+                contract=final.get('wager_contract')
+                exact_final=[c for c in pool if text(c,'best_pick')==text(final,'best_pick') and number(c,'odds_american')==number(final,'odds_american') and text(c,'market_type')==text(final,'market_type')]
+                selected=exact_final[0] if family=='overall' and isinstance(contract,dict) and contract.get('production_eligible') and len(exact_final)==1 else pool[0]
                 reason='Highest-ranked '+family+' candidate in this game'
             elif (family=='overall' or family_of(final)==family) and (not novig_only or public_quote(final, allow_fallback, nfl_fallback=nfl_fallback)):
                 selected=final
@@ -196,6 +198,9 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         fallback_selected = quote is not None and quote[0] != 'Novig'
         observed_selected = bool(quote and quote[0] == 'DraftKings' and not exact_book_quote(selected, 'draftkings') and espn_observed_quote(selected))
         same = selected is not None and family_of(selected)==family_of(final) and text(selected,'best_pick')==text(final,'best_pick') and number(selected,'odds_american')==number(final,'odds_american') and text(selected,'odds_source')==text(final,'odds_source')
+        canonical=final.get('wager_contract')
+        if isinstance(canonical,dict) and selected is not None:
+            same = (text(selected,'best_pick')==canonical.get('selection') and number(selected,'odds_american')==canonical.get('odds') and text(selected,'market_type')==canonical.get('market_type') and (not novig_only or bool(quote and quote[0]==canonical.get('sportsbook'))))
         # Only the exact final ticket can inherit the finalized approval or stake.
         source=selected if selected is None or novig_only else final if same or family=='overall' else selected
         final_ticket = same or (family=='overall' and not novig_only)
@@ -258,5 +263,6 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      **({'qualification_reason':approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('Sportsbook fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else (college_unavailable_reason(final,candidates,family) if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
                      **({'quote_time_basis':'espn_observed'} if observed_selected else {}),
                      **({k:final[k] for k in ('maturity','gemini_review_status','conservative_ev','espn_event_id','mlb_game_pk','game_number') if k in final} if final_ticket else {}),
+                     **({'wager_contract':final['wager_contract']} if final_ticket and isinstance(final.get('wager_contract'),dict) else {}),
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)

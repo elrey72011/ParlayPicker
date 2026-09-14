@@ -126,6 +126,11 @@ def test_explicit_update_is_idempotent_and_recomputes_ledger(monkeypatch):
 
 
 def test_batch_timeout_transport_is_preserved(monkeypatch):
+    # This transport test must not consume the owner's persisted daily budget.
+    from app_core import gemini_review_budget as budget
+    monkeypatch.setattr(budget,'reserve',lambda:True)
+    monkeypatch.setattr(budget,'lookup',lambda key:None)
+    monkeypatch.setattr(budget,'save',lambda *args:None)
     from app_core import llm_assistant as llm
     from integrations.gemini_client import _attach_gemini_results
     def fail(**kw):raise RuntimeError('504 DEADLINE_EXCEEDED')

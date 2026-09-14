@@ -92,15 +92,12 @@ def test_empty_card_recovery_publishes_separate_controlled_value_card(monkeypatc
     state, _, _ = app._run_pipeline(controls)
     out = state["best_picks_df"]
     actionable = out[out["Pick_Status"] == "Actionable"]
-    assert len(actionable) == 2
-    assert actionable["controlled_card_recovery"].all()
-    assert actionable["sellable_as_value_card"].all()
-    assert not actionable["sellable_as_premium"].any()
-    assert actionable["wager_approved"].all()
-    assert actionable["commercial_tier"].eq("Controlled Value Pick").all()
-    assert state["diagnostics"]["empty_card_recovery_enabled"] is True
-    assert state["diagnostics"]["empty_card_recovery_triggered"] is True
-    assert state["diagnostics"]["controlled_value_pick_count"] == 2
+    # Legacy recovery lacks validated canonical evidence and cannot fund a new run.
+    assert actionable.empty
+    assert not out["wager_approved"].any()
+    assert not out["sellable_as_premium"].any()
+    assert state["diagnostics"]["controlled_value_pick_count"] == 0
+
 
 
 def test_controlled_value_recovery_rejects_low_probability_plus_money_rows(monkeypatch):

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import math
 from collections import defaultdict
 from core.market_policy import production_market, MARKET_POLICY_VERSION
-from core.sport_policy import SportPolicy
+from core.sport_policy import SportPolicy, DEPLOYMENT_STATES
 
 
 def finite(value):
@@ -41,7 +41,7 @@ def moneyline_context(home_odds, away_odds):
     return {"available": True, "home_probability": hp / (hp + ap), "away_probability": ap / (hp + ap), "wager_eligible": False}
 
 
-def candidate_decision(row, policy: SportPolicy, now):
+def candidate_decision(row, policy: SportPolicy, now, *, outage_policy=None):
     """Only reduce eligibility. Trusted adapter must supply evidence identifiers.
 
     Probability and policy validation are independent. Bucket rate alone is not
@@ -62,7 +62,8 @@ def candidate_decision(row, policy: SportPolicy, now):
         reasons.append("unsupported_production_market")
     if not row.get("game_id") or row.get("identity_verified") is not True:
         reasons.append("unverified_mapping")
-    if not row.get("book") or decimal is None or row.get("exact_quote_verified") is not True:
+    from app_core.public_quote_policy import supported_quote
+    if not supported_quote({"sport":row.get("sport", ""), "quote_source":row.get("book")}) or decimal is None or row.get("exact_quote_verified") is not True:
         reasons.append("invalid_exact_price")
     if finite(row.get("line")) is None:
         reasons.append("missing_exact_line")
@@ -100,10 +101,13 @@ def candidate_decision(row, policy: SportPolicy, now):
     if edge is None or edge < policy.min_conservative_edge:
         reasons.append("insufficient_conservative_edge")
     tier = row.get("maturity", "RESEARCH")
+    required_state = {"PROVISIONAL": 1, "STANDARD": 2, "PREMIUM": 3}.get(tier, 99)
+    if DEPLOYMENT_STATES.get(policy.deployment_state, 0) < required_state:
+        reasons.append("deployment_state_below_maturity")
     effective_n = finite(row.get("evidence_effective_sample_size"))
     if effective_n is None or effective_n <= 0:
         reasons.append("missing_effective_evidence")
-    elif tier != "PROVISIONAL" and effective_n < policy.minimum_evidence:
+    elif effective_n < (policy.provisional_minimum_evidence if tier == "PROVISIONAL" else policy.minimum_evidence):
         reasons.append("insufficient_evidence_for_maturity")
     caps = {"PROVISIONAL": policy.provisional_stake_cap if policy.provisional_allowed else 0,
             "STANDARD": policy.standard_stake_cap, "PREMIUM": policy.premium_stake_cap}
@@ -113,18 +117,32 @@ def candidate_decision(row, policy: SportPolicy, now):
         reasons.append("unvalidated_maturity_or_cap")
     review = row.get("gemini_status", "UNAVAILABLE")
     reduction = finite(row.get("gemini_stake_multiplier", 1))
-    if review not in {"CONFIRM", "REDUCE"} or reduction is None or not 0 < reduction <= 1:
+    outage = review in {"UNAVAILABLE", "TIMEOUT", "SERVICE_ERROR"}
+    outage_cap = None
+    config = outage_policy or {}
+    if outage and config.get("mode") == "capped":
+        outage_cap = finite(config.get("cap"))
+        reduction = finite(config.get("multiplier"))
+        if outage_cap is None or not 0 < outage_cap <= .01 or reduction is None or not 0 < reduction < 1:
+            reasons.append("gemini_hold")
+    elif review not in {"CONFIRM", "APPROVE", "REDUCE"} or reduction is None or not 0 < reduction <= 1:
         reasons.append("gemini_hold")
     if row.get("unresolved_material_news"):
         reasons.append("wait_for_material_news")
     stake = 0.0
+    kelly = 0.0
     if not reasons:
         kelly = max(0.0, ev / ((decimal - 1) * (1 - push))) * policy.kelly_fraction
         stake = min(kelly, caps[tier], policy.sport_exposure_cap) * reduction
+        if outage_cap is not None:
+            stake = min(stake, outage_cap)
     action = "PASS" if reasons else "REDUCE" if review == "REDUCE" else "BET ALT LINE" if row.get("alternate") else "BET NOW"
     if reasons == ["wait_for_material_news"]:
         action = "WAIT"
-    return dict(row, market_policy_version=MARKET_POLICY_VERSION, sport_policy_version=policy.version,
+    return dict(row, deployment_state=policy.deployment_state, wager_contract_version="live-v1", production_eligible=not reasons and stake > 0,
+                production_gate_reason="; ".join(reasons), raw_kelly=kelly / policy.kelly_fraction if policy.kelly_fraction else 0,
+                gemini_review_status=review, gemini_stake_multiplier=reduction,
+                gemini_outage_capped=outage and not reasons, market_policy_version=MARKET_POLICY_VERSION, sport_policy_version=policy.version,
                 conservative_ev=ev, conservative_edge=edge, break_even_probability=break_even,
                 strategic_action=action, reason_for_pass=reasons, recommended_fraction=stake,
                 minimum_decimal_price=((1 - push) / p if valid_p and valid_push else None), push_probability=push)

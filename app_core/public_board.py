@@ -87,6 +87,12 @@ def pick_record(row, *, prop=False, as_of=None):
         for field in ('espn_event_id','mlb_game_pk','game_number'):
             if text(row,field): record[field] = text(row,field)
         if number(row,'conservative_ev') is not None: record['conservative_ev'] = number(row,'conservative_ev')
+    if not prop and isinstance(row.get('wager_contract'),dict):
+        record['wager_contract']=dict(row['wager_contract'])
+        if record['wager_contract'].get('selection')==record['pick']:
+            record['win_estimate']=record['wager_contract'].get('conservative_probability')
+            record['ev']=record['wager_contract'].get('conservative_ev')
+        record['status']='APPROVED' if record['wager_contract'].get('production_eligible') is True and (record['wager_contract'].get('production_bet_amount') or 0)>0 else 'PASS'
     if prop:
         projection = number(row, 'expected_count')
         if record['sport'].upper() == 'NFL' and (number(row, 'FormSampleSize') or 0) <= 0:
@@ -135,9 +141,12 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
     from app_core.public_prop_timing import with_game_starts
     public_props=[] if props is None else [pick_record(row, prop=True, as_of=props_as_of) for _,row in props.iterrows()]
     public_props=with_game_starts(public_props,games['overall'])
-    qualified_parlays = build_parlays(games['overall'], built_at, qualified_only=True)
-    research_parlays = build_research_parlays(games['overall'], built_at, qualified_parlays=qualified_parlays)
-    return {'schema_version':2, 'parlay_policy':'supported-v2', 'research_parlay_policy':'positive-edge-v1', 'research_parlays':research_parlays, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':qualified_parlays, 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
+    from app_core.production_parlays import build_production_parlays, canonical_funnel
+    summary=canonical_funnel(games['overall'],built_at)
+    summary.pop('combinations')
+    qualified_parlays = build_production_parlays(games['overall'], built_at)
+    research_parlays = build_research_parlays(games['overall'], built_at, qualified_parlays=qualified_parlays, diversified=True)
+    return {'schema_version':2, 'parlay_funnel':summary, 'parlay_policy':'canonical-v3', 'research_parlay_policy':'diversified-v2', 'research_parlays':research_parlays, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':qualified_parlays, 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
             'games':games, 'props':public_props,
             'dfs':lineups}
 
@@ -151,15 +160,15 @@ def validate_package(package):
         value = row.get('expected_stat')
         if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
             raise ValueError('Invalid expected statistic')
-    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' research_parlay_policy research_parlays' if 'research_parlay_policy' in package else '') + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else '') + (' parlay_policy' if 'parlay_policy' in package else ''))
-    if package.get("parlay_policy", "supported-v2") != "supported-v2":
+    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' research_parlay_policy research_parlays' if 'research_parlay_policy' in package else '') + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else '') + (' parlay_policy' if 'parlay_policy' in package else '') + (' parlay_funnel' if 'parlay_funnel' in package else ''))
+    if package.get("parlay_policy", "supported-v2") not in {"supported-v2", "canonical-v3"}:
         raise ValueError("Unsupported parlay policy")
     package_age_minutes(package)
     if package['schema_version'] not in {1,2,3,4,5}:
         raise ValueError('Unsupported public package version/policy')
     if 'selection_policy' in package and package['selection_policy'] != 'qualified-v1':
         raise ValueError('Unsupported selection policy')
-    if 'research_parlay_policy' in package and (package['research_parlay_policy'] != 'positive-edge-v1' or package.get('selection_policy') != 'qualified-v1' or package['schema_version'] not in {2,3,4,5}):
+    if 'research_parlay_policy' in package and (package['research_parlay_policy'] not in {'positive-edge-v1', 'diversified-v2'} or package.get('selection_policy') != 'qualified-v1' or package['schema_version'] not in {2,3,4,5}):
         raise ValueError('Unsupported research parlay policy')
     if 'top_ten_policy' in package and (package['top_ten_policy'] != 'first-publication-v1' or package.get('selection_policy') != 'qualified-v1'):
         raise ValueError('Unsupported Top 10 policy')
@@ -169,7 +178,11 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','conservative_ev','espn_event_id','mlb_game_pk','game_number') if k in row))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','conservative_ev','espn_event_id','mlb_game_pk','game_number') if k in row))
+            if 'wager_contract' in row:
+                from core.live_wager_contract import PUBLIC_FIELDS, validate_snapshot
+                exact(row['wager_contract'],' '.join(PUBLIC_FIELDS))
+                validate_snapshot(row['wager_contract'])
             projection_metric(row)
             if any(k in row and not isinstance(row[k],str) for k in ('maturity','gemini_review_status','espn_event_id','mlb_game_pk','game_number')):
                 raise ValueError('Invalid public review labels')
@@ -219,11 +232,19 @@ def validate_package(package):
     if package['schema_version'] in {2,3,4,5}:
         from app_core.public_parlays import build_parlays
         expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_only=package.get('selection_policy')=='qualified-v1', max_age_minutes=package_age_minutes(package), legacy='parlay_policy' not in package)
+        if package.get('parlay_policy')=='canonical-v3':
+            from app_core.production_parlays import build_production_parlays
+            expected=build_production_parlays(package['games']['overall'],datetime.fromisoformat(package['built_at']))
+        if 'parlay_funnel' in package:
+            from app_core.production_parlays import canonical_funnel
+            expected_funnel=canonical_funnel(package['games']['overall'],datetime.fromisoformat(package['built_at']))
+            expected_funnel.pop('combinations')
+            if package['parlay_funnel'] != expected_funnel: raise ValueError('Invalid parlay funnel')
         if package['parlays'] != expected:
             raise ValueError('Parlays must match the original disjoint selections and estimates')
         if 'research_parlay_policy' in package:
             from app_core.public_parlays import build_research_parlays
-            research = build_research_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_parlays=expected, max_age_minutes=package_age_minutes(package))
+            research = build_research_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']), qualified_parlays=expected, max_age_minutes=package_age_minutes(package), diversified=package['research_parlay_policy']=='diversified-v2')
             if package['research_parlays'] != research:
                 raise ValueError('Research parlays must match the original eligible selections and estimates')
     if package['schema_version'] in {3,4,5}:
