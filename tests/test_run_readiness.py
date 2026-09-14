@@ -171,3 +171,18 @@ def test_moneyline_without_point_is_not_a_missing_spread(frozen):
     report = build_readiness(audit, final)
     candidate = next(c for c in report["candidates"] if not c["selected"])
     assert candidate["line_eligible"]
+
+
+def test_structured_wager_metadata_dedup_preserves_conflicts(frozen):
+    audit, final = saved(frozen)
+    audit['metadata'] = [{'teams': ['away', 'home'], 'flags': {'fresh': True}} for _ in range(len(audit))]
+    final['wager_contract'] = [{'production_eligible': False, 'reasons': ['UNVALIDATED']} for _ in range(len(final))]
+    original = final.copy(deep=True)
+    baseline = build_readiness(audit, final)
+    repeated = build_readiness(pd.concat([audit, audit]), pd.concat([final, final]))
+    assert repeated == baseline
+    pd.testing.assert_frame_equal(final, original)
+    changed = final.copy(deep=True)
+    changed['wager_contract'] = [{'production_eligible': True, 'reasons': []} for _ in range(len(changed))]
+    result = build_readiness(audit, pd.concat([final, changed]))
+    assert 'final_decision_missing_or_ambiguous' in result['games'][0]['evidence_blockers']

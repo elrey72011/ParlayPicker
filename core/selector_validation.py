@@ -3,6 +3,7 @@
 No fitting, live API calls, or production configuration changes occur here.
 """
 from __future__ import annotations
+from core.frame_records import drop_duplicate_records
 
 import hashlib
 from pathlib import Path
@@ -112,7 +113,7 @@ def join_final_selections(audits, selections):
     final = selections[KEY].copy()
     final["_approved"] = bool_column(selections, "wager_approved")
     final = final.dropna(subset=KEY)
-    final = final.drop_duplicates()
+    final = drop_duplicate_records(final)
     if final.duplicated(KEY).any():
         raise ValueError("Conflicting final wager approvals for the same run/candidate")
     out = out.drop(columns="_approved").merge(final, on=KEY, how="left", validate="many_to_one")
@@ -204,7 +205,7 @@ def build_report(audits, *, train_through, probability_column="calibrated_probab
     if cutoff.tzinfo is not None or cutoff != cutoff.normalize():
         raise ValueError("train_through must be a calendar date")
     evaluation_start = (cutoff + pd.Timedelta(days=1)).tz_localize("America/New_York").tz_convert("UTC")
-    f = audits.copy().drop_duplicates().reset_index(drop=True)
+    f = drop_duplicate_records(audits).reset_index(drop=True)
     raw_rows = len(audits)
     # Candidate identity conflicts are excluded at snapshot level, not resolved by file order.
     conflict = f.duplicated(KEY, keep=False)
@@ -301,7 +302,7 @@ def build_report(audits, *, train_through, probability_column="calibrated_probab
         "evidence": {"preregistered": preregistered, "note": spec_reason,
                      "model_versions": sorted(text_column(eligible, "model_version").unique().tolist()),
                      "out_of_sample_independently_verified": False},
-        "inventory": {"raw_rows": raw_rows, "duplicate_rows_removed": raw_rows - len(audits.drop_duplicates()),
+        "inventory": {"raw_rows": raw_rows, "duplicate_rows_removed": raw_rows - len(drop_duplicate_records(audits)),
                       "development_events": int(f.loc[development, "_event"].nunique()),
                       "evaluation_events_seen": int(f.loc[~development & f._start.notna(), "_event"].nunique()),
                       "eligible_events": int(eligible._event.nunique()), "eligible_candidates": len(eligible),
