@@ -175,7 +175,7 @@ def select_matchups(rows, policies, now):
     return decisions
 
 
-def allocate_exposure(decisions, bankroll, *, total_cap, game_cap, sport_caps, committed=None, team_cap=None):
+def allocate_exposure(decisions, bankroll, *, total_cap, game_cap, sport_caps, committed=None, team_cap=None, daily_cap=None, weekly_cap=None):
     """Deterministic downward-only allocation. Include existing straight/parlay exposure.
 
     Committed keys: 'total', 'game:<sport>:<id>', 'sport:<sport>',
@@ -188,6 +188,13 @@ def allocate_exposure(decisions, bankroll, *, total_cap, game_cap, sport_caps, c
     team_cap = game_cap if team_cap is None else finite(team_cap)
     if team_cap is None or not 0 <= team_cap <= 1:
         raise ValueError("Invalid team cap")
+    period_caps = {}
+    for key, value in (("daily", daily_cap), ("weekly", weekly_cap)):
+        if value is not None:
+            value = finite(value)
+            if value is None or not 0 <= value <= 1:
+                raise ValueError("Invalid period cap")
+            period_caps[key] = value
     used = dict(committed or {})
     if any(finite(v) is None or finite(v) < 0 for v in used.values()):
         raise ValueError("Invalid committed exposure")
@@ -199,6 +206,7 @@ def allocate_exposure(decisions, bankroll, *, total_cap, game_cap, sport_caps, c
         if cap is None or not 0 <= cap <= 1:
             cap = 0.0
         keys = {"total": total_cap, f"sport:{sport}": cap, f"game:{sport}:{game}": game_cap}
+        keys.update(period_caps)
         teams = row.get("team_ids")
         valid_teams = isinstance(teams, (list, tuple)) and len(teams) == 2 and all(isinstance(t, str) and t.strip() for t in teams) and len(set(teams)) == 2
         if valid_teams:

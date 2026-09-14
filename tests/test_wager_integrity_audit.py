@@ -220,3 +220,34 @@ def test_cached_moneyline_cannot_be_pick_of_day_or_new_lock():
     assert lock_audit(package, at)[0]['Lock status'] == 'Context only market'
     # Saved records retain their immutable identity and remain readable.
     assert locked_selections(old) == old
+
+
+@pytest.mark.parametrize('committed,limits,expected',[
+    ({'total':.04,'daily':.04}, {'daily_cap':.05}, .01),
+    ({'total':.04,'weekly':.19}, {'weekly_cap':.20}, .01),
+    ({'total':.09}, {}, .01),
+    ({'daily':.05}, {'daily_cap':.05}, 0),
+    ({'weekly':.21}, {'weekly_cap':.20}, 0),
+    ({'game:NFL:g1':.09}, {}, .01),
+    ({'team:NFL:home':.09}, {}, .01),
+    ({'sport:NFL':.09}, {}, .01),
+])
+def test_each_exposure_remainder_subtracted_once(committed, limits, expected):
+    from copy import deepcopy
+    original=deepcopy(committed)
+    decision=dict(sport='NFL',game_id='g1',market_type='spread_home',team_ids=['home','away'],
+                  recommended_fraction=.02,conservative_ev=.1,strategic_action='BET NOW',reason_for_pass=[])
+    result=allocate_exposure([decision],1000,total_cap=.1,game_cap=.1,team_cap=.1,
+        sport_caps={'NFL':.1},committed=committed,**limits)
+    assert result[0]['recommended_fraction']==pytest.approx(expected)
+    assert result[0]['recommended_stake']==pytest.approx(1000*expected)
+    assert committed==original
+
+
+def test_multiple_recommendations_consume_daily_capacity_once():
+    rows=[dict(sport='NFL',game_id=g,market_type='spread_home',team_ids=[g+'h',g+'a'],
+               recommended_fraction=.02,conservative_ev=.1,strategic_action='BET NOW',reason_for_pass=[]) for g in ['b','a']]
+    result=allocate_exposure(rows,1000,total_cap=.1,daily_cap=.07,weekly_cap=.2,
+        game_cap=.1,team_cap=.1,sport_caps={'NFL':.1},committed={'total':.04,'daily':.04})
+    assert [r['game_id'] for r in result]==['a','b']
+    assert [r['recommended_fraction'] for r in result]==pytest.approx([.02,.01])

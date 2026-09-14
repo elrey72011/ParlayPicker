@@ -132,17 +132,31 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
         if config.get('automatic_maturity'):
             from core.candidate_maturity import assign
             validation=config.get('validation_results',{}).get(row['sport'],{})
+            # The loader verifies active policy artifacts. Bind the study again
+            # to this candidate; candidate-supplied family is never authority.
+            row['validated_evidence_family'] = None
+            from core.exposure_ledger import digest
+            study_hash = validation.get('validation_hash')
+            expires = aware(validation.get('expires_at'))
+            if (validation.get('sport') != row['sport'] or policy.sport != row['sport']
+                    or validation.get('deployment_state') != policy.deployment_state
+                    or not study_hash or study_hash != policy.validation_id
+                    or digest({k:v for k,v in validation.items() if k != 'validation_hash'}) != study_hash
+                    or expires is None or expires <= now):
+                row['critical_feature_error'] = True
             versions=validation.get('versions',{})
             validated_at=aware(validation.get('validation_through'))
-            if validated_at is None or validated_at>now or row.get('slate_id') in validation.get('validation_slates',[]):row['critical_feature_error']=True
+            if validated_at is None or validated_at>now or not row.get('slate_id') or not validation.get('validation_slates') or row.get('slate_id') in validation.get('validation_slates',[]):row['critical_feature_error']=True
             row['prior_clv_lower']=validation.get('metrics',{}).get('price_clv_lower_95')
             if any(not versions.get(k) or row.get(k)!=versions[k] for k in ('model_version','calibration_version','selection_policy_version','sport_policy_version','evidence_version')):
                 row['critical_feature_error']=True
             if str(row.get('market_type','')).split('_')[0]!=config.get('validation_results',{}).get(row['sport'],{}).get('market_family'):
                 row['critical_feature_error']=True
             generated=aware(row.get('prediction_generated_at'));trained=aware(row.get('model_trained_through'));available=aware(row.get('model_available_at'));cal_available=aware(row.get('calibration_available_at'))
-            if any(x is None for x in (generated,trained,available,cal_available)) or not trained<generated<=now or not available<=generated or not cal_available<=generated:
+            if any(x is None for x in (generated,trained,available,cal_available,validated_at)) or not trained<generated<=now or not available<=generated or not cal_available<=generated or not validated_at<generated:
                 row['critical_feature_error']=True
+            if row.get('critical_feature_error') is False:
+                row['validated_evidence_family'] = validation.get('market_family')
             row=assign(row,policy,runtime.get('maturity_rules',{}),now)
         decision = candidate_decision(row, policy, now, outage_policy=runtime.get('gemini_outage',config.get('gemini_outage')))
         grouped[(row['sport'],str(row.get('game_id') or ''))].append(decision)
@@ -173,8 +187,9 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
     if valid_exposure:
         caps = dict(caps, **{k:finite(caps.get(k,0)) for k in ('total_cap','daily_cap','weekly_cap','game_cap','team_cap')})
         committed = {k:finite(v) for k,v in committed.items()}
-    remaining = min(caps.get('total_cap',0), max(0,caps.get('daily_cap',0)-(committed or {}).get('daily',0)), max(0,caps.get('weekly_cap',0)-(committed or {}).get('weekly',0))) if valid_exposure else 0
-    allocated=allocate_exposure(selected,bankroll,total_cap=remaining,
+    allocated=allocate_exposure(selected,bankroll,total_cap=caps.get('total_cap',0) if valid_exposure else 0,
+        daily_cap=caps.get('daily_cap',0) if valid_exposure else 0,
+        weekly_cap=caps.get('weekly_cap',0) if valid_exposure else 0,
         game_cap=caps.get('game_cap',0) if valid_exposure else 0,team_cap=caps.get('team_cap',0) if valid_exposure else 0,
         sport_caps={s:p.sport_exposure_cap for s,p in policies.items()},committed=committed if valid_exposure else {})
     lookup={(r.get('sport'),str(r.get('game_id'))):r for r in allocated}
@@ -187,7 +202,10 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
         if contract['production_bet_amount']<=0:
             contract['strategic_action']='PASS'
         result=dict(template)
-        for key in ('team_ids','maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state'):
+        if row.get('candidate_id'):
+            # Preserve the selected exact candidate's line/book and evidence.
+            result.update(row)
+        for key in ('team_ids','maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state','validated_evidence_family'):
             result[key]=row.get(key)
         if contract['production_eligible']:
             result.update(best_pick=row['selection'],market_type=row['market_type'],odds_american=row['odds_american'],market_line_used=row['line'],odds_source=row['book'], production_win_probability=row.get('conservative_probability'), production_expected_value=row.get('conservative_ev'),production_edge=row.get('conservative_edge'))
@@ -195,7 +213,7 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
         result['canonical_pick_key']=_build_canonical_pick_key(pd.Series(result))
         result['wager_contract']=contract
         output.append(result)
-    return enforce_frame(pd.DataFrame(output)), [dict(snapshot(r,now),**{k:r.get(k) for k in ('maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state')}) for pool in grouped.values() for r in pool]
+    return enforce_frame(pd.DataFrame(output)), [dict(snapshot(r,now),**{k:r.get(k) for k in ('maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state','validated_evidence_family','candidate_id')}) for pool in grouped.values() for r in pool]
 
 
 def enforce_frame(frame):
