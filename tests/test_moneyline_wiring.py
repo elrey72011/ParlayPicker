@@ -83,28 +83,16 @@ def test_best_picks_preserves_live_line_less_moneyline_identity(
     }])
 
     out = build_best_picks_df(df)
-    assert len(out) == 1
-    row = out.iloc[0]
-    assert row["best_pick"] == expected_pick
-    assert "unresolved" not in str(row["best_pick"]).lower()
-    assert pd.isna(row["market_line_used"])
-    assert row["market_line_source"] == "live"
-    assert row["market_line_source_detail"] == "live_odds"
-    assert bool(row["line_consistency_flag"])
-    assert bool(row["line_event_identity_match_flag"])
-    assert row["line_event_identity_reason"] == "exact_live_event_identity"
-    assert int(row["line_candidate_count"]) == 1
-    assert not bool(row["production_eligible"])
-    assert float(row["Kelly_Bet_Size"]) == 0.0
+    assert out.empty  # Flags cannot promote context into Best Picks.
 
 def test_eligible_moneyline_is_parlay_only_never_single():
     out = _enforce_moneyline_parlay_only(_ml_rows())
     dog = out.iloc[0]
-    assert bool(dog["parlay_only"])
+    assert not bool(dog["parlay_only"])
     assert float(dog["Kelly_Bet_Size"]) == 0.0
     assert not bool(dog["production_eligible"])
     # Actionable moneyline is capped to High Variance so it stays a leg, not a single.
-    assert dog["Pick_Status"] == "High Variance/Speculative"
+    assert dog["Pick_Status"] == "No Play"
 
 
 def test_heavy_favorite_moneyline_no_play():
@@ -112,7 +100,7 @@ def test_heavy_favorite_moneyline_no_play():
     fav = out.iloc[1]
     assert fav["Pick_Status"] == "No Play"
     assert float(fav["Kelly_Bet_Size"]) == 0.0
-    assert "moneyline parlay gate" in fav["Status_Reason"].lower()
+    assert "context only" in fav["Status_Reason"].lower()
 
 
 def test_no_edge_moneyline_no_play():
@@ -143,9 +131,7 @@ def test_build_best_picks_forces_moneyline_parlay_only(monkeypatch):
         "kalshi_probability": None,
     }])
     out = build_best_picks_df(df)
-    row = out.iloc[0]
-    assert float(row["Kelly_Bet_Size"]) == 0.0
-    assert bool(row.get("parlay_only", False))
+    assert out.empty
 
 
 def test_flag_off_leaves_moneyline_unenforced(monkeypatch):

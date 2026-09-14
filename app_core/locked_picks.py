@@ -1,5 +1,6 @@
 """Immutable owner-selected overall picks, distinct from published/approved history."""
 from collections import Counter
+from core.market_policy import production_market, moneyline_context_only
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from app_core.public_history import eligible, event_key, digest, resolved_pick
@@ -33,7 +34,7 @@ def lock_candidates(package, at):
     rows = {}
     duplicates = _duplicate_ids(package)
     for leg in package['games']['overall']:
-        if not resolved_pick(leg) or not eligible(leg, clock, max_age_minutes=package_age_minutes(package)):
+        if not production_market(leg.get('market')) or not resolved_pick(leg) or not eligible(leg, clock, max_age_minutes=package_age_minutes(package)):
             continue
         date = datetime.fromisoformat(leg['start']).astimezone(ZoneInfo('America/New_York')).date().isoformat()
         if date != today:
@@ -94,6 +95,8 @@ def lock_audit(package, at, locks=()):
         identity = digest(('locked-overall', *key[:3], day)) if key else None
         if identity in existing:
             status, detail = 'Already locked', 'Original selection and odds remain saved; no new lock is needed.'
+        elif moneyline_context_only(leg.get('market')):
+            status, detail = 'Context only market', 'New game locks require a spread or total; moneyline is context only.'
         elif identity in duplicates:
             status, detail = 'Duplicate game entry', 'Multiple rows share these teams and game date. Only this game is excluded; other eligible games can still be locked.'
         elif not start or not key:
@@ -114,7 +117,7 @@ def lock_audit(package, at, locks=()):
             status, detail = 'Stale analysis', f'Game analysis is older than {limit} minutes; refresh game picks.'
         elif not resolved_pick(leg):
             status, detail = 'Unresolved pick', 'A complete selection and line are required before a new lock can be saved.'
-        elif not eligible(leg, clock, max_age_minutes=limit):
+        elif not production_market(leg.get('market')) or not eligible(leg, clock, max_age_minutes=limit):
             status, detail = 'Invalid market or odds', 'The saved market or price is not supported for locking.'
         else:
             status, detail = 'Eligible now', 'Select this game below to save its current pick and price.'

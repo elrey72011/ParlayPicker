@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from app_core.weights_config import MIN_STAKE_WIN_PROBABILITY
+from core.market_policy import moneyline_context_only
 
 # Retained for compatibility with older callers; production selection no longer
 # creates a courtesy bet when the board has no funded edge.
@@ -59,6 +60,8 @@ def _game_candidates(best_picks_df: pd.DataFrame | None) -> pd.DataFrame:
     df = best_picks_df.copy()
 
     keep = pd.Series(True, index=df.index)
+    if "market_type" in df.columns:
+        keep &= ~df["market_type"].map(moneyline_context_only)
     if "game_already_started_flag" in df.columns:
         keep &= ~df["game_already_started_flag"].fillna(False).astype(bool)
     if "status_blocker_stage" in df.columns:

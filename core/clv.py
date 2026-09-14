@@ -1,9 +1,7 @@
 """Closing-line value (CLV) utilities — pure, dependency-light, unit-tested.
 
-CLV is the single best available proxy for genuine betting edge: a bettor who
-consistently beats the closing line (gets a better number/price than the market
-settles at) is, over a large sample, a long-term winner regardless of short-run
-results. The pipeline currently does NOT capture closing lines, so scripts/
+CLV measures entry versus closing prices. It is supporting evidence, not a
+guarantee of profitability or a substitute for quote provenance. The pipeline currently does NOT capture closing lines, so scripts/
 capture_closing_lines.py snapshots them near game start and this module scores
 the open-vs-close move for each pick.
 
@@ -13,6 +11,7 @@ the odds API. Probabilities are de-vigged two-way where both prices are known.
 from __future__ import annotations
 
 from typing import Optional
+import math
 
 
 def american_to_implied(odds: Optional[float]) -> Optional[float]:
@@ -23,7 +22,7 @@ def american_to_implied(odds: Optional[float]) -> Optional[float]:
         o = float(odds)
     except (TypeError, ValueError):
         return None
-    if o == 0:
+    if isinstance(odds, bool) or not math.isfinite(o) or abs(o) < 100:
         return None
     if o > 0:
         return 100.0 / (o + 100.0)
@@ -58,10 +57,14 @@ def line_clv(side: str, open_line: Optional[float], close_line: Optional[float])
         o = float(open_line); c = float(close_line)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(o) or not math.isfinite(c):
+        return None
     s = str(side).strip().lower()
-    if s.startswith("over"):
+    if s.startswith("spread"):
+        return o - c  # Selected-team handicap: +3 beats +2, -2 beats -3.
+    if s.startswith("over") or s == "total_over":
         return c - o
-    if s.startswith("under"):
+    if s.startswith("under") or s == "total_under":
         return o - c
     return None
 
@@ -74,6 +77,10 @@ def price_clv(pick_open_odds: Optional[float], pick_close_odds: Optional[float],
     no-vig prob (you bought the side cheaper than where it settled). Returns
     ``close_novig - open_novig``: positive = you got a better price than the close.
     """
+    # Never compare a raw entry to a de-vigged close (or vice versa).
+    paired = american_to_implied(opp_open_odds) is not None and american_to_implied(opp_close_odds) is not None
+    if not paired:
+        opp_open_odds = opp_close_odds = None
     open_p = no_vig_prob(pick_open_odds, opp_open_odds)
     close_p = no_vig_prob(pick_close_odds, opp_close_odds)
     if open_p is None or close_p is None:
@@ -93,23 +100,23 @@ def closing_line_value(
     """Score a pick's open-vs-close move.
 
     Returns ``{line_clv, price_clv, beat_close}`` where ``beat_close`` is True
-    when the net move (line points + price prob, with line weighted ~0.5 pt per
-    1% as a rough totals convention) is in the bettor's favor. ``beat_close`` is
+    when observed line and price directions agree favorably. Conflicting
+    directions remain unresolved instead of applying an arbitrary conversion. ``beat_close`` is
     None when neither line nor price is computable.
     """
     lc = line_clv(side, open_line, close_line)
     pc = price_clv(pick_open_odds, pick_close_odds, opp_open_odds, opp_close_odds)
-    # Combine: ~0.5 total points ≈ 1% no-vig prob for MLB totals (rough but standard).
-    net = 0.0
-    have = False
-    if lc is not None:
-        net += lc * 0.02  # 0.5 pt -> ~0.01 prob
-        have = True
-    if pc is not None:
-        net += pc
-        have = True
+    # There is no universal conversion from spread/total points to probability.
+    # Conflicting line and price directions remain unresolved.
+    moves = [value for value in (lc, pc) if value is not None]
+    beat = None
+    if moves and not (any(x > 0 for x in moves) and any(x < 0 for x in moves)):
+        beat = any(x > 0 for x in moves)
+
     return {
         "line_clv": lc,
         "price_clv": pc,
-        "beat_close": (net > 0) if have else None,
+        "beat_close": beat,
+        "price_basis": "two_way_no_vig" if american_to_implied(opp_open_odds) is not None and american_to_implied(opp_close_odds) is not None else "raw_implied",
+        "evidence_eligible": False,  # Pure math is not a verified closing capture.
     }

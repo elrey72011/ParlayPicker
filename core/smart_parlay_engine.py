@@ -398,7 +398,10 @@ def generate_probability_ranked_parlays(
     if df is None or df.empty or "best_pick" not in df.columns:
         return pd.DataFrame()
 
+    from core.market_policy import moneyline_context_only
     candidates = df.copy()
+    if "market_type" in candidates:
+        candidates = candidates.loc[~candidates["market_type"].map(moneyline_context_only)].copy()
     for canonical, aliases in {
         "away_team": ("Away", "away"),
         "home_team": ("Home", "home"),
@@ -675,7 +678,10 @@ def generate_smart_parlays(
     # Falls back to calibrated_probability for compatibility with older data.
     rank_col = "effective_win_probability" if "effective_win_probability" in df.columns else "calibrated_probability"
 
+    from core.market_policy import moneyline_context_only
     candidates = df.copy()
+    if "market_type" in candidates:
+        candidates = candidates.loc[~candidates["market_type"].map(moneyline_context_only)].copy()
 
     strict_mode = bool(
         STRICT_PRODUCTION_PARLAYS

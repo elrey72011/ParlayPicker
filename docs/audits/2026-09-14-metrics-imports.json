@@ -1,0 +1,2403 @@
+{
+  "module_count": 634,
+  "parse_errors": [
+    {
+      "module": "archive.experimental_scripts.check_end",
+      "error": "IndentationError"
+    },
+    {
+      "module": "archive.experimental_scripts.snippet1",
+      "error": "IndentationError"
+    },
+    {
+      "module": "archive.experimental_scripts.snippet2",
+      "error": "IndentationError"
+    },
+    {
+      "module": "archive.experimental_scripts.snippet_kalshi",
+      "error": "IndentationError"
+    },
+    {
+      "module": "archive.experimental_scripts.snippet_match_impl_2",
+      "error": "IndentationError"
+    },
+    {
+      "module": "archive.experimental_scripts.snippet_match_kalshi",
+      "error": "IndentationError"
+    }
+  ],
+  "graph": {
+    "audit_pipeline_diagnostics": [
+      "core.streamlit_pipeline"
+    ],
+    "best_bet_analyzer": [
+      "ml_predictions"
+    ],
+    "betting_features": [],
+    "collect_historical_data": [
+      "config"
+    ],
+    "collect_real_historical_data": [
+      "app_core"
+    ],
+    "collect_training_data": [],
+    "complete_workflow_implementation": [
+      "core.ev_engine",
+      "core.models.analysis_models",
+      "core.models.model_converter",
+      "core.models.prediction_models",
+      "core.odds_normalizer",
+      "core.parlay_safety",
+      "core.probability_engine",
+      "core.probability_utils",
+      "core.schema.schema_utils",
+      "core.schema.schema_validator",
+      "ml_predictions"
+    ],
+    "config": [],
+    "consolidated_workflow_complete": [
+      "ml_predictions"
+    ],
+    "daily_picks": [
+      "app_core.feature_engine",
+      "config"
+    ],
+    "diagnose_kalshi_codes": [
+      "app_core.kalshi_integrator"
+    ],
+    "examples": [
+      "betting_features",
+      "parlay_optimizer",
+      "sports_data_pipeline"
+    ],
+    "gemini_integration": [],
+    "generate_mock_export": [],
+    "get_block": [],
+    "headless_runner": [
+      "core.streamlit_pipeline",
+      "core.theover_loader"
+    ],
+    "main": [
+      "parlaypicker.core.bankroll_manager",
+      "parlaypicker.core.ev_engine",
+      "parlaypicker.core.parlay_engine",
+      "parlaypicker.core.probability_engine",
+      "parlaypicker.data_pipeline.sports_data_pipeline",
+      "parlaypicker.simulation.bankroll_simulation",
+      "parlaypicker.utils.config",
+      "parlaypicker.utils.helpers"
+    ],
+    "ml_model": [],
+    "ml_predictions": [
+      "app_core.sharp_engine.bankroll_manager",
+      "app_core.sharp_engine.ev_engine",
+      "app_core.sharp_engine.probability_engine"
+    ],
+    "ml_speedup": [],
+    "normalize_csv": [],
+    "parlaydesk_init": [
+      "app_core",
+      "app_core.odds_api"
+    ],
+    "parlaydesk_ui": [
+      "parlaydesk_init"
+    ],
+    "parlay_optimizer": [
+      "config",
+      "core.parlay_safety",
+      "parlaypicker.core.ev_engine",
+      "parlaypicker.core.probability_engine"
+    ],
+    "parse_theover_csv": [],
+    "print_status": [
+      "core.streamlit_pipeline"
+    ],
+    "run_diagnostics_harness": [
+      "core.streamlit_pipeline"
+    ],
+    "run_pipeline_harness": [
+      "app_core.kalshi_integrator",
+      "core.streamlit_pipeline"
+    ],
+    "run_pipeline_test": [
+      "core.streamlit_pipeline"
+    ],
+    "run_sim": [
+      "app_core.odds_api",
+      "core.streamlit_pipeline"
+    ],
+    "run_test": [
+      "core.streamlit_pipeline"
+    ],
+    "setup_secrets": [
+      "config"
+    ],
+    "shotgun_mode": [
+      "core.parlay_safety"
+    ],
+    "shotgun_mode_ui": [
+      "shotgun_mode"
+    ],
+    "sports_data_pipeline": [],
+    "streamlit_app": [
+      "app.ui.analysis_dashboard",
+      "app.ui.daily_dashboard",
+      "app.ui.data_diagnostics",
+      "app.ui.debug_panel",
+      "app.ui.draftkings",
+      "app.ui.kalshi_diagnostics",
+      "app.ui.layout",
+      "app.ui.odds_dashboard",
+      "app.ui.publish_panel",
+      "app.ui.readiness_dashboard",
+      "app.ui.results_dashboard",
+      "app.ui.sidebar_controls",
+      "app.ui.strategy_lab_dashboard",
+      "app_core.best_duos",
+      "app_core.card_recovery",
+      "app_core.evidence_config",
+      "app_core.evidence_health",
+      "app_core.evidence_remote",
+      "app_core.export_scope",
+      "app_core.gemini_bet_gate",
+      "app_core.kalshi_integrator",
+      "app_core.lean_card",
+      "app_core.nfl_prop_pipeline",
+      "app_core.odds_api",
+      "app_core.performance_pipeline",
+      "app_core.pick_of_day",
+      "app_core.precision_card",
+      "app_core.prediction_evidence",
+      "app_core.prop_analysis",
+      "app_core.stage_timing",
+      "app_core.strategy_lab_realized",
+      "app_core.weights_config",
+      "core.empirical_tiers",
+      "core.probability_calibration",
+      "core.smart_parlay_engine",
+      "core.streamlit_pipeline",
+      "core.team_normalizer",
+      "core.theover_loader",
+      "integrations.gemini_client"
+    ],
+    "streamlit_bridge": [],
+    "test_apis": [],
+    "test_cbbpy": [],
+    "test_dashboard_app": [
+      "app.ui.results_dashboard"
+    ],
+    "test_epsilon": [],
+    "test_eval": [],
+    "test_fallback": [
+      "core.streamlit_pipeline"
+    ],
+    "test_matchup_id": [
+      "app_core.prediction_engine"
+    ],
+    "test_nhl": [
+      "app_core.feature_processing"
+    ],
+    "test_pipeline_coverage": [
+      "app_core.odds_api",
+      "core.streamlit_pipeline"
+    ],
+    "test_recap_tab": [],
+    "test_sort": [
+      "core.streamlit_pipeline"
+    ],
+    "test_sort2": [
+      "core.streamlit_pipeline"
+    ],
+    "test_sort3": [
+      "core.streamlit_pipeline"
+    ],
+    "test_sort4": [
+      "core.streamlit_pipeline"
+    ],
+    "test_sort5": [
+      "core.streamlit_pipeline"
+    ],
+    "test_stats_enrichment_resolution": [
+      "app_core",
+      "app_core.feature_processing"
+    ],
+    "update_team_mapper": [],
+    "verify_cuj": [],
+    "verify_dashboard": [],
+    "app": [],
+    "app_core.apisports": [
+      "app_core.team_name_mapping"
+    ],
+    "app_core.apisports_baseball": [
+      "app_core.apisports"
+    ],
+    "app_core.batter_prop_pipeline": [
+      "app_core.prop_model"
+    ],
+    "app_core.best_duos": [
+      "app_core.pick_of_day",
+      "core.market_policy",
+      "core.parlay_safety"
+    ],
+    "app_core.calibration": [],
+    "app_core.candidate_recap": [
+      "core.selector_validation"
+    ],
+    "app_core.card_recovery": [],
+    "app_core.college_novig": [],
+    "app_core.confidence_utils": [],
+    "app_core.consensus_ingest": [],
+    "app_core.dataframe_utils": [],
+    "app_core.diagnostics": [],
+    "app_core.draftkings_classic": [],
+    "app_core.espn_ncaaf_odds": [
+      "core.team_mapper"
+    ],
+    "app_core.espn_results": [
+      "app_core.result_team_names"
+    ],
+    "app_core.evidence_config": [],
+    "app_core.evidence_drive": [
+      "app_core.evidence_config"
+    ],
+    "app_core.evidence_health": [
+      "app_core.evidence_remote",
+      "app_core.prediction_evidence"
+    ],
+    "app_core.evidence_remote": [
+      "app_core.evidence_config",
+      "app_core.evidence_drive",
+      "app_core.prediction_evidence"
+    ],
+    "app_core.export_scope": [],
+    "app_core.export_utils": [],
+    "app_core.external_data_fetcher": [],
+    "app_core.feature_engine": [],
+    "app_core.feature_processing": [
+      "app_core.prediction_engine",
+      "app_core.team_name_mapping",
+      "app_core.team_name_matcher",
+      "core.nfl_teams"
+    ],
+    "app_core.gemini_bet_gate": [],
+    "app_core.gemini_review_budget": [
+      "app_core.prediction_evidence"
+    ],
+    "app_core.gemini_review_comparison": [],
+    "app_core.imported_recaps": [
+      "app_core.public_board",
+      "app_core.public_history"
+    ],
+    "app_core.kalshi_api_key_fix": [
+      "app_core"
+    ],
+    "app_core.kalshi_integrator": [
+      "app_core.team_name_matcher",
+      "app_core.weights_config",
+      "core.team_mapper"
+    ],
+    "app_core.kalshi_integrator_reverted": [],
+    "app_core.lean_card": [
+      "core.empirical_tiers",
+      "core.probability_calibration",
+      "core.production_gate"
+    ],
+    "app_core.llm_assistant": [
+      "app_core",
+      "app_core.gemini_review_budget"
+    ],
+    "app_core.locked_picks": [
+      "app_core.public_board",
+      "app_core.public_history",
+      "app_core.public_quote_policy",
+      "app_core.quote_freshness"
+    ],
+    "app_core.low_line_override": [
+      "app_core.weights_config"
+    ],
+    "app_core.market_probability_model": [],
+    "app_core.market_tracker": [
+      "app_core.snapshot_manager"
+    ],
+    "app_core.matching": [
+      "app_core.feature_processing",
+      "app_core.kalshi_integrator",
+      "app_core.prediction_engine"
+    ],
+    "app_core.meta_model": [],
+    "app_core.ml": [
+      "app_core.sample_ml_data"
+    ],
+    "app_core.mlb_batter_stats": [],
+    "app_core.mlb_history": [],
+    "app_core.mlb_pitcher_history": [
+      "app_core.mlb_history"
+    ],
+    "app_core.mlb_pitcher_stats": [],
+    "app_core.mlb_prospective": [
+      "app_core",
+      "app_core.mlb_history",
+      "app_core.mlb_pitcher_history",
+      "app_core.mlb_prospective_store",
+      "app_core.mlb_research"
+    ],
+    "app_core.mlb_prospective_store": [
+      "app_core.evidence_drive",
+      "app_core.evidence_remote",
+      "app_core.ncaaf_history",
+      "app_core.prediction_evidence"
+    ],
+    "app_core.mlb_research": [
+      "app_core.mlb_history"
+    ],
+    "app_core.mlb_team_stats": [],
+    "app_core.ml_speedup": [],
+    "app_core.moneyline_parlay": [
+      "app_core.weights_config"
+    ],
+    "app_core.ncaaf_closing": [
+      "app_core",
+      "app_core.ncaaf_history",
+      "app_core.ncaaf_identity",
+      "app_core.ncaaf_prospective",
+      "app_core.ncaaf_prospective_store",
+      "app_core.prediction_evidence"
+    ],
+    "app_core.ncaaf_data_access": [],
+    "app_core.ncaaf_history": [
+      "app_core.evidence_drive",
+      "app_core.evidence_remote"
+    ],
+    "app_core.ncaaf_identity": [
+      "core.team_mapper"
+    ],
+    "app_core.ncaaf_prospective": [
+      "app_core",
+      "app_core.ncaaf_history",
+      "app_core.ncaaf_identity",
+      "app_core.ncaaf_prospective_store",
+      "app_core.ncaaf_research",
+      "app_core.prediction_evidence"
+    ],
+    "app_core.ncaaf_prospective_store": [
+      "app_core.evidence_drive",
+      "app_core.evidence_remote",
+      "app_core.ncaaf_history",
+      "app_core.prediction_evidence"
+    ],
+    "app_core.ncaaf_research": [
+      "app_core.ncaaf_history"
+    ],
+    "app_core.netlify_publishing": [
+      "scripts.publish_board"
+    ],
+    "app_core.new_summary_logic": [
+      "app_core.weights_config"
+    ],
+    "app_core.nfl_identity": [],
+    "app_core.nfl_market": [
+      "app_core",
+      "app_core.ncaaf_history",
+      "app_core.nfl_market_store",
+      "app_core.quote_freshness",
+      "app_core.research_api_budget"
+    ],
+    "app_core.nfl_market_store": [
+      "app_core.evidence_drive",
+      "app_core.evidence_remote",
+      "app_core.ncaaf_history",
+      "app_core.prediction_evidence"
+    ],
+    "app_core.nfl_novig": [],
+    "app_core.nfl_prop_pipeline": [
+      "app_core.prop_odds_ingest"
+    ],
+    "app_core.novig_candidates": [],
+    "app_core.odds_api": [],
+    "app_core.performance_pipeline": [
+      "app_core.export_utils",
+      "app_core.prediction_evidence",
+      "app_core.results_fetcher",
+      "app_core.results_ingestion"
+    ],
+    "app_core.per_game_boards": [
+      "app_core.prediction_evidence",
+      "app_core.quote_freshness",
+      "app_core.recommendation_quality",
+      "core.market_policy",
+      "core.selector_validation"
+    ],
+    "app_core.pick_accuracy": [
+      "app_core.gemini_review_comparison",
+      "core.selector_validation",
+      "core.walk_forward"
+    ],
+    "app_core.pick_of_day": [
+      "app_core.weights_config"
+    ],
+    "app_core.precision_card": [],
+    "app_core.prediction_engine": [
+      "app_core.dataframe_utils",
+      "app_core.feature_processing",
+      "app_core.team_name_matcher",
+      "config",
+      "core.team_mapper"
+    ],
+    "app_core.prediction_evidence": [
+      "app_core",
+      "app_core.candidate_recap",
+      "app_core.evidence_remote",
+      "app_core.weights_config",
+      "core.line_evidence",
+      "core.probability_semantics",
+      "core.selector_validation",
+      "core.team_mapper"
+    ],
+    "app_core.probability_utils": [],
+    "app_core.prop_analysis": [
+      "app_core.best_duos",
+      "app_core.gemini_bet_gate",
+      "app_core.nfl_prop_pipeline",
+      "app_core.odds_api",
+      "app_core.prop_runner",
+      "app_core.stage_timing",
+      "app_core.weights_config",
+      "core.streamlit_pipeline",
+      "integrations.gemini_client"
+    ],
+    "app_core.prop_calibration": [
+      "app_core.prop_grading",
+      "core.probability_calibration"
+    ],
+    "app_core.prop_grading": [
+      "app_core.mlb_batter_stats",
+      "app_core.nfl_prop_pipeline",
+      "scripts.grade_props"
+    ],
+    "app_core.prop_model": [],
+    "app_core.prop_odds_ingest": [],
+    "app_core.prop_pipeline": [
+      "app_core.prop_model"
+    ],
+    "app_core.prop_runner": [
+      "app_core.batter_prop_pipeline",
+      "app_core.mlb_batter_stats",
+      "app_core.mlb_pitcher_stats",
+      "app_core.prop_calibration",
+      "app_core.prop_odds_ingest",
+      "app_core.prop_pipeline"
+    ],
+    "app_core.public_board": [
+      "app_core.draftkings_classic",
+      "app_core.public_parlays",
+      "app_core.public_prop_history",
+      "app_core.public_prop_timing",
+      "app_core.public_quote_policy",
+      "app_core.quote_freshness",
+      "core.market_policy"
+    ],
+    "app_core.public_grading_scheduler": [
+      "app_core.imported_recaps",
+      "app_core.locked_picks",
+      "app_core.public_history",
+      "app_core.research_schedule"
+    ],
+    "app_core.public_history": [
+      "app_core.espn_results",
+      "app_core.evidence_drive",
+      "app_core.imported_recaps",
+      "app_core.locked_picks",
+      "app_core.ncaaf_identity",
+      "app_core.netlify_publishing",
+      "app_core.nfl_identity",
+      "app_core.public_board",
+      "app_core.public_quote_policy",
+      "app_core.quote_freshness",
+      "app_core.result_team_names",
+      "app_core.top_ten_history"
+    ],
+    "app_core.public_parlays": [
+      "app_core.public_history",
+      "app_core.public_quote_policy",
+      "app_core.quote_freshness",
+      "app_core.recommendation_quality",
+      "core.market_policy"
+    ],
+    "app_core.public_prop_history": [
+      "app_core.public_board",
+      "app_core.public_history",
+      "app_core.public_prop_timing",
+      "app_core.quote_freshness",
+      "scripts.grade_props"
+    ],
+    "app_core.public_prop_timing": [
+      "app_core.public_board",
+      "app_core.theover_ingest"
+    ],
+    "app_core.public_quote_policy": [],
+    "app_core.public_record": [],
+    "app_core.public_site_shell": [],
+    "app_core.quote_freshness": [],
+    "app_core.recommendation_quality": [],
+    "app_core.reddit_sentiment": [],
+    "app_core.research_api_budget": [
+      "app_core.research_schedule"
+    ],
+    "app_core.research_schedule": [],
+    "app_core.research_scheduler": [
+      "app_core",
+      "app_core.mlb_history",
+      "app_core.mlb_prospective",
+      "app_core.mlb_prospective_store",
+      "app_core.ncaaf_prospective",
+      "app_core.ncaaf_prospective_store",
+      "app_core.nfl_market",
+      "app_core.nfl_market_store",
+      "app_core.research_api_budget",
+      "app_core.research_schedule"
+    ],
+    "app_core.results_fetcher": [
+      "app_core.espn_results"
+    ],
+    "app_core.results_ingestion": [
+      "app_core.result_team_names",
+      "app_core.team_name_matcher"
+    ],
+    "app_core.results_overview": [],
+    "app_core.result_team_names": [
+      "app_core.feature_processing",
+      "app_core.prediction_engine"
+    ],
+    "app_core.sample_ml_data": [],
+    "app_core.sentiment": [
+      "app_core.sentiment_cache",
+      "app_core.sentiment_pipeline"
+    ],
+    "app_core.sentiment_cache": [],
+    "app_core.sentiment_pipeline": [
+      "app_core.reddit_sentiment",
+      "app_core.sentiment",
+      "app_core.sentiment_cache"
+    ],
+    "app_core.sftp_publishing": [
+      "scripts.publish_board"
+    ],
+    "app_core.snapshot_manager": [],
+    "app_core.sportsdata": [
+      "app_core.team_name_mapping"
+    ],
+    "app_core.stage_timing": [],
+    "app_core.strategy_lab_realized": [],
+    "app_core.team_name_mapping": [],
+    "app_core.team_name_matcher": [],
+    "app_core.theover_ingest": [
+      "app_core.feature_processing",
+      "app_core.kalshi_integrator",
+      "app_core.team_name_matcher"
+    ],
+    "app_core.top_ten_history": [
+      "app_core.public_history",
+      "app_core.public_quote_policy",
+      "app_core.quote_freshness"
+    ],
+    "app_core.weights_config": [],
+    "app_core": [],
+    "core.bankroll_simulator": [],
+    "core.clv": [],
+    "core.empirical_tiers": [
+      "core.probability_calibration"
+    ],
+    "core.ev_engine": [
+      "core.models.prediction_models"
+    ],
+    "core.football_evidence": [
+      "core.wager_decisions"
+    ],
+    "core.kelly_optimizer": [],
+    "core.line_evidence": [],
+    "core.market_policy": [],
+    "core.model_direction": [
+      "app_core.precision_card"
+    ],
+    "core.model_validation": [],
+    "core.nfl_teams": [],
+    "core.odds_normalizer": [],
+    "core.parlay_engine": [
+      "core.parlay_safety",
+      "core.smart_parlay_engine"
+    ],
+    "core.parlay_safety": [],
+    "core.probability_calibration": [],
+    "core.probability_engine": [],
+    "core.probability_semantics": [],
+    "core.probability_utils": [],
+    "core.production_gate": [],
+    "core.run_readiness": [
+      "app_core.quote_freshness",
+      "core.line_evidence",
+      "core.probability_semantics",
+      "core.selector_validation"
+    ],
+    "core.selector_validation": [
+      "core.probability_semantics",
+      "core.team_mapper"
+    ],
+    "core.slate_quality": [],
+    "core.smart_parlay_engine": [
+      "core.market_policy",
+      "core.parlay_safety",
+      "core.probability_calibration"
+    ],
+    "core.sport_policy": [],
+    "core.streamlit_pipeline": [
+      "app_core",
+      "app_core.calibration",
+      "app_core.card_recovery",
+      "app_core.college_novig",
+      "app_core.dataframe_utils",
+      "app_core.espn_ncaaf_odds",
+      "app_core.external_data_fetcher",
+      "app_core.feature_processing",
+      "app_core.low_line_override",
+      "app_core.market_probability_model",
+      "app_core.mlb_team_stats",
+      "app_core.nfl_novig",
+      "app_core.novig_candidates",
+      "app_core.odds_api",
+      "app_core.prediction_engine",
+      "app_core.prediction_evidence",
+      "app_core.weights_config",
+      "core.bankroll_simulator",
+      "core.empirical_tiers",
+      "core.kelly_optimizer",
+      "core.market_policy",
+      "core.model_direction",
+      "core.probability_calibration",
+      "core.probability_engine",
+      "core.production_gate",
+      "core.schema.base_schema",
+      "core.slate_quality",
+      "core.smart_parlay_engine",
+      "core.team_mapper"
+    ],
+    "core.team_mapper": [
+      "app_core.team_name_mapping"
+    ],
+    "core.team_normalizer": [
+      "core.team_mapper"
+    ],
+    "core.theover_loader": [
+      "core.slate_quality"
+    ],
+    "core.threshold_validation": [
+      "core.selector_validation"
+    ],
+    "core.vertex_master_analyzer": [
+      "complete_workflow_implementation"
+    ],
+    "core.wager_decisions": [
+      "core.market_policy",
+      "core.sport_policy"
+    ],
+    "core.walk_forward": [],
+    "core": [],
+    "integrations.gemini_client": [
+      "app_core.llm_assistant"
+    ],
+    "integrations": [],
+    "parlaypicker": [],
+    "scripts.analyze_candidate_weights": [
+      "app_core.espn_ncaaf_odds"
+    ],
+    "scripts.backfill_historical_data": [
+      "core.team_mapper"
+    ],
+    "scripts.backtest_low_line_over": [],
+    "scripts.backtest_signal_vs_outcome": [],
+    "scripts.backtest_theover_direction": [
+      "scripts.backtest_low_line_over"
+    ],
+    "scripts.capture_closing_lines": [
+      "core.clv",
+      "core.streamlit_pipeline"
+    ],
+    "scripts.collect_mlb_history": [
+      "app_core.mlb_history"
+    ],
+    "scripts.collect_mlb_pitcher_history": [
+      "app_core.mlb_history",
+      "app_core.mlb_pitcher_history",
+      "scripts.collect_mlb_history"
+    ],
+    "scripts.compare_pick_accuracy": [
+      "app_core.pick_accuracy",
+      "core.selector_validation"
+    ],
+    "scripts.compare_thresholds": [
+      "app_core.prediction_evidence",
+      "core.selector_validation",
+      "core.threshold_validation"
+    ],
+    "scripts.debug_kalshi_markets": [
+      "app_core.kalshi_integrator",
+      "app_core.team_name_matcher"
+    ],
+    "scripts.debug_secrets": [],
+    "scripts.diagnose_kalshi_root_cause": [
+      "app_core.kalshi_integrator"
+    ],
+    "scripts.discover_kalshi_ncaab_codes": [
+      "app_core.kalshi_integrator"
+    ],
+    "scripts.edge_by_bucket": [
+      "scripts.backtest_low_line_over"
+    ],
+    "scripts.empty_card_frequency": [],
+    "scripts.evaluate_mlb_pitcher_development": [
+      "app_core.mlb_history",
+      "app_core.mlb_pitcher_history",
+      "app_core.mlb_research"
+    ],
+    "scripts.evaluate_walk_forward": [
+      "core.walk_forward"
+    ],
+    "scripts.fit_blend_weights": [
+      "app_core.weights_config"
+    ],
+    "scripts.fit_bucket_stats": [
+      "core.empirical_tiers",
+      "scripts.fit_calibration"
+    ],
+    "scripts.fit_calibration": [
+      "core.probability_calibration",
+      "core.walk_forward"
+    ],
+    "scripts.fix_everything": [],
+    "scripts.fix_secrets": [],
+    "scripts.gen_stub_model": [],
+    "scripts.grade_from_scores": [
+      "app_core.espn_results",
+      "app_core.feature_processing"
+    ],
+    "scripts.grade_props": [
+      "app_core.mlb_batter_stats",
+      "app_core.mlb_pitcher_stats"
+    ],
+    "scripts.grade_slate": [],
+    "scripts.grade_tiers": [],
+    "scripts.kalshi_discover_team_codes": [
+      "app_core.kalshi_integrator"
+    ],
+    "scripts.kalshi_self_check": [
+      "app_core.kalshi_integrator"
+    ],
+    "scripts.master_repository_audit": [],
+    "scripts.prediction_evidence": [
+      "app_core.evidence_health",
+      "app_core.evidence_remote",
+      "app_core.performance_pipeline",
+      "app_core.prediction_evidence",
+      "core.selector_validation"
+    ],
+    "scripts.prepare_methodology_page": [
+      "app_core.public_site_shell"
+    ],
+    "scripts.publish_board": [
+      "app_core.public_board",
+      "app_core.public_record",
+      "app_core.public_site_shell"
+    ],
+    "scripts.refresh_calibration": [],
+    "scripts.replay_model_direction": [
+      "app_core.espn_ncaaf_odds",
+      "core.model_direction"
+    ],
+    "scripts.research_schedule_window": [
+      "app_core.research_schedule"
+    ],
+    "scripts.resolve_unmatched_entities": [],
+    "scripts.run_ci_tests": [],
+    "scripts.run_mlb_research": [
+      "app_core.mlb_research"
+    ],
+    "scripts.run_ncaaf_research": [
+      "app_core.ncaaf_history",
+      "app_core.ncaaf_research"
+    ],
+    "scripts.run_readiness": [
+      "app_core.prediction_evidence",
+      "core.run_readiness",
+      "core.selector_validation"
+    ],
+    "scripts.run_research_scheduler": [
+      "app_core.evidence_drive",
+      "app_core.evidence_remote",
+      "app_core.public_grading_scheduler",
+      "app_core.research_schedule",
+      "app_core.research_scheduler"
+    ],
+    "scripts.run_strikeout_props": [
+      "app_core.odds_api",
+      "app_core.prop_pipeline",
+      "app_core.prop_runner"
+    ],
+    "scripts.train_meta_model": [
+      "app_core.meta_model"
+    ],
+    "scripts.train_xgboost_model": [
+      "config",
+      "core.model_validation",
+      "core.walk_forward"
+    ],
+    "scripts.validate_nfl_market_model": [
+      "core.model_validation"
+    ],
+    "scripts.validate_selector": [
+      "core.selector_validation"
+    ],
+    "scripts.verify_changes": [
+      "app_core.theover_ingest"
+    ],
+    "scripts.verify_gemini_config": [
+      "config"
+    ],
+    "scripts.verify_ncaab_codes": [
+      "app_core.kalshi_integrator"
+    ],
+    "scripts.verify_sentiment": [
+      "app_core.sentiment"
+    ],
+    "tests.test_absolute_production_gate": [
+      "core.production_gate",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_bankroll_simulator_resilience": [
+      "core.bankroll_simulator"
+    ],
+    "tests.test_batter_props": [
+      "app_core.batter_prop_pipeline",
+      "app_core.mlb_batter_stats",
+      "app_core.prop_odds_ingest",
+      "app_core.prop_runner",
+      "scripts.grade_props"
+    ],
+    "tests.test_best_available_candidate_audit": [
+      "core.smart_parlay_engine",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_best_duos": [
+      "app_core.best_duos"
+    ],
+    "tests.test_best_duos_strict": [
+      "app_core.best_duos"
+    ],
+    "tests.test_best_overall_pick_logic": [
+      "app_core.new_summary_logic"
+    ],
+    "tests.test_best_picks_calibration_pass": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_best_picks_export_identity_columns": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_best_picks_full_game_coverage": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_best_picks_identity_required": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_best_picks_kelly_attach": [
+      "core.streamlit_pipeline",
+      "streamlit_app"
+    ],
+    "tests.test_best_picks_match_analysis": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_best_picks_novig_priority": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_bucket_calibration": [
+      "core.probability_calibration"
+    ],
+    "tests.test_calibration": [
+      "app_core.calibration"
+    ],
+    "tests.test_calibration_promotion": [
+      "scripts.fit_calibration"
+    ],
+    "tests.test_calibration_tuning": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_calibration_update": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_candidate_generation": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_candidate_recap": [
+      "app_core.candidate_recap"
+    ],
+    "tests.test_candidate_weight_analysis": [
+      "scripts.analyze_candidate_weights"
+    ],
+    "tests.test_card_recovery_emptiness": [
+      "app_core.card_recovery"
+    ],
+    "tests.test_chicago_bkn": [
+      "app_core.feature_processing",
+      "app_core.prediction_engine"
+    ],
+    "tests.test_ci_test_shards": [
+      "scripts.run_ci_tests"
+    ],
+    "tests.test_clv_and_backtest": [
+      "core.clv",
+      "scripts.backtest_signal_vs_outcome",
+      "scripts.capture_closing_lines"
+    ],
+    "tests.test_college_novig": [
+      "app_core.college_novig"
+    ],
+    "tests.test_college_public_grading": [
+      "app_core.public_history"
+    ],
+    "tests.test_compact_export": [
+      "streamlit_app"
+    ],
+    "tests.test_compact_probability_export": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_consistent_spread_book": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_consistent_total_book": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_controlled_prop_rollout": [
+      "app_core.export_scope",
+      "app_core.prop_calibration",
+      "app_core.prop_runner"
+    ],
+    "tests.test_core_engine_updates": [
+      "core.ev_engine",
+      "core.parlay_engine",
+      "core.probability_engine",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_corrupt_odds_guard": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_daily_dashboard": [
+      "app.ui.daily_dashboard"
+    ],
+    "tests.test_dfs_lock_picker": [
+      "app.ui.publish_panel"
+    ],
+    "tests.test_diagnostics": [
+      "app_core.diagnostics"
+    ],
+    "tests.test_draftkings_classic": [
+      "app_core.draftkings_classic"
+    ],
+    "tests.test_draftkings_mlb_classic": [
+      "app_core.draftkings_classic"
+    ],
+    "tests.test_draftkings_panel": [
+      "app.ui.draftkings"
+    ],
+    "tests.test_earned_actionable_over": [
+      "core.empirical_tiers",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_edge_instrumentation": [
+      "scripts.backtest_low_line_over"
+    ],
+    "tests.test_edge_no_stake_gates": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_empirical_finalist_selection": [
+      "core.empirical_tiers",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_empirical_tiers": [
+      "core.empirical_tiers"
+    ],
+    "tests.test_espn_observed_quotes": [
+      "app_core",
+      "app_core.espn_ncaaf_odds",
+      "app_core.locked_picks",
+      "app_core.per_game_boards",
+      "app_core.prediction_evidence",
+      "app_core.public_board",
+      "app_core.public_history"
+    ],
+    "tests.test_espn_results_wnba": [
+      "app_core.espn_results"
+    ],
+    "tests.test_evidence_config": [
+      "app_core",
+      "app_core.evidence_config",
+      "app_core.evidence_remote"
+    ],
+    "tests.test_evidence_drive": [
+      "app_core",
+      "app_core.evidence_drive",
+      "app_core.evidence_remote",
+      "app_core.prediction_evidence"
+    ],
+    "tests.test_evidence_health": [
+      "app_core",
+      "app_core.evidence_health",
+      "app_core.prediction_evidence"
+    ],
+    "tests.test_evidence_remote": [
+      "app_core",
+      "app_core.evidence_remote",
+      "app_core.prediction_evidence"
+    ],
+    "tests.test_export_scope": [
+      "app_core.export_scope"
+    ],
+    "tests.test_fallback_ev": [
+      "streamlit_app"
+    ],
+    "tests.test_fallback_slate_keeps_theover_signal": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_feature_population": [
+      "app_core.feature_processing"
+    ],
+    "tests.test_feature_processing": [
+      "app_core.feature_processing"
+    ],
+    "tests.test_fit_blend_weights": [
+      "scripts.fit_blend_weights"
+    ],
+    "tests.test_fit_bucket_stats_recency": [
+      "scripts.fit_bucket_stats"
+    ],
+    "tests.test_football_side_fallback": [
+      "app_core.per_game_boards",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_force_deploy_staking": [
+      "app_core",
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_game_already_started_guard": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_game_time_est_conversion": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_gemini_bet_gate": [
+      "app_core",
+      "app_core.gemini_bet_gate",
+      "app_core.llm_assistant",
+      "core.streamlit_pipeline",
+      "integrations.gemini_client"
+    ],
+    "tests.test_gemini_review_evidence": [
+      "app_core",
+      "app_core.gemini_review_budget",
+      "app_core.gemini_review_comparison",
+      "app_core.llm_assistant",
+      "integrations.gemini_client"
+    ],
+    "tests.test_generate_parlays_no_infinite_loop": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_grade_from_scores": [
+      "scripts.grade_from_scores"
+    ],
+    "tests.test_grade_props": [
+      "scripts.grade_props"
+    ],
+    "tests.test_grade_slate_no_play": [
+      "scripts.grade_slate"
+    ],
+    "tests.test_grade_tiers": [
+      "scripts.grade_tiers"
+    ],
+    "tests.test_imported_recaps": [
+      "app_core.imported_recaps",
+      "app_core.public_history",
+      "app_core.result_team_names"
+    ],
+    "tests.test_jul27_regression_guardrails": [
+      "app_core.prop_grading",
+      "app_core.prop_runner"
+    ],
+    "tests.test_kalshi_alias_overrides": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_diagnostics": [
+      "app.ui.kalshi_diagnostics",
+      "streamlit_app"
+    ],
+    "tests.test_kalshi_direction_veto": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_kalshi_enrich_league_inference": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_enrich_markets": [
+      "app_core",
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_enrich_nullable_inputs": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_enrich_timeout": [
+      "streamlit_app"
+    ],
+    "tests.test_kalshi_event_date_filter": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_event_match_one_sided": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_extreme_price_guard": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_failure_reasons": [
+      "app_core",
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_family_inference": [
+      "app_core",
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_matching_fixes": [
+      "app_core",
+      "app_core.kalshi_integrator",
+      "core.streamlit_pipeline",
+      "streamlit_app"
+    ],
+    "tests.test_kalshi_merge_game_date_types": [
+      "streamlit_app"
+    ],
+    "tests.test_kalshi_mlb_event_matching": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_nba_spread": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_orientation_and_recap": [
+      "app.ui.results_dashboard",
+      "app_core.results_ingestion",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_kalshi_series_cache_refresh": [
+      "app_core",
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_spread_orientation": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_totals_line_tolerance": [
+      "app_core",
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_kalshi_wrong_game_title_guard": [
+      "app_core.kalshi_integrator",
+      "core.team_mapper"
+    ],
+    "tests.test_league_evaluation": [
+      "core.walk_forward"
+    ],
+    "tests.test_league_infer_from_base": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_league_recovery_and_kalshi_tolerance": [
+      "app_core",
+      "app_core.kalshi_integrator",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_lean_card": [
+      "app_core.lean_card"
+    ],
+    "tests.test_line_drift": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_line_drift_diagnostics": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_locked_picks": [
+      "app.ui",
+      "app.ui.lock_picks",
+      "app.ui.public_results",
+      "app.ui.sftp_publish",
+      "app_core",
+      "app_core.locked_picks",
+      "app_core.public_board",
+      "app_core.public_grading_scheduler",
+      "app_core.public_history",
+      "app_core.public_parlays"
+    ],
+    "tests.test_lock_storage_performance": [
+      "app.ui",
+      "app.ui.lock_picks",
+      "app.ui.public_results",
+      "app.ui.sftp_publish",
+      "app_core",
+      "app_core.evidence_drive",
+      "app_core.locked_picks",
+      "app_core.public_history"
+    ],
+    "tests.test_low_line_over_override": [
+      "app_core.low_line_override",
+      "app_core.weights_config"
+    ],
+    "tests.test_market_calibration": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_market_probability_model": [
+      "app_core.market_probability_model"
+    ],
+    "tests.test_matchup_auto_detect_column": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_matchup_identity_fallback": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_meta_model": [
+      "app_core.meta_model"
+    ],
+    "tests.test_minor_improvements": [
+      "core",
+      "core.kelly_optimizer",
+      "core.probability_engine",
+      "core.smart_parlay_engine",
+      "core.streamlit_pipeline",
+      "parlaypicker.core.parlay_engine",
+      "parlaypicker.core.probability_engine"
+    ],
+    "tests.test_mlb_history": [
+      "app_core.mlb_history",
+      "scripts.collect_mlb_history"
+    ],
+    "tests.test_mlb_pitcher_history": [
+      "app_core.mlb_pitcher_history",
+      "scripts.evaluate_mlb_pitcher_development"
+    ],
+    "tests.test_mlb_pitcher_stats": [
+      "app_core.mlb_pitcher_stats"
+    ],
+    "tests.test_mlb_prospective": [
+      "app_core",
+      "app_core.mlb_prospective",
+      "app_core.mlb_prospective_store"
+    ],
+    "tests.test_mlb_research": [
+      "app_core.mlb_research"
+    ],
+    "tests.test_mlb_runline_cover": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_mlb_team_stats": [
+      "app_core.mlb_team_stats"
+    ],
+    "tests.test_mlb_total_debias": [
+      "core.streamlit_pipeline",
+      "streamlit_app"
+    ],
+    "tests.test_mlb_total_direction_conflict": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_ml_flatness_diagnostics": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_ml_target_guard": [
+      "core.streamlit_pipeline",
+      "streamlit_app"
+    ],
+    "tests.test_model_direction": [
+      "core.model_direction"
+    ],
+    "tests.test_model_validation": [
+      "core.model_validation"
+    ],
+    "tests.test_moneyline_parlay": [
+      "app_core.moneyline_parlay"
+    ],
+    "tests.test_moneyline_wiring": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_my_fixes": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_navigation_persistence": [
+      "streamlit_app"
+    ],
+    "tests.test_nba_stats_reliability": [
+      "app_core",
+      "app_core.feature_processing",
+      "app_core.weights_config"
+    ],
+    "tests.test_ncaaf_closing": [
+      "app_core",
+      "app_core.ncaaf_closing",
+      "app_core.ncaaf_prospective_store"
+    ],
+    "tests.test_ncaaf_data_access": [
+      "app_core.ncaaf_data_access"
+    ],
+    "tests.test_ncaaf_history": [
+      "app_core.evidence_drive",
+      "app_core.ncaaf_history"
+    ],
+    "tests.test_ncaaf_identity": [
+      "app_core.ncaaf_identity",
+      "app_core.ncaaf_prospective"
+    ],
+    "tests.test_ncaaf_prospective": [
+      "app_core",
+      "app_core.evidence_drive",
+      "app_core.ncaaf_history",
+      "app_core.ncaaf_prospective",
+      "app_core.ncaaf_prospective_store"
+    ],
+    "tests.test_ncaaf_research": [
+      "app_core.ncaaf_history",
+      "app_core.ncaaf_research"
+    ],
+    "tests.test_ncaaf_selection": [
+      "app.ui.sidebar_controls",
+      "app_core",
+      "app_core.espn_ncaaf_odds",
+      "app_core.espn_results",
+      "app_core.feature_processing",
+      "app_core.kalshi_integrator",
+      "app_core.market_probability_model",
+      "app_core.odds_api",
+      "collect_historical_data",
+      "core.schema.base_schema",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_ncaaf_stats_aliases": [
+      "app_core.feature_processing",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_netlify_publishing": [
+      "app.ui",
+      "app.ui.public_results",
+      "app.ui.remote_publish",
+      "app_core",
+      "app_core.netlify_publishing"
+    ],
+    "tests.test_nfl_lock_inputs": [
+      "app.ui.daily_dashboard",
+      "app_core",
+      "app_core.espn_ncaaf_odds",
+      "app_core.feature_processing",
+      "app_core.locked_picks",
+      "app_core.nfl_novig",
+      "app_core.odds_api",
+      "app_core.per_game_boards",
+      "app_core.prediction_evidence",
+      "app_core.public_board",
+      "app_core.public_history",
+      "core.nfl_teams",
+      "core.streamlit_pipeline",
+      "core.team_mapper"
+    ],
+    "tests.test_nfl_market": [
+      "app_core",
+      "app_core.nfl_market",
+      "app_core.nfl_market_store",
+      "app_core.research_api_budget",
+      "app_core.research_scheduler"
+    ],
+    "tests.test_nfl_model_validation": [
+      "scripts.validate_nfl_market_model"
+    ],
+    "tests.test_nfl_player_props": [
+      "app_core.nfl_prop_pipeline",
+      "app_core.prop_grading",
+      "app_core.prop_odds_ingest",
+      "app_core.prop_runner",
+      "scripts.grade_props"
+    ],
+    "tests.test_nfl_selection": [
+      "app.ui.sidebar_controls",
+      "app_core",
+      "app_core.odds_api",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_nhl_pittsburgh_stats_resolution": [
+      "app_core.feature_processing"
+    ],
+    "tests.test_normalized_ev": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_novig_fetch_no_hardcoded_date": [
+      "app_core",
+      "app_core.odds_api",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_novig_half_run": [
+      "app_core.novig_candidates",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_novig_unmatched_fallback": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_no_bet_display_reasons": [
+      "streamlit_app"
+    ],
+    "tests.test_no_bet_pick_quality": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_odds_api_key": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_odds_api_pagination": [
+      "app_core.odds_api"
+    ],
+    "tests.test_odds_fill_reverse_match": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_odds_source": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_odds_source_calibration": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_original_estimates": [
+      "app_core",
+      "app_core.public_board",
+      "app_core.public_history",
+      "app_core.public_prop_history"
+    ],
+    "tests.test_parlay_accuracy_changes": [
+      "app.ui.results_dashboard",
+      "core.probability_calibration",
+      "core.smart_parlay_engine",
+      "scripts.grade_slate"
+    ],
+    "tests.test_parlay_correlation": [
+      "config",
+      "parlay_optimizer"
+    ],
+    "tests.test_parlay_safety": [
+      "core.parlay_safety"
+    ],
+    "tests.test_parlay_unique_games": [
+      "core.parlay_engine",
+      "core.smart_parlay_engine",
+      "shotgun_mode"
+    ],
+    "tests.test_performance_pipeline_wnba": [
+      "app_core.performance_pipeline"
+    ],
+    "tests.test_performance_recap_scope": [
+      "app.ui.results_dashboard"
+    ],
+    "tests.test_per_game_boards": [
+      "app_core",
+      "app_core.locked_picks",
+      "app_core.per_game_boards",
+      "app_core.public_board",
+      "app_core.public_history"
+    ],
+    "tests.test_per_game_boards_ui": [
+      "app.ui.daily_dashboard"
+    ],
+    "tests.test_pick_accuracy": [
+      "app_core.pick_accuracy",
+      "scripts.compare_pick_accuracy"
+    ],
+    "tests.test_pick_of_day": [
+      "app_core.pick_of_day"
+    ],
+    "tests.test_pipeline_date_fill_from_base": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_pipeline_identity_before_portfolio": [
+      "core.streamlit_pipeline",
+      "streamlit_app"
+    ],
+    "tests.test_pipeline_master_et_kalshi_fixes": [
+      "app_core",
+      "app_core.kalshi_integrator",
+      "app_core.odds_api",
+      "app_core.prediction_engine",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_pipeline_missing_columns": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_pitcher_prop_expansion": [
+      "app_core.mlb_pitcher_stats",
+      "app_core.prop_odds_ingest",
+      "app_core.prop_pipeline",
+      "app_core.prop_runner"
+    ],
+    "tests.test_portfolio_calibration_and_caps": [
+      "core",
+      "core.empirical_tiers",
+      "core.probability_calibration",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_precision_card": [
+      "app.ui.results_dashboard",
+      "app_core.precision_card"
+    ],
+    "tests.test_prediction_engine_flatness_diagnostics": [
+      "app_core.prediction_engine"
+    ],
+    "tests.test_prediction_engine_settingwithcopy": [
+      "app_core.prediction_engine"
+    ],
+    "tests.test_prediction_evidence": [
+      "app_core",
+      "app_core.gemini_review_comparison",
+      "app_core.performance_pipeline",
+      "app_core.prediction_evidence",
+      "app_core.results_ingestion",
+      "core.selector_validation",
+      "core.streamlit_pipeline",
+      "streamlit_app"
+    ],
+    "tests.test_preselection_line_audit_consistency": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_probability_display_order": [],
+    "tests.test_probability_first_selection": [
+      "app_core.per_game_boards",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_probability_semantics": [
+      "core.probability_semantics"
+    ],
+    "tests.test_probation_portfolio_guard": [
+      "app_core.best_duos",
+      "app_core.prop_runner"
+    ],
+    "tests.test_production_card_calibration_guard": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_prop_calibration": [
+      "app_core.prop_calibration",
+      "app_core.prop_runner"
+    ],
+    "tests.test_prop_grading": [
+      "app_core.prop_grading"
+    ],
+    "tests.test_prop_model": [
+      "app_core.prop_model"
+    ],
+    "tests.test_prop_odds_ingest": [
+      "app_core.prop_odds_ingest"
+    ],
+    "tests.test_prop_performance_recap": [
+      "app.ui.results_dashboard",
+      "scripts.grade_props"
+    ],
+    "tests.test_prop_pipeline": [
+      "app_core.prop_pipeline"
+    ],
+    "tests.test_prop_runner": [
+      "app_core.mlb_pitcher_stats",
+      "app_core.prop_pipeline",
+      "app_core.prop_runner"
+    ],
+    "tests.test_public_betting_fade": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_public_board": [
+      "app_core.draftkings_classic",
+      "app_core.public_board",
+      "app_core.public_site_shell",
+      "scripts.publish_board"
+    ],
+    "tests.test_public_grading_scheduler": [
+      "app_core",
+      "app_core.public_grading_scheduler",
+      "app_core.public_history",
+      "scripts.run_research_scheduler"
+    ],
+    "tests.test_public_history": [
+      "app.ui",
+      "app.ui.public_results",
+      "app_core",
+      "app_core.evidence_config",
+      "app_core.netlify_publishing",
+      "app_core.public_board",
+      "app_core.public_history",
+      "app_core.result_team_names"
+    ],
+    "tests.test_public_parlays": [
+      "app_core.public_board",
+      "app_core.public_parlays"
+    ],
+    "tests.test_public_prop_history": [
+      "app.ui",
+      "app.ui.public_results",
+      "app_core",
+      "app_core.public_board",
+      "app_core.public_history",
+      "app_core.public_prop_history"
+    ],
+    "tests.test_public_prop_timing": [
+      "app_core.public_board",
+      "app_core.public_prop_history",
+      "app_core.public_prop_timing"
+    ],
+    "tests.test_public_record": [
+      "app.ui",
+      "app.ui.public_results",
+      "app_core.public_record",
+      "scripts.publish_board"
+    ],
+    "tests.test_publish_panel": [
+      "app.ui",
+      "app.ui.lock_picks",
+      "app.ui.public_results",
+      "app.ui.publish_panel"
+    ],
+    "tests.test_quote_freshness": [
+      "app_core",
+      "app_core.locked_picks",
+      "app_core.per_game_boards",
+      "app_core.public_board",
+      "app_core.public_history",
+      "app_core.public_parlays",
+      "app_core.public_prop_history"
+    ],
+    "tests.test_raw_book_odds_diag": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_recap_tier_summary": [
+      "app_core.strategy_lab_realized"
+    ],
+    "tests.test_recovered_row_value": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_recovery_calibration_gate": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_refresh_calibration": [
+      "scripts.refresh_calibration"
+    ],
+    "tests.test_regression_kalshi_and_results": [
+      "app.ui.results_dashboard",
+      "app_core.results_ingestion",
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_research_api_budget": [
+      "app_core.research_api_budget",
+      "app_core.research_schedule"
+    ],
+    "tests.test_research_parlays": [
+      "app_core.public_board",
+      "app_core.public_history",
+      "app_core.public_parlays"
+    ],
+    "tests.test_research_scheduler": [
+      "app_core",
+      "app_core.research_api_budget",
+      "app_core.research_scheduler"
+    ],
+    "tests.test_results_ingestion": [
+      "app_core.results_ingestion"
+    ],
+    "tests.test_results_overview": [
+      "app.ui.results_dashboard",
+      "app.ui.results_overview",
+      "app_core.results_overview"
+    ],
+    "tests.test_reversed_game_dedupe": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_run_click_counter": [
+      "streamlit_app"
+    ],
+    "tests.test_run_readiness": [
+      "app_core",
+      "app_core.prediction_evidence",
+      "core.run_readiness"
+    ],
+    "tests.test_sanitization": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_schedule_staleness": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_selection_probability_integrity": [
+      "core.empirical_tiers",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_selector_validation": [
+      "core.selector_validation",
+      "scripts.validate_selector"
+    ],
+    "tests.test_separate_prop_analysis": [
+      "app_core",
+      "app_core.best_duos",
+      "app_core.gemini_bet_gate",
+      "app_core.odds_api",
+      "app_core.prop_analysis",
+      "app_core.prop_runner",
+      "app_core.public_board",
+      "app_core.weights_config",
+      "core",
+      "core.streamlit_pipeline",
+      "integrations",
+      "integrations.gemini_client",
+      "tests.test_public_board"
+    ],
+    "tests.test_sftp_publishing": [
+      "app.ui",
+      "app.ui.public_results",
+      "app.ui.remote_publish",
+      "app_core",
+      "app_core.sftp_publishing",
+      "tests.test_sftp_publishing"
+    ],
+    "tests.test_sidebar_sport_view": [
+      "app.ui.sidebar_controls"
+    ],
+    "tests.test_simple_publication_workflow": [
+      "app.ui",
+      "app.ui.public_results",
+      "app.ui.sftp_publish"
+    ],
+    "tests.test_slate_performance": [
+      "app.ui",
+      "app.ui.strategy_lab_dashboard",
+      "app_core",
+      "app_core.feature_processing",
+      "app_core.stage_timing"
+    ],
+    "tests.test_slate_quality": [
+      "core.slate_quality",
+      "core.theover_loader"
+    ],
+    "tests.test_speculative_lean_recovery": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline",
+      "tests.test_best_picks_calibration_pass"
+    ],
+    "tests.test_spread_away_orientation": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_status_display_labels": [
+      "streamlit_app"
+    ],
+    "tests.test_strategy_lab_kelly_alignment": [
+      "app.ui.strategy_lab_dashboard"
+    ],
+    "tests.test_strategy_lab_realized": [
+      "app.ui",
+      "app.ui.strategy_lab_dashboard",
+      "app_core.strategy_lab_realized"
+    ],
+    "tests.test_strategy_lab_top_ev_kelly_safety": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_strategy_lab_top_ev_production_source": [
+      "app.ui.strategy_lab_dashboard"
+    ],
+    "tests.test_string_series_categorical_safety": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_suspicious_upload_mismatch": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_sweet_spot_export_scope": [
+      "streamlit_app"
+    ],
+    "tests.test_sweet_spot_filter": [
+      "streamlit_app"
+    ],
+    "tests.test_sweet_spot_segmentation": [],
+    "tests.test_team_mapper": [
+      "core.streamlit_pipeline",
+      "core.team_mapper"
+    ],
+    "tests.test_theover_bet_rows_resilience": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_theover_fade_scope": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_theover_overweight_fix": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_theover_source_filter": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_threshold_validation": [
+      "core.threshold_validation"
+    ],
+    "tests.test_tiered_prop_parlays": [
+      "app_core.best_duos"
+    ],
+    "tests.test_tighten_thin_actionable_overs": [
+      "core.empirical_tiers"
+    ],
+    "tests.test_top_ten_history": [
+      "app_core.public_board",
+      "app_core.public_history",
+      "app_core.top_ten_history"
+    ],
+    "tests.test_totals_pick_direction": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_total_consensus_provenance": [
+      "app_core.per_game_boards",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_two_stage_finalist_selection": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_under_floor_relaxation": [
+      "app_core",
+      "app_core.weights_config"
+    ],
+    "tests.test_uploader_compat": [
+      "app_core.results_ingestion"
+    ],
+    "tests.test_upload_column_aliases_and_game_date_fallback": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_upload_header_punctuation_normalization": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_upload_placeholder_identity_fallback": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_upload_team_columns_fallback": [
+      "core",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_wager_integrity_audit": [
+      "app_core.public_board",
+      "app_core.public_history",
+      "core.clv",
+      "core.football_evidence",
+      "core.kelly_optimizer",
+      "core.production_gate",
+      "core.sport_policy",
+      "core.wager_decisions"
+    ],
+    "tests.test_walk_forward": [
+      "core.walk_forward"
+    ],
+    "tests.test_win_probability_first_card": [
+      "app_core.weights_config",
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_wnba_cold_start_blend": [
+      "core.streamlit_pipeline"
+    ],
+    "tests.test_wnba_kalshi_matching": [
+      "app_core.kalshi_integrator"
+    ],
+    "tests.test_wnba_model_features": [
+      "app_core.feature_processing"
+    ],
+    "tests.test_wnba_selection": [
+      "app.ui.sidebar_controls",
+      "app_core",
+      "app_core.odds_api",
+      "collect_historical_data",
+      "core.streamlit_pipeline",
+      "core.team_mapper"
+    ],
+    "app.ui.analysis_dashboard": [],
+    "app.ui.daily_dashboard": [
+      "app_core.export_scope",
+      "app_core.per_game_boards",
+      "app_core.recommendation_quality"
+    ],
+    "app.ui.data_diagnostics": [
+      "app_core.odds_api"
+    ],
+    "app.ui.debug_panel": [],
+    "app.ui.draftkings": [
+      "app_core.draftkings_classic"
+    ],
+    "app.ui.export_tools": [],
+    "app.ui.kalshi_diagnostics": [],
+    "app.ui.layout": [],
+    "app.ui.lock_picks": [
+      "app.ui.public_results",
+      "app.ui.sftp_publish",
+      "app_core",
+      "app_core.locked_picks",
+      "app_core.public_history",
+      "app_core.public_prop_history",
+      "app_core.public_record",
+      "app_core.quote_freshness"
+    ],
+    "app.ui.mlb_prospective": [
+      "app_core",
+      "app_core.mlb_prospective",
+      "app_core.mlb_prospective_store"
+    ],
+    "app.ui.ncaaf_data_access": [
+      "app_core.ncaaf_data_access"
+    ],
+    "app.ui.ncaaf_history": [
+      "app.ui.ncaaf_data_access",
+      "app.ui.ncaaf_research",
+      "app_core.ncaaf_history"
+    ],
+    "app.ui.ncaaf_prospective": [
+      "app.ui.ncaaf_data_access",
+      "app_core",
+      "app_core.ncaaf_closing",
+      "app_core.ncaaf_prospective",
+      "app_core.ncaaf_prospective_store"
+    ],
+    "app.ui.ncaaf_research": [
+      "app_core.ncaaf_history",
+      "app_core.ncaaf_research"
+    ],
+    "app.ui.nfl_market": [
+      "app_core",
+      "app_core.nfl_market",
+      "app_core.nfl_market_store"
+    ],
+    "app.ui.odds_dashboard": [],
+    "app.ui.parlay_dashboard": [],
+    "app.ui.pick_accuracy": [
+      "app_core.pick_accuracy"
+    ],
+    "app.ui.portfolio_dashboard": [],
+    "app.ui.public_results": [
+      "app_core",
+      "app_core.evidence_config",
+      "app_core.imported_recaps",
+      "app_core.locked_picks",
+      "app_core.netlify_publishing",
+      "app_core.public_history",
+      "app_core.public_prop_history",
+      "app_core.public_record",
+      "app_core.sftp_publishing"
+    ],
+    "app.ui.publish_panel": [
+      "app.ui.lock_picks",
+      "app.ui.public_results",
+      "app.ui.remote_publish",
+      "app.ui.sftp_publish",
+      "app_core.per_game_boards",
+      "app_core.public_board",
+      "app_core.quote_freshness",
+      "scripts.publish_board"
+    ],
+    "app.ui.readiness_dashboard": [
+      "app_core.prediction_evidence",
+      "core.run_readiness"
+    ],
+    "app.ui.realtime_dashboard": [],
+    "app.ui.remote_publish": [
+      "app.ui.public_results",
+      "app.ui.sftp_publish",
+      "app_core",
+      "app_core.netlify_publishing"
+    ],
+    "app.ui.results_dashboard": [
+      "app.ui.pick_accuracy",
+      "app.ui.results_overview",
+      "app.ui.threshold_dashboard",
+      "app_core.candidate_recap",
+      "app_core.gemini_review_comparison",
+      "app_core.performance_pipeline",
+      "app_core.prediction_evidence",
+      "app_core.prop_grading",
+      "app_core.results_ingestion",
+      "app_core.results_overview",
+      "app_core.strategy_lab_realized"
+    ],
+    "app.ui.results_overview": [
+      "app_core",
+      "app_core.evidence_health",
+      "app_core.mlb_prospective",
+      "app_core.ncaaf_prospective",
+      "app_core.nfl_market",
+      "app_core.prediction_evidence",
+      "app_core.results_overview"
+    ],
+    "app.ui.schema_debug_panel": [],
+    "app.ui.sftp_publish": [
+      "app.ui.public_results",
+      "app_core",
+      "app_core.sftp_publishing"
+    ],
+    "app.ui.sidebar_controls": [
+      "app.ui.mlb_prospective",
+      "app.ui.ncaaf_data_access",
+      "app.ui.ncaaf_history",
+      "app.ui.ncaaf_prospective",
+      "app.ui.nfl_market",
+      "app_core.prop_calibration",
+      "app_core.prop_grading",
+      "collect_historical_data"
+    ],
+    "app.ui.strategy_lab_dashboard": [
+      "app_core.performance_pipeline",
+      "app_core.strategy_lab_realized"
+    ],
+    "app.ui.threshold_dashboard": [
+      "app_core.prediction_evidence",
+      "core.threshold_validation"
+    ],
+    "app.ui": [],
+    "app_core.sharp_engine.bankroll_manager": [],
+    "app_core.sharp_engine.calibration_engine": [],
+    "app_core.sharp_engine.ev_engine": [
+      "parlaypicker.core.ev_engine"
+    ],
+    "app_core.sharp_engine.monte_carlo_simulator": [],
+    "app_core.sharp_engine.probability_engine": [
+      "parlaypicker.core.probability_engine"
+    ],
+    "app_core.sharp_engine": [
+      "app_core.sharp_engine.bankroll_manager",
+      "app_core.sharp_engine.calibration_engine",
+      "app_core.sharp_engine.ev_engine",
+      "app_core.sharp_engine.monte_carlo_simulator",
+      "app_core.sharp_engine.probability_engine"
+    ],
+    "archive.experimental_scripts.analyze_data": [],
+    "archive.experimental_scripts.analyze_kalshi_debug": [],
+    "archive.experimental_scripts.analyze_ncaab_kalshi": [],
+    "archive.experimental_scripts.check_copy": [],
+    "archive.experimental_scripts.check_returns": [],
+    "archive.experimental_scripts.debug_fix": [],
+    "archive.experimental_scripts.debug_kalshi_match": [
+      "app_core.kalshi_integrator"
+    ],
+    "archive.experimental_scripts.debug_nfl_schedule": [],
+    "archive.experimental_scripts.snippet_match_impl": [],
+    "archive.experimental_scripts.test_date_tokens": [
+      "streamlit_app"
+    ],
+    "archive.experimental_scripts.test_date_tokens_sim": [],
+    "archive.experimental_scripts.test_fixes": [
+      "app_core.feature_processing",
+      "app_core.kalshi_integrator",
+      "parlay_optimizer"
+    ],
+    "archive.experimental_scripts.test_improved_predictions": [
+      "app_core.prediction_engine",
+      "app_core.theover_ingest"
+    ],
+    "archive.experimental_scripts.test_kalshi_market_fix": [
+      "app_core.new_summary_logic"
+    ],
+    "archive.experimental_scripts.test_kalshi_nba_matching": [
+      "app_core.kalshi_integrator"
+    ],
+    "archive.experimental_scripts.test_kalshi_quick": [
+      "app_core.kalshi_integrator"
+    ],
+    "archive.experimental_scripts.verify_atlantic10_fix": [
+      "app_core.kalshi_integrator"
+    ],
+    "archive.experimental_scripts.verify_dashboard": [],
+    "archive.experimental_scripts.verify_kalshi_counts_v2": [],
+    "archive.experimental_scripts.verify_kalshi_ncaab": [
+      "app_core.kalshi_integrator"
+    ],
+    "archive.experimental_scripts.verify_theover_fix": [],
+    "core.models.analysis_models": [],
+    "core.models.game_models": [],
+    "core.models.model_converter": [
+      "core.models.analysis_models",
+      "core.models.game_models",
+      "core.models.prediction_models"
+    ],
+    "core.models.prediction_models": [],
+    "core.models": [
+      "core.models.analysis_models",
+      "core.models.game_models",
+      "core.models.prediction_models"
+    ],
+    "core.schema.base_schema": [],
+    "core.schema.schema_registry": [],
+    "core.schema.schema_utils": [],
+    "core.schema.schema_validator": [
+      "core.schema.schema_registry"
+    ],
+    "core.schema": [
+      "core.schema.base_schema",
+      "core.schema.schema_registry",
+      "core.schema.schema_utils",
+      "core.schema.schema_validator"
+    ],
+    "output.mlb-history.run_collection": [
+      "app_core.mlb_history",
+      "scripts.collect_mlb_history"
+    ],
+    "output.mlb-history.verify_collection": [],
+    "output.mlb-pitchers.run_full": [
+      "app_core.mlb_pitcher_history",
+      "scripts.collect_mlb_history",
+      "scripts.collect_mlb_pitcher_history"
+    ],
+    "output.mlb-pitchers.verify": [],
+    "parlaypicker.app.dashboard_components": [
+      "parlaypicker.core.ev_engine",
+      "parlaypicker.core.portfolio_engine"
+    ],
+    "parlaypicker.app.streamlit_app": [
+      "parlaypicker.app.dashboard_components",
+      "parlaypicker.data_pipeline.sports_data_pipeline",
+      "parlaypicker.models.model_loader"
+    ],
+    "parlaypicker.app": [],
+    "parlaypicker.core.bankroll_manager": [
+      "parlaypicker.utils.config"
+    ],
+    "parlaypicker.core.calibration_engine": [],
+    "parlaypicker.core.duckdb_engine": [],
+    "parlaypicker.core.ev_engine": [],
+    "parlaypicker.core.parlay_engine": [],
+    "parlaypicker.core.probability_engine": [
+      "parlaypicker.utils.config"
+    ],
+    "parlaypicker.core": [],
+    "parlaypicker.data_pipeline.feature_engineering": [
+      "core.schema.schema_utils",
+      "core.schema.schema_validator",
+      "parlaypicker.data_pipeline.feature_engineering_polars"
+    ],
+    "parlaypicker.data_pipeline.feature_engineering_polars": [],
+    "parlaypicker.data_pipeline.odds_collector": [
+      "core.schema.schema_utils",
+      "core.schema.schema_validator"
+    ],
+    "parlaypicker.data_pipeline.sports_data_pipeline": [
+      "parlaypicker.core.duckdb_engine",
+      "parlaypicker.data_pipeline.feature_engineering_polars",
+      "parlaypicker.data_pipeline.odds_collector"
+    ],
+    "parlaypicker.data_pipeline": [],
+    "parlaypicker.integrations.sentiment_client": [],
+    "parlaypicker.integrations.theover_client": [],
+    "parlaypicker.integrations": [],
+    "parlaypicker.models.model_loader": [],
+    "parlaypicker.models.predict_model": [
+      "core.schema.schema_validator",
+      "parlaypicker.models.model_loader"
+    ],
+    "parlaypicker.models.train_model": [],
+    "parlaypicker.models": [],
+    "parlaypicker.simulation.bankroll_simulation": [
+      "parlaypicker.simulation.monte_carlo_simulator"
+    ],
+    "parlaypicker.simulation.monte_carlo_simulator": [],
+    "parlaypicker.simulation": [],
+    "parlaypicker.tests.test_ev_engine": [
+      "parlaypicker.core.ev_engine"
+    ],
+    "parlaypicker.tests.test_parlay_engine": [
+      "parlaypicker.core.parlay_engine"
+    ],
+    "parlaypicker.tests.test_portfolio_engine": [
+      "parlaypicker.core.portfolio_engine",
+      "parlaypicker.core.portfolio_engine.correlation_matrix",
+      "parlaypicker.core.portfolio_engine.risk_model"
+    ],
+    "parlaypicker.tests.test_probability_engine": [
+      "parlaypicker.core.probability_engine"
+    ],
+    "parlaypicker.tests": [],
+    "parlaypicker.utils.config": [],
+    "parlaypicker.utils.helpers": [],
+    "parlaypicker.utils.logger": [],
+    "parlaypicker.utils": [],
+    "parlaypicker.core.portfolio_engine.correlation_matrix": [],
+    "parlaypicker.core.portfolio_engine.portfolio_optimizer": [
+      "parlaypicker.core.bankroll_manager",
+      "parlaypicker.core.ev_engine",
+      "parlaypicker.core.portfolio_engine.correlation_matrix",
+      "parlaypicker.core.portfolio_engine.risk_model"
+    ],
+    "parlaypicker.core.portfolio_engine.risk_model": [],
+    "parlaypicker.core.portfolio_engine": [
+      "parlaypicker.core.portfolio_engine.portfolio_optimizer"
+    ]
+  },
+  "possibly_reachable_from_streamlit": [
+    "app.ui.analysis_dashboard",
+    "app.ui.daily_dashboard",
+    "app.ui.data_diagnostics",
+    "app.ui.debug_panel",
+    "app.ui.draftkings",
+    "app.ui.kalshi_diagnostics",
+    "app.ui.layout",
+    "app.ui.lock_picks",
+    "app.ui.mlb_prospective",
+    "app.ui.ncaaf_data_access",
+    "app.ui.ncaaf_history",
+    "app.ui.ncaaf_prospective",
+    "app.ui.ncaaf_research",
+    "app.ui.nfl_market",
+    "app.ui.odds_dashboard",
+    "app.ui.pick_accuracy",
+    "app.ui.public_results",
+    "app.ui.publish_panel",
+    "app.ui.readiness_dashboard",
+    "app.ui.remote_publish",
+    "app.ui.results_dashboard",
+    "app.ui.results_overview",
+    "app.ui.sftp_publish",
+    "app.ui.sidebar_controls",
+    "app.ui.strategy_lab_dashboard",
+    "app.ui.threshold_dashboard",
+    "app_core",
+    "app_core.batter_prop_pipeline",
+    "app_core.best_duos",
+    "app_core.calibration",
+    "app_core.candidate_recap",
+    "app_core.card_recovery",
+    "app_core.college_novig",
+    "app_core.dataframe_utils",
+    "app_core.draftkings_classic",
+    "app_core.espn_ncaaf_odds",
+    "app_core.espn_results",
+    "app_core.evidence_config",
+    "app_core.evidence_drive",
+    "app_core.evidence_health",
+    "app_core.evidence_remote",
+    "app_core.export_scope",
+    "app_core.export_utils",
+    "app_core.external_data_fetcher",
+    "app_core.feature_processing",
+    "app_core.gemini_bet_gate",
+    "app_core.gemini_review_budget",
+    "app_core.gemini_review_comparison",
+    "app_core.imported_recaps",
+    "app_core.kalshi_integrator",
+    "app_core.lean_card",
+    "app_core.llm_assistant",
+    "app_core.locked_picks",
+    "app_core.low_line_override",
+    "app_core.market_probability_model",
+    "app_core.mlb_batter_stats",
+    "app_core.mlb_history",
+    "app_core.mlb_pitcher_history",
+    "app_core.mlb_pitcher_stats",
+    "app_core.mlb_prospective",
+    "app_core.mlb_prospective_store",
+    "app_core.mlb_research",
+    "app_core.mlb_team_stats",
+    "app_core.ncaaf_closing",
+    "app_core.ncaaf_data_access",
+    "app_core.ncaaf_history",
+    "app_core.ncaaf_identity",
+    "app_core.ncaaf_prospective",
+    "app_core.ncaaf_prospective_store",
+    "app_core.ncaaf_research",
+    "app_core.netlify_publishing",
+    "app_core.nfl_identity",
+    "app_core.nfl_market",
+    "app_core.nfl_market_store",
+    "app_core.nfl_novig",
+    "app_core.nfl_prop_pipeline",
+    "app_core.novig_candidates",
+    "app_core.odds_api",
+    "app_core.per_game_boards",
+    "app_core.performance_pipeline",
+    "app_core.pick_accuracy",
+    "app_core.pick_of_day",
+    "app_core.precision_card",
+    "app_core.prediction_engine",
+    "app_core.prediction_evidence",
+    "app_core.prop_analysis",
+    "app_core.prop_calibration",
+    "app_core.prop_grading",
+    "app_core.prop_model",
+    "app_core.prop_odds_ingest",
+    "app_core.prop_pipeline",
+    "app_core.prop_runner",
+    "app_core.public_board",
+    "app_core.public_history",
+    "app_core.public_parlays",
+    "app_core.public_prop_history",
+    "app_core.public_prop_timing",
+    "app_core.public_quote_policy",
+    "app_core.public_record",
+    "app_core.public_site_shell",
+    "app_core.quote_freshness",
+    "app_core.recommendation_quality",
+    "app_core.research_api_budget",
+    "app_core.research_schedule",
+    "app_core.result_team_names",
+    "app_core.results_fetcher",
+    "app_core.results_ingestion",
+    "app_core.results_overview",
+    "app_core.sftp_publishing",
+    "app_core.stage_timing",
+    "app_core.strategy_lab_realized",
+    "app_core.team_name_mapping",
+    "app_core.team_name_matcher",
+    "app_core.theover_ingest",
+    "app_core.top_ten_history",
+    "app_core.weights_config",
+    "collect_historical_data",
+    "config",
+    "core.bankroll_simulator",
+    "core.empirical_tiers",
+    "core.kelly_optimizer",
+    "core.line_evidence",
+    "core.market_policy",
+    "core.model_direction",
+    "core.nfl_teams",
+    "core.parlay_safety",
+    "core.probability_calibration",
+    "core.probability_engine",
+    "core.probability_semantics",
+    "core.production_gate",
+    "core.run_readiness",
+    "core.schema.base_schema",
+    "core.selector_validation",
+    "core.slate_quality",
+    "core.smart_parlay_engine",
+    "core.streamlit_pipeline",
+    "core.team_mapper",
+    "core.team_normalizer",
+    "core.theover_loader",
+    "core.threshold_validation",
+    "core.walk_forward",
+    "integrations.gemini_client",
+    "scripts.grade_props",
+    "scripts.publish_board",
+    "streamlit_app"
+  ],
+  "limitation": "Static imports include optional and function-local paths; not a runtime trace. Unreachable does not prove dead code."
+}

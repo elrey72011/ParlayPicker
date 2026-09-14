@@ -49,13 +49,13 @@ def prepare_features_for_inference(history_df, todays_df):
     team_games["point_diff"] = team_games["points_for"] - team_games["points_against"]
     
     # -- Rolling Calculations --
-    team_games["form_last5"] = grp["won"].shift(1).rolling(window, min_periods=1).mean()
-    team_games["pf_last5"] = grp["points_for"].shift(1).rolling(window, min_periods=1).mean()
-    team_games["pd_last5"] = grp["point_diff"].shift(1).rolling(window, min_periods=1).mean()
+    team_games["form_last5"] = grp["won"].transform(lambda values: values.shift(1).rolling(window, min_periods=1).mean())
+    team_games["pf_last5"] = grp["points_for"].transform(lambda values: values.shift(1).rolling(window, min_periods=1).mean())
+    team_games["pd_last5"] = grp["point_diff"].transform(lambda values: values.shift(1).rolling(window, min_periods=1).mean())
     
     # Pre-game Win %
     team_games["games_played"] = grp.cumcount()
-    team_games["wins_cum"] = grp["won"].shift(1).cumsum().fillna(0)
+    team_games["wins_cum"] = grp["won"].transform(lambda values: values.shift(1).cumsum()).fillna(0)
     team_games["win_pct_before"] = np.where(
         team_games["games_played"] > 0,
         team_games["wins_cum"] / team_games["games_played"],
@@ -69,7 +69,7 @@ def prepare_features_for_inference(history_df, todays_df):
     team_games = team_games.merge(opp_stats, on=["sport", "opponent", "commence_time"], how="left")
     
     grp_v2 = team_games.groupby(["sport", "team"])
-    team_games["sos_last5"] = grp_v2["opp_win_pct"].shift(1).rolling(window, min_periods=1).mean()
+    team_games["sos_last5"] = grp_v2["opp_win_pct"].transform(lambda values: values.shift(1).rolling(window, min_periods=1).mean())
     
     # 4. Merge Back to Home/Away Format
     cols_to_keep = ["game_id", "win_pct_before", "pf_last5", "form_last5", "pd_last5", "sos_last5"]

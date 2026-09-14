@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import pandas as pd
+import math
 
 
 def kelly_fraction(prob: float, decimal_odds: float) -> float:
     """Return Kelly fraction, floored at zero for no-bet scenarios."""
-    if pd.isna(prob) or pd.isna(decimal_odds) or decimal_odds <= 1:
+    try:
+        if isinstance(prob, bool) or isinstance(decimal_odds, bool):
+            return 0.0
+        prob, decimal_odds = float(prob), float(decimal_odds)
+        if not math.isfinite(prob) or not math.isfinite(decimal_odds) or not 0 <= prob <= 1 or decimal_odds <= 1:
+            return 0.0
+    except (TypeError, ValueError):
         return 0.0
 
     b = decimal_odds - 1

@@ -95,7 +95,7 @@ def test_production_calibration_requires_chronological_promotion(tmp_path, monke
     save_calibration(
         knots,
         path,
-        meta={"validation": {"promotable": True}},
+        meta={"validation": {"promotable": True, "train_end": "2026-08-15", "test_start": "2026-08-16"}},
     )
     assert load_calibration() == knots
 

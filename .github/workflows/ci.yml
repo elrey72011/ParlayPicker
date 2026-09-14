@@ -60,6 +60,7 @@ jobs:
           tests/test_ncaaf_stats_aliases.py
           tests/test_compact_probability_export.py
           tests/test_walk_forward.py
+          tests/test_wager_integrity_audit.py
           tests/test_ml_target_guard.py
           tests/test_parlay_safety.py
           tests/test_candidate_recap.py

@@ -113,8 +113,9 @@ def test_strict_duos_map_to_smart_parlay_export_with_capped_stake():
     out = duos_to_smart_parlays(duos, bankroll=1000.0)
     assert len(out) == 1
     assert out.iloc[0]["legs"] == 2
-    assert out.iloc[0]["production_safety_mode"]
-    assert 0 < out.iloc[0]["recommended_bet"] <= 2.5
+    assert not out.iloc[0]["production_safety_mode"]
+    assert out.iloc[0]["recommended_bet"] == 0.0
+    assert not out.iloc[0]["ticket_price_verified"]
     assert " | " in out.iloc[0]["parlay_legs"]
 
 

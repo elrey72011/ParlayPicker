@@ -244,6 +244,9 @@ def selections(publications):
 @lru_cache(maxsize=8192)
 def grading_team_name(value, sport):
     """Resolve result names without changing immutable publication/lock identities."""
+    if sport.upper() == 'NFL':
+        from app_core.nfl_identity import nfl_result_name
+        return nfl_result_name(value)
     if sport != 'NCAAF':
         return team_name(value, sport)
     from app_core.ncaaf_identity import normalize_ncaaf_team, _key

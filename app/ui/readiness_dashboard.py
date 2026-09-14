@@ -31,6 +31,12 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             st.info("No candidate evidence is available for this run. Run Game Analysis or select a saved snapshot.")
             return
         report = build_readiness(audit, final, diagnostics=diagnostics)
+        rejected = (diagnostics or {}).get("preselection_rejected_candidates", [])
+        if rejected:
+            st.write(f"Market candidates excluded before ranking: {len(rejected)}")
+            st.caption("These rows did not reach the ranked candidate export. Reasons distinguish price, line, identity and main-market policy exclusions.")
+            st.download_button("Download excluded market candidates", json.dumps(rejected, indent=2),
+                               file_name="excluded-market-candidates.json", mime="application/json")
         counts = report["counts"]
         st.write(f"Games: {counts['games']} · Evidence ready for grading: {counts['ready_for_grading']} · Approved wagers: {counts['approved_wagers']}")
         st.caption(f"Quote age warning: {report['quote_warning_minutes']} minutes at capture, for diagnostics only. Feature freshness is unavailable without a source timestamp.")

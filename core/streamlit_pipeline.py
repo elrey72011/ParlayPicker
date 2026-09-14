@@ -1499,6 +1499,22 @@ def _filter_preselection_line_integrity(
         diagnostics_out["preselection_dropped_total_candidate_count"] = int((drop_mask & is_total).sum())
         diagnostics_out["preselection_dropped_spread_candidate_count"] = int((drop_mask & is_spread).sum())
         diagnostics_out["preselection_dropped_line_candidate_count"] = int(drop_mask.sum())
+        rejection_flags = {
+            "untrusted_source": ~trusted_live_source, "ambiguous_identity": ambiguous_identity,
+            "display_live_line_mismatch": total_display_live_mismatch | spread_display_live_mismatch,
+            "missing_display_line": total_display_line_missing | spread_display_line_missing,
+            "invalid_spread_price_pair": invalid_spread_price_pair,
+            "moneyline_orientation_conflict": mlb_spread_orientation_fault,
+            "total_outside_main_market_policy": invalid_total_shape,
+            "incoherent_opposing_lines": pair_invalid_total | pair_invalid_spread,
+        }
+        diagnostics_out["preselection_rejected_candidates"] = [
+            {"matchup_id": str(pool.loc[idx].get("matchup_id", "")),
+             "league": str(league.loc[idx]), "market_type": str(market.loc[idx]),
+             "reasons": [name for name, flag in rejection_flags.items() if bool(flag.loc[idx])]
+                        or ["missing_or_invalid_quote"]}
+            for idx in pool.index[drop_mask]
+        ]
         diagnostics_out["preselection_retained_only_candidate_count"] = int(
             (invalid_candidate & ~drop_mask).sum()
         )
@@ -1780,42 +1796,22 @@ def _neutralize_recovered_row_value(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _enforce_moneyline_parlay_only(best: pd.DataFrame) -> pd.DataFrame:
-    """Moneyline picks are PARLAY-ONLY: never staked as singles, and only legs that clear
-    the odds-range + edge gate stay parlay-eligible (others -> No Play). Hard-forces zero
-    single stake regardless of tier, so even a future-calibrated moneyline can't draw a
-    single bet without an explicit policy change.
-    """
-    from app_core.moneyline_parlay import moneyline_leg_eligible
-
-    if best is None or best.empty or "market_type" not in best.columns:
+    """Compatibility boundary: moneylines are context only, never funded legs."""
+    from core.market_policy import moneyline_context_only
+    if best is None or best.empty or "market_type" not in best:
         return best
-    ml_mask = best["market_type"].astype(str).str.lower().str.contains("moneyline", na=False)
-    if not ml_mask.any():
-        return best
-    if "parlay_only" not in best.columns:
+    best = best.copy()
+    mask = best["market_type"].map(moneyline_context_only)
+    if "parlay_only" not in best:
         best["parlay_only"] = False
-    prob = pd.to_numeric(
-        best.get("effective_win_probability", best.get("WinProbability")), errors="coerce"
-    )
-    odds = pd.to_numeric(best.get("odds_american"), errors="coerce")
-    for idx in best.index[ml_mask]:
-        res = moneyline_leg_eligible(prob.get(idx), odds.get(idx))
-        best.at[idx, "parlay_only"] = True
-        best.at[idx, "Kelly_Bet_Size"] = 0.0
-        if "production_eligible" in best.columns:
-            best.at[idx, "production_eligible"] = False
-        if not res["eligible"]:
-            best.at[idx, "Pick_Status"] = "No Play"
-            best.at[idx, "Status_Reason"] = f"No Play (moneyline parlay gate): {res['reason']}"
-            if "status_blocker_stage" in best.columns:
-                best.at[idx, "status_blocker_stage"] = "moneyline_parlay_gate"
-        else:
-            # Eligible parlay leg -> force a parlay-eligible, non-single status. The singles
-            # threshold gates (e.g. side-minimum 53%) judge SINGLE bets and would bench a
-            # legit +150 value dog; a moneyline leg is judged by this odds/edge gate and the
-            # parlay engine instead. High Variance keeps it a leg, never a single (Kelly 0).
-            best.at[idx, "Pick_Status"] = "High Variance/Speculative"
-            best.at[idx, "Status_Reason"] = f"Parlay leg only: {res['reason']}"
+    best.loc[mask, "parlay_only"] = False
+    for column in ("Kelly_Bet_Size", "production_bet_amount", "recommended_bet"):
+        if column in best:
+            best.loc[mask, column] = 0.0
+    best.loc[mask, "production_eligible"] = False
+    best.loc[mask, "Pick_Status"] = "No Play"
+    best.loc[mask, "Status_Reason"] = "Moneyline is context only"
+    best.loc[mask, "status_blocker_stage"] = "market_policy"
     return best
 
 
@@ -4065,13 +4061,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         ENABLE_MONEYLINE_PARLAY_LEGS,
     )
 
-    # Production Best Available is explicitly spread/totals-only while both
-    # moneyline gates are disabled. Keep this final allow-list in addition to the
+    # Production Best Available is unconditionally spread/totals-only. Keep this final allow-list in addition to the
     # upstream generator gate so a moneyline introduced by another input path can
     # never leak into the selected card or candidate audit.
     allowed_markets = {"spread_home", "spread_away", "total_over", "total_under"}
-    if ENABLE_MONEYLINE_BEST_AVAILABLE or ENABLE_MONEYLINE_PARLAY_LEGS:
-        allowed_markets.update({"moneyline_home", "moneyline_away"})
+    # Moneyline ingestion is retained for context. Flags cannot make it a wager.
     allowed_markets.intersection_update(VALID_MARKETS)
     pool = analysis_df[_string_series(analysis_df, "market_type").isin(sorted(allowed_markets))].copy()
     logger.info(
@@ -10437,10 +10431,8 @@ def run_analysis_pipeline(
 
 
 def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataFrame:
-    from core.kelly_optimizer import add_kelly_bet_sizing, apply_simultaneous_kelly
     from core.probability_calibration import load_calibration
     from core.smart_parlay_engine import (
-        downweight_correlated_parlay_kelly,
         generate_probability_ranked_parlays,
         generate_smart_parlays,
         select_card_unique_parlays,
@@ -10483,15 +10475,14 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
         return parlays_df
     parlays_df["parlay_rank"] = range(1, len(parlays_df) + 1)
 
-    if probability_fallback:
-        parlays_df["kelly_fraction"] = 0.0
-        parlays_df["recommended_bet"] = 0.0
-    else:
-        parlays_df = add_kelly_bet_sizing(parlays_df, bankroll=1000.0, fraction=0.125)
-        # Same-direction Agrees pairs still carry block variance; halve their
-        # stake before exposure caps are applied.
-        parlays_df = downweight_correlated_parlay_kelly(parlays_df)
-        parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
+    # These generators multiply individual leg prices. They do not retrieve an
+    # executable sportsbook ticket, so no bankroll can justify funding them.
+    parlays_df["kelly_fraction"] = 0.0
+    parlays_df["recommended_bet"] = 0.0
+    parlays_df["risk_tier"] = "Research"
+    parlays_df["ticket_price_verified"] = False
+    parlays_df["price_basis"] = "Estimated product of leg prices"
+    parlays_df["wager_instruction"] = "RESEARCH ONLY: verify the actual ticket price and joint model before staking."
 
     def _shared_snapshot_value(columns: tuple[str, ...]) -> object:
         for column in columns:
@@ -10597,8 +10588,11 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         | health_warning.str.contains("degraded|staking suspended", regex=True, na=False)
         | degraded
     )
+    from core.market_policy import production_market
+    production_market_ok = _string_series(portfolio, "market_type").map(production_market)
     production_eligible = (
-        status.eq("actionable")
+        production_market_ok
+        & status.eq("actionable")
         & line_source.eq("live")
         & line_warning.eq("")
         & line_used.notna()

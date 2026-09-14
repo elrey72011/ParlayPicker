@@ -6,9 +6,9 @@ from core.streamlit_pipeline import optimize_portfolio_allocation
 
 def _rows():
     return pd.DataFrame([
-        {"league":"MLB","home_team":"A","away_team":"B","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.6,"decimal_odds":2.0,"expected_value":0.1,"edge":0.1},
+        {"league":"MLB","home_team":"A","away_team":"B","best_pick":"Over 8.5","market_type":"total_over","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.6,"decimal_odds":2.0,"expected_value":0.1,"edge":0.1},
         {"league":"MLB","home_team":"C","away_team":"D","best_pick":"Over unresolved","Pick_Status":"No Play","line_consistency_flag":False,"line_event_identity_match_flag":False,"market_line_source":"rejected_live","line_provenance_warning":"Total line unresolved","market_line_used":pd.NA,"calibrated_probability":0.6,"decimal_odds":2.0,"expected_value":0.2,"edge":0.2},
-        {"league":"MLB","home_team":"E","away_team":"F","best_pick":"Under 7.5","Pick_Status":"High Variance/Speculative","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":7.5,"calibrated_probability":0.6,"decimal_odds":2.0,"expected_value":0.2,"edge":0.2},
+        {"league":"MLB","home_team":"E","away_team":"F","best_pick":"Under 7.5","market_type":"total_under","Pick_Status":"High Variance/Speculative","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":7.5,"calibrated_probability":0.6,"decimal_odds":2.0,"expected_value":0.2,"edge":0.2},
     ])
 
 
@@ -39,8 +39,8 @@ def test_kelly_contains_raw_and_production_amounts():
 
 def test_higher_kelly_fraction_gets_higher_production_bet():
     rows = pd.DataFrame([
-        {"league":"MLB","home_team":"A","away_team":"B","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.62,"decimal_odds":2.1,"expected_value":0.1,"edge":0.1},
-        {"league":"MLB","home_team":"C","away_team":"D","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.53,"decimal_odds":1.9,"expected_value":0.05,"edge":0.05},
+        {"league":"MLB","home_team":"A","away_team":"B","best_pick":"Over 8.5","market_type":"total_over","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.62,"decimal_odds":2.1,"expected_value":0.1,"edge":0.1},
+        {"league":"MLB","home_team":"C","away_team":"D","best_pick":"Over 8.5","market_type":"total_over","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.53,"decimal_odds":1.9,"expected_value":0.05,"edge":0.05},
     ])
     out = optimize_portfolio_allocation(rows, bankroll=1000.0).set_index("home_team")
     assert out.loc["A", "kelly_fraction"] > out.loc["C", "kelly_fraction"]
@@ -49,9 +49,9 @@ def test_higher_kelly_fraction_gets_higher_production_bet():
 
 def test_kelly_weighting_columns_exist_and_not_flattened_when_uncapped():
     rows = pd.DataFrame([
-        {"league":"MLB","home_team":"A","away_team":"B","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.58,"decimal_odds":1.9,"expected_value":0.1,"edge":0.1},
-        {"league":"MLB","home_team":"C","away_team":"D","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.56,"decimal_odds":1.9,"expected_value":0.08,"edge":0.08},
-        {"league":"MLB","home_team":"E","away_team":"F","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.54,"decimal_odds":1.9,"expected_value":0.06,"edge":0.06},
+        {"league":"MLB","home_team":"A","away_team":"B","best_pick":"Over 8.5","market_type":"total_over","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.58,"decimal_odds":1.9,"expected_value":0.1,"edge":0.1},
+        {"league":"MLB","home_team":"C","away_team":"D","best_pick":"Over 8.5","market_type":"total_over","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.56,"decimal_odds":1.9,"expected_value":0.08,"edge":0.08},
+        {"league":"MLB","home_team":"E","away_team":"F","best_pick":"Over 8.5","market_type":"total_over","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.54,"decimal_odds":1.9,"expected_value":0.06,"edge":0.06},
     ])
     out = optimize_portfolio_allocation(rows, bankroll=1000.0)
     for col in ["kelly_probability_used", "kelly_decimal_odds", "kelly_fraction", "fractional_kelly_amount", "kelly_weight_share", "slate_scaled_amount", "kelly_allocation_method"]:
