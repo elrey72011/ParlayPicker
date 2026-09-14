@@ -1,5 +1,7 @@
 """Canonical private evidence projection; missing facts stay missing."""
-import json
+from datetime import date, datetime
+import math
+import numpy as np
 import pandas as pd
 from core.exposure_ledger import digest
 from core.wager_decisions import aware, decimal_price
@@ -8,6 +10,29 @@ FIELDS = '''snapshot_id export_run_id candidate_id game_id matchup_id sport seas
 
 def missing(value):
     return value is None or (not isinstance(value, (list, dict)) and bool(pd.isna(value))) or value == ''
+
+def evidence_value(value):
+    """Normalize known dataframe scalars without inventing missing timestamps.
+
+    Keep an original timestamp's offset (or lack of timezone). Unknown objects
+    still fail serialization rather than silently becoming arbitrary strings.
+    """
+    if value is None or value is pd.NA or value is pd.NaT:
+        return None
+    if isinstance(value, np.datetime64):
+        return None if np.isnat(value) else pd.Timestamp(value).isoformat()
+    if isinstance(value, (pd.Timestamp, datetime, date)):
+        return value.isoformat()
+    if isinstance(value, np.generic):
+        return evidence_value(value.item())
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {k: evidence_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return [evidence_value(v) for v in value]
+    return value
+
 
 def project(frame):
     out = frame.copy().astype(object).where(pd.notna(frame), None)
@@ -33,6 +58,7 @@ def project(frame):
             season, week = r.get('season'), r.get('schedule_week')
             if not missing(season) and not missing(week):
                 r['slate_id'] = f"{r['sport']}:{int(season)}:WEEK_{int(week):02d}"
+        r = {k: evidence_value(v) for k, v in r.items()}
         if missing(r['candidate_id']):
             r['candidate_id'] = digest({k:r.get(k) for k in ('snapshot_id','game_id','market_type','selection','line','american_odds','sportsbook')})
         r['payload_hash'] = digest({k:r.get(k) for k in FIELDS if k != 'payload_hash'})
