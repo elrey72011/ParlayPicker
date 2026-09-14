@@ -12,12 +12,14 @@ import threading
 from app_core.evidence_config import safe_error, EvidenceStorageError
 
 TABLES = {
+    "validation_plans": ("plan_id", "sport", "payload"),
+    "closing_observations": ("observation_id", "snapshot_id", "candidate_id", "payload"),
     "bundles": ("version", "frozen_at", "manifest"),
     "snapshots": ("snapshot_id", "version", "generated_at", "candidates", "decisions", "inputs", "payload_hash"),
     "snapshot_runtime": ("snapshot_id", "process_instance"),
     "score_revisions": ("snapshot_id", "evidence_hash", "recorded_at", "scores"),
 }
-KEYS = {"bundles": (0,), "snapshots": (0,), "snapshot_runtime": (0,), "score_revisions": (0, 1)}
+KEYS = {"validation_plans": (0,),"closing_observations": (0,),"bundles": (0,), "snapshots": (0,), "snapshot_runtime": (0,), "score_revisions": (0, 1)}
 _lock = threading.RLock()
 _restored = set()
 _status = {}
@@ -75,6 +77,15 @@ def _decode(raw, table):
     row = item.get("row")
     if not isinstance(row, list) or len(row) != len(TABLES[table]) or not all(isinstance(v, str) for v in row):
         raise EvidenceStorageError("Invalid remote evidence record")
+    if table == "validation_plans":
+        from core.exposure_ledger import digest
+        value=json.loads(row[2])
+        if digest({k:v for k,v in value.items() if k!="plan_hash"}) != row[0]:
+            raise EvidenceStorageError("Development plan hash mismatch")
+    if table == "closing_observations":
+        from core.exposure_ledger import digest
+        if digest(json.loads(row[3])) != row[0]:
+            raise EvidenceStorageError("Closing observation hash mismatch")
     if table == "bundles" and hashlib.sha256(row[2].encode()).hexdigest() != row[0]:
         raise EvidenceStorageError("Remote model manifest hash mismatch")
     if table == "snapshots" and hashlib.sha256("\0".join(row[3:6]).encode()).hexdigest() != row[6]:

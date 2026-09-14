@@ -132,6 +132,11 @@ expired=true;renderParlays();assert.match(text(nodes.researchParlayRows),/EXPIRE
 data.research_parlays=[];renderParlays();assert.match(text(nodes.researchParlayRows),/same sportsbook/);
 assert.doesNotMatch(text(nodes.researchParlayRows),/Build a new preview with at least two eligible games/);
 delete data.research_parlay_policy;renderParlays();assert.match(text(nodes.researchParlayRows),/predates Research Parlays/);
+data.parlay_policy='canonical-v3';data.parlay_funnel={counts:{total_best_picks:2,parlay_eligible:2},exclusions:{}};
+data.parlays=[{legs:data.games.overall,win_estimate:.34,decimal_odds_estimate:3.6,ev_estimate:.22,approved_legs:true,status:'QUALIFIED — VERIFY TICKET PRICE',recommended_stake:0,actual_ticket_price_verified:false}];
+expired=false;renderParlays();assert.match(text(nodes.parlayRows),/QUALIFIED PARLAY CANDIDATE/);assert.match(text(nodes.parlayRows),/Recommended stake \$0/);assert.match(text(nodes.parlayRows),/Qualified Parlay Funnel/);
+data.parlays=[];renderParlays();assert.match(text(nodes.parlayRows),/at least two compatible/);
+
 """
     path = tmp_path/'research.cjs'; path.write_text(script,encoding='utf-8')
     subprocess.run([node,str(path)],check=True,capture_output=True,text=True)

@@ -14,7 +14,8 @@ def evidence_health(path=None, process_instance=None):
 
     from app_core.evidence_remote import remote_status
     location = Path(path or database_path()).resolve()
-    result = {"remote_storage": remote_status(), "status": "missing", "snapshots": 0, "score_revisions": 0,
+    from app_core.evidence_config import runtime_configuration_status
+    result = {"runtime_configuration": runtime_configuration_status(), "remote_storage": remote_status(), "status": "missing", "snapshots": 0, "score_revisions": 0, "closing_observations": 0, "validation_plans": 0,
               "storage_directory_configured": bool(os.environ.get("PARLAYPICKER_EVIDENCE_DIR")),
               "prior_process_snapshots_accessible": None,
               "durability_across_redeployment_verified": False,
@@ -27,6 +28,9 @@ def evidence_health(path=None, process_instance=None):
         with closing(sqlite3.connect(location.as_uri() + "?mode=ro", uri=True, timeout=5)) as db:
             if db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                 raise ValueError("SQLite integrity check failed")
+            for table in ("closing_observations", "validation_plans"):
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                    result[table] = db.execute("SELECT COUNT(*) FROM " + table).fetchone()[0]
             result["snapshots"] = db.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
             result["score_revisions"] = db.execute("SELECT COUNT(*) FROM score_revisions").fetchone()[0]
             result["latest_score_recorded_at"] = db.execute("SELECT MAX(recorded_at) FROM score_revisions").fetchone()[0]

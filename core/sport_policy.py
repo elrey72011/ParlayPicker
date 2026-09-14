@@ -5,11 +5,15 @@ import math
 
 SPORTS = ("NFL", "NCAAF", "NBA", "NCAAB", "MLB", "NHL")
 
+DEPLOYMENT_STATES = {"UNVALIDATED": 0, "PROVISIONAL_VALIDATED": 1, "STANDARD_VALIDATED": 2, "PREMIUM_VALIDATED": 3}
+
 @dataclass(frozen=True)
 class SportPolicy:
     sport: str
     version: str
     validation_id: str = ""
+    deployment_state: str = "UNVALIDATED"
+    provisional_minimum_evidence: float = 0.0
     update_frequency: str = "daily"
     historical_prior_strength: float = 0.0
     historical_prior_decay: float = 0.0
@@ -33,6 +37,10 @@ class SportPolicy:
     sport_exposure_cap: float = 0.0
 
     def __post_init__(self):
+        if self.deployment_state not in DEPLOYMENT_STATES:
+            raise ValueError("Unknown sport deployment state")
+        if not math.isfinite(self.provisional_minimum_evidence) or self.provisional_minimum_evidence < 0:
+            raise ValueError("Invalid provisional evidence minimum")
         if not self.version or not isinstance(self.minimum_evidence, int) or self.minimum_evidence < 0:
             raise ValueError("Version and nonnegative evidence minimum required")
         if self.sport not in SPORTS:
@@ -45,8 +53,7 @@ class SportPolicy:
                 raise ValueError(f"Invalid {name}")
         if not 0 < self.uncertainty_quantile < 0.5:
             raise ValueError("Conservative quantile must be below the median")
-        if self.provisional_allowed and self.sport not in {"NFL", "NCAAF"}:
-            raise ValueError("Football provisional policy cannot alter other sports")
+
 
 
 def research_policies() -> Mapping[str, SportPolicy]:

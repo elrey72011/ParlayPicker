@@ -64,8 +64,15 @@ def _legacy_build_parlays(rows, now=None, *, qualified_only=False, max_age_minut
     return result
 
 
-def build_research_parlays(rows, now=None, *, qualified_parlays=(), max_age_minutes=QUOTE_MAX_AGE_MINUTES):
+def build_research_parlays(rows, now=None, *, qualified_parlays=(), max_age_minutes=QUOTE_MAX_AGE_MINUTES, diversified=False, top_n=10):
     """Positive-edge research tickets at one sportsbook; never wager approval."""
+    if isinstance(top_n, bool) or not isinstance(top_n, int) or not 1 <= top_n <= 10:
+        raise ValueError('Research limit must be between 1 and 10')
+    if diversified:
+        # Exact duplicates do not remove an otherwise valid research candidate.
+        from app_core.public_history import digest
+        unique = {digest(row): row for row in rows}
+        rows = list(unique.values())
     from collections import Counter
     from zoneinfo import ZoneInfo
     from app_core.public_history import eligible, event_key, resolved_pick
@@ -79,7 +86,7 @@ def build_research_parlays(rows, now=None, *, qualified_parlays=(), max_age_minu
     # Duplicate aliases must not choose a different line by input ordering.
     identities = Counter(frozenset(teams(row)) for row in rows if row.get('start'))
     used = set()
-    for ticket in qualified_parlays:
+    for ticket in (() if diversified else qualified_parlays):
         for leg in ticket['legs']:
             used.update(teams(leg))
     candidates = []
@@ -104,6 +111,9 @@ def build_research_parlays(rows, now=None, *, qualified_parlays=(), max_age_minu
             candidates.append((row, names, decimal))
         except (TypeError, ValueError):
             continue
+    if diversified:
+        candidates.sort(key=lambda x: (-x[0]['win_estimate'], x[0]['game'], x[0]['pick']))
+        candidates = candidates[:30]
     pairs = []
     for a, b in itertools.combinations(candidates, 2):
         if a[1] & b[1] or a[0]['quote_source'] != b[0]['quote_source']:
@@ -116,14 +126,14 @@ def build_research_parlays(rows, now=None, *, qualified_parlays=(), max_age_minu
     result = []
     for probability, decimal, a, b in pairs:
         names = a[1] | b[1]
-        if used & names:
+        if not diversified and used & names:
             continue
         used.update(names)
         result.append({'legs': [a[0].copy(), b[0].copy()], 'win_estimate': probability,
                        'decimal_odds_estimate': decimal, 'ev_estimate': probability*decimal-1,
                        'approved_legs': all(x[0]['status']=='APPROVED' for x in (a,b)),
-                       'status': 'RESEARCH ONLY'})
-        if len(result) == 3:
+                       'status': 'RESEARCH ONLY', **({'recommended_stake':0.0, 'actual_ticket_price_verified':False} if diversified else {})})
+        if len(result) == (top_n if diversified else 3):
             break
     return result
 

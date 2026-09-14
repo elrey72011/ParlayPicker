@@ -1675,6 +1675,31 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         (~parlays_df["premium_eligible"]).sum()
     ) if parlays_df is not None and not parlays_df.empty else 0
 
+    # Terminal authority: evaluate every candidate, then select and allocate.
+    from core.prospective_uncertainty import prepare_live
+    analysis_df = prepare_live(analysis_df)
+    from core.live_wager_contract import finalize_live_wagers
+    best_picks_df, contract_audit = finalize_live_wagers(analysis_df, best_picks_df, float(controls["bankroll"]))
+    diagnostics["wager_contract_audit"] = contract_audit
+    funded_mask=best_picks_df.get("production_eligible",pd.Series(False,index=best_picks_df.index)).fillna(False).astype(bool)
+    diagnostics["final_actionable_count"]=int(funded_mask.sum())
+    diagnostics["production_card_empty_flag"]=not bool(funded_mask.any())
+    diagnostics["production_card_empty_reason"]="No candidate passed the canonical validated wager contract" if not funded_mask.any() else ""
+    diagnostics["controlled_value_pick_count"]=0
+    diagnostics["premium_pick_count"]=int(best_picks_df.get("sellable_as_premium",pd.Series(False,index=best_picks_df.index)).fillna(False).sum())
+    simulation_results={}
+
+    portfolio_df = best_picks_df.copy()
+    # Older workspace parlay engines have no verified combined ticket price.
+    for legacy_parlay_frame in [parlays_df, *per_leg.values()]:
+        if isinstance(legacy_parlay_frame, pd.DataFrame) and not legacy_parlay_frame.empty:
+            for stake_field in ("recommended_bet", "production_bet_amount", "kelly_fraction"):
+                if stake_field in legacy_parlay_frame: legacy_parlay_frame[stake_field] = 0.0
+            legacy_parlay_frame["premium_eligible"] = False
+            legacy_parlay_frame["sellable_as_premium"] = False
+            legacy_parlay_frame["parlay_class"] = "Research / Recreational"
+    diagnostics["premium_parlay_count"] = 0
+
     timer.start("Save prediction evidence")
     try:
         from app_core.prediction_evidence import capture_run
@@ -1687,6 +1712,12 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
                 if loaded.get("sha256") != evidence_context["manifest"]["artifacts"].get(model_name):
                     raise ValueError("Loaded model differs from the frozen artifact; restart analysis with the current model")
             audit, _ = _sync_selected_candidate_audit(diagnostics.get("candidate_audit_df"), best_picks_df)
+            # Exact-candidate private maturity audit; no public schema changes.
+            for idx, candidate in audit.iterrows():
+                matches=[c for c in contract_audit if str(c.get('game_id'))==str(candidate.get('game_id',candidate.get('matchup_id'))) and c.get('market_type')==candidate.get('market_type') and c.get('selection')==candidate.get('best_pick') and c.get('odds')==candidate.get('odds_american')]
+                if len(matches)==1:
+                    for key in ('maturity','maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state'):
+                        audit.at[idx,key]=matches[0].get(key)
             audit, saved_card = capture_run(evidence_context, audit, best_picks_df, analysis_df)
             diagnostics["candidate_audit_df"] = audit
             diagnostics["prediction_snapshot_id"] = evidence_context["snapshot_id"]

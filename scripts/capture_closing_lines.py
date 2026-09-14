@@ -111,9 +111,18 @@ def _infer_sports(export_df: pd.DataFrame) -> list[str]:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--export", required=True, help="glob for the day's best_picks_export CSV")
+    ap.add_argument("--export", help="glob for the day's best_picks_export CSV")
     ap.add_argument("--out", default=None, help="output path (default app_exports/closing_lines_<run>.csv)")
+    ap.add_argument("--database", default="data/prediction_evidence/evidence.sqlite3")
+    ap.add_argument("--verified-quotes", help="Provider quote JSON captured now, with exact event/book/direction IDs")
+    ap.add_argument("--prospective", action="store_true", help="Capture strict closes for immutable candidates currently within 30 minutes of start")
     args = ap.parse_args(argv)
+    if args.prospective:
+        import json
+        from app_core.activation_closing import capture_live
+        print(json.dumps(capture_live(args.database)))
+        return 0
+    if not args.export: ap.error("--export or --prospective required")
 
     matches = sorted(glob.glob(args.export))
     if not matches:
@@ -121,6 +130,19 @@ def main(argv=None) -> int:
         return 1
     export_df = pd.read_csv(matches[-1], encoding="utf-8-sig")
 
+    if args.verified_quotes:
+        import json
+        from datetime import datetime,timezone
+        from app_core.activation_closing import record_close
+        quotes=json.loads(open(args.verified_quotes,encoding='utf-8').read())
+        saved=0;unavailable=0
+        for candidate in export_df.to_dict('records'):
+            matches=[q for q in quotes if q.get('game_id')==candidate.get('game_id') and q.get('market_type')==candidate.get('market_type') and q.get('sportsbook')==candidate.get('quote_bookmaker')]
+            if len(matches)!=1:unavailable+=1;continue
+            try:record_close(args.database,candidate,matches[0],captured_at=datetime.now(timezone.utc).isoformat());saved+=1
+            except ValueError:unavailable+=1
+        print(f"Verified closing observations: {saved}; unavailable: {unavailable}")
+        return 0
     try:
         from core.streamlit_pipeline import fetch_live_odds_dataframe
         live_df = fetch_live_odds_dataframe(_infer_sports(export_df))
