@@ -207,6 +207,7 @@ _COMPACT_EXPORT_COLUMNS = [
     "odds_feed_source",
     "market_line_source_detail", "best_pick", "gemini_pick", "gemini_confidence",
     "gemini_review_status", "gemini_gate_reason", "gemini_stake_multiplier",
+    "gemini_outage_allowed", "gemini_outage_cap_fraction", "maturity",
     "Kelly_Bet_Size",
 ]
 
@@ -395,7 +396,7 @@ def _friendly_no_bet_reason(row: pd.Series | dict) -> str:
     gemini_approved = str(get("gemini_approved", "")).strip().lower() in {
         "true", "1", "yes", "y"
     }
-    if gemini_enabled and not gemini_approved:
+    if gemini_enabled and not gemini_approved and str(get("gemini_review_status", "")) != "OUTAGE_CAPPED":
         gemini_reason = str(get("gemini_gate_reason", "") or "").strip()
         return gemini_reason or "Gemini review did not approve this wager"
     stage = str(get("status_blocker_stage", "") or "").strip()
@@ -1197,7 +1198,8 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
             diagnostics=diagnostics,
         )
         if gemini_gate_enabled:
-            held_count = int((~best_picks_df["gemini_approved"]).sum())
+            from app_core.gemini_bet_gate import gemini_gate_mask
+            held_count = int((~gemini_gate_mask(best_picks_df)).sum())
             if held_count:
                 deferred_warnings.append(
                     f"Gemini held {held_count} best-pick review(s) at $0 because "
@@ -1414,7 +1416,8 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
             best_picks_df.get("gemini_approved", False),
             index=best_picks_df.index,
         ).fillna(False).astype(bool)
-        _gemini_ok0 = ~_gemini_enabled0 | _gemini_approved0
+        from app_core.gemini_bet_gate import gemini_gate_mask
+        _gemini_ok0 = gemini_gate_mask(best_picks_df)
         diagnostics["empty_card_recovery_excluded_gemini_count"] = int(
             (~_gemini_ok0).sum()
         )

@@ -9,6 +9,8 @@ price/line was not validated by the deterministic pipeline.
 from __future__ import annotations
 
 import json
+import os
+import math
 import re
 from typing import Any, MutableMapping
 
@@ -18,6 +20,7 @@ import pandas as pd
 APPROVED_CONFIDENCE = frozenset({"HIGH", "MEDIUM"})
 HARD_BLOCKING_FLAGS = frozenset(
     {
+        "wrong_team", "wrong_line", "material_player_absence", "critical_contradiction",
         "incomplete_data",
         "missing_data",
         "missing_live_stats",
@@ -153,6 +156,7 @@ def apply_gemini_bet_gate(
     enabled: bool,
     product: str,
     diagnostics: MutableMapping[str, Any] | None = None,
+    outage_policy: dict | None = None,
 ) -> pd.DataFrame:
     """Attach audited Gemini verdicts and fail closed on potential wagers.
 
@@ -178,7 +182,33 @@ def apply_gemini_bet_gate(
         out["gemini_approved"] = False
         out["gemini_reviewed"] = False
 
-    gate_ok = ~out["gemini_gate_enabled"] | out["gemini_approved"]
+    policy = outage_policy if outage_policy is not None else {
+        'mode':os.getenv('PARLAYPICKER_GEMINI_OUTAGE_MODE','capped'),
+        'fraction':os.getenv('PARLAYPICKER_GEMINI_OUTAGE_CAP','0.001'),
+        'multiplier':os.getenv('PARLAYPICKER_GEMINI_OUTAGE_MULTIPLIER','0.5')}
+    try:
+        cap, multiplier = float(policy.get('fraction',0)), float(policy.get('multiplier',0))
+        configured = policy.get('mode') == 'capped' and math.isfinite(cap) and 0 < cap <= .01 and math.isfinite(multiplier) and 0 < multiplier < 1
+    except (ValueError,TypeError):
+        configured, cap, multiplier = False, 0., 0.
+    out['gemini_outage_allowed'] = False
+    out['gemini_outage_cap_fraction'] = 0.
+    if enabled and configured:
+        for idx, row in out.iterrows():
+            # Missing/low-confidence reviews are not automatically provider outages.
+            marker = ' '.join(_text(row.get(k)) for k in ('gemini_error','gemini_explanation','gemini_risk_notes','gemini_review_status')).upper()
+            outage = any(x in marker for x in ('TIMEOUT','DEADLINE_EXCEEDED','503','504','502','SERVICE_UNAVAILABLE'))
+            ev = _first_numeric(row,'conservative_ev','production_expected_value','effective_expected_value','expected_value')
+            deterministic = _text(row.get('production_eligible')).lower() in {'true','1','yes'}
+            veto = bool(_flag_set(row.get('gemini_flags')) & HARD_BLOCKING_FLAGS)
+            if outage and row['gemini_review_status'] == 'UNAVAILABLE' and deterministic and ev is not None and math.isfinite(ev) and ev > 0 and not veto:
+                out.at[idx,'gemini_review_status'] = 'OUTAGE_CAPPED'
+                out.at[idx,'gemini_outage_allowed'] = True
+                out.at[idx,'gemini_outage_cap_fraction'] = cap
+                out.at[idx,'gemini_stake_multiplier'] = multiplier
+                out.at[idx,'gemini_gate_reason'] = 'Gemini service outage; unreviewed deterministic straight only, reduced and capped'
+                out.at[idx,'maturity'] = 'PROVISIONAL'
+    gate_ok = gemini_gate_mask(out)
     if "production_eligible" in out.columns:
         existing = pd.Series(out["production_eligible"], index=out.index).fillna(False).astype(bool)
         out["production_eligible"] = existing & gate_ok
@@ -204,6 +234,14 @@ def apply_gemini_bet_gate(
                     ).fillna(0.0)
                 ).round(2)
 
+    outage = out['gemini_outage_allowed']
+    for column in ('Kelly_Bet_Size','Play_Stake','production_bet_amount','recommended_bet','Suggested_Stake'):
+        if column in out and outage.any():
+            # Without a known bankroll, already-sized rows stay at zero.
+            bank = pd.to_numeric(out.get('bankroll', pd.Series(0.,index=out.index)),errors='coerce').fillna(0).clip(lower=0)
+            amounts = pd.to_numeric(out[column],errors='coerce').fillna(0).clip(lower=0)
+            reduced = amounts if product == 'prop' else amounts * multiplier
+            out.loc[outage,column] = pd.concat([reduced,bank*cap],axis=1).min(axis=1).loc[outage]
     if enabled and product == "prop":
         held = ~gate_ok
         if "production_gate_reason" not in out.columns:
@@ -219,9 +257,15 @@ def apply_gemini_bet_gate(
         prefix = "gemini_prop" if product == "prop" else "gemini_best_pick"
         diagnostics[f"{prefix}_gate_enabled"] = bool(enabled)
         diagnostics[f"{prefix}_reviewed_count"] = int(
-            (~out["gemini_review_status"].isin({"DISABLED", "UNAVAILABLE"})).sum()
+            (~out["gemini_review_status"].isin({"DISABLED", "UNAVAILABLE", "OUTAGE_CAPPED"})).sum()
         )
         diagnostics[f"{prefix}_approved_count"] = int(out["gemini_approved"].sum())
-        diagnostics[f"{prefix}_held_count"] = int((enabled & ~out["gemini_approved"]).sum())
+        diagnostics[f"{prefix}_held_count"] = int((enabled & ~gate_ok).sum())
         diagnostics[f"{prefix}_status_counts"] = out["gemini_review_status"].value_counts().to_dict()
     return out
+
+
+def gemini_gate_mask(frame):
+    def flag(key):
+        return pd.Series(frame.get(key,False),index=frame.index).astype('string').str.lower().isin({'true','1','yes'})
+    return ~flag('gemini_gate_enabled') | flag('gemini_approved') | (flag('gemini_outage_allowed') & pd.Series(frame.get('gemini_review_status',''),index=frame.index).eq('OUTAGE_CAPPED'))

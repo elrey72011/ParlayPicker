@@ -45,14 +45,17 @@ def run(site, folder, client, sports, *, clock=None, fetch=None):
         try:
             revision=fetch(datetime.fromisoformat(day).date(),{sport})
             # No new empty/repeated score blobs for unfinished games.
-            known={digest(r['scores']) for r in revisions}
-            if revision['scores'] and digest(revision['scores']) not in known:
+            from app_core.result_reconciliation import revision_signature
+            known={revision_signature(r) for r in revisions}
+            if (revision['scores'] or revision.get('events') or revision.get('errors')) and revision_signature(revision) not in known:
                 store.put('scores/'+digest(revision)+'.json',revision)
                 revisions.append(revision)
             result['checked_batches']+=1
         except Exception as exc:
             result['errors'].append(sport+':'+type(exc).__name__)
     after=report(pubs,revisions,imports,locks)
+    from app_core.result_reconciliation import pending_diagnostics
+    result['pending_diagnostics'] = pending_diagnostics([e for e in entries if e['id'] in {r['id'] for r in after if r['outcome']=='PENDING'}],revisions)
     result['pending']=sum(r['outcome']=='PENDING' for r in after)
     result['newly_settled']=sum(r['id'] in pending_ids and r['outcome']!='PENDING' for r in after)
     result['finished_at']=clock().isoformat()

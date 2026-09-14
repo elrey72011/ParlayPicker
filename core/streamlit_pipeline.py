@@ -578,7 +578,7 @@ BEST_PICK_COLUMNS = [
     "gemini_verified_context", "gemini_supporting_evidence", "gemini_missing_information",
     "gemini_explanation", "gemini_risk_notes", "gemini_gate_enabled",
     "gemini_review_status", "gemini_gate_reason", "gemini_approved",
-    "gemini_stake_multiplier", "used_stale_features", "Pick_Quality", "Conviction_Score",
+    "gemini_stake_multiplier", "gemini_outage_allowed", "gemini_outage_cap_fraction", "maturity", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "game_already_started_flag",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     "market_line_used", "market_line_source", "market_line_source_detail", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line",
@@ -3887,7 +3887,8 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     event_ok = boolean_flag("line_event_identity_match_flag", True)
     gemini_gate_enabled = boolean_flag("gemini_gate_enabled", False)
     gemini_approved = boolean_flag("gemini_approved", False)
-    gemini_ok = ~gemini_gate_enabled | gemini_approved
+    from app_core.gemini_bet_gate import gemini_gate_mask
+    gemini_ok = gemini_gate_mask(out)
 
     selector_probability_ok = (
         ~_string_series(out, "best_available_selection_policy").eq("probability-first-v1")
@@ -10607,7 +10608,8 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     gemini_approved = pd.Series(
         portfolio.get("gemini_approved", False), index=portfolio.index
     ).fillna(False).astype(bool)
-    gemini_gate_ok = ~gemini_gate_enabled | gemini_approved
+    from app_core.gemini_bet_gate import gemini_gate_mask
+    gemini_gate_ok = gemini_gate_mask(portfolio)
     # Enabling Gemini makes it a real secondary approval gate. It only narrows
     # deterministic eligibility; it can never promote a row on its own.
     production_eligible &= gemini_gate_ok
@@ -11034,6 +11036,9 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio["production_bet_amount"] = (
         pre_gemini_amount * gemini_multiplier
     ).where(gemini_gate_ok, 0.0)
+    outage_cap = pd.to_numeric(pd.Series(portfolio.get('gemini_outage_cap_fraction',0),index=portfolio.index),errors='coerce').fillna(0).clip(0,.01)
+    outage_rows = pd.Series(portfolio.get('gemini_review_status',''),index=portfolio.index).eq('OUTAGE_CAPPED')
+    portfolio.loc[outage_rows,'production_bet_amount'] = pd.concat([portfolio['production_bet_amount'], outage_cap * bankroll],axis=1).min(axis=1).loc[outage_rows]
     portfolio.loc[~gemini_gate_ok, "production_eligible"] = False
     portfolio.loc[~gemini_gate_ok, "kelly_cap_reason"] = "Gemini review hold"
     medium_reduction = (
@@ -11041,6 +11046,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         & gemini_gate_ok
         & gemini_multiplier.lt(1.0)
         & pre_gemini_amount.gt(0.0)
+        & ~outage_rows
     )
     if medium_reduction.any():
         prior = portfolio.loc[medium_reduction, "kelly_cap_reason"].fillna("").astype(str)
@@ -11049,6 +11055,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             prior + "; Gemini MEDIUM 75% multiplier",
             "Gemini MEDIUM 75% multiplier",
         )
+    portfolio.loc[outage_rows,"kelly_cap_reason"] = "Gemini outage: reduced straight-only cap; not Gemini approval"
     portfolio["production_bet_amount"] = portfolio["production_bet_amount"].round(2)
     portfolio["recommended_bet"] = portfolio["production_bet_amount"]
     capped = capped | hard_pick_hits
@@ -11080,6 +11087,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     for col in cols:
         if col not in portfolio.columns:
             portfolio[col] = pd.NA
+    cols += [key for key in ("gemini_gate_enabled","gemini_approved","gemini_review_status","gemini_outage_allowed","gemini_outage_cap_fraction","gemini_stake_multiplier","maturity") if key in portfolio.columns]
     return portfolio[cols].sort_values("edge", ascending=False).reset_index(drop=True)
 
 

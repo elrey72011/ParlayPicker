@@ -267,24 +267,10 @@ def grading_team_name(value, sport):
 
 
 def grade_leg(leg, scores, *, imported=False):
-    teams=re.split(r'\s+(?:at|@)\s+',leg['game'],flags=re.I)
-    if len(teams)!=2 or not leg.get('start'):
-        return 'PENDING',None
-    key=(leg['sport'],*(grading_team_name(t,leg['sport']) for t in teams))
-    matches=[]
-    for score in scores:
-        if (score['sport'],grading_team_name(score['away'],score['sport']),grading_team_name(score['home'],score['sport']))!=key:
-            continue
-        # College kickoffs can be delayed by hours. Exact teams, Eastern date
-        # and a unique event are required; retain the doubleheader guard elsewhere.
-        score_start=datetime.fromisoformat(score['start']);leg_start=datetime.fromisoformat(leg['start'])
-        same_day=score_start.astimezone(ZoneInfo('America/New_York')).date()==leg_start.astimezone(ZoneInfo('America/New_York')).date()
-        if ((imported or leg['sport']=='NCAAF') and same_day) or (not imported and leg['sport']!='NCAAF' and abs((score_start-leg_start).total_seconds())<=1800):
-            matches.append(score)
-    unique={s['event_id']:s for s in matches}
-    if len(unique)!=1:
-        return 'PENDING',None
-    score=next(iter(unique.values()))
+    from app_core.result_reconciliation import match_result
+    score, reason = match_result(leg, scores)
+    if reason:
+        return 'PENDING', None
     a,h=score['away_score'],score['home_score']
     market=leg['market'];pick=leg['pick']
     if market.startswith('total_'):
@@ -315,15 +301,13 @@ def original_estimate(leg):
 
 
 def report(publications, revisions, imports=None, locks=None):
-    latest={}
-    for revision in sorted(revisions,key=lambda x:x['recorded_at']):
-        for score in revision['scores']:
-            latest[(score['sport'],score['event_id'])]=score
+    from app_core.result_reconciliation import latest_scores
+    latest = latest_scores(revisions)
     rows=[]
     from app_core.imported_recaps import imported_selections
     from app_core.locked_picks import locked_selections
     for item in selections(publications) + imported_selections(imports or []) + locked_selections(locks or []):
-        graded=[grade_leg(leg,list(latest.values()),imported=item['group']=='Imported research') for leg in item['legs']]
+        graded=[grade_leg(leg,latest,imported=item['group']=='Imported research') for leg in item['legs']]
         outcomes=[x[0] for x in graded]
         # Wait for every leg; pushed/voided tickets excluded from win percentage.
         outcome='PENDING' if 'PENDING' in outcomes else 'LOSS' if 'LOSS' in outcomes else 'PUSH' if 'PUSH' in outcomes else 'WIN'
@@ -339,31 +323,6 @@ def report(publications, revisions, imports=None, locks=None):
 
 
 def fetch_scores(day, sports):
-    """Explicit one-day grading; no paid API and no background fetch on rendering."""
-    import requests
-    from app_core.espn_results import ESPN_ENDPOINTS, _scoreboard_urls
-    scores={}
-    for sport in sorted(set(sports)):
-        if sport not in ESPN_ENDPOINTS:continue
-        for url in _scoreboard_urls(sport,day.strftime('%Y%m%d')):
-            response=requests.get(url,timeout=10)
-            response.raise_for_status()
-            for event in response.json().get('events',[]):
-                for game in event.get('competitions',[]):
-                    status=game.get('status',{}).get('type',{})
-                    if not status.get('completed') or status.get('state')!='post' or not str(status.get('name','')).startswith('STATUS_FINAL'):continue
-                    teams={t.get('homeAway'):t for t in game.get('competitors',[])}
-                    if set(teams)!={'home','away'}:continue
-                    try:
-                        a=float(teams['away']['score']);h=float(teams['home']['score'])
-                        start=game.get('date') or event['date']
-                        datetime.fromisoformat(start.replace('Z','+00:00'))
-                        if not all(math.isfinite(n) and n>=0 and n.is_integer() for n in (a,h)):continue
-                    except (ValueError,TypeError,KeyError):continue
-                    scores[(sport,event['id'])]={'sport':sport,'event_id':event['id'],'start':start.replace('Z','+00:00'),
-                        # Preserve source names: generic normalization can lose the
-                        # college identity (e.g. Tennessee State -> Tennessee).
-                        'away':teams['away']['team']['displayName'],
-                        'home':teams['home']['team']['displayName'],
-                        'away_score':int(a),'home_score':int(h)}
-    return {'recorded_at':now(),'scores':list(scores.values())}
+    """Explicit authoritative retrieval; never called by passive rendering."""
+    from app_core.result_providers import fetch_results
+    return fetch_results(day, sports)

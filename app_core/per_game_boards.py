@@ -199,7 +199,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         # Only the exact final ticket can inherit the finalized approval or stake.
         source=selected if selected is None or novig_only else final if same or family=='overall' else selected
         final_ticket = same or (family=='overall' and not novig_only)
-        approved=not fallback_selected and source is not None and final_ticket and text(final,'Bettable').lower() in {'true','1','yes'} and (number(final,'Play_Stake') or 0)>0
+        approved=not observed_selected and (not fallback_selected or (text(final,'production_eligible').lower() in {'true','1','yes'} and text(final,'wager_approved').lower() in {'true','1','yes'})) and source is not None and final_ticket and text(final,'Bettable').lower() in {'true','1','yes'} and (number(final,'Play_Stake') or 0)>0
         probability=None; basis='Unavailable'; edge=None; ev=None
         if source is not None:
             if final_ticket:
@@ -228,7 +228,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         approval_reason = text(final,'Production_Gate_Reason','Status_Reason','qualification_reason') if final_ticket else ''
         if source is None:
             approval_reason = 'No matching ranked market available; refresh analysis'
-        elif fallback_selected:
+        elif fallback_selected and not approved:
             approval_reason = ('ESPN snapshot; sportsbook update time unknown; research selection, not wager approval' if observed_selected else 'Sportsbook fallback; research selection, not wager approval')
         elif approved:
             approval_reason = 'Passed final wager checks with a positive approved stake'
@@ -257,5 +257,6 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'reason':reason,'approval_reason':approval_reason,
                      **({'qualification_reason':approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('Sportsbook fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else (college_unavailable_reason(final,candidates,family) if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
                      **({'quote_time_basis':'espn_observed'} if observed_selected else {}),
+                     **({k:final[k] for k in ('maturity','gemini_review_status','conservative_ev','espn_event_id','mlb_game_pk','game_number') if k in final} if final_ticket else {}),
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)

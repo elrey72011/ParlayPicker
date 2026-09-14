@@ -1863,6 +1863,10 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
                 "last5_win_pct": w_pct
             })
 
+        scheduled = {nfl_stats_identity(t, schedule_code=True) for t in set(df['home_team']) | set(df['away_team'])}
+        missing_completed = sorted(scheduled - {r['team_norm'] for r in stats})
+        if missing_completed:
+            logger.warning('NFL_STATS_NO_COMPLETED_SEASON_GAMES season=%s teams=%s; no synthetic stats supplied', season_year, missing_completed)
         logger.info(f"Successfully fetched NFL stats for {len(stats)} teams.")
         return stats
     except Exception as e:
