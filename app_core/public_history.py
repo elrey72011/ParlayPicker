@@ -311,7 +311,15 @@ def report(publications, revisions, imports=None, locks=None):
         outcomes=[x[0] for x in graded]
         # Wait for every leg; pushed/voided tickets excluded from win percentage.
         outcome='PENDING' if 'PENDING' in outcomes else 'LOSS' if 'LOSS' in outcomes else 'PUSH' if 'PUSH' in outcomes else 'WIN'
+        diagnostics = []
+        from app_core.mlb_event_matcher import match_mlb_event
+        for leg in item['legs']:
+            if leg['sport'] == 'MLB':
+                matched = match_mlb_event(leg, latest)
+                if not matched.status.startswith('MATCHED_'):
+                    diagnostics.append({'event_match_status':matched.status, 'grading_reason':matched.reason, 'event_match_method':matched.identity_method, 'settlement_review_required':matched.settlement_review_required})
         rows.append({**{k:v for k,v in item.items() if k!='legs'},'outcome':outcome,
+                     **({'grading_diagnostics':diagnostics} if diagnostics else {}),
                      'picks':' + '.join(x['game']+': '+x['pick'] for x in item['legs']),
                      'odds':' / '.join(str(x['odds']) for x in item['legs']),
                      **({k:item['legs'][0].get(k, '') for k in ('sport', 'market')} if len(item['legs']) == 1 else {}),

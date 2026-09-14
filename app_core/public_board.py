@@ -231,10 +231,19 @@ def validate_package(package):
             raise ValueError('Invalid public results')
         seen=set()
         for row in package['results']:
-            exact(row, 'id category date group published_at outcome picks odds final_score' + (' quote_source' if 'quote_source' in row else '') + (' quote_time quote_time_basis' if 'quote_time_basis' in row else '') + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' sport' if row.get('category')!='props' and 'sport' in row else '') + (' market' if row.get('category')!='props' and 'market' in row else '') + (' original_win_estimate' if 'original_win_estimate' in row else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
+            exact(row, 'id category date group published_at outcome picks odds final_score' + (' quote_source' if 'quote_source' in row else '') + (' quote_time quote_time_basis' if 'quote_time_basis' in row else '') + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' sport' if row.get('category')!='props' and 'sport' in row else '') + (' market' if row.get('category')!='props' and 'market' in row else '') + (' grading_diagnostics' if 'grading_diagnostics' in row else '') + (' original_win_estimate' if 'original_win_estimate' in row else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
             projection_metric(row)
-            if not all(isinstance(v,str) for k,v in row.items() if k not in {'expected_stat', 'original_win_estimate'}) or row['id'] in seen:
+            if not all(isinstance(v,str) for k,v in row.items() if k not in {'expected_stat', 'original_win_estimate', 'grading_diagnostics'}) or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
+            if 'grading_diagnostics' in row:
+                diagnostics = row['grading_diagnostics']
+                allowed = {'INVALID_SAVED_EVENT', 'INVALID_RESULT_EVENT', 'NO_MATCH', 'DATE_MISMATCH', 'PROVIDER_ID_NOT_FOUND', 'PROVIDER_ID_CONFLICT', 'DOUBLEHEADER_AMBIGUOUS', 'MULTIPLE_MATCHING_EVENTS', 'RESCHEDULED_NEEDS_REVIEW', 'NO_FINAL_PROVIDER_RESULT', 'FINAL_SCORE_INVALID', 'PROVIDER_SCORE_CONFLICT', 'RESCHEDULED_SETTLEMENT_REVIEW'}
+                if not isinstance(diagnostics, list) or not diagnostics:
+                    raise ValueError('Invalid grading diagnostics')
+                for diagnostic in diagnostics:
+                    exact(diagnostic, 'event_match_status grading_reason event_match_method settlement_review_required')
+                    if diagnostic['event_match_status'] not in allowed or diagnostic['grading_reason'] not in allowed or diagnostic['event_match_method'] not in {None, 'provider_id', 'teams_scheduled_date', 'game_number'} or not isinstance(diagnostic['settlement_review_required'], bool):
+                        raise ValueError('Invalid grading diagnostics')
             if 'original_win_estimate' in row:
                 value = row['original_win_estimate']
                 if (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)

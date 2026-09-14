@@ -35,15 +35,15 @@ def test_doubleheader_disambiguation_and_unfinished_game():
     scores=[mlb(),dict(mlb(),event_id='two',start='2026-09-14T00:00:00Z',completed=False,away_score=None,home_score=None)]
     assert match_result(leg(),scores)[1]=='DOUBLEHEADER_AMBIGUOUS'
     assert grade_leg(leg(espn_event_id='one'),scores)[0]=='WIN'
-    assert match_result(leg(espn_event_id='missing'),scores)[1]=='EVENT_ID_NOT_FOUND'
-    assert grade_leg(dict(leg(),start='2026-09-13T23:00:00Z'),scores)[0]=='WIN'
+    assert match_result(leg(espn_event_id='missing'),scores)[1]=='DOUBLEHEADER_AMBIGUOUS'
+    assert grade_leg(dict(leg(),start='2026-09-13T23:00:00Z'),scores)[0]=='PENDING'
     assert grade_leg(leg(game_number=2),[dict(scores[0],game_number=1),dict(scores[1],game_number=2)])[0]=='PENDING'
 
 
 def test_conflicting_provider_and_invalid_scores_never_grade():
     assert match_result(leg(),[mlb(),dict(mlb(),result_source='MLB',event_id='other',home_score=3)])[1]=='PROVIDER_SCORE_CONFLICT'
     assert match_result(leg(),[dict(mlb(),home_score=float('nan'))])[1]=='FINAL_SCORE_INVALID'
-    assert match_result(leg(),[dict(mlb(),start='2026-09-15T00:00:00Z')])[1]=='NO_FINAL_PROVIDER_RESULT'
+    assert match_result(leg(),[dict(mlb(),start='2026-09-15T00:00:00Z')])[1]=='DATE_MISMATCH'
 
 
 def test_official_mlb_fallback_after_espn_failure(monkeypatch):
