@@ -148,7 +148,8 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     if board is None or board.empty: return pd.DataFrame()
     candidates=candidates if isinstance(candidates,pd.DataFrame) else pd.DataFrame()
-    candidate_rows = [row for _, row in candidates.iterrows()]
+    from core.market_policy import production_market
+    candidate_rows = [row for _, row in candidates.iterrows() if production_market(text(row, 'market_type'))]
     rows=[]
     for _, final in board.iterrows():
         league = text(final, 'league', 'League').upper()
@@ -188,12 +189,15 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 reason='Final overall pick; no matching family audit available'
             else:
                 reason='No matching ranked '+family+' candidate available; rerun analysis to refresh the audit'
+        if selected is not None and not production_market(text(selected, 'market_type')):
+            selected = None
+            reason = 'No qualifying spread or total; moneyline is context only'
         quote = public_quote(selected, allow_fallback, nfl_fallback=nfl_fallback) if selected is not None and novig_only else None
         fallback_selected = quote is not None and quote[0] != 'Novig'
         observed_selected = bool(quote and quote[0] == 'DraftKings' and not exact_book_quote(selected, 'draftkings') and espn_observed_quote(selected))
         same = selected is not None and family_of(selected)==family_of(final) and text(selected,'best_pick')==text(final,'best_pick') and number(selected,'odds_american')==number(final,'odds_american') and text(selected,'odds_source')==text(final,'odds_source')
         # Only the exact final ticket can inherit the finalized approval or stake.
-        source=selected if novig_only else final if same or family=='overall' else selected
+        source=selected if selected is None or novig_only else final if same or family=='overall' else selected
         final_ticket = same or (family=='overall' and not novig_only)
         approved=not fallback_selected and source is not None and final_ticket and text(final,'Bettable').lower() in {'true','1','yes'} and (number(final,'Play_Stake') or 0)>0
         probability=None; basis='Unavailable'; edge=None; ev=None

@@ -67,6 +67,7 @@ def evaluate_absolute_production_gate(
         & break_even.gt(0.0)
         & break_even.lt(1.0)
         & model_ev.notna()
+        & np.isfinite(model_ev)
     )
     passed = (
         valid
@@ -83,6 +84,7 @@ def evaluate_absolute_production_gate(
     reason.loc[break_even.notna() & ~(break_even.gt(0.0) & break_even.lt(1.0))] = (
         "invalid sportsbook break-even price"
     )
+    reason.loc[~np.isfinite(model_ev)] = "missing or invalid model EV"
     reason.loc[valid & ~model_ev.gt(float(min_model_ev))] = "model EV is not positive"
     thin_edge = valid & model_ev.gt(float(min_model_ev)) & ~absolute_edge.ge(float(min_edge))
     reason.loc[thin_edge] = absolute_edge.loc[thin_edge].map(

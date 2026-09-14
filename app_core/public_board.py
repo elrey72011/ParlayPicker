@@ -59,6 +59,12 @@ def pick_record(row, *, prop=False, as_of=None):
             approved = False
     if odds is None or probability is None:
         approved = False
+    from core.market_policy import production_market, moneyline_context_only
+    if not prop and moneyline_context_only(text(row, 'market_type')):
+        raise ValueError('Public game picks must be spread or total; moneyline is context only')
+    if not prop and not production_market(text(row, 'market_type')):
+        # Missing quotes remain visible as PASS rows, never approved wagers.
+        approved = False
     pick = text(row, 'best_pick' if prop else 'pick')
     record = {'sport':text(row, 'league','League'), 'game':text(row, 'matchup'),
             'pick':pick, 'player':text(row, 'player') if prop else '',

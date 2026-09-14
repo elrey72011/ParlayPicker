@@ -1,5 +1,6 @@
 """Deterministic, disjoint two-leg research combinations from public game picks."""
 from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES
+from core.market_policy import production_market
 import itertools
 import math
 import re
@@ -10,6 +11,8 @@ def build_parlays(rows, now=None, *, qualified_only=False, max_age_minutes=QUOTE
     now = now or datetime.now(timezone.utc)
     candidates = []
     for row in rows:
+        if not production_market(row.get('market')):
+            continue
         if qualified_only:
             from app_core.recommendation_quality import positive_price_edge
             if row.get('status') != 'APPROVED' or not row.get('quote_time') or row.get('quote_source') != 'Novig' or not positive_price_edge(row.get('win_estimate'), row.get('odds'), row.get('ev')):
@@ -81,6 +84,8 @@ def build_research_parlays(rows, now=None, *, qualified_parlays=(), max_age_minu
             used.update(teams(leg))
     candidates = []
     for row in rows:
+        if not production_market(row.get('market')):
+            continue
         try:
             names = teams(row)
             if len(names) != 2 or identities[frozenset(names)] != 1 or used & names:

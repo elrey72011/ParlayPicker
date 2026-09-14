@@ -24,11 +24,12 @@ def test_tiered_parlay_menu_includes_production_only():
     })
     out = build_tiered_prop_parlays(None, props, bankroll=1000.0)
     assert len(out) == 1
-    assert set(out["risk_tier"]) == {"Controlled"}
+    assert set(out["risk_tier"]) == {"Research"}
     assert out["group_id"].is_unique
     assert out["group_id"].tolist() == ["strict_duo_1"]
     assert out["best_payout_book"].eq("Novig").all()
-    assert out["recommended_bet"].ge(1.0).all()
+    assert out["recommended_bet"].eq(0.0).all()
+    assert not out["ticket_price_verified"].any()
 
 
 

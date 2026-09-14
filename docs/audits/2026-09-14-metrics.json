@@ -1,0 +1,553 @@
+{
+  "version": 1,
+  "baseline_commit": "d9d4b5353ebdc25de6845fe3be04cd09194f7b02",
+  "inputs": [
+    {
+      "file": "best_picks_candidate_audit - 2026-09-12T133726.357.csv",
+      "sha256": "e5104d924cd4c73cf00884c3ecacab38e62a0b1d7e76930583eae158b5f4cc19",
+      "candidate_rows": 482,
+      "sports": {
+        "MLB": {
+          "games": 15,
+          "candidate_rows": 54,
+          "selected_rows": 15,
+          "candidate_spread_games": 12,
+          "candidate_total_games": 15,
+          "candidate_moneyline_games": 0,
+          "both_spread_total_games": 12,
+          "spread_only_games": 0,
+          "total_only_games": 3,
+          "neither_spread_total_games": 0,
+          "selected_markets": {
+            "total_over": 3,
+            "spread_away": 4,
+            "spread_home": 2,
+            "total_under": 6
+          },
+          "selection_sources": {
+            "calibrated_probability": 15
+          },
+          "recorded_qualification_reasons": {
+            "PASS: final safety status is not eligible for a qualified lean.": 10,
+            "PASS: final calibrated win probability is below 60%.": 5
+          },
+          "provider_quoted_games_by_book_family": {
+            "betmgm:moneyline": 15,
+            "betmgm:spread": 14,
+            "betmgm:total": 15,
+            "draftkings:moneyline": 15,
+            "draftkings:spread": 15,
+            "draftkings:total": 15,
+            "fanduel:moneyline": 15,
+            "fanduel:spread": 15,
+            "fanduel:total": 15,
+            "novig:moneyline": 15,
+            "novig:spread": 15,
+            "novig:total": 15
+          },
+          "approved_flag_rows": 0
+        },
+        "NCAAF": {
+          "games": 112,
+          "candidate_rows": 428,
+          "selected_rows": 112,
+          "candidate_spread_games": 103,
+          "candidate_total_games": 111,
+          "candidate_moneyline_games": 0,
+          "both_spread_total_games": 102,
+          "spread_only_games": 1,
+          "total_only_games": 9,
+          "neither_spread_total_games": 0,
+          "selected_markets": {
+            "total_over": 33,
+            "spread_away": 24,
+            "spread_home": 35,
+            "total_under": 20
+          },
+          "selection_sources": {
+            "calibrated_probability": 112
+          },
+          "recorded_qualification_reasons": {
+            "PASS: final safety status is not eligible for a qualified lean.": 105,
+            "PASS: market consensus opposes the selected direction.": 6,
+            "PASS: live line or event identity is not verified.": 1
+          },
+          "provider_quoted_games_by_book_family": {
+            "betmgm:moneyline": 58,
+            "betmgm:spread": 76,
+            "betmgm:total": 76,
+            "draftkings:moneyline": 89,
+            "draftkings:spread": 112,
+            "draftkings:total": 112,
+            "fanduel:moneyline": 60,
+            "fanduel:spread": 79,
+            "fanduel:total": 78,
+            "novig:moneyline": 37,
+            "novig:spread": 44,
+            "novig:total": 44
+          },
+          "approved_flag_rows": 0
+        }
+      }
+    },
+    {
+      "file": "best_picks_candidate_audit - 2026-09-13T125603.579.csv",
+      "sha256": "9ef6652b7c78db424f053a194680c8d8af118a81249b458d7b57419b9cb30d22",
+      "candidate_rows": 112,
+      "sports": {
+        "MLB": {
+          "games": 15,
+          "candidate_rows": 60,
+          "selected_rows": 15,
+          "candidate_spread_games": 15,
+          "candidate_total_games": 15,
+          "candidate_moneyline_games": 0,
+          "both_spread_total_games": 15,
+          "spread_only_games": 0,
+          "total_only_games": 0,
+          "neither_spread_total_games": 0,
+          "selected_markets": {
+            "spread_away": 5,
+            "spread_home": 3,
+            "total_over": 3,
+            "total_under": 4
+          },
+          "selection_sources": {
+            "calibrated_probability": 15
+          },
+          "recorded_qualification_reasons": {
+            "Gemini confidence is below MEDIUM; wager held at $0": 9,
+            "PASS: final calibrated win probability is below 60%.": 3,
+            "Gemini review unavailable; wager held at $0": 3
+          },
+          "provider_quoted_games_by_book_family": {
+            "betmgm:moneyline": 15,
+            "betmgm:spread": 15,
+            "betmgm:total": 15,
+            "draftkings:moneyline": 15,
+            "draftkings:spread": 15,
+            "draftkings:total": 15,
+            "fanduel:moneyline": 15,
+            "fanduel:spread": 15,
+            "fanduel:total": 15,
+            "novig:moneyline": 15,
+            "novig:spread": 15,
+            "novig:total": 15
+          },
+          "approved_flag_rows": 0
+        },
+        "NFL": {
+          "games": 13,
+          "candidate_rows": 52,
+          "selected_rows": 13,
+          "candidate_spread_games": 13,
+          "candidate_total_games": 13,
+          "candidate_moneyline_games": 0,
+          "both_spread_total_games": 13,
+          "spread_only_games": 0,
+          "total_only_games": 0,
+          "neither_spread_total_games": 0,
+          "selected_markets": {
+            "spread_home": 7,
+            "total_under": 3,
+            "spread_away": 3
+          },
+          "selection_sources": {
+            "calibrated_probability": 13
+          },
+          "recorded_qualification_reasons": {
+            "Gemini review unavailable; wager held at $0": 9,
+            "PASS: final calibrated win probability is below 60%.": 1,
+            "Gemini confidence is below MEDIUM; wager held at $0": 3
+          },
+          "provider_quoted_games_by_book_family": {
+            "betmgm:moneyline": 13,
+            "betmgm:spread": 13,
+            "betmgm:total": 13,
+            "draftkings:moneyline": 13,
+            "draftkings:spread": 13,
+            "draftkings:total": 13,
+            "fanduel:moneyline": 13,
+            "fanduel:spread": 13,
+            "fanduel:total": 13
+          },
+          "approved_flag_rows": 0
+        }
+      }
+    }
+  ],
+  "scope": "Archived input snapshots; quote presence is not verified availability at lock time or wager approval.",
+  "evaluation": {
+    "source": "pick-accuracy-2026-09-13.json",
+    "sha256": "77d0e4714062947e7867072c7ccf9b637a2640c35f5c57c4e774e2145e345cab",
+    "status": "insufficient_verified_evidence",
+    "inventory": {
+      "raw_rows": 1176,
+      "duplicate_rows_removed": 0,
+      "development_events": 142,
+      "evaluation_events_seen": 167,
+      "eligible_events": 0,
+      "eligible_candidates": 0,
+      "evaluation_days": []
+    },
+    "exclusions": [
+      {
+        "reason": "development_slate",
+        "rows": 366,
+        "events": 94
+      },
+      {
+        "reason": "export_not_verified_pregame",
+        "rows": 168,
+        "events": 50
+      },
+      {
+        "reason": "missing_identity",
+        "rows": 128,
+        "events": 32
+      },
+      {
+        "reason": "missing_or_invalid_prediction_timestamp",
+        "rows": 502,
+        "events": 131
+      },
+      {
+        "reason": "training_cutoff_unverified_or_leaking",
+        "rows": 12,
+        "events": 3
+      }
+    ]
+  },
+  "threshold_study": [
+    {
+      "sport": "NFL",
+      "threshold": 0.55,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NFL",
+      "threshold": 0.6,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NFL",
+      "threshold": 0.65,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NFL",
+      "threshold": 0.7,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NFL",
+      "threshold": 0.75,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAF",
+      "threshold": 0.55,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAF",
+      "threshold": 0.6,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAF",
+      "threshold": 0.65,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAF",
+      "threshold": 0.7,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAF",
+      "threshold": 0.75,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NBA",
+      "threshold": 0.55,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NBA",
+      "threshold": 0.6,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NBA",
+      "threshold": 0.65,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NBA",
+      "threshold": 0.7,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NBA",
+      "threshold": 0.75,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAB",
+      "threshold": 0.55,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAB",
+      "threshold": 0.6,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAB",
+      "threshold": 0.65,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAB",
+      "threshold": 0.7,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NCAAB",
+      "threshold": 0.75,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "MLB",
+      "threshold": 0.55,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "MLB",
+      "threshold": 0.6,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "MLB",
+      "threshold": 0.65,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "MLB",
+      "threshold": 0.7,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "MLB",
+      "threshold": 0.75,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NHL",
+      "threshold": 0.55,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NHL",
+      "threshold": 0.6,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NHL",
+      "threshold": 0.65,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NHL",
+      "threshold": 0.7,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    },
+    {
+      "sport": "NHL",
+      "threshold": 0.75,
+      "verified_games": 0,
+      "win_rate": null,
+      "roi": null,
+      "brier": null,
+      "log_loss": null,
+      "ece": null,
+      "status": "not_estimable_without_verified_pregame_cohort"
+    }
+  ]
+}

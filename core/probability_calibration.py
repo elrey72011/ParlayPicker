@@ -134,6 +134,12 @@ def load_calibration(path: Path | str | None = None) -> list[list[float]] | None
             validation = (payload.get("meta") or {}).get("validation") or {}
             if validation.get("promotable") is not True:
                 return None
+            # Older artifacts were promoted by a row split that could divide one
+            # slate. Never trust the flag without a strictly later holdout.
+            train_end = pd.to_datetime(validation.get("train_end"), errors="coerce", utc=True)
+            test_start = pd.to_datetime(validation.get("test_start"), errors="coerce", utc=True)
+            if pd.isna(train_end) or pd.isna(test_start) or train_end.normalize() >= test_start.normalize():
+                return None
         knots = payload.get("knots")
         return knots if knots else None
     except (OSError, ValueError):

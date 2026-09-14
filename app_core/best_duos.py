@@ -10,8 +10,7 @@
     correlation quietly turns a "70% x 65%" parlay into something worse.
     Duos in the ranked list also never reuse a leg, so the top-3 are nine... six
     independent bets, not one pick wearing three hats.
-  * "Despite the bet": ranked by JOINT WIN PROBABILITY (p1 x p2, independent by
-    construction since legs share no game), not by payout. Combined odds are
+  * "Despite the bet": ranked by JOINT WIN PROBABILITY (p1 x p2, assuming independence; different games alone do not establish it), not by payout. Combined odds are
     shown so the price is visible, never the ranking key.
 """
 from __future__ import annotations
@@ -87,6 +86,9 @@ def build_best_duos(
     Returns columns: leg1, leg2, leg1_prob, leg2_prob, combined_probability,
     combined_decimal, parlay_ev, payout_per_10.
     """
+    from core.market_policy import moneyline_context_only
+    if best_picks_df is not None and "market_type" in best_picks_df:
+        best_picks_df = best_picks_df.loc[~best_picks_df["market_type"].map(moneyline_context_only)].copy()
     if strict:
         # Game candidates must have passed the main production portfolio gate.
         # Props use the stricter Actionable-only path and probationary markets
@@ -254,7 +256,7 @@ def duos_to_smart_parlays(duos: pd.DataFrame | None, bankroll: float = 1000.0) -
             continue
         book_display = "Novig" if common_book == "novig" else common_book.replace("_", " ").title()
         rows.append({
-            "risk_tier": "Probation / Research" if probation_mode else "Controlled",
+            "risk_tier": "Research",
             "group_id": f"strict_duo_{index + 1}",
             "parlay_legs": f"{duo.get('leg1')} | {duo.get('leg2')}",
             "combined_probability": probability,
@@ -263,13 +265,15 @@ def duos_to_smart_parlays(duos: pd.DataFrame | None, bankroll: float = 1000.0) -
             "legs": 2,
             "combined_market_prob": None,
             "ev_boost_pct": None,
-            "is_high_correlation": False,
+            "is_high_correlation": None,
             "best_payout_book": book_display,
             "Conviction_Score": min(float(duo.get("leg1_prob") or 0.0), float(duo.get("leg2_prob") or 0.0)),
             "min_leg_prob": min(float(duo.get("leg1_prob") or 0.0), float(duo.get("leg2_prob") or 0.0)),
-            "kelly_fraction": fractional_kelly,
-            "recommended_bet": round(recommended, 2),
-            "production_safety_mode": bool(duo.get("production_safety_mode", True)),
+            "kelly_fraction": 0.0,
+            "recommended_bet": 0.0,
+            "ticket_price_verified": False,
+            "price_basis": "Estimated product of leg prices",
+            "production_safety_mode": False,
             "probation_parlay_mode": probation_mode,
             "model_risk_haircut": duo.get("model_risk_haircut"),
             "unique_game_count": 2,
