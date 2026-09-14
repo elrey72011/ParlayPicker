@@ -39,4 +39,3 @@ def recommend(ticket,confirmation,policy,exposure,*,now):
         for team in teams:limits.append(exposure['team_cap']-used.get(f'team:{sport}:{team}',0))
     stake=max(0,min(limits))*exposure['bankroll']
     return dict(result,status='ACTIONABLE PARLAY RECOMMENDATION' if stake>0 else 'PASS',recommended_stake=stake,conservative_probability=p,conservative_ev=ev,actual_decimal_odds=odds,confirmation_hash=digest(confirmation))
-

@@ -40,10 +40,11 @@ def render(games):
     with st.expander('Configure bankroll and exposure limits'):
         with st.form('exposure_configuration'):
             bankroll=st.number_input('Confirmed bankroll',min_value=0.,value=0.)
-            unit=st.number_input('Dollar value per unit',min_value=0.,value=0.)
+            unit=st.number_input('Currency value per unit',min_value=0.,value=0.)
+            currency=st.text_input('Confirmed currency code',value='').strip().upper()
             caps={k:st.number_input(k.replace('_',' ').title()+' (fraction)',min_value=0.,max_value=1.,value=0.) for k in ('total_cap','daily_cap','weekly_cap','game_cap','team_cap')}
             if st.form_submit_button('Save bankroll and limits'):
-                try:append(ledger,dict(status='CONFIGURED',bankroll=bankroll,unit_value=unit,currency='USD',**caps),confirmed=True);st.success('Configuration recorded.')
+                try:append(ledger,dict(status='CONFIGURED',bankroll=bankroll,unit_value=unit,currency=currency,**caps),confirmed=True);st.success('Configuration recorded.')
                 except ValueError as e:st.error(str(e))
     try:st.caption('Fresh exposure: '+json.dumps(snapshot(ledger)['committed']))
     except ValueError:st.info('Configure bankroll and limits before any funded recommendation.')

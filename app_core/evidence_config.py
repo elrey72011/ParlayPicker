@@ -37,3 +37,23 @@ def safe_error(exc, action):
     if isinstance(exc, (EvidenceConfigurationError, EvidenceStorageError)):
         return str(exc)
     return f"{action} failed ({type(exc).__name__}); check storage access/configuration."
+
+
+def runtime_configuration_status():
+    """Presence/schema checks only; never return credentials or secret paths."""
+    from pathlib import Path
+    result = {key: "configured" if os.environ.get(key, "").strip() else "missing"
+              for key in ("PARLAYPICKER_DRIVE_FOLDER_ID", "THE_ODDS_API_KEY")}
+    key = "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT"
+    if not os.environ.get(key, "").strip():
+        result[key] = "missing"
+    else:
+        try:
+            service_account_info()
+            result[key] = "configured"
+        except EvidenceConfigurationError:
+            result[key] = "invalid"
+    for key, default in (("PARLAYPICKER_WAGER_POLICY_PATH", "data/policies/active_wager_policy.json"),
+                         ("PARLAYPICKER_EXPOSURE_LEDGER", "data/exposure/exposure.sqlite3")):
+        result[key] = "configured" if Path(os.environ.get(key) or default).is_file() else "missing"
+    return result
