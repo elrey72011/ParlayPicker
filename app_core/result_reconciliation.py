@@ -14,6 +14,10 @@ def stamp(value):
 
 
 def match_result(leg, scores):
+    if str(leg.get('sport', '')).upper() == 'MLB':
+        from app_core.mlb_event_matcher import match_mlb_event
+        match = match_mlb_event(leg, scores)
+        return (match.event, None) if match.status.startswith('MATCHED_') else (None, match.reason or match.status)
     from app_core.public_history import grading_team_name
     sport = str(leg.get('sport', '')).upper()
     from app_core.espn_results import ESPN_ENDPOINTS
@@ -85,7 +89,12 @@ def pending_diagnostics(entries, revisions):
                 failures = [e for r in revisions for e in r.get('errors',[]) if e.get('sport') == leg['sport']]
                 if reason == 'NO_FINAL_PROVIDER_RESULT' and failures:
                     reason = 'PROVIDER_FAILURE'
-                result.append({'id':entry['id'],'date':entry['date'],'game':leg['game'],'pick':leg['pick'],'reason':reason})
+                metadata = {}
+                if leg['sport'] == 'MLB':
+                    from app_core.mlb_event_matcher import match_mlb_event
+                    match = match_mlb_event(leg, scores)
+                    metadata = {'event_match_status':match.status, 'event_match_method':match.identity_method, 'candidate_count':match.candidate_count, 'settlement_review_required':match.settlement_review_required}
+                result.append({**metadata, 'id':entry['id'],'date':entry['date'],'game':leg['game'],'pick':leg['pick'],'reason':reason})
     return result
 
 

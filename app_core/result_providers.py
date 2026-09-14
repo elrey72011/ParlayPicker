@@ -46,7 +46,7 @@ def fetch_results(day, sports):
                     if not stamp(game.get('gameDate')): continue
                     complete=game.get('status',{}).get('abstractGameState') == 'Final'
                     row=dict(sport='MLB',event_id=str(game['gamePk']),provider_event_id=str(game['gamePk']),result_source='MLB',provider_recorded_at=at,
-                             start=stamp(game['gameDate']).isoformat(),away=game['teams']['away']['team']['name'],home=game['teams']['home']['team']['name'],completed=complete,game_number=game.get('gameNumber'))
+                             start=stamp(game['gameDate']).isoformat(),away=game['teams']['away']['team']['name'],home=game['teams']['home']['team']['name'],completed=complete,game_number=game.get('gameNumber'),official_date=game.get('officialDate') or group.get('date'))
                     events[('MLB', 'mlb:'+str(game['gamePk']))]=row
                     if complete:
                         a,h=(game['teams'][k].get('score') for k in ('away','home'))
