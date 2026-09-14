@@ -1,5 +1,6 @@
 """Read-only diagnostics for supplied prediction runs; never approve a wager."""
 from collections import Counter
+from core.frame_records import drop_duplicate_records
 import math
 
 from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES
@@ -47,8 +48,8 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
     if not math.isfinite(quote_warning_minutes) or quote_warning_minutes <= 0:
         raise ValueError("Quote warning minutes must be positive and finite")
     audit = pd.DataFrame() if audit is None else audit.copy()
-    audit = audit.drop(columns=[c for c in audit if c.startswith("actual_") or c in {"candidate_outcome", "candidate_graded"}], errors="ignore").drop_duplicates()
-    final = pd.DataFrame() if final is None else final.copy().drop_duplicates()
+    audit = drop_duplicate_records(audit.drop(columns=[c for c in audit if c.startswith("actual_") or c in {"candidate_outcome", "candidate_graded"}], errors="ignore"))
+    final = pd.DataFrame() if final is None else drop_duplicate_records(final)
     report = {"version": 1, "quote_warning_minutes": quote_warning_minutes,
               "production_changes": False, "games": [], "candidates": [], "run_warnings": []}
     diagnostics = diagnostics or {}
