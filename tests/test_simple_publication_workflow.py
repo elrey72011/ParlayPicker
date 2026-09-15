@@ -98,6 +98,7 @@ def test_empty_analysis_app_branch_grades_and_publishes_saved_board(monkeypatch)
     source="""
 import pandas as pd
 import streamlit as st
+from streamlit_app import _publication_candidates
 
 def main():
     analysis_df = None

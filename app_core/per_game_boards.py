@@ -33,6 +33,22 @@ def exact_book_quote(row, book):
     """Require exact original team/market/line/price evidence from the requested bookmaker."""
     from app_core.prediction_evidence import bind_quote
     candidate = dict(row)
+    # Reject only explicit cross-provider/event conflicts. Older quotes without
+    # scoped identity retain their existing behavior; never modify the evidence.
+    provider_id = text(row, 'provider_event_id')
+    namespace = text(row, 'provider_namespace')
+    if provider_id and namespace:
+        import json
+        try:
+            quotes = json.loads(candidate.get('provider_quotes') or '[]')
+        except (TypeError, ValueError):
+            quotes = None
+        if isinstance(quotes, list):
+            candidate['provider_quotes'] = json.dumps([
+                q for q in quotes if not isinstance(q, dict)
+                or not (text(q, 'provider_event_id') and text(q, 'provider_namespace'))
+                or (text(q, 'provider_event_id') == provider_id and text(q, 'provider_namespace') == namespace)
+            ])
     candidate['opposing_odds_source'] = book
     bound = bind_quote(candidate)
     if not bound['quote_binding_verified'] or bound['quote_bookmaker'] != book:
