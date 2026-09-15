@@ -179,12 +179,17 @@ def ensure_authoritative_quote_binding(row):
     """
     from core.wager_decisions import aware, finite
     from app_core.candidate_evidence_schema import missing
+    from app_core.public_quote_policy import canonical_book_label
     out = dict(row)
     def present(key):
         return not missing(out.get(key))
     def book(value):
-        name = str(value).strip().casefold()
-        return 'novig' if name in {'novig', 'novig_us'} else name
+        return canonical_book_label(value).casefold()
+    def canonical_binding():
+        for key in ('quote_bookmaker', 'book', 'sportsbook', 'quote_source'):
+            if present(key):
+                out[key] = canonical_book_label(out[key])
+        return out
     def reject():
         out.update(quote_binding_verified=False, quote_verified=False, exact_quote_verified=False)
         return out
@@ -214,7 +219,7 @@ def ensure_authoritative_quote_binding(row):
         return reject()
     if (out.get('quote_binding_verified') is True and present('quote_bookmaker')
             and aware(out.get('odds_recorded_at')) is not None):
-        return out
+        return canonical_binding()
     candidate = dict(out)
     # Restrict the existing matcher to the candidate's supplied book/provider;
     # never let an opposing-book alias select a different candidate's quote.
@@ -224,7 +229,8 @@ def ensure_authoritative_quote_binding(row):
         quotes = []
     if not isinstance(quotes, list):
         quotes = []
-    quotes = [q for q in quotes if isinstance(q, dict)
+    # Normalize only the matcher's working copy; retain the original payload.
+    quotes = [dict(q, book=book(q.get('book', ''))) for q in quotes if isinstance(q, dict)
               and (not books or book(q.get('book', '')) in books)
               and all(not present(k) or str(q.get(k)) == str(out[k])
                       for k in ('provider_event_id', 'provider_namespace'))]
@@ -243,7 +249,7 @@ def ensure_authoritative_quote_binding(row):
     # Fill only absent adapter aliases. Explicit integrity vetoes stay false.
     if not present('exact_quote_verified'):
         out['exact_quote_verified'] = True
-    return out
+    return canonical_binding()
 
 
 def bind_authoritative_candidates(frame):

@@ -327,7 +327,7 @@ def test_preserve_complete_binding_without_rebinding():
     row = binding_row()
     row.update(quote_binding_verified=True, odds_recorded_at='2026-09-03T13:59:00Z',
         quote_bookmaker='novig', provider_event_id='original', provider_namespace='odds_api')
-    assert evidence.ensure_authoritative_quote_binding(row) == row
+    assert evidence.ensure_authoritative_quote_binding(row) == dict(row, book='Novig', quote_bookmaker='Novig')
 
 
 def test_bind_unique_exact_quote_uses_provider_time():
@@ -335,12 +335,14 @@ def test_bind_unique_exact_quote_uses_provider_time():
     bound = evidence.ensure_authoritative_quote_binding(row)
     assert bound['quote_binding_verified'] is True
     assert bound['odds_recorded_at'] == '2026-09-03T14:00:00+00:00'
-    assert bound['quote_bookmaker'] == 'novig'
+    assert bound['quote_bookmaker'] == 'Novig'
     assert bound['provider_event_id'] == 'evt'
     assert bound['provider_namespace'] == 'odds_api'
     assert evidence.ensure_authoritative_quote_binding(bound) == bound
     assert 'model_validated' not in bound and 'calibration_validated' not in bound
-    for key in ('odds_american', 'total_line', 'book'):
+    assert bound['book'] == 'Novig'
+    assert bound['provider_quotes'] == row['provider_quotes']
+    for key in ('odds_american', 'total_line'):
         assert bound[key] == row[key]
 
 
@@ -457,9 +459,84 @@ def test_own_verified_book_is_not_replaced_by_opposing_price_source():
     row=binding_row()
     row.update(quote_binding_verified=True, odds_recorded_at='2026-09-03T14:00:00Z',
                quote_bookmaker='novig', opposing_odds_source='draftkings')
-    assert evidence.ensure_authoritative_quote_binding(row) == row
+    assert evidence.ensure_authoritative_quote_binding(row) == dict(row, book='Novig', quote_bookmaker='Novig')
     row['quote_binding_verified']=False
     bound=evidence.ensure_authoritative_quote_binding(row)
     assert bound['quote_binding_verified'] is True
-    assert bound['quote_bookmaker'] == 'novig'
+    assert bound['quote_bookmaker'] == 'Novig'
     assert bound['opposing_odds_source'] == 'draftkings'
+
+
+@pytest.mark.parametrize('raw,label', [
+    ('draftkings','DraftKings'), ('fanduel','FanDuel'), ('betmgm','BetMGM'),
+    ('novig','Novig'), ('novig_us','Novig'), ('DraftKings','DraftKings'),
+    ('FanDuel','FanDuel'), ('BetMGM','BetMGM'), ('Novig','Novig'),
+    (' DRAFTKINGS ','DraftKings'), ('fAnDuEl','FanDuel'),
+])
+def test_raw_sportsbook_binding_policy_identity(raw, label):
+    from app_core.public_quote_policy import canonical_book_label, supported_quote
+    from core.live_wager_contract import adapt_candidate
+    row=binding_row()
+    row.pop('book')
+    row.pop('opposing_odds_source')
+    row['league']='NFL'
+    quotes=json.loads(row['provider_quotes']);quotes[0]['book']=raw
+    row['provider_quotes']=json.dumps(quotes)
+    bound=evidence.ensure_authoritative_quote_binding(row)
+    assert canonical_book_label(raw) == label
+    assert bound['quote_binding_verified'] is True
+    assert bound['quote_bookmaker'] == label
+    assert bound['provider_quotes'] == row['provider_quotes']
+    assert bound['provider_namespace'] == 'odds_api'
+    assert bound['provider_event_id'] == 'evt'
+    adapted=adapt_candidate(bound)
+    assert adapted['book'] == label
+    assert adapted['exact_quote_verified'] is True
+    assert supported_quote({'sport':'NFL','quote_source':adapted['book']})
+
+
+@pytest.mark.parametrize('raw', ['draftkings','fanduel','betmgm'])
+@pytest.mark.parametrize('sport', ['MLB','NBA','WNBA','NHL','NCAAB'])
+def test_canonicalization_does_not_expand_sport_fallback(raw, sport):
+    from app_core.public_quote_policy import canonical_book_label, supported_quote
+    assert not supported_quote({'sport':sport,'quote_source':raw})
+    assert not supported_quote({'sport':sport,'quote_source':canonical_book_label(raw)})
+
+
+@pytest.mark.parametrize('sport', ['NFL','NCAAF'])
+@pytest.mark.parametrize('raw', ['draftkings','fanduel','betmgm','novig','novig_us'])
+def test_existing_football_book_policy_handles_provider_keys(sport, raw):
+    from app_core.public_quote_policy import supported_quote
+    assert supported_quote({'sport':sport,'quote_source':raw})
+
+
+@pytest.mark.parametrize('raw', ['DK','FD','MGM','Caesars','ESPN BET','odds_api','espn',None,''])
+def test_unknown_books_and_provider_namespaces_do_not_authorize(raw):
+    from app_core.public_quote_policy import canonical_book_label, supported_quote
+    assert canonical_book_label(raw) not in {'DraftKings','FanDuel','BetMGM','Novig'}
+    for sport in ('NFL','NCAAF','MLB'):
+        assert not supported_quote({'sport':sport,'quote_source':raw})
+
+
+@pytest.mark.parametrize('sport,book,basis,expected', [
+    ('NCAAF','draftkings','espn_observed',True),
+    ('NFL','draftkings','espn_observed',False),
+    ('MLB','draftkings','espn_observed',False),
+    ('NCAAF','fanduel','espn_observed',False),
+    ('NCAAF','novig','espn_observed',False),
+    ('NCAAF','draftkings','provider',False),
+    ('NCAAF','draftkings',None,False),
+])
+def test_observed_quote_policy_retains_all_conditions(sport, book, basis, expected):
+    from app_core.public_quote_policy import supported_quote
+    assert supported_quote({'sport':sport,'quote_source':book,'quote_time_basis':basis}) is expected
+
+
+@pytest.mark.parametrize('raw,label', [('draftkings','DraftKings'),('DraftKings','DraftKings'),('novig_us','Novig')])
+def test_prebound_book_normalizes_without_changing_quote(raw, label):
+    row=binding_row()
+    row.pop('opposing_odds_source')
+    row.update(book=raw, quote_bookmaker=raw, quote_binding_verified=True,
+        odds_recorded_at='2026-09-03T12:00:00Z', provider_namespace='odds_api', provider_event_id='original')
+    bound=evidence.ensure_authoritative_quote_binding(row)
+    assert bound == dict(row, book=label, quote_bookmaker=label)
