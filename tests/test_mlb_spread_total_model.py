@@ -127,3 +127,12 @@ def test_malformed_manifest_does_not_crash_analysis(trained):
 @pytest.mark.parametrize("receipt", [None, [], {"payload": []}])
 def test_malformed_receipt_rejected(receipt):
     with pytest.raises(ValueError):m.receipt_features(receipt)
+
+
+@pytest.mark.parametrize("market", m.TARGETS)
+def test_tied_final_is_not_a_betting_push(market):
+    with pytest.raises(ValueError):m.label(market,0,3,3,"FINAL")
+    assert m.label(market,0,None,None,"VOID")=="VOID"
+    assert m.label("spread_home",-2,5,3)=="PUSH"
+    assert m.label("total_over",8,5,3)=="PUSH"
+    assert m.label("spread_home",-1.5,5,3)=="WIN"
