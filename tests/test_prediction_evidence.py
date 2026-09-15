@@ -176,6 +176,7 @@ def test_live_app_captures_the_final_guarded_card(frozen, monkeypatch):
 
     def build(analysis, diagnostics_out=None):
         diagnostics_out["candidate_audit_df"] = a.copy()
+        diagnostics_out["candidate_authority_df"] = a.copy()
         return f.copy()
 
     monkeypatch.setattr(pipeline, "build_best_picks_df", build)

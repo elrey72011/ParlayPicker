@@ -1677,11 +1677,11 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
 
     # Terminal authority: evaluate every candidate, then select and allocate.
     from core.prospective_uncertainty import prepare_live
-    candidate_pool = diagnostics.get("candidate_audit_df")
+    candidate_pool = diagnostics.get("candidate_authority_df")
     if not isinstance(candidate_pool, pd.DataFrame):
         candidate_pool = pd.DataFrame()  # No substitute for a missing expanded audit.
     candidate_pool = prepare_live(candidate_pool)
-    diagnostics["candidate_audit_df"] = candidate_pool
+    diagnostics["candidate_authority_df"] = candidate_pool
     from core.live_wager_contract import finalize_live_wagers
     best_picks_df, contract_audit = finalize_live_wagers(candidate_pool, best_picks_df, float(controls["bankroll"]))
     diagnostics["wager_contract_audit"] = contract_audit
@@ -1724,8 +1724,8 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
                 if len(matches)==1:
                     for key in ('maturity','maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state','validated_evidence_family'):
                         audit.at[idx,key]=matches[0].get(key)
-            audit, saved_card = capture_run(evidence_context, audit, best_picks_df, analysis_df)
-            diagnostics["candidate_audit_df"] = audit
+            audit, saved_card = capture_run(evidence_context, audit, best_picks_df, analysis_df, authoritative_candidates=True)
+            diagnostics["candidate_authority_df"] = audit
             diagnostics["prediction_snapshot_id"] = evidence_context["snapshot_id"]
             diagnostics["prediction_snapshot_saved"] = True
             best_picks_df = saved_card

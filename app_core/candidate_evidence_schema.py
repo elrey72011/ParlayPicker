@@ -8,6 +8,52 @@ from core.wager_decisions import aware, decimal_price
 
 FIELDS = '''snapshot_id export_run_id candidate_id game_id matchup_id sport season slate_id event_date game_start_utc home_team_id away_team_id home_team away_team market_type selection line american_odds decimal_odds sportsbook odds_source odds_recorded_at quote_verified prediction_generated_at model_version model_available_at model_trained_through calibration_version calibration_available_at evidence_version evidence_frozen_at selection_policy_version sport_policy_version raw_model_probability calibrated_probability sport_calibrated_probability hierarchical_probability conservative_probability market_probability fair_market_probability edge conservative_edge expected_value conservative_ev calibration_uncertainty effective_evidence_size historical_prior_weight current_season_weight ml_context_probability ml_spread_alignment kalshi_probability consensus_agreement gemini_review_status gemini_reviewed_at gemini_input_hash identity_verified data_quality_status push_semantics_verified candidate_maturity production_eligible production_bet_amount created_process_id payload_hash candidate_rank_before_gate candidate_rank_after_gate selected_as_best_pick best_available_candidate_count decision_bundle_version provider_event_id provider_namespace candidate_pool_complete'''.split()
 
+# Owner-private authority transport, not the public wager-contract schema.
+# Reuse maturity inputs and immutable evidence fields; include adapter aliases
+# and allocation/quote/provenance inputs that neither schema alone covers.
+from core.candidate_maturity import INPUTS as MATURITY_INPUTS
+PRIVATE_AUTHORITY_FIELDS = tuple(dict.fromkeys(FIELDS + MATURITY_INPUTS + """
+unresolved_material_news gemini_status team_ids league best_pick odds_american quote_bookmaker quote_source quote_time
+quote_timestamp start commence_time game_time_est market_line_used market_line_source spread_line
+ total_line quote_binding_verified model_validated calibration_validated
+current_regime_conflict alternate alternate_quote_verified maturity
+line_consistency_flag line_event_identity_match_flag degraded_feature_subset_flag
+provider_quotes provider_ids gamePk event_id season schedule_week
+probability_semantics win_probability_unconditional loss_probability_unconditional
+push_probability model_probability gemini_review_status gemini_error
+gemini_stake_multiplier gemini_gate_reason
+""".split()))
+
+
+def authority_projection(pool, reporting_columns):
+    """Copy supplied facts from the exact expanded rows before reporting repair.
+
+    Never copy arbitrary source columns (which could contain secrets), infer
+    validation, or synthesize team IDs. Only candidate identity uses the existing
+    evidence digest when the producer did not supply an ID.
+    """
+    columns = list(dict.fromkeys(list(reporting_columns) + list(PRIVATE_AUTHORITY_FIELDS)))
+    out = pool[[c for c in columns if c in pool.columns]].copy()
+    def identity(row):
+        if not missing(row.get('candidate_id')):
+            return row['candidate_id']
+        def first(*names):
+            return next((evidence_value(row.get(k)) for k in names if not missing(row.get(k))), None)
+        # Stable exact identity, including provider namespace and quote time.
+        # A synthesized candidate key never serves as verified event identity.
+        return digest(dict(
+            game_id=first('game_id', 'matchup_id'), sport=first('sport', 'league'),
+            market_type=first('market_type'), selection=first('selection', 'best_pick'),
+            line=first('line', 'market_line_used', 'total_line' if str(row.get('market_type')).startswith('total') else 'spread_line'),
+            odds=first('odds_american', 'american_odds'),
+            book=first('book', 'sportsbook', 'quote_bookmaker', 'quote_source', 'odds_source'),
+            quote_time=first('quote_time', 'odds_recorded_at', 'quote_timestamp'),
+            provider_event_id=first('provider_event_id'), provider_namespace=first('provider_namespace'),
+            provider_ids=first('provider_ids'), snapshot_id=first('snapshot_id')))
+    out['candidate_id'] = out.apply(identity, axis=1)
+    return out
+
+
 def missing(value):
     return value is None or (not isinstance(value, (list, dict)) and bool(pd.isna(value))) or value == ''
 

@@ -236,6 +236,7 @@ def test_expanded_prepared_pool_is_evaluated_and_persisted(monkeypatch,tmp_path)
     seen={}
     monkeypatch.setattr(app,'run_analysis_pipeline',lambda **kwargs:(base.copy(),pd.DataFrame(),{}))
     def build(frame,diagnostics_out=None):
+        diagnostics_out['candidate_authority_df']=expanded.copy()
         diagnostics_out['candidate_audit_df']=expanded.copy()
         return base.copy()
     monkeypatch.setattr(sp,'build_best_picks_df',build)
@@ -259,7 +260,7 @@ def test_expanded_prepared_pool_is_evaluated_and_persisted(monkeypatch,tmp_path)
     real_begin=evidence.begin_run
     monkeypatch.setattr(evidence,'begin_run',lambda controls:real_begin(controls,path=db))
     real_capture=evidence.capture_run
-    monkeypatch.setattr(evidence,'capture_run',lambda context,audit,card,inputs:real_capture(context,audit,card,inputs,path=db))
+    monkeypatch.setattr(evidence,'capture_run',lambda context,audit,card,inputs,**kwargs:real_capture(context,audit,card,inputs,path=db,**kwargs))
     state,_,_=app._run_pipeline({'sports':['NFL'],'use_ml':False,'theover_spreads':None,
         'theover_totals':None,'bankroll':1000.,'use_gemini':False})
     assert state['diagnostics']['prediction_snapshot_saved'],state['diagnostics'].get('prediction_snapshot_error')
