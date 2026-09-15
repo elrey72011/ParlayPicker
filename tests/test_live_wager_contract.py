@@ -169,3 +169,102 @@ def test_missing_expired_policy_is_zero(tmp_path,monkeypatch):
     monkeypatch.setenv('PARLAYPICKER_WAGER_POLICY_PATH',str(p))
     policies,config,reason=load_configuration(NOW)
     assert reason and all(x.standard_stake_cap==0 for x in policies.values())
+
+
+def _bound_study(policy, config, **updates):
+    from dataclasses import replace
+    from core.exposure_ledger import digest
+    study=config['validation_results'][policy.sport]
+    study.update(updates)
+    study.pop('validation_hash',None)
+    study['validation_hash']=digest(study)
+    return replace(policy,validation_id=study['validation_hash'])
+
+
+@pytest.mark.parametrize('family,market',[('spread','spread_home'),('total','total_under')])
+def test_verified_family_populates_without_candidate_self_assertion(tmp_path,family,market):
+    from activation_fixture import setup,run
+    r,p,c=setup(tmp_path/'ledger.db')
+    r.pop('validated_evidence_family')
+    r.update(market_type=market, total_line=8.5 if family=='total' else None)
+    if family=='total':r.update(line=8.5,selection='Under 8.5',best_pick='Under 8.5')
+    p=_bound_study(p,c,market_family=family)
+    result=run(r,p,c)
+    assert result['validated_evidence_family']==family
+    assert result['production_bet_amount']>0
+
+
+@pytest.mark.parametrize('change',[
+    {'market_type':'total_over'}, {'model_version':'wrong'}, {'calibration_version':'wrong'},
+    {'evidence_version':'wrong'}, {'sport_policy_version':'wrong'}, {'selection_policy_version':'wrong'},
+    {'model_validated':None}, {'calibration_validated':None}, {'model_trained_through':None},
+    {'slate_id':'NFL:TEST:PAST'}, {'prediction_generated_at':(NOW-timedelta(days=2)).isoformat()},
+])
+def test_invalid_family_context_cannot_promote(tmp_path,change):
+    from activation_fixture import setup,run
+    r,p,c=setup(tmp_path/'ledger.db');r.update(change)
+    result=run(r,p,c)
+    assert result['production_bet_amount']==0
+    assert result['maturity'] not in {'PROVISIONAL','STANDARD','PREMIUM'}
+
+
+@pytest.mark.parametrize('failure',['missing','sport','hash','expired'])
+def test_unverified_study_cannot_supply_family(tmp_path,failure):
+    from activation_fixture import setup,run
+    r,p,c=setup(tmp_path/'ledger.db')
+    if failure=='missing':c['validation_results']={}
+    if failure=='sport':p=_bound_study(p,c,sport='NCAAF')
+    if failure=='hash':c['validation_results']['NFL']['metrics']={'price_clv_lower_95':1}
+    if failure=='expired':p=_bound_study(p,c,expires_at=NOW.isoformat())
+    result=run(r,p,c)
+    assert result['production_bet_amount']==0
+    assert result.get('validated_evidence_family') is None
+
+
+def test_eligible_alternative_and_canonical_order(tmp_path):
+    from activation_fixture import setup
+    r,p,c=setup(tmp_path/'ledger.db')
+    first=dict(r,candidate_id='first',identity_verified=False,mean_probability=.8)
+    other=dict(r,candidate_id='other',market_type='spread_away',line=2.5,spread_line=2.5,
+               selection='Away +2.5',best_pick='Away +2.5')
+    rows=pd.DataFrame([first,other])
+    out,audit=finalize_live_wagers(rows,rows.iloc[:1],1000,now=NOW,policies={'NFL':p},config=c,reviews=rows)
+    assert out.iloc[0]['candidate_id']=='other'
+    assert out.iloc[0]['best_pick']=='Away +2.5'
+    assert out.iloc[0]['production_bet_amount']>0
+    assert len(audit)==2
+    # Both eligible, deterministic ties and conservative EV take precedence.
+    first['identity_verified']=True
+    for probabilities,winner in [((.58,.60),'other'),((.60,.58),'first'),((.58,.58),'other')]:
+        first['conservative_probability'],other['conservative_probability']=probabilities
+        rows=pd.DataFrame([first,other])
+        out,_=finalize_live_wagers(rows.iloc[::-1],rows.iloc[:1],1000,now=NOW,policies={'NFL':p},config=c,reviews=rows)
+        assert out.iloc[0]['candidate_id']==winner
+    rows['identity_verified']=False
+    out,_=finalize_live_wagers(rows,rows.iloc[:1],1000,now=NOW,policies={'NFL':p},config=c,reviews=rows)
+    assert out.iloc[0]['production_bet_amount']==0
+    money=dict(other,market_type='moneyline_home',conservative_probability=.99)
+    out,audit=finalize_live_wagers(pd.concat([rows,pd.DataFrame([money])]),rows.iloc[:1],1000,now=NOW,policies={'NFL':p},config=c,reviews=rows)
+    assert out.iloc[0]['production_bet_amount']==0
+    assert len(audit)==2
+
+
+@pytest.mark.parametrize('period',['daily','weekly'])
+def test_terminal_authority_passes_absolute_period_caps(tmp_path,monkeypatch,period):
+    from dataclasses import replace
+    from activation_fixture import setup
+    import core.live_wager_contract as live
+    r,p,c=setup(tmp_path/'ledger.db')
+    c['automatic_maturity']=False
+    c['exposure'].update(total_cap=.1,daily_cap=.2,weekly_cap=.2,game_cap=.1,team_cap=.1,
+                         committed={'total':.04,period:.04})
+    c['exposure'][period+'_cap']=.05
+    p=replace(p,sport_exposure_cap=.1)
+    def decision(row,*args,**kwargs):
+        return dict(row,production_eligible=True,conservative_ev=.1,recommended_fraction=.02,
+                    strategic_action='BET NOW',reason_for_pass=[])
+    monkeypatch.setattr(live,'candidate_decision',decision)
+    rows=pd.DataFrame([r])
+    out,_=live.finalize_live_wagers(rows,rows,1000,now=NOW,policies={'NFL':p},config=c)
+    assert out.iloc[0]['production_bet_amount']==pytest.approx(10.)
+    assert c['exposure']['committed']=={'total':.04,period:.04}

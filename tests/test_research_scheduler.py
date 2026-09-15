@@ -202,3 +202,26 @@ def test_mlb_schedule_dates_cover_midnight_without_entire_season(monkeypatch):
     assert calls[0]['startDate']=='2026-09-11'
     assert calls[0]['endDate']=='2026-09-12'
     assert 'season' not in calls[0]
+
+
+def test_activation_workflow_aliases_window_and_independence():
+    from pathlib import Path
+    import yaml
+    workflow = yaml.safe_load(Path('.github/workflows/research-scheduler.yml').read_text())
+    jobs = workflow['jobs']
+    job = jobs['activation-evidence']
+    assert 'needs' not in job
+    for alias in ('ODDS_API_KEY', 'THE_ODDS_API_KEY'):
+        assert job['env'][alias] == '${{ secrets.ODDS_API_KEY }}'
+    for name in ('research', 'activation-evidence'):
+        steps = jobs[name]['steps']
+        check = next(s for s in steps if s.get('id') == 'window')
+        assert 'scripts/research_schedule_window.py' in check['run']
+        for step in steps:
+            command = step.get('run', '')
+            if any(token in command for token in ('pip install','prediction_evidence.py','bootstrap_evidence.py','run_research_scheduler.py')):
+                assert "steps.window.outputs.active == 'true'" in step['if']
+                # The literal comparison admits true and rejects false.
+                for active, eligible in [('true', True), ('false', False)]:
+                    assert (active == 'true') is eligible
+    assert workflow.get('on', workflow.get(True))['schedule'] == [{'cron':'15,45 0-7,15-23 * * *'}]

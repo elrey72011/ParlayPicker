@@ -33,6 +33,7 @@ google-genai
 vaderSentiment>=3.3.2
 
 # Utils
+PyYAML>=6.0,<7
 rapidfuzz>=3.0.0
 pytz>=2023.3
 

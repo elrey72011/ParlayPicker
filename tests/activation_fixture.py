@@ -15,6 +15,12 @@ def setup(path):
     p=SportPolicy('NFL','TEST-ONLY-v1',validation_id='TEST-ONLY-NFL-PROVISIONAL-001',deployment_state='PROVISIONAL_VALIDATED',provisional_allowed=True,provisional_stake_cap=.0025,kelly_fraction=.1,sport_exposure_cap=.03)
     r=dict(sport='NFL',league='NFL',game_id='one',matchup_id='one',home_team='Home',away_team='Away',market_type='spread_home',line=-2.5,spread_line=-2.5,selection='Home -2.5',best_pick='Home -2.5',team_ids=['home','away'],odds_american=-110,book='DraftKings',conservative_probability=.58,mean_probability=.62,identity_verified=True,exact_quote_verified=True,start=(NOW+timedelta(hours=3)).isoformat(),quote_time=(NOW-timedelta(minutes=5)).isoformat(),prediction_generated_at=NOW.isoformat(),model_trained_through=(NOW-timedelta(days=2)).isoformat(),model_available_at=(NOW-timedelta(days=1)).isoformat(),calibration_available_at=(NOW-timedelta(days=1)).isoformat(),selection_policy_version='s1',sport_policy_version='TEST-ONLY-v1',evidence_version='e1',model_validated=True,model_version='m1',calibration_validated=True,calibration_version='c1',evidence_frozen_at=(NOW-timedelta(days=1)).isoformat(),evidence_snapshot_id='TEST-ONLY',evidence_effective_sample_size=30,critical_feature_error=False,gemini_review_status='APPROVE',calibration_uncertainty=.02,prior_clv_lower=.01,current_regime_conflict=False,validated_evidence_family='spread')
     cfg={'automatic_maturity':True,'exposure':snapshot(path,now=NOW),'validation_results':{'NFL':{'validation_through':(NOW-timedelta(days=1)).isoformat(),'validation_slates':['NFL:TEST:PAST'],'metrics':{'price_clv_lower_95':.01},'market_family':'spread','versions':{'model_version':'m1','calibration_version':'c1','selection_policy_version':'s1','sport_policy_version':'TEST-ONLY-v1','evidence_version':'e1'},'supported_policy':{'exposure_limits':{'total_cap':.05,'daily_cap':.05,'weekly_cap':.1,'game_cap':.01,'team_cap':.01},'maturity_rules':{'PROVISIONAL':{'max_uncertainty':.05,'min_prior_clv':0}}}}}}
+    r['slate_id']='NFL:TEST:FUTURE'
+    validation=cfg['validation_results']['NFL']
+    validation.update(sport='NFL', deployment_state=p.deployment_state,
+                      expires_at=(NOW+timedelta(days=1)).isoformat())
+    validation['validation_hash']=digest(validation)
+    p=replace(p,validation_id=validation['validation_hash'])
     return r,p,cfg
 
 def run(row,policy,config):

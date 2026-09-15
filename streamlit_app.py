@@ -1677,9 +1677,13 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
 
     # Terminal authority: evaluate every candidate, then select and allocate.
     from core.prospective_uncertainty import prepare_live
-    analysis_df = prepare_live(analysis_df)
+    candidate_pool = diagnostics.get("candidate_audit_df")
+    if not isinstance(candidate_pool, pd.DataFrame):
+        candidate_pool = pd.DataFrame()  # No substitute for a missing expanded audit.
+    candidate_pool = prepare_live(candidate_pool)
+    diagnostics["candidate_audit_df"] = candidate_pool
     from core.live_wager_contract import finalize_live_wagers
-    best_picks_df, contract_audit = finalize_live_wagers(analysis_df, best_picks_df, float(controls["bankroll"]))
+    best_picks_df, contract_audit = finalize_live_wagers(candidate_pool, best_picks_df, float(controls["bankroll"]))
     diagnostics["wager_contract_audit"] = contract_audit
     funded_mask=best_picks_df.get("production_eligible",pd.Series(False,index=best_picks_df.index)).fillna(False).astype(bool)
     diagnostics["final_actionable_count"]=int(funded_mask.sum())
@@ -1703,7 +1707,6 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     timer.start("Save prediction evidence")
     try:
         from app_core.prediction_evidence import capture_run
-        from core.streamlit_pipeline import _sync_selected_candidate_audit
         if evidence_context is not None:
             loaded = diagnostics.get("loaded_model_identity", {})
             if loaded:
@@ -1711,12 +1714,15 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
                 model_name = model_path.relative_to(ROOT).as_posix()
                 if loaded.get("sha256") != evidence_context["manifest"]["artifacts"].get(model_name):
                     raise ValueError("Loaded model differs from the frozen artifact; restart analysis with the current model")
-            audit, _ = _sync_selected_candidate_audit(diagnostics.get("candidate_audit_df"), best_picks_df)
+            audit = candidate_pool.copy()
+            selected_ids = set(best_picks_df.get("candidate_id", pd.Series(dtype=object)).dropna())
+            audit["best_available_selected"] = audit["candidate_id"].isin(selected_ids)
+            audit["selected_as_best_pick"] = audit["best_available_selected"]
             # Exact-candidate private maturity audit; no public schema changes.
             for idx, candidate in audit.iterrows():
-                matches=[c for c in contract_audit if str(c.get('game_id'))==str(candidate.get('game_id',candidate.get('matchup_id'))) and c.get('market_type')==candidate.get('market_type') and c.get('selection')==candidate.get('best_pick') and c.get('odds')==candidate.get('odds_american')]
+                matches=[c for c in contract_audit if c.get('candidate_id') == candidate.get('candidate_id')]
                 if len(matches)==1:
-                    for key in ('maturity','maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state'):
+                    for key in ('maturity','maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state','validated_evidence_family'):
                         audit.at[idx,key]=matches[0].get(key)
             audit, saved_card = capture_run(evidence_context, audit, best_picks_df, analysis_df)
             diagnostics["candidate_audit_df"] = audit

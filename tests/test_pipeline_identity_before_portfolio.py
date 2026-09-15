@@ -216,3 +216,60 @@ def test_controlled_value_recovery_rejects_low_probability_plus_money_rows(monke
     assert not out["wager_approved"].any()
     assert state["diagnostics"]["empty_card_recovery_candidate_count"] == 0
     assert state["diagnostics"]["empty_card_recovery_promoted_count"] == 0
+
+
+def test_expanded_prepared_pool_is_evaluated_and_persisted(monkeypatch,tmp_path):
+    import sqlite3
+    from io import StringIO
+    from activation_fixture import setup,NOW
+    from app_core import prediction_evidence as evidence
+    from core import live_wager_contract as authority
+    r,policy,config=setup(tmp_path/'ledger.db')
+    r.update(game_date='2026-09-14',game_start_utc=r['start'],calibrated_probability=.62,
+             expected_value=.1,edge=.1,line_consistency_flag=True,line_event_identity_match_flag=True,
+             market_line_source='live',market_line_used=-2.5,Pick_Status='PASS',odds_source='DraftKings',
+             best_available_candidate_count=2,best_available_selected=True,candidate_id='original')
+    alternative=dict(r,candidate_id='expanded',market_type='spread_away',line=2.5,spread_line=2.5,
+                     market_line_used=2.5,selection='Away +2.5',best_pick='Away +2.5',best_available_selected=False)
+    r['identity_verified']=False
+    base=pd.DataFrame([r]);expanded=pd.DataFrame([r,alternative])
+    seen={}
+    monkeypatch.setattr(app,'run_analysis_pipeline',lambda **kwargs:(base.copy(),pd.DataFrame(),{}))
+    def build(frame,diagnostics_out=None):
+        diagnostics_out['candidate_audit_df']=expanded.copy()
+        return base.copy()
+    monkeypatch.setattr(sp,'build_best_picks_df',build)
+    monkeypatch.setattr(app,'optimize_portfolio_allocation',lambda *args,**kwargs:pd.DataFrame())
+    monkeypatch.setattr(app,'generate_parlays',lambda *args,**kwargs:pd.DataFrame())
+    monkeypatch.setattr(app,'run_bankroll_simulation',lambda *args,**kwargs:{})
+    monkeypatch.setattr(app,'_enrich_with_kalshi_safe',lambda df:(df,None))
+    monkeypatch.setattr(app,'_recompute_consensus_from_kalshi',lambda df,require_ml=False:df)
+    def prepare(frame):
+        assert set(frame.candidate_id)=={'original','expanded'}
+        frame=frame.copy();frame['evidence_snapshot_id']=frame.candidate_id.map(lambda x:'prepared-'+x)
+        seen['prepared']=frame.copy()
+        return frame
+    monkeypatch.setattr('core.prospective_uncertainty.prepare_live',prepare)
+    real_finalize=authority.finalize_live_wagers
+    def finalize(frame,best,bankroll):
+        assert frame.evidence_snapshot_id.tolist()==['prepared-original','prepared-expanded']
+        return real_finalize(frame,best,bankroll,now=NOW,policies={'NFL':policy},config=config,reviews=frame)
+    monkeypatch.setattr(authority,'finalize_live_wagers',finalize)
+    db=tmp_path/'evidence.sqlite3'
+    real_begin=evidence.begin_run
+    monkeypatch.setattr(evidence,'begin_run',lambda controls:real_begin(controls,path=db))
+    real_capture=evidence.capture_run
+    monkeypatch.setattr(evidence,'capture_run',lambda context,audit,card,inputs:real_capture(context,audit,card,inputs,path=db))
+    state,_,_=app._run_pipeline({'sports':['NFL'],'use_ml':False,'theover_spreads':None,
+        'theover_totals':None,'bankroll':1000.,'use_gemini':False})
+    assert state['diagnostics']['prediction_snapshot_saved'],state['diagnostics'].get('prediction_snapshot_error')
+    with sqlite3.connect(db) as conn:
+        saved=pd.read_csv(StringIO(conn.execute('SELECT candidates FROM snapshots').fetchone()[0]))
+    assert set(saved.candidate_id)=={'original','expanded'}
+    indexed=saved.set_index('candidate_id')
+    assert indexed.loc['expanded','evidence_snapshot_id']=='prepared-expanded'
+    assert indexed.loc['original','market_type']=='spread_home'
+    assert indexed.loc['expanded','market_type']=='spread_away'
+    assert bool(indexed.loc['expanded','best_available_selected'])
+    assert not bool(indexed.loc['original','best_available_selected'])
+    assert state['best_picks_df'].iloc[0]['candidate_id']=='expanded'
