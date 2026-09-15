@@ -4750,6 +4750,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_ranking_verified", "best_available_rejection_reason",
     ]
     from app_core.candidate_evidence_schema import authority_projection
+    # Verify the exact expanded candidate before private evidence projection.
+    from app_core.mlb_spread_total_model import attach_challenger
+    pool = attach_challenger(pool)
     candidate_authority_df = authority_projection(pool, candidate_audit_columns).rename(
         columns={"_market_family": "market_family"}
     )
@@ -7243,6 +7246,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             "best_available_candidate_audit_rows": int(len(candidate_audit_df)),
         }
         diagnostics_out["candidate_authority_df"] = candidate_authority_df
+        diagnostics_out["mlb_challenger_status_counts"] = candidate_authority_df["mlb_challenger_status"].value_counts().to_dict()
         diagnostics_out["candidate_audit_df"] = candidate_audit_df
         diagnostics_out["best_available_selection_verified"] = bool(selection_invariant_mismatches == 0)
         diagnostics_out["best_available_selection_mismatch_count"] = int(selection_invariant_mismatches)
