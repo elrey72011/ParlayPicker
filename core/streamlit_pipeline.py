@@ -4191,6 +4191,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             )
             from core.probability_calibration import (
                 load_calibration as _load_selection_calibration,
+                calibration_provenance as _selection_calibration_provenance,
             )
 
             _selection_bucket_stats = _load_selection_bucket_stats()
@@ -4203,16 +4204,25 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 now=_slate_as_of_timestamp(pool),
             )
             if _selection_bucket_stats and _selection_bucket_stats_fresh:
+                _selection_calibration = _load_selection_calibration()
                 _empirical_prob = empirical_selection_probabilities(
                     pool,
                     _selection_bucket_stats,
-                    _load_selection_calibration(),
+                    _selection_calibration,
                     prob_col="calibrated_probability",
                 )
                 _usable_empirical = _empirical_prob.notna()
                 pool.loc[_usable_empirical, "_selection_probability"] = (
                     _empirical_prob.loc[_usable_empirical]
                 )
+                # Record only the artifact actually consumed by this selection
+                # probability. The upstream blend is not a trained calibration.
+                _calibration_facts = _selection_calibration_provenance(_selection_calibration)
+                for _field in ("calibration_version", "calibration_trained_through", "calibration_available_at"):
+                    if _field not in pool:
+                        pool[_field] = pd.Series(None, index=pool.index, dtype=object)
+                    pool.loc[_usable_empirical, _field] = _calibration_facts.get(_field)
+                pool.loc[_usable_empirical, "calibration_probability_field"] = "selection_probability_used"
                 # Every family now uses the same calibrated + bounded empirical
                 # decision scale before sides and totals are compared.
                 pool.loc[

@@ -186,3 +186,42 @@ def test_structured_wager_metadata_dedup_preserves_conflicts(frozen):
     changed['wager_contract'] = [{'production_eligible': True, 'reasons': []} for _ in range(len(changed))]
     result = build_readiness(audit, pd.concat([final, changed]))
     assert 'final_decision_missing_or_ambiguous' in result['games'][0]['evidence_blockers']
+
+
+@pytest.mark.parametrize('change,expected', [
+    ({},None),
+    ({'model_trained_through':'invalid'},'model_provenance_missing'),
+    ({'model_available_at':'2026-09-04T00:00:00Z'},'model_provenance_timing_invalid'),
+    ({'model_trained_through':'2026-09-04T00:00:00Z'},'model_provenance_timing_invalid'),
+])
+def test_authoritative_provenance_readiness_uses_only_supplied_facts(frozen,change,expected):
+    context,db,_=frozen
+    audit,final=fixture_frames()
+    audit['candidate_id']=['over','under'];final['candidate_id']=['over']
+    facts=dict(model_version='synthetic-trained-artifact-sha256',model_trained_through='2026-09-01T00:00:00Z',
+        model_available_at='2026-09-02T00:00:00Z',training_cutoff_basis='max game_start_utc in test-only data')
+    facts.update(change)
+    for field,value in facts.items():audit[field]=value
+    evidence.capture_run(context,audit,final,audit,path=db,authoritative_candidates=True)
+    _,saved,card=evidence.load_snapshots(db)[0]
+    blocks=build_readiness(saved,card)['games'][0]['evidence_blockers']
+    if expected:assert expected in blocks
+    else:assert 'model_provenance_missing' not in blocks
+    for field,value in facts.items():assert saved[field].eq(value).all()
+    assert saved.calibration_version.isna().all()
+    assert saved.calibration_available_at.isna().all()
+    from core.activation_validation import reasons
+    assert 'missing_calibration_version' in reasons(saved.iloc[0].to_dict())
+    assert 'calibration_not_available' in reasons(saved.iloc[0].to_dict())
+
+
+def test_missing_authoritative_model_calibration_is_not_bundle_provenance(frozen):
+    context,db,_=frozen
+    audit,final=fixture_frames()
+    audit['candidate_id']=['over','under'];final['candidate_id']=['over']
+    evidence.capture_run(context,audit,final,audit,path=db,authoritative_candidates=True)
+    _,saved,card=evidence.load_snapshots(db)[0]
+    assert saved.decision_bundle_version.eq(context['model_version']).all()
+    for field in ('model_version','model_trained_through','model_available_at','calibration_version','calibration_available_at'):
+        assert saved[field].isna().all()
+    assert 'model_provenance_missing' in build_readiness(saved,card)['games'][0]['evidence_blockers']
