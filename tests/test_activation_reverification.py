@@ -98,3 +98,197 @@ def test_prospective_uncertainty_cannot_use_same_slate_or_other_sport():
     assert value['conservative_probability']<=.6
     assert value['current_season_weight']==1
     assert value['uncertainty_status']=='PROSPECTIVE_ESTIMATE_NOT_DEPLOYMENT_AUTHORITY'
+
+
+@pytest.fixture
+def strict_close_snapshot(tmp_path, monkeypatch, request):
+    """Persist through capture_run and load through the real immutable reader."""
+    from datetime import timedelta
+    from activation_fixture import NOW
+    from app_core import prediction_evidence as pe
+    root = tmp_path / 'repo'
+    root.mkdir()
+    monkeypatch.setattr(pe, 'now_utc', lambda: (NOW-timedelta(minutes=20)).isoformat())
+    database = tmp_path / 'closing.db'
+    context = pe.begin_run({}, path=database, root=root)
+    book = getattr(request, 'param', 'DraftKings')
+    row = dict(candidate_id='close-candidate', game_id='game-123', matchup_id='game-123',
+        sport='NFL', league='NFL', home_team='Indianapolis Colts', away_team='Baltimore Ravens',
+        game_date=NOW.date().isoformat(), game_start_utc=(NOW+timedelta(minutes=10)).isoformat(),
+        market_type='spread_home', best_pick='Indianapolis Colts -2.5', spread_line=-2.5,
+        market_line_used=-2.5, odds_american=-110, quote_bookmaker=book,
+        quote_binding_verified=True, odds_recorded_at=(NOW-timedelta(minutes=20)).isoformat(),
+        provider_namespace='odds_api', provider_event_id='provider:123',
+        best_available_selected=True, best_available_candidate_count=1, wager_approved=False)
+    frame = pd.DataFrame([row])
+    pe.capture_run(context, frame, frame, frame, path=database, authoritative_candidates=True)
+    candidate = pe.load_snapshots(database)[0][1].iloc[0].to_dict()
+    assert candidate['quote_bookmaker'] == book
+    return database, candidate
+
+
+def test_strict_close_saved_canonical_raw_provider_e2e(strict_close_snapshot):
+    import json
+    from activation_fixture import NOW
+    from app_core.activation_closing import capture_live, observations
+    from app_core.prediction_evidence import load_snapshots
+    database, candidate = strict_close_snapshot
+    before = load_snapshots(database)[0][1].copy(deep=True)
+    q = dict(book='draftkings', provider_namespace='odds_api', provider_event_id='provider:123',
+        market_type='spread_home', point=-3., price=-120, recorded_at=NOW.isoformat())
+    live = pd.DataFrame([dict(matchup_id='game-123', provider_quotes=json.dumps([q]))])
+    raw_before = live.copy(deep=True)
+    result = capture_live(database, fetch=lambda sports: live, now=NOW)
+    assert result == {'verified':1, 'unavailable':0, 'reasons':{}}, result
+    stored, = observations(database)
+    assert stored['candidate_id'] == candidate['candidate_id']
+    assert stored['snapshot_id'] == candidate['snapshot_id']
+    assert stored['quote']['sportsbook'] == 'DraftKings'
+    assert stored['quote']['provider_namespace'] == 'odds_api'
+    assert stored['quote']['provider_event_id'] == 'provider:123'
+    assert stored['quote']['quote_recorded_at'] == q['recorded_at']
+    assert stored['quote_verified'] is True
+    pd.testing.assert_frame_equal(live, raw_before)
+    pd.testing.assert_frame_equal(load_snapshots(database)[0][1], before)
+
+
+@pytest.mark.parametrize('strict_close_snapshot,raw', [
+    ('DraftKings','draftkings'), ('FanDuel','fanduel'), ('BetMGM','betmgm'),
+    ('Novig','novig'), ('Novig','novig_us'), ('DraftKings','DraftKings'),
+], indirect=['strict_close_snapshot'])
+def test_strict_closing_book_representations(strict_close_snapshot, raw):
+    import json
+    from activation_fixture import NOW
+    from app_core.activation_closing import capture_live, observations
+    database, c = strict_close_snapshot
+    q = dict(book=raw, provider_namespace=c['provider_namespace'], provider_event_id=c['provider_event_id'],
+        market_type=c['market_type'], point=-3., price=-120, recorded_at=NOW.isoformat())
+    live = pd.DataFrame([dict(matchup_id=c['matchup_id'], provider_quotes=json.dumps([q]))])
+    original = live.copy(deep=True)
+    assert capture_live(database, fetch=lambda _: live, now=NOW) == {'verified':1,'unavailable':0,'reasons':{}}
+    stored, = observations(database)
+    assert stored['quote']['sportsbook'] == c['quote_bookmaker']
+    assert stored['quote']['provider_event_id'] == c['provider_event_id']
+    pd.testing.assert_frame_equal(original, live)
+
+
+@pytest.mark.parametrize('change,reason', [
+    ({'book':'fanduel'}, 'missing_or_ambiguous_exact_quote'),
+    ({'book':'Caesars'}, 'missing_or_ambiguous_exact_quote'),
+    ({'book':'DK'}, 'missing_or_ambiguous_exact_quote'),
+    ({'provider_namespace':'espn'}, 'missing_or_ambiguous_exact_quote'),
+    ({'provider_event_id':'different'}, 'missing_or_ambiguous_exact_quote'),
+    ({'market_type':'spread_away'}, 'missing_or_ambiguous_exact_quote'),
+    ({'wrong_matchup':True}, 'missing_or_ambiguous_exact_quote'),
+    ({'missing':True}, 'missing_or_ambiguous_exact_quote'),
+    ({'ambiguous':True}, 'missing_or_ambiguous_exact_quote'),
+    ({'minutes':-31}, 'invalid_or_stale_close'),
+    ({'minutes':10}, 'invalid_or_stale_close'),
+    ({'recorded_at':'invalid'}, 'invalid_or_stale_close'),
+])
+def test_strict_close_rejects_non_book_failures(strict_close_snapshot, change, reason):
+    import json
+    from datetime import timedelta
+    from activation_fixture import NOW
+    from app_core.activation_closing import capture_live, observations
+    database, c = strict_close_snapshot
+    q = dict(book='draftkings', provider_namespace=c['provider_namespace'], provider_event_id=c['provider_event_id'],
+        market_type=c['market_type'], point=-3., price=-120, recorded_at=NOW.isoformat())
+    q.update(change)
+    if 'minutes' in change:
+        q['recorded_at'] = (NOW+timedelta(minutes=change['minutes'])).isoformat()
+    quotes = [] if change.get('missing') else [q]
+    if change.get('ambiguous'):
+        quotes.append(dict(q, book='DraftKings', price=-125))
+    live = pd.DataFrame([dict(matchup_id='wrong' if change.get('wrong_matchup') else c['matchup_id'], provider_quotes=json.dumps(quotes))])
+    assert capture_live(database, fetch=lambda _: live, now=NOW) == {'verified':0,'unavailable':1,'reasons':{reason:1}}
+    assert observations(database) == []
+
+
+def test_record_close_normalizes_without_mutation_and_preserves_clv(strict_close_snapshot):
+    from copy import deepcopy
+    from activation_fixture import NOW
+    from app_core.activation_closing import record_close, observations
+    from core.clv import line_clv, price_clv
+    database, c = strict_close_snapshot
+    original = deepcopy(c)
+    q = dict(game_id=c['game_id'], sport=c['sport'], market_type=c['market_type'],
+        sportsbook='draftkings', provider_namespace=c['provider_namespace'], provider_event_id=c['provider_event_id'],
+        quote_recorded_at=NOW.isoformat(), line=-2.5, price=-120)
+    raw = deepcopy(q)
+    key = record_close(database, c, q, captured_at=NOW.isoformat())
+    # Equivalent representation produces the same immutable record, not a duplicate.
+    assert record_close(database, c, dict(q,sportsbook='DraftKings'), captured_at=NOW.isoformat()) == key
+    first, = observations(database)
+    assert first['quote']['sportsbook'] == 'DraftKings'
+    assert first['line_clv'] == line_clv(c['market_type'],-2.5,-2.5) == 0
+    assert first['price_clv'] == price_clv(-110,-120)
+    assert first['beat_close'] is True
+    # Also accept a historical raw candidate identity without rewriting that candidate.
+    record_close(database, dict(c,quote_bookmaker='draftkings'), dict(q,line=-3.), captured_at=NOW.isoformat())
+    stored = observations(database)
+    assert len(stored) == 2 and stored[0] == first
+    assert stored[1]['line_clv'] == line_clv(c['market_type'],-2.5,-3.) == .5
+    assert stored[1]['price_clv'] is None and stored[1]['beat_close'] is True
+    assert q == raw
+    assert c.keys() == original.keys()
+    assert c['quote_bookmaker'] == original['quote_bookmaker']
+
+
+@pytest.mark.parametrize('field,value', [
+    ('sportsbook','FanDuel'), ('sportsbook','DK'), ('game_id','other'), ('sport','MLB'),
+    ('market_type','spread_away'), ('provider_event_id','other'), ('provider_namespace','espn'),
+])
+def test_record_close_identity_guards(strict_close_snapshot, field, value):
+    from activation_fixture import NOW
+    from app_core.activation_closing import record_close, observations
+    database, c = strict_close_snapshot
+    q = dict(game_id=c['game_id'], sport=c['sport'], market_type=c['market_type'],
+        sportsbook='draftkings', provider_namespace=c['provider_namespace'], provider_event_id=c['provider_event_id'],
+        quote_recorded_at=NOW.isoformat(), line=-3., price=-120)
+    q[field] = value
+    with pytest.raises(ValueError, match='Closing provider namespace|Closing identity/book mismatch'):
+        record_close(database, c, q, captured_at=NOW.isoformat())
+    assert observations(database) == []
+
+
+def test_closing_observations_are_append_only_and_digest_checked(strict_close_snapshot):
+    import sqlite3
+    from contextlib import closing
+    from activation_fixture import NOW
+    from app_core.activation_closing import record_close, observations
+    from app_core.prediction_evidence import connect
+    database, c = strict_close_snapshot
+    q = dict(game_id=c['game_id'], sport=c['sport'], market_type=c['market_type'],
+        sportsbook='draftkings', provider_namespace=c['provider_namespace'], provider_event_id=c['provider_event_id'],
+        quote_recorded_at=NOW.isoformat(), line=-3., price=-120)
+    record_close(database, c, q, captured_at=NOW.isoformat())
+    with closing(connect(database)) as db:
+        for sql in ('DELETE FROM closing_observations', "UPDATE closing_observations SET payload='{}'"):
+            with pytest.raises(sqlite3.IntegrityError, match='append-only'):
+                db.execute(sql)
+        # A corrupt newly inserted payload cannot pass the reader's digest check.
+        with db:
+            db.execute('INSERT INTO closing_observations VALUES (?,?,?,?)', ('invalid-digest',c['snapshot_id'],c['candidate_id'],'{}'))
+    with pytest.raises(ValueError, match='Closing payload changed'):
+        observations(database)
+
+
+def test_verified_quotes_cli_normalizes_books(strict_close_snapshot, tmp_path, capsys):
+    import json
+    from datetime import datetime, timedelta, timezone
+    from scripts.capture_closing_lines import main
+    from app_core.activation_closing import observations
+    database, c = strict_close_snapshot
+    now = datetime.now(timezone.utc)
+    c = dict(c,game_start_utc=(now+timedelta(minutes=10)).isoformat())
+    q = dict(game_id=c['game_id'], sport=c['sport'], market_type=c['market_type'],
+        sportsbook='draftkings', provider_namespace=c['provider_namespace'], provider_event_id=c['provider_event_id'],
+        quote_recorded_at=now.isoformat(), line=-3., price=-120)
+    export = tmp_path/'export.csv'; quotes = tmp_path/'quotes.json'
+    pd.DataFrame([c]).to_csv(export,index=False)
+    quotes.write_text(json.dumps([q]),encoding='utf-8')
+    assert main(['--export',str(export),'--verified-quotes',str(quotes),'--database',str(database)]) == 0
+    assert 'Verified closing observations: 1; unavailable: 0' in capsys.readouterr().out
+    assert observations(database)[0]['quote']['sportsbook'] == 'DraftKings'
+    assert json.loads(quotes.read_text(encoding='utf-8')) == [q]

@@ -134,10 +134,11 @@ def main(argv=None) -> int:
         import json
         from datetime import datetime,timezone
         from app_core.activation_closing import record_close
+        from app_core.public_quote_policy import canonical_book_label
         quotes=json.loads(open(args.verified_quotes,encoding='utf-8').read())
         saved=0;unavailable=0
         for candidate in export_df.to_dict('records'):
-            matches=[q for q in quotes if q.get('game_id')==candidate.get('game_id') and q.get('market_type')==candidate.get('market_type') and q.get('sportsbook')==candidate.get('quote_bookmaker')]
+            matches=[q for q in quotes if q.get('game_id')==candidate.get('game_id') and q.get('market_type')==candidate.get('market_type') and canonical_book_label(q.get('sportsbook'))==canonical_book_label(candidate.get('quote_bookmaker'))]
             if len(matches)!=1:unavailable+=1;continue
             try:record_close(args.database,candidate,matches[0],captured_at=datetime.now(timezone.utc).isoformat());saved+=1
             except ValueError:unavailable+=1
