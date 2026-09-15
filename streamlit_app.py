@@ -1680,6 +1680,8 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     candidate_pool = diagnostics.get("candidate_authority_df")
     if not isinstance(candidate_pool, pd.DataFrame):
         candidate_pool = pd.DataFrame()  # No substitute for a missing expanded audit.
+    from app_core.prediction_evidence import bind_authoritative_candidates
+    candidate_pool = bind_authoritative_candidates(candidate_pool)
     candidate_pool = prepare_live(candidate_pool)
     diagnostics["candidate_authority_df"] = candidate_pool
     from core.live_wager_contract import finalize_live_wagers

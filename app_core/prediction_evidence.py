@@ -171,6 +171,88 @@ def bind_quote(row):
             "provider_event_id": matches[0].get("provider_event_id"), "provider_namespace": matches[0].get("provider_namespace")}
 
 
+def ensure_authoritative_quote_binding(row):
+    """Preserve a consistent binding, otherwise use the existing exact matcher.
+
+    No clock, network, validation promotion or market/price mutation. Canonical
+    quote facts and the aliases consumed by terminal authority must agree.
+    """
+    from core.wager_decisions import aware, finite
+    from app_core.candidate_evidence_schema import missing
+    out = dict(row)
+    def present(key):
+        return not missing(out.get(key))
+    def book(value):
+        name = str(value).strip().casefold()
+        return 'novig' if name in {'novig', 'novig_us'} else name
+    def reject():
+        out.update(quote_binding_verified=False, quote_verified=False, exact_quote_verified=False)
+        return out
+    family_line = 'total_line' if str(out.get('market_type', '')).startswith('total') else 'spread_line'
+    line = finite(out.get(family_line))
+    price = finite(out.get('odds_american'))
+    if price is None or abs(price) < 100 or (not str(out.get('market_type', '')).startswith('moneyline') and line is None):
+        return reject()
+    if any(present(k) and finite(out[k]) != line for k in ('line', 'market_line_used')):
+        return reject()
+    books = {book(out[k]) for k in ('book', 'sportsbook', 'quote_bookmaker', 'quote_source') if present(k)}
+    # odds_source may identify a feed rather than a sportsbook.
+    for k in ('odds_source',):
+        if present(k) and book(out[k]) in {'novig', 'draftkings', 'fanduel', 'betmgm'}:
+            books.add(book(out[k]))
+    if not books and present('opposing_odds_source'):
+        preferred = book(out['opposing_odds_source'])
+        if preferred in {'novig', 'draftkings', 'fanduel', 'betmgm'}:
+            books.add(preferred)
+    if len(books) > 1:
+        return reject()
+    times = [aware(out[k]) for k in ('quote_time', 'odds_recorded_at', 'quote_timestamp') if present(k)]
+    if any(t is None for t in times) or len(set(times)) > 1:
+        return reject()
+    identities = [present('provider_event_id'), present('provider_namespace')]
+    if any(identities) and not all(identities):
+        return reject()
+    if (out.get('quote_binding_verified') is True and present('quote_bookmaker')
+            and aware(out.get('odds_recorded_at')) is not None):
+        return out
+    candidate = dict(out)
+    # Restrict the existing matcher to the candidate's supplied book/provider;
+    # never let an opposing-book alias select a different candidate's quote.
+    try:
+        quotes = json.loads(out.get('provider_quotes') or '[]')
+    except (ValueError, TypeError):
+        quotes = []
+    if not isinstance(quotes, list):
+        quotes = []
+    quotes = [q for q in quotes if isinstance(q, dict)
+              and (not books or book(q.get('book', '')) in books)
+              and all(not present(k) or str(q.get(k)) == str(out[k])
+                      for k in ('provider_event_id', 'provider_namespace'))]
+    candidate['provider_quotes'] = json.dumps(quotes)
+    if books:
+        candidate['opposing_odds_source'] = next(iter(books))
+    binding = bind_quote(candidate)
+    if not binding['quote_binding_verified']:
+        return reject()
+    if times and aware(binding['odds_recorded_at']) != times[0]:
+        return reject()
+    if bool(binding.get('provider_event_id')) != bool(binding.get('provider_namespace')):
+        return reject()
+    out.update(binding)
+    out['quote_verified'] = True  # Canonical alias of the newly verified binding.
+    # Fill only absent adapter aliases. Explicit integrity vetoes stay false.
+    if not present('exact_quote_verified'):
+        out['exact_quote_verified'] = True
+    return out
+
+
+def bind_authoritative_candidates(frame):
+    """Apply the same deterministic binding before preparation and at capture."""
+    if frame.empty:
+        return frame.copy()
+    return pd.DataFrame([ensure_authoritative_quote_binding(r) for r in frame.to_dict('records')], index=frame.index)
+
+
 def capture_run(context, audit, final, inputs, *, path=None, authoritative_candidates=False):
     """Commit inputs, candidates and the final guarded card in one transaction."""
     from core.selector_validation import join_final_selections, text_column, timestamp
@@ -180,9 +262,10 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
     if audit is None or audit.empty or final is None or final.empty:
         raise ValueError("Cannot capture an empty candidate audit or final card")
     audit, final = audit.copy(), final.copy()
-    # Canonical prepared candidates must not inherit reporting repairs or have
-    # their already-evaluated quote/provenance rebound during persistence.
-    prepared_facts = audit.copy() if authoritative_candidates else None
+    # Source facts first; metadata and canonical derivation follow. There is no
+    # post-derivation restoration that could erase facts with projected nulls.
+    if authoritative_candidates:
+        audit = bind_authoritative_candidates(audit)
     generated = now_utc()
     run_id = pd.Timestamp(generated).strftime("%Y%m%dT%H%M%S.%fZ")
     audit["export_run_id"], final["export_run_id"] = run_id, run_id
@@ -226,11 +309,11 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
         frame["decision_bundle_version"] = context["model_version"]
         # Preserve original trainer provenance when supplied. The legacy frozen
         # artifact upper bound remains descriptive and is excluded by activation.
-        if "model_version" not in frame: frame["model_version"] = context["model_version"]
-        if "model_trained_through" not in frame:
+        if not authoritative_candidates and "model_version" not in frame: frame["model_version"] = context["model_version"]
+        if not authoritative_candidates and "model_trained_through" not in frame:
             frame["model_trained_through"] = context["frozen_at"]
             frame["training_cutoff_basis"] = "frozen_artifact_information_upper_bound"
-        if "model_available_at" not in frame: frame["model_available_at"] = context["frozen_at"]
+        if not authoritative_candidates and "model_available_at" not in frame: frame["model_available_at"] = context["frozen_at"]
     for idx, row in audit.iterrows():
         for col, value in ({} if authoritative_candidates else bind_quote(row)).items():
             audit.at[idx, col] = value
@@ -239,24 +322,25 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
         no_push = kind.startswith("moneyline") or (pd.notna(line) and abs(line % 1 - .5) < 1e-8)
         from core.probability_semantics import conditional_probabilities
         explicit_push = str(row.get("probability_semantics", "")) == "win_unconditional_with_push" and conditional_probabilities(row) is not None
+        explicit_conditional = (authoritative_candidates and str(row.get("probability_semantics")) == "win_conditional_on_decision"
+                                and conditional_probabilities(row) is not None)
         audit.at[idx, "probability_semantics"] = (
+            "win_conditional_on_decision" if explicit_conditional else
             "win_unconditional_with_push" if explicit_push else
             "win_conditional_on_decision" if no_push else "push_semantics_unverified"
         )
         from core.line_evidence import line_rejected
         rejected = line_rejected(row)
         audit.at[idx, "final_line_rejected"] = rejected
-        if pd.isna(timestamp(row.get("game_start_utc"))):
+        from core.wager_decisions import aware
+        missing_start = (aware(row.get("game_start_utc")) is None if authoritative_candidates
+                         else pd.isna(timestamp(row.get("game_start_utc"))))
+        if missing_start:
             try:
                 start = pd.to_datetime(str(row.get("game_time_est", "")).replace(" ET", ""), format="%Y-%m-%d %I:%M %p")
                 audit.at[idx, "game_start_utc"] = start.tz_localize("America/New_York", ambiguous="raise", nonexistent="raise").tz_convert("UTC").isoformat()
             except (ValueError, TypeError):
                 audit.at[idx, "game_start_utc"] = ""
-    if authoritative_candidates:
-        from app_core.candidate_evidence_schema import PRIVATE_AUTHORITY_FIELDS
-        for column in PRIVATE_AUTHORITY_FIELDS:
-            if column in prepared_facts and column not in {'snapshot_id', 'export_run_id', 'created_process_id', 'decision_bundle_version'}:
-                audit[column] = prepared_facts[column]
     for idx, row in final.iterrows():
         if authoritative_candidates:
             matched = audit[audit.candidate_id.eq(row.get('candidate_id'))]

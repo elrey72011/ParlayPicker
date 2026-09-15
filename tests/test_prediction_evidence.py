@@ -293,3 +293,173 @@ def test_review_metadata_survives_capture_and_grading(frozen):
     report = review_comparison(graded)
     assert report.Selections.tolist() == [1, 1]
     assert report.Wins.tolist() == [1, 1]
+
+
+@pytest.mark.parametrize('field,expected', [
+    ('quote_binding_verified', True),
+    ('probability_semantics', 'win_conditional_on_decision'),
+    ('game_start_utc', '2026-09-03T23:00:00+00:00'),
+])
+def test_authoritative_binding_and_derived_fields_survive(frozen, field, expected):
+    from app_core.candidate_evidence_schema import project
+    context, db, _ = frozen
+    a, f = fixture_frames()
+    a['candidate_id'] = ['over', 'under']
+    a['game_start_utc'] = None
+    a['game_time_est'] = '2026-09-03 07:00 PM'
+    a['probability_semantics'] = None
+    prepared = project(a)
+    f = prepared[prepared.best_available_selected].copy()
+    saved, _ = evidence.capture_run(context, prepared, f, a, path=db, authoritative_candidates=True)
+    assert saved.iloc[0][field] == expected
+
+
+def binding_row():
+    a, _ = fixture_frames()
+    row = a.iloc[0].to_dict()
+    row.update(book='novig', provider_quotes=json.dumps([dict(book='novig',
+        market_type='total_over', point=8.5, price=-110,
+        recorded_at='2026-09-03T14:00:00Z', provider_event_id='evt', provider_namespace='odds_api')]))
+    return row
+
+
+def test_preserve_complete_binding_without_rebinding():
+    row = binding_row()
+    row.update(quote_binding_verified=True, odds_recorded_at='2026-09-03T13:59:00Z',
+        quote_bookmaker='novig', provider_event_id='original', provider_namespace='odds_api')
+    assert evidence.ensure_authoritative_quote_binding(row) == row
+
+
+def test_bind_unique_exact_quote_uses_provider_time():
+    row = binding_row()
+    bound = evidence.ensure_authoritative_quote_binding(row)
+    assert bound['quote_binding_verified'] is True
+    assert bound['odds_recorded_at'] == '2026-09-03T14:00:00+00:00'
+    assert bound['quote_bookmaker'] == 'novig'
+    assert bound['provider_event_id'] == 'evt'
+    assert bound['provider_namespace'] == 'odds_api'
+    assert evidence.ensure_authoritative_quote_binding(bound) == bound
+    assert 'model_validated' not in bound and 'calibration_validated' not in bound
+    for key in ('odds_american', 'total_line', 'book'):
+        assert bound[key] == row[key]
+
+
+@pytest.mark.parametrize('change', [
+    {'total_line':9.5}, {'odds_american':-120}, {'book':'draftkings'},
+    {'provider_quotes':'[]'}, {'provider_event_id':'wrong', 'provider_namespace':'odds_api'},
+    {'quote_time':'2026-09-03T13:59:00Z'}, {'line':9.5},
+])
+def test_binding_mismatch_or_missing_fails_closed(change):
+    row = dict(binding_row(), **change)
+    row['exact_quote_verified'] = True  # Cannot bypass a failed canonical binding.
+    bound = evidence.ensure_authoritative_quote_binding(row)
+    assert bound['quote_binding_verified'] is False
+    assert bound['exact_quote_verified'] is False
+
+
+def test_ambiguous_quotes_do_not_choose_a_provider():
+    row = binding_row()
+    quotes = json.loads(row['provider_quotes'])
+    quotes.append(dict(quotes[0], provider_event_id='second'))
+    row['provider_quotes'] = json.dumps(quotes)
+    bound = evidence.ensure_authoritative_quote_binding(row)
+    assert bound['quote_binding_verified'] is False
+    assert not bound.get('odds_recorded_at')
+    assert not bound.get('provider_event_id')
+
+
+@pytest.mark.parametrize('semantics,push', [('win_unconditional_with_push', .1), ('win_conditional_on_decision', 0)])
+def test_authoritative_explicit_facts_and_capture_metadata(frozen, semantics, push):
+    from app_core.candidate_evidence_schema import project
+    context, db, _ = frozen
+    a, _ = fixture_frames()
+    a['candidate_id'] = ['over', 'under']
+    a['probability_semantics'] = semantics
+    a['push_probability'] = push
+    a['market_push_probability'] = push
+    a['model_validated'] = False
+    a['critical_feature_error'] = False
+    a['prior_clv_lower'] = 0
+    for key in ('snapshot_id','export_run_id','created_process_id','decision_bundle_version'):
+        a[key] = 'cannot_override_capture'
+    prepared = project(a)
+    f = prepared[prepared.best_available_selected].copy()
+    saved, _ = evidence.capture_run(context, prepared, f, a, path=db, authoritative_candidates=True)
+    row = saved.iloc[0]
+    assert row['probability_semantics'] == semantics
+    assert row['game_start_utc'] == '2026-09-03T23:00:00Z'
+    assert not bool(row['model_validated']) and not bool(row['critical_feature_error'])
+    assert row['prior_clv_lower'] == 0
+    assert row['push_probability'] == push
+    assert row['snapshot_id'] == context['snapshot_id']
+    assert row['created_process_id'] == evidence.PROCESS_INSTANCE
+    assert row['decision_bundle_version'] == context['model_version']
+    assert row['export_run_id'] != 'cannot_override_capture'
+
+
+@pytest.mark.parametrize('control', ['ambiguous', 'stale', 'validation', 'policy', 'moneyline', 'veto', 'legacy'])
+def test_bound_quote_does_not_create_wager_authority(tmp_path, control):
+    from activation_fixture import setup, NOW
+    from dataclasses import replace
+    from core.live_wager_contract import finalize_live_wagers
+    row, policy, config = setup(tmp_path/'ledger.db')
+    row.update(odds_source='DraftKings', provider_quotes=json.dumps([dict(book='draftkings',
+        market_type='spread_home', point=-2.5, price=-110,
+        recorded_at=row['quote_time'], provider_namespace='odds_api', provider_event_id='one')]))
+    if control == 'ambiguous':
+        row['provider_quotes'] = json.dumps(json.loads(row['provider_quotes'])*2)
+    elif control == 'stale':
+        row['quote_time'] = '2026-09-14T13:00:00+00:00'
+        quotes=json.loads(row['provider_quotes']);quotes[0]['recorded_at']=row['quote_time'];row['provider_quotes']=json.dumps(quotes)
+    elif control == 'validation': row['model_validated'] = False
+    elif control == 'policy': policy=replace(policy,deployment_state='UNVALIDATED')
+    elif control == 'moneyline': row['market_type']='moneyline_home'
+    elif control == 'veto': row['gemini_review_status']='HARD_VETO'
+    elif control == 'legacy': row.update(model_validated=False, Pick_Status='APPROVED', wager_approved=True)
+    bound=evidence.ensure_authoritative_quote_binding(row)
+    frame=pd.DataFrame([bound])
+    result,_=finalize_live_wagers(frame,frame,1000,now=NOW,policies={'NFL':policy},config=config,reviews=frame)
+    assert result.iloc[0]['production_bet_amount'] == 0
+
+
+@pytest.mark.parametrize('null', [None, float('nan'), pd.NA, ''])
+def test_projected_null_derivation_keeps_false_zero_and_binding(frozen, null):
+    from app_core.candidate_evidence_schema import project
+    context, db, _ = frozen
+    a, _ = fixture_frames()
+    a['candidate_id'] = ['over', 'under']
+    a['game_start_utc'] = null
+    a['game_time_est'] = '2026-09-03 07:00 PM'
+    a['probability_semantics'] = null
+    a['quote_binding_verified'] = False
+    a['critical_feature_error'] = False
+    a['push_probability'] = 0
+    prepared = project(a)
+    f=prepared[prepared.best_available_selected].copy()
+    saved,_=evidence.capture_run(context,prepared,f,a,path=db,authoritative_candidates=True)
+    assert bool(saved.iloc[0]['quote_verified'])
+    assert bool(saved.iloc[0]['quote_binding_verified'])
+    assert saved.iloc[0]['probability_semantics'] == 'win_conditional_on_decision'
+    assert saved.iloc[0]['game_start_utc'] == '2026-09-03T23:00:00+00:00'
+    assert not bool(saved.iloc[0]['critical_feature_error'])
+    assert saved.iloc[0]['push_probability'] == 0
+
+
+def test_binding_without_provider_timestamp_does_not_invent_time():
+    row=binding_row()
+    quotes=json.loads(row['provider_quotes']);quotes[0].pop('recorded_at')
+    quotes[0]['observed_at']='2026-09-03T14:00:00Z'
+    row['provider_quotes']=json.dumps(quotes)
+    assert evidence.ensure_authoritative_quote_binding(row)['quote_binding_verified'] is False
+
+
+def test_own_verified_book_is_not_replaced_by_opposing_price_source():
+    row=binding_row()
+    row.update(quote_binding_verified=True, odds_recorded_at='2026-09-03T14:00:00Z',
+               quote_bookmaker='novig', opposing_odds_source='draftkings')
+    assert evidence.ensure_authoritative_quote_binding(row) == row
+    row['quote_binding_verified']=False
+    bound=evidence.ensure_authoritative_quote_binding(row)
+    assert bound['quote_binding_verified'] is True
+    assert bound['quote_bookmaker'] == 'novig'
+    assert bound['opposing_odds_source'] == 'draftkings'
