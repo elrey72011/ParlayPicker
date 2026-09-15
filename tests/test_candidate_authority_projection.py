@@ -1,4 +1,5 @@
 """Real expanded production shape, with test-only policy and exposure."""
+import json
 import pandas as pd
 import pytest
 from dataclasses import replace
@@ -12,6 +13,10 @@ def source(tmp_path):
                calibrated_probability=.62, model_probability=.62, expected_value=.1,
                edge=.1, market_probability=.5, odds_source='DraftKings',
                line_source='live', market_line_source='live', candidate_id='original')
+    row['provider_quotes'] = json.dumps([
+        dict(book='draftkings', market_type=kind, point=line, price=-110,
+             recorded_at=row['quote_time'], provider_event_id='one', provider_namespace='odds_api')
+        for kind, line in [('spread_home', -2.5), ('spread_away', 2.5)]])
     return row, policy, config
 
 
@@ -124,11 +129,20 @@ def test_private_contract_covers_adapter_and_gate_inputs():
     assert required <= set(PRIVATE_AUTHORITY_FIELDS)
 
 
-def test_real_builder_through_live_pipeline(tmp_path, monkeypatch):
+@pytest.mark.parametrize('fallback_start', [False, True])
+def test_real_builder_through_live_pipeline(tmp_path, monkeypatch, fallback_start):
     import streamlit_app as app
     from app_core import prediction_evidence as evidence
     from core import live_wager_contract as authority, prospective_uncertainty as uncertainty
     row, policy, config = source(tmp_path)
+    # Raw provider data, no prebound canonical quote fields.
+    row.pop('exact_quote_verified')
+    row.pop('quote_time')
+    if fallback_start:
+        row.pop('game_start_utc')
+        row.pop('start')
+        row['game_time_est'] = '2026-09-14 02:00 PM'
+        row['probability_semantics'] = None
     monkeypatch.setattr('core.empirical_tiers.load_bucket_stats', lambda: {})
     monkeypatch.setattr('core.probability_calibration.load_calibration', lambda: None)
     monkeypatch.setattr(app, 'run_analysis_pipeline', lambda **kwargs: (pd.DataFrame([row]), pd.DataFrame(), {}))
@@ -140,6 +154,8 @@ def test_real_builder_through_live_pipeline(tmp_path, monkeypatch):
     real_prepare = uncertainty.prepare_live
     def prepare(frame):
         assert frame.iloc[0]['team_ids'] == row['team_ids']
+        assert frame.iloc[0]['quote_binding_verified'] is True or bool(frame.iloc[0]['quote_binding_verified'])
+        assert frame.iloc[0]['odds_recorded_at'] == '2026-09-14T14:55:00+00:00'
         return real_prepare(frame, database=tmp_path/'prior.db', plan_dir=tmp_path/'plans', now=NOW)
     monkeypatch.setattr(uncertainty, 'prepare_live', prepare)
     real_finalize = authority.finalize_live_wagers
@@ -152,9 +168,24 @@ def test_real_builder_through_live_pipeline(tmp_path, monkeypatch):
         'theover_totals':None, 'bankroll':1000., 'use_gemini':False})
     diag = state['diagnostics']
     assert diag['prediction_snapshot_saved'], diag.get('prediction_snapshot_error')
-    assert state['best_picks_df'].iloc[0]['production_bet_amount'] == 2.5
+    if not fallback_start:
+        assert state['best_picks_df'].iloc[0]['production_bet_amount'] == 2.5
     assert diag['candidate_authority_df'].iloc[0]['team_ids'] == row['team_ids']
     assert set(diag['candidate_audit_df'].candidate_id) == set(diag['candidate_authority_df'].candidate_id)
+    import sqlite3
+    from io import StringIO
+    with sqlite3.connect(tmp_path/'saved.db') as db:
+        stored = pd.read_csv(StringIO(db.execute('SELECT candidates FROM snapshots').fetchone()[0])).iloc[0]
+    assert stored['candidate_id'] == row['candidate_id']
+    assert bool(stored['quote_binding_verified'])
+    assert stored['quote_bookmaker'] == 'draftkings'
+    assert stored['odds_recorded_at'] == '2026-09-14T14:55:00+00:00'
+    assert stored['provider_event_id'] == 'one'
+    assert stored['provider_namespace'] == 'odds_api'
+    assert stored['game_start_utc'] == '2026-09-14T18:00:00+00:00'
+    assert stored['probability_semantics'] == 'win_conditional_on_decision'
+    for field in ('model_version', 'calibration_version', 'model_trained_through', 'model_available_at', 'calibration_available_at'):
+        assert stored[field] == row[field]
 
 
 def test_generated_identity_includes_exact_book_and_quote():
@@ -168,3 +199,15 @@ def test_generated_identity_includes_exact_book_and_quote():
     assert frame.candidate_id.nunique() == 3
     reverse = authority_projection(pd.DataFrame(rows[::-1]), [])
     assert list(frame.candidate_id) == list(reverse.candidate_id)[::-1]
+
+
+def test_real_private_frame_retains_push_semantics_support(tmp_path, monkeypatch):
+    from core.probability_semantics import conditional_probabilities
+    row, _, _ = source(tmp_path)
+    row.update(probability_semantics='win_unconditional_with_push', push_probability=.1,
+               market_push_probability=.1)
+    _, diag = build([row], monkeypatch)
+    candidate = diag['candidate_authority_df'].iloc[0]
+    assert candidate['market_push_probability'] == .1
+    assert candidate['probability_semantics'] == row['probability_semantics']
+    assert conditional_probabilities(candidate) is not None

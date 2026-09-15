@@ -20,7 +20,7 @@ current_regime_conflict alternate alternate_quote_verified maturity
 line_consistency_flag line_event_identity_match_flag degraded_feature_subset_flag
 provider_quotes provider_ids gamePk event_id season schedule_week
 probability_semantics win_probability_unconditional loss_probability_unconditional
-push_probability model_probability gemini_review_status gemini_error
+push_probability market_push_probability model_probability gemini_review_status gemini_error
 gemini_stake_multiplier gemini_gate_reason
 """.split()))
 

@@ -231,6 +231,11 @@ def test_expanded_prepared_pool_is_evaluated_and_persisted(monkeypatch,tmp_path)
              best_available_candidate_count=2,best_available_selected=True,candidate_id='original')
     alternative=dict(r,candidate_id='expanded',market_type='spread_away',line=2.5,spread_line=2.5,
                      market_line_used=2.5,selection='Away +2.5',best_pick='Away +2.5',best_available_selected=False)
+    import json
+    quotes=json.dumps([dict(book='draftkings', market_type=kind, point=line, price=-110,
+                           recorded_at=r['quote_time'], provider_event_id='one', provider_namespace='odds_api')
+                       for kind,line in [('spread_home',-2.5),('spread_away',2.5)]])
+    r['provider_quotes']=quotes;alternative['provider_quotes']=quotes
     r['identity_verified']=False
     base=pd.DataFrame([r]);expanded=pd.DataFrame([r,alternative])
     seen={}
