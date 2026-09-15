@@ -310,7 +310,13 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
 
     for frame in (audit, final):
         frame["snapshot_id"] = context["snapshot_id"]
-        if "prediction_generated_at" not in frame: frame["prediction_generated_at"] = generated
+        if "prediction_generated_at" not in frame:
+            frame["prediction_generated_at"] = generated
+        else:
+            from app_core.candidate_evidence_schema import missing
+            # Capture time fills absent facts only; never repair nonblank producer values.
+            values = frame["prediction_generated_at"].astype(object)
+            frame["prediction_generated_at"] = values.where(~values.map(missing), generated)
         frame["created_process_id"] = PROCESS_INSTANCE
         frame["decision_bundle_version"] = context["model_version"]
         # Preserve original trainer provenance when supplied. The legacy frozen
