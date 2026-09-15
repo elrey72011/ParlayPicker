@@ -178,7 +178,7 @@ def test_real_builder_through_live_pipeline(tmp_path, monkeypatch, fallback_star
         stored = pd.read_csv(StringIO(db.execute('SELECT candidates FROM snapshots').fetchone()[0])).iloc[0]
     assert stored['candidate_id'] == row['candidate_id']
     assert bool(stored['quote_binding_verified'])
-    assert stored['quote_bookmaker'] == 'draftkings'
+    assert stored['quote_bookmaker'] == 'DraftKings'
     assert stored['odds_recorded_at'] == '2026-09-14T14:55:00+00:00'
     assert stored['provider_event_id'] == 'one'
     assert stored['provider_namespace'] == 'odds_api'
@@ -211,3 +211,29 @@ def test_real_private_frame_retains_push_semantics_support(tmp_path, monkeypatch
     assert candidate['market_push_probability'] == .1
     assert candidate['probability_semantics'] == row['probability_semantics']
     assert conditional_probabilities(candidate) is not None
+
+
+def test_raw_provider_no_book_reaches_terminal_policy(tmp_path, monkeypatch):
+    from app_core.prediction_evidence import bind_authoritative_candidates
+    from app_core.public_quote_policy import supported_quote
+    from core.live_wager_contract import adapt_candidate, finalize_live_wagers
+    from core.prospective_uncertainty import prepare_live
+    row, policy, config = source(tmp_path)
+    row.pop('book')
+    row.pop('exact_quote_verified')
+    row.pop('quote_time')
+    row['odds_source'] = 'odds_api'
+    assert 'quote_bookmaker' not in row
+    best, diag = build([row], monkeypatch)
+    bound = bind_authoritative_candidates(diag['candidate_authority_df'])
+    adapted = adapt_candidate(bound.iloc[0].to_dict())
+    assert supported_quote({'sport':'NFL','quote_source':adapted['book']}), adapted
+    assert bound.iloc[0]['quote_bookmaker'] == 'DraftKings'
+    assert adapted['book'] == 'DraftKings'
+    assert adapted['exact_quote_verified'] is True
+    prepared = prepare_live(bound, database=tmp_path/'prior.db', plan_dir=tmp_path/'plans', now=NOW)
+    final, _ = finalize_live_wagers(prepared, best, 1000, now=NOW,
+        policies={'NFL':policy}, config=config, reviews=prepared)
+    assert 'invalid_exact_price' not in str(final.iloc[0]['production_gate_reason'])
+    assert final.iloc[0]['production_bet_amount'] == 2.5
+    assert bound.iloc[0]['provider_quotes'] == row['provider_quotes']
