@@ -7329,6 +7329,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
         ]
 
     game_dict = {}
+    mlb_receipt_health = {}
     for sk in sport_keys:
         games = []
         try:
@@ -7367,6 +7368,17 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
             sport_games = games if date else filter_games_today_only(games)
             if not sport_games:
                 continue
+
+            if sk == "baseball_mlb" and date is None:
+                # Original provider objects, before candidate expansion/reporting repair.
+                from app_core.mlb_pregame_receipts import capture_live_games
+                try:
+                    sport_games, mlb_receipt_health = capture_live_games(sport_games)
+                except Exception as exc:
+                    # Research display must survive collector/storage failures.
+                    mlb_receipt_health = {"receipts_created": 0, "receipts_skipped": len(sport_games)*4,
+                                          "reasons": {"collector_unavailable": 1}}
+                    logger.warning("MLB receipt collection unavailable: %s", type(exc).__name__)
 
             for game in sport_games:
                 matchup_id = game.get('matchup_id')
@@ -7423,6 +7435,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                     }
 
                 row = game_dict[matchup_id]
+                for field in ("home_team_id", "away_team_id", "team_ids", "provider_ids", "mlb_provider_event_id"):
+                    if field in game:
+                        row[field] = game[field]
                 from app_core.prediction_evidence import provider_quotes
                 row["provider_quotes"] = provider_quotes(game)
 
@@ -7466,7 +7481,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
     if not game_dict:
         return pd.DataFrame()
 
-    return pd.DataFrame(list(game_dict.values()))
+    result = pd.DataFrame(list(game_dict.values()))
+    result.attrs["mlb_receipt_health"] = mlb_receipt_health
+    return result
 
 def _fmt_odds_token(v):
     """Format a spread point or moneyline price for the raw-odds diagnostic string:
@@ -8123,6 +8140,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     id_cols = [
         "league", "home_team", "away_team", "game_date", "matchup_id",
         "commence_time_raw", "odds_feed_source", "provider_quotes",
+        "home_team_id", "away_team_id", "team_ids", "provider_ids", "mlb_provider_event_id",
     ]
     # Check for game_time_est if exists
     if "game_time_est" in live_odds_df.columns:
@@ -9240,6 +9258,7 @@ def run_analysis_pipeline(
 
     # 2. Expand TheOdds API into the Master Slate dynamically using theover_rows
     live_odds_df = fetch_live_odds_dataframe(sports)
+    mlb_receipt_health = live_odds_df.attrs.get("mlb_receipt_health", {})
 
     if not live_odds_df.empty:
         live_odds_df = _normalize_identity_strings(live_odds_df, ["league", "home_team", "away_team"])
@@ -10451,6 +10470,7 @@ def run_analysis_pipeline(
         finally:
              analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
 
+    diagnostics["mlb_receipt_health"] = mlb_receipt_health
     diagnostics["loaded_model_identity"] = loaded_model_identity
     return (analysis_df, best_picks_df, diagnostics)
 

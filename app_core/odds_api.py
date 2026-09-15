@@ -128,6 +128,14 @@ class TheOddsAPIClient:
                 games_data = data
 
             if isinstance(games_data, list):
+                # Genuine response observation, retained across transformations/caches.
+                # Historical/date-requested responses never acquire a live receipt time.
+                if sport_key == "baseball_mlb" and date is None and "/historical/" not in url:
+                    from datetime import timezone
+                    observed_at = datetime.now(timezone.utc).isoformat()
+                    for game in games_data:
+                        game["live_receipt_observed_at"] = observed_at
+                        game["live_receipt_price_format"] = self.oddsFormat
                 all_data.extend(games_data)
             else:
                 return games_data

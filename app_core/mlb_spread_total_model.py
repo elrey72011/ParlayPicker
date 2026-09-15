@@ -125,7 +125,7 @@ def label(market, line, home, away, status="FINAL"):
     if status != "FINAL":
         raise ValueError("unsettled target")
     h, a, line = finite(home), finite(away), finite(line)
-    if min(h, a) < 0 or h != int(h) or a != int(a):
+    if min(h, a) < 0 or h != int(h) or a != int(a) or h == a:
         raise ValueError("invalid final score")
     delta = {"spread_home": h-a+line, "spread_away": a-h+line,
              "total_over": h+a-line, "total_under": line-h-a}[market]
