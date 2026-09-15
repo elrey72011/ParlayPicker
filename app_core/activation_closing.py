@@ -4,13 +4,16 @@ from contextlib import closing
 from core.exposure_ledger import digest
 from core.wager_decisions import aware,finite,decimal_price
 from core.clv import line_clv,price_clv
+from app_core.public_quote_policy import canonical_book_label
 
 def record_close(database,candidate,quote,*,captured_at):
+    # Normalize the closing record, never the caller's raw quote or saved candidate.
+    quote = dict(quote, sportsbook=canonical_book_label(quote.get('sportsbook')))
     start=aware(candidate.get('game_start_utc'));at=aware(quote.get('quote_recorded_at'));capture=aware(captured_at)
     if None in (start,at,capture) or not at<=capture<start or not 0<(start-at).total_seconds()<=1800 or (capture-at).total_seconds()>1800: raise ValueError('Not a verified pregame closing observation')
     if candidate.get('provider_namespace') not in {'odds_api','espn','mlb'} or candidate.get('provider_namespace')!=quote.get('provider_namespace'): raise ValueError('Closing provider namespace missing or different')
     for key in ('game_id','sport','market_type','sportsbook','provider_event_id'):
-        source=candidate.get('quote_bookmaker') if key=='sportsbook' else candidate.get(key)
+        source=canonical_book_label(candidate.get('quote_bookmaker')) if key=='sportsbook' else candidate.get(key)
         if not source or source!=quote.get(key):raise ValueError('Closing identity/book mismatch')
     # Exact direction is market_type, selected-team identity is immutable game ID + direction.
     if decimal_price(quote.get('price')) is None or finite(quote.get('line')) is None:raise ValueError('Invalid close')
@@ -60,14 +63,14 @@ def capture_live(database, *, fetch=None, now=None):
             for q in json.loads(row.get('provider_quotes') or '[]'):
                 if (q.get('provider_namespace') and q.get('provider_namespace') == r.get('provider_namespace')
                     and q.get('provider_event_id') == r.get('provider_event_id')
-                    and q.get('book') == r.get('quote_bookmaker') and q.get('market_type') == r.get('market_type')):
+                    and canonical_book_label(q.get('book')) == canonical_book_label(r.get('quote_bookmaker')) and q.get('market_type') == r.get('market_type')):
                     matching.append(q)
         if len(matching) != 1:
             blocked['missing_or_ambiguous_exact_quote'] = blocked.get('missing_or_ambiguous_exact_quote',0)+1
             continue
         q = matching[0]
         quote = dict(game_id=r['game_id'], sport=r['sport'], market_type=r['market_type'],
-                     sportsbook=q['book'], provider_event_id=q['provider_event_id'],
+                     sportsbook=canonical_book_label(q.get('book')), provider_event_id=q['provider_event_id'],
                      provider_namespace=q['provider_namespace'], quote_recorded_at=q.get('recorded_at'),
                      line=q.get('point'), price=q.get('price'))
         try:
