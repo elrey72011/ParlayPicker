@@ -1763,6 +1763,14 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     return state_updates, deferred_warnings, deferred_errors
 
 
+def _publication_candidates(diagnostics):
+    """Use the captured card's candidate frame without rebuilding its evidence."""
+    candidates = diagnostics.get("candidate_authority_df")
+    if not isinstance(candidates, pd.DataFrame) or candidates.empty:
+        candidates = diagnostics.get("candidate_audit_df")
+    return candidates
+
+
 def main() -> None:
     from app.ui.analysis_dashboard import render_analysis
     try:
@@ -1971,7 +1979,7 @@ def main() -> None:
         # even before today's analysis has produced a game board.
         with publish_tab:
             from app.ui.publish_panel import render_publish_panel
-            render_publish_panel(publication_games, diagnostics.get("candidate_audit_df"), publication_props, publication_dfs)
+            render_publish_panel(publication_games, _publication_candidates(diagnostics), publication_props, publication_dfs)
         saved_props = st.session_state.get("strikeout_prop_card", pd.DataFrame())
         if not saved_props.empty:
             with tab3:
@@ -3399,7 +3407,7 @@ def main() -> None:
 
     with publish_tab:
         from app.ui.publish_panel import render_publish_panel
-        render_publish_panel(publication_games, diagnostics.get("candidate_audit_df"), publication_props, publication_dfs)
+        render_publish_panel(publication_games, _publication_candidates(diagnostics), publication_props, publication_dfs)
 
     with tab4:
         st.subheader("Best Parlays")
