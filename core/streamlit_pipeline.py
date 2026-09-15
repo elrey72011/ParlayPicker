@@ -4739,6 +4739,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_candidate_count", "best_available_selection_verified",
         "best_available_ranking_verified", "best_available_rejection_reason",
     ]
+    from app_core.candidate_evidence_schema import authority_projection
+    candidate_authority_df = authority_projection(pool, candidate_audit_columns).rename(
+        columns={"_market_family": "market_family"}
+    )
+    # Shared exact identity; the reporting copy may subsequently be repaired.
+    pool["candidate_id"] = candidate_authority_df["candidate_id"]
+    candidate_audit_columns.append("candidate_id")
     audit_available_columns = [col for col in candidate_audit_columns if col in pool.columns]
     candidate_audit_df = pool[audit_available_columns].copy().rename(
         columns={"_market_family": "market_family"}
@@ -6991,7 +6998,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     from app_core.prediction_evidence import PROVENANCE_COLUMNS
     evidence_columns = [c for c in PROVENANCE_COLUMNS if c in best and c not in BEST_PICK_COLUMNS]
-    final_best_df = best[BEST_PICK_COLUMNS + evidence_columns].copy()
+    identity_columns = [c for c in ("candidate_id", "game_id")
+                        if c in best and c not in BEST_PICK_COLUMNS + evidence_columns]
+    final_best_df = best[BEST_PICK_COLUMNS + evidence_columns + identity_columns].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
     # Neutralize any lone research-only fallback before diagnostics and synchronize
     # the selected audit row to the exact line/pick/value that will be exported.
@@ -7223,6 +7232,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             "best_available_selection_mismatch_count": int(selection_invariant_mismatches),
             "best_available_candidate_audit_rows": int(len(candidate_audit_df)),
         }
+        diagnostics_out["candidate_authority_df"] = candidate_authority_df
         diagnostics_out["candidate_audit_df"] = candidate_audit_df
         diagnostics_out["best_available_selection_verified"] = bool(selection_invariant_mismatches == 0)
         diagnostics_out["best_available_selection_mismatch_count"] = int(selection_invariant_mismatches)

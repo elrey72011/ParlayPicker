@@ -171,7 +171,7 @@ def bind_quote(row):
             "provider_event_id": matches[0].get("provider_event_id"), "provider_namespace": matches[0].get("provider_namespace")}
 
 
-def capture_run(context, audit, final, inputs, *, path=None):
+def capture_run(context, audit, final, inputs, *, path=None, authoritative_candidates=False):
     """Commit inputs, candidates and the final guarded card in one transaction."""
     from core.selector_validation import join_final_selections, text_column, timestamp
 
@@ -180,6 +180,9 @@ def capture_run(context, audit, final, inputs, *, path=None):
     if audit is None or audit.empty or final is None or final.empty:
         raise ValueError("Cannot capture an empty candidate audit or final card")
     audit, final = audit.copy(), final.copy()
+    # Canonical prepared candidates must not inherit reporting repairs or have
+    # their already-evaluated quote/provenance rebound during persistence.
+    prepared_facts = audit.copy() if authoritative_candidates else None
     generated = now_utc()
     run_id = pd.Timestamp(generated).strftime("%Y%m%dT%H%M%S.%fZ")
     audit["export_run_id"], final["export_run_id"] = run_id, run_id
@@ -197,7 +200,10 @@ def capture_run(context, audit, final, inputs, *, path=None):
 
     selected = audit[text_column(audit, "best_available_selected").str.lower().isin(["true", "1"])]
     for idx, row in final.iterrows():
-        matches = selected[selected.apply(key, axis=1).map(lambda value: value == key(row))]
+        if authoritative_candidates:
+            matches = selected[selected['candidate_id'].eq(row.get('candidate_id'))]
+        else:
+            matches = selected[selected.apply(key, axis=1).map(lambda value: value == key(row))]
         # Include day to avoid joining separate slates of the same matchup.
         day = str(row.get("game_date", ""))[:10]
         matches = matches[text_column(matches, "game_date").str[:10].eq(day)]
@@ -210,7 +216,7 @@ def capture_run(context, audit, final, inputs, *, path=None):
                        "gemini_approved", "gemini_flags", "gemini_agreement", "gemini_reviewed_at", "gemini_review_model", "gemini_review_input_hash", "gemini_verified_context", "gemini_supporting_evidence", "gemini_missing_information", "gemini_explanation", "production_gate_reason",
                        "market_line_used", "market_line_source", "line_consistency_flag",
                        "line_event_identity_match_flag", "line_provenance_warning"):
-            if column in final:
+            if column in final and not authoritative_candidates:
                 audit.at[ai, column] = row[column]
 
     for frame in (audit, final):
@@ -226,7 +232,7 @@ def capture_run(context, audit, final, inputs, *, path=None):
             frame["training_cutoff_basis"] = "frozen_artifact_information_upper_bound"
         if "model_available_at" not in frame: frame["model_available_at"] = context["frozen_at"]
     for idx, row in audit.iterrows():
-        for col, value in bind_quote(row).items():
+        for col, value in ({} if authoritative_candidates else bind_quote(row)).items():
             audit.at[idx, col] = value
         kind = str(row.get("market_type", ""))
         line = pd.to_numeric(row.get("total_line" if kind.startswith("total") else "spread_line"), errors="coerce")
@@ -246,8 +252,16 @@ def capture_run(context, audit, final, inputs, *, path=None):
                 audit.at[idx, "game_start_utc"] = start.tz_localize("America/New_York", ambiguous="raise", nonexistent="raise").tz_convert("UTC").isoformat()
             except (ValueError, TypeError):
                 audit.at[idx, "game_start_utc"] = ""
+    if authoritative_candidates:
+        from app_core.candidate_evidence_schema import PRIVATE_AUTHORITY_FIELDS
+        for column in PRIVATE_AUTHORITY_FIELDS:
+            if column in prepared_facts and column not in {'snapshot_id', 'export_run_id', 'created_process_id', 'decision_bundle_version'}:
+                audit[column] = prepared_facts[column]
     for idx, row in final.iterrows():
-        matched = audit[audit.matchup_id.eq(row.matchup_id) & audit.market_type.eq(row.market_type) & audit.best_pick.eq(row.best_pick)]
+        if authoritative_candidates:
+            matched = audit[audit.candidate_id.eq(row.get('candidate_id'))]
+        else:
+            matched = audit[audit.matchup_id.eq(row.matchup_id) & audit.market_type.eq(row.market_type) & audit.best_pick.eq(row.best_pick)]
         if len(matched) != 1:
             raise ValueError("Ambiguous candidate identity in final card")
         for col in PROVENANCE_COLUMNS:

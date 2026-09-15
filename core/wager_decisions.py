@@ -214,6 +214,8 @@ def allocate_exposure(decisions, bankroll, *, total_cap, game_cap, sport_caps, c
         requested = max(0.0, finite(row.get("recommended_fraction")) or 0.0)
         if not valid_teams:
             requested = 0.0
+            row = dict(row, production_gate_reason=(str(row.get('production_gate_reason') or '')
+                       + '; missing_stable_team_ids').strip('; '))
         if not production_market(row.get("market_type")) or row.get("strategic_action") not in {"BET NOW", "BET ALT LINE", "REDUCE"} or row.get("reason_for_pass"):
             requested = 0.0
         stake = max(0.0, min([requested] + [limit - used.get(key, 0) for key, limit in keys.items()]))
