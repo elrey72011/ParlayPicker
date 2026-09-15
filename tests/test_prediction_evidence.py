@@ -540,3 +540,52 @@ def test_prebound_book_normalizes_without_changing_quote(raw, label):
         odds_recorded_at='2026-09-03T12:00:00Z', provider_namespace='odds_api', provider_event_id='original')
     bound=evidence.ensure_authoritative_quote_binding(row)
     assert bound == dict(row, book=label, quote_bookmaker=label)
+
+
+@pytest.mark.parametrize('value', ['absent', None, '', float('nan'), pd.NA, pd.NaT,
+    '2026-09-03T14:30:00+00:00', 'not-a-timestamp'], ids=['absent','none','empty','nan','pdNA','NaT','producer','invalid'])
+def test_capture_prediction_timestamp_missing_values(frozen, value):
+    from core.run_readiness import build_readiness
+    context, db, _ = frozen
+    audit, final = fixture_frames()
+    audit['candidate_id'] = ['over','under']
+    final['candidate_id'] = ['over']
+    absent = isinstance(value,str) and value == 'absent'
+    if not absent:
+        for frame in (audit, final):
+            frame['prediction_generated_at'] = value
+    saved, card = evidence.capture_run(context, audit, final, audit, path=db, authoritative_candidates=True)
+    expected = '2026-09-03T15:00:00.123456Z' if absent or value is None or value is pd.NA or value is pd.NaT or (isinstance(value,float) and pd.isna(value)) or value == '' else value
+    _, loaded, decisions = evidence.load_snapshots(db)[0]
+    for frame in (saved, card, loaded, decisions):
+        assert frame.prediction_generated_at.eq(expected).all()
+    blockers = build_readiness(loaded, decisions)['games'][0]['evidence_blockers']
+    assert 'model_provenance_missing' in blockers
+    for col in ('model_version','model_trained_through','model_available_at'):
+        assert col not in loaded or loaded[col].isna().all()
+    if expected == 'not-a-timestamp':
+        assert 'prediction_or_start_time_unverified' in blockers
+        assert 'export_timing_unverified' in blockers
+    else:
+        assert 'prediction_or_start_time_unverified' not in blockers
+        assert 'export_timing_unverified' not in blockers
+        for _, row in loaded.iterrows():
+            prediction = pd.Timestamp(row.prediction_generated_at)
+            export = pd.to_datetime(row.export_run_id,format='%Y%m%dT%H%M%S.%fZ',utc=True)
+            assert prediction <= export < pd.Timestamp(row.game_start_utc)
+    with evidence.connect(db) as con:
+        before = con.execute('SELECT candidates,decisions,payload_hash FROM snapshots').fetchall()
+    with pytest.raises(ValueError,match='immutable snapshot'):
+        evidence.capture_run(context,audit,final,audit,path=db,authoritative_candidates=True)
+    with evidence.connect(db) as con:
+        assert con.execute('SELECT candidates,decisions,payload_hash FROM snapshots').fetchall() == before
+
+
+def test_capture_prediction_timestamp_mixed_rows(frozen):
+    context, db, _ = frozen
+    audit, final = fixture_frames()
+    audit['prediction_generated_at'] = ['2026-09-03T14:30:00+00:00', None]
+    final['prediction_generated_at'] = ['2026-09-03T14:30:00+00:00']
+    saved, card = evidence.capture_run(context,audit,final,audit,path=db)
+    assert saved.prediction_generated_at.tolist() == ['2026-09-03T14:30:00+00:00','2026-09-03T15:00:00.123456Z']
+    assert card.prediction_generated_at.iloc[0] == '2026-09-03T14:30:00+00:00'
