@@ -109,6 +109,50 @@ def apply_bucket_calibration(
     return pd.Series([_tilt(p, b) for p, b in zip(cal, bucket_list)], index=cal.index)
 
 
+def calibration_digest(payload: dict) -> str:
+    """Content identity excluding only the self-referential version field."""
+    import hashlib
+    meta = dict(payload.get("meta") or {})
+    meta.pop("calibration_version", None)
+    body = dict(payload, meta=meta)
+    return hashlib.sha256(json.dumps(body, sort_keys=True, allow_nan=False,
+                                    separators=(",", ":")).encode()).hexdigest()
+
+
+class CalibrationTable(list):
+    """Keep the exact loaded artifact with its knots; no second metadata read."""
+    def __init__(self, payload):
+        from copy import deepcopy
+        super().__init__(payload["knots"])
+        self.payload = deepcopy(payload)
+
+
+def calibration_provenance(table, *, now=None) -> dict:
+    """Return verified artifact facts only, never model or validation authority."""
+    from core.wager_decisions import aware
+    if not isinstance(table, CalibrationTable):
+        return {}
+    payload = table.payload
+    meta = payload.get("meta") or {}
+    validation = meta.get("validation") or {}
+    try:
+        if list(table) != payload["knots"] or meta.get("calibration_version") != calibration_digest(payload):
+            return {}
+        train = aware(meta.get("calibration_trained_through"))
+        available = aware(meta.get("calibration_available_at"))
+        train_end = aware(validation.get("train_end"))
+        test_start = aware(validation.get("test_start"))
+        clock = aware(now) if now is not None else pd.Timestamp.now(tz="UTC").to_pydatetime()
+        if (validation.get("promotable") is not True or not meta.get("source")
+                or None in (train, available, train_end, test_start, clock)
+                or not train_end.date() < test_start.date()
+                or not test_start <= train <= available <= clock):
+            return {}
+    except (TypeError, ValueError):
+        return {}
+    return {k: meta[k] for k in ("calibration_version", "calibration_trained_through", "calibration_available_at")}
+
+
 def save_calibration(table: list[list[float]], path: Path | str, meta: dict | None = None) -> None:
     payload = {"knots": table, "meta": meta or {}}
     path = Path(path)
@@ -141,7 +185,7 @@ def load_calibration(path: Path | str | None = None) -> list[list[float]] | None
             if pd.isna(train_end) or pd.isna(test_start) or train_end.normalize() >= test_start.normalize():
                 return None
         knots = payload.get("knots")
-        return knots if knots else None
+        return CalibrationTable(payload) if knots else None
     except (OSError, ValueError):
         return None
 

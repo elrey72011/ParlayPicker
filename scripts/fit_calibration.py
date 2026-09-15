@@ -33,6 +33,7 @@ from core.probability_calibration import (  # noqa: E402
     apply_calibration,
     fit_isotonic_calibration,
     save_calibration,
+    calibration_digest,
 )
 from core.walk_forward import chronological_split, probability_metrics  # noqa: E402
 
@@ -215,13 +216,22 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     knots = fit_isotonic_calibration(graded["prob"].tolist(), graded["win"].tolist())
-    save_calibration(knots, out_json, meta={
+    # PAV fits only finite interior probabilities. The final refit includes the
+    # holdout, so validation.train_end is not its training cutoff.
+    fitted = graded.loc[graded["prob"].gt(0) & graded["prob"].lt(1)]
+    dates = pd.to_datetime(fitted.get("slate_date"), errors="coerce", utc=True)
+    cutoff = dates.max().isoformat() if dates is not None and not dates.isna().any() else None
+    meta = {
         "n_graded": int(len(graded)),
         "source": _source_label(exports_dir),
         "fitted_on": pd.Timestamp.now().strftime("%Y-%m-%d"),
         "prob_col": "effective_win_probability (fallback WinProbability)",
         "validation": validation,
-    })
+        "calibration_trained_through": cutoff,
+        "calibration_available_at": pd.Timestamp.now(tz="UTC").isoformat(),
+    }
+    meta["calibration_version"] = calibration_digest({"knots": knots, "meta": meta})
+    save_calibration(knots, out_json, meta=meta)
     print(f"\nfit on {len(graded)} graded picks -> {len(knots)} knots -> {out_json}")
     report(graded)
     return 0

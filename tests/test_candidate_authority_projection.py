@@ -237,3 +237,64 @@ def test_raw_provider_no_book_reaches_terminal_policy(tmp_path, monkeypatch):
     assert 'invalid_exact_price' not in str(final.iloc[0]['production_gate_reason'])
     assert final.iloc[0]['production_bet_amount'] == 2.5
     assert bound.iloc[0]['provider_quotes'] == row['provider_quotes']
+
+
+@pytest.mark.parametrize('market', ['spread_home','total_over'])
+def test_real_calibration_provenance_private_snapshot_roundtrip(tmp_path,monkeypatch,market):
+    from test_calibration_promotion import provenance_artifact
+    from core import probability_calibration as pc
+    from app_core import prediction_evidence as pe
+    from core.prospective_uncertainty import prepare_live
+    from core.live_wager_contract import finalize_live_wagers
+    from core.run_readiness import build_readiness
+    from core.activation_validation import reasons
+    path=tmp_path/'calibration.json';meta=provenance_artifact(path)
+    monkeypatch.setattr(pc,'DEFAULT_CALIBRATION_PATH',path)
+    monkeypatch.setattr('app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED',True)
+    monkeypatch.setattr('core.streamlit_pipeline._selection_bucket_stats_are_fresh',lambda *a,**k:True)
+    monkeypatch.setattr('core.empirical_tiers.load_bucket_stats',lambda: {'overall':{'n':2,'win_rate':.5},'buckets':{}})
+    row,policy,config=source(tmp_path)
+    # A synthetic trained producer's facts test transport, not real-world validation.
+    row.update(training_cutoff_basis='max game_start_utc in test-only training dataset')
+    if market=='total_over':
+        row.update(market_type=market,line=42.5,total_line=42.5,spread_line=None,market_line_used=42.5,
+            best_pick='Over 42.5',selection='Over 42.5')
+        row['provider_quotes']=json.dumps([dict(book='draftkings',market_type=market,point=42.5,price=-110,
+            recorded_at=row['quote_time'],provider_namespace='odds_api',provider_event_id='one')])
+    diagnostics={}
+    best=build_best_picks_df(pd.DataFrame([row]),diagnostics_out=diagnostics)
+    private=diagnostics['candidate_authority_df']
+    fields=['model_version','model_trained_through','model_available_at','training_cutoff_basis']
+    for field in fields:assert private.iloc[0][field] == row[field]
+    for field in ('calibration_version','calibration_trained_through','calibration_available_at'):
+        assert private.iloc[0][field] == meta[field]
+    assert private.iloc[0]['calibration_probability_field'] == 'selection_probability_used'
+    prepared=prepare_live(private,database=tmp_path/'prior.db',plan_dir=tmp_path/'plans',now=NOW)
+    final,_=finalize_live_wagers(prepared,best,1000,now=NOW,policies={'NFL':policy},config=config,reviews=prepared)
+    root=tmp_path/'repo';root.mkdir()
+    database=tmp_path/'snapshot.db'
+    monkeypatch.setattr(pe,'now_utc',lambda:NOW.isoformat())
+    context=pe.begin_run({},path=database,root=root)
+    pe.capture_run(context,prepared,final,pd.DataFrame([row]),path=database,authoritative_candidates=True)
+    _,saved,card=pe.load_snapshots(database)[0]
+    for field in fields:assert saved.iloc[0][field] == row[field]
+    for field in ('calibration_version','calibration_trained_through','calibration_available_at'):
+        assert saved.iloc[0][field] == meta[field]
+    assert 'model_provenance_missing' not in build_readiness(saved,card)['games'][0]['evidence_blockers']
+    bad=dict(saved.iloc[0],calibration_available_at='2099-01-01T00:00:00Z')
+    assert 'calibration_not_available' in reasons(bad)
+
+
+def test_real_score_distribution_is_not_trained_model_provenance():
+    from app_core.market_probability_model import predict_market_probabilities
+    from core.streamlit_pipeline import compute_blended_probability
+    frame=pd.DataFrame([dict(league='MLB',market_type='total_over',total_line=8.5,
+        feature_home_ppg=5.,feature_away_ppg=4.,feature_home_oppg=4.,feature_away_oppg=5.)])
+    result=predict_market_probabilities(frame)
+    assert result.ml_probability.notna().all()
+    assert result.ml_probability_source.iloc[0]=='score-distribution-v1:mlb'
+    p=compute_blended_probability(pd.Series([.5]),pd.Series([.55]),result.ml_probability,
+        pd.Series([.6]),pd.Series([.5]),league=frame.league,market_type=frame.market_type)
+    assert p.notna().all()
+    for field in ('model_version','model_trained_through','model_available_at','calibration_version','calibration_available_at'):
+        assert field not in result
