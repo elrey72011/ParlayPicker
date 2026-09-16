@@ -125,6 +125,9 @@ class History:
         choices = {row['id']: row for row in lock_candidates(package, at)}
         requested = set(selected_ids)
         if not requested or not requested <= choices.keys():
+            if relock_review is not None:
+                from app_core.relock_changes import RelockReviewExpired
+                raise RelockReviewExpired('Candidate is no longer eligible')
             raise ValueError('Selections changed, started or became stale. Rebuild the preview before locking.')
         def update(label, done=0, total=0):
             if progress:
@@ -136,8 +139,11 @@ class History:
             removed = {r['lock_hash'] for r in removals}
             active = {r['id']: r for r in originals if digest(r) not in removed}
         if relock_review is not None:
-            from app_core.relock_changes import verify_review
-            verify_review(removals, choices, requested - active.keys(), relock_review)
+            from app_core.relock_changes import verify_review, validate_candidates, RelockAlreadyLocked
+            if requested & active.keys():
+                raise RelockAlreadyLocked()
+            choices = validate_candidates(package, requested, choices, now())
+            verify_review(removals, choices, requested, relock_review)
         update('Saving reviewed board')
         with lock_stage('archive_board'):
             self.archive(package)
@@ -160,6 +166,11 @@ class History:
                 for key, value in pending:
                     saved.append(self.put(key, value, first=True))
                     update('Saving and verifying locks', len(saved), len(pending))
+        if relock_review is not None and any(r != choices[r['id']] for r in saved):
+            # A concurrent create won the conditional write. Never claim its
+            # selection as this owner's confirmed new lock. Other batch rows
+            # may have saved; do not promise an atomic rollback.
+            raise RelockAlreadyLocked(after_write=True)
         active.update({r['id']: r for r in saved})
         return [active[identity] for identity in sorted(requested)]
 
