@@ -15,6 +15,12 @@ AT = "2026-09-15T18:01:00+00:00"
 
 @pytest.fixture(params=["spread_home", "total_under"])
 def captured(request, tmp_path, monkeypatch):
+    from datetime import datetime
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.fromisoformat(AT).astimezone(tz)
+    monkeypatch.setattr("app_core.public_board.datetime", FrozenDateTime)
     kind=request.param
     line=-1.5 if kind.startswith("spread") else 8.5
     pick="Chicago Cubs -1.5" if kind.startswith("spread") else "Under 8.5"
@@ -76,6 +82,9 @@ def test_existing_locks_cannot_be_replaced(captured,tmp_path,monkeypatch):
     assert lock_audit(current,AT,original)[0]["Lock status"]=="Already locked"
     changed=deepcopy(current)
     changed["games"]["overall"][0]["odds"]=-115
+    from app_core.price_value_display import display
+    leg=changed["games"]["overall"][0]
+    leg.update(display(leg["win_estimate"],leg["odds"],leg["ev"]))
     assert store.lock_picks(changed,ids)==original
     assert locked_selections(store.all("locks"))==original
 
@@ -90,6 +99,11 @@ def test_existing_time_rules(captured,change,status):
     if change=="date":leg["start"]="2026-09-16T23:00:00+00:00"
     if change=="quote":leg["quote_time"]="2026-09-15T17:00:00+00:00"
     if change=="analysis":leg["as_of"]="2026-09-15T17:00:00+00:00"
+    # Fixture edits must also refresh the derived funnel, like a real build.
+    from datetime import datetime
+    from app_core.production_parlays import canonical_funnel
+    current["parlay_funnel"] = canonical_funnel(current["games"]["overall"],datetime.fromisoformat(current["built_at"]))
+    current["parlay_funnel"].pop("combinations")
     assert lock_audit(current,checked_at)[0]["Lock status"]==status
     assert lock_candidates(current,checked_at)==[]
 

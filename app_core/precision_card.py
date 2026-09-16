@@ -208,6 +208,11 @@ def attach_precision_card(
         "score corroborated the signal; no fixed hit-rate target is claimed."
     )
     out["Precision_Card_Reason"] = reason
+    from app_core.price_value_display import display
+    values = [display(r.get("Precision_Probability"), r.get("odds_american"), r.get("expected_value")) for r in out.to_dict("records")]
+    out["Precision_Estimated_EV"] = [v["estimated_expected_value"] for v in values]
+    out["Precision_Price_Edge"] = pd.to_numeric(out.get("edge", pd.Series(float("nan"), index=out.index)), errors="coerce")
+    out["Precision_Value_Status"] = [v["value_status"] for v in values]
     return out
 
 

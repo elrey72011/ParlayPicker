@@ -134,6 +134,15 @@ def render_history(setting):
         dates=sorted({r['date'] for r in saved['rows']+prop_rows})
         st.caption('Available game dates: '+(', '.join(dates) if dates else 'None yet'))
         day=st.date_input('Public results date',value=datetime.now(ZoneInfo('America/New_York')).date()-timedelta(days=1),key='public_results_day')
+        if st.checkbox('Prepare read-only reconciliation downloads', key='public_reconcile_downloads'):
+            import json
+            from app_core.public_reconciliation import reconcile, markdown
+            source = {k:saved.get(k, []) for k in ('publications','revisions','locks')}
+            reconciled = reconcile(source, day.isoformat())
+            st.download_button('Download reconciliation JSON', json.dumps(reconciled, indent=2),
+                               f'reconciliation-{day}.json', 'application/json')
+            st.download_button('Download reconciliation report', markdown(reconciled),
+                               f'reconciliation-{day}.md', 'text/markdown')
         if st.button('Grade picks for selected date',key='public_history_grade'):
             try:
                 from app_core.imported_recaps import imported_selections

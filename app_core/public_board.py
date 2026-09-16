@@ -99,6 +99,11 @@ def pick_record(row, *, prop=False, as_of=None):
             projection = None
         if projection is not None and projection >= 0:
             record['expected_stat'] = projection
+    if not prop:
+        from app_core.total_signal_quality import public_fields
+        from app_core.price_value_display import display
+        record.update(public_fields(row))
+        record.update(display(record["win_estimate"], record["odds"], record["ev"]))
     return record
 
 
@@ -156,6 +161,8 @@ def validate_package(package):
     def exact(obj, keys):
         if not isinstance(obj, dict) or set(obj) != set(keys.split()):
             raise ValueError('Unexpected or missing public fields')
+    from app_core.total_signal_quality import FIELDS as TQ_FIELDS, validate as validate_quality
+    from app_core.price_value_display import FIELDS as VALUE_FIELDS, display as display_value
     def projection_metric(row):
         value = row.get('expected_stat')
         if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
@@ -178,7 +185,14 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','conservative_ev','espn_event_id','mlb_game_pk','game_number') if k in row))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','conservative_ev','espn_event_id','mlb_game_pk','game_number', *TQ_FIELDS, *VALUE_FIELDS) if k in row))
+            if any(k in row for k in TQ_FIELDS):
+                validate_quality({k:row[k] for k in TQ_FIELDS if k in row})
+                if row['sport'] != 'MLB' or row['market'] not in {'total_over','total_under'}:
+                    raise ValueError('Totals diagnostics require MLB totals')
+            if any(k in row for k in VALUE_FIELDS):
+                if {k:row[k] for k in VALUE_FIELDS if k in row} != display_value(row['win_estimate'],row['odds'],row['ev']):
+                    raise ValueError('Price display must match saved estimates')
             if 'wager_contract' in row:
                 from core.live_wager_contract import PUBLIC_FIELDS, validate_snapshot
                 exact(row['wager_contract'],' '.join(PUBLIC_FIELDS))

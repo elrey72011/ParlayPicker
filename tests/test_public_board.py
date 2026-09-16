@@ -260,10 +260,10 @@ def test_published_category_overview_keeps_locked_record_separate(tmp_path):
     node=os.environ.get('NODE_BINARY') or shutil.which('node')
     if not node: pytest.skip('Node unavailable')
     html=Path('publishing/board.html').read_text(encoding='utf-8')
-    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function matchesResultGroup(', 'function renderLockedWinRate(', 'function flatStakeMetrics(', 'function originalEstimateLabel(', 'function estimateComparison(', 'function renderEstimateComparison(', 'function renderResults(')))
+    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function matchesResultGroup(', 'function renderLockedWinRate(', 'function flatStakeMetrics(', 'function originalEstimateLabel(', 'function estimateComparison(', 'function renderEstimateComparison(', 'function renderResults(', 'function yesterdayDate(', 'function easternDay(', 'function yesterdayLockedRows(', 'function renderYesterdayLocked(', 'function activeResultLabel(')))
     script=r"""
 const assert=require('node:assert/strict');
-class Element {constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.value='';} append(...v){this.children.push(...v)} replaceChildren(...v){this.children=[...v]} }
+class Element {constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.value='';this.options=[];} append(...v){this.children.push(...v)} replaceChildren(...v){this.children=[...v]} }
 const elements={};const document={getElementById:id=>elements[id]||(elements[id]=new Element('div'))};
 const el=(tag,text)=>new Element(tag,text);const fmt=(x,p=false)=>p?(x*100).toFixed(1)+'%':String(x);
 const availableResults=[
@@ -274,6 +274,7 @@ const availableResults=[
  {group:'Locked',category:'overall',outcome:'LOSS',picks:'locked-overall'},
  {group:'Imported research',category:'totals',outcome:'WIN',picks:'imported-total'}
 ].map(r=>({...r,date:'2026-09-11',odds:'-110',final_score:'1-0'}));
+let initialResultFallback=false;
 const resultWindow=()=>({bounds:['2026-09-11','2026-09-11'],rows:availableResults});
 document.getElementById('resultKind').value='games';
 document.getElementById('resultGroup').value='Published picks';

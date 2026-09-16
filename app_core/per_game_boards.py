@@ -265,7 +265,8 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
             if quality or not quote or not positive_price_edge(probability, number(source, 'odds_american') if source is not None else None, ev):
                 approved = False
                 approval_reason = quality or 'No verified positive estimated edge at the quoted price'
-        rows.append({'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
+        from app_core.total_signal_quality import public_fields as total_quality_fields
+        rows.append({**(total_quality_fields(source) if source is not None else {}), 'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
                      'matchup_id':text(final,'matchup_id'),'game_date':text(final,'Local Date','game_date'),
                      'start':text(final,'Commence (Local)','game_time_est'),
                      'pick':text(source,'display_pick','best_pick') if source is not None else ('Sportsbook quote unavailable' if allow_fallback else 'Novig quote unavailable' if novig_only else 'No Bet — market unavailable'),

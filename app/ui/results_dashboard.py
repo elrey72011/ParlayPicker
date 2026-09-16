@@ -389,6 +389,7 @@ def _performance_recap_table(display_df: pd.DataFrame) -> pd.DataFrame:
         "Precision_Corroborating_Score", "Precision_Corroborating_Source",
         "Precision_Signal_Corroborated",
         "Precision_Card_Instruction", "Precision_Wager_Approved",
+        "Precision_Estimated_EV", "Precision_Price_Edge", "Precision_Value_Status",
         "market_type", "performance_probability_used",
         "performance_probability_source", "selection_probability_used",
         "Pick_Status", "export_run_id",
