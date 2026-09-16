@@ -7,12 +7,15 @@ from app_core.locked_picks import lock_candidates, lock_audit
 from app_core.quote_freshness import package_age_minutes
 from app_core.public_history import now, report, digest, lock_stage
 from app_core.public_record import current_records
-from app_core.relock_changes import latest_removed, compare, review_token, acknowledged
+from app_core.relock_changes import (latest_removed, compare, review_token, acknowledged, requirements,
+    validate_candidates, clear_review_state, log_review, RelockReviewExpired, RelockAlreadyLocked)
 
 
 def render_lock_picks(package, setting):
     from app.ui.public_results import history
     key = 'public_results_' + str(setting('PARLAYPICKER_NETLIFY_SITE_ID')).strip()
+    if st.session_state.pop('relock_reset_requested', False):
+        clear_review_state(st.session_state)
     notice=st.session_state.pop('lock_correction_notice',None)
     if notice:st.info(notice)
     saved = st.session_state.get(key)
@@ -32,6 +35,10 @@ def render_lock_picks(package, setting):
             if st.button('Retry removed lock history'):
                 st.rerun()
             return
+        context = digest([package, existing, removals])
+        if st.session_state.get('relock_context') != context:
+            clear_review_state(st.session_state)
+            st.session_state['relock_context'] = context
         for message in st.session_state.pop('changed_relock_notices', []):
             st.success(message)
         published_ids=set()
@@ -63,6 +70,7 @@ def render_lock_picks(package, setting):
         locked_today=sum(r['date']==today for r in existing)
         st.caption(f'Locked today: {locked_today} Â· Not locked and eligible now: {len(choices)}')
         if not choices:
+            clear_review_state(st.session_state)
             blocked = {r['Lock status'] for r in audit}
             if blocked & {'Stale quote', 'Stale analysis'}:
                 st.info('No new eligible picks to lock. Some saved prices or analysis are stale; click Refresh picks, then return here. Refresh preview and Run Player Props do not refresh game quotes. See Why games cannot be locked for each reason.')
@@ -77,33 +85,33 @@ def render_lock_picks(package, setting):
         for identity in selected:
             prior = latest_removed(removals, identity)
             if prior:
-                change = compare(prior['lock'], choices[identity])
+                change = compare(prior['lock'], choices[identity], prior)
                 token = review_token(prior, choices[identity])
                 tokens[identity] = token
                 changes.append((choices[identity]['legs'][0]['game'], change))
-                ready = render_relock_review(change, token) and ready
+                ready = render_relock_review(change, identity + '_' + token) and ready
         severity = max((c['severity'] for _, c in changes), key=lambda x: ['NORMAL','WARNING','HIGH','CRITICAL'].index(x), default=None)
         label = {'NORMAL':'Re-lock at current price', 'WARNING':'Confirm changed re-lock',
                  'HIGH':'Confirm market-change re-lock', 'CRITICAL':'Re-lock opposite side'}.get(severity, 'Lock selected picks')
         if st.button(label, key='lock_picks_action', disabled=not ready):
-            if changes:
+            if any(requirements(c)['dialog'] for _, c in changes):
                 st.session_state['relock_pending'] = digest([tokens, selected, package])
             else:
-                save_reviewed_locks(package, selected, setting, saved, tokens, [])
+                save_reviewed_locks(package, selected, setting, saved, tokens, success_notices(changes), choices, changes)
 
         if st.session_state.get('relock_pending') == digest([tokens, selected, package]) and changes and ready:
-            confirm_relock(package, selected, setting, saved, tokens, changes)
+            confirm_relock(package, selected, setting, saved, tokens, changes, choices)
 
 
 def change_label(removals, row):
     prior = latest_removed(removals, row['id'])
-    return compare(prior['lock'], row)['label'] if prior else 'No change'
+    return compare(prior['lock'], row)['label'] if prior else '—'
 
 
 def comparison_table(change):
     st.dataframe(pd.DataFrame({'Field': list(change['previous']),
-        'PREVIOUS LOCK': [str(v) if v is not None else 'Not recorded' for v in change['previous'].values()],
-        'CURRENT SELECTION': [str(v) if v is not None else 'Not recorded' for v in change['current'].values()]}), hide_index=True)
+        'PREVIOUS LOCK': [str(v) if v not in (None, '') else 'Not recorded' for v in change['previous'].values()],
+        'CURRENT SELECTION': [str(v) if v not in (None, '') else 'Not recorded' for v in change['current'].values()]}), hide_index=True)
 
 
 def render_relock_review(change, token):
@@ -114,43 +122,67 @@ def render_relock_review(change, token):
     comparison_table(change)
     if change['flags']['market_favorite_changed']:
         st.write('Market favorite also changed: ' + change['previous']['Market favorite'] + ' → ' + change['current']['Market favorite'])
-    st.write('Recorded changes: ' + (', '.join(change['differences']) or 'No recorded differences'))
+    body = {
+        'NORMAL':'This game was previously locked and later removed. The selection is unchanged, but the current line, price, or quote time may be different.',
+        'WARNING':'This game was previously locked with a different selection. The current reviewed board now contains a different selection for this game.',
+        'HIGH':'The current best selection is from a different market than the previous lock. This is not a routine price refresh. The current reviewed board selected a different type of market.',
+        'CRITICAL':'The current reviewed board selects the opposing team from your previous lock. This is a material change, not a routine quote update. Review the current selection, line, price, analysis time, and quote time before continuing.'}
+    st.write(body[severity])
+    if len(change['differences']) > 1:
+        st.write('MATERIAL RE-LOCK CHANGE')
+        st.write('This re-lock differs from the previous lock in ' + str(len(change['differences'])) + ' recorded ways:')
+    for field in change['differences']:
+        st.write(field + ': ' + str(change['previous'][field]) + ' → ' + str(change['current'][field]))
     st.caption('Re-locking saves the current reviewed selection and quote. The previous removed lock remains archived. This does not place a sportsbook wager.')
     with st.expander('Why did the current pick change?'):
-        st.caption('Recorded differences between the two analyses. These comparisons do not establish causality.')
-        st.write(change['recorded_analysis'] or 'No additional saved analysis values available.')
+        st.caption('Recorded differences between the two saved analyses. These comparisons do not establish causality.')
+        st.write(dict(change['recorded_analysis']) or 'No additional saved analysis values available.')
     checked, typed = False, ''
     if severity != 'NORMAL':
         text = ('I understand that the selected team reversed.' if severity == 'CRITICAL' else
                 'I understand that the market changed from ' + change['previous']['Market family'] + ' to ' + change['current']['Market family'] + '.' if severity == 'HIGH' else
-                'I understand that this re-lock changes the selection.')
+                'I understand that this re-lock changes the selected team or side.')
         checked = st.checkbox(text, key='relock_ack_' + token)
     if severity == 'CRITICAL':
         typed = st.text_input('Type RELOCK to confirm', key='relock_type_' + token)
     return acknowledged(change, checked, typed)
 
 
-@st.dialog('Confirm re-lock')
-def confirm_relock(package, selected, setting, saved, tokens, changes):
+def success_notices(changes):
     notices = []
     for game, change in changes:
-        st.write(game)
-        comparison_table(change)
-        notices.append('Changed re-lock saved: ' + game + '. Previous removed lock: ' + change['previous']['Pick'] +
+        title = 'Re-lock saved at the current price' if change['severity'] == 'NORMAL' else 'Changed re-lock saved'
+        notices.append(title + ': ' + game + ' is now locked as ' + change['current']['Pick'] +
+            ' (' + str(change['current']['Odds']) + '). Previous removed lock: ' + change['previous']['Pick'] +
             ' (' + str(change['previous']['Odds']) + '). New lock saved: ' + change['current']['Pick'] +
             ' (' + str(change['current']['Odds']) + '). The original lock remains preserved in history.')
-    st.write('This saves the new selection and publishes the updated locked board. The previous record remains archived. This does not place a sportsbook wager.')
-    if st.button('Cancel', key='relock_cancel'):
-        st.session_state.pop('relock_pending', None)
+    return notices
+
+
+@st.dialog('Confirm re-lock')
+def confirm_relock(package, selected, setting, saved, tokens, changes, reviewed):
+    for game, change in changes:
+        st.write('You are saving a new lock for: ' + game)
+        st.write('Previous removed lock: ' + change['previous']['Pick'] + ' (' + str(change['previous']['Odds']) + ')')
+        st.write('New lock: ' + change['current']['Pick'] + ' (' + str(change['current']['Odds']) + ')')
+        comparison_table(change)
+    st.write('The previous record remains archived. This action saves the current selection and quote and publishes the updated locked board. This does not place a sportsbook wager.')
+    if st.button('Cancel', key='relock_cancel', type='primary'):
+        for _, change in changes:
+            log_review(change['lock_id'], change, 'cancelled')
+        st.session_state['relock_reset_requested'] = True
         st.rerun()
     if st.button('Confirm and save new lock', key='relock_confirm'):
         st.session_state.pop('relock_pending', None)
-        save_reviewed_locks(package, selected, setting, saved, tokens, notices)
+        save_reviewed_locks(package, selected, setting, saved, tokens, success_notices(changes), reviewed, changes)
 
 
-def save_reviewed_locks(package, selected, setting, saved, tokens, notices):
+def save_reviewed_locks(package, selected, setting, saved, tokens, notices, reviewed, changes):
     from app.ui.public_results import history
     try:
+        validate_candidates(package, selected, reviewed, now())
+        for _, change in changes:
+            log_review(change['lock_id'], change, 'confirmed')
         with st.status('Saving locks...', expanded=True) as saving:
             def show_progress(label, done, total):
                 saving.update(label=f'{label} ({done}/{total})' if total else label)
@@ -163,6 +195,9 @@ def save_reviewed_locks(package, selected, setting, saved, tokens, notices):
                 locks = store.all('locks')
             saved['locks'] = locks
             saving.update(label='Locks saved and verified', state='complete')
+        st.session_state['relock_reset_requested'] = True
+        for _, change in changes:
+            log_review(change['lock_id'], change, 'saved')
         st.session_state['changed_relock_notices'] = notices
         st.success('Your locks are saved. Preparing and publishing the website now.')
         with st.status('Publishing website...', expanded=True) as publishing:
@@ -180,10 +215,31 @@ def save_reviewed_locks(package, selected, setting, saved, tokens, notices):
         st.session_state.pop('publication_preview', None)
         st.session_state['lock_saved_notice'] = True
         st.rerun()
+    except RelockReviewExpired as exc:
+        saved.pop('lock_removals', None)
+        st.session_state['relock_reset_requested'] = True
+        if str(exc) == 'Candidate changed':
+            st.error('Re-lock changed while you were reviewing it. The current selection or quote changed before the lock was saved. Nothing was locked. Refresh the preview and review the updated selection again.')
+        else:
+            st.error('Re-lock review is no longer current. The game, selection, quote, or lock history changed while this screen was open. Nothing was saved. Refresh the preview and review the current state again.')
+        for _, change in changes:
+            log_review(change['lock_id'], change, 'review_expired')
+    except RelockAlreadyLocked as exc:
+        saved.pop('lock_removals', None)
+        st.session_state['relock_reset_requested'] = True
+        st.error('This game was already locked elsewhere. Restore lock history to review the saved selection. No additional lock was created for that game.')
+        if exc.after_write:
+            st.warning('Other selections in this batch may have saved. Restore history before retrying.')
+        for _, change in changes:
+            log_review(change['lock_id'], change, 'concurrent_lock')
     except (ValueError, RuntimeError):
+        for _, change in changes:
+            log_review(change['lock_id'], change, 'save_failed')
         saved.pop('lock_removals', None)
         st.error('Lock could not complete. Restore history to check saved locks, then rebuild the preview.')
     except Exception:
+        for _, change in changes:
+            log_review(change['lock_id'], change, 'save_failed')
         st.error('Drive lock save or verification failed. Some selections may have saved; restore history before retrying.')
 
 

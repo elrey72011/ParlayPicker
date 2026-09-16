@@ -51,6 +51,7 @@ def restore_history(setting):
         stage = 'reading saved publications and results'
         pubs=store.publications();revisions=store.all('scores');imports=store.all('imports');locks=store.all('locks')
         st.session_state[key]={'publications':pubs,'revisions':revisions,'imports':imports,'grading_runs':store.all('grading_runs'),'prop_revisions':store.all('prop_stats'),'prop_imports':store.all('prop_imports'),'locks':locks,'rows':report(pubs,revisions,imports,locks)}
+        st.session_state['relock_reset_requested'] = True
         st.success('Public history restored.')
         return True
     except Exception as exc:
