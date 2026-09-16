@@ -193,7 +193,7 @@ def test_lock_ui_explains_missing_quotes_without_requesting_pointless_refresh(mo
     package['games']['overall'][0].update(quote_source='Unavailable',quote_time=None,quote_reason='No matching exact quote')
     code="""import streamlit as st
 from app.ui.lock_picks import render_lock_picks
-st.session_state['public_results_site']={'publications':[],'revisions':[],'locks':[]}
+st.session_state['public_results_site']={'publications':[],'revisions':[],'locks':[],'lock_removals':[]}
 render_lock_picks(PACKAGE,lambda key:'site')
 """.replace('PACKAGE',repr(package))
     app=AppTest.from_string(code).run()
@@ -234,7 +234,7 @@ def test_existing_alias_duplicates_do_not_hide_new_selector(store, monkeypatch):
     assert [r['Lock status'] for r in lock_audit(package, AT, saved)] == ['Already locked', 'Already locked', 'Eligible now']
     monkeypatch.setattr(lock_picks, 'now', lambda: AT)
     code = "import streamlit as st\nfrom app.ui.lock_picks import render_lock_picks\n"
-    code += "st.session_state['public_results_site']=" + repr(dict(publications=[], revisions=[], locks=saved)) + "\n"
+    code += "st.session_state['public_results_site']=" + repr(dict(publications=[], revisions=[], locks=saved, lock_removals=[])) + "\n"
     code += "render_lock_picks(" + repr(package) + ", lambda key: 'site')"
     app = AppTest.from_string(code).run()
     assert not app.exception

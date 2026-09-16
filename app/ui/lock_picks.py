@@ -7,6 +7,7 @@ from app_core.locked_picks import lock_candidates, lock_audit
 from app_core.quote_freshness import package_age_minutes
 from app_core.public_history import now, report, digest, lock_stage
 from app_core.public_record import current_records
+from app_core.relock_changes import latest_removed, compare, review_token, acknowledged
 
 
 def render_lock_picks(package, setting):
@@ -22,6 +23,17 @@ def render_lock_picks(package, setting):
         if any(r.get('quote_time_basis') == 'espn_observed' for r in package['games']['overall']):
             st.caption('ESPN college research picks use the time we observed the snapshot. DraftKings update time is unknown. Refresh preview does not renew the observation time.')
         existing = saved.get('locks', [])
+        try:
+            if 'lock_removals' not in saved:
+                saved['lock_removals'] = history(setting).all('lock_removals')
+            removals = saved['lock_removals']
+        except Exception:
+            st.error('Removed lock history could not be loaded. Retry before locking.')
+            if st.button('Retry removed lock history'):
+                st.rerun()
+            return
+        for message in st.session_state.pop('changed_relock_notices', []):
+            st.success(message)
         published_ids=set()
         pubs=saved.get('publications',[])
         if pubs:
@@ -36,6 +48,7 @@ def render_lock_picks(package, setting):
                 'Sportsbook':r['legs'][0].get('quote_source','Not recorded'),
                 **({'Observed at (UTC)':r['legs'][0]['quote_time']} if r['legs'][0].get('quote_time_basis') == 'espn_observed' else {}),
                 'Locked at (UTC)':r['published_at'],
+                'Change from prior lock':change_label(removals, r),
                 'Website':'Published' if r['id'] in published_ids else 'Not verified as published'} for r in existing]), hide_index=True)
         render_lock_correction(package, setting, saved)
         checked_at = now()
@@ -48,7 +61,7 @@ def render_lock_picks(package, setting):
             return
         today=datetime.fromisoformat(checked_at).astimezone(ZoneInfo('America/New_York')).date().isoformat()
         locked_today=sum(r['date']==today for r in existing)
-        st.caption(f'Locked today: {locked_today} · Not locked and eligible now: {len(choices)}')
+        st.caption(f'Locked today: {locked_today} Â· Not locked and eligible now: {len(choices)}')
         if not choices:
             blocked = {r['Lock status'] for r in audit}
             if blocked & {'Stale quote', 'Stale analysis'}:
@@ -60,40 +73,118 @@ def render_lock_picks(package, setting):
         selected = st.multiselect('Picks to lock', list(choices), default=list(choices),
             format_func=lambda key: choices[key]['legs'][0]['game'] + ': ' + choices[key]['legs'][0]['pick'] + ' (' + str(choices[key]['legs'][0]['odds']) + ')',
             key='lock_pick_selection')
-        if st.button('Lock selected picks', key='lock_picks_action', disabled=not selected):
-            try:
-                with st.status('Saving locks...', expanded=True) as saving:
-                    def show_progress(label, done, total):
-                        saving.update(label=f'{label} ({done}/{total})' if total else label)
-                    with lock_stage('open_storage'):
-                        store = history(setting)
-                    store.lock_picks(package, selected, progress=show_progress)
-                    saving.update(label='Checking saved locks...')
-                    # Fresh authoritative read retains concurrent locks/removals.
-                    with lock_stage('verify_lock_history'):
-                        locks = store.all('locks')
-                    saved['locks'] = locks
-                    saving.update(label='Locks saved and verified', state='complete')
-                st.success('Your locks are saved. Preparing and publishing the website now.')
-                with st.status('Publishing website...', expanded=True) as publishing:
-                    with lock_stage('rebuild_results'):
-                        saved['rows'] = report(saved['publications'], saved['revisions'], saved.get('imports',[]), locks)
-                        from copy import deepcopy
-                        from app_core import public_prop_history
-                        from app.ui.sftp_publish import publish_action
-                        updated=deepcopy(package)
-                        updated['results']=current_records(saved['rows']+public_prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[])))
-                    with lock_stage('publish_website'):
-                        notice = publish_action(updated,setting)
-                        st.session_state['lock_publish_notice'] = notice
-                    publishing.update(label=notice, state='complete' if notice.startswith(('Published:', 'Records saved.')) else 'error')
-                st.session_state.pop('publication_preview', None)
-                st.session_state['lock_saved_notice'] = True
-                st.rerun()
-            except (ValueError, RuntimeError):
-                st.error('Lock could not complete. Restore history to check saved locks, then rebuild the preview.')
-            except Exception:
-                st.error('Drive lock save or verification failed. Some selections may have saved; restore history before retrying.')
+        tokens, changes, ready = {}, [], bool(selected)
+        for identity in selected:
+            prior = latest_removed(removals, identity)
+            if prior:
+                change = compare(prior['lock'], choices[identity])
+                token = review_token(prior, choices[identity])
+                tokens[identity] = token
+                changes.append((choices[identity]['legs'][0]['game'], change))
+                ready = render_relock_review(change, token) and ready
+        severity = max((c['severity'] for _, c in changes), key=lambda x: ['NORMAL','WARNING','HIGH','CRITICAL'].index(x), default=None)
+        label = {'NORMAL':'Re-lock at current price', 'WARNING':'Confirm changed re-lock',
+                 'HIGH':'Confirm market-change re-lock', 'CRITICAL':'Re-lock opposite side'}.get(severity, 'Lock selected picks')
+        if st.button(label, key='lock_picks_action', disabled=not ready):
+            if changes:
+                st.session_state['relock_pending'] = digest([tokens, selected, package])
+            else:
+                save_reviewed_locks(package, selected, setting, saved, tokens, [])
+
+        if st.session_state.get('relock_pending') == digest([tokens, selected, package]) and changes and ready:
+            confirm_relock(package, selected, setting, saved, tokens, changes)
+
+
+def change_label(removals, row):
+    prior = latest_removed(removals, row['id'])
+    return compare(prior['lock'], row)['label'] if prior else 'No change'
+
+
+def comparison_table(change):
+    st.dataframe(pd.DataFrame({'Field': list(change['previous']),
+        'PREVIOUS LOCK': [str(v) if v is not None else 'Not recorded' for v in change['previous'].values()],
+        'CURRENT SELECTION': [str(v) if v is not None else 'Not recorded' for v in change['current'].values()]}), hide_index=True)
+
+
+def render_relock_review(change, token):
+    severity = change['severity']
+    title = {'NORMAL':'Fresh price required for re-lock', 'WARNING':'RE-LOCK SELECTION CHANGED',
+             'HIGH':'RE-LOCK MARKET CHANGED', 'CRITICAL':'RE-LOCK REVERSES THE SELECTED TEAM'}[severity]
+    (st.info if severity == 'NORMAL' else st.warning)(title)
+    comparison_table(change)
+    if change['flags']['market_favorite_changed']:
+        st.write('Market favorite also changed: ' + change['previous']['Market favorite'] + ' → ' + change['current']['Market favorite'])
+    st.write('Recorded changes: ' + (', '.join(change['differences']) or 'No recorded differences'))
+    st.caption('Re-locking saves the current reviewed selection and quote. The previous removed lock remains archived. This does not place a sportsbook wager.')
+    with st.expander('Why did the current pick change?'):
+        st.caption('Recorded differences between the two analyses. These comparisons do not establish causality.')
+        st.write(change['recorded_analysis'] or 'No additional saved analysis values available.')
+    checked, typed = False, ''
+    if severity != 'NORMAL':
+        text = ('I understand that the selected team reversed.' if severity == 'CRITICAL' else
+                'I understand that the market changed from ' + change['previous']['Market family'] + ' to ' + change['current']['Market family'] + '.' if severity == 'HIGH' else
+                'I understand that this re-lock changes the selection.')
+        checked = st.checkbox(text, key='relock_ack_' + token)
+    if severity == 'CRITICAL':
+        typed = st.text_input('Type RELOCK to confirm', key='relock_type_' + token)
+    return acknowledged(change, checked, typed)
+
+
+@st.dialog('Confirm re-lock')
+def confirm_relock(package, selected, setting, saved, tokens, changes):
+    notices = []
+    for game, change in changes:
+        st.write(game)
+        comparison_table(change)
+        notices.append('Changed re-lock saved: ' + game + '. Previous removed lock: ' + change['previous']['Pick'] +
+            ' (' + str(change['previous']['Odds']) + '). New lock saved: ' + change['current']['Pick'] +
+            ' (' + str(change['current']['Odds']) + '). The original lock remains preserved in history.')
+    st.write('This saves the new selection and publishes the updated locked board. The previous record remains archived. This does not place a sportsbook wager.')
+    if st.button('Cancel', key='relock_cancel'):
+        st.session_state.pop('relock_pending', None)
+        st.rerun()
+    if st.button('Confirm and save new lock', key='relock_confirm'):
+        st.session_state.pop('relock_pending', None)
+        save_reviewed_locks(package, selected, setting, saved, tokens, notices)
+
+
+def save_reviewed_locks(package, selected, setting, saved, tokens, notices):
+    from app.ui.public_results import history
+    try:
+        with st.status('Saving locks...', expanded=True) as saving:
+            def show_progress(label, done, total):
+                saving.update(label=f'{label} ({done}/{total})' if total else label)
+            with lock_stage('open_storage'):
+                store = history(setting)
+            store.lock_picks(package, selected, progress=show_progress, relock_review=tokens)
+            saving.update(label='Checking saved locks...')
+            # Fresh authoritative read retains concurrent locks/removals.
+            with lock_stage('verify_lock_history'):
+                locks = store.all('locks')
+            saved['locks'] = locks
+            saving.update(label='Locks saved and verified', state='complete')
+        st.session_state['changed_relock_notices'] = notices
+        st.success('Your locks are saved. Preparing and publishing the website now.')
+        with st.status('Publishing website...', expanded=True) as publishing:
+            with lock_stage('rebuild_results'):
+                saved['rows'] = report(saved['publications'], saved['revisions'], saved.get('imports',[]), locks)
+                from copy import deepcopy
+                from app_core import public_prop_history
+                from app.ui.sftp_publish import publish_action
+                updated=deepcopy(package)
+                updated['results']=current_records(saved['rows']+public_prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[])))
+            with lock_stage('publish_website'):
+                notice = publish_action(updated,setting)
+                st.session_state['lock_publish_notice'] = notice
+            publishing.update(label=notice, state='complete' if notice.startswith(('Published:', 'Records saved.')) else 'error')
+        st.session_state.pop('publication_preview', None)
+        st.session_state['lock_saved_notice'] = True
+        st.rerun()
+    except (ValueError, RuntimeError):
+        saved.pop('lock_removals', None)
+        st.error('Lock could not complete. Restore history to check saved locks, then rebuild the preview.')
+    except Exception:
+        st.error('Drive lock save or verification failed. Some selections may have saved; restore history before retrying.')
 
 
 def render_lock_correction(package, setting, saved):
@@ -113,6 +204,7 @@ def render_lock_correction(package, setting, saved):
             try:
                 store=history(setting)
                 saved['locks']=store.remove_locks(removed,reason)
+                saved.pop('lock_removals', None)
                 saved['rows']=report(saved['publications'],saved['revisions'],saved.get('imports',[]),saved['locks'])
                 from copy import deepcopy
                 from app_core import public_prop_history
@@ -129,7 +221,7 @@ def render_lock_correction(package, setting, saved):
 def render_lock_audit(rows, at):
     from collections import Counter
     counts = Counter(r['Lock status'] for r in rows)
-    st.caption('Current board: ' + str(len(rows)) + ' rows · ' + ' · '.join(f'{status}: {count}' for status, count in counts.items()))
+    st.caption('Current board: ' + str(len(rows)) + ' rows Â· ' + ' Â· '.join(f'{status}: {count}' for status, count in counts.items()))
     with st.expander('Why games cannot be locked', expanded=False):
         st.caption('Checked ' + datetime.fromisoformat(at).astimezone(ZoneInfo('America/New_York')).strftime('%I:%M:%S %p Eastern') + '. One status per board row; existing locks take priority over current price age. Locks from other boards or dates are not included in this breakdown.')
         frame = pd.DataFrame(rows)
