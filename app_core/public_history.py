@@ -118,7 +118,7 @@ class History:
                       'removed_at':now(), 'reason':reason.strip(), 'lock':originals[key]}, first=True)
         return self.all('locks')
 
-    def lock_picks(self, package, selected_ids, *, progress=None):
+    def lock_picks(self, package, selected_ids, *, progress=None, relock_review=None):
         from app_core.locked_picks import lock_candidates
         # One authoritative server acceptance time, unchanged by I/O completion.
         at = now()
@@ -129,15 +129,18 @@ class History:
         def update(label, done=0, total=0):
             if progress:
                 progress(label, done, total)
-        update('Saving reviewed board')
-        with lock_stage('archive_board'):
-            self.archive(package)
         update('Reading existing locks')
         with lock_stage('read_existing_locks'):
             originals = self._all('locks')
             removals = self._all('lock_removals')
             removed = {r['lock_hash'] for r in removals}
             active = {r['id']: r for r in originals if digest(r) not in removed}
+        if relock_review is not None:
+            from app_core.relock_changes import verify_review
+            verify_review(removals, choices, requested - active.keys(), relock_review)
+        update('Saving reviewed board')
+        with lock_stage('archive_board'):
+            self.archive(package)
         pending = []
         for identity in sorted(requested):
             # First write wins, including concurrent clicks and later previews.
