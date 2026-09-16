@@ -4753,6 +4753,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # Verify the exact expanded candidate before private evidence projection.
     from app_core.mlb_spread_total_model import attach_challenger
     pool = attach_challenger(pool)
+    from app_core.total_signal_quality import attach as attach_total_quality, FIELDS as TOTAL_QUALITY_FIELDS, counters as total_quality_counters
+    pool = attach_total_quality(pool)
+    candidate_audit_columns.extend(TOTAL_QUALITY_FIELDS)
+    from app_core.price_value_display import display as price_display, FIELDS as VALUE_DISPLAY_FIELDS
+    values = [price_display(r.get("calibrated_probability"),r.get("odds_american"),r.get("expected_value")) for r in pool.to_dict("records")]
+    for field in VALUE_DISPLAY_FIELDS:
+        pool[field] = [v[field] for v in values]
+    candidate_audit_columns.extend(VALUE_DISPLAY_FIELDS)
     candidate_authority_df = authority_projection(pool, candidate_audit_columns).rename(
         columns={"_market_family": "market_family"}
     )
@@ -7010,7 +7018,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         if column in best: best.loc[missing_forecast, column] = 0.0
 
     from app_core.prediction_evidence import PROVENANCE_COLUMNS
-    evidence_columns = [c for c in PROVENANCE_COLUMNS if c in best and c not in BEST_PICK_COLUMNS]
+    evidence_columns = [c for c in list(PROVENANCE_COLUMNS) + list(TOTAL_QUALITY_FIELDS) if c in best and c not in BEST_PICK_COLUMNS]
     identity_columns = [c for c in ("candidate_id", "game_id")
                         if c in best and c not in BEST_PICK_COLUMNS + evidence_columns]
     final_best_df = best[BEST_PICK_COLUMNS + evidence_columns + identity_columns].copy()
@@ -7245,6 +7253,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             "best_available_selection_mismatch_count": int(selection_invariant_mismatches),
             "best_available_candidate_audit_rows": int(len(candidate_audit_df)),
         }
+        diagnostics_out.update(total_quality_counters(candidate_authority_df))
         diagnostics_out["candidate_authority_df"] = candidate_authority_df
         diagnostics_out["mlb_challenger_status_counts"] = candidate_authority_df["mlb_challenger_status"].value_counts().to_dict()
         diagnostics_out["candidate_audit_df"] = candidate_audit_df

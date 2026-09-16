@@ -199,6 +199,7 @@ _COMPACT_EXPORT_COLUMNS = [
     "Precision_Signal_Corroborated",
     "Precision_Target_Hit_Rate", "Precision_Wager_Approved",
     "Precision_Card_Instruction", "Precision_Card_Reason",
+    "Precision_Estimated_EV", "Precision_Price_Edge", "Precision_Value_Status",
     "WinProbability", "expected_value", "edge",
     "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
     "effective_expected_value", "effective_edge", "effective_win_probability",
