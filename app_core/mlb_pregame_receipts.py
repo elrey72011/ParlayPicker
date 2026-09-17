@@ -271,6 +271,8 @@ def capture_live_games(odds_games, *, path=None, max_feeds=20, fetch=observe):
     if not 0 <= max_feeds <= 100:
         raise ValueError("max_feeds must be 0..100")
     output = deepcopy(odds_games)
+    for game in output:
+        game.pop("mlb_pregame_receipts", None)  # Never replay a prior run as a fresh observation.
     report = {"receipts_created": 0, "receipts_skipped": 0, "reasons": {}, "prior_feeds_requested": 0, "prior_feeds_remaining": 0}
     reasons = Counter()
     eligible = []
@@ -365,6 +367,9 @@ def capture_live_games(odds_games, *, path=None, max_feeds=20, fetch=observe):
                         raise Rejected("insufficient_prior_games")
                     receipt = build_receipt(game, quotes[market], [cached[k] for k in sorted(needed)],
                         captured_at=now().isoformat(), source_refs={"schedule": source_ref, "quotes": quote_ref})
+                    # Pass this run's exact observed quote to inference, even when
+                    # first-receipt training storage already contains this target.
+                    raw.setdefault("mlb_pregame_receipts", {})[market] = receipt
                     key = receipt_key(receipt["payload"])
                     if key in existing:
                         reasons["duplicate_receipt"] += 1
