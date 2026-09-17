@@ -43,7 +43,7 @@ jobs:
         if: steps.window.outputs.active == 'true'
         env:
           PARLAYPICKER_EVIDENCE_DIR: ${{ runner.temp }}/research-evidence
-        run: python scripts/run_research_scheduler.py
+        run: python -u scripts/run_research_scheduler.py
 
 
   activation-evidence:
