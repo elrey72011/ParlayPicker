@@ -31,6 +31,7 @@ def main():
         try:
             from app_core.public_grading_scheduler import run as grade_public
             folder,_=settings()
+            print("Public grading started", flush=True)
             public=grade_public(site,folder,DriveStore(folder),sports)
             result["public_grading"]=public
             result["errors"].extend("public_grading:"+e for e in public["errors"])

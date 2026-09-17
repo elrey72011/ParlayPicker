@@ -135,6 +135,7 @@ def test_drive_roundtrip_and_integrity(tmp_path):
     from app_core.evidence_drive import AlreadyExists
     objects={}
     client=Mock()
+    client.read_objects = None  # Exercise the non-Drive object-store fallback.
     def put(**kw):
         if kw['Key'] in objects: raise AlreadyExists()
         objects[kw['Key']]=kw['Body']

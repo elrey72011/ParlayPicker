@@ -55,30 +55,11 @@ def records(path=None):
         return sorted(result, key=lambda r: (r["created_at"], r["id"]))
 
 
-def sync(path=None, *, client=None, folder=None):
+def sync(path=None, *, client=None, folder=None, session=None):
     from app_core.evidence_remote import settings
-    from app_core.evidence_drive import DriveStore, AlreadyExists
+    from app_core.evidence_drive import DriveStore
+    from app_core.prospective_sync import sync_records
+    import sys
     folder = folder or settings()[0]
     client = client or DriveStore(folder)
-    restored = 0
-    for page in client.get_paginator("list_objects_v2").paginate(Bucket=folder, Prefix=PREFIX):
-        for item in page.get("Contents", []):
-            with client.get_object(Bucket=folder, Key=item["Key"])["Body"] as body:
-                raw = body.read(40_000_001)
-            if len(raw) > 40_000_000 or PREFIX + hashlib.sha256(raw).hexdigest() + ".json" != item["Key"]:
-                raise ValueError("Prospective backup integrity failure")
-            insert(json.loads(raw), path)
-            restored += 1
-    saved = 0
-    for r in records(path):
-        key = PREFIX + r["id"] + ".json"
-        raw = encode({k: v for k, v in r.items() if k != "id"})
-        try:
-            client.put_object(Bucket=folder, Key=key, Body=raw, ContentType="application/json", IfNoneMatch="*")
-        except AlreadyExists:
-            pass
-        with client.get_object(Bucket=folder, Key=key)["Body"] as body:
-            if body.read() != raw:
-                raise ValueError("Prospective backup read-back failed")
-        saved += 1
-    return {"remote_records_read": restored, "records_verified": saved}
+    return sync_records(sys.modules[__name__], path, client, folder, session)

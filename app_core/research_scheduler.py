@@ -21,6 +21,10 @@ class ResearchStageError(Exception):
         super().__init__(self.code)
 
 
+def progress(sport, stage, **facts):
+    print(json.dumps({"sport": sport, "stage": stage, **facts}), flush=True)
+
+
 def utcnow():
     return datetime.now(timezone.utc)
 
@@ -98,6 +102,7 @@ def run_mlb(path, state, backup):
     candidates.sort(key=lambda g:(capture_attempts.get(str(g["gamePk"]),""),g["gameDate"],g["gamePk"]))
     for g in candidates[:6]:
         if not is_open():break
+        progress("MLB", "capture_started", game_id=g["gamePk"])
         capture_attempts[str(g["gamePk"])]=utcnow().isoformat()
         try:
             mlb.capture(g["gamePk"],path)
@@ -206,11 +211,17 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
         store={"MLB": ms, "NCAAF": ns, "NFL": fs}[sport]
         path=root/("nfl-market.sqlite3" if sport=="NFL" else sport.lower()+"-prospective.sqlite3")
         stage = "restore"
-        def backup():return store.sync(path,client=client,folder=folder)
+        sync_session = {}
+        def backup():
+            progress(sport, "sync_started", operation="backup" if sync_session.get("restored") else "restore")
+            result = store.sync(path, client=client, folder=folder, session=sync_session)
+            progress(sport, "sync_completed", **(result or {}))
+            return result
         try:
             backup()  # Restore must succeed before any capture or grading.
             try:
                 stage = "capture_and_grade"
+                progress(sport, stage)
                 if sport=="NFL":
                     result=nfl.run(path,odds_key,backup,budget.request)
                 else:
@@ -229,6 +240,7 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
             code=str(exc) if str(exc) in known else type(exc).__name__
             if isinstance(exc, ResearchStageError):
                 stage, code = exc.stage, exc.code
+            progress(sport, "failed", failed_stage=stage, code=code)
             report["errors"].append(sport+":"+code)
             report.setdefault("failure_stages", {})[sport] = {"stage": stage, "code": code}
     report["finished_at"]=utcnow().isoformat()
