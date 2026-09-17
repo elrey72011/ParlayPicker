@@ -13,6 +13,14 @@ PREFIX = "parlaypicker/research-scheduler-v1/"
 _last_checkpoint_time = None
 
 
+class ResearchStageError(Exception):
+    """Sanitized stage information without provider URLs or credentials."""
+    def __init__(self, stage, cause):
+        self.stage = stage
+        self.code = type(cause).__name__
+        super().__init__(self.code)
+
+
 def utcnow():
     return datetime.now(timezone.utc)
 
@@ -81,7 +89,10 @@ def run_mlb(path, state, backup):
     if model["data"]["runtime_hash"]!=mlb.runtime_hash():raise ValueError("stale_frozen_model")
     seen={e["game_id"] for r in records if r["kind"]=="capture" and r["data"]["model_id"]==model["id"] for e in r["data"]["events"]}
     counts={"captured":0,"graded":0,"blocked_captures":0,"errors":[]}
-    games=sorted(retry_schedule(upcoming_mlb),key=lambda g:(g["gameDate"],g["gamePk"]))
+    try:
+        games=sorted(retry_schedule(upcoming_mlb),key=lambda g:(g["gameDate"],g["gamePk"]))
+    except Exception as exc:
+        raise ResearchStageError("mlb_schedule", exc) from None
     candidates=[g for g in games if g["gamePk"] not in seen and due(g["gameDate"],utcnow())]
     capture_attempts=state.setdefault("mlb_capture_attempts",{})
     candidates.sort(key=lambda g:(capture_attempts.get(str(g["gamePk"]),""),g["gameDate"],g["gamePk"]))
@@ -124,6 +135,11 @@ def run_mlb(path, state, backup):
 
 def run_ncaaf(path, state, cfbd_key, odds_key, backup, request_get=None):
     records=ns.records(path);model=latest_model(records)
+    from app_core.research_model_recovery import recover_ncaaf
+    recovered = recover_ncaaf(model, path)
+    if recovered["id"] != model["id"]:
+        backup()  # Verify the new immutable cohort remotely before capture.
+    model = recovered
     if model["data"]["runtime_hash"]!=ncaaf.runtime_hash():raise ValueError("stale_frozen_model")
     if not cfbd_key or not odds_key:raise ValueError("missing_provider_keys")
     inputs=state.get("ncaaf_inputs")
@@ -189,10 +205,12 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
     for sport in sports:
         store={"MLB": ms, "NCAAF": ns, "NFL": fs}[sport]
         path=root/("nfl-market.sqlite3" if sport=="NFL" else sport.lower()+"-prospective.sqlite3")
+        stage = "restore"
         def backup():return store.sync(path,client=client,folder=folder)
         try:
             backup()  # Restore must succeed before any capture or grading.
             try:
+                stage = "capture_and_grade"
                 if sport=="NFL":
                     result=nfl.run(path,odds_key,backup,budget.request)
                 else:
@@ -200,12 +218,19 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
                 report["sports"][sport]=result
                 report["errors"].extend(result["errors"])
             finally:
+                # A backup error must be distinguishable from provider capture.
+                previous_stage = stage
+                stage = "backup"
                 backup()
+                stage = previous_stage
         except Exception as exc:
             # Never include provider exception text: URLs may contain API keys.
             known={"missing_frozen_model","stale_frozen_model","missing_provider_keys"}
             code=str(exc) if str(exc) in known else type(exc).__name__
+            if isinstance(exc, ResearchStageError):
+                stage, code = exc.stage, exc.code
             report["errors"].append(sport+":"+code)
+            report.setdefault("failure_stages", {})[sport] = {"stage": stage, "code": code}
     report["finished_at"]=utcnow().isoformat()
     report["api_budget"]=budget.report()
     state["last_run"]=report

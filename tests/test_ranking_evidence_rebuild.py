@@ -36,3 +36,13 @@ def test_rebuild_failure_writes_error_not_healthy(monkeypatch,tmp_path):
     path=tmp_path/'report.json'
     assert rebuild('unused',path)['status']=='ERROR'
     assert 'private detail' not in path.read_text()
+
+
+def test_latest_producer_health_does_not_hide_legacy_exclusions_or_activate():
+    old = row(prediction_generated_at='2026-09-14T15:00:00+00:00', exclusion_reasons=['missing_model_version'])
+    new = row(exclusion_reasons=['missing_calibration_version'])
+    report = build([], [old, new])
+    assert report['exclusions']['missing_model_version'] == 1
+    assert report['latest_producer_health']['MLB']['exclusions'] == {'missing_calibration_version': 1}
+    assert report['eligible_games'] == 0
+    assert report['status'] == 'BLOCKED_NO_ELIGIBLE_EVIDENCE'
