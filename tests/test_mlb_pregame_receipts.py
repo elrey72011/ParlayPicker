@@ -364,3 +364,71 @@ def test_earlier_provider_start_blocks_capture(fixture):
     raw['commence_time'] = (NOW - timedelta(minutes=1)).isoformat()
     with pytest.raises(ValueError, match='invalid_capture_time'):
         r.resolve_event(raw, fixture[1])
+
+
+def makeup_pair(final):
+    final = deepcopy(final)
+    final['status']['detailedState'] = 'Final'
+    old = deepcopy(final)
+    old['gameDate'] = (datetime.fromisoformat(final['gameDate'])-timedelta(days=1)).isoformat()
+    old['status']['detailedState'] = 'Postponed'
+    old['rescheduleDate'] = final['gameDate']
+    final['rescheduledFrom'] = old['gameDate']
+    for side in ('home', 'away'):
+        old['teams'][side].pop('score')
+    return old, final
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+def test_linked_makeup_resolves_and_collects(fixture, reverse):
+    games = fixture[1]
+    old, final = makeup_pair(games[0])
+    games[0] = final
+    games.append(old)
+    if reverse:
+        games.reverse()
+    original = deepcopy(games)
+    _, health = collect(fixture)
+    assert health['receipts_created'] == 4, health
+    assert health['reasons']['linked_postponed_makeups_resolved'] == 1
+    assert games == original
+
+
+@pytest.mark.parametrize('defect', ['link', 'team', 'score', 'two_finals'])
+def test_makeup_without_complete_proof_stays_quarantined(fixture, defect):
+    games = fixture[1]
+    old, final = makeup_pair(games[0])
+    if defect == 'link':
+        final.pop('rescheduledFrom')
+    elif defect == 'team':
+        old['teams']['home']['team']['id'] = 111
+    elif defect == 'score':
+        old['teams']['home']['score'] = 3
+    else:
+        old['status']['detailedState'] = 'Final'
+    games[0] = final
+    games.append(old)
+    _, health = collect(fixture)
+    assert health['receipts_created'] == 0
+    assert health['reasons']['conflicting_schedule_events_quarantined'] == 1
+
+
+def test_linked_scheduled_makeup_is_not_a_final():
+    old, new = makeup_pair(schedule_game(100, START, True))
+    new['status'] = {'abstractGameState':'Preview', 'detailedState':'Scheduled'}
+    for side in ('home','away'):
+        new['teams'][side].pop('score')
+    assert r.resolved_resume_or_scheduled([old,new]) == new
+
+
+@pytest.mark.parametrize('conflict', [False, True])
+def test_resumed_final_requires_matching_scores(conflict):
+    old = schedule_game(100, START-timedelta(days=2), True)
+    old['status']['detailedState'] = 'Final'
+    new = deepcopy(old)
+    new['gameDate'] = (START-timedelta(days=1)).isoformat()
+    old['resumeDate'] = new['gameDate']
+    new['resumedFrom'] = old['gameDate']
+    if conflict:
+        new['teams']['home']['score'] += 1
+    assert r.resolved_resume_or_scheduled([new,old]) == (None if conflict else old)
