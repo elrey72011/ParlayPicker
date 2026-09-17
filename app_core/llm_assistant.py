@@ -486,6 +486,13 @@ Return ONLY a JSON array of objects. No markdown formatting.
             if cached is not None:
                 all_results.update(cached)
                 continue
+            remaining = min(GEMINI_REVIEW_REQUEST_SECONDS, deadline - time.monotonic())
+            # Gemini rejects deadlines below ten seconds. Do not extend the run
+            # deadline or spend request budget on an invalid request.
+            if remaining < 10:
+                if session_state is not None:
+                    session_state["gemini_review_limit_status"] = "Review time limit reached; unfinished reviews remain held at $0"
+                return all_results
             if not budget.reserve():
                 if session_state is not None:
                     session_state["gemini_review_limit_status"] = "Daily structured-review request limit reached"
@@ -493,7 +500,9 @@ Return ONLY a JSON array of objects. No markdown formatting.
             if session_state is not None:
                 session_state.pop("gemini_review_limit_status", None)
             remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            if min(GEMINI_REVIEW_REQUEST_SECONDS, remaining) < 10:
+                if session_state is not None:
+                    session_state["gemini_review_limit_status"] = "Review time limit reached; unfinished reviews remain held at $0"
                 return all_results
 
             resp = client.models.generate_content(

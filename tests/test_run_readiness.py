@@ -225,3 +225,31 @@ def test_missing_authoritative_model_calibration_is_not_bundle_provenance(frozen
     for field in ('model_version','model_trained_through','model_available_at','calibration_version','calibration_available_at'):
         assert saved[field].isna().all()
     assert 'model_provenance_missing' in build_readiness(saved,card)['games'][0]['evidence_blockers']
+
+
+def test_challenger_diagnostics_do_not_supply_missing_authority(frozen):
+    audit, final = saved(frozen)
+    audit['league'] = 'MLB'
+    audit['mlb_challenger_status'] = 'RESEARCH'
+    audit['mlb_challenger_result'] = json.dumps({
+        'probability': .61, 'model_version': 'challenger-v1', 'receipt_hash': 'receipt-v1'})
+    audit['model_version'] = ''
+    report = build_readiness(audit, final, diagnostics={'mlb_receipt_health': {'receipts_created': 2}})
+    assert report['counts']['games'] == 1
+    assert report['mlb_receipt_health'] == {'receipts_created': 2}
+    assert report['mlb_challenger_status_counts'] == {'RESEARCH': len(audit)}
+    assert report['candidates'][0]['mlb_challenger_probability'] == .61
+    assert report['candidates'][0]['mlb_challenger_receipt_hash'] == 'receipt-v1'
+    assert 'model_provenance_missing' in report['games'][0]['evidence_blockers']
+    assert build_readiness(audit, final)['mlb_receipt_health'] == {}
+    json.dumps(report, allow_nan=False)
+
+
+def test_live_dashboard_uses_authoritative_evidence():
+    import ast
+    from pathlib import Path
+    tree = ast.parse(Path('streamlit_app.py').read_text(encoding='utf-8'))
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Name) and n.func.id == 'render_readiness_dashboard']
+    assert len(calls) == 1
+    assert ast.literal_eval(calls[0].args[0].args[0]) == 'candidate_authority_df'

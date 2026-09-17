@@ -1973,7 +1973,7 @@ def main() -> None:
                                file_name="prediction-evidence-status.json", mime="application/json")
 
         from app.ui.readiness_dashboard import render_readiness_dashboard
-        render_readiness_dashboard(diagnostics.get("candidate_audit_df"), best_picks_df, diagnostics)
+        render_readiness_dashboard(diagnostics.get("candidate_authority_df"), best_picks_df, diagnostics)
 
     if analysis_df is None or analysis_df.empty:
         # History grading and republication must remain available after a restart,

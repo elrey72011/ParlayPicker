@@ -2,6 +2,7 @@
 from collections import Counter
 from core.frame_records import drop_duplicate_records
 import math
+import json
 
 from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES
 import pandas as pd
@@ -39,6 +40,23 @@ def probability(value):
     return value if value is not None and 0 <= value <= 1 else None
 
 
+def challenger_diagnostics(row):
+    """Expose recorded challenger evidence without promoting baseline authority."""
+    result = row.get("mlb_challenger_result")
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except (ValueError, TypeError):
+            result = None
+    result = result if isinstance(result, dict) else {}
+    return {
+        "mlb_challenger_status": text(row.get("mlb_challenger_status")) or "NOT_RECORDED",
+        "mlb_challenger_probability": probability(result.get("probability")),
+        "mlb_challenger_model_version": text(result.get("model_version")),
+        "mlb_challenger_receipt_hash": text(result.get("receipt_hash")),
+    }
+
+
 def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MINUTES, diagnostics=None):
     """One diagnostic row per supplied snapshot/game, including failed games.
 
@@ -57,6 +75,11 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
         value = diagnostics.get(key)
         if isinstance(value, (str, bool)) and value:
             report["run_warnings"].append(f"{key}: {value}")
+    health = diagnostics.get("mlb_receipt_health")
+    report["mlb_receipt_health"] = health if isinstance(health, dict) else {}
+    report["mlb_challenger_status_counts"] = dict(Counter(
+        text(row.get("mlb_challenger_status")) or "NOT_RECORDED"
+        for _, row in audit.iterrows() if text(row.get("league")).upper() == "MLB"))
     if audit.empty:
         report.update(status="no_candidate_evidence", counts={"games": 0, "ready_for_grading": 0, "approved_wagers": 0})
         return report
@@ -162,6 +185,7 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
                       "independent_model_probability": probability(row.get("ml_probability")),
                       "theover_probability": probability(row.get("theover_probability")),
                       "issues": sorted(set(issues))}
+            detail.update(challenger_diagnostics(row))
             blocks.update(issues)
             details.append(detail)
         model_p = probability(selected_row.get("ml_probability"))
@@ -224,6 +248,8 @@ def render_readiness(report):
         values = [r["matchup"], r["selected_pick"], r["readiness"], r["wager_decision"],
                   r["displayed_probability"], r["production_probability"], "; ".join(r["evidence_blockers"] + r["wager_reasons"])]
         lines.append("| " + " | ".join(escape(v) if v is not None else "Unavailable" for v in values) + " |")
+    lines += ["", "MLB challenger status counts: " + json.dumps(report.get("mlb_challenger_status_counts", {}), sort_keys=True),
+              "MLB receipt collection: " + json.dumps(report.get("mlb_receipt_health", {}), sort_keys=True)]
     lines += ["", "## Run warnings", ""] + ["- " + escape(v) for v in report["run_warnings"]]
     lines += ["", "Candidate-level issues, source coverage and evaluation-day eligibility are included in the JSON download."]
     return "\n".join(lines) + "\n"

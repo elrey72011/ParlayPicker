@@ -492,3 +492,18 @@ def test_retry_shares_original_deadline(monkeypatch):
     monkeypatch.setattr(llm_assistant, 'genai', SimpleNamespace(types=SimpleNamespace(GenerateContentConfig=lambda **kw:kw)))
     assert llm_assistant.generate_batch_confidence_explanation([{'game_id':'one'}]) == {}
     assert timeouts == [30000,10000]
+
+
+def test_short_remaining_deadline_does_not_call_or_reserve(monkeypatch):
+    from app_core import gemini_review_budget as budget
+    monkeypatch.setattr(llm_assistant, '_GEMINI_AVAILABLE', True)
+    monkeypatch.setattr(llm_assistant, 'initialize_gemini', lambda: (SimpleNamespace(models=None), None))
+    monkeypatch.setattr(llm_assistant.time, 'monotonic', lambda: 88.0)
+    monkeypatch.setattr(budget, 'lookup', lambda key: None)
+    def forbidden():
+        pytest.fail('Insufficient time must not reserve a provider request')
+    monkeypatch.setattr(budget, 'reserve', forbidden)
+    state = {}
+    assert llm_assistant.generate_batch_confidence_explanation(
+        [{'game_id': 'one'}], state, _deadline=90.0) == {}
+    assert 'time limit' in state['gemini_review_limit_status']

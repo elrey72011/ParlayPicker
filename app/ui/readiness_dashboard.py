@@ -10,11 +10,6 @@ from core.run_readiness import build_readiness, game_table, render_readiness
 def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
     with st.expander("Run Readiness Report", expanded=False):
         st.caption("Evidence readiness and wager approval are separate. This report does not change picks or thresholds.")
-        receipt_health = (diagnostics or {}).get("mlb_receipt_health", {})
-        if receipt_health:
-            st.caption(f"MLB research receipts: {receipt_health.get('receipts_created', 0)} created; {receipt_health.get('receipts_skipped', 0)} skipped. No training or wager activation.")
-            st.download_button("Download MLB Receipt Health", json.dumps(receipt_health, indent=2),
-                               file_name="mlb-receipt-health.json", mime="application/json")
         source = st.selectbox("Readiness source", ["Current run", "Saved snapshot"], key="readiness_source")
         if source == "Saved snapshot":
             if st.button("Load saved snapshots", key="readiness_load"):
@@ -32,6 +27,11 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             sid = st.selectbox("Snapshot", list(reversed(by_id)), key="readiness_snapshot")
             audit, final = by_id[sid]
             diagnostics = None  # Current run warnings must not describe an older run.
+        receipt_health = (diagnostics or {}).get("mlb_receipt_health", {})
+        if receipt_health:
+            st.caption(f"MLB research receipts: {receipt_health.get('receipts_created', 0)} created; {receipt_health.get('receipts_skipped', 0)} skipped. No training or wager activation.")
+            st.download_button("Download MLB Receipt Health", json.dumps(receipt_health, indent=2),
+                               file_name="mlb-receipt-health.json", mime="application/json")
         if audit is None or audit.empty:
             st.info("No candidate evidence is available for this run. Run Game Analysis or select a saved snapshot.")
             return
