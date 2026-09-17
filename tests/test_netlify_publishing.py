@@ -14,7 +14,7 @@ def package():
 
 def test_upload_archive_contains_only_public_page_and_headers():
     with zipfile.ZipFile(io.BytesIO(remote.archive(package()))) as archive:
-        assert set(archive.namelist())=={'index.html','_headers'}
+        assert set(archive.namelist())=={'index.html','site.css','site.js','board-data.json','version.json','_headers'}
         assert b'board-data' in archive.read('index.html')
     data=package();data['secret']='do not upload'
     with pytest.raises(ValueError):remote.archive(data)

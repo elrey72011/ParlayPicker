@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 from app_core.per_game_boards import per_game_board
 from app_core.public_board import build_package
-from scripts.publish_board import ROOT, render, publish_package
+from scripts.publish_board import ROOT, render, publish_package, production_source_fingerprint
 
 
 def setting(name, default=''):
@@ -26,7 +26,7 @@ def setting(name, default=''):
 
 def source_fingerprint(games, candidates, props, dfs, options):
     digest = hashlib.sha256(json.dumps(options, sort_keys=True).encode())
-    digest.update((ROOT / "publishing/board.html").read_bytes())
+    digest.update(production_source_fingerprint().encode())
     for frame in (games, candidates, props, dfs):
         digest.update((frame.to_json(orient='split', date_format='iso') if isinstance(frame,pd.DataFrame) else '').encode())
     return digest.hexdigest()

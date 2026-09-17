@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 import requests
-from scripts.publish_board import render
+from scripts.publish_board import render, assets_from_html
 
 LIMIT = 10_000_000
 
@@ -104,9 +104,9 @@ def connection(config):
         client.close()
 
 
-def public_bytes(config):
+def public_bytes(config, filename=""):
     try:
-        with requests.get(config['url'] + '/?publication_check=' + uuid4().hex,
+        with requests.get(config['url'] + '/' + filename + '?publication_check=' + uuid4().hex,
                           timeout=(10, 30), allow_redirects=False, stream=True,
                           headers={'Cache-Control': 'no-cache'}) as response:
             if response.status_code != 200:
@@ -131,7 +131,7 @@ def site_info(config):
 
 
 def prepare(package):
-    content = render(package).encode('utf-8')
+    content = render(package, live=True).encode('utf-8')
     if len(content) > LIMIT:
         raise ValueError('Public board exceeds the 10 MB upload limit.')
     return content, 'sftp-' + hashlib.sha256(content).hexdigest()
@@ -142,23 +142,31 @@ def deploy(content, deploy_id, config):
         raise ValueError('Publication content mismatch.')
     with connection(config) as sftp:
         directory = config['directory']
-        temporary = directory + '/.parlaypicker-' + uuid4().hex + '.tmp'
-        try:
-            sftp.putfo(io.BytesIO(content), temporary, file_size=len(content), confirm=True)
-            sftp.chmod(temporary, 0o644)
-            # Atomic replacement; never delete the live page as a fallback.
-            sftp.posix_rename(temporary, directory + '/index.html')
-        finally:
+        for name, text in assets_from_html(content.decode('utf-8')).items():
+            payload = text.encode('utf-8')
+            temporary = directory + '/.parlaypicker-' + uuid4().hex + '.tmp'
             try:
-                sftp.remove(temporary)
-            except OSError:
-                pass
+                sftp.putfo(io.BytesIO(payload), temporary, file_size=len(payload), confirm=True)
+                sftp.chmod(temporary, 0o644)
+                # Version is replaced last; readers verify the corresponding hash.
+                sftp.posix_rename(temporary, directory + '/' + name)
+            finally:
+                try:
+                    sftp.remove(temporary)
+                except OSError:
+                    pass
     return {'id': deploy_id, 'state': 'uploaded', 'url': config['url']}
 
 
 def deployment_status(deploy_id, config):
     if not re.fullmatch(r'sftp-[0-9a-f]{64}', deploy_id):
         raise ValueError('Invalid SFTP publication identifier.')
-    actual = 'sftp-' + hashlib.sha256(public_bytes(config)).hexdigest()
+    html = public_bytes(config)
+    actual = 'sftp-' + hashlib.sha256(html).hexdigest()
+    ready = actual == deploy_id
+    if ready:
+        assets = assets_from_html(html.decode('utf-8'))
+        ready = all(public_bytes(config, name) == assets[name].encode('utf-8')
+                    for name in ('board-data.json', 'version.json'))
     return {'id': deploy_id, 'url': config['url'],
-            'state': 'ready' if actual == deploy_id else 'content_mismatch'}
+            'state': 'ready' if ready else 'content_mismatch'}

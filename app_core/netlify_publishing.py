@@ -4,7 +4,7 @@ import re
 import zipfile
 from urllib.parse import urlsplit
 import requests
-from scripts.publish_board import render
+from scripts.publish_board import render, assets_from_html
 
 API = 'https://api.netlify.com/api/v1'
 
@@ -23,11 +23,12 @@ def website(value):
 
 
 def archive(package):
-    html = render(package)
+    html = render(package, live=True)
     output = io.BytesIO()
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as bundle:
         # Only validated public output is uploaded. Never walk local directories.
-        bundle.writestr('index.html',html)
+        for name, content in assets_from_html(html).items():
+            bundle.writestr(name, content)
         bundle.writestr('_headers','/*\n  Cache-Control: no-cache\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n')
     content = output.getvalue()
     if len(content)>10_000_000:

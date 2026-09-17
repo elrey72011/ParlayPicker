@@ -65,6 +65,8 @@ def test_atomic_upload_never_removes_live_page(monkeypatch,fail):
     else:assert remote.deploy(content,identity,config())['state']=='uploaded'
     assert calls[0][2]==content
     assert [x for x in calls if x[0]=='rename'][0][2]=='/home/owner/picks.example.com/index.html'
+    if not fail:
+        assert [x[2].rsplit('/', 1)[-1] for x in calls if x[0]=='rename'][-2:] == ['board-data.json','version.json']
     assert all(x[1].endswith('.tmp') for x in calls if x[0]=='remove')
 
 
@@ -72,7 +74,7 @@ def test_public_verification_requires_exact_content(monkeypatch):
     content,identity=remote.prepare(package())
     monkeypatch.setattr(remote,'public_bytes',lambda c:b'old page')
     assert remote.deployment_status(identity,config())['state']=='content_mismatch'
-    monkeypatch.setattr(remote,'public_bytes',lambda c:content)
+    monkeypatch.setattr(remote,'public_bytes',lambda c, name='':remote.assets_from_html(content.decode())[name].encode() if name else content)
     assert remote.deployment_status(identity,config())['state']=='ready'
 
 
@@ -173,3 +175,9 @@ def test_authentication_and_network_errors_have_specific_guidance():
     assert 'cPanel username and password' in message and 'secret' not in message
     assert 'hostname could not be resolved' in remote.connection_error(socket.gaierror('secret'),'connecting and authenticating')
     assert 'Streamlit Cloud' in remote.connection_error(TimeoutError('secret'),'connecting and authenticating')
+
+
+def test_matching_html_with_incomplete_sidecars_is_not_ready(monkeypatch):
+    content, identity = remote.prepare(package())
+    monkeypatch.setattr(remote, 'public_bytes', lambda config, name='': b'old' if name else content)
+    assert remote.deployment_status(identity, config())['state'] == 'content_mismatch'
