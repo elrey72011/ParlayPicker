@@ -294,3 +294,46 @@ def test_live_receipts_returned_without_rewriting_first_training_receipt(fixture
     assert first[0]["mlb_pregame_receipts"]["total_over"]["payload"]["quote"]["line"] == 8.5
     assert r.read("receipts", db) == original
     assert report["receipts_created"] == 0
+
+
+def test_identical_schedule_duplicates_continue_collection(fixture):
+    games = fixture[1]
+    games.extend(deepcopy(games))
+    _, health = collect(fixture)
+    assert health['receipts_created'] == 4
+    assert health['reasons']['identical_schedule_duplicates_collapsed'] == 11
+
+
+def test_conflicting_target_never_picks_a_variant(fixture):
+    games = fixture[1]
+    changed = deepcopy(games[-1])
+    changed['gameDate'] = (START + timedelta(hours=1)).isoformat()
+    games.append(changed)
+    _, health = collect(fixture)
+    assert health['receipts_created'] == 0
+    assert health['reasons']['conflicting_schedule_event'] == 1
+
+
+def test_unrelated_conflict_does_not_stop_receipts(fixture):
+    games = fixture[1]
+    other = schedule_game(999, START)
+    other['teams']['home']['team'] = {'id': 111, 'name': 'Boston Red Sox'}
+    other['teams']['away']['team'] = {'id': 147, 'name': 'New York Yankees'}
+    changed = deepcopy(other)
+    changed['gameDate'] = (START + timedelta(hours=1)).isoformat()
+    games.extend([other, changed])
+    original = deepcopy(games)
+    _, health = collect(fixture)
+    assert health['receipts_created'] == 4
+    assert health['reasons']['conflicting_schedule_events_quarantined'] == 1
+    assert games == original
+
+
+def test_conflicting_prior_cannot_be_replaced_by_older_history(fixture):
+    games = fixture[1]
+    changed = deepcopy(games[0])
+    changed['teams']['home']['score'] = 9
+    games.extend([changed, schedule_game(20, START-timedelta(days=20), True)])
+    _, health = collect(fixture)
+    assert health['receipts_created'] == 0
+    assert health['reasons']['conflicting_prior_schedule_event'] == 1
