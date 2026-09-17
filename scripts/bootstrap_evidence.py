@@ -14,6 +14,8 @@ def main():
     if a.grade:
         from app_core.prediction_evidence import refresh_outcomes
         result['grading']=refresh_outcomes(a.database)
+        from core.ranking_evidence_rebuild import rebuild
+        result['ranking_evidence']=rebuild(a.database, Path(a.output)/'ranking-evidence.json')
     output=Path(a.output);output.mkdir(parents=True,exist_ok=True)
     for sport in SPORTS:
         plan=Path(a.plan_dir,sport+'.json');r=validate(a.database,sport,json.loads(plan.read_text()) if plan.exists() else None)
