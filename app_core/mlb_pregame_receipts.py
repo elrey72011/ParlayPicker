@@ -197,9 +197,9 @@ def resolve_event(odds_game, games):
     stable_id(game.get("gamePk"))
     for side in ("home", "away"):
         team_id(game["teams"][side]["team"].get("id"))
-    if timestamp(game["gameDate"]) != timestamp(odds_game["commence_time"]):
+    if abs((timestamp(game["gameDate"]) - timestamp(odds_game["commence_time"])).total_seconds()) > 600:
         raise Rejected("event_start_mismatch")
-    if game["status"]["abstractGameState"] != "Preview" or timestamp(game["gameDate"]) <= now():
+    if game["status"]["abstractGameState"] != "Preview" or min(timestamp(game["gameDate"]), timestamp(odds_game["commence_time"])) <= now():
         raise Rejected("invalid_capture_time")
     claimed = odds_game.get("provider_ids", {}).get("mlb")
     if claimed is not None and str(claimed) != str(game["gamePk"]):
@@ -230,7 +230,8 @@ def exact_quotes(game):
         q = {"market_type": kind, "line": quote["point"], "decimal_odds": price,
              "sportsbook": book, "observed_at": observed.isoformat(),
              "provider_event_id": quote["provider_event_id"], "provider_namespace": "odds_api",
-             "provider_updated_at": quote.get("recorded_at")}
+             "provider_updated_at": quote.get("recorded_at"),
+             "source_game_start_utc": timestamp(game["commence_time"]).isoformat()}
         key = (kind, book)
         if key in grouped and grouped[key] != q:
             raise Rejected("ambiguous_quote")
@@ -267,6 +268,8 @@ def build_receipt(game, quote, prior_games, *, captured_at, source_refs):
          "provider_ids": {"mlb": gid, "odds_api": quote["provider_event_id"]},
          "source_observations": source_refs}
     if game["status"]["abstractGameState"] != "Preview":
+        raise Rejected("invalid_capture_time")
+    if quote.get("source_game_start_utc") and timestamp(captured_at) >= timestamp(quote["source_game_start_utc"]):
         raise Rejected("invalid_capture_time")
     result = {"payload": p, "sha256": digest(p)}
     receipt_features(result)

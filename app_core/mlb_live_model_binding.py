@@ -34,7 +34,10 @@ def verify(row, receipt, *, now):
             if v is not None and str(v) not in ("", "nan", "NaT", "<NA>"):
                 return v
         raise ValueError("missing candidate quote fact")
-    if timestamp(first("game_start_utc", "start", "commence_time_raw", "commence_time")) != timestamp(p["game_start_utc"]):
+    source_start = timestamp(q.get("source_game_start_utc", p["game_start_utc"]))
+    if abs((source_start - timestamp(p["game_start_utc"])).total_seconds()) > 600:
+        raise ValueError("challenger source start mismatch")
+    if timestamp(first("game_start_utc", "start", "commence_time_raw", "commence_time")) != source_start:
         raise ValueError("challenger start mismatch")
     if row.get("market_type") != q["market_type"]:
         raise ValueError("challenger market mismatch")
@@ -57,5 +60,5 @@ def verify(row, receipt, *, now):
         raise ValueError("challenger price mismatch")
     if not 0 <= (now - timestamp(q["observed_at"])).total_seconds() <= 1800:
         raise ValueError("challenger stale quote")
-    if not timestamp(p["captured_at"]) <= now < timestamp(p["game_start_utc"]):
+    if not timestamp(p["captured_at"]) <= now < min(source_start, timestamp(p["game_start_utc"])):
         raise ValueError("challenger not pregame")

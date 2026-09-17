@@ -337,3 +337,30 @@ def test_conflicting_prior_cannot_be_replaced_by_older_history(fixture):
     _, health = collect(fixture)
     assert health['receipts_created'] == 0
     assert health['reasons']['conflicting_prior_schedule_event'] == 1
+
+
+@pytest.mark.parametrize('minutes', [-10, -1, 1, 10])
+def test_small_unique_event_start_difference_collects(fixture, minutes):
+    raw = odds_game()
+    raw['commence_time'] = (START + timedelta(minutes=minutes)).isoformat()
+    db, games, fetch, _ = fixture
+    output, health = r.capture_live_games([raw], path=db, fetch=fetch)
+    assert health['receipts_created'] == 4, health
+    receipt = output[0]['mlb_pregame_receipts']['spread_home']['payload']
+    assert r.timestamp(receipt['game_start_utc']) == START
+    assert r.timestamp(receipt['quote']['source_game_start_utc']) == START + timedelta(minutes=minutes)
+
+
+def test_large_start_difference_still_blocked(fixture):
+    raw = odds_game()
+    raw['commence_time'] = (START + timedelta(minutes=11)).isoformat()
+    with pytest.raises(ValueError, match='event_start_mismatch'):
+        r.resolve_event(raw, fixture[1])
+
+
+def test_earlier_provider_start_blocks_capture(fixture):
+    fixture[1][-1]['gameDate'] = (NOW + timedelta(minutes=1)).isoformat()
+    raw = odds_game()
+    raw['commence_time'] = (NOW - timedelta(minutes=1)).isoformat()
+    with pytest.raises(ValueError, match='invalid_capture_time'):
+        r.resolve_event(raw, fixture[1])
