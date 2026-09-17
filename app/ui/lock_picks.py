@@ -81,6 +81,10 @@ def render_lock_picks(package, setting):
         selected = st.multiselect('Picks to lock', list(choices), default=list(choices),
             format_func=lambda key: choices[key]['legs'][0]['game'] + ': ' + choices[key]['legs'][0]['pick'] + ' (' + str(choices[key]['legs'][0]['odds']) + ')',
             key='lock_pick_selection')
+        quality_rows = total_input_review([choices[identity] for identity in selected])
+        if quality_rows:
+            st.warning('Review total inputs before locking. Research ranking is not wager approval; these warnings do not change the selected pick or its probability.')
+            st.dataframe(pd.DataFrame(quality_rows), hide_index=True)
         tokens, changes, ready = {}, [], bool(selected)
         for identity in selected:
             prior = latest_removed(removals, identity)
@@ -285,3 +289,25 @@ def render_lock_audit(rows, at):
             st.dataframe(frame, hide_index=True)
             st.download_button('Download lock eligibility audit', frame.to_csv(index=False).encode('utf-8'),
                                'lock-eligibility-audit.csv', 'text/csv', key='lock_eligibility_audit_download')
+
+
+def total_input_review(records):
+    """Display only immutable saved labels; never infer missing historical inputs."""
+    reasons = {'missing_theover': 'TheOver input missing',
+               'stale_empirical_evidence': 'Empirical evidence stale',
+               'missing_target_model': 'Matching total model missing',
+               'degraded_feature_subset': 'Reduced model feature set'}
+    rows = []
+    for record in records:
+        for leg in record.get('legs', []):
+            if leg.get('sport') != 'MLB' or not str(leg.get('market', '')).startswith('total_'):
+                continue
+            recorded = leg.get('total_input_version') == 'mlb-total-inputs-v1'
+            status = leg.get('total_input_status') if recorded else 'Not recorded'
+            if status == 'COMPLETE':
+                continue
+            codes = str(leg.get('total_input_reason_codes') or '').split('|') if recorded else []
+            rows.append({'Game': leg.get('game', ''), 'Pick': leg.get('pick', ''),
+                         'Saved total-input status': status,
+                         'Recorded input warnings': '; '.join(reasons.get(c, c) for c in codes if c) or 'Not recorded'})
+    return rows
