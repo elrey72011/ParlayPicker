@@ -76,3 +76,11 @@ jobs:
       - name: Report evidence health
         if: ${{ !cancelled() && steps.window.outputs.active == 'true' }}
         run: python -u scripts/prediction_evidence.py status --database data/prediction_evidence/evidence.sqlite3
+
+      - name: Preserve ranking evidence rebuild diagnostics
+        if: ${{ !cancelled() && steps.window.outputs.active == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ranking-evidence-rebuild
+          path: output/sport-validation/ranking-evidence.json
+          if-no-files-found: warn
