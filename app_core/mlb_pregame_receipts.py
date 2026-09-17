@@ -150,6 +150,69 @@ class ScheduleGames(list):
         self.conflicts = conflicts
 
 
+def resolved_makeup(variants):
+    """Resolve only an explicitly linked, unscored postponement and scored final."""
+    if len(variants) != 2:
+        return None
+    for old, final in (variants, variants[::-1]):
+        try:
+            if old["status"].get("detailedState") != "Postponed":
+                continue
+            if final["status"].get("detailedState") != "Final" or final["status"].get("abstractGameState") != "Final":
+                continue
+            if old.get("season") != final.get("season") or old.get("gameType") != final.get("gameType"):
+                continue
+            if stable_id(old["gamePk"]) != stable_id(final["gamePk"]):
+                continue
+            if any(team_id(old["teams"][side]["team"]["id"]) != team_id(final["teams"][side]["team"]["id"])
+                   or old["teams"][side].get("score") is not None
+                   or type(final["teams"][side].get("score")) is not int
+                   or final["teams"][side]["score"] < 0 for side in ("home", "away")):
+                continue
+            if (timestamp(old["rescheduleDate"]) != timestamp(final["gameDate"])
+                    or timestamp(final["rescheduledFrom"]) != timestamp(old["gameDate"])
+                    or timestamp(old["gameDate"]) >= timestamp(final["gameDate"])):
+                continue
+            return final
+        except (ValueError, KeyError, TypeError):
+            continue
+    return None
+
+
+def resolved_resume_or_scheduled(variants):
+    """Accept reciprocal provider links, with no inconsistent identity or scores."""
+    if len(variants) != 2:
+        return None
+    for old, new in (variants, variants[::-1]):
+        try:
+            if any(old.get(k) != new.get(k) for k in ("gamePk", "season", "gameType")):
+                continue
+            if any(team_id(old["teams"][s]["team"]["id"]) != team_id(new["teams"][s]["team"]["id"]) for s in ("home", "away")):
+                continue
+            if timestamp(old["gameDate"]) >= timestamp(new["gameDate"]):
+                continue
+            if (old['status'].get('detailedState') == 'Postponed'
+                    and new['status'].get('abstractGameState') == 'Preview'
+                    and new['status'].get('detailedState') == 'Scheduled'
+                    and all(g['teams'][side].get('score') is None for g in (old,new) for side in ('home','away'))
+                    and timestamp(old['rescheduleDate']) == timestamp(new['gameDate'])
+                    and timestamp(new['rescheduledFrom']) == timestamp(old['gameDate'])):
+                return new
+            if (all(g['status'].get('detailedState') == 'Final' and g['status'].get('abstractGameState') == 'Final' for g in (old,new))
+                    and all(type(old['teams'][side].get('score')) is int
+                            and old['teams'][side]['score'] >= 0
+                            and type(new['teams'][side].get('score')) is int
+                            and old['teams'][side]['score'] == new['teams'][side]['score'] for side in ('home','away'))
+                    and timestamp(old['resumeDate']) == timestamp(new['gameDate'])
+                    and timestamp(new['resumedFrom']) == timestamp(old['gameDate'])):
+                # The feed retains the original event start; completion time is
+                # independently checked when loading historical game evidence.
+                return old
+        except (ValueError, KeyError, TypeError):
+            continue
+    return None
+
+
 def schedule_games(observation, reasons=None):
     grouped = {}
     duplicates = 0
@@ -161,6 +224,16 @@ def schedule_games(observation, reasons=None):
                 duplicates += 1
             else:
                 variants.append(game)
+    for key, variants in grouped.items():
+        makeup = resolved_makeup(variants)
+        reason = "linked_postponed_makeups_resolved"
+        if makeup is None:
+            makeup = resolved_resume_or_scheduled(variants)
+            reason = "linked_schedule_variants_resolved"
+        if makeup is not None:
+            grouped[key] = [makeup]
+            if reasons is not None:
+                reasons[reason] += 1
     conflicts = [g for variants in grouped.values() if len(variants) > 1 for g in variants]
     if reasons is not None:
         if duplicates:
