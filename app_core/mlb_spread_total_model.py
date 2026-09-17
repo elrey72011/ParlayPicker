@@ -395,14 +395,23 @@ def attach_challenger(frame, *, model_path=None, now=None):
         if str(row.get("sport", row.get("league", row.get("League", "")))).upper() != "MLB":
             continue
         try:
-            receipt = row.get("mlb_pregame_receipt")
+            receipts = row.get("mlb_pregame_receipts")
+            if isinstance(receipts, str):
+                receipts = json.loads(receipts)
+            receipt = (receipts.get(row.get("market_type")) if isinstance(receipts, dict)
+                       else row.get("mlb_pregame_receipt"))
             if isinstance(receipt, str):
                 receipt = json.loads(receipt)
             p = receipt["payload"]
             # Exact event/selection binding, not team names or positional alignment.
-            for key in ("provider_namespace", "provider_event_id", "home_team_id", "away_team_id", "game_start_utc"):
-                if str(row.get(key)) != str(p[key]):
-                    raise ValueError("challenger event mismatch")
+            if isinstance(receipts, dict):
+                from app_core.mlb_live_model_binding import verify
+                verify(row, receipt, now=now or utcnow())
+            else:
+                # Compatibility for explicit single-receipt research callers.
+                for key in ("provider_namespace", "provider_event_id", "home_team_id", "away_team_id", "game_start_utc"):
+                    if str(row.get(key)) != str(p[key]):
+                        raise ValueError("challenger event mismatch")
             q = p["quote"]
             if row["market_type"] != q["market_type"]:
                 raise ValueError("challenger target mismatch")
@@ -410,6 +419,8 @@ def attach_challenger(frame, *, model_path=None, now=None):
             if finite(line) != finite(q["line"]):
                 raise ValueError("challenger line mismatch")
             result = predict_mlb_spread_total(bundle, receipt, prediction_generated_at=(now or utcnow()).isoformat())
+            # Save the exact input with its namespaced prediction for replay.
+            result["input_receipt"] = receipt
             out.at[idx, "mlb_challenger_result"] = json.dumps(result, sort_keys=True)
             out.at[idx, "mlb_challenger_status"] = "RESEARCH"
         except (ValueError, KeyError, TypeError):

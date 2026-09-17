@@ -221,6 +221,12 @@ def test_live_ingestion_and_expansion_preserve_stable_ids(fixture,monkeypatch):
     assert frame.attrs["mlb_receipt_health"]["receipts_created"]==4
     expanded,_=sp._expand_live_odds_to_bet_rows(frame)
     assert not expanded.empty
+    from app_core.mlb_live_model_binding import verify
+    import json
+    for candidate in expanded.to_dict("records"):
+        if candidate["market_type"] in model.TARGETS:
+            receipt = json.loads(candidate["mlb_pregame_receipts"])[candidate["market_type"]]
+            verify(candidate, receipt, now=NOW)
     assert all(ids==["mlb:112","mlb:134"] for ids in expanded.team_ids)
     assert expanded.home_team_id.eq("mlb:112").all()
     assert all(ids["odds_api"]=="odds-100" for ids in expanded.provider_ids)
@@ -275,3 +281,16 @@ def test_source_failure_keeps_research_game_and_reports_skips(fixture):
     assert output == [original]
     assert report["receipts_created"] == 0 and report["receipts_skipped"] == 4
     assert report["reasons"] == {"receipt_source_or_storage_unavailable": 1}
+
+
+def test_live_receipts_returned_without_rewriting_first_training_receipt(fixture):
+    db, _, fetch, _ = fixture
+    first, _ = r.capture_live_games([odds_game()], path=db, fetch=fetch)
+    original = r.read("receipts", db)
+    changed = odds_game()
+    changed["bookmakers"][0]["markets"][1]["outcomes"][0]["point"] = 9.5
+    second, report = r.capture_live_games([changed], path=db, fetch=fetch)
+    assert second[0]["mlb_pregame_receipts"]["total_over"]["payload"]["quote"]["line"] == 9.5
+    assert first[0]["mlb_pregame_receipts"]["total_over"]["payload"]["quote"]["line"] == 8.5
+    assert r.read("receipts", db) == original
+    assert report["receipts_created"] == 0
