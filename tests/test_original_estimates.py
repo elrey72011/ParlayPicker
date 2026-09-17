@@ -84,6 +84,8 @@ assert.deepEqual([...endpoints.bands.keys()],[0,11,19]);
 renderEstimateComparison(rows);const text=JSON.stringify(root);
 assert.ok(text.includes('62.0%')&&text.includes('50.0%')&&text.includes('-12.0 percentage points'));
 assert.ok(text.includes('2 of 3 decided picks'));
+assert.ok(text.includes('Expected wins: 1.24') && text.includes('Observed wins: 1'));
+assert.ok(text.includes('Same-cohort comparison: 2 decided picks'));
 assert.equal(JSON.stringify(rows),before);
 """
     target=tmp_path/'estimate-comparison.cjs';target.write_text(script,encoding='utf-8')
