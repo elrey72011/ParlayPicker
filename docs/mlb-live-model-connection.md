@@ -46,8 +46,8 @@ stale observations, immutable first receipts and retained $0 research authority.
 
 ## Receipt persistence and dataset audit
 
-The dedicated receipt SQLite store is not currently covered by the prospective
-store's remote sync. A completed collection backlog does not establish durable
+The dedicated receipt SQLite store is separate from the prospective
+store's remote sync; see the dedicated recovery section below. A completed collection backlog does not establish durable
 storage or a sufficient settled training dataset.
 
 In Run Readiness Report, select Current run and click **Prepare MLB receipt store
@@ -64,4 +64,23 @@ command. The audit reports necessary sample lower bounds only; chronological spl
 paired-side deduplication, outcome availability, and model performance checks remain
 with the trainer. No validation status is inferred from counts.
 
-Remote receipt backup/recovery wiring and a deployed store audit are still required.
+A deployed recovery check and store audit are still required.
+
+## Dedicated receipt remote recovery
+
+Live MLB collection now restores `parlaypicker/mlb-receipt-backup-v1/` objects
+from the existing Shared Drive connection before collection. It uploads a
+content-addressed full backup and verifies read-back before reconciling at most
+ten saved events, then backs up again. Missing configuration, conflicts, or
+backup errors remain visible as collector failure; ordinary research odds still
+render. No model or wager is activated. Full backups have a 40 MB size limit;
+exceeding it fails explicitly and requires storage partitioning.
+
+Use **Restore or sync MLB receipt backup** in Current run readiness to upload an
+original downloaded backup and verify its Drive copy. Keep the offline copy.
+CLI `restore --input backup.json --database path` restores atomically; `sync`
+restores remote objects then uploads and verifies the local store. A checksum is
+integrity evidence, not independent attestation of pregame collection.
+
+Recovery tests prove empty-store reconstruction and conflict rollback. Live Drive
+recovery after redeployment must still be verified from deployed health reports.

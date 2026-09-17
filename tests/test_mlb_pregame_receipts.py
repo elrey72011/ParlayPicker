@@ -217,6 +217,8 @@ def test_live_ingestion_and_expansion_preserve_stable_ids(fixture,monkeypatch):
     monkeypatch.setattr(sp,"_get_odds_api_key",lambda:"test")
     real=r.capture_live_games
     monkeypatch.setattr(r,"capture_live_games",lambda games:real(games,path=fixture[0],fetch=fixture[2]))
+    from app_core import mlb_receipt_remote
+    monkeypatch.setattr(mlb_receipt_remote, "collect_durable", r.capture_live_games)
     frame=sp.fetch_live_odds_dataframe(["MLB"])
     assert frame.attrs["mlb_receipt_health"]["receipts_created"]==4
     expanded,_=sp._expand_live_odds_to_bet_rows(frame)

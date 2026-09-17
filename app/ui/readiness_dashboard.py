@@ -33,6 +33,19 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             st.download_button("Download MLB Receipt Health", json.dumps(receipt_health, indent=2),
                                file_name="mlb-receipt-health.json", mime="application/json")
         if source == "Current run":
+            with st.expander("Restore or sync MLB receipt backup"):
+                uploaded = st.file_uploader("Original MLB receipt backup JSON", type=["json"], key="mlb_receipt_restore_file")
+                if st.button("Restore receipt backup and verify Drive copy", disabled=uploaded is None, key="mlb_receipt_restore"):
+                    from app_core.mlb_receipt_remote import restore, connection, recover, backup
+                    try:
+                        client, folder = connection()
+                        recover(client)
+                        restored = restore(json.loads(uploaded.getvalue()))
+                        result = backup(client, folder)
+                        st.success(f"Restored {restored} records. Drive backup read-back verified.")
+                        st.session_state.pop("mlb_receipt_store_downloads", None)
+                    except Exception:
+                        st.error("Receipt recovery or backup failed. No conflicting records were overwritten. Remote durability is not confirmed.")
             if st.button("Prepare MLB receipt store audit and backup", key="mlb_receipt_store_audit"):
                 from app_core.mlb_receipt_audit import audit_store, backup_bundle
                 from app_core.mlb_pregame_receipts import export_records

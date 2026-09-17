@@ -7380,9 +7380,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
             if sk == "baseball_mlb" and date is None:
                 # Original provider objects, before candidate expansion/reporting repair.
-                from app_core.mlb_pregame_receipts import capture_live_games
+                from app_core.mlb_receipt_remote import collect_durable
                 try:
-                    sport_games, mlb_receipt_health = capture_live_games(sport_games)
+                    sport_games, mlb_receipt_health = collect_durable(sport_games)
                 except Exception as exc:
                     # Research display must survive collector/storage failures.
                     mlb_receipt_health = {"receipts_created": 0, "receipts_skipped": len(sport_games)*4,

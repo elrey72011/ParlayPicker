@@ -9,13 +9,24 @@ from app_core import mlb_pregame_receipts as receipts
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["capture", "reconcile", "export", "status", "audit", "backup"])
+    parser.add_argument("command", choices=["capture", "reconcile", "export", "status", "audit", "backup", "restore", "sync"])
     parser.add_argument("--database", type=Path)
     parser.add_argument("--max-feeds", type=int, default=20)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--input", type=Path)
     parser.add_argument("--include-pending", action="store_true")
     args = parser.parse_args(argv)
-    if args.command in {"audit", "backup"}:
+    if args.command == "restore":
+        from app_core.mlb_receipt_remote import restore
+        if args.input is None:
+            parser.error("restore requires --input")
+        report = {"records_restored": restore(json.loads(args.input.read_text(encoding="utf-8-sig")), args.database)}
+    elif args.command == "sync":
+        from app_core.mlb_receipt_remote import connection, recover, backup
+        client, folder = connection()
+        restored = recover(client, args.database)
+        report = {"records_restored": restored, **backup(client, folder, args.database)}
+    elif args.command in {"audit", "backup"}:
         from app_core.mlb_receipt_audit import audit_store, backup_bundle
         report = audit_store(args.database) if args.command == "audit" else backup_bundle(args.database)
         if args.output:
