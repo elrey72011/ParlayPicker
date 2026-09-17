@@ -43,3 +43,25 @@ receipt to inference does not establish deployment durability for that database.
 Verification covers live ingestion/expansion to exact receipt binding, actual
 fixture-trained inference, mismatched providers/teams/markets/lines/books/prices,
 stale observations, immutable first receipts and retained $0 research authority.
+
+## Receipt persistence and dataset audit
+
+The dedicated receipt SQLite store is not currently covered by the prospective
+store's remote sync. A completed collection backlog does not establish durable
+storage or a sufficient settled training dataset.
+
+In Run Readiness Report, select Current run and click **Prepare MLB receipt store
+audit and backup**. Download the audit, full receipt backup, and settled training
+records. Preserve the full backup outside Streamlit before redeployment; it includes
+raw observations, receipts and outcomes. Its checksum detects changes but is not
+independent proof of provenance. These controls do not reconcile, train, or activate
+wagers. Re-prepare downloads after collection or reconciliation.
+
+CLI equivalents: `scripts/capture_mlb_pregame_receipts.py audit --output audit.json`
+and `backup --output backup.json`, with `--database` when needed. Existing output
+files are never overwritten. Reconciliation remains the separate `reconcile`
+command. The audit reports necessary sample lower bounds only; chronological split,
+paired-side deduplication, outcome availability, and model performance checks remain
+with the trainer. No validation status is inferred from counts.
+
+Remote receipt backup/recovery wiring and a deployed store audit are still required.

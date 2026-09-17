@@ -32,6 +32,24 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             st.caption(f"MLB research receipts: {receipt_health.get('receipts_created', 0)} created; {receipt_health.get('receipts_skipped', 0)} skipped. No training or wager activation.")
             st.download_button("Download MLB Receipt Health", json.dumps(receipt_health, indent=2),
                                file_name="mlb-receipt-health.json", mime="application/json")
+        if source == "Current run":
+            if st.button("Prepare MLB receipt store audit and backup", key="mlb_receipt_store_audit"):
+                from app_core.mlb_receipt_audit import audit_store, backup_bundle
+                from app_core.mlb_pregame_receipts import export_records
+                try:
+                    st.session_state["mlb_receipt_store_downloads"] = (
+                        audit_store(), backup_bundle(), export_records(settled_only=True))
+                except Exception:
+                    st.session_state.pop("mlb_receipt_store_downloads", None)
+                    st.error("Receipt store audit failed. No records were changed; inspect the store before training.")
+            downloads = st.session_state.get("mlb_receipt_store_downloads")
+            if downloads:
+                st.caption("Prepared on demand. Re-prepare after collection or reconciliation. Download and retain the full backup; remote recovery is not verified.")
+                for title, filename, value in zip(
+                    ("Receipt Store Audit", "Full Receipt Backup", "Settled Training Records"),
+                    ("mlb-receipt-store-audit.json", "mlb-receipt-backup.json", "mlb-settled-training-records.json"), downloads):
+                    st.download_button("Download " + title, json.dumps(value, indent=2, allow_nan=False),
+                                       file_name=filename, mime="application/json")
         if audit is None or audit.empty:
             st.info("No candidate evidence is available for this run. Run Game Analysis or select a saved snapshot.")
             return
