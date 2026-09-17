@@ -41,6 +41,19 @@ def test_preview_explicit_publish_and_invalidation(tmp_path, monkeypatch):
     assert not at.exception
     assert (tmp_path/'site/index.html').exists()
     original=(tmp_path/'site/index.html').read_text(encoding='utf-8')
+    import json
+    from scripts.publish_board import assets_from_html
+    from app_core.public_site_shell import STYLES
+    assert STYLES in original
+    assert 'color-scheme: dark' not in original
+    assert '#0b111b' not in original.lower() and '#6fe1ba' not in original.lower()
+    assert '>Research view</div>' in original
+    assert 'id="publication-client"' in original
+    assets = assets_from_html(original)
+    assert json.loads(assets['board-data.json']) == at.session_state['publication_preview']['package']
+    for name in ('board-data.json', 'version.json'):
+        assert (tmp_path/'site'/name).read_text(encoding='utf-8') == assets[name]
+
     at.session_state['test_pick']='Under 8.5'
     at.run()
     assert not at.exception

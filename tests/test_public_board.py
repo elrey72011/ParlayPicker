@@ -275,12 +275,13 @@ const availableResults=[
  {group:'Imported research',category:'totals',outcome:'WIN',picks:'imported-total'}
 ].map(r=>({...r,date:'2026-09-11',odds:'-110',final_score:'1-0'}));
 let initialResultFallback=false;
+const RESULTS_PAGE_SIZE=25;let visibleResultCount=25;
 const resultWindow=()=>({bounds:['2026-09-11','2026-09-11'],rows:availableResults});
 document.getElementById('resultKind').value='games';
 document.getElementById('resultGroup').value='Published picks';
 """+funcs+r"""
 renderResults();
-const summary=document.getElementById('resultSummary').children.find(n=>n.className==='panel scroll').children[0];
+const summary=document.getElementById('resultSummary').children.find(n=>n.tag==='details').children[1].children[0];
 assert.deepEqual(summary.children.slice(1).map(r=>r.children.slice(0,7).map(c=>c.textContent)),[
  ['Overall Best Picks',1,0,0,0,1,'100.0%'],['Sides',0,1,0,0,1,'0.0%'],
  ['Totals',1,0,0,0,1,'100.0%'],['Parlays',0,1,0,0,1,'0.0%'],['Top 10',0,0,0,0,0,'No tracked picks']]);
@@ -290,7 +291,7 @@ assert.ok(details.includes('published-parlay'));
 assert.ok(!details.includes('locked-overall')&&!details.includes('imported-total'));
 availableResults.push(...['WIN','LOSS','PUSH','PENDING'].map(outcome=>({group:'Approved',category:'top10',outcome,picks:'top-ten-'+outcome,date:'2026-09-11',odds:'-110',final_score:'saved score'})));
 document.getElementById('resultGroup').value='Top 10';document.getElementById('resultPeriod').value='1';renderResults();
-const topSummary=document.getElementById('resultSummary').children.find(n=>n.className==='panel scroll').children[0];
+const topSummary=document.getElementById('resultSummary').children.find(n=>n.tag==='details').children[1].children[0];
 assert.deepEqual(topSummary.children[1].children.slice(0,7).map(c=>c.textContent),['Yesterday’s Top 10',1,1,1,1,3,'50.0%']);
 assert.equal(topSummary.children.length,2);
 assert.ok(JSON.stringify(document.getElementById('resultDetails')).includes('top-ten-WIN'));
@@ -329,7 +330,7 @@ assert.equal(flatStakeMetrics([leg('LOSS','-110','parlays')]).roi,null);
 """
     target=tmp_path/'qualification-returns.cjs';target.write_text(script,encoding='utf-8')
     subprocess.run([node,str(target)],check=True)
-    assert 'No qualifying picks today' in html and 'Full research board' in html
+    assert 'No qualifying picks in ' in html and 'Full research board' in html
 
 
 def test_top_ten_cross_league_ranking_and_rendering(tmp_path):
@@ -367,9 +368,9 @@ data.games.overall=rows;renderTopPicks();
 const text=n=>[n.text||'',...n.children.map(text)].join(' ');
 assert.match(text(host),/Showing 3 qualifying picks/);assert.match(text(host),/NCAAF/);
 const rendered=JSON.stringify(host);selectedLeague='NFL';renderTopPicks();assert.equal(JSON.stringify(host),rendered);
-const tableNode=host.children.at(-1).children[0];
-assert.deepEqual(tableNode.children[0].children[0].children.slice(0,2).map(n=>n.text),['Rank','League']);
-assert.deepEqual(tableNode.children[1].children.map(n=>n.children[0].text),['1','2','3']);
+const cards=host.children.at(-1).children;
+assert.deepEqual(cards.map(n=>n.children[0].children[0].text),['#1 · MLB','#2 · NCAAF','#3 · MLB']);
+assert.ok(cards.every(n=>n.tag==='article'));
 now=Date.parse('2026-09-12T16:16:00Z');renderTopPicks();assert.match(text(host),/No qualifying picks available/);
 assert.equal(JSON.stringify(rows),before);
 now=Date.parse('2026-09-12T16:00:00Z');delete data.selection_policy;assert.deepEqual(topPicks(rows),[]);
