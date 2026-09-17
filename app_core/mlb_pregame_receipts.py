@@ -143,12 +143,32 @@ def persist_observation(observation, path=None):
     return key
 
 
-def schedule_games(observation):
-    games = [g for d in observation["payload"]["dates"] for g in d["games"]]
-    keys = [stable_id(g.get("gamePk")) for g in games]
-    if len(keys) != len(set(keys)):
-        raise Rejected("duplicate_schedule_event")
-    return games
+class ScheduleGames(list):
+    """Unique events plus quarantined variants; never choose a conflict winner."""
+    def __init__(self, games, conflicts):
+        super().__init__(games)
+        self.conflicts = conflicts
+
+
+def schedule_games(observation, reasons=None):
+    grouped = {}
+    duplicates = 0
+    for day in observation["payload"]["dates"]:
+        for game in day["games"]:
+            key = stable_id(game.get("gamePk"))
+            variants = grouped.setdefault(key, [])
+            if game in variants:
+                duplicates += 1
+            else:
+                variants.append(game)
+    conflicts = [g for variants in grouped.values() if len(variants) > 1 for g in variants]
+    if reasons is not None:
+        if duplicates:
+            reasons["identical_schedule_duplicates_collapsed"] += duplicates
+        conflict_count = sum(len(v) > 1 for v in grouped.values())
+        if conflict_count:
+            reasons["conflicting_schedule_events_quarantined"] += conflict_count
+    return ScheduleGames([v[0] for v in grouped.values() if len(v) == 1], conflicts)
 
 
 def resolve_event(odds_game, games):
@@ -161,6 +181,12 @@ def resolve_event(odds_game, games):
     if not all(pair):
         raise Rejected("missing_matchup")
     day = scheduled_eastern_date(odds_game)
+    for variant in getattr(games, "conflicts", []):
+        variant_pair = tuple(grading_team_name(variant["teams"][s]["team"].get("name", ""), "MLB") for s in ("home", "away"))
+        claimed = odds_game.get("provider_ids", {}).get("mlb")
+        if (claimed is not None and str(claimed) == str(variant["gamePk"])) or (
+                variant_pair == pair and scheduled_eastern_date({"start": variant["gameDate"]}) == day):
+            raise Rejected("conflicting_schedule_event")
     candidates = [g for g in games if g.get("gameType") == "R" and
         tuple(grading_team_name(g["teams"][s]["team"].get("name", ""), "MLB") for s in ("home", "away")) == pair
         and scheduled_eastern_date({"start": g["gameDate"]}) == day]
@@ -251,6 +277,12 @@ def choose_prior_ids(game, games):
     selected = set()
     for side in ("home", "away"):
         team = team_id(game["teams"][side]["team"].get("id"))
+        # Do not silently substitute older history for an unresolved prior event.
+        for variant in getattr(games, "conflicts", []):
+            if (str(variant.get("season")) == str(game["season"])
+                    and team in [team_id(variant["teams"][s]["team"].get("id")) for s in ("home", "away")]
+                    and timestamp(variant["gameDate"]) < timestamp(game["gameDate"])):
+                raise Rejected("conflicting_prior_schedule_event")
         candidates = [g for g in games if g.get("gameType") == "R" and str(g.get("season")) == str(game["season"])
             and g["status"]["abstractGameState"] == "Final" and str(g["gamePk"]) != str(game["gamePk"])
             and team in [team_id(g["teams"][s]["team"].get("id")) for s in ("home", "away")]
@@ -298,7 +330,7 @@ def capture_live_games(odds_games, *, path=None, max_feeds=20, fetch=observe):
         if (now()-timestamp(observation["observed_at"])).total_seconds() > 60:
             raise Rejected("stale_schedule_observation")
         source_ref = persist_observation(observation, path)
-        games = schedule_games(observation)
+        games = schedule_games(observation, reasons)
         cached = {}
         for obs in read("observations", path).values():
             if obs.get("source") == "mlb_statsapi" and "/feed/live" in obs.get("endpoint", ""):
