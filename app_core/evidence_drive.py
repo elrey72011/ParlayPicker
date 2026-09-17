@@ -5,6 +5,24 @@ from io import BytesIO
 import json
 import re
 import uuid
+import time
+import requests
+
+
+def _read(session, url, **kwargs):
+    """Retry transient read failures only; never retry an uncertain upload."""
+    for attempt in range(3):
+        try:
+            response = session.get(url, **kwargs)
+            response.raise_for_status()
+            return response
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt == 2:
+                raise
+        except requests.HTTPError as exc:
+            if exc.response is None or exc.response.status_code not in (429, 500, 502, 503, 504) or attempt == 2:
+                raise
+        time.sleep(attempt + 1)
 
 from app_core.evidence_config import EvidenceStorageError
 
@@ -45,7 +63,7 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         if session is None:
             session = self._session_factory()
         self.session = session
-        response = self.session.get(f"{API}/{folder}", params={"supportsAllDrives": "true", "fields": "id,driveId,mimeType,trashed"}, timeout=20)
+        response = _read(self.session, f"{API}/{folder}", params={"supportsAllDrives": "true", "fields": "id,driveId,mimeType,trashed"}, timeout=20)
         response.raise_for_status()
         metadata = response.json()
         if not metadata.get("driveId") or metadata.get("trashed") or metadata.get("mimeType") != "application/vnd.google-apps.folder":
@@ -63,7 +81,7 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
                       "supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "corpora": "drive", "driveId": self.drive}
             if token:
                 params["pageToken"] = token
-            response = self.session.get(API, params=params, timeout=20)
+            response = _read(self.session, API, params=params, timeout=20)
             response.raise_for_status()
             data = response.json()
             if data.get("incompleteSearch"):
@@ -87,7 +105,7 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
     def _read_files(self, files):
         contents = []
         for item in files:
-            response = self.session.get(f"{API}/{item['id']}", params={"alt": "media", "supportsAllDrives": "true"}, timeout=20)
+            response = _read(self.session, f"{API}/{item['id']}", params={"alt": "media", "supportsAllDrives": "true"}, timeout=20)
             response.raise_for_status()
             contents.append(response.content)
         if any(raw != contents[0] for raw in contents):

@@ -56,7 +56,23 @@ def build(rows, excluded=()):
         sports[sport] = dict(overall=summarize(cohort), buckets={k:summarize(v) for k,v in buckets.items()},
                             meta=dict(recency_anchor=anchor.isoformat(), source_hash=digest(cohort),
                                       status='CANDIDATE_NOT_ACTIVATED', unit='latest_saved_best_pick_per_game'))
-    return dict(schema=1, status='CANDIDATE_NOT_ACTIVATED' if sports else 'BLOCKED_NO_ELIGIBLE_EVIDENCE',
+    # Separate current producer health from thousands of immutable legacy rows.
+    latest = {}
+    for row in [*rows, *excluded]:
+        sport = row.get('sport') or row.get('league') or 'UNKNOWN'
+        at = aware(row.get('prediction_generated_at'))
+        if at is None:
+            continue
+        if sport not in latest or at > latest[sport][0]:
+            latest[sport] = (at, [row])
+        elif at == latest[sport][0]:
+            latest[sport][1].append(row)
+    producer_health = {}
+    for sport, (at, cohort) in latest.items():
+        issues = Counter(reason for row in cohort for reason in row.get('exclusion_reasons', []))
+        producer_health[sport] = dict(prediction_generated_at=at.isoformat(), rows=len(cohort),
+                                     exclusions=dict(issues))
+    return dict(schema=1, latest_producer_health=producer_health, status='CANDIDATE_NOT_ACTIVATED' if sports else 'BLOCKED_NO_ELIGIBLE_EVIDENCE',
                 eligible_games=len(selected), exclusions=dict(rejected), sports=sports,
                 activation_blocker='Requires sport-isolated runtime integration and prospective validation before replacing the legacy pooled overlay.')
 
