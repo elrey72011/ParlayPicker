@@ -258,6 +258,9 @@ def selections(publications):
 @lru_cache(maxsize=8192)
 def grading_team_name(value, sport):
     """Resolve result names without changing immutable publication/lock identities."""
+    if sport.upper() == 'WNBA':
+        from app_core.result_team_names import wnba_result_name
+        return wnba_result_name(value)
     if sport.upper() == 'NFL':
         from app_core.nfl_identity import nfl_result_name
         return nfl_result_name(value)

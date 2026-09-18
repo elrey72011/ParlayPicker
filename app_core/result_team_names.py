@@ -43,3 +43,25 @@ def normalize_result_team(value: object) -> str:
 def clean_result_team(value: object) -> str:
     _, clean = _production_normalizers()
     return str(clean(str(value or "")))
+
+
+# Grading-only aliases: never feed city names through cross-sport prediction
+# aliases (e.g. Dallas -> Stars, Washington -> Capitals, Seattle -> Seattle U).
+_WNBA_TEAMS = {
+    "Atlanta": "Dream", "Chicago": "Sky", "Connecticut": "Sun",
+    "Dallas": "Wings", "Golden State": "Valkyries", "Indiana": "Fever",
+    "Las Vegas": "Aces", "Los Angeles": "Sparks", "Minnesota": "Lynx",
+    "New York": "Liberty", "Phoenix": "Mercury", "Portland": "Fire",
+    "Seattle": "Storm", "Toronto": "Tempo", "Washington": "Mystics",
+}
+_WNBA_RESULT_ALIASES = {
+    _ascii_words(alias): _ascii_words(f"{city} {nickname}")
+    for city, nickname in _WNBA_TEAMS.items()
+    for alias in (city, f"{city} {nickname}")
+}
+
+
+def wnba_result_name(value: object) -> str:
+    """Resolve explicit WNBA city/full names; unknown names remain distinct."""
+    key = _ascii_words(value)
+    return _WNBA_RESULT_ALIASES.get(key, key)
