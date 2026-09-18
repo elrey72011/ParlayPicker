@@ -114,6 +114,11 @@ def rebuild(database, output):
     except Exception as exc:
         report = dict(schema=1, status='ERROR', error_type=type(exc).__name__, eligible_games=0,
                       activation_blocker='Evidence could not be verified; active ranking artifacts unchanged.')
+    try:
+        from core.research_performance import rebuild as rebuild_research
+        report['research_performance'] = rebuild_research(database)
+    except Exception as exc:
+        report['research_performance'] = {'status': 'ERROR', 'error_type': type(exc).__name__, 'wager_authority': False, 'ranking_authority': False}
     report['checked_at'] = datetime.now(timezone.utc).isoformat()
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix('.tmp')

@@ -10,6 +10,19 @@ from core.run_readiness import build_readiness, game_table, render_readiness
 def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
     with st.expander("Run Readiness Report", expanded=False):
         st.caption("Evidence readiness and wager approval are separate. This report does not change picks or thresholds.")
+        if st.button("Prepare research performance report", key="research_performance_prepare"):
+            try:
+                from core.research_performance import rebuild
+                from app_core.prediction_evidence import database_path
+                st.session_state["research_performance_report"] = rebuild(database_path())
+            except Exception:
+                st.session_state.pop("research_performance_report", None)
+                st.error("Saved research evidence could not be verified. No ranking or wager settings changed.")
+        research = st.session_state.get("research_performance_report")
+        if research is not None:
+            st.caption(f"Research performance: {research['eligible_games']} eligible settled games. Descriptive only; ranking and wager validation remain separate. Uses locally restored evidence.")
+            st.download_button("Download research performance report", json.dumps(research, indent=2),
+                               "research-performance.json", "application/json", key="research_performance_download")
         source = st.selectbox("Readiness source", ["Current run", "Saved snapshot"], key="readiness_source")
         if source == "Saved snapshot":
             if st.button("Load saved snapshots", key="readiness_load"):
