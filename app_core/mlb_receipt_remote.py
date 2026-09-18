@@ -64,6 +64,9 @@ MAX_OBJECT_BYTES = 40_000_000
 
 
 def recover(client, path=None):
+    # A fresh remote read establishes verification only for this client/run.
+    client._receipt_verified = set()
+    verified = set()
     count = 0
     for key, raw in client.read_objects(Prefix=PREFIX):
         if len(raw) > MAX_OBJECT_BYTES:
@@ -80,11 +83,17 @@ def recover(client, path=None):
         sha = digest(value)
         if key != RECORD_PREFIX + sha + ".json":
             raise ValueError("Receipt record hash mismatch")
+        if canonical(value) != raw:
+            raise ValueError("Receipt record canonical mismatch")
+        verified.add(key)
         records[sha] = value
     for key, raw in client.read_objects(Prefix=MANIFEST_PREFIX):
         manifest = json.loads(raw)
         if len(raw) > MAX_OBJECT_BYTES or key != MANIFEST_PREFIX + digest(manifest) + ".json" or manifest.get("schema") != "mlb-receipt-manifest-v2":
             raise ValueError("Receipt manifest mismatch")
+        if canonical(manifest) != raw:
+            raise ValueError("Receipt manifest canonical mismatch")
+        verified.add(key)
         tables = {}
         for table, refs in manifest["tables"].items():
             tables[table] = {}
@@ -95,11 +104,14 @@ def recover(client, path=None):
                 tables[table][record_id] = value["payload"]
         payload = {"schema": "mlb-receipt-backup-v1", "tables": tables}
         count += restore({"payload": payload, "sha256": digest(payload)}, path)
+    client._receipt_verified = verified
     return count
 
 
 def backup(client, folder, path=None):
     from app_core.evidence_drive import AlreadyExists
+    verified = getattr(client, "_receipt_verified", set())
+    counters = {"objects_reused": 0, "objects_uploaded_verified": 0}
 
     def verified_put(prefix, value):
         raw = canonical(value)
@@ -107,6 +119,9 @@ def backup(client, folder, path=None):
             raise ValueError("Receipt individual object too large")
         sha = digest(value)
         key = prefix + sha + ".json"
+        if key in verified:
+            counters["objects_reused"] += 1
+            return sha
         try:
             client.put_object(Bucket=folder, Key=key, Body=raw, ContentType="application/json", IfNoneMatch="*")
         except AlreadyExists:
@@ -114,6 +129,8 @@ def backup(client, folder, path=None):
         with client.get_object(Bucket=folder, Key=key)["Body"] as stream:
             if stream.read(MAX_OBJECT_BYTES + 1) != raw:
                 raise ValueError("Receipt backup read-back failed")
+        verified.add(key)
+        counters["objects_uploaded_verified"] += 1
         return sha
 
     bundle = backup_bundle(path)
@@ -125,10 +142,11 @@ def backup(client, folder, path=None):
                 {"table": table, "id": key, "payload": payload})
     # Publish the manifest only after every referenced object passed read-back.
     sha = verified_put(MANIFEST_PREFIX, manifest)
-    return {"remote_backup_verified": True, "backup_id": sha, "backup_format": "records-v2"}
+    client._receipt_verified = verified
+    return {"remote_backup_verified": True, "backup_id": sha, "backup_format": "records-v2", **counters}
 
 
-def collect_durable(games):
+def collect_durable(games, *, max_feeds=20):
     stage = "connect"
     health = {"receipts_created": 0, "receipts_skipped": len(games)*4}
     try:
@@ -136,7 +154,7 @@ def collect_durable(games):
         stage = "restore"
         restored = recover(client)
         stage = "capture"
-        games, health = r.capture_live_games(games)
+        games, health = r.capture_live_games(games, max_feeds=max_feeds)
         health["records_restored"] = restored
         stage = "backup_before_reconciliation"
         health.update(backup(client, folder))
@@ -149,3 +167,31 @@ def collect_durable(games):
         health.update(remote_backup_verified=False, failed_stage=stage, error_type=type(exc).__name__)
         health.setdefault("reasons", {})["receipt_" + stage + "_failed"] = 1
     return games, health
+
+
+def restore_diagnostic(stage, exc):
+    """Never expose arbitrary exception text or provider URLs/credentials."""
+    known = {
+        "Receipt recovery conflict": "LOCAL_RECORD_CONFLICT",
+        "Receipt backup hash/schema mismatch": "BACKUP_HASH_OR_SCHEMA_INVALID",
+        "Receipt manifest record missing or mismatched": "REMOTE_RECORD_MISSING",
+        "Receipt backup read-back failed": "REMOTE_READBACK_MISMATCH",
+        "Receipt individual object too large": "INDIVIDUAL_OBJECT_TOO_LARGE",
+        "Receipt remote key mismatch": "REMOTE_KEY_MISMATCH",
+        "Receipt record hash mismatch": "REMOTE_RECORD_HASH_MISMATCH",
+    }
+    return {"failed_stage": stage, "error_type": type(exc).__name__,
+            "reason": known.get(str(exc), "RESTORE_OPERATION_FAILED"),
+            "remote_backup_verified": False}
+
+
+def catch_up_history():
+    """Bounded receipt-only run with fresh quotes, no full analysis or Gemini."""
+    from core.streamlit_pipeline import _get_odds_api_key
+    from app_core.odds_api import TheOddsAPIClient
+    key = _get_odds_api_key()
+    if not key:
+        raise ValueError("Missing odds API configuration")
+    games = TheOddsAPIClient(key, markets="spreads,totals").get_odds("baseball_mlb")
+    _, health = collect_durable(games, max_feeds=100)
+    return health

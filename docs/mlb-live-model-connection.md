@@ -87,3 +87,19 @@ integrity evidence, not independent attestation of pregame collection.
 
 Recovery tests prove empty-store reconstruction and conflict rollback. Live Drive
 recovery after redeployment must still be verified from deployed health reports.
+
+## Incremental refresh and history catch-up
+
+Receipt recovery establishes a fresh, client-scoped set of verified immutable
+objects for each run. The two backup phases reuse that verification and upload
+only new objects; an unchanged post-reconciliation backup performs no remote
+object calls. Each later run still reads remote evidence afresh, so verification
+is not assumed across deployments. Health includes objects_reused and
+objects_uploaded_verified for the most recent backup phase.
+
+Use **Catch up MLB receipt history** in Current run readiness to process up to 100
+historical feeds using fresh MLB quotes without the full analysis/Gemini/props
+pipeline. It preserves pregame checks and Drive read-back. Download its separate
+catch-up health report; the original run-health download still describes the
+original analysis. Re-prepare the store audit after catch-up. Remote recovery and
+new-object uploads still take time; no fixed runtime is promised.
