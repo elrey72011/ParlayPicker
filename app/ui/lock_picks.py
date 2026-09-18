@@ -81,7 +81,12 @@ def render_lock_picks(package, setting):
         selected = st.multiselect('Picks to lock', list(choices), default=list(choices),
             format_func=lambda key: choices[key]['legs'][0]['game'] + ': ' + choices[key]['legs'][0]['pick'] + ' (' + str(choices[key]['legs'][0]['odds']) + ')',
             key='lock_pick_selection')
-        quality_rows = total_input_review([choices[identity] for identity in selected])
+        selected_records = [choices[identity] for identity in selected]
+        coverage_rows = total_input_coverage(selected_records)
+        if coverage_rows:
+            st.info('TheOver is unavailable for these totals. Research picks use the other available inputs; no replacement TheOver probability is assumed. Wager eligibility still requires all validation checks.')
+            st.dataframe(pd.DataFrame(coverage_rows), hide_index=True)
+        quality_rows = total_input_review(selected_records)
         if quality_rows:
             st.warning('Review total inputs before locking. Research ranking is not wager approval; these warnings do not change the selected pick or its probability.')
             st.dataframe(pd.DataFrame(quality_rows), hide_index=True)
@@ -307,7 +312,22 @@ def total_input_review(records):
             if status == 'COMPLETE':
                 continue
             codes = str(leg.get('total_input_reason_codes') or '').split('|') if recorded else []
+            codes = [c for c in codes if c and c != 'missing_theover']
+            if recorded and not codes and status == 'DEGRADED':
+                continue
             rows.append({'Game': leg.get('game', ''), 'Pick': leg.get('pick', ''),
                          'Saved total-input status': status,
                          'Recorded input warnings': '; '.join(reasons.get(c, c) for c in codes if c) or 'Not recorded'})
     return rows
+
+
+def total_input_coverage(records):
+    """Optional-source coverage is informational, without rewriting saved labels."""
+    return [
+        {'Game': leg.get('game', ''), 'Pick': leg.get('pick', ''),
+         'Coverage': 'TheOver unavailable - using other inputs'}
+        for record in records for leg in record.get('legs', [])
+        if leg.get('sport') == 'MLB' and str(leg.get('market', '')).startswith('total_')
+        and leg.get('total_input_version') == 'mlb-total-inputs-v1'
+        and 'missing_theover' in str(leg.get('total_input_reason_codes') or '').split('|')
+    ]
