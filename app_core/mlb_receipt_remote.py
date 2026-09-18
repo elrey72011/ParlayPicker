@@ -58,44 +58,94 @@ def connection():
     return DriveStore(folder), folder
 
 
+RECORD_PREFIX = "parlaypicker/mlb-receipt-records-v2/"
+MANIFEST_PREFIX = "parlaypicker/mlb-receipt-manifests-v2/"
+MAX_OBJECT_BYTES = 40_000_000
+
+
 def recover(client, path=None):
     count = 0
     for key, raw in client.read_objects(Prefix=PREFIX):
-        if len(raw) > 40_000_000:
-            raise ValueError("Receipt backup too large")
+        if len(raw) > MAX_OBJECT_BYTES:
+            raise ValueError("Legacy receipt backup too large")
         bundle = json.loads(raw)
         if key != PREFIX + digest(bundle) + ".json":
             raise ValueError("Receipt remote key mismatch")
         count += restore(bundle, path)
+    records = {}
+    for key, raw in client.read_objects(Prefix=RECORD_PREFIX):
+        if len(raw) > MAX_OBJECT_BYTES:
+            raise ValueError("Receipt record too large")
+        value = json.loads(raw)
+        sha = digest(value)
+        if key != RECORD_PREFIX + sha + ".json":
+            raise ValueError("Receipt record hash mismatch")
+        records[sha] = value
+    for key, raw in client.read_objects(Prefix=MANIFEST_PREFIX):
+        manifest = json.loads(raw)
+        if len(raw) > MAX_OBJECT_BYTES or key != MANIFEST_PREFIX + digest(manifest) + ".json" or manifest.get("schema") != "mlb-receipt-manifest-v2":
+            raise ValueError("Receipt manifest mismatch")
+        tables = {}
+        for table, refs in manifest["tables"].items():
+            tables[table] = {}
+            for record_id, sha in refs.items():
+                value = records.get(sha)
+                if value is None or value.get("table") != table or value.get("id") != record_id:
+                    raise ValueError("Receipt manifest record missing or mismatched")
+                tables[table][record_id] = value["payload"]
+        payload = {"schema": "mlb-receipt-backup-v1", "tables": tables}
+        count += restore({"payload": payload, "sha256": digest(payload)}, path)
     return count
 
 
 def backup(client, folder, path=None):
     from app_core.evidence_drive import AlreadyExists
+
+    def verified_put(prefix, value):
+        raw = canonical(value)
+        if len(raw) > MAX_OBJECT_BYTES:
+            raise ValueError("Receipt individual object too large")
+        sha = digest(value)
+        key = prefix + sha + ".json"
+        try:
+            client.put_object(Bucket=folder, Key=key, Body=raw, ContentType="application/json", IfNoneMatch="*")
+        except AlreadyExists:
+            pass
+        with client.get_object(Bucket=folder, Key=key)["Body"] as stream:
+            if stream.read(MAX_OBJECT_BYTES + 1) != raw:
+                raise ValueError("Receipt backup read-back failed")
+        return sha
+
     bundle = backup_bundle(path)
-    raw = canonical(bundle)
-    if len(raw) > 40_000_000:
-        raise ValueError("Receipt backup too large")
-    key = PREFIX + digest(bundle) + ".json"
-    try:
-        client.put_object(Bucket=folder, Key=key, Body=raw, ContentType="application/json", IfNoneMatch="*")
-    except AlreadyExists:
-        pass
-    with client.get_object(Bucket=folder, Key=key)["Body"] as stream:
-        if stream.read(40_000_001) != raw:
-            raise ValueError("Receipt backup read-back failed")
-    return {"remote_backup_verified": True, "backup_id": digest(bundle)}
+    manifest = {"schema": "mlb-receipt-manifest-v2", "tables": {}}
+    for table, records in bundle["payload"]["tables"].items():
+        manifest["tables"][table] = {}
+        for key, payload in records.items():
+            manifest["tables"][table][key] = verified_put(RECORD_PREFIX,
+                {"table": table, "id": key, "payload": payload})
+    # Publish the manifest only after every referenced object passed read-back.
+    sha = verified_put(MANIFEST_PREFIX, manifest)
+    return {"remote_backup_verified": True, "backup_id": sha, "backup_format": "records-v2"}
 
 
 def collect_durable(games):
-    client, folder = connection()
-    restored = recover(client)
-    games, health = r.capture_live_games(games)
-    # Preserve new pregame receipts before any outcome network work.
-    health.update(backup(client, folder))
-    health["records_restored"] = restored
+    stage = "connect"
+    health = {"receipts_created": 0, "receipts_skipped": len(games)*4}
     try:
-        health["reconciliation"] = r.reconcile(max_games=10)
-    finally:
+        client, folder = connection()
+        stage = "restore"
+        restored = recover(client)
+        stage = "capture"
+        games, health = r.capture_live_games(games)
+        health["records_restored"] = restored
+        stage = "backup_before_reconciliation"
         health.update(backup(client, folder))
+        stage = "reconcile"
+        health["reconciliation"] = r.reconcile(max_games=10)
+        stage = "backup_after_reconciliation"
+        health.update(backup(client, folder))
+    except Exception as exc:
+        # Report only stage and class; provider exception text can contain secrets.
+        health.update(remote_backup_verified=False, failed_stage=stage, error_type=type(exc).__name__)
+        health.setdefault("reasons", {})["receipt_" + stage + "_failed"] = 1
     return games, health

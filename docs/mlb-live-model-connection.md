@@ -69,12 +69,15 @@ A deployed recovery check and store audit are still required.
 ## Dedicated receipt remote recovery
 
 Live MLB collection now restores `parlaypicker/mlb-receipt-backup-v1/` objects
-from the existing Shared Drive connection before collection. It uploads a
-content-addressed full backup and verifies read-back before reconciling at most
+from the existing Shared Drive connection before collection. It restores legacy full backups and verified v2 manifests. It uploads
+content-addressed individual records and verifies read-back before reconciling at most
 ten saved events, then backs up again. Missing configuration, conflicts, or
 backup errors remain visible as collector failure; ordinary research odds still
-render. No model or wager is activated. Full backups have a 40 MB size limit;
-exceeding it fails explicitly and requires storage partitioning.
+render. No model or wager is activated. The 40 MB limit applies to each remote object, not the combined database.
+A manifest is published only after all referenced records have passed read-back.
+Missing records or conflicting local data fail recovery without guessing.
+Collection health reports failed_stage and error_type without exposing provider
+exception text. A failed backup never reports remote durability as verified.
 
 Use **Restore or sync MLB receipt backup** in Current run readiness to upload an
 original downloaded backup and verify its Drive copy. Keep the offline copy.

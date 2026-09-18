@@ -11,7 +11,7 @@ class Store:
     def __init__(self): self.data = {}
     def put_object(self, **kw): self.data[kw['Key']] = kw['Body']
     def get_object(self, **kw): return {'Body': BytesIO(self.data[kw['Key']])}
-    def read_objects(self, **kw): return list(self.data.items())
+    def read_objects(self, **kw): return [(k,v) for k,v in self.data.items() if k.startswith(kw['Prefix'])]
 
 
 def test_empty_store_recovery_matches_every_hash(fixture, tmp_path):
@@ -63,5 +63,51 @@ def test_remote_corruption_fails_before_restore(fixture, tmp_path):
     store = Store()
     remote.backup(store, 'folder', fixture[0])
     key = next(iter(store.data))
-    store.data[key] = store.data[key].replace(b'mlb-receipt-backup-v1',b'mlb-receipt-backup-v2')
+    store.data[key] = store.data[key] + b'corrupt'
     with pytest.raises(ValueError): remote.recover(store, tmp_path/'tampered.sqlite3')
+
+
+def test_total_store_can_exceed_object_limit(fixture, tmp_path, monkeypatch):
+    collect(fixture)
+    bundle = backup_bundle(fixture[0])
+    largest = max(len(remote.canonical({'table':t,'id':k,'payload':v})) for t,rs in bundle['payload']['tables'].items() for k,v in rs.items())
+    monkeypatch.setattr(remote, 'MAX_OBJECT_BYTES', largest + 1000)
+    assert len(remote.canonical(bundle)) > remote.MAX_OBJECT_BYTES
+    store = Store()
+    remote.backup(store, 'folder', fixture[0])
+    target = tmp_path/'large.sqlite3'
+    remote.recover(store, target)
+    assert backup_bundle(target) == bundle
+
+
+def test_legacy_backup_recovers(fixture, tmp_path):
+    collect(fixture)
+    bundle = backup_bundle(fixture[0])
+    store = Store()
+    store.data[remote.PREFIX + remote.digest(bundle) + '.json'] = remote.canonical(bundle)
+    target = tmp_path/'legacy.sqlite3'
+    remote.recover(store, target)
+    assert backup_bundle(target) == bundle
+
+
+def test_failed_backup_reports_stage_without_reconciling(monkeypatch):
+    monkeypatch.setattr(remote, 'connection', lambda: ('client','folder'))
+    monkeypatch.setattr(remote, 'recover', lambda *a: 0)
+    monkeypatch.setattr(r, 'capture_live_games', lambda games: (games, {'receipts_created':4}))
+    def fail(*a): raise ValueError('sensitive provider detail')
+    monkeypatch.setattr(remote, 'backup', fail)
+    monkeypatch.setattr(r, 'reconcile', lambda **kw: pytest.fail('must back up first'))
+    _, health = remote.collect_durable([])
+    assert health['failed_stage'] == 'backup_before_reconciliation'
+    assert health['remote_backup_verified'] is False
+    assert 'sensitive' not in str(health)
+
+
+def test_missing_manifest_record_does_not_partially_restore(fixture, tmp_path):
+    collect(fixture)
+    store = Store()
+    remote.backup(store, 'folder', fixture[0])
+    del store.data[next(k for k in store.data if k.startswith(remote.RECORD_PREFIX))]
+    target = tmp_path/'missing.sqlite3'
+    with pytest.raises(ValueError): remote.recover(store, target)
+    assert r.read('receipts', target) == {}
