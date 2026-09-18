@@ -8,6 +8,34 @@ from core.exposure_ledger import digest
 from core.empirical_tiers import bucket_key
 
 
+def producer_requirements(cohort):
+    """Explain original producer facts without inferring validation or authority."""
+    counts = Counter()
+    statuses = Counter()
+    for row in cohort:
+        status = row.get('mlb_challenger_status')
+        if isinstance(status, str) and status:
+            statuses[status] += 1
+        bad = set(row.get('exclusion_reasons', []))
+        if 'missing_model_version' in bad:
+            counts['model_artifact_not_configured' if status == 'NOT_CONFIGURED'
+                   else 'production_model_provenance_missing'] += 1
+        if bad & {'missing_calibration_version', 'calibration_not_available'}:
+            counts['matching_calibration_provenance_required'] += 1
+        if bad & {'missing_training_cutoff', 'unverified_training_cutoff', 'model_not_available'}:
+            counts['verified_training_and_availability_times_required'] += 1
+        if 'identity_unverified' in bad:
+            counts['verified_event_identity_required'] += 1
+        if bad & {'missing_evidence_version', 'evidence_not_available', 'missing_selection_policy_version', 'missing_sport_policy_version'}:
+            counts['original_evidence_and_policy_provenance_required'] += 1
+        if 'missing_conservative_probability' in bad:
+            counts['prospective_uncertainty_evidence_required'] += 1
+        if bad & {'missing_outcome', 'missing_or_future_outcome_timestamp'}:
+            counts['verified_settlement_required'] += 1
+    return {'counts': dict(counts), 'challenger_status_counts': dict(statuses),
+            'note': 'Counts are candidate rows, not independent games. Challenger facts cannot authorize baseline probabilities. Missing provenance is not repaired retrospectively.'}
+
+
 def build(rows, excluded=()):
     """Input rows must come from activation_validation.read_dataset.
 
@@ -71,7 +99,7 @@ def build(rows, excluded=()):
     for sport, (at, cohort) in latest.items():
         issues = Counter(reason for row in cohort for reason in row.get('exclusion_reasons', []))
         producer_health[sport] = dict(prediction_generated_at=at.isoformat(), rows=len(cohort),
-                                     exclusions=dict(issues))
+                                     exclusions=dict(issues), producer_requirements=producer_requirements(cohort))
     return dict(schema=1, latest_producer_health=producer_health, status='CANDIDATE_NOT_ACTIVATED' if sports else 'BLOCKED_NO_ELIGIBLE_EVIDENCE',
                 eligible_games=len(selected), exclusions=dict(rejected), sports=sports,
                 activation_blocker='Requires sport-isolated runtime integration and prospective validation before replacing the legacy pooled overlay.')
