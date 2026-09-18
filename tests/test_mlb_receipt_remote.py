@@ -175,3 +175,15 @@ def test_catchup_fetches_fresh_mlb_quotes_and_bounded_batch(monkeypatch):
     monkeypatch.setattr(remote, 'collect_durable', lambda games, **kw: (seen.append((games,kw)), {'ok':True}))
     assert remote.catch_up_history() == {'ok':True}
     assert seen == [([{'id':'fresh'}], {'max_feeds':100})]
+
+def test_live_refresh_defers_settlement_but_verifies_backup(monkeypatch):
+    calls = []
+    monkeypatch.setattr(remote, 'connection', lambda: ('client', 'folder'))
+    monkeypatch.setattr(remote, 'recover', lambda c: calls.append('recover') or 0)
+    monkeypatch.setattr(r, 'capture_live_games', lambda games, **kw: (games, {'receipts_created':4}))
+    monkeypatch.setattr(remote, 'backup', lambda *a: calls.append('backup') or {'remote_backup_verified':True})
+    monkeypatch.setattr(r, 'reconcile', lambda **kw: pytest.fail('settlement is deferred'))
+    _, health = remote.collect_durable([], reconcile_history=False)
+    assert calls == ['recover', 'backup']
+    assert health['remote_backup_verified'] and health['reconciliation_deferred']
+    assert set(health['stage_timings_seconds']) == {'connect','restore','capture','backup_before_reconciliation'}

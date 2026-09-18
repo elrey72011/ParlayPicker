@@ -144,13 +144,22 @@ def restore(path=None, *, client=None):
     # Table-specific listing preserves referential order; all pages are consumed.
     for table in TABLES:
         _status["operation"] = f"restore:{table}"
-        pages = client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=f"{prefix}/{table}/")
-        for page in pages:
-            for item in page.get("Contents", []):
-                row = _decode(_get(client, item["Key"]), table)
-                if item["Key"] != _key(table, row):
-                    raise EvidenceStorageError("Remote record key does not match its identity")
-                rows[table].append(row)
+        import time
+        import logging
+        started = time.monotonic()
+        if callable(getattr(client, "read_objects", None)):
+            objects = client.read_objects(Prefix=f"{prefix}/{table}/")
+        else:
+            pages = client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=f"{prefix}/{table}/")
+            objects = ((item["Key"], _get(client, item["Key"]))
+                       for page in pages for item in page.get("Contents", []))
+        for key, raw in objects:
+            row = _decode(raw, table)
+            if key != _key(table, row):
+                raise EvidenceStorageError("Remote record key does not match its identity")
+            rows[table].append(row)
+        logging.getLogger(__name__).warning("PERFORMANCE evidence_restore table=%s records=%s seconds=%.3f",
+                                          table, len(rows[table]), time.monotonic() - started)
     imported = 0
     with closing(connect(path or database_path())) as db, db:
         for table, entries in rows.items():

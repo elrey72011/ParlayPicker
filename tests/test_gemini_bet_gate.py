@@ -507,3 +507,16 @@ def test_short_remaining_deadline_does_not_call_or_reserve(monkeypatch):
     assert llm_assistant.generate_batch_confidence_explanation(
         [{'game_id': 'one'}], state, _deadline=90.0) == {}
     assert 'time limit' in state['gemini_review_limit_status']
+
+def test_service_timeout_is_not_retried_as_incomplete(monkeypatch):
+    calls = []
+    def fail(**kw):
+        calls.append(kw)
+        raise RuntimeError('504 DEADLINE_EXCEEDED')
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=fail))
+    monkeypatch.setattr(llm_assistant, '_GEMINI_AVAILABLE', True)
+    monkeypatch.setattr(llm_assistant, 'initialize_gemini', lambda: (client, None))
+    monkeypatch.setattr(llm_assistant, 'genai', SimpleNamespace(types=SimpleNamespace(GenerateContentConfig=lambda **kw: kw)))
+    result = llm_assistant.generate_batch_confidence_explanation([{'game_id':'timeout-case', 'side_a':{'best_pick':'Under 8.5'}}])
+    assert len(calls) == 1
+    assert result['timeout-case']['error'] == 'SERVICE_TIMEOUT_OR_5XX'

@@ -146,26 +146,40 @@ def backup(client, folder, path=None):
     return {"remote_backup_verified": True, "backup_id": sha, "backup_format": "records-v2", **counters}
 
 
-def collect_durable(games, *, max_feeds=20):
+def collect_durable(games, *, max_feeds=20, reconcile_history=True):
+    import logging
+    import time
+    timings = {}
+    def timed(name, operation):
+        started = time.monotonic()
+        try:
+            return operation()
+        finally:
+            timings[name] = round(time.monotonic() - started, 3)
+            logging.getLogger(__name__).warning("PERFORMANCE mlb_receipts stage=%s seconds=%.3f", name, timings[name])
     stage = "connect"
     health = {"receipts_created": 0, "receipts_skipped": len(games)*4}
     try:
-        client, folder = connection()
+        client, folder = timed(stage, connection)
         stage = "restore"
-        restored = recover(client)
+        restored = timed(stage, lambda: recover(client))
         stage = "capture"
-        games, health = r.capture_live_games(games, max_feeds=max_feeds)
+        games, health = timed(stage, lambda: r.capture_live_games(games, max_feeds=max_feeds))
         health["records_restored"] = restored
         stage = "backup_before_reconciliation"
-        health.update(backup(client, folder))
-        stage = "reconcile"
-        health["reconciliation"] = r.reconcile(max_games=10)
-        stage = "backup_after_reconciliation"
-        health.update(backup(client, folder))
+        health.update(timed(stage, lambda: backup(client, folder)))
+        if reconcile_history:
+            stage = "reconcile"
+            health["reconciliation"] = timed(stage, lambda: r.reconcile(max_games=10))
+            stage = "backup_after_reconciliation"
+            health.update(timed(stage, lambda: backup(client, folder)))
+        else:
+            health["reconciliation_deferred"] = True
     except Exception as exc:
         # Report only stage and class; provider exception text can contain secrets.
         health.update(remote_backup_verified=False, failed_stage=stage, error_type=type(exc).__name__)
         health.setdefault("reasons", {})["receipt_" + stage + "_failed"] = 1
+    health["stage_timings_seconds"] = timings
     return games, health
 
 

@@ -7382,7 +7382,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 # Original provider objects, before candidate expansion/reporting repair.
                 from app_core.mlb_receipt_remote import collect_durable
                 try:
-                    sport_games, mlb_receipt_health = collect_durable(sport_games)
+                    sport_games, mlb_receipt_health = collect_durable(sport_games, reconcile_history=False)
                 except Exception as exc:
                     # Research display must survive collector/storage failures.
                     mlb_receipt_health = {"receipts_created": 0, "receipts_skipped": len(sport_games)*4,

@@ -211,3 +211,15 @@ def test_restore_primes_incremental_sync_and_new_rows_still_upload(frozen, cloud
     calls.clear()
     assert remote.sync(fresh, incremental=True)
     assert calls == []
+
+def test_restore_bulk_read_keeps_identity_validation(frozen, cloud, tmp_path):
+    _, db, _ = frozen
+    save_fixture(frozen)
+    remote.sync(db)
+    cloud.read_objects = lambda *, Prefix: [(k,v) for k,v in cloud.objects.items() if k.startswith(Prefix)]
+    cloud.get_paginator = lambda *a: pytest.fail('bulk reads must not relist each object')
+    assert remote.restore(tmp_path/'bulk.sqlite3', client=cloud) > 0
+    key = next(k for k in cloud.objects if '/snapshots/' in k)
+    cloud.objects[key + 'wrong'] = cloud.objects.pop(key)
+    with pytest.raises(Exception, match='identity'):
+        remote.restore(tmp_path/'bad-bulk.sqlite3', client=cloud)

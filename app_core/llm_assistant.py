@@ -586,6 +586,7 @@ Return ONLY a JSON array of objects. No markdown formatting.
             game
             for game in games_data
             if not _complete_batch_review(all_results.get(str(game.get("game_id", ""))))
+            and (all_results.get(str(game.get("game_id", ""))) or {}).get("error") != "SERVICE_TIMEOUT_OR_5XX"
         ]
         if incomplete:
             logger.warning(
