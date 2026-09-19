@@ -8,6 +8,8 @@ from core.run_readiness import build_readiness, game_table, render_readiness
 
 
 def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
+    # Release legacy full raw-feed backup objects retained by older sessions.
+    st.session_state.pop("mlb_receipt_store_downloads", None)
     with st.expander("Run Readiness Report", expanded=False):
         st.caption("Evidence readiness and wager approval are separate. This report does not change picks or thresholds.")
         if st.button("Prepare research performance report", key="research_performance_prepare"):
@@ -51,7 +53,7 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
                 try:
                     with st.spinner("Collecting up to 100 historical feeds and verifying Drive backup..."):
                         st.session_state["mlb_receipt_catchup_health"] = catch_up_history()
-                    st.session_state.pop("mlb_receipt_store_downloads", None)
+                    st.session_state.pop("mlb_receipt_audit_downloads_v2", None)
                 except Exception as exc:
                     st.session_state["mlb_receipt_catchup_health"] = {"failed_stage": "history_catchup", "error_type": type(exc).__name__, "remote_backup_verified": False}
             catchup = st.session_state.get("mlb_receipt_catchup_health")
@@ -72,11 +74,11 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
                         bundle = json.loads(uploaded.getvalue())
                         stage = "restore_uploaded_backup"
                         restored = restore(bundle)
-                        st.session_state.pop("mlb_receipt_store_downloads", None)
+                        st.session_state.pop("mlb_receipt_audit_downloads_v2", None)
                         stage = "backup_and_verify_drive"
                         result = backup(client, folder)
                         st.success(f"Restored {restored} records. Drive backup read-back verified.")
-                        st.session_state.pop("mlb_receipt_store_downloads", None)
+                        st.session_state.pop("mlb_receipt_audit_downloads_v2", None)
                     except Exception as exc:
                         import logging
                         detail = restore_diagnostic(stage, exc)
@@ -84,22 +86,20 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
                         st.error(f"Receipt operation failed at {stage}: {detail['reason']} ({detail['error_type']}). No conflicting records were overwritten. Remote durability is not confirmed.")
                         st.download_button("Download receipt restore error", json.dumps(detail, indent=2),
                                            file_name="mlb-receipt-restore-error.json", mime="application/json")
-            if st.button("Prepare MLB receipt store audit and backup", key="mlb_receipt_store_audit"):
-                from app_core.mlb_receipt_audit import audit_store, backup_bundle
-                from app_core.mlb_pregame_receipts import export_records
+            if st.button("Prepare MLB receipt store audit and settled records", key="mlb_receipt_store_audit"):
+                from app_core.mlb_receipt_audit import audit_downloads
+                st.session_state.pop("mlb_receipt_audit_downloads_v2", None)
                 try:
-                    st.session_state["mlb_receipt_store_downloads"] = (
-                        audit_store(), backup_bundle(), export_records(settled_only=True))
+                    st.session_state["mlb_receipt_audit_downloads_v2"] = audit_downloads()
                 except Exception:
-                    st.session_state.pop("mlb_receipt_store_downloads", None)
+                    import logging
+                    logging.getLogger(__name__).exception("MLB receipt audit preparation failed")
                     st.error("Receipt store audit failed. No records were changed; inspect the store before training.")
-            downloads = st.session_state.get("mlb_receipt_store_downloads")
+            downloads = st.session_state.get("mlb_receipt_audit_downloads_v2")
             if downloads:
-                st.caption("Prepared on demand. Re-prepare after collection or reconciliation. Download and retain the full backup; remote recovery is not verified.")
-                for title, filename, value in zip(
-                    ("Receipt Store Audit", "Full Receipt Backup", "Settled Training Records"),
-                    ("mlb-receipt-store-audit.json", "mlb-receipt-backup.json", "mlb-settled-training-records.json"), downloads):
-                    st.download_button("Download " + title, json.dumps(value, indent=2, allow_nan=False),
+                st.caption("Re-prepare after collection or reconciliation. These downloads contain the audit and settled receipts, not the full raw-feed backup. Drive backup status is reported separately in receipt health.")
+                for title, filename, value in downloads:
+                    st.download_button("Download " + title, value,
                                        file_name=filename, mime="application/json")
         if audit is None or audit.empty:
             st.info("No candidate evidence is available for this run. Run Game Analysis or select a saved snapshot.")
