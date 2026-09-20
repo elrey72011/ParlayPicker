@@ -185,6 +185,10 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
                       "independent_model_probability": probability(row.get("ml_probability")),
                       "theover_probability": probability(row.get("theover_probability")),
                       "issues": sorted(set(issues))}
+            detail.update({k: text(row.get(k)) for k in (
+                "ml_probability_source", "ml_target", "ml_unavailable_reason",
+                "model_version", "calibration_version", "selection_probability_source",
+                "home_classification", "away_classification")})
             detail.update(challenger_diagnostics(row))
             blocks.update(issues)
             details.append(detail)
@@ -221,6 +225,8 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
         "ready_for_grading": sum(r["readiness"] == "ready_for_grading" for r in report["games"]),
         "approved_wagers": sum(r["wager_decision"] == "approved" for r in report["games"]),
         "blockers_by_game": dict(Counter(c for r in report["games"] for c in r["evidence_blockers"]))})
+    from core.football_coverage import summarize
+    report["football_coverage"] = summarize(report)
     return report
 
 
