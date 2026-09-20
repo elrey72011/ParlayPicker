@@ -20,7 +20,10 @@ def capture(frame, now=None):
         sport = str(row.get("league", row.get("League", ""))).upper()
         if sport not in {"NFL", "NCAAF"}:
             continue
-        start = aware(row.get("game_start_utc")) or aware(row.get("commence_time"))
+        # Expanded market candidates retain the provider kickoff under this raw
+        # field before the evidence projection assigns game_start_utc.
+        start = (aware(row.get("game_start_utc")) or aware(row.get("commence_time"))
+                 or aware(row.get("commence_time_raw")))
         if start is None or clock >= start:
             out.at[index, "football_feature_capture_status"] = "NOT_VERIFIED_PREGAME"
             continue
