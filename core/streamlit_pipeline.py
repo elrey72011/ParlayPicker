@@ -7379,6 +7379,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
             # Historical/backfill requests must honor the caller's explicit date.
             # The today-only guard is appropriate only for the live slate.
             sport_games = games if date else filter_games_today_only(games)
+            football_sport = {"americanfootball_nfl": "NFL", "americanfootball_ncaaf": "NCAAF"}.get(sk)
+            if football_sport:
+                from app_core.football_identity_capture import collect as collect_football_identity
+                sport_games = collect_football_identity(sport_games, football_sport)
+
             if not sport_games:
                 continue
 
@@ -7449,7 +7454,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
                 row = game_dict[matchup_id]
                 import json
-                for field in ("home_team_id", "away_team_id", "team_ids", "provider_ids", "mlb_provider_event_id", "mlb_pregame_receipts"):
+                for field in ("home_team_id", "away_team_id", "team_ids", "provider_ids", "football_identity_status", "football_identity_observed_at", "football_identity_source_hash", "mlb_provider_event_id", "mlb_pregame_receipts"):
                     if field in game:
                         row[field] = json.dumps(game[field], sort_keys=True) if field == "mlb_pregame_receipts" else game[field]
                 from app_core.prediction_evidence import provider_quotes
@@ -8154,7 +8159,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     id_cols = [
         "league", "home_team", "away_team", "game_date", "matchup_id",
         "commence_time_raw", "odds_feed_source", "provider_quotes",
-        "home_team_id", "away_team_id", "team_ids", "provider_ids", "mlb_provider_event_id", "mlb_pregame_receipts",
+        "home_team_id", "away_team_id", "team_ids", "provider_ids", "football_identity_status", "football_identity_observed_at", "football_identity_source_hash", "mlb_provider_event_id", "mlb_pregame_receipts",
     ]
     # Check for game_time_est if exists
     if "game_time_est" in live_odds_df.columns:
