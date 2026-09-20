@@ -2,7 +2,6 @@
 import json
 from contextlib import closing
 from app_core import mlb_pregame_receipts as r
-from app_core.mlb_receipt_audit import backup_bundle
 from app_core.mlb_spread_total_model import digest, canonical, receipt_features, prepare_rows
 
 PREFIX = "parlaypicker/mlb-receipt-backup-v1/"
@@ -133,13 +132,20 @@ def backup(client, folder, path=None):
         counters["objects_uploaded_verified"] += 1
         return sha
 
-    bundle = backup_bundle(path)
     manifest = {"schema": "mlb-receipt-manifest-v2", "tables": {}}
-    for table, records in bundle["payload"]["tables"].items():
-        manifest["tables"][table] = {}
-        for key, payload in records.items():
-            manifest["tables"][table][key] = verified_put(RECORD_PREFIX,
-                {"table": table, "id": key, "payload": payload})
+    # One consistent SQLite snapshot; keep only one decoded raw feed in memory.
+    # Do not materialize/hash the entire archive just to upload individual objects.
+    with closing(r.connect(path)) as db:
+        db.execute("BEGIN")
+        for table in ("observations", "receipts", "outcomes"):
+            manifest["tables"][table] = {}
+            for key, expected, raw in db.execute(f"SELECT id,sha256,payload FROM {table} ORDER BY rowid"):
+                payload = json.loads(raw)
+                if digest(payload) != expected:
+                    raise r.Rejected("stored_hash_mismatch")
+                manifest["tables"][table][key] = verified_put(RECORD_PREFIX,
+                    {"table": table, "id": key, "payload": payload})
+                del payload, raw
     # Publish the manifest only after every referenced object passed read-back.
     sha = verified_put(MANIFEST_PREFIX, manifest)
     client._receipt_verified = verified
