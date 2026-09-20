@@ -11,7 +11,7 @@ FIELDS = '''snapshot_id export_run_id candidate_id game_id matchup_id sport seas
 from app_core.total_signal_quality import FIELDS as TOTAL_QUALITY_FIELDS
 FIELDS += list(TOTAL_QUALITY_FIELDS)
 # Preserve the producer's probability basis for diagnostics; never infer it.
-FIELDS += ["selection_probability_source", "ml_probability", "ml_probability_source",
+FIELDS += ["opposing_odds_american", "opposing_odds_source", "selection_probability_source", "ml_probability", "ml_probability_source",
            "ml_target", "ml_unavailable_reason", "ml_feature_quality",
            "features_generated_at", "stats_updated_at", "home_classification",
            "away_classification"]

@@ -25,6 +25,19 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             st.caption(f"Research performance: {research['eligible_games']} eligible settled games. Descriptive only; ranking and wager validation remain separate. Uses locally restored evidence.")
             st.download_button("Download research performance report", json.dumps(research, indent=2),
                                "research-performance.json", "application/json", key="research_performance_download")
+        if st.button("Prepare football evidence inventory", key="football_inventory_prepare"):
+            st.session_state.pop("football_inventory", None)
+            try:
+                from core.football_inventory import rebuild
+                from app_core.prediction_evidence import database_path
+                st.session_state["football_inventory"] = rebuild(database_path())
+            except Exception:
+                st.error("Football evidence inventory failed verification. No records or wager settings changed.")
+        inventory = st.session_state.get("football_inventory")
+        if inventory is not None:
+            st.caption("First saved pregame selections from locally restored evidence. Research counts do not authorize model training or wagers.")
+            st.download_button("Download football evidence inventory", json.dumps(inventory, indent=2),
+                               file_name="football-evidence-inventory.json", mime="application/json")
         source = st.selectbox("Readiness source", ["Current run", "Saved snapshot"], key="readiness_source")
         if source == "Saved snapshot":
             if st.button("Load saved snapshots", key="readiness_load"):
