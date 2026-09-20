@@ -105,6 +105,15 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             st.info("No candidate evidence is available for this run. Run Game Analysis or select a saved snapshot.")
             return
         report = build_readiness(audit, final, diagnostics=diagnostics)
+        football = report.get("football_coverage", {})
+        if football.get("sports"):
+            with st.expander("Football model and input coverage"):
+                st.caption("TheOver is optional. Limited-evidence estimates are research selections; model validation remains required.")
+                for sport, coverage in football["sports"].items():
+                    st.write(f"{sport}: {coverage['games']} games")
+                    st.dataframe(coverage["rows"], hide_index=True)
+                st.download_button("Download football coverage", json.dumps(football, indent=2),
+                                   file_name="football-coverage.json", mime="application/json")
         rejected = (diagnostics or {}).get("preselection_rejected_candidates", [])
         if rejected:
             st.write(f"Market candidates excluded before ranking: {len(rejected)}")
