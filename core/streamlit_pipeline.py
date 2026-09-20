@@ -2351,7 +2351,7 @@ def compute_blended_probability(
     m_type = pd.Series(market_type).fillna("").astype(str).str.lower()
 
     def _blend_row(p_mkt, p_kal, p_ml, p_the, p_sen, m_typ, lg):
-        if pd.isna(p_mkt):
+        if pd.isna(p_mkt) and str(lg).upper() not in {"NFL", "NCAAF"}:
             p_mkt = p_ml if pd.notna(p_ml) else 0.5
 
         # Kalshi Probability is already oriented to the pick side before this step
@@ -2631,6 +2631,9 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     out["market_probability"] = (
         implied_prob.divide(_market_denom.where(_market_denom > 0))
     ).clip(0.01, 0.99)
+
+    from core.football_fallback import market_input
+    out["market_probability"] = market_input(out, out["market_probability"])
 
     theover = _numeric_series(out, "theover_probability")
     theover = theover.where(theover <= 1, theover / 100.0)
@@ -4170,7 +4173,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["_selection_probability"] = pd.to_numeric(
         pool["calibrated_probability"], errors="coerce"
     )
-    pool["selection_probability_source"] = "calibrated_probability"
+    from core.football_fallback import selection_sources
+    pool["selection_probability_source"] = selection_sources(pool)
     pool["_recent_regime_score_penalty"] = 0.0
     pool["recent_regime_penalty_applied"] = False
     pool["recent_regime_penalty_value"] = 0.0
@@ -9554,6 +9558,9 @@ def run_analysis_pipeline(
         paired_market_probability.notna(),
         fallback_market_probability,
     )
+    from core.football_fallback import market_input
+    merged["market_probability"] = market_input(merged, merged["market_probability"])
+
 
     # Mandatory Sanitization Layer
     logger.info(f"PIPELINE AUDIT: [2/9] Rows before sanitization: {len(merged)}")
