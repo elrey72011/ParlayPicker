@@ -213,3 +213,35 @@ def test_backup_corrupt_local_record_never_publishes_manifest(fixture):
     with pytest.raises(r.Rejected, match="stored_hash_mismatch"):
         remote.backup(store, "folder", fixture[0])
     assert not any(k.startswith(remote.MANIFEST_PREFIX) for k in store.data)
+
+
+def test_cumulative_manifests_restore_once(fixture, tmp_path, monkeypatch):
+    collect(fixture)
+    store = Store()
+    remote.backup(store, "folder", fixture[0])
+    observation = {"source": "test", "payload": {"new": True}}
+    r.append("observations", remote.digest(observation), observation, fixture[0])
+    remote.backup(store, "folder", fixture[0])
+    original = remote.restore
+    calls = []
+    def tracked(bundle, path=None):
+        calls.append(1)
+        return original(bundle, path)
+    monkeypatch.setattr(remote, "restore", tracked)
+    target = tmp_path / "union.sqlite3"
+    remote.recover(store, target)
+    assert len(calls) == 1
+    assert backup_bundle(target) == backup_bundle(fixture[0])
+
+
+def test_invalid_manifest_dependency_cannot_be_hidden_by_union(fixture, tmp_path):
+    import json
+    collect(fixture)
+    store = Store()
+    remote.backup(store, "folder", fixture[0])
+    manifest = next(json.loads(v) for k,v in store.data.items() if k.startswith(remote.MANIFEST_PREFIX))
+    manifest["tables"]["observations"] = {}
+    key = remote.MANIFEST_PREFIX + remote.digest(manifest) + ".json"
+    store.data[key] = remote.canonical(manifest)
+    with pytest.raises(ValueError, match="Receipt observation missing"):
+        remote.recover(store, tmp_path / "bad-union.sqlite3")

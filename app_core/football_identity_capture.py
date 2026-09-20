@@ -71,4 +71,9 @@ def collect(games, sport):
                 events.extend(response.json().get("events", []))
             except (requests.RequestException, ValueError, TypeError, AttributeError):
                 continue
-    return attach(games, sport, events, datetime.now(timezone.utc).isoformat())
+    result = attach(games, sport, events, datetime.now(timezone.utc).isoformat())
+    import logging
+    from collections import Counter
+    logging.getLogger(__name__).warning("FOOTBALL IDENTITY sport=%s games=%s statuses=%s",
+        sport, len(result), dict(Counter(g.get("football_identity_status", "UNRESOLVED") for g in result)))
+    return result
