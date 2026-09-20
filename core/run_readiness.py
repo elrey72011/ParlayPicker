@@ -116,6 +116,8 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
                 match = match.iloc[0:0]
                 break
             match = match.loc[match[column].map(text).eq(wanted)]
+        final_match_count = len(match)
+        final_match_status = "matched" if final_match_count == 1 else "missing" if final_match_count == 0 else "conflicting"
         card = match.iloc[0] if len(match) == 1 else pd.Series(dtype=object)
         if len(match) != 1:
             blocks.add("final_decision_missing_or_ambiguous")
@@ -189,6 +191,10 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
                 "ml_probability_source", "ml_target", "ml_unavailable_reason",
                 "model_version", "calibration_version", "selection_probability_source",
                 "home_classification", "away_classification")})
+            detail.update({"selected_odds_american": number(row.get("odds_american")),
+                           "opposing_odds_american": number(row.get("opposing_odds_american")),
+                           "opposing_odds_source": text(row.get("opposing_odds_source")),
+                           "market_probability": probability(row.get("market_probability"))})
             detail.update(challenger_diagnostics(row))
             blocks.update(issues)
             details.append(detail)
@@ -211,6 +217,7 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
             "league": text(head.get("league")), "matchup": f"{text(head.get('away_team'))} at {text(head.get('home_team'))}",
             "game_start_utc": text(head.get("game_start_utc")), "prediction_generated_at": text(head.get("prediction_generated_at")),
             "selected_pick": text(selected_row.get("best_pick")), "candidate_count": len(pool),
+            "final_match_status": final_match_status, "final_match_count": final_match_count,
             "verified_quote_candidates": sum(d["quote_verified"] for d in details),
             "readiness": "ready_for_grading" if not blocks else "blocked",
             "wager_decision": "approved" if approved is True else "pass" if approved is False else "unknown",

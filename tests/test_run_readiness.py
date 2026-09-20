@@ -253,3 +253,25 @@ def test_live_dashboard_uses_authoritative_evidence():
              and isinstance(n.func, ast.Name) and n.func.id == 'render_readiness_dashboard']
     assert len(calls) == 1
     assert ast.literal_eval(calls[0].args[0].args[0]) == 'candidate_authority_df'
+
+
+def test_final_match_diagnostics_distinguish_missing_and_conflicting(frozen):
+    audit, final = saved(frozen)
+    missing = build_readiness(audit)["games"][0]
+    assert missing["final_match_status"] == "missing"
+    assert missing["final_match_count"] == 0
+    changed = final.copy()
+    changed["wager_approved"] = False
+    conflict = build_readiness(audit, pd.concat([final, changed]))["games"][0]
+    assert conflict["final_match_status"] == "conflicting"
+    assert conflict["final_match_count"] == 2
+    assert conflict["wager_decision"] == "unknown"
+
+
+def test_original_paired_price_diagnostics(frozen):
+    audit, final = saved(frozen)
+    audit["opposing_odds_american"] = -105
+    audit["opposing_odds_source"] = "original_book"
+    candidate = build_readiness(audit, final)["candidates"][0]
+    assert candidate["opposing_odds_american"] == -105
+    assert candidate["opposing_odds_source"] == "original_book"
