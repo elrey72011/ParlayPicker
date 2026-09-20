@@ -187,3 +187,29 @@ def test_live_refresh_defers_settlement_but_verifies_backup(monkeypatch):
     assert calls == ['recover', 'backup']
     assert health['remote_backup_verified'] and health['reconciliation_deferred']
     assert set(health['stage_timings_seconds']) == {'connect','restore','capture','backup_before_reconciliation'}
+
+
+def test_backup_does_not_materialize_whole_store(fixture, monkeypatch):
+    collect(fixture)
+    expected = backup_bundle(fixture[0])
+    def forbidden(*args, **kwargs):
+        raise AssertionError("backup must stream stored records")
+    monkeypatch.setattr(r, "read", forbidden)
+    store = Store()
+    assert remote.backup(store, "folder", fixture[0])["remote_backup_verified"]
+    import json
+    manifests = [json.loads(v) for k,v in store.data.items() if k.startswith(remote.MANIFEST_PREFIX)]
+    assert len(manifests) == 1
+    assert {t: set(refs) for t,refs in manifests[0]["tables"].items()} == {
+        t: set(values) for t,values in expected["payload"]["tables"].items()}
+
+
+def test_backup_corrupt_local_record_never_publishes_manifest(fixture):
+    collect(fixture)
+    with r.connect(fixture[0]) as db:
+        db.execute("DROP TRIGGER observations_UPDATE")
+        db.execute("UPDATE observations SET sha256='invalid'")
+    store = Store()
+    with pytest.raises(r.Rejected, match="stored_hash_mismatch"):
+        remote.backup(store, "folder", fixture[0])
+    assert not any(k.startswith(remote.MANIFEST_PREFIX) for k in store.data)
