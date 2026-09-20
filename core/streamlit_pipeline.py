@@ -9692,6 +9692,13 @@ def run_analysis_pipeline(
                 from app_core.feature_processing import enrich_with_model_features
                 api_clients = {}  # Stub for backward compatibility if it expects dict
                 enriched_for_prediction = enrich_with_model_features(merged[needs_prediction].copy(), api_clients)
+                from app_core.football_feature_capture import capture as capture_football_features, FIELDS as FOOTBALL_FEATURE_FIELDS
+                enriched_for_prediction = capture_football_features(enriched_for_prediction)
+                for field in FOOTBALL_FEATURE_FIELDS:
+                    if field not in merged:
+                        merged[field] = pd.Series(None, index=merged.index, dtype=object)
+                    merged.loc[enriched_for_prediction.index, field] = enriched_for_prediction[field]
+
 
                 # Genuine MLB team features: replace league-default stats (4.5 runs, .500) on
                 # MLB rows with real standings (win%/runs scored+allowed per game/streak/form)
