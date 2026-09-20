@@ -86,6 +86,8 @@ def recover(client, path=None):
             raise ValueError("Receipt record canonical mismatch")
         verified.add(key)
         records[sha] = value
+    merged_tables = {t: {} for t in ("observations", "receipts", "outcomes")}
+    manifest_count = 0
     for key, raw in client.read_objects(Prefix=MANIFEST_PREFIX):
         manifest = json.loads(raw)
         if len(raw) > MAX_OBJECT_BYTES or key != MANIFEST_PREFIX + digest(manifest) + ".json" or manifest.get("schema") != "mlb-receipt-manifest-v2":
@@ -101,8 +103,39 @@ def recover(client, path=None):
                 if value is None or value.get("table") != table or value.get("id") != record_id:
                     raise ValueError("Receipt manifest record missing or mismatched")
                 tables[table][record_id] = value["payload"]
-        payload = {"schema": "mlb-receipt-backup-v1", "tables": tables}
+        if set(tables) != set(merged_tables):
+            raise ValueError("Receipt backup tables mismatch")
+        # Verify each manifest's dependency closure before combining snapshots.
+        # A later snapshot must not hide a missing dependency in an earlier one.
+        events = set()
+        for record_id, snapshot in tables["receipts"].items():
+            payload, _ = receipt_features(snapshot)
+            event = r.event_key(payload)
+            events.add(event)
+            if record_id != r.receipt_key(payload):
+                raise ValueError("Receipt identity mismatch")
+            if any(ref not in tables["observations"] for ref in payload["source_observations"].values()):
+                raise ValueError("Receipt observation missing")
+            if event in tables["outcomes"]:
+                prepare_rows([{"snapshot": snapshot, "outcome": tables["outcomes"][event]}])
+        for record_id, outcome in tables["outcomes"].items():
+            if record_id not in events or record_id != r.event_key(outcome) or outcome.get("observation_hash") not in tables["observations"]:
+                raise ValueError("Outcome provenance missing")
+        for table, values in tables.items():
+            for record_id, payload in values.items():
+                old = merged_tables[table].get(record_id)
+                if old is not None and old != payload:
+                    raise ValueError("Receipt recovery conflict")
+                merged_tables[table][record_id] = payload
+        manifest_count += 1
+    # Restore the union once rather than repeatedly hash and scan every large
+    # observation in every cumulative historical manifest.
+    if manifest_count:
+        payload = {"schema": "mlb-receipt-backup-v1", "tables": merged_tables}
         count += restore({"payload": payload, "sha256": digest(payload)}, path)
+    import logging
+    logging.getLogger(__name__).warning("RECEIPT RECOVERY manifests=%s unique_records=%s",
+        manifest_count, sum(len(v) for v in merged_tables.values()))
     client._receipt_verified = verified
     return count
 

@@ -190,7 +190,8 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
             detail.update({k: text(row.get(k)) for k in (
                 "ml_probability_source", "ml_target", "ml_unavailable_reason",
                 "model_version", "calibration_version", "selection_probability_source",
-                "home_classification", "away_classification")})
+                "home_classification", "away_classification", "home_team_id", "away_team_id",
+                "football_identity_status", "football_identity_observed_at", "football_identity_source_hash")})
             detail.update({"selected_odds_american": number(row.get("odds_american")),
                            "opposing_odds_american": number(row.get("opposing_odds_american")),
                            "opposing_odds_source": text(row.get("opposing_odds_source")),

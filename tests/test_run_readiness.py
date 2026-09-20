@@ -275,3 +275,17 @@ def test_original_paired_price_diagnostics(frozen):
     candidate = build_readiness(audit, final)["candidates"][0]
     assert candidate["opposing_odds_american"] == -105
     assert candidate["opposing_odds_source"] == "original_book"
+
+
+def test_football_identity_capture_fields_are_exported(frozen):
+    audit, final = saved(frozen)
+    audit["home_team_id"] = "espn:nfl:1"
+    audit["away_team_id"] = "espn:nfl:2"
+    audit["football_identity_status"] = "MATCHED"
+    audit["football_identity_observed_at"] = "2026-09-20T12:00:00Z"
+    audit["football_identity_source_hash"] = "original-hash"
+    row = build_readiness(audit, final)["candidates"][0]
+    assert row["home_team_id"] == "espn:nfl:1"
+    assert row["away_team_id"] == "espn:nfl:2"
+    assert row["football_identity_status"] == "MATCHED"
+    assert row["football_identity_source_hash"] == "original-hash"
