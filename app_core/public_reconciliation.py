@@ -33,7 +33,7 @@ def selection_facts(item):
                 date=item.get("date"), published_at=item.get("published_at"), legs=legs)
 
 
-def reconcile(source, day):
+def prepare_source(source):
     publications, errors = [], []
     for pub in source.get("publications", []):
         if digest(pub["package"]) != pub["package_hash"]:
@@ -47,7 +47,7 @@ def reconcile(source, day):
     for pub in publications:
         for family, legs in pub['package']['games'].items():
             for leg in legs:
-                single = deepcopy(pub)
+                single = {**pub, 'package': dict(pub['package'])}
                 single['package']['games'] = {'overall':[], 'sides':[], 'totals':[]}
                 single['package']['games'][family] = [leg]
                 single['package']['parlays'] = []
@@ -59,6 +59,26 @@ def reconcile(source, day):
                         entries.append(item)
     entries += deepcopy(source.get("locks", []))
     scores = latest_scores(source.get("revisions", []))
+    return entries, scores, errors, digest(source)
+
+
+def reconcile_many(source, days, progress=None):
+    prepared = prepare_source(source)
+    results = []
+    days = sorted(set(days))
+    for index, day in enumerate(days):
+        results.append(_reconcile_day(prepared, day))
+        if progress:
+            progress(index + 1, len(days), day)
+    return results
+
+
+def reconcile(source, day):
+    return _reconcile_day(prepare_source(source), day)
+
+
+def _reconcile_day(prepared, day):
+    entries, scores, errors, source_hash = prepared
     by_id = defaultdict(list)
     for index, item in enumerate(entries):
         if item.get("date") == day:
@@ -109,7 +129,7 @@ def reconcile(source, day):
     cohorts.update({"Published " + label: [r for r in records if published(r) and r["category"] == category]
                     for category, label in (("overall", "Overall"), ("sides", "Sides"), ("totals", "Totals"))})
     cohorts.update({group:[r for r in records if r["group"] == group] for group in ("Approved", "Research")})
-    return dict(date=day, source_hash=digest(source), status="NEEDS_REVIEW" if errors or any(r["outcome"] == "NEEDS_REVIEW" for r in records) else "RECONCILED",
+    return dict(date=day, source_hash=source_hash, status="NEEDS_REVIEW" if errors or any(r["outcome"] == "NEEDS_REVIEW" for r in records) else "RECONCILED",
                 source_errors=errors, cohorts={k:counts(v,day) for k,v in cohorts.items()}, records=records,
                 overlap_notice="Categories and groups overlap; never sum these cohorts as independent wagers.")
 

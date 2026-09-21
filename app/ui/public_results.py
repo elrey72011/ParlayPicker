@@ -144,13 +144,24 @@ def render_history(setting):
                                f'reconciliation-{day}.json', 'application/json')
             st.download_button('Download reconciliation report', markdown(reconciled),
                                f'reconciliation-{day}.md', 'text/markdown')
+        audit_cutoff = st.date_input('Audit evaluation starts (exploratory cutoff)', value=datetime.now(ZoneInfo('America/New_York')).date(), key='public_audit_cutoff')
         if st.button('Prepare probability and parlay audit', key='public_probability_audit'):
             import json
-            from app_core.public_reconciliation import reconcile
+            from app_core.public_reconciliation import reconcile_many
             from app_core.public_probability_audit import build
+            import time
+            import logging
             source = {k:saved.get(k, []) for k in ('publications','revisions','locks')}
             game_dates = sorted({r['date'] for r in saved['rows']})
-            audit = build([reconcile(source, d) for d in game_dates])
+            started = time.perf_counter()
+            progress = st.progress(0, text='Validating saved history once…')
+            reports = reconcile_many(source, game_dates, progress=lambda done,total,d: progress.progress(done/total, text=f'Reconciled {done}/{total} dates: {d}'))
+            audit = build(reports, holdout_start=audit_cutoff.isoformat())
+            elapsed = time.perf_counter() - started
+            audit['preparation_seconds'] = round(elapsed, 3)
+            logging.getLogger(__name__).info('PERFORMANCE probability_parlay_audit dates=%s seconds=%.3f', len(game_dates), elapsed)
+            progress.empty()
+            st.success(f'Audit ready in {elapsed:.1f} seconds. Download below.')
             st.session_state['public_probability_audit_download'] = json.dumps(audit, indent=2)
         if st.session_state.get('public_probability_audit_download'):
             st.caption('All restored game dates; original saved estimates only. Descriptive diagnostics do not change picks or wager approval. Prepare again after grading or restoring history.')

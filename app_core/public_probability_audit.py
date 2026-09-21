@@ -24,9 +24,13 @@ def summary(rows):
                 descriptive_wilson_95=[center-half, center+half])
 
 
-def build(reconciliations):
+def build(reconciliations, *, holdout_start=None):
     """Separate groups/categories; deduplicate repeated exports and reject conflicts."""
     from app_core.public_history import digest
+    if holdout_start is not None:
+        from datetime import date
+        date.fromisoformat(holdout_start)
+    baselines = defaultdict(list)
     variants = defaultdict(dict)
     for report in reconciliations:
         if report.get('source_errors'):
@@ -60,6 +64,10 @@ def build(reconciliations):
             cohort = (group, row.get('category'), leg.get('league'), family)
             value = (leg['original_win_estimate'], int(leg['outcome']=='WIN'))
             cohorts[cohort].append(value)
+            odds = leg.get('odds')
+            if isinstance(odds, (int, float)) and not isinstance(odds, bool) and math.isfinite(odds) and abs(odds) >= 100:
+                implied = -odds/(100-odds) if odds < 0 else 100/(100+odds)
+                baselines[cohort].append((row['date'], value[0], value[1], implied))
             if row.get('category') == 'overall':
                 label = 'locked' if group == 'Locked' else 'published'
                 if group in {'Locked', 'Approved', 'Research'}:
@@ -96,6 +104,10 @@ def build(reconciliations):
         n = concordant + discordant
         results.append(dict(group=cohort[0], category=cohort[1], sport=cohort[2], market=cohort[3],
                             **summary(rows), dates=days,
+                            price_baseline=baseline_comparison(baselines[cohort]),
+                            chronological_comparison=(dict(
+                                before_cutoff=baseline_comparison([r for r in baselines[cohort] if r[0] < holdout_start]),
+                                on_or_after_cutoff=baseline_comparison([r for r in baselines[cohort] if r[0] >= holdout_start])) if holdout_start else None),
                             probability_bands=[dict(lower=b/20, upper=(b+1)/20, **summary(v)) for b,v in sorted(bands.items())],
                             ranking_comparable_pairs=n,
                             ranking_concordance=concordant/n if n else None))
@@ -119,11 +131,24 @@ def build(reconciliations):
             a, b = sides['published'][0], sides['locked'][0]
             if any(a.get(k) != b.get(k) for k in ('selection','odds','original_win_estimate')):
                 changes.append(dict(date=event[0], sport=event[1], game=event[2], published=a, locked=b))
-    return dict(selection_changes=changes, schema_version=1, descriptive_only=True, cohorts=results, parlay_dependence=dependence,
+    return dict(holdout_start=holdout_start, selection_changes=changes, schema_version=2, descriptive_only=True, cohorts=results, parlay_dependence=dependence,
                 repeated_leg_exposure=[dict(group=k[0],date=k[1],leg=list(k[2]),tickets=v) for k,v in exposure.items() if v>1],
                 exclusions=dict(exclusions),
-                limitations=['No ranking, probability, stake, or validation changes.',
+                limitations=['Single-sided implied-price baseline includes vig; it is not a no-vig fair probability.',
+                  'Chronological comparison is exploratory unless the cutoff and model were frozen before the evaluation period; it never authorizes promotion.',
+                  'No ranking, probability, stake, or validation changes.',
                   'Categories overlap; compare separately. Pushes excluded; probability semantics may be unverified.',
                   'Wilson intervals assume independent games and are descriptive; shared-day/model dependence can widen uncertainty.',
                   'Pair observations share legs. Pooled phi is descriptive, not a validated correlation adjustment or causal finding.',
                   'Joint-probability discrepancies can reflect miscalibration as well as dependence. Multiple dates and independent holdout validation are required.'])
+
+
+def baseline_comparison(rows):
+    if not rows:
+        return {'n': 0, 'status': 'NO_PAIRED_PRICE_EVIDENCE'}
+    n = len(rows)
+    model = sum((p-y)**2 for d,p,y,q in rows)/n
+    price = sum((q-y)**2 for d,p,y,q in rows)/n
+    return dict(n=n, dates=len({r[0] for r in rows}), model_brier=model,
+                single_sided_price_brier=price, model_minus_price_brier=model-price,
+                status='DESCRIPTIVE_NOT_VALIDATION')
