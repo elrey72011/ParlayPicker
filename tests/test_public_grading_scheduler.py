@@ -84,6 +84,10 @@ def test_cli_optional_public_grading(monkeypatch,tmp_path,configured):
     monkeypatch.setattr(scheduler,'run',lambda *a:calls.append(a) or {'status':'ok','errors':[]})
     assert cli.main()==0
     assert len(calls)==int(configured)
+    if configured:
+        from app_core.espn_results import ESPN_ENDPOINTS
+        assert calls[0][3] == set(ESPN_ENDPOINTS)
+        assert {'NFL', 'WNBA'} <= calls[0][3]
     assert ('not_configured' in (tmp_path/'summary.md').read_text()) != configured
 
 
@@ -101,3 +105,34 @@ def test_cli_public_failure_is_sanitized(monkeypatch,tmp_path):
     assert cli.main()==1
     summary=(tmp_path/'summary.md').read_text()
     assert 'public_grading:RuntimeError' in summary and 'secret-value' not in summary
+
+
+@pytest.mark.parametrize('sport,away,home,provider_away,provider_home', [
+    ('NFL', 'Cleveland', 'Tampa Bay', 'Cleveland Browns', 'Tampa Bay Buccaneers'),
+    ('WNBA', 'Minnesota', 'Connecticut', 'Minnesota Lynx', 'Connecticut Sun'),
+])
+def test_public_saved_sports_settle_with_fresh_finals(monkeypatch, sport, away, home, provider_away, provider_home):
+    from app_core.espn_results import ESPN_ENDPOINTS
+    monkeypatch.setattr(scheduler, 'is_open', lambda: True)
+    client = Memory()
+    store = History('site-1234', 'folder', client)
+    publication = pub()
+    for family, legs in publication['package']['games'].items():
+        for leg in legs:
+            leg.update(sport=sport, game=f'{away} at {home}')
+            if family != 'totals':
+                leg['pick'] = home + ' +1.5'
+    key = store.archive(publication['package'])
+    store.confirm('deploy-sport', key, publication['confirmed_at'])
+    final = dict(sport=sport, away=provider_away, home=provider_home,
+                 event_id='verified-event', result_source='ESPN', completed=True,
+                 start='2026-09-09T20:00:00+00:00', away_score=4, home_score=3)
+    calls = []
+    def fetch(day, sports):
+        calls.append(sports)
+        return {'recorded_at': AT.isoformat(), 'scores': [final]}
+    result = scheduler.run('site-1234', 'folder', client, set(ESPN_ENDPOINTS),
+                           clock=lambda: AT, fetch=fetch)
+    assert calls == [{sport}]
+    assert result['newly_settled'] == 3
+    assert result['pending'] == 0
