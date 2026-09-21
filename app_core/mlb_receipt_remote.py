@@ -75,7 +75,15 @@ def recover(client, path=None):
             raise ValueError("Receipt remote key mismatch")
         count += restore(bundle, path)
     records = {}
-    for key, raw in client.read_objects(Prefix=RECORD_PREFIX):
+    # Cache is expendable and never replaces a fresh remote inventory/checksum.
+    # Legacy full backups retain the existing explicit read path.
+    def read_v2(prefix):
+        if not hasattr(client, 'read_cached_objects'):
+            return client.read_objects(Prefix=prefix)
+        from pathlib import Path
+        db_path = Path(path or r.database_path().with_name('mlb-pregame-receipts.sqlite3'))
+        return client.read_cached_objects(Prefix=prefix, cache_dir=db_path.with_suffix('.remote-cache'))
+    for key, raw in read_v2(RECORD_PREFIX):
         if len(raw) > MAX_OBJECT_BYTES:
             raise ValueError("Receipt record too large")
         value = json.loads(raw)
@@ -88,7 +96,7 @@ def recover(client, path=None):
         records[sha] = value
     merged_tables = {t: {} for t in ("observations", "receipts", "outcomes")}
     manifest_count = 0
-    for key, raw in client.read_objects(Prefix=MANIFEST_PREFIX):
+    for key, raw in read_v2(MANIFEST_PREFIX):
         manifest = json.loads(raw)
         if len(raw) > MAX_OBJECT_BYTES or key != MANIFEST_PREFIX + digest(manifest) + ".json" or manifest.get("schema") != "mlb-receipt-manifest-v2":
             raise ValueError("Receipt manifest mismatch")
