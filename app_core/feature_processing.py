@@ -1788,86 +1788,140 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
     return []
 
 @st.cache_data(ttl=21600)
-def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
-    """
-    Fetch NFL stats using nfl_data_py for the given season year.
-    Uses 'import_schedules' to aggregate team stats from game results.
+def fetch_nfl_stats(season_year: int, as_of_date: str | None = None) -> List[Dict[str, Any]]:
+    """Aggregate point-in-time NFL scoring and recent-form evidence.
+
+    Only games scheduled before ``as_of_date`` are eligible.  This prevents a
+    historical slate from silently consuming later results and makes the exact
+    prior-game summary available to the candidate audit.
     """
     if nfl is None:
         return []
 
     try:
-        logger.info(f"Fetching NFL stats for season: {season_year}")
-        # Use schedule data which has scores
+        logger.info("Fetching NFL stats for season=%s as_of=%s", season_year, as_of_date or "latest")
         from core.nfl_teams import nfl_stats_identity
-        df = nfl.import_schedules([season_year])
 
-        team_stats = {}
+        df = nfl.import_schedules([season_year]).copy()
+        date_column = next(
+            (column for column in ("gameday", "game_date", "date") if column in df.columns),
+            None,
+        )
+        if as_of_date:
+            if date_column is None:
+                logger.error("NFL schedule has no date column; refusing non-point-in-time aggregation")
+                return []
+            cutoff = pd.Timestamp(as_of_date)
+            if cutoff.tzinfo is not None:
+                cutoff = cutoff.tz_convert("UTC").tz_localize(None)
+            game_dates = pd.to_datetime(df[date_column], errors="coerce", utc=True).dt.tz_localize(None)
+            df = df.loc[game_dates.lt(cutoff.normalize())].copy()
+            df["_parsed_game_date"] = game_dates.loc[df.index]
+        elif date_column is not None:
+            df["_parsed_game_date"] = pd.to_datetime(df[date_column], errors="coerce", utc=True).dt.tz_localize(None)
+        else:
+            df["_parsed_game_date"] = pd.NaT
+        df = df.sort_values(["_parsed_game_date"], kind="stable")
 
-        def update_team(team, scored, allowed, won, turnovers=0):
+        team_stats: dict[str, dict[str, Any]] = {}
+
+        def update_team(team, opponent, scored, allowed, won, turnovers, venue, game_date):
             if team not in team_stats:
-                team_stats[team] = {'games': 0, 'wins': 0, 'points_for': 0, 'points_against': 0, 'turnovers': 0}
-            team_stats[team]['games'] += 1
-            team_stats[team]['points_for'] += scored
-            team_stats[team]['points_against'] += allowed
-            if won:
-                team_stats[team]['wins'] += 1
-            team_stats[team]['turnovers'] += turnovers
+                team_stats[team] = {
+                    "games": [],
+                    "wins": 0,
+                    "points_for": 0.0,
+                    "points_against": 0.0,
+                    "turnovers": 0.0,
+                }
+            record = team_stats[team]
+            record["wins"] += int(bool(won))
+            record["points_for"] += float(scored)
+            record["points_against"] += float(allowed)
+            record["turnovers"] += float(turnovers)
+            record["games"].append(
+                {
+                    "won": bool(won),
+                    "scored": float(scored),
+                    "allowed": float(allowed),
+                    "margin": float(scored) - float(allowed),
+                    "opponent": str(opponent),
+                    "venue": venue,
+                    "date": pd.Timestamp(game_date).date().isoformat() if pd.notna(game_date) else "",
+                }
+            )
 
-        # nfl_data_py schedules df has 'home_turnovers' and 'away_turnovers' if recent enough
-        # checking columns availability
-        has_turnovers = 'home_turnovers' in df.columns and 'away_turnovers' in df.columns
-
+        has_turnovers = "home_turnovers" in df.columns and "away_turnovers" in df.columns
         for _, row in df.iterrows():
-            if pd.isna(row['result']): # Game not played yet
+            if "result" in row and pd.isna(row["result"]):
                 continue
-
-            home = row['home_team']
-            away = row['away_team']
-            home_score = row['home_score']
-            away_score = row['away_score']
-
-            home_to = row['home_turnovers'] if has_turnovers else 0
-            away_to = row['away_turnovers'] if has_turnovers else 0
-
-            # Handle potential NaNs
+            home_score = pd.to_numeric(row.get("home_score"), errors="coerce")
+            away_score = pd.to_numeric(row.get("away_score"), errors="coerce")
             if pd.isna(home_score) or pd.isna(away_score):
                 continue
-
-            home_to = home_to if pd.notnull(home_to) else 0
-            away_to = away_to if pd.notnull(away_to) else 0
-
-            update_team(home, home_score, away_score, home_score > away_score, home_to)
-            update_team(away, away_score, home_score, away_score > home_score, away_to)
+            home = row["home_team"]
+            away = row["away_team"]
+            home_to = pd.to_numeric(row.get("home_turnovers"), errors="coerce") if has_turnovers else 0.0
+            away_to = pd.to_numeric(row.get("away_turnovers"), errors="coerce") if has_turnovers else 0.0
+            home_to = 0.0 if pd.isna(home_to) else float(home_to)
+            away_to = 0.0 if pd.isna(away_to) else float(away_to)
+            game_date = row.get("_parsed_game_date")
+            update_team(home, away, home_score, away_score, home_score > away_score, home_to, "vs", game_date)
+            update_team(away, home, away_score, home_score, away_score > home_score, away_to, "at", game_date)
 
         stats = []
         for team_code, data in team_stats.items():
-            games = data['games']
-            if games == 0: continue
+            games = data["games"]
+            count = len(games)
+            if count == 0:
+                continue
+            recent = games[-5:]
+            latest = games[-1]
+            latest_won = latest["won"]
+            streak_count = 0
+            for game in reversed(games):
+                if game["won"] != latest_won:
+                    break
+                streak_count += 1
+            streak = float(streak_count if latest_won else -streak_count)
+            result_letter = "W" if latest_won else "L"
+            last_game_summary = (
+                f"{result_letter} {latest['scored']:.0f}-{latest['allowed']:.0f} "
+                f"{latest['venue']} {latest['opponent']}"
+                + (f" ({latest['date']})" if latest["date"] else "")
+            )
+            stats.append(
+                {
+                    "team_norm": nfl_stats_identity(team_code, schedule_code=True),
+                    "league_key": "NFL",
+                    "win_pct": data["wins"] / count,
+                    "home_win_pct": data["wins"] / count,
+                    "away_win_pct": data["wins"] / count,
+                    "points_per_game": data["points_for"] / count,
+                    "points_allowed_per_game": data["points_against"] / count,
+                    "turnovers": data["turnovers"] / count,
+                    "streak": streak,
+                    "last5_win_pct": sum(int(game["won"]) for game in recent) / len(recent),
+                    "recent_point_margin": sum(game["margin"] for game in recent) / len(recent),
+                    "games_played": count,
+                    "last_game_summary": last_game_summary,
+                    "last_game_date": latest["date"],
+                    "source": "nfl_data_py_schedule",
+                }
+            )
 
-            w_pct = data['wins'] / games
-            ppg = data['points_for'] / games
-            oppg = data['points_against'] / games
-            avg_tov = data['turnovers'] / games
-
-            stats.append({
-                "team_norm": nfl_stats_identity(team_code, schedule_code=True),
-                "league_key": "NFL",
-                "win_pct": w_pct,
-                "home_win_pct": w_pct,
-                "away_win_pct": w_pct,
-                "points_per_game": ppg,
-                "points_allowed_per_game": oppg,
-                "turnovers": avg_tov,
-                "streak": 0.0,
-                "last5_win_pct": w_pct
-            })
-
-        scheduled = {nfl_stats_identity(t, schedule_code=True) for t in set(df['home_team']) | set(df['away_team'])}
-        missing_completed = sorted(scheduled - {r['team_norm'] for r in stats})
+        scheduled = {
+            nfl_stats_identity(team, schedule_code=True)
+            for team in set(df.get("home_team", [])) | set(df.get("away_team", []))
+        }
+        missing_completed = sorted(scheduled - {row["team_norm"] for row in stats})
         if missing_completed:
-            logger.warning('NFL_STATS_NO_COMPLETED_SEASON_GAMES season=%s teams=%s; no synthetic stats supplied', season_year, missing_completed)
-        logger.info(f"Successfully fetched NFL stats for {len(stats)} teams.")
+            logger.warning(
+                "NFL_STATS_NO_COMPLETED_SEASON_GAMES season=%s teams=%s; no synthetic stats supplied",
+                season_year,
+                missing_completed,
+            )
+        logger.info("Successfully fetched point-in-time NFL stats for %s teams.", len(stats))
         return stats
     except Exception as e:
         logger.error(f"Failed to fetch NFL stats via nfl_data_py: {e}", exc_info=True)
@@ -2572,7 +2626,13 @@ def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
 
 # -------------------------------------------------------------------------
 
-def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = None, *, leagues=None) -> pd.DataFrame:
+def fetch_team_stats(
+    api_clients: Dict[str, Any],
+    season_year: Optional[int] = None,
+    *,
+    leagues=None,
+    as_of_date: str | None = None,
+) -> pd.DataFrame:
     """
     Refactored function to fetch stats for all configured leagues using
     specific open-source libraries where requested.
@@ -2601,7 +2661,10 @@ def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = N
             continue
         started = perf_counter()
         try:
-            all_stats.extend(fetcher(season_year))
+            if league == "NFL" and as_of_date:
+                all_stats.extend(fetcher(season_year, as_of_date=as_of_date))
+            else:
+                all_stats.extend(fetcher(season_year))
         finally:
             logger.warning("PERFORMANCE team_stats league=%s season=%s seconds=%.2f",
                            league, season_year, perf_counter()-started)
@@ -2686,14 +2749,29 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # 3) Fetch stats AFTER league_keys exists (ok if empty)
     # ------------------------------------------------------------
     # Tier 1: Attempt Live Stats Fetching
-    stats_df = fetch_team_stats(api_clients, season_year=season_year, leagues=set(league_keys))
+    as_of_date = None
+    for date_column in ("game_date", "date", "commence_time", "game_time_est"):
+        if date_column not in df.columns:
+            continue
+        parsed_dates = pd.to_datetime(df[date_column], errors="coerce", utc=True).dropna()
+        if not parsed_dates.empty:
+            as_of_date = parsed_dates.min().date().isoformat()
+            break
+    fetch_kwargs = {"leagues": set(league_keys)}
+    if as_of_date:
+        fetch_kwargs["as_of_date"] = as_of_date
+    stats_df = fetch_team_stats(api_clients, season_year=season_year, **fetch_kwargs)
 
     # Tier 2: If live stats are missing or incomplete, attempt season averages fallback
     used_historical_stats = False
     if stats_df is None or stats_df.empty:
         if season_year is not None:
             logger.warning(f"Live stats mostly empty for {season_year}. Attempting fallback to previous season averages.")
-            fallback_stats = fetch_team_stats(api_clients, season_year=season_year - 1, leagues=set(league_keys))
+            fallback_stats = fetch_team_stats(
+                api_clients,
+                season_year=season_year - 1,
+                **fetch_kwargs,
+            )
             if fallback_stats is not None and not fallback_stats.empty:
                 stats_df = fallback_stats
                 used_historical_stats = True
@@ -3069,6 +3147,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["feature_home_oppg"] = _map_stat_impl(home_matched_names, "points_allowed_per_game", default_oppg, league_keys, global_stats_lookup, df.index)
     features_data["feature_home_streak"] = _map_stat_impl(home_matched_names, "streak", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
     features_data["feature_home_turnovers"] = _map_stat_impl(home_matched_names, "turnovers", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_games_played"] = _map_stat_impl(home_matched_names, "games_played", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_recent_point_margin"] = _map_stat_impl(home_matched_names, "recent_point_margin", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_last_game_summary"] = _map_stat_impl(home_matched_names, "last_game_summary", pd.Series("", index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_home_last_game_date"] = _map_stat_impl(home_matched_names, "last_game_date", pd.Series("", index=df.index), league_keys, global_stats_lookup, df.index)
 
     features_data["feature_away_win_pct"] = _map_stat_impl(away_matched_names, "win_pct", default_win_pct, league_keys, global_stats_lookup, df.index)
     features_data["feature_away_away_win_pct"] = _map_stat_impl(away_matched_names, "away_win_pct", default_win_pct, league_keys, global_stats_lookup, df.index)
@@ -3077,6 +3159,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["feature_away_oppg"] = _map_stat_impl(away_matched_names, "points_allowed_per_game", default_oppg, league_keys, global_stats_lookup, df.index)
     features_data["feature_away_streak"] = _map_stat_impl(away_matched_names, "streak", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
     features_data["feature_away_turnovers"] = _map_stat_impl(away_matched_names, "turnovers", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_games_played"] = _map_stat_impl(away_matched_names, "games_played", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_recent_point_margin"] = _map_stat_impl(away_matched_names, "recent_point_margin", pd.Series(0.0, index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_last_game_summary"] = _map_stat_impl(away_matched_names, "last_game_summary", pd.Series("", index=df.index), league_keys, global_stats_lookup, df.index)
+    features_data["feature_away_last_game_date"] = _map_stat_impl(away_matched_names, "last_game_date", pd.Series("", index=df.index), league_keys, global_stats_lookup, df.index)
 
     # SCALING: NHL stats are ~3.0, model expects ~110.0. Scale by 35x if league is NHL.
     is_nhl = league_keys == "NHL"
@@ -3191,6 +3277,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         "feature_home_oppg",
         "feature_home_streak",
         "feature_home_turnovers",
+        "feature_home_games_played",
+        "feature_home_recent_point_margin",
         "feature_away_win_pct",
         "feature_away_away_win_pct",
         "feature_away_last5_win_pct",
@@ -3198,6 +3286,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         "feature_away_oppg",
         "feature_away_streak",
         "feature_away_turnovers",
+        "feature_away_games_played",
+        "feature_away_recent_point_margin",
         "feature_diff_win_pct",
         "feature_diff_ppg",
         "feature_diff_oppg",

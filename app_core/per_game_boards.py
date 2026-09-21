@@ -254,6 +254,11 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                     decimal=1+odds/100 if odds>0 else 1+100/abs(odds)
                     edge=probability-1/decimal
                     ev=probability*decimal-1
+            if not trial and league == 'NFL' and probability is not None:
+                if text(source, 'ml_probability_source').lower() == 'score-distribution-v1:nfl':
+                    basis = 'NFL score model + market (recent form and injury context; unvalidated)'
+                elif text(source, 'selection_probability_source') == 'football_research_blend_no_independent_model':
+                    basis = 'Market-implied estimate (NFL context model unavailable)'
             if probability is None or not 0<=probability<=1: probability=None;basis='Unavailable'
         approval_reason = text(final,'Production_Gate_Reason','Status_Reason','qualification_reason') if final_ticket else ''
         if source is None:
@@ -298,5 +303,14 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      **({k:final[k] for k in ('maturity','gemini_review_status','gemini_reviewed_at','gemini_review_model','gemini_review_input_hash','gemini_verified_context','gemini_supporting_evidence','gemini_missing_information','conservative_ev','espn_event_id','mlb_game_pk','game_number') if k in final} if final_ticket else {}),
                      **({'wager_contract':final['wager_contract']} if final_ticket and isinstance(final.get('wager_contract'),dict) else {}),
                      **({'controlled_trial_contract':trial_contract} if trial else {}),
+                     **({
+                         'nfl_context_status': text(source, 'nfl_context_status'),
+                         'home_recent_result': text(source, 'feature_home_last_game_summary'),
+                         'away_recent_result': text(source, 'feature_away_last_game_summary'),
+                         'home_injury_context': text(source, 'injury_home_summary'),
+                         'away_injury_context': text(source, 'injury_away_summary'),
+                         'injury_context_source': text(source, 'injury_context_source'),
+                         'injury_context_status': text(source, 'injury_context_status'),
+                     } if source is not None and league == 'NFL' else {}),
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)

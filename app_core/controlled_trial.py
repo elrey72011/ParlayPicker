@@ -291,6 +291,15 @@ def evaluate_candidates(frame: pd.DataFrame, *, now: datetime | pd.Timestamp | N
             or data_quality in {"DEGRADED", "UNVERIFIED", "MISSING", "ERROR"}
             or (market.startswith("total") and _text(row, "total_input_status").upper() == "DEGRADED")
         )
+        league = _text(row, "league", "sport").upper()
+        nfl_context_complete = (
+            league != "NFL"
+            or (
+                _text(row, "nfl_context_status").casefold() == "complete"
+                and _text(row, "ml_probability_source").casefold() == "score-distribution-v1:nfl"
+                and _truth(row.get("nfl_context_model_used"))
+            )
+        )
 
         blockers: list[str] = []
         if not production_market(market):
@@ -311,6 +320,8 @@ def evaluate_candidates(frame: pd.DataFrame, *, now: datetime | pd.Timestamp | N
             blockers.append("quote stale or timestamp unavailable")
         if degraded:
             blockers.append("degraded or critical input state")
+        if not nfl_context_complete:
+            blockers.append("NFL recent-result and injury context incomplete")
         if probability is None or break_even is None or edge is None or calculated_ev is None:
             blockers.append("priced probability unavailable")
         elif edge < MIN_PRICE_EDGE:

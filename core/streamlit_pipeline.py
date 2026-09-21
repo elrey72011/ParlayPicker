@@ -158,7 +158,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-09-02d-gemini-prop-batching"
+PIPELINE_BUILD = "2026-09-21-nfl-context-v1"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -611,6 +611,25 @@ _PUBLIC_QUALITY_COLUMNS = ['stats_source', 'stats_resolution_status', 'stats_fal
                            'feature_stats_fallback', 'degraded_feature_subset_flag', 'model_status']
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _PUBLIC_QUALITY_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _PUBLIC_QUALITY_COLUMNS))
+
+# Point-in-time NFL context must survive every selection/export boundary.  These
+# fields make it possible to reconstruct which completed games and injury report
+# affected a pick instead of silently falling back to the sportsbook price.
+_NFL_CONTEXT_COLUMNS = [
+    "feature_home_games_played", "feature_away_games_played",
+    "feature_home_last5_win_pct", "feature_away_last5_win_pct",
+    "feature_home_recent_point_margin", "feature_away_recent_point_margin",
+    "feature_home_last_game_summary", "feature_away_last_game_summary",
+    "feature_home_last_game_date", "feature_away_last_game_date",
+    "injuries_home_count", "injuries_away_count",
+    "injury_home_impact", "injury_away_impact",
+    "injury_home_summary", "injury_away_summary",
+    "injury_context_source", "injury_context_status",
+    "injury_probability_adjustment",
+    "nfl_context_status", "nfl_context_model_used",
+]
+REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _NFL_CONTEXT_COLUMNS))
+BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _NFL_CONTEXT_COLUMNS))
 
 
 CANONICAL_BET_COLUMNS = [
@@ -4753,6 +4772,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_candidate_count", "best_available_selection_verified",
         "best_available_ranking_verified", "best_available_rejection_reason",
     ]
+    candidate_audit_columns.extend(_NFL_CONTEXT_COLUMNS)
     from app_core.candidate_evidence_schema import authority_projection
     # Verify the exact expanded candidate before private evidence projection.
     from app_core.mlb_spread_total_model import attach_challenger
@@ -9810,8 +9830,21 @@ def run_analysis_pipeline(
                     market_model_predictions = None
                     logger.warning("Market-specific probability model skipped: %s", market_model_exc)
 
-                # Copy the enriched columns back into merged (or at least provide to predictor)
-                # Ensure the predictor runs on the enriched dataframe
+                # Preserve point-in-time team context after prediction.  The old
+                # path enriched a temporary frame and then dropped these columns,
+                # which made NFL cards look market-derived even when stats existed.
+                retained_context_columns = [
+                    "feature_home_games_played", "feature_away_games_played",
+                    "feature_home_last5_win_pct", "feature_away_last5_win_pct",
+                    "feature_home_recent_point_margin", "feature_away_recent_point_margin",
+                    "feature_home_last_game_summary", "feature_away_last_game_summary",
+                    "feature_home_last_game_date", "feature_away_last_game_date",
+                    "stats_source", "stats_resolution_status", "stats_fallback_reason",
+                    "feature_stats_fallback", "ml_feature_eligible",
+                ]
+                for column in retained_context_columns:
+                    if column in enriched_for_prediction.columns:
+                        merged.loc[enriched_for_prediction.index, column] = enriched_for_prediction[column]
 
                 engine = get_cached_prediction_engine()
                 ml_model_actually_loaded = not getattr(engine, "use_fallback", True)
@@ -10048,16 +10081,48 @@ def run_analysis_pipeline(
     except Exception as _ext_err:
         logger.warning(f"External data enrichment skipped: {_ext_err}")
 
-    # Injury Impact: adjust model probability based on key player availability.
+    # Injury Impact: use status/position-weighted context when available.  The
+    # compatibility count remains a fallback for older/non-ESPN inputs.
     from app_core.weights_config import INJURY_PROB_PENALTY_PER_KEY_PLAYER, INJURY_KEY_PLAYER_THRESHOLD
-    home_injuries = pd.to_numeric(merged.get("injuries_home_count", 0), errors="coerce").fillna(0)
-    away_injuries = pd.to_numeric(merged.get("injuries_away_count", 0), errors="coerce").fillna(0)
-    home_injury_penalty = (home_injuries.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER).where(home_injuries >= INJURY_KEY_PLAYER_THRESHOLD, 0.0)
-    away_injury_penalty = (away_injuries.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER).where(away_injuries >= INJURY_KEY_PLAYER_THRESHOLD, 0.0)
+    home_injuries = pd.to_numeric(
+        merged.get("injuries_home_count", pd.Series(0, index=merged.index)), errors="coerce"
+    ).fillna(0)
+    away_injuries = pd.to_numeric(
+        merged.get("injuries_away_count", pd.Series(0, index=merged.index)), errors="coerce"
+    ).fillna(0)
+    if "injury_home_impact" in merged.columns:
+        home_injury_units = pd.to_numeric(merged["injury_home_impact"], errors="coerce").fillna(0.0)
+        home_injury_penalty = home_injury_units.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER
+    else:
+        home_injury_penalty = (home_injuries.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER).where(home_injuries >= INJURY_KEY_PLAYER_THRESHOLD, 0.0)
+    if "injury_away_impact" in merged.columns:
+        away_injury_units = pd.to_numeric(merged["injury_away_impact"], errors="coerce").fillna(0.0)
+        away_injury_penalty = away_injury_units.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER
+    else:
+        away_injury_penalty = (away_injuries.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER).where(away_injuries >= INJURY_KEY_PLAYER_THRESHOLD, 0.0)
     is_home_side = merged["market_type"].astype(str).eq("spread_home")
     is_away_side = merged["market_type"].astype(str).eq("spread_away")
+    merged["injury_probability_adjustment"] = 0.0
+    merged.loc[is_home_side, "injury_probability_adjustment"] = (
+        -home_injury_penalty + away_injury_penalty
+    ).loc[is_home_side]
+    merged.loc[is_away_side, "injury_probability_adjustment"] = (
+        -away_injury_penalty + home_injury_penalty
+    ).loc[is_away_side]
     model_probability = model_probability.where(~is_home_side, (model_probability - home_injury_penalty + away_injury_penalty).clip(0.01, 0.99))
     model_probability = model_probability.where(~is_away_side, (model_probability - away_injury_penalty + home_injury_penalty).clip(0.01, 0.99))
+
+    is_nfl = _string_series(merged, "league").str.upper().eq("NFL")
+    nfl_model_used = _string_series(merged, "ml_probability_source").eq("score-distribution-v1:nfl")
+    injury_available = _string_series(merged, "injury_context_status").isin(
+        {"available", "available_no_listings"}
+    )
+    merged["nfl_context_model_used"] = is_nfl & nfl_model_used
+    merged["nfl_context_status"] = "not_applicable"
+    merged.loc[is_nfl & nfl_model_used & injury_available, "nfl_context_status"] = "complete"
+    merged.loc[is_nfl & nfl_model_used & ~injury_available, "nfl_context_status"] = "recent_form_only"
+    merged.loc[is_nfl & ~nfl_model_used & injury_available, "nfl_context_status"] = "injury_only"
+    merged.loc[is_nfl & ~nfl_model_used & ~injury_available, "nfl_context_status"] = "unavailable"
 
     # Weather Impact (MLB outdoor games only): reduce total over probability in bad weather.
     from app_core.weights_config import WEATHER_TOTAL_OVER_PENALTY

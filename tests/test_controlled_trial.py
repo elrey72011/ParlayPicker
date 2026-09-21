@@ -186,6 +186,29 @@ def test_degraded_total_is_not_a_trial_candidate():
     assert select_review_candidates(pd.DataFrame([row]), now=NOW).empty
 
 
+def test_nfl_controlled_trial_requires_complete_recent_result_and_injury_context():
+    complete = candidate(
+        league="NFL",
+        sport="NFL",
+        ml_probability_source="score-distribution-v1:nfl",
+        nfl_context_model_used=True,
+        nfl_context_status="complete",
+    )
+    assert not select_review_candidates(pd.DataFrame([complete]), now=NOW).empty
+
+    from app_core.controlled_trial import evaluate_candidates
+
+    for change in (
+        {"nfl_context_status": "recent_form_only"},
+        {"nfl_context_model_used": False},
+        {"ml_probability_source": ""},
+    ):
+        row = dict(complete, **change)
+        evaluated = evaluate_candidates(pd.DataFrame([row]), now=NOW).iloc[0]
+        assert not evaluated.controlled_trial_deterministic_eligible
+        assert "NFL recent-result and injury context incomplete" in evaluated.controlled_trial_gate_reason
+
+
 def test_approved_review_creates_capped_trial_without_production_approval():
     out = apply_trials(pd.DataFrame([final_row()]), pd.DataFrame([reviewed()]), 1000, now=NOW)
     row = out.iloc[0]

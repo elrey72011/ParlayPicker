@@ -20,6 +20,26 @@ def test_allowlist_preserves_status_but_not_private_fields():
     assert package['games']['overall'][0]['start']=='2026-09-08T23:41:00+00:00'
 
 
+def test_public_nfl_context_is_allowlisted_and_validated():
+    frames = boards()
+    for frame in frames:
+        frame['league'] = 'NFL'
+        frame['probability_basis'] = 'NFL score model + market (recent form and injury context; unvalidated)'
+        frame['nfl_context_status'] = 'complete'
+        frame['home_recent_result'] = 'L 7-27 at PHI (2026-09-13)'
+        frame['away_recent_result'] = 'W 28-20 vs DAL (2026-09-13)'
+        frame['home_injury_context'] = 'Puka Nacua (WR) Questionable'
+        frame['injury_context_source'] = 'espn_injuries'
+        frame['injury_context_status'] = 'available'
+
+    package = build_package(*frames)
+    validate_package(package)
+    row = package['games']['overall'][0]
+    assert row['nfl_context_status'] == 'complete'
+    assert row['home_recent_result'].startswith('L 7-27')
+    assert 'Puka Nacua' in row['home_injury_context']
+
+
 def test_mixed_runs_and_duplicate_games_rejected():
     frames = boards();frames[1]['export_run_id']='20260909T200000Z'
     with pytest.raises(ValueError): build_package(*frames)
@@ -49,15 +69,15 @@ def test_publish_rejects_invalid_draft_and_preserves_previous(tmp_path):
     draft=tmp_path/'draft';draft.mkdir();dest=tmp_path/'site'
     package=build_package(*boards())
     (draft/'public-board.json').write_text(json.dumps(package))
-    target=publish(draft,dest);before=target.read_text()
+    target=publish(draft,dest);before=target.read_text(encoding='utf-8')
     package['games']['overall'][0]['pick']='new selection'
     (draft/'public-board.json').write_text(json.dumps(package))
     publish(draft,dest)
-    assert (dest/'previous.html').read_text()==before
-    current=target.read_text();package['private']='secret'
+    assert (dest/'previous.html').read_text(encoding='utf-8')==before
+    current=target.read_text(encoding='utf-8');package['private']='secret'
     (draft/'public-board.json').write_text(json.dumps(package))
     with pytest.raises(ValueError):publish(draft,dest)
-    assert target.read_text()==current
+    assert target.read_text(encoding='utf-8')==current
 
 
 def test_optional_props_require_time_and_keep_private_fields_out():
@@ -342,7 +362,8 @@ def test_top_ten_cross_league_ranking_and_rendering(tmp_path):
     html = Path('publishing/board.html').read_text(encoding='utf-8')
     funcs = '\n'.join(line for line in html.splitlines() if line.startswith((
         'function quoteLabel(', 'function supportedQuote(', 'function state(', 'function qualifiedPick(',
-        'function easternDay(', 'function topPicks(', 'function renderTopPicks(', 'function table(')))
+        'function easternDay(', 'function topPicks(', 'function renderTopPicks(',
+        'function estimateLabel(', 'function table(')))
     script = r"""
 const assert=require('node:assert/strict');
 let now=Date.parse('2026-09-12T16:00:00Z');Date.now=()=>now;

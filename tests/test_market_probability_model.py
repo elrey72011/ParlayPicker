@@ -124,3 +124,41 @@ def test_mixed_league_column_falls_back_per_row():
     frame.loc[1,"League"] = ""
     frame["league"] = "MLB"
     assert predict_market_probabilities(frame).ml_probability.notna().all()
+
+
+def test_nfl_recent_results_change_cover_estimate_and_are_not_market_relabeling():
+    frame = _resolved_rows(
+        ["spread_home", "spread_away"],
+        spread_lines=[-6.5, 6.5],
+        league="NFL",
+    )
+    frame["feature_home_ppg"] = 7.0
+    frame["feature_home_oppg"] = 27.0
+    frame["feature_away_ppg"] = 28.0
+    frame["feature_away_oppg"] = 20.0
+    frame["feature_home_win_pct"] = 0.0
+    frame["feature_away_win_pct"] = 1.0
+    frame["feature_diff_last5"] = -1.0
+    frame["feature_home_games_played"] = 1
+    frame["feature_away_games_played"] = 1
+    frame["feature_home_recent_point_margin"] = -20.0
+    frame["feature_away_recent_point_margin"] = 8.0
+
+    out = predict_market_probabilities(frame)
+
+    assert out["ml_probability"].notna().all()
+    assert out["ml_probability"].sum() == pytest.approx(1.0)
+    assert out.loc[0, "ml_probability"] < out.loc[1, "ml_probability"]
+    assert out["ml_probability_source"].eq("score-distribution-v1:nfl").all()
+    assert out["ml_feature_quality"].eq("resolved_team_scoring_recent_form").all()
+
+
+def test_nfl_score_model_fails_closed_without_completed_games():
+    frame = _resolved_rows(["spread_home"], spread_lines=[-3.5], league="NFL")
+    frame["feature_home_games_played"] = 0
+    frame["feature_away_games_played"] = 1
+
+    out = predict_market_probabilities(frame)
+
+    assert pd.isna(out.loc[0, "ml_probability"])
+    assert out.loc[0, "ml_unavailable_reason"] == "No completed point-in-time games for one or both teams"

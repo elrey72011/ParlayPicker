@@ -39,6 +39,20 @@ _LEAGUE_PARAMS: dict[str, dict[str, float]] = {
         "total_sigma": 15.00,
         "reliability": 0.65,
     },
+    "NFL": {
+        # Research-only early-season score model. Team scoring is shrunk through
+        # four league-average games before the exact spread/total is evaluated,
+        # so one result is retained without being treated as a full-season rate.
+        "home_advantage": 1.50,
+        "win_pct_margin_weight": 3.00,
+        "recent_margin_weight": 1.50,
+        "recent_point_margin_weight": 0.10,
+        "margin_sigma": 13.86,
+        "total_sigma": 14.50,
+        "reliability": 0.45,
+        "prior_games": 4.0,
+        "scoring_prior": 22.0,
+    },
 }
 
 
@@ -108,6 +122,10 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
     h_win = _numeric(frame, "feature_home_win_pct")
     a_win = _numeric(frame, "feature_away_win_pct")
     recent_diff = _numeric(frame, "feature_diff_last5").fillna(0.0)
+    h_games = _numeric(frame, "feature_home_games_played")
+    a_games = _numeric(frame, "feature_away_games_played")
+    h_recent_margin = _numeric(frame, "feature_home_recent_point_margin")
+    a_recent_margin = _numeric(frame, "feature_away_recent_point_margin")
 
     for idx in frame.index:
         lg = str(league.loc[idx])
@@ -129,16 +147,39 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
             result.at[idx, "ml_unavailable_reason"] = "Team scoring statistics are missing or invalid"
             continue
 
+        sample_factor = 1.0
+        prior_games = float(params.get("prior_games", 0.0))
+        if prior_games > 0:
+            home_games = float(h_games.loc[idx]) if np.isfinite(h_games.loc[idx]) else 0.0
+            away_games = float(a_games.loc[idx]) if np.isfinite(a_games.loc[idx]) else 0.0
+            if home_games < 1 or away_games < 1:
+                result.at[idx, "ml_unavailable_reason"] = "No completed point-in-time games for one or both teams"
+                continue
+            scoring_prior = float(params["scoring_prior"])
+            h_ppg = (home_games * h_ppg + prior_games * scoring_prior) / (home_games + prior_games)
+            h_oppg = (home_games * h_oppg + prior_games * scoring_prior) / (home_games + prior_games)
+            a_ppg = (away_games * a_ppg + prior_games * scoring_prior) / (away_games + prior_games)
+            a_oppg = (away_games * a_oppg + prior_games * scoring_prior) / (away_games + prior_games)
+            minimum_games = min(home_games, away_games)
+            sample_factor = minimum_games / (minimum_games + prior_games)
+
         expected_home = 0.5 * (h_ppg + a_oppg)
         expected_away = 0.5 * (a_ppg + h_oppg)
         win_diff = 0.0
         if np.isfinite(h_win.loc[idx]) and np.isfinite(a_win.loc[idx]):
             win_diff = float(h_win.loc[idx] - a_win.loc[idx])
         form_diff = float(recent_diff.loc[idx]) if np.isfinite(recent_diff.loc[idx]) else 0.0
+        recent_point_diff = 0.0
+        if np.isfinite(h_recent_margin.loc[idx]) and np.isfinite(a_recent_margin.loc[idx]):
+            recent_point_diff = float(
+                np.clip(h_recent_margin.loc[idx], -21.0, 21.0)
+                - np.clip(a_recent_margin.loc[idx], -21.0, 21.0)
+            )
         margin_adjustment = (
             params["home_advantage"]
-            + params["win_pct_margin_weight"] * win_diff
-            + params["recent_margin_weight"] * form_diff
+            + params["win_pct_margin_weight"] * win_diff * sample_factor
+            + params["recent_margin_weight"] * form_diff * sample_factor
+            + params.get("recent_point_margin_weight", 0.0) * recent_point_diff * sample_factor
         )
         expected_margin = (expected_home - expected_away) + margin_adjustment
         expected_total = expected_home + expected_away
@@ -179,7 +220,10 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
         result.at[idx, "ml_target"] = target
         result.at[idx, "ml_projection"] = projection
         result.at[idx, "ml_residual_scale"] = residual_scale
-        result.at[idx, "ml_feature_quality"] = "resolved_team_scoring_stats"
+        result.at[idx, "ml_feature_quality"] = (
+            "resolved_team_scoring_recent_form"
+            if lg == "NFL"
+            else "resolved_team_scoring_stats"
+        )
 
     return result
-
