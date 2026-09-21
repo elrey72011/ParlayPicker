@@ -1156,6 +1156,18 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         and best_picks_df["canonical_pick_key"].astype(str).str.strip().ne("").all()
     )
 
+    # Trial candidates come from the full exact-price authority pool, not only
+    # the probability-first display winner for each game.
+    trial_now = pd.Timestamp.now(tz="UTC").to_pydatetime()
+    from app_core.controlled_trial_pipeline import prepare_review_candidates
+    candidate_pool, trial_candidates = prepare_review_candidates(
+        diagnostics, now=trial_now
+    )
+    diagnostics["candidate_authority_df"] = candidate_pool
+    diagnostics["controlled_trial_candidate_count"] = int(len(trial_candidates))
+    from app_core.controlled_trial import attach_reviews
+    best_picks_df = attach_reviews(best_picks_df, trial_candidates)
+
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
     if "gemini_pick" not in analysis_df.columns:
@@ -1166,42 +1178,25 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     # flip to an opposing side without a separately validated line and price.
     timer.start("Gemini review and wager checks")
     gemini_gate_enabled = bool(controls.get("use_gemini"))
-    if gemini_gate_enabled and not best_picks_df.empty:
-        try:
-            eligible_reviews = int(
-                best_picks_df.get(
-                    "production_eligible", pd.Series(False, index=best_picks_df.index)
-                ).astype("string").str.lower().isin({"true", "1", "yes"}).sum()
-            )
-            logger.info(
-                "Firing Gemini API for %s of %s deterministically eligible best picks...",
-                eligible_reviews,
-                len(best_picks_df),
-            )
-            from integrations.gemini_client import run_gemini_analysis
-
-            # Pass to Gemini wrapper with date columns automatically scrubbed.
-            # analysis_df carries every candidate side (not just the winner), so
-            # each pick can be paired with its opposing side for a genuine
-            # head-to-head comparison instead of a one-sided audit.
-            best_picks_df = run_gemini_analysis(
-                best_picks_df,
-                st.session_state,
-                analysis_df=analysis_df,
-                eligible_only=True,
-            )
-            logger.info("Gemini analysis payload unpacked successfully.")
-        except Exception as e:
-            deferred_warnings.append(f"Gemini analysis failed: {e}")
-            for column, value in {
-                "gemini_explanation": "Gemini analysis unavailable",
-                "gemini_risk_notes": "Gemini analysis unavailable",
-                "gemini_pick": "No Gemini pick",
-                "gemini_confidence": "",
-                "gemini_flags": "",
-                "gemini_reviewed": False,
-            }.items():
-                best_picks_df[column] = value
+    from app_core.controlled_trial_pipeline import review_candidates
+    best_picks_df, trial_reviews, wager_reviews, gemini_review_error = review_candidates(
+        best_picks_df,
+        trial_candidates,
+        enabled=gemini_gate_enabled,
+        session_state=st.session_state,
+        analysis=analysis_df,
+        diagnostics=diagnostics,
+    )
+    if gemini_review_error:
+        deferred_warnings.append(f"Gemini analysis failed: {gemini_review_error}")
+    candidate_pool = attach_reviews(candidate_pool, trial_reviews)
+    diagnostics["candidate_authority_df"] = candidate_pool
+    diagnostics["controlled_trial_reviewed_count"] = int(
+        trial_reviews.get("gemini_reviewed", pd.Series(False, index=trial_reviews.index)).fillna(False).astype(bool).sum()
+    )
+    diagnostics["controlled_trial_approved_count"] = int(
+        trial_reviews.get("gemini_review_status", pd.Series("", index=trial_reviews.index)).astype(str).str.upper().eq("APPROVE").sum()
+    )
 
     if not best_picks_df.empty:
         from app_core.gemini_bet_gate import apply_gemini_bet_gate
@@ -1691,22 +1686,32 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     ) if parlays_df is not None and not parlays_df.empty else 0
 
     # Terminal authority: evaluate every candidate, then select and allocate.
-    from core.prospective_uncertainty import prepare_live
-    candidate_pool = diagnostics.get("candidate_authority_df")
-    if not isinstance(candidate_pool, pd.DataFrame):
-        candidate_pool = pd.DataFrame()  # No substitute for a missing expanded audit.
-    from app_core.prediction_evidence import bind_authoritative_candidates
-    candidate_pool = bind_authoritative_candidates(candidate_pool)
-    candidate_pool = prepare_live(candidate_pool)
-    diagnostics["candidate_authority_df"] = candidate_pool
     from core.live_wager_contract import finalize_live_wagers
-    best_picks_df, contract_audit = finalize_live_wagers(candidate_pool, best_picks_df, float(controls["bankroll"]))
+    from inspect import signature
+    terminal_kwargs = (
+        {"reviews": wager_reviews}
+        if "reviews" in signature(finalize_live_wagers).parameters else {}
+    )
+    best_picks_df, contract_audit = finalize_live_wagers(
+        candidate_pool,
+        best_picks_df,
+        float(controls["bankroll"]),
+        **terminal_kwargs,
+    )
+    from app_core.controlled_trial import apply_trials
+    best_picks_df = apply_trials(
+        best_picks_df,
+        trial_reviews,
+        float(controls["bankroll"]),
+        now=trial_now,
+    )
     diagnostics["wager_contract_audit"] = contract_audit
     funded_mask=best_picks_df.get("production_eligible",pd.Series(False,index=best_picks_df.index)).fillna(False).astype(bool)
-    diagnostics["final_actionable_count"]=int(funded_mask.sum())
+    trial_mask=best_picks_df.get("controlled_trial_eligible",pd.Series(False,index=best_picks_df.index)).fillna(False).astype(bool)
+    diagnostics["final_actionable_count"]=int((funded_mask | trial_mask).sum())
     diagnostics["production_card_empty_flag"]=not bool(funded_mask.any())
     diagnostics["production_card_empty_reason"]="No candidate passed the canonical validated wager contract" if not funded_mask.any() else ""
-    diagnostics["controlled_value_pick_count"]=0
+    diagnostics["controlled_value_pick_count"]=int(trial_mask.sum())
     diagnostics["premium_pick_count"]=int(best_picks_df.get("sellable_as_premium",pd.Series(False,index=best_picks_df.index)).fillna(False).sum())
     simulation_results={}
 
@@ -1732,8 +1737,17 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
                 if loaded.get("sha256") != evidence_context["manifest"]["artifacts"].get(model_name):
                     raise ValueError("Loaded model differs from the frozen artifact; restart analysis with the current model")
             audit = candidate_pool.copy()
+            original_selected = pd.Series(
+                audit.get("best_available_selected", False), index=audit.index
+            ).fillna(False).astype(bool)
             selected_ids = set(best_picks_df.get("candidate_id", pd.Series(dtype=object)).dropna())
             audit["best_available_selected"] = audit["candidate_id"].isin(selected_ids)
+            trial_games = {
+                str(row.get("game_id") or row.get("matchup_id") or "")
+                for _, row in best_picks_df.iterrows()
+                if isinstance(row.get("controlled_trial_contract"), dict)
+            }
+            audit.loc[audit["game_id"].astype(str).isin(trial_games), "best_available_selected"] = original_selected
             audit["selected_as_best_pick"] = audit["best_available_selected"]
             # Exact-candidate private maturity audit; no public schema changes.
             for idx, candidate in audit.iterrows():

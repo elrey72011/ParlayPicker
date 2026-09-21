@@ -51,6 +51,15 @@ def pick_record(row, *, prop=False, as_of=None):
     if odds is not None and abs(odds) < 100:
         raise ValueError('Invalid American odds')
     # Missing or conflicting authorization never grants approval.
+    trial_contract = row.get('controlled_trial_contract') if not prop else None
+    trial = False
+    if isinstance(trial_contract, dict):
+        from app_core.controlled_trial import validate_contract
+        validate_contract(trial_contract)
+        trial_amount = number(row, 'Trial_Stake') or 0
+        trial = text(row, 'status') == 'TRIAL' and trial_contract.get('trial_eligible') is True and trial_amount > 0 and trial_amount == number(trial_contract, 'recommended_bet_amount')
+        if not trial:
+            raise ValueError('Invalid controlled-trial row authorization')
     approved = text(row, 'Bettable').lower() in {'true','1','yes'} and (number(row, 'Play_Stake','Kelly_Bet_Size','Suggested_Stake') or 0) > 0
     if not prop:
         approved = approved and text(row, 'status') == 'APPROVED'
@@ -70,7 +79,7 @@ def pick_record(row, *, prop=False, as_of=None):
             'pick':pick, 'player':text(row, 'player') if prop else '',
             'market':text(row, 'market_type'), 'odds':odds, 'win_estimate':probability,
             'ev':number(row, 'expected_value' if prop else 'ev'),
-            'status':'APPROVED' if approved else 'PASS', 'start':start, 'as_of':at}
+            'status':'APPROVED' if approved else 'TRIAL' if trial else 'PASS', 'start':start, 'as_of':at}
     if not prop and 'qualification_reason' in row:
         record['qualification_reason'] = text(row, 'qualification_reason')
     if not prop and 'quote_source' in row:
@@ -112,6 +121,22 @@ def pick_record(row, *, prop=False, as_of=None):
             record['win_estimate']=record['wager_contract'].get('conservative_probability')
             record['ev']=record['wager_contract'].get('conservative_ev')
         record['status']='APPROVED' if record['wager_contract'].get('production_eligible') is True and (record['wager_contract'].get('production_bet_amount') or 0)>0 else 'PASS'
+    if not prop and trial:
+        contract = dict(trial_contract)
+        if (
+            contract.get('selection') != record['pick']
+            or number(contract, 'odds') != record['odds']
+            or contract.get('market_type') != record['market']
+            or timestamp(contract.get('start')) != record['start']
+            or text(record, 'quote_source').casefold() != str(contract.get('sportsbook') or '').casefold()
+            or timestamp(contract.get('quote_timestamp')) != record.get('quote_time')
+            or contract.get('gemini_review_status') != 'APPROVE'
+        ):
+            raise ValueError('Controlled trial does not match the public ticket')
+        record['controlled_trial_contract'] = contract
+        record['win_estimate'] = contract.get('estimated_probability')
+        record['ev'] = contract.get('estimated_expected_value')
+        record['status'] = 'TRIAL'
     if prop:
         projection = number(row, 'expected_count')
         if record['sport'].upper() == 'NFL' and (number(row, 'FormSampleSize') or 0) <= 0:
@@ -204,7 +229,7 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','conservative_ev','espn_event_id','mlb_game_pk','game_number', *TQ_FIELDS, *VALUE_FIELDS) if k in row))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + (' controlled_trial_contract' if 'controlled_trial_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','conservative_ev','espn_event_id','mlb_game_pk','game_number', *TQ_FIELDS, *VALUE_FIELDS) if k in row))
             if any(k in row for k in TQ_FIELDS):
                 validate_quality({k:row[k] for k in TQ_FIELDS if k in row})
                 if row['sport'] != 'MLB' or row['market'] not in {'total_over','total_under'}:
@@ -216,6 +241,10 @@ def validate_package(package):
                 from core.live_wager_contract import PUBLIC_FIELDS, validate_snapshot
                 exact(row['wager_contract'],' '.join(PUBLIC_FIELDS))
                 validate_snapshot(row['wager_contract'])
+            if 'controlled_trial_contract' in row:
+                from app_core.controlled_trial import PUBLIC_FIELDS as TRIAL_FIELDS, validate_contract
+                exact(row['controlled_trial_contract'], ' '.join(TRIAL_FIELDS))
+                validate_contract(row['controlled_trial_contract'])
             projection_metric(row)
             if any(k in row and not isinstance(row[k],str) for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','espn_event_id','mlb_game_pk','game_number')):
                 raise ValueError('Invalid public review labels')
@@ -235,7 +264,7 @@ def validate_package(package):
             for key in ('sport','game','pick','player','market','status'):
                 if not isinstance(row[key], str):
                     raise ValueError('Public labels must be text')
-            if row['status'] not in {'APPROVED','PASS'}:
+            if row['status'] not in {'APPROVED','TRIAL','PASS'}:
                 raise ValueError('Invalid status')
             if not timestamp(row['as_of']):
                 raise ValueError('Missing analysis time')
@@ -305,7 +334,7 @@ def validate_package(package):
                         or not row.get('sport') or not row.get('market')):
                     raise ValueError('Invalid original win estimate')
             seen.add(row['id'])
-            if row['category'] not in (({'overall','sides','totals','parlays','props'} | ({'top10'} if package['schema_version']==5 else set())) if package['schema_version'] in {4,5} else {'overall','sides','totals','parlays'}) or row['group'] not in ({'Approved','Research','Imported research','Locked'} if package['schema_version']==5 else {'Approved','Research','Imported research'}) or row['outcome'] not in ({'WIN','LOSS','PUSH','PENDING','NEEDS_REVIEW'} if package['schema_version']==5 and row['category']=='props' else {'WIN','LOSS','PUSH','PENDING'}):
+            if row['category'] not in (({'overall','sides','totals','parlays','props'} | ({'top10'} if package['schema_version']==5 else set())) if package['schema_version'] in {4,5} else {'overall','sides','totals','parlays'}) or row['group'] not in ({'Approved','Controlled trial','Research','Imported research','Locked'} if package['schema_version']==5 else {'Approved','Research','Imported research'}) or row['outcome'] not in ({'WIN','LOSS','PUSH','PENDING','NEEDS_REVIEW'} if package['schema_version']==5 and row['category']=='props' else {'WIN','LOSS','PUSH','PENDING'}):
                 raise ValueError('Invalid result category or outcome')
             if row['category']=='top10' and row['group']!='Approved':
                 raise ValueError('Top 10 results must be approved published selections')

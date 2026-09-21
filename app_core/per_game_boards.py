@@ -198,9 +198,11 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 pool=[]
             if pool:
                 pool.sort(key=lambda c:((0 if not novig_only or novig_quote(c) else 1),number(c,'best_available_rank' if family=='overall' else 'best_available_family_rank'),number(c,'best_available_rank') or math.inf,text(c,'best_pick')))
-                contract=final.get('wager_contract')
+                strict_contract=final.get('wager_contract')
+                trial_contract=final.get('controlled_trial_contract')
+                authority_contract=strict_contract if isinstance(strict_contract,dict) and strict_contract.get('production_eligible') else trial_contract
                 exact_final=[c for c in pool if text(c,'best_pick')==text(final,'best_pick') and number(c,'odds_american')==number(final,'odds_american') and text(c,'market_type')==text(final,'market_type')]
-                selected=exact_final[0] if family=='overall' and isinstance(contract,dict) and contract.get('production_eligible') and len(exact_final)==1 else pool[0]
+                selected=exact_final[0] if family=='overall' and isinstance(authority_contract,dict) and len(exact_final)==1 else pool[0]
                 reason='Highest-ranked '+family+' candidate in this game'
             elif (family=='overall' or family_of(final)==family) and (not novig_only or public_quote(final, allow_fallback, nfl_fallback=nfl_fallback)):
                 selected=final
@@ -215,15 +217,22 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         observed_selected = bool(quote and quote[0] == 'DraftKings' and not exact_book_quote(selected, 'draftkings') and espn_observed_quote(selected))
         same = selected is not None and family_of(selected)==family_of(final) and text(selected,'best_pick')==text(final,'best_pick') and number(selected,'odds_american')==number(final,'odds_american') and text(selected,'odds_source')==text(final,'odds_source')
         canonical=final.get('wager_contract')
+        trial_contract=final.get('controlled_trial_contract')
+        if not (isinstance(canonical,dict) and canonical.get('production_eligible')) and isinstance(trial_contract,dict) and trial_contract.get('trial_eligible'):
+            canonical=trial_contract
         if isinstance(canonical,dict) and selected is not None:
-            same = (text(selected,'best_pick')==canonical.get('selection') and number(selected,'odds_american')==canonical.get('odds') and text(selected,'market_type')==canonical.get('market_type') and (not novig_only or bool(quote and quote[0]==canonical.get('sportsbook'))))
+            same = (text(selected,'best_pick')==canonical.get('selection') and number(selected,'odds_american')==canonical.get('odds') and text(selected,'market_type')==canonical.get('market_type') and (not novig_only or bool(quote and quote[0].casefold()==str(canonical.get('sportsbook') or '').casefold())))
         # Only the exact final ticket can inherit the finalized approval or stake.
         source=selected if selected is None or novig_only else final if same or family=='overall' else selected
         final_ticket = same or (family=='overall' and not novig_only)
         approved=not observed_selected and (not fallback_selected or (text(final,'production_eligible').lower() in {'true','1','yes'} and text(final,'wager_approved').lower() in {'true','1','yes'})) and source is not None and final_ticket and text(final,'Bettable').lower() in {'true','1','yes'} and (number(final,'Play_Stake') or 0)>0
+        trial=not approved and not observed_selected and not fallback_selected and source is not None and final_ticket and isinstance(trial_contract,dict) and trial_contract.get('trial_eligible') is True and (number(trial_contract,'recommended_bet_amount') or 0)>0 and same
         probability=None; basis='Unavailable'; edge=None; ev=None
         if source is not None:
-            if final_ticket:
+            if trial:
+                probability=number(trial_contract,'estimated_probability');basis='Controlled-trial estimate (unvalidated)'
+                edge=number(trial_contract,'estimated_price_edge');ev=number(trial_contract,'estimated_expected_value')
+            elif final_ticket:
                 probability=number(final,'production_win_probability');basis='Final production estimate'
                 edge=number(final,'production_edge');ev=number(final,'production_expected_value')
             else:
@@ -235,7 +244,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                     edge=probability-break_even
             # New runs expose the same probability that chose the candidate.
             # Production risk adjustments still govern funding independently.
-            if text(source, 'best_available_selection_policy') == 'probability-first-v1':
+            if not trial and text(source, 'best_available_selection_policy') == 'probability-first-v1':
                 probability=number(source, 'best_available_probability')
                 basis='Candidate win estimate (pair-normalized)' if text(source, 'best_available_probability_source') == 'calibrated_probability_pair_normalized' else 'Candidate win estimate'
                 odds=number(source, 'odds_american')
@@ -249,6 +258,8 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         approval_reason = text(final,'Production_Gate_Reason','Status_Reason','qualification_reason') if final_ticket else ''
         if source is None:
             approval_reason = 'No matching ranked market available; refresh analysis'
+        elif trial:
+            approval_reason = str(trial_contract.get('reason') or 'Owner-authorized controlled trial')
         elif fallback_selected and not approved:
             approval_reason = ('ESPN snapshot; sportsbook update time unknown; research selection, not wager approval' if observed_selected else 'Sportsbook fallback; research selection, not wager approval')
         elif approved:
@@ -262,7 +273,11 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         if novig_only:
             from app_core.recommendation_quality import quality_reason, positive_price_edge
             quality = quality_reason(final)
-            if quality or not quote or not positive_price_edge(probability, number(source, 'odds_american') if source is not None else None, ev):
+            positive = bool(quote and positive_price_edge(probability, number(source, 'odds_american') if source is not None else None, ev))
+            if trial and not positive:
+                trial = False
+                approval_reason = 'Controlled trial held: no verified positive estimated edge at the quoted price'
+            if approved and (quality or not positive):
                 approved = False
                 approval_reason = quality or 'No verified positive estimated edge at the quoted price'
         from app_core.total_signal_quality import public_fields as total_quality_fields
@@ -273,13 +288,15 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'market_type':text(source,'market_type') if source is not None else '',
                      'odds':number(source,'odds_american') if source is not None else None,
                      'Bettable':approved,'Play_Stake':number(final,'Play_Stake') if approved else 0.0,
+                     'Trial_Stake':number(trial_contract,'recommended_bet_amount') if trial else 0.0,
                      'selection_label': {'overall':'Best Overall','sides':'Best Side','totals':'Best Total'}[family] if source is not None else 'Unavailable',
-                     'status':'APPROVED' if approved else 'PASS', 'win_probability':probability,'probability_basis':basis,
+                     'status':'APPROVED' if approved else 'TRIAL' if trial else 'PASS', 'win_probability':probability,'probability_basis':basis,
                      'edge':edge,'ev':ev,'selection_score':number(selected,'best_available_score') if selected is not None else None,
                      'reason':reason,'approval_reason':approval_reason,
                      **({'qualification_reason':approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('Sportsbook fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else (college_unavailable_reason(final,candidates,family) if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
                      **({'quote_time_basis':'espn_observed'} if observed_selected else {}),
                      **({k:final[k] for k in ('maturity','gemini_review_status','gemini_reviewed_at','gemini_review_model','gemini_review_input_hash','gemini_verified_context','gemini_supporting_evidence','gemini_missing_information','conservative_ev','espn_event_id','mlb_game_pk','game_number') if k in final} if final_ticket else {}),
                      **({'wager_contract':final['wager_contract']} if final_ticket and isinstance(final.get('wager_contract'),dict) else {}),
+                     **({'controlled_trial_contract':trial_contract} if trial else {}),
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)
