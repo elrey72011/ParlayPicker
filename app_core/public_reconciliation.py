@@ -26,7 +26,9 @@ def selection_facts(item):
         match = re.fullmatch(r"(?:Over|Under)\s+(\d+(?:\.\d+)?)", pick, re.I) if market.startswith("total_") else re.fullmatch(r".+\s+([+-]\d+(?:\.\d+)?)", pick)
         legs.append(dict(league=leg.get("sport"), game=leg.get("game"), selection=pick,
                          market_type=market, line=float(match[1]) if match else None,
-                         odds=leg.get("odds"), sportsbook=leg.get("quote_source")))
+                         odds=leg.get("odds"), sportsbook=leg.get("quote_source"),
+                         original_win_estimate=leg.get("win_estimate"),
+                         start=leg.get("start")))
     return dict(id=item.get("id"), category=item.get("category"), group=item.get("group"),
                 date=item.get("date"), published_at=item.get("published_at"), legs=legs)
 
