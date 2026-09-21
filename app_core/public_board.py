@@ -87,7 +87,7 @@ def pick_record(row, *, prop=False, as_of=None):
         review_status = text(row, 'gemini_review_status').upper()
         if review_status:
             record['gemini_review_completion'] = (
-                'Skipped' if review_status == 'DISABLED' else
+                'Skipped' if review_status in {'DISABLED', 'SKIPPED'} else
                 'Unavailable' if review_status in {'UNAVAILABLE', 'OUTAGE_CAPPED', 'GEMINI_TIMEOUT', 'GEMINI_SERVICE_ERROR'} else
                 'Completed' if review_status in {'APPROVE', 'ABSTAIN', 'LOW_CONFIDENCE', 'OPPOSE', 'HOLD'} else
                 'Not confirmed')

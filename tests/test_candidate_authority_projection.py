@@ -47,6 +47,48 @@ def test_real_projection_retains_authority(tmp_path, monkeypatch):
     assert bool(out.iloc[0]['production_eligible'])
 
 
+def test_exact_gemini_review_provenance_survives_terminal_selection_and_capture(tmp_path, monkeypatch):
+    """A projected blank must never erase the completed exact-ticket review."""
+    from app_core.prediction_evidence import begin_run, capture_run
+    from core.prospective_uncertainty import prepare_live
+    from core.live_wager_contract import finalize_live_wagers
+
+    row, policy, config = source(tmp_path)
+    best, diagnostics = build([row], monkeypatch)
+    review = {
+        'gemini_review_status': 'APPROVE',
+        'gemini_reviewed_at': '2026-09-14T15:01:02+00:00',
+        'gemini_review_model': 'gemini-2.5-flash',
+        'gemini_review_input_hash': 'review-input-sha256',
+        'gemini_verified_context': '{"lineups":"confirmed"}',
+        'gemini_supporting_evidence': '["lineups"]',
+        'gemini_missing_information': '["weather"]',
+        'gemini_explanation': 'Verified-context review.',
+        'gemini_agreement': 'CONFIRM',
+        'gemini_flags': '[]',
+    }
+    for field, value in review.items():
+        best.loc[:, field] = value
+
+    frame = diagnostics['candidate_authority_df']
+    # This is the real regression shape: authority projection has a blank
+    # placeholder while the display/best row contains the completed review.
+    assert not str(frame.iloc[0].get('gemini_reviewed_at') or '').strip()
+    prepared = prepare_live(frame, database=tmp_path/'evidence.db', plan_dir=tmp_path/'plans', now=NOW)
+    final, _ = finalize_live_wagers(prepared, best, 1000, now=NOW,
+        policies={'NFL': policy}, config=config, reviews=best)
+    for field in ('gemini_reviewed_at', 'gemini_review_model', 'gemini_review_input_hash'):
+        assert final.iloc[0][field] == review[field]
+
+    prepared['best_available_selected'] = True
+    context = begin_run({}, path=tmp_path/'saved.db')
+    saved, _ = capture_run(context, prepared, final, pd.DataFrame([row]),
+        path=tmp_path/'saved.db', authoritative_candidates=True)
+    selected = saved.loc[saved.candidate_id.eq(final.iloc[0].candidate_id)].iloc[0]
+    for field in ('gemini_reviewed_at', 'gemini_review_model', 'gemini_review_input_hash'):
+        assert selected[field] == review[field]
+
+
 @pytest.mark.parametrize('change', [
     {'team_ids': None}, {'model_validated': None}, {'calibration_validated': False},
     {'quote_time': '2026-09-14T13:00:00+00:00'}, {'unvalidated': True},

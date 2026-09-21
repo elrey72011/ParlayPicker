@@ -21,6 +21,18 @@ PROVENANCE_COLUMNS = [
     "provider_quotes", "calibrated_probability",
 ]
 
+# Post-prediction review facts may be joined back to the one exact selected
+# candidate. They are deliberately excluded from source-authority repair, but
+# must be retained in the immutable snapshot for prospective Gemini evaluation.
+GEMINI_REVIEW_COLUMNS = {
+    "gemini_approved", "gemini_flags", "gemini_agreement",
+    "gemini_review_status", "gemini_reviewed_at", "gemini_review_model",
+    "gemini_review_input_hash", "gemini_verified_context",
+    "gemini_supporting_evidence", "gemini_missing_information",
+    "gemini_explanation", "gemini_error", "gemini_stake_multiplier",
+    "gemini_gate_reason",
+}
+
 
 def now_utc():
     return pd.Timestamp.now(tz="UTC").isoformat()
@@ -305,8 +317,10 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
                        "gemini_approved", "gemini_flags", "gemini_agreement", "gemini_reviewed_at", "gemini_review_model", "gemini_review_input_hash", "gemini_verified_context", "gemini_supporting_evidence", "gemini_missing_information", "gemini_explanation", "production_gate_reason",
                        "market_line_used", "market_line_source", "line_consistency_flag",
                        "line_event_identity_match_flag", "line_provenance_warning"):
-            if column in final and not authoritative_candidates:
-                audit.at[ai, column] = row[column]
+            if column in final and (not authoritative_candidates or column in GEMINI_REVIEW_COLUMNS):
+                from app_core.candidate_evidence_schema import missing
+                if not missing(row[column]):
+                    audit.at[ai, column] = row[column]
 
     for frame in (audit, final):
         frame["snapshot_id"] = context["snapshot_id"]

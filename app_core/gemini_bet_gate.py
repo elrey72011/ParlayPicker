@@ -84,6 +84,12 @@ def _first_numeric(row: pd.Series | dict[str, Any], *columns: str) -> float | No
 def classify_gemini_review(row: pd.Series | dict[str, Any]) -> tuple[str, str, float]:
     """Return ``(status, reason, stake_multiplier)`` for one Gemini review."""
     get = row.get
+    if _text(get("gemini_review_skipped_reason")) == "DETERMINISTICALLY_INELIGIBLE":
+        return (
+            "SKIPPED",
+            "Gemini review skipped because deterministic wager checks did not qualify this row",
+            0.0,
+        )
     selected = _pick_key(get("best_pick"))
     recommended_raw = _text(get("gemini_pick"))
     recommended = _pick_key(recommended_raw)
@@ -174,7 +180,7 @@ def apply_gemini_bet_gate(
         out["gemini_gate_reason"] = [item[1] for item in classified]
         out["gemini_stake_multiplier"] = [item[2] for item in classified]
         out["gemini_approved"] = out["gemini_review_status"].eq("APPROVE")
-        out["gemini_reviewed"] = ~out["gemini_review_status"].eq("UNAVAILABLE")
+        out["gemini_reviewed"] = ~out["gemini_review_status"].isin({"UNAVAILABLE", "SKIPPED"})
     else:
         out["gemini_review_status"] = "DISABLED"
         out["gemini_gate_reason"] = "Gemini wager gate disabled"
@@ -257,7 +263,7 @@ def apply_gemini_bet_gate(
         prefix = "gemini_prop" if product == "prop" else "gemini_best_pick"
         diagnostics[f"{prefix}_gate_enabled"] = bool(enabled)
         diagnostics[f"{prefix}_reviewed_count"] = int(
-            (~out["gemini_review_status"].isin({"DISABLED", "UNAVAILABLE", "OUTAGE_CAPPED"})).sum()
+            (~out["gemini_review_status"].isin({"DISABLED", "SKIPPED", "UNAVAILABLE", "OUTAGE_CAPPED"})).sum()
         )
         diagnostics[f"{prefix}_approved_count"] = int(out["gemini_approved"].sum())
         diagnostics[f"{prefix}_held_count"] = int((enabled & ~gate_ok).sum())

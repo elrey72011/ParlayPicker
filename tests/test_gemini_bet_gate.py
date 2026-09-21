@@ -10,6 +10,8 @@ from app_core.gemini_bet_gate import apply_gemini_bet_gate, classify_gemini_revi
 from core.streamlit_pipeline import optimize_portfolio_allocation
 from integrations.gemini_client import run_gemini_analysis, run_gemini_prop_analysis
 
+MISSING_CONTEXT = ["probable_pitchers", "lineups", "injuries", "weather"]
+
 
 def _review_row(**overrides) -> dict:
     row = {
@@ -203,6 +205,8 @@ def test_game_and_prop_wrappers_preserve_structured_review_fields(monkeypatch):
                 "explanation": "Price and calibrated probability align.",
                 "risk_notes": "Normal variance.",
                 "flags": ["contrarian"],
+                "supporting_evidence": [],
+                "missing_information": list(MISSING_CONTEXT),
             }
             for item in payload
         }
@@ -249,6 +253,68 @@ def test_game_and_prop_wrappers_preserve_structured_review_fields(monkeypatch):
         assert result["gemini_flags"] == "contrarian"
         assert bool(result["gemini_reviewed"])
         assert classify_gemini_review(result)[0] == "APPROVE"
+
+
+def test_online_review_prefilter_calls_gemini_only_for_deterministically_eligible_rows(monkeypatch):
+    captured = []
+
+    def fake_batch(payload, session_state=None):
+        captured.extend(payload)
+        return {
+            str(item["game_id"]): {
+                "recommended_bet": item["side_a"]["best_pick"],
+                "confidence": "HIGH",
+                "explanation": "The offered price clears the supplied model estimate.",
+                "risk_notes": "Normal line movement risk.",
+                "flags": [],
+                "supporting_evidence": [],
+                "missing_information": [
+                    "probable_pitchers", "lineups", "injuries", "weather"
+                ],
+            }
+            for item in payload
+        }
+
+    monkeypatch.setattr(
+        "app_core.llm_assistant.generate_batch_confidence_explanation",
+        fake_batch,
+    )
+    card = pd.DataFrame([
+        {
+            "game_id": "eligible",
+            "matchup_id": "m1",
+            "league": "MLB",
+            "market_type": "total_under",
+            "best_pick": "Under 8.5",
+            "odds_american": -110,
+            "expected_value": 0.08,
+            "production_eligible": True,
+        },
+        {
+            "game_id": "research",
+            "matchup_id": "m2",
+            "league": "MLB",
+            "market_type": "total_over",
+            "best_pick": "Over 9.5",
+            "odds_american": -110,
+            "expected_value": -0.03,
+            "production_eligible": False,
+        },
+    ])
+
+    annotated = run_gemini_analysis(
+        card,
+        analysis_df=card,
+        eligible_only=True,
+    )
+    assert [item["game_id"] for item in captured] == ["eligible"]
+    assert bool(annotated.iloc[0]["gemini_reviewed"])
+    assert annotated.iloc[1]["gemini_error"] == "SKIPPED_DETERMINISTICALLY_INELIGIBLE"
+    gated = apply_gemini_bet_gate(
+        annotated, enabled=True, product="best_pick"
+    )
+    assert gated["gemini_review_status"].tolist() == ["APPROVE", "SKIPPED"]
+    assert not bool(gated.iloc[1]["production_eligible"])
 
 
 def test_incomplete_structured_review_is_not_marked_reviewed(monkeypatch):
@@ -299,6 +365,8 @@ def test_batch_retries_only_incomplete_gemini_reviews(monkeypatch):
                 "explanation": "Complete first review.",
                 "risk_notes": "Normal variance.",
                 "flags": [],
+                "supporting_evidence": [],
+                "missing_information": list(MISSING_CONTEXT),
             },
             {
                 "game_id": "g2",
@@ -306,6 +374,8 @@ def test_batch_retries_only_incomplete_gemini_reviews(monkeypatch):
                 "confidence": "MEDIUM",
                 "explanation": "Risk notes were omitted.",
                 "flags": [],
+                "supporting_evidence": [],
+                "missing_information": list(MISSING_CONTEXT),
             },
         ],
         [
@@ -316,6 +386,8 @@ def test_batch_retries_only_incomplete_gemini_reviews(monkeypatch):
                 "explanation": "Completed on retry.",
                 "risk_notes": "The edge is thin.",
                 "flags": ["no_value_at_price"],
+                "supporting_evidence": [],
+                "missing_information": list(MISSING_CONTEXT),
             }
         ],
     ]
@@ -363,7 +435,11 @@ def test_batch_retries_only_incomplete_gemini_reviews(monkeypatch):
         "explanation",
         "risk_notes",
         "flags",
+        "supporting_evidence",
+        "missing_information",
     ]
+    assert models.configs[0]["thinking_config"] == {"thinking_budget": 0}
+    assert models.configs[0]["max_output_tokens"] == 8192
     assert result["g1"]["explanation"] == "Complete first review."
     assert result["g2"]["risk_notes"] == "The edge is thin."
 
@@ -385,6 +461,8 @@ def test_structured_gemini_batches_stay_below_schema_complexity_limit(monkeypatc
                     "explanation": "The supplied model probability clears the market price.",
                     "risk_notes": "Normal variance and line movement risk.",
                     "flags": [],
+                    "supporting_evidence": [],
+                    "missing_information": list(MISSING_CONTEXT),
                 }
                 for position in range(start, start + expected)
             ]
@@ -424,6 +502,8 @@ def test_generic_invalid_argument_does_not_disable_remaining_gemini_batches(monk
                     "explanation": "The final row still received an independent review.",
                     "risk_notes": "The price offers little value.",
                     "flags": ["no_value_at_price"],
+                    "supporting_evidence": [],
+                    "missing_information": list(MISSING_CONTEXT),
                 }
             ]))
 

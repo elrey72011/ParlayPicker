@@ -11,6 +11,17 @@ VERSION = 'live-v1'
 MATURITIES = {'RESEARCH','QUALIFIED','PROVISIONAL','STANDARD','PREMIUM'}
 PUBLIC_FIELDS = ('wager_contract_version game_id matchup_id sport market_type selection line odds sportsbook quote_timestamp start raw_model_probability calibrated_probability sport_calibrated_probability hierarchical_probability conservative_probability market_probability fair_market_probability edge conservative_edge expected_value conservative_ev data_quality_status identity_verified quote_verified quote_fresh gemini_review_status gemini_gate_reason gemini_stake_multiplier gemini_outage_capped maturity evidence_maturity_score production_eligible production_gate_reason raw_kelly production_bet_amount recommended_units model_version calibration_version sport_policy_version evidence_version strategic_action').split()
 
+# These fields describe the exact secondary review that was performed. They are
+# not wagering authority on their own, but they must follow the same exact
+# ticket as the review decision so prospective evaluation can prove when, with
+# which model, and against which input the review was made.
+GEMINI_REVIEW_PROVENANCE_FIELDS = (
+    'gemini_reviewed_at', 'gemini_review_model', 'gemini_review_input_hash',
+    'gemini_verified_context', 'gemini_supporting_evidence',
+    'gemini_missing_information', 'gemini_explanation', 'gemini_agreement',
+    'gemini_flags', 'gemini_error',
+)
+
 
 def load_configuration(now):
     """Only explicit, unexpired policy artifacts can authorize live exposure."""
@@ -68,6 +79,11 @@ def adapt_candidate(row, review=None):
         if out.get(target) is None and row.get(source) is not None:out[target]=row[source]
     # Do not copy a selected side's review to its opposite or another market.
     review = review or {}
+    for field in GEMINI_REVIEW_PROVENANCE_FIELDS:
+        value = review.get(field)
+        if value is not None and not (isinstance(value, str) and not value.strip()) and not (
+                not isinstance(value, (dict, list, tuple)) and bool(pd.isna(value))):
+            out[field] = value
     status = review.get('gemini_review_status', 'UNAVAILABLE')
     error = str(review.get('gemini_error','')).upper()
     if status in {'UNAVAILABLE','OUTAGE_CAPPED'}:

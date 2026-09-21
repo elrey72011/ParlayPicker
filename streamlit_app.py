@@ -1168,14 +1168,28 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     gemini_gate_enabled = bool(controls.get("use_gemini"))
     if gemini_gate_enabled and not best_picks_df.empty:
         try:
-            logger.info(f"Firing Gemini API for {len(best_picks_df)} best picks...")
+            eligible_reviews = int(
+                best_picks_df.get(
+                    "production_eligible", pd.Series(False, index=best_picks_df.index)
+                ).astype("string").str.lower().isin({"true", "1", "yes"}).sum()
+            )
+            logger.info(
+                "Firing Gemini API for %s of %s deterministically eligible best picks...",
+                eligible_reviews,
+                len(best_picks_df),
+            )
             from integrations.gemini_client import run_gemini_analysis
 
             # Pass to Gemini wrapper with date columns automatically scrubbed.
             # analysis_df carries every candidate side (not just the winner), so
             # each pick can be paired with its opposing side for a genuine
             # head-to-head comparison instead of a one-sided audit.
-            best_picks_df = run_gemini_analysis(best_picks_df, st.session_state, analysis_df=analysis_df)
+            best_picks_df = run_gemini_analysis(
+                best_picks_df,
+                st.session_state,
+                analysis_df=analysis_df,
+                eligible_only=True,
+            )
             logger.info("Gemini analysis payload unpacked successfully.")
         except Exception as e:
             deferred_warnings.append(f"Gemini analysis failed: {e}")

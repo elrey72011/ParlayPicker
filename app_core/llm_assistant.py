@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # GEMINI (GOOGLE GENERATIVE AI) SETUP
 # -------------------------------------------------------------------
 try:
-    # Use google-generativeai package (V1) as requested
+    # Current unified Google Gen AI SDK.
     from google import genai
     _GEMINI_AVAILABLE = True
 except ImportError:
@@ -25,8 +25,15 @@ except ImportError:
     logger.warning("google-genai not found. Gemini features disabled.")
 
 
-# Global holding the currently active model name
-ACTIVE_MODEL = "gemini-2.5-flash"
+# Stable models approved for the synchronous wager-review path. Flash remains
+# the default; Flash-Lite is available for measured A/B evaluation.
+DEFAULT_REVIEW_MODEL = "gemini-2.5-flash"
+SUPPORTED_REVIEW_MODELS = frozenset({
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+})
+# Backward-compatible alias for older non-review helpers in this module.
+ACTIVE_MODEL = DEFAULT_REVIEW_MODEL
 
 # Structured-output requests become unreliable when an exact-count array schema
 # asks Gemini for a large number of objects at once. Game cards are normally
@@ -37,9 +44,53 @@ GEMINI_REVIEW_TEMPERATURE = 0.0
 GEMINI_REVIEW_SEED = 0
 GEMINI_REVIEW_RUN_SECONDS = 90
 GEMINI_REVIEW_REQUEST_SECONDS = 30
+GEMINI_REVIEW_DEFAULT_THINKING_BUDGET = 0
+GEMINI_REVIEW_DEFAULT_MAX_OUTPUT_TOKENS = 8192
 
-# Fallback list (still useful for internal tracking, though implementation focuses on ACTIVE_MODEL)
-MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+
+def _review_setting(name: str, default: Any) -> Any:
+    if name in os.environ:
+        return os.environ[name]
+    try:
+        return st.secrets.get(name, default)
+    except (FileNotFoundError, StreamlitSecretNotFoundError, KeyError):
+        return default
+
+
+def active_review_model() -> str:
+    configured = str(_review_setting(
+        "PARLAYPICKER_GEMINI_REVIEW_MODEL", DEFAULT_REVIEW_MODEL
+    )).strip()
+    if configured not in SUPPORTED_REVIEW_MODELS:
+        logger.warning(
+            "Unsupported Gemini review model %r; using %s",
+            configured,
+            DEFAULT_REVIEW_MODEL,
+        )
+        return DEFAULT_REVIEW_MODEL
+    return configured
+
+
+def review_thinking_budget() -> int:
+    try:
+        value = int(_review_setting(
+            "PARLAYPICKER_GEMINI_THINKING_BUDGET",
+            GEMINI_REVIEW_DEFAULT_THINKING_BUDGET,
+        ))
+    except (TypeError, ValueError):
+        return GEMINI_REVIEW_DEFAULT_THINKING_BUDGET
+    return value if value == -1 or 0 <= value <= 24576 else GEMINI_REVIEW_DEFAULT_THINKING_BUDGET
+
+
+def review_max_output_tokens() -> int:
+    try:
+        value = int(_review_setting(
+            "PARLAYPICKER_GEMINI_MAX_OUTPUT_TOKENS",
+            GEMINI_REVIEW_DEFAULT_MAX_OUTPUT_TOKENS,
+        ))
+    except (TypeError, ValueError):
+        return GEMINI_REVIEW_DEFAULT_MAX_OUTPUT_TOKENS
+    return value if 1024 <= value <= 65536 else GEMINI_REVIEW_DEFAULT_MAX_OUTPUT_TOKENS
 
 GEMINI_REVIEW_ITEM_SCHEMA = {
     "type": "object",
@@ -79,6 +130,8 @@ GEMINI_REVIEW_ITEM_SCHEMA = {
         "explanation",
         "risk_notes",
         "flags",
+        "supporting_evidence",
+        "missing_information",
     ],
 }
 
@@ -301,7 +354,6 @@ def generate_confidence_explanation(prompt: str, session_state: Optional[Any] = 
     Returns:
         Dictionary with confidence explanation, or empty dict on error
     """
-    deadline = _deadline if _deadline is not None else time.monotonic() + GEMINI_REVIEW_RUN_SECONDS
     # Check if Gemini is globally unavailable
     if not _GEMINI_AVAILABLE:
         return {}
@@ -359,7 +411,57 @@ def _complete_batch_review(payload: Any) -> bool:
         return False
     if str(payload.get("confidence") or "").strip().upper() not in {"HIGH", "MEDIUM", "LOW"}:
         return False
-    return "flags" in payload and isinstance(payload.get("flags"), list)
+    return all(
+        field in payload
+        and isinstance(payload.get(field), list)
+        and all(isinstance(item, str) for item in payload.get(field))
+        for field in ("flags", "supporting_evidence", "missing_information")
+    )
+
+
+def _response_metric_fields(response: Any) -> Dict[str, Any]:
+    def field(value: Any, name: str, default=None):
+        if isinstance(value, dict):
+            return value.get(name, default)
+        return getattr(value, name, default)
+
+    usage = field(response, "usage_metadata")
+    candidates = field(response, "candidates", []) or []
+    finish = field(candidates[0], "finish_reason", "") if candidates else ""
+    finish = getattr(finish, "name", finish)
+    return {
+        "prompt_tokens": field(usage, "prompt_token_count"),
+        "output_tokens": field(usage, "candidates_token_count"),
+        "thought_tokens": field(usage, "thoughts_token_count"),
+        "cached_tokens": field(usage, "cached_content_token_count"),
+        "total_tokens": field(usage, "total_token_count"),
+        "finish_reason": str(finish or ""),
+    }
+
+
+def _record_review_metric(
+    budget,
+    *,
+    cache_key: str,
+    model: str,
+    batch_size: int,
+    started_at: float,
+    cache_hit: bool = False,
+    response: Any = None,
+    error_type: str = "",
+) -> None:
+    try:
+        budget.record_metric(
+            request_key=cache_key,
+            model=model,
+            batch_size=batch_size,
+            duration_ms=(time.monotonic() - started_at) * 1000,
+            cache_hit=cache_hit,
+            error_type=error_type,
+            **(_response_metric_fields(response) if response is not None else {}),
+        )
+    except Exception as exc:
+        logger.debug("Gemini usage metric could not be recorded: %s", exc)
 
 
 def _batch_review_schema(expected_count: int) -> Dict[str, Any]:
@@ -418,6 +520,13 @@ def generate_batch_confidence_explanation(
     if client is None:
         return {}
 
+    review_model = active_review_model()
+    thinking_budget = review_thinking_budget()
+    max_output_tokens = review_max_output_tokens()
+    request_configuration = (
+        f"thinking_budget={thinking_budget};max_output_tokens={max_output_tokens}"
+    )
+
     # Limit structured batches to avoid Gemini rejecting complex exact-count
     # schemas or truncating a long response on large player-prop slates.
     batch_size = GEMINI_STRUCTURED_BATCH_SIZE
@@ -439,9 +548,8 @@ def generate_batch_confidence_explanation(
         # Build prompt
         review_date_str = datetime.now(timezone.utc).date().isoformat()
         prompt = f"""Review Date (UTC): {review_date_str}
-You are an independent sports betting risk reviewer. Do not assume any side has already
-been approved or rejected — some games here are ones the system declined, others
-are ones it bet, and you are not told which is which.
+You are an independent sports betting risk reviewer. The upstream deterministic
+eligibility verdict is not supplied; judge only the bounded evidence below.
 
 Each game has a 'side_a' object: the market line, de-vigged market probability,
 and this system's model probabilities (Kalshi/ML/TheOver), odds, and edge/EV for
@@ -479,11 +587,26 @@ Games to analyze:
 Return ONLY a JSON array of objects. No markdown formatting.
 """
 
+        batch_started_at = time.monotonic()
+        metric_recorded = False
+        cache_key = ""
         try:
             from app_core import gemini_review_budget as budget
-            cache_key = budget.request_key(ACTIVE_MODEL, prompt)
+            cache_key = budget.request_key(
+                review_model,
+                prompt,
+                request_configuration,
+            )
             cached = budget.lookup(cache_key)
             if cached is not None:
+                _record_review_metric(
+                    budget,
+                    cache_key=cache_key,
+                    model=review_model,
+                    batch_size=len(batch),
+                    started_at=batch_started_at,
+                    cache_hit=True,
+                )
                 all_results.update(cached)
                 continue
             remaining = min(GEMINI_REVIEW_REQUEST_SECONDS, deadline - time.monotonic())
@@ -506,7 +629,7 @@ Return ONLY a JSON array of objects. No markdown formatting.
                 return all_results
 
             resp = client.models.generate_content(
-                model=ACTIVE_MODEL,
+                model=review_model,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
                     http_options={
@@ -515,10 +638,21 @@ Return ONLY a JSON array of objects. No markdown formatting.
                     },
                     temperature=GEMINI_REVIEW_TEMPERATURE,
                     seed=GEMINI_REVIEW_SEED,
+                    thinking_config={"thinking_budget": thinking_budget},
+                    max_output_tokens=max_output_tokens,
                     response_mime_type="application/json",
                     response_json_schema=_batch_review_schema(len(batch)),
                 ),
             )
+            _record_review_metric(
+                budget,
+                cache_key=cache_key,
+                model=review_model,
+                batch_size=len(batch),
+                started_at=batch_started_at,
+                response=resp,
+            )
+            metric_recorded = True
             text = getattr(resp, "text", "") or ""
 
             # Parse response
@@ -551,7 +685,7 @@ Return ONLY a JSON array of objects. No markdown formatting.
                         g_id = str(res.get('game_id', ''))
                         if g_id in {str(g.get("game_id", "")) for g in batch}:
                             res["reviewed_at"] = datetime.now(timezone.utc).isoformat()
-                            res["review_model"] = ACTIVE_MODEL
+                            res["review_model"] = review_model
                             res["review_input_hash"] = cache_key
                             all_results[g_id] = res
                 valid_batch = {str(g["game_id"]): all_results[str(g["game_id"])] for g in batch
@@ -563,6 +697,15 @@ Return ONLY a JSON array of objects. No markdown formatting.
 
         except Exception as exc:
              exc_str = str(exc)
+             if cache_key and not metric_recorded:
+                 _record_review_metric(
+                     budget,
+                     cache_key=cache_key,
+                     model=review_model,
+                     batch_size=len(batch),
+                     started_at=batch_started_at,
+                     error_type=type(exc).__name__,
+                 )
              # INVALID_ARGUMENT/HTTP 400 can also mean a schema or request-shape
              # problem. Only disable the session for an explicit key failure;
              # otherwise later batches and the targeted retry still get a chance.

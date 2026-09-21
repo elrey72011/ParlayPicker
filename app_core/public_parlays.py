@@ -158,7 +158,7 @@ def parlay_funnel(rows, now=None, *, max_age_minutes=QUOTE_MAX_AGE_MINUTES):
         approved = row.get('status') == 'APPROVED' and row.get('production_eligible',True) is True
         gemini = row.get('gemini_review_status','')
         if gemini in {'HOLD','OPPOSE','ABSTAIN','LOW_CONFIDENCE'}: failed.append('gemini_hard_veto')
-        if gemini in {'OUTAGE_CAPPED','UNAVAILABLE'}: failed.append('gemini_unavailable')
+        if gemini in {'OUTAGE_CAPPED','UNAVAILABLE','SKIPPED'}: failed.append('gemini_unavailable')
         stages=[('spread_total',market,'moneyline_or_invalid_market'),('valid_price',price,'invalid_price'),('positive_ev',value,'nonpositive_ev'),('fresh_pregame',fresh,'stale_or_unresolved_quote'),('supported_book',book,'unsupported_book'),('production_eligible',approved,'not_approved'),('standard_premium',mature,'provisional_straight_only' if maturity=='PROVISIONAL' else 'research_maturity')]
         reached=True
         for stage,ok,reason in stages:

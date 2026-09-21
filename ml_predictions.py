@@ -48,7 +48,7 @@ def is_vertex_ai_enabled() -> bool:
 def get_gemini_model(
     project_id: Optional[str] = None,
     location: Optional[str] = None,
-    model_name: str = "gemini-2.0-flash-001",
+    model_name: str = "gemini-2.5-flash",
     _cache_version: int = 2  # ← ADD THIS to force new cache
 ) -> Optional[GenerativeModel]:
     """
