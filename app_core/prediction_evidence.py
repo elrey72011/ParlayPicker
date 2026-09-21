@@ -31,6 +31,11 @@ GEMINI_REVIEW_COLUMNS = {
     "gemini_supporting_evidence", "gemini_missing_information",
     "gemini_explanation", "gemini_error", "gemini_stake_multiplier",
     "gemini_gate_reason",
+    "controlled_trial_candidate", "controlled_trial_deterministic_eligible",
+    "controlled_trial_gate_reason", "controlled_trial_estimated_probability",
+    "controlled_trial_break_even_probability", "controlled_trial_estimated_price_edge",
+    "controlled_trial_estimated_expected_value", "controlled_trial_eligible",
+    "controlled_trial_stake",
 }
 
 
@@ -302,7 +307,9 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
     selected = audit[text_column(audit, "best_available_selected").str.lower().isin(["true", "1"])]
     for idx, row in final.iterrows():
         if authoritative_candidates:
-            matches = selected[selected['candidate_id'].eq(row.get('candidate_id'))]
+            trial = row.get("controlled_trial_contract")
+            source_candidates = audit if isinstance(trial, dict) else selected
+            matches = source_candidates[source_candidates['candidate_id'].eq(row.get('candidate_id'))]
         else:
             matches = selected[selected.apply(key, axis=1).map(lambda value: value == key(row))]
         # Include day to avoid joining separate slates of the same matchup.
@@ -316,7 +323,11 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
                        "Kelly_Bet_Size", "wager_approved", "Pick_Status", "Status_Reason", "qualification_reason",
                        "gemini_approved", "gemini_flags", "gemini_agreement", "gemini_reviewed_at", "gemini_review_model", "gemini_review_input_hash", "gemini_verified_context", "gemini_supporting_evidence", "gemini_missing_information", "gemini_explanation", "production_gate_reason",
                        "market_line_used", "market_line_source", "line_consistency_flag",
-                       "line_event_identity_match_flag", "line_provenance_warning"):
+                       "line_event_identity_match_flag", "line_provenance_warning",
+                       "controlled_trial_candidate", "controlled_trial_deterministic_eligible",
+                       "controlled_trial_gate_reason", "controlled_trial_estimated_probability",
+                       "controlled_trial_break_even_probability", "controlled_trial_estimated_price_edge",
+                       "controlled_trial_estimated_expected_value", "controlled_trial_eligible", "controlled_trial_stake"):
             if column in final and (not authoritative_candidates or column in GEMINI_REVIEW_COLUMNS):
                 from app_core.candidate_evidence_schema import missing
                 if not missing(row[column]):

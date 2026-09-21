@@ -90,6 +90,7 @@ dd { margin: 4px 0; font-weight: 650; }
 .pp-number,.pp-metric-grid dd,.pp-stat-value,.pp-odds,.pp-time { font-variant-numeric: tabular-nums; }
 .pp-status,.badge { display: inline-flex; width: fit-content; padding: 5px 9px; border-radius: var(--pp-radius-sm); border: 1px solid #D9DEE5; font-size: 12px; font-weight: 750; background: var(--pp-neutral-soft); color: var(--pp-text-muted); }
 .pp-status-approved,.approved { color: var(--pp-success); background: var(--pp-success-soft); border-color: #C8DED2; }
+.pp-status-trial { color: #7A3E00; background: #FFF1D6; border-color: #E8B96A; }
 .pp-status-research { color: var(--pp-research); background: var(--pp-research-soft); border-color: #DDC9B5; }
 .pp-status-stale { color: var(--pp-warning); background: var(--pp-warning-soft); border-color: #E8D7A9; }
 .pp-status-danger { color: var(--pp-danger); background: var(--pp-danger-soft); border-color: #EFCBC7; }

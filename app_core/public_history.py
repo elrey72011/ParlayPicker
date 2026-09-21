@@ -238,9 +238,9 @@ def selections(publications):
     for pub in sorted(publications,key=lambda p:(p['confirmed_at'],p['package_hash'])):
         confirmed=datetime.fromisoformat(pub['confirmed_at'])
         package=pub['package']
-        entries=[(family,[leg],leg['status']=='APPROVED') for family,rows in package['games'].items() for leg in rows]
-        entries += [('parlays',p['legs'],False) for p in [*package.get('parlays',[]), *package.get('research_parlays',[])]]
-        for category,legs,approved in entries:
+        entries=[(family,[leg],'Approved' if leg['status']=='APPROVED' else 'Controlled trial' if leg['status']=='TRIAL' else 'Research') for family,rows in package['games'].items() for leg in rows]
+        entries += [('parlays',p['legs'],'Research') for p in [*package.get('parlays',[]), *package.get('research_parlays',[])]]
+        for category,legs,group in entries:
             if not legs or not all(eligible(leg,confirmed,max_age_minutes=package_age_minutes(package)) for leg in legs):
                 continue
             if len({datetime.fromisoformat(x['start']).astimezone(ZoneInfo('America/New_York')).date() for x in legs})!=1:
@@ -249,7 +249,7 @@ def selections(publications):
             if identity in chosen:
                 continue
             date=min(datetime.fromisoformat(x['start']) for x in legs).astimezone(ZoneInfo('America/New_York')).date().isoformat()
-            chosen[identity]={'id':digest(identity),'category':category,'date':date,'group':'Approved' if approved else 'Research',
+            chosen[identity]={'id':digest(identity),'category':category,'date':date,'group':group,
                               'published_at':pub['confirmed_at'],'legs':legs}
     from app_core.top_ten_history import top_ten_selections
     return list(chosen.values()) + top_ten_selections(publications)

@@ -182,11 +182,11 @@ def _opposing_side_lookup(analysis_df: pd.DataFrame) -> dict:
 
 
 def _deterministic_review_mask(frame: pd.DataFrame) -> pd.Series:
-    """Only already-qualified rows may consume an online Gemini review."""
-    if "production_eligible" not in frame.columns:
-        return pd.Series(False, index=frame.index)
-    values = frame["production_eligible"]
-    return values.astype("string").str.strip().str.lower().isin({"true", "1", "yes"})
+    """Only strict-qualified or deterministic trial rows consume a review."""
+    truthy = {"true", "1", "yes"}
+    production = pd.Series(frame.get("production_eligible", False), index=frame.index).astype("string").str.strip().str.lower().isin(truthy)
+    controlled_trial = pd.Series(frame.get("controlled_trial_candidate", False), index=frame.index).astype("string").str.strip().str.lower().isin(truthy)
+    return production | controlled_trial
 
 
 def _skipped_review_frame(frame: pd.DataFrame) -> pd.DataFrame:
