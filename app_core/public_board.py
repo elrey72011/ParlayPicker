@@ -95,6 +95,8 @@ def pick_record(row, *, prop=False, as_of=None):
             # A qualitative verdict is not evidence of independently checked facts.
             record['gemini_review_scope'] = 'Qualitative review of supplied analysis; independent fact verification is not established.'
             record['gemini_factual_evidence'] = 'No source-linked verified factual findings published.'
+            from app_core.gemini_public_evidence import evidence_summary
+            record['gemini_factual_evidence'] = evidence_summary(row)
             reviewed = text(row, 'gemini_reviewed_at')
             if reviewed:
                 try:
