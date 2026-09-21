@@ -18,9 +18,12 @@ def prepare_review_candidates(
     if not isinstance(pool, pd.DataFrame):
         pool = pd.DataFrame()
     from app_core.prediction_evidence import bind_authoritative_candidates
+    from app_core.controlled_trial import attest_candidate_integrity
     from core.prospective_uncertainty import prepare_live
 
-    pool = prepare_live(bind_authoritative_candidates(pool))
+    pool = bind_authoritative_candidates(pool)
+    pool = attest_candidate_integrity(pool)
+    pool = prepare_live(pool)
     trials = select_review_candidates(pool, now=now)
     return pool, trials
 
