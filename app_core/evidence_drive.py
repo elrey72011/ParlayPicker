@@ -77,7 +77,7 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
             query += f" and name = '{escaped}'"
         token = None
         while True:
-            params = {"q": query, "fields": "nextPageToken,incompleteSearch,files(id,name)", "pageSize": 1000,
+            params = {"q": query, "fields": "nextPageToken,incompleteSearch,files(id,name,sha256Checksum)", "pageSize": 1000,
                       "supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "corpora": "drive", "driveId": self.drive}
             if token:
                 params["pageToken"] = token
@@ -170,6 +170,60 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         return self.run_parallel(
             lambda worker, name: (name, worker._read_files(list(grouped[name].values()))),
             sorted(grouped))
+
+    def read_cached_objects(self, *, Prefix, cache_dir):
+        """Fresh complete listing; reuse only bytes matching Drive's SHA-256.
+
+        Missing checksums always force media reads. Every duplicate is checked;
+        cached bytes alone never establish remote presence or durability.
+        """
+        from pathlib import Path
+        import hashlib
+        root = Path(cache_dir)
+        root.mkdir(parents=True, exist_ok=True)
+        grouped = {}
+        for item in self._files():
+            if item['name'].startswith(Prefix):
+                grouped.setdefault(item['name'], {})[item['id']] = item
+        for name, file_id in self.created_ids.items():
+            if name.startswith(Prefix):
+                grouped.setdefault(name, {}).setdefault(file_id, {'id':file_id, 'name':name})
+        cache_events = []
+        def read(worker, name):
+            contents = []
+            for item in grouped[name].values():
+                sha = item.get('sha256Checksum', '')
+                target = root / sha if re.fullmatch(r'[a-f0-9]{64}', sha) else None
+                raw = None
+                if target is not None:
+                    try:
+                        candidate = target.read_bytes()
+                        if hashlib.sha256(candidate).hexdigest() == sha:
+                            raw = candidate
+                            cache_events.append("reused")
+                    except OSError:
+                        pass
+                if raw is None:
+                    raw = worker._read_files([item])
+                    cache_events.append("downloaded")
+                    if target is not None:
+                        if hashlib.sha256(raw).hexdigest() != sha:
+                            raise EvidenceStorageError('Remote evidence checksum changed during read')
+                        temporary = root / (sha + '.' + uuid.uuid4().hex + '.tmp')
+                        try:
+                            temporary.write_bytes(raw)
+                            temporary.replace(target)
+                        finally:
+                            temporary.unlink(missing_ok=True)
+                contents.append(raw)
+            if any(raw != contents[0] for raw in contents):
+                raise EvidenceStorageError('Drive contains conflicting duplicate evidence names')
+            return name, contents[0]
+        result = self.run_parallel(read, sorted(grouped))
+        import logging
+        logging.getLogger(__name__).warning('PERFORMANCE receipt_remote_cache objects=%s reused=%s downloaded=%s',
+                                           len(grouped), cache_events.count('reused'), cache_events.count('downloaded'))
+        return result
 
     def put_object(self, *, Key, Body, IfNoneMatch, **kwargs):
         if IfNoneMatch != "*":

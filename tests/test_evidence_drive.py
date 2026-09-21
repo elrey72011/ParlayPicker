@@ -126,3 +126,44 @@ def test_delayed_search_does_not_bypass_readback_integrity():
     store.put_object(Key="prefix/snapshots/new.json", Body=b'original', IfNoneMatch="*")
     session.files[0]["content"] = b'changed'
     assert store.get_object(Key="prefix/snapshots/new.json")["Body"].read() == b'changed'
+
+def test_receipt_cache_requires_fresh_remote_sha_and_checks_duplicates(tmp_path):
+    import hashlib
+    store = object.__new__(DriveStore)
+    store.created_ids = {}
+    store._session_factory = None
+    raw = b'original'
+    sha = hashlib.sha256(raw).hexdigest()
+    files = [{'id':'one','name':'receipt/key','sha256Checksum':sha}]
+    reads=[]; listings=[]
+    def listing():
+        listings.append(1)
+        return files
+    store._files = listing
+    store._read_files = lambda items: reads.append(items[0]['id']) or raw
+    assert store.read_cached_objects(Prefix='receipt/', cache_dir=tmp_path)==[('receipt/key',raw)]
+    assert store.read_cached_objects(Prefix='receipt/', cache_dir=tmp_path)==[('receipt/key',raw)]
+    assert len(listings)==2 and reads==['one']
+    (tmp_path/sha).write_bytes(b'corrupt')
+    store.read_cached_objects(Prefix='receipt/', cache_dir=tmp_path)
+    assert reads==['one','one']
+    files.clear()
+    assert store.read_cached_objects(Prefix='receipt/', cache_dir=tmp_path)==[]
+    files.extend([{'id':'one','name':'receipt/key','sha256Checksum':sha},
+                  {'id':'two','name':'receipt/key'}])
+    store._read_files=lambda items: b'conflict'
+    with pytest.raises(Exception, match='conflicting duplicate'):
+        store.read_cached_objects(Prefix='receipt/', cache_dir=tmp_path)
+
+
+def test_receipt_cache_missing_checksum_reads_every_time_and_rejects_changed_checksum(tmp_path):
+    store=object.__new__(DriveStore)
+    store.created_ids={};store._session_factory=None
+    files=[{'id':'one','name':'receipt/key'}];reads=[]
+    store._files=lambda: files
+    store._read_files=lambda items: reads.append(1) or b'data'
+    for _ in range(2):store.read_cached_objects(Prefix='receipt/',cache_dir=tmp_path)
+    assert len(reads)==2
+    files[0]['sha256Checksum']='0'*64
+    with pytest.raises(Exception,match='checksum changed'):
+        store.read_cached_objects(Prefix='receipt/',cache_dir=tmp_path)
