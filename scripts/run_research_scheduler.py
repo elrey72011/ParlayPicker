@@ -32,7 +32,10 @@ def main():
             from app_core.public_grading_scheduler import run as grade_public
             folder,_=settings()
             print("Public grading started", flush=True)
-            public=grade_public(site,folder,DriveStore(folder),sports)
+            # Public results cover every supported saved sport, independently of
+            # the narrower research capture configuration (which excludes WNBA).
+            from app_core.espn_results import ESPN_ENDPOINTS
+            public=grade_public(site,folder,DriveStore(folder),set(ESPN_ENDPOINTS))
             result["public_grading"]=public
             result["errors"].extend("public_grading:"+e for e in public["errors"])
         except Exception as exc:
