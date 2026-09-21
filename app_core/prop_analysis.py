@@ -99,6 +99,7 @@ def run_prop_analysis(controls, session_state, best_picks_df=None, progress=None
                         strikeout_prop_card = run_gemini_prop_analysis(
                             strikeout_prop_card,
                             session_state,
+                            eligible_only=True,
                         )
                     from app_core.gemini_bet_gate import apply_gemini_bet_gate
 

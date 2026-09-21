@@ -40,6 +40,9 @@ OPPOSITE_MARKET_TYPE = {
     "h2h_home": "h2h_away", "h2h_away": "h2h_home",
     "moneyline_home": "moneyline_away", "moneyline_away": "moneyline_home",
 }
+VERIFIED_CONTEXT_CATEGORIES = (
+    "probable_pitchers", "lineups", "injuries", "weather"
+)
 
 
 PROP_PAYLOAD_MAP = {
@@ -91,11 +94,24 @@ def _attach_gemini_results(
     for position, row_id in enumerate(row_ids):
         payload = analyses.get(str(row_id), {})
         evidence = payload.get("supporting_evidence", [])
+        missing_information = payload.get("missing_information", [])
         try:
             known = json.loads(result.iloc[position].get("gemini_verified_context", "{}"))
         except (ValueError, TypeError):
             known = {}
-        evidence_valid = isinstance(evidence, list) and all(isinstance(k, str) and k in known for k in evidence)
+        known = known if isinstance(known, dict) else {}
+        evidence_valid = (
+            isinstance(evidence, list)
+            and all(isinstance(k, str) and k in known for k in evidence)
+            and len(evidence) == len(set(evidence))
+        )
+        expected_missing = set(VERIFIED_CONTEXT_CATEGORIES) - set(known)
+        missing_valid = (
+            isinstance(missing_information, list)
+            and all(isinstance(k, str) and k in VERIFIED_CONTEXT_CATEGORIES for k in missing_information)
+            and len(missing_information) == len(set(missing_information))
+            and set(missing_information) == expected_missing
+        )
         raw_explanation = str(payload.get("explanation") or "").strip()
         raw_risk = str(payload.get("risk_notes") or "").strip()
         raw_pick = str(payload.get("recommended_bet") or "").strip()
@@ -113,6 +129,7 @@ def _attach_gemini_results(
         reviewed.append(
             bool(payload)
             and evidence_valid
+            and missing_valid
             and bool(raw_pick)
             and bool(raw_explanation)
             and bool(raw_risk)
@@ -164,7 +181,59 @@ def _opposing_side_lookup(analysis_df: pd.DataFrame) -> dict:
     return lookup
 
 
-def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None, analysis_df: pd.DataFrame | None = None) -> pd.DataFrame:
+def _deterministic_review_mask(frame: pd.DataFrame) -> pd.Series:
+    """Only already-qualified rows may consume an online Gemini review."""
+    if "production_eligible" not in frame.columns:
+        return pd.Series(False, index=frame.index)
+    values = frame["production_eligible"]
+    return values.astype("string").str.strip().str.lower().isin({"true", "1", "yes"})
+
+
+def _skipped_review_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    out = frame.copy()
+    defaults = {
+        "gemini_error": "SKIPPED_DETERMINISTICALLY_INELIGIBLE",
+        "gemini_explanation": "Gemini review skipped: deterministic wager checks did not qualify this row.",
+        "gemini_risk_notes": "No online model request was made.",
+        "gemini_pick": "No Gemini pick",
+        "gemini_confidence": "",
+        "gemini_flags": "",
+        "gemini_reviewed": False,
+        "gemini_reviewed_at": "",
+        "gemini_review_model": "",
+        "gemini_review_input_hash": "",
+        "gemini_supporting_evidence": "[]",
+        "gemini_missing_information": "[]",
+        "gemini_agreement": "unavailable",
+        "gemini_review_skipped_reason": "DETERMINISTICALLY_INELIGIBLE",
+    }
+    for column, value in defaults.items():
+        out[column] = value
+    return out
+
+
+def _merge_reviewed_positions(base: pd.DataFrame, reviewed: pd.DataFrame, mask: pd.Series) -> pd.DataFrame:
+    positions = [position for position, eligible in enumerate(mask.tolist()) if eligible]
+    for column in [name for name in reviewed.columns if name.startswith("gemini_")]:
+        if column not in base.columns:
+            base[column] = None
+        values = base[column].astype(object).to_numpy(copy=True)
+        values[positions] = reviewed[column].astype(object).to_numpy()
+        base[column] = values
+    if "gemini_review_skipped_reason" in base.columns:
+        values = base["gemini_review_skipped_reason"].astype(object).to_numpy(copy=True)
+        values[positions] = ""
+        base["gemini_review_skipped_reason"] = values
+    return base
+
+
+def run_gemini_analysis(
+    df: pd.DataFrame,
+    session_state: Any = None,
+    analysis_df: pd.DataFrame | None = None,
+    *,
+    eligible_only: bool = False,
+) -> pd.DataFrame:
     """Best-effort Gemini annotation that preserves UI behavior when Gemini is unavailable.
 
     When analysis_df is provided, each candidate row is paired with its opposing
@@ -176,6 +245,18 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None, analysis_df
         return pd.DataFrame() if df is None else df.copy()
 
     result = df.copy()
+    if eligible_only:
+        mask = _deterministic_review_mask(result)
+        skipped = _skipped_review_frame(result)
+        if not mask.any():
+            return skipped
+        reviewed = run_gemini_analysis(
+            result.loc[mask].copy(),
+            session_state,
+            analysis_df,
+            eligible_only=False,
+        )
+        return _merge_reviewed_positions(skipped, reviewed, mask)
 
     try:
         from app_core.llm_assistant import generate_batch_confidence_explanation
@@ -219,7 +300,7 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None, analysis_df
         result['gemini_verified_context'] = [json.dumps(c, default=str) for c in contexts]
         for game, context in zip(games_list, contexts):
             game['verified_context'] = context
-            game['missing_context'] = [k for k in ('probable_pitchers', 'lineups', 'injuries', 'weather') if k not in context]
+            game['missing_context'] = [k for k in VERIFIED_CONTEXT_CATEGORIES if k not in context]
 
         # Pair each candidate with its opposing side, when available, for a
         # genuine head-to-head comparison rather than a one-sided audit.
@@ -260,6 +341,8 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None, analysis_df
 def run_gemini_prop_analysis(
     df: pd.DataFrame,
     session_state: Any = None,
+    *,
+    eligible_only: bool = False,
 ) -> pd.DataFrame:
     """Run the same structured Gemini review over MLB and NFL player props.
 
@@ -270,6 +353,17 @@ def run_gemini_prop_analysis(
     if df is None or df.empty:
         return pd.DataFrame() if df is None else df.copy()
     result = df.copy()
+    if eligible_only:
+        mask = _deterministic_review_mask(result)
+        skipped = _skipped_review_frame(result)
+        if not mask.any():
+            return skipped
+        reviewed = run_gemini_prop_analysis(
+            result.loc[mask].copy(),
+            session_state,
+            eligible_only=False,
+        )
+        return _merge_reviewed_positions(skipped, reviewed, mask)
     try:
         from app_core.llm_assistant import generate_batch_confidence_explanation
 
@@ -301,8 +395,11 @@ def run_gemini_prop_analysis(
                     "is_live_data": bool(live_fields),
                     "side_a": side,
                     "side_b": None,
+                    "verified_context": {},
+                    "missing_context": list(VERIFIED_CONTEXT_CATEGORIES),
                 }
             )
+        result["gemini_verified_context"] = "{}"
         analyses = generate_batch_confidence_explanation(games, session_state)
         return _attach_gemini_results(result, row_ids, analyses)
     except Exception as exc:  # pragma: no cover - external SDK/runtime boundary

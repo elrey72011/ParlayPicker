@@ -6,6 +6,8 @@ from app_core import gemini_review_budget as budget
 from app_core.gemini_review_comparison import review_comparison
 from integrations.gemini_client import verified_context, _attach_gemini_results
 
+MISSING_CONTEXT = ['probable_pitchers', 'lineups', 'injuries', 'weather']
+
 @pytest.fixture(autouse=True)
 def local_store(tmp_path, monkeypatch):
     monkeypatch.setenv('PARLAYPICKER_EVIDENCE_DIR', str(tmp_path))
@@ -39,7 +41,7 @@ def test_context_requires_source_and_recent_timestamp():
 
 def test_invented_evidence_cannot_authorize_review():
     df = pd.DataFrame([{'best_pick':'Over 8', 'gemini_verified_context':'{}'}])
-    response = {'x': {'recommended_bet':'Over 8','explanation':'x','risk_notes':'x','confidence':'HIGH','flags':[], 'supporting_evidence':['invented']}}
+    response = {'x': {'recommended_bet':'Over 8','explanation':'x','risk_notes':'x','confidence':'HIGH','flags':[], 'supporting_evidence':['invented'], 'missing_information':list(MISSING_CONTEXT)}}
     reviewed = _attach_gemini_results(df, ['x'], response)
     assert not reviewed.iloc[0].gemini_reviewed
     assert reviewed.iloc[0].gemini_agreement == 'unavailable'
@@ -63,7 +65,19 @@ def test_batch_cache_and_exhaustion_do_not_call_provider(monkeypatch):
         calls = 0
         def generate_content(self, **kwargs):
             self.calls += 1
-            return SimpleNamespace(text=json.dumps([{'game_id':'g', 'recommended_bet':'Over 8', 'confidence':'MEDIUM', 'explanation':'x','risk_notes':'x','flags':[]}]))
+            return SimpleNamespace(
+                text=json.dumps([{'game_id':'g', 'recommended_bet':'Over 8', 'confidence':'MEDIUM', 'explanation':'x','risk_notes':'x','flags':[], 'supporting_evidence':[], 'missing_information':list(MISSING_CONTEXT)}]),
+                usage_metadata=SimpleNamespace(
+                    prompt_token_count=120,
+                    candidates_token_count=35,
+                    thoughts_token_count=0,
+                    cached_content_token_count=0,
+                    total_token_count=155,
+                ),
+                candidates=[SimpleNamespace(
+                    finish_reason=SimpleNamespace(name='STOP')
+                )],
+            )
     models = Models()
     monkeypatch.setattr(llm, '_GEMINI_AVAILABLE', True)
     monkeypatch.setattr(llm, 'initialize_gemini', lambda: (SimpleNamespace(models=models), None))
@@ -73,6 +87,16 @@ def test_batch_cache_and_exhaustion_do_not_call_provider(monkeypatch):
     first = llm.generate_batch_confidence_explanation(data)
     assert llm.generate_batch_confidence_explanation(data) == first
     assert models.calls == 1
+    metrics = budget.recent_metrics()
+    assert len(metrics) == 2
+    provider = next(metric for metric in metrics if not metric['cache_hit'])
+    cached = next(metric for metric in metrics if metric['cache_hit'])
+    assert provider['prompt_tokens'] == 120
+    assert provider['output_tokens'] == 35
+    assert provider['thought_tokens'] == 0
+    assert provider['total_tokens'] == 155
+    assert provider['finish_reason'] == 'STOP'
+    assert cached['batch_size'] == 1
     monkeypatch.setenv('PARLAYPICKER_GEMINI_DAILY_REQUESTS','0')
     assert llm.generate_batch_confidence_explanation([{'game_id':'different'}]) == {}
     assert models.calls == 1

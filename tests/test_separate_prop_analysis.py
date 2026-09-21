@@ -64,7 +64,10 @@ def test_gemini_gate_remains_enabled_for_explicit_prop_run(monkeypatch):
     from integrations import gemini_client
     from app_core.prop_analysis import run_prop_analysis
     calls=[]
-    def review(card,state):calls.append('review');return card
+    def review(card,state,**kwargs):
+        assert kwargs == {'eligible_only': True}
+        calls.append('review')
+        return card
     def gate(card,**kwargs):
         assert kwargs['enabled'] and kwargs['product']=='prop'
         calls.append('gate');return card

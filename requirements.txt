@@ -27,7 +27,7 @@ nba_api>=1.4.0
 nfl_data_py>=0.3.0
 
 # AI
-google-genai
+google-genai>=2.19,<3
 
 # Sentiment
 vaderSentiment>=3.3.2
