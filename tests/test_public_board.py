@@ -380,3 +380,19 @@ now=Date.parse('2026-09-12T16:00:00Z');delete data.selection_policy;assert.deepE
     subprocess.run([node, str(target)], check=True)
     assert html.index('id="topPicks"') < html.index('id="gameLeague"')
     assert 'function render(){renderTopPicks();renderLockedPicks();' in html
+
+@pytest.mark.parametrize('status,completion',[('APPROVE','Completed'),('ABSTAIN','Completed'),('UNAVAILABLE','Unavailable'),('OUTAGE_CAPPED','Unavailable'),('DISABLED','Skipped')])
+def test_public_gemini_review_is_not_factual_verification(status,completion):
+    frames=boards()
+    for frame in frames:
+        frame['gemini_review_status']=status
+        frame['gemini_reviewed_at']='2026-09-08T20:44:00Z'
+        frame['gemini_error']='PRIVATE'
+        frame['Bettable']=False
+    package=build_package(*frames)
+    validate_package(package)
+    row=package['games']['overall'][0]
+    assert row['gemini_review_completion']==completion
+    assert row['status']=='PASS'
+    assert 'not established' in row['gemini_review_scope']
+    assert 'PRIVATE' not in json.dumps(package)

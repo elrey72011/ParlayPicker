@@ -84,6 +84,23 @@ def pick_record(row, *, prop=False, as_of=None):
     if not prop:
         for field in ('maturity', 'gemini_review_status'):
             if text(row,field): record[field] = text(row,field)
+        review_status = text(row, 'gemini_review_status').upper()
+        if review_status:
+            record['gemini_review_completion'] = (
+                'Skipped' if review_status == 'DISABLED' else
+                'Unavailable' if review_status in {'UNAVAILABLE', 'OUTAGE_CAPPED', 'GEMINI_TIMEOUT', 'GEMINI_SERVICE_ERROR'} else
+                'Completed' if review_status in {'APPROVE', 'ABSTAIN', 'LOW_CONFIDENCE', 'OPPOSE', 'HOLD'} else
+                'Not confirmed')
+            # Do not publish arbitrary model prose, provider errors or context.
+            # A qualitative verdict is not evidence of independently checked facts.
+            record['gemini_review_scope'] = 'Qualitative review of supplied analysis; independent fact verification is not established.'
+            record['gemini_factual_evidence'] = 'No source-linked verified factual findings published.'
+            reviewed = text(row, 'gemini_reviewed_at')
+            if reviewed:
+                try:
+                    record['gemini_reviewed_at'] = timestamp(reviewed)
+                except (ValueError, TypeError):
+                    pass
         for field in ('espn_event_id','mlb_game_pk','game_number'):
             if text(row,field): record[field] = text(row,field)
         if number(row,'conservative_ev') is not None: record['conservative_ev'] = number(row,'conservative_ev')
@@ -185,7 +202,7 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','conservative_ev','espn_event_id','mlb_game_pk','game_number', *TQ_FIELDS, *VALUE_FIELDS) if k in row))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','conservative_ev','espn_event_id','mlb_game_pk','game_number', *TQ_FIELDS, *VALUE_FIELDS) if k in row))
             if any(k in row for k in TQ_FIELDS):
                 validate_quality({k:row[k] for k in TQ_FIELDS if k in row})
                 if row['sport'] != 'MLB' or row['market'] not in {'total_over','total_under'}:
@@ -198,7 +215,7 @@ def validate_package(package):
                 exact(row['wager_contract'],' '.join(PUBLIC_FIELDS))
                 validate_snapshot(row['wager_contract'])
             projection_metric(row)
-            if any(k in row and not isinstance(row[k],str) for k in ('maturity','gemini_review_status','espn_event_id','mlb_game_pk','game_number')):
+            if any(k in row and not isinstance(row[k],str) for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','espn_event_id','mlb_game_pk','game_number')):
                 raise ValueError('Invalid public review labels')
             if 'conservative_ev' in row and (isinstance(row['conservative_ev'],bool) or not isinstance(row['conservative_ev'],(int,float)) or not math.isfinite(row['conservative_ev'])):
                 raise ValueError('Invalid conservative EV')
