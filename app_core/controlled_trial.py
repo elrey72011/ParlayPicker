@@ -9,6 +9,7 @@ validation is accumulated, but they never set ``production_eligible`` or
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import math
 import os
 from typing import Any
@@ -90,6 +91,137 @@ def _price_allowed(odds: float | None) -> bool:
     if odds is None:
         return False
     return MIN_AMERICAN_ODDS <= odds <= -100.0 or 100.0 <= odds <= MAX_AMERICAN_ODDS
+
+
+def _optional_truth(row: dict | pd.Series, name: str) -> bool | None:
+    """Return an explicit boolean without treating a missing fact as false."""
+    if name not in row:
+        return None
+    value = row.get(name)
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y"}:
+        return True
+    if normalized in {"0", "false", "no", "n"}:
+        return False
+    return None
+
+
+def _expected_pick(row: dict | pd.Series, market: str, line: float | None) -> str:
+    if line is None:
+        return ""
+    if market == "spread_home":
+        return f"{_text(row, 'home_team')} {line:+.1f}".strip()
+    if market == "spread_away":
+        return f"{_text(row, 'away_team')} {line:+.1f}".strip()
+    if market == "total_over":
+        return f"Over {line:.1f}"
+    if market == "total_under":
+        return f"Under {line:.1f}"
+    return ""
+
+
+def attest_candidate_integrity(frame: pd.DataFrame) -> pd.DataFrame:
+    """Certify exact trial rows from their immutable provider quote evidence.
+
+    The expanded ranking pool is created before the display winner receives its
+    final line/event flags. Trial alternatives therefore need the equivalent
+    checks against their own exact quote. Explicit upstream failures remain
+    vetoes; this function only fills facts that were absent from the pool.
+    """
+    if frame is None or frame.empty:
+        return pd.DataFrame() if frame is None else frame.copy()
+
+    from app_core.prediction_evidence import matching_quotes
+
+    out = frame.copy()
+    line_results: list[bool] = []
+    identity_results: list[bool] = []
+    for _, row in out.iterrows():
+        market = _text(row, "market_type").lower()
+        odds = _number(row, "odds_american", "american_odds")
+        line = _number(
+            row,
+            "line",
+            "market_line_used",
+            "total_line" if market.startswith("total") else "spread_line",
+        )
+        matches = matching_quotes(row)
+        quote = matches[0] if len(matches) == 1 else None
+        quote_line = finite(quote.get("point")) if quote else None
+        quote_price = finite(quote.get("price")) if quote else None
+        quote_bound = _truth(row.get("quote_binding_verified"))
+        expected_pick = _expected_pick(row, market, line)
+        actual_pick = _text(row, "best_pick", "selection")
+        rejected_source = any(
+            _text(row, name).lower().startswith("rejected")
+            for name in ("line_source", "market_line_source", "odds_source")
+        )
+        fuzzy_identity = "fuzzy" in _text(row, "orientation_source").lower()
+
+        computed_line = bool(
+            production_market(market)
+            and quote_bound
+            and quote is not None
+            and line is not None
+            and quote_line is not None
+            and odds is not None
+            and quote_price is not None
+            and math.isclose(line, quote_line, abs_tol=1e-8)
+            and math.isclose(odds, quote_price, abs_tol=1e-8)
+            and expected_pick
+            and actual_pick.casefold() == expected_pick.casefold()
+            and not rejected_source
+        )
+
+        provider_event_id = _text(quote or {}, "provider_event_id")
+        provider_namespace = _text(quote or {}, "provider_namespace")
+        bound_event_id = _text(row, "provider_event_id")
+        bound_namespace = _text(row, "provider_namespace")
+        try:
+            supplied_quotes = json.loads(row.get("provider_quotes") or "[]")
+        except (TypeError, ValueError):
+            supplied_quotes = []
+        provider_conflict = any(
+            isinstance(item, dict)
+            and _text(item, "provider_namespace") == provider_namespace
+            and _text(item, "provider_event_id")
+            and _text(item, "provider_event_id") != provider_event_id
+            for item in supplied_quotes
+        ) if isinstance(supplied_quotes, list) and provider_namespace else True
+        computed_identity = bool(
+            computed_line
+            and provider_event_id
+            and provider_namespace
+            and bound_event_id == provider_event_id
+            and bound_namespace == provider_namespace
+            and _text(row, "game_id", "matchup_id")
+            and _text(row, "home_team")
+            and _text(row, "away_team")
+            and not provider_conflict
+            and not fuzzy_identity
+        )
+
+        explicit_line = _optional_truth(row, "line_consistency_flag")
+        explicit_identity = [
+            value for value in (
+                _optional_truth(row, "identity_verified"),
+                _optional_truth(row, "line_event_identity_match_flag"),
+            ) if value is not None
+        ]
+        line_results.append(computed_line and explicit_line is not False)
+        identity_results.append(computed_identity and False not in explicit_identity)
+
+    out["line_consistency_flag"] = line_results
+    out["line_event_identity_match_flag"] = identity_results
+    out["identity_verified"] = identity_results
+    return out
 
 
 def _metrics(row: dict | pd.Series) -> tuple[float | None, float | None, float | None, float | None]:

@@ -7,6 +7,7 @@ from app_core.controlled_trial import (
     MAX_BANKROLL_FRACTION_PER_PICK,
     MAX_DOLLARS_PER_PICK,
     apply_trials,
+    attest_candidate_integrity,
     select_review_candidates,
     validate_contract,
 )
@@ -101,6 +102,56 @@ def test_value_candidate_is_selected_instead_of_negative_ev_probability_winner()
     chosen = select_review_candidates(rows, now=NOW)
     assert chosen["best_pick"].tolist() == ["Detroit -1.5"]
     assert chosen.iloc[0]["controlled_trial_estimated_price_edge"] == pytest.approx(0.02365893885)
+
+
+def test_expanded_alternate_is_attested_from_its_exact_provider_quote():
+    from app_core.prediction_evidence import bind_authoritative_candidates
+
+    row = candidate(
+        identity_verified=None,
+        line_consistency_flag=None,
+        line_event_identity_match_flag=None,
+        quote_binding_verified=None,
+        provider_event_id=None,
+        provider_namespace=None,
+        provider_quotes='[{"book":"novig","market_type":"spread_home","point":-1.5,"price":167,"recorded_at":"2026-09-21T19:45:00+00:00","provider_event_id":"odds-event-1","provider_namespace":"odds_api"}]',
+    )
+    bound = bind_authoritative_candidates(pd.DataFrame([row]))
+    certified = attest_candidate_integrity(bound)
+    assert bool(certified.iloc[0]["quote_binding_verified"])
+    assert certified.iloc[0]["provider_event_id"] == "odds-event-1"
+    assert bool(certified.iloc[0]["line_consistency_flag"])
+    assert bool(certified.iloc[0]["line_event_identity_match_flag"])
+    assert bool(certified.iloc[0]["identity_verified"])
+    assert select_review_candidates(certified, now=NOW)["best_pick"].tolist() == ["Detroit -1.5"]
+
+
+def test_candidate_attestation_preserves_explicit_identity_veto():
+    row = candidate(
+        identity_verified=False,
+        line_event_identity_match_flag=None,
+        provider_event_id="odds-event-1",
+        provider_namespace="odds_api",
+        provider_quotes='[{"book":"novig","market_type":"spread_home","point":-1.5,"price":167,"recorded_at":"2026-09-21T19:45:00+00:00","provider_event_id":"odds-event-1","provider_namespace":"odds_api"}]',
+    )
+    certified = attest_candidate_integrity(pd.DataFrame([row]))
+    assert not bool(certified.iloc[0]["identity_verified"])
+    assert not bool(certified.iloc[0]["line_event_identity_match_flag"])
+    assert select_review_candidates(certified, now=NOW).empty
+
+
+def test_candidate_attestation_rejects_cross_event_quote_payload():
+    row = candidate(
+        identity_verified=None,
+        line_consistency_flag=None,
+        line_event_identity_match_flag=None,
+        provider_event_id="odds-event-1",
+        provider_namespace="odds_api",
+        provider_quotes='[{"book":"novig","market_type":"spread_home","point":-1.5,"price":167,"recorded_at":"2026-09-21T19:45:00+00:00","provider_event_id":"odds-event-1","provider_namespace":"odds_api"},{"book":"fanduel","market_type":"spread_home","point":-1.5,"price":160,"recorded_at":"2026-09-21T19:45:00+00:00","provider_event_id":"different-event","provider_namespace":"odds_api"}]',
+    )
+    certified = attest_candidate_integrity(pd.DataFrame([row]))
+    assert not bool(certified.iloc[0]["line_event_identity_match_flag"])
+    assert select_review_candidates(certified, now=NOW).empty
 
 
 @pytest.mark.parametrize(
