@@ -55,3 +55,38 @@ def test_published_lock_changes_preserve_original_values():
     assert len(changes)==1
     assert changes[0]['published']['original_win_estimate']==.6
     assert changes[0]['locked']['outcome']=='LOSS'
+
+def test_paired_baseline_and_chronological_cutoff():
+    a=row(1,.6,'WIN');b=row(2,.55,'LOSS')
+    b['date']='2026-09-21'
+    result=build([{'records':[a,b]}],holdout_start='2026-09-21')['cohorts'][0]
+    assert result['price_baseline']['n']==2
+    split=result['chronological_comparison']
+    assert split['before_cutoff']['n']==1
+    assert split['on_or_after_cutoff']['n']==1
+    assert abs(split['before_cutoff']['model_brier']-.16)<1e-10
+    assert split['on_or_after_cutoff']['status']=='DESCRIPTIVE_NOT_VALIDATION'
+
+
+def test_missing_price_is_not_fabricated():
+    a=row(1,.6,'WIN');a['legs'][0]['odds']=None
+    c=build([{'records':[a]}])['cohorts'][0]
+    assert c['n']==1 and c['price_baseline']['n']==0
+
+
+def test_reconcile_many_prepares_once_and_matches_individual(monkeypatch):
+    from app_core import public_reconciliation as r
+    from test_public_history import pub, scores
+    source={'publications':[pub()], 'revisions':[{'recorded_at':'2026-09-10T00:00:00Z','scores':scores()}], 'locks':[]}
+    original=deepcopy(source)
+    days=['2026-09-09','2026-09-10']
+    expected=[r.reconcile(source,d) for d in days]
+    prepare=r.prepare_source
+    calls=[];progress=[]
+    def wrapped(s):
+        calls.append(1)
+        return prepare(s)
+    monkeypatch.setattr(r,'prepare_source',wrapped)
+    assert r.reconcile_many(source,days,lambda *args:progress.append(args))==expected
+    assert calls==[1] and len(progress)==2
+    assert source==original
