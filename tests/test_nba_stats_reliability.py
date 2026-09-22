@@ -281,6 +281,16 @@ def test_nba_fetch_diagnostics_distinguish_live_cached_failed(monkeypatch, tmp_p
     fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
     monkeypatch.chdir(tmp_path)
 
+    # Keep both calls on the same logical slate day.  Without this guard the
+    # test can cross UTC midnight while the mocked secondary endpoints time out,
+    # legitimately turning the second request into a new-day live fetch.
+    class FixedDateTime:
+        @staticmethod
+        def utcnow():
+            return pd.Timestamp("2026-04-28T12:00:00Z")
+
+    monkeypatch.setattr(fp, "datetime", FixedDateTime)
+
     class SuccessEndpoint:
         def __init__(self, **kwargs):
             pass
