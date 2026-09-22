@@ -21,6 +21,18 @@ def test_missing_model_label_does_not_promote_or_modify_probability():
         "calibrated_probability", "calibrated_probability"]
 
 
+def test_nfl_context_model_has_explicit_probability_provenance():
+    frame = pd.DataFrame({
+        "league": ["NFL", "NFL"],
+        "ml_probability": [0.57, None],
+        "ml_probability_source": ["score-distribution-v1:nfl", ""],
+    })
+    assert list(selection_sources(frame)) == [
+        "nfl_score_distribution_recent_form_injury",
+        "football_research_blend_no_independent_model",
+    ]
+
+
 def test_missing_football_market_is_not_a_synthetic_neutral_vote():
     from core.streamlit_pipeline import compute_blended_probability
     result = compute_blended_probability(

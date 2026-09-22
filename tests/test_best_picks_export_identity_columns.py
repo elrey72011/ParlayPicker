@@ -16,7 +16,7 @@ def test_best_picks_export_identity_columns_present_without_regression():
 
 
 def test_pipeline_build_identifies_current_export_contract():
-    assert PIPELINE_BUILD == "2026-09-02d-gemini-prop-batching"
+    assert PIPELINE_BUILD == "2026-09-21-nfl-context-v1"
 
 
 @pytest.mark.parametrize("column", [

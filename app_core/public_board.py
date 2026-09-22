@@ -7,6 +7,13 @@ from datetime import datetime, timezone
 import pandas as pd
 
 
+PUBLIC_NFL_CONTEXT_FIELDS = (
+    'probability_basis', 'nfl_context_status', 'home_recent_result',
+    'away_recent_result', 'home_injury_context', 'away_injury_context',
+    'injury_context_source', 'injury_context_status',
+)
+
+
 def text(row, *keys):
     for key in keys:
         value = row.get(key)
@@ -91,6 +98,9 @@ def pick_record(row, *, prop=False, as_of=None):
         if 'quote_reason' in row:
             record['quote_reason'] = text(row, 'quote_reason')
     if not prop:
+        for field in PUBLIC_NFL_CONTEXT_FIELDS:
+            if text(row, field):
+                record[field] = text(row, field)
         for field in ('maturity', 'gemini_review_status'):
             if text(row,field): record[field] = text(row,field)
         review_status = text(row, 'gemini_review_status').upper()
@@ -229,7 +239,7 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + (' controlled_trial_contract' if 'controlled_trial_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','conservative_ev','espn_event_id','mlb_game_pk','game_number', *TQ_FIELDS, *VALUE_FIELDS) if k in row))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + (' controlled_trial_contract' if 'controlled_trial_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','conservative_ev','espn_event_id','mlb_game_pk','game_number', *PUBLIC_NFL_CONTEXT_FIELDS, *TQ_FIELDS, *VALUE_FIELDS) if k in row))
             if any(k in row for k in TQ_FIELDS):
                 validate_quality({k:row[k] for k in TQ_FIELDS if k in row})
                 if row['sport'] != 'MLB' or row['market'] not in {'total_over','total_under'}:
@@ -246,7 +256,7 @@ def validate_package(package):
                 exact(row['controlled_trial_contract'], ' '.join(TRIAL_FIELDS))
                 validate_contract(row['controlled_trial_contract'])
             projection_metric(row)
-            if any(k in row and not isinstance(row[k],str) for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','espn_event_id','mlb_game_pk','game_number')):
+            if any(k in row and not isinstance(row[k],str) for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','espn_event_id','mlb_game_pk','game_number', *PUBLIC_NFL_CONTEXT_FIELDS)):
                 raise ValueError('Invalid public review labels')
             if 'conservative_ev' in row and (isinstance(row['conservative_ev'],bool) or not isinstance(row['conservative_ev'],(int,float)) or not math.isfinite(row['conservative_ev'])):
                 raise ValueError('Invalid conservative EV')

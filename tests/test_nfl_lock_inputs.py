@@ -50,6 +50,30 @@ def test_nfl_actual_schedule_codes_enrich_games(monkeypatch):
     assert enriched.stats_resolution_status.eq('resolved').all()
     assert not enriched.feature_stats_fallback.any()
     assert enriched.feature_home_ppg.tolist() == [20,31,27]
+    assert enriched.feature_home_games_played.tolist() == [1,1,1]
+    assert enriched.feature_home_last_game_summary.tolist() == [
+        'L 20-24 vs BAL', 'W 31-17 vs NYG', 'L 27-28 vs LAC'
+    ]
+
+
+def test_nfl_stats_are_point_in_time_and_retain_prior_result(monkeypatch):
+    schedule = pd.DataFrame([
+        dict(gameday='2026-09-13', home_team='NYG', away_team='DAL', home_score=28, away_score=20, result=8),
+        dict(gameday='2026-09-13', home_team='PHI', away_team='LA', home_score=27, away_score=7, result=20),
+        # This later result must not leak into a September 21 slate.
+        dict(gameday='2026-09-27', home_team='NYG', away_team='LA', home_score=10, away_score=31, result=-21),
+    ])
+    monkeypatch.setattr(fp, 'nfl', SimpleNamespace(import_schedules=lambda years: schedule))
+
+    stats = pd.DataFrame(fp.fetch_nfl_stats.__wrapped__(2026, as_of_date='2026-09-21'))
+    giants = stats.loc[stats.team_norm.eq('NEW YORK GIANTS')].iloc[0]
+    rams = stats.loc[stats.team_norm.eq('LOS ANGELES RAMS')].iloc[0]
+
+    assert giants.games_played == 1 and rams.games_played == 1
+    assert giants.last_game_summary == 'W 28-20 vs DAL (2026-09-13)'
+    assert rams.last_game_summary == 'L 7-27 at PHI (2026-09-13)'
+    assert giants.recent_point_margin == 8
+    assert rams.recent_point_margin == -20
 
 
 def game():

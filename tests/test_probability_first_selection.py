@@ -72,3 +72,29 @@ def test_public_estimate_matches_selection_probability_and_price():
     row=per_game_board(board).iloc[0]
     assert row.win_probability is None
     assert not row.Bettable and row.Play_Stake==0
+
+
+def test_nfl_board_labels_context_model_and_retains_evidence():
+    board = pd.DataFrame([final(
+        league="NFL",
+        production_win_probability=.51,
+        best_available_selection_policy="probability-first-v1",
+        best_available_probability=.56,
+        best_available_probability_source="calibrated_probability",
+        ml_probability_source="score-distribution-v1:nfl",
+        selection_probability_source="nfl_score_distribution_recent_form_injury",
+        nfl_context_status="complete",
+        feature_home_last_game_summary="L 7-27 at PHI (2026-09-13)",
+        feature_away_last_game_summary="W 28-20 vs DAL (2026-09-13)",
+        injury_home_summary="Puka Nacua (WR) Questionable",
+        injury_away_summary="",
+        injury_context_source="espn_injuries",
+        injury_context_status="available",
+    )])
+
+    row = per_game_board(board).iloc[0]
+
+    assert row.probability_basis.startswith("NFL score model + market")
+    assert row.home_recent_result.startswith("L 7-27")
+    assert "Puka Nacua" in row.home_injury_context
+    assert row.nfl_context_status == "complete"

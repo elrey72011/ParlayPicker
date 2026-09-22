@@ -20,6 +20,12 @@ def selection_sources(frame):
     sources = pd.Series("calibrated_probability", index=frame.index)
     sport = frame.get("league", pd.Series("", index=frame.index)).astype(str).str.upper()
     model = pd.to_numeric(frame.get("ml_probability", pd.Series(float("nan"), index=frame.index)), errors="coerce")
+    model_source = frame.get("ml_probability_source", pd.Series("", index=frame.index)).astype(str).str.lower()
     absent = ~model.between(0, 1, inclusive="neither")
     sources.loc[sport.isin(["NFL", "NCAAF"]) & absent] = "football_research_blend_no_independent_model"
+    sources.loc[
+        sport.eq("NFL")
+        & ~absent
+        & model_source.eq("score-distribution-v1:nfl")
+    ] = "nfl_score_distribution_recent_form_injury"
     return sources

@@ -2,7 +2,7 @@
 External data fetcher — free APIs, no keys required.
 
 Sources:
-  - Injuries (NBA/NHL/MLB): ESPN public API (no auth)
+  - Injuries (NBA/NHL/MLB/NFL): ESPN public API (no auth)
   - Weather (MLB outdoor): wttr.in (no auth)
 
 The pipeline calls `enrich_with_external_data(merged_df)` before probability
@@ -32,10 +32,36 @@ _ESPN_LEAGUE_SLUG: dict[str, str] = {
     "NBA": "basketball/nba",
     "NHL": "hockey/nhl",
     "MLB": "baseball/mlb",
+    "NFL": "football/nfl",
 }
 
 # Statuses that represent a player being unavailable
 _OUT_STATUSES = {"out", "doubtful", "injured reserve", "ir", "day-to-day"}
+_STATUS_IMPACT = {
+    "out": 1.0,
+    "injured reserve": 1.0,
+    "ir": 1.0,
+    "doubtful": 0.75,
+    "day-to-day": 0.50,
+    "questionable": 0.35,
+}
+_POSITION_IMPACT = {
+    "QB": 1.75,
+    "WR": 1.00,
+    "TE": 1.00,
+    "RB": 0.90,
+    "OT": 0.90,
+    "T": 0.90,
+    "G": 0.80,
+    "C": 0.80,
+    "CB": 0.80,
+    "S": 0.75,
+    "DE": 0.75,
+    "DT": 0.70,
+    "LB": 0.70,
+    "OLB": 0.70,
+    "ILB": 0.70,
+}
 
 # ---------------------------------------------------------------------------
 # MLB outdoor stadiums → city for wttr.in
@@ -100,6 +126,7 @@ def _teams_match(a: str, b: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _injury_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_injury_fetch_status: dict[str, str] = {}
 
 
 def _fetch_espn_injuries(league: str) -> list[dict[str, Any]]:
@@ -111,11 +138,13 @@ def _fetch_espn_injuries(league: str) -> list[dict[str, Any]]:
     """
     slug = _ESPN_LEAGUE_SLUG.get(league.upper())
     if not slug:
+        _injury_fetch_status[league.upper()] = "unsupported_league"
         return []
 
     now = time.time()
     cached = _injury_cache.get(league.upper())
     if cached and (now - cached[0]) < _CACHE_TTL:
+        _injury_fetch_status[league.upper()] = "available"
         return cached[1]
 
     url = f"https://site.api.espn.com/apis/site/v2/sports/{slug}/injuries"
@@ -124,6 +153,7 @@ def _fetch_espn_injuries(league: str) -> list[dict[str, Any]]:
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
+        _injury_fetch_status[league.upper()] = "fetch_failed"
         logger.warning(f"ESPN injury fetch failed for {league}: {e}")
         return []
 
@@ -140,37 +170,118 @@ def _fetch_espn_injuries(league: str) -> list[dict[str, Any]]:
                 or inj.get("type", {}).get("description", "")
             ).lower().strip()
             athlete = inj.get("athlete", {}).get("displayName", "")
-            records.append({"team": team_name, "status": status_raw, "player": athlete})
+            position = (
+                inj.get("athlete", {}).get("position", {}).get("abbreviation")
+                or inj.get("athlete", {}).get("position", {}).get("name")
+                or ""
+            )
+            records.append(
+                {
+                    "team": team_name,
+                    "status": status_raw,
+                    "player": athlete,
+                    "position": str(position).upper().strip(),
+                }
+            )
 
     _injury_cache[league.upper()] = (now, records)
+    _injury_fetch_status[league.upper()] = "available"
     logger.info(f"ESPN injuries fetched for {league}: {len(records)} records")
     return records
 
 
-def fetch_injury_counts(league: str, home_team: str, away_team: str, game_date: str) -> dict[str, int]:
+def _injury_impact(record: dict[str, Any]) -> float:
+    status_weight = _STATUS_IMPACT.get(str(record.get("status", "")).lower().strip(), 0.0)
+    position_weight = _POSITION_IMPACT.get(str(record.get("position", "")).upper().strip(), 0.65)
+    return status_weight * position_weight
+
+
+def _injury_summary(records: list[dict[str, Any]]) -> str:
+    material = [record for record in records if _injury_impact(record) > 0]
+    material.sort(key=lambda record: (-_injury_impact(record), str(record.get("player", ""))))
+    return "; ".join(
+        " ".join(
+            part
+            for part in (
+                str(record.get("player", "")).strip(),
+                f"({str(record.get('position', '')).strip()})" if record.get("position") else "",
+                str(record.get("status", "")).strip().title(),
+            )
+            if part
+        )
+        for record in material
+    )
+
+
+def fetch_injury_context(league: str, home_team: str, away_team: str, game_date: str) -> dict[str, Any]:
+    """Return auditable injury evidence and a bounded status-weighted impact.
+
+    The impact is a research feature, not a medical forecast or wagering authority.
+    Questionable players remain visible with a fractional weight instead of being
+    silently treated as either fully active or definitely out.
     """
-    Return count of key players OUT/Doubtful for home and away teams.
-    Uses ESPN public API — no key required.
-    """
-    if league.upper() not in _ESPN_LEAGUE_SLUG:
-        return {"home": 0, "away": 0}
+    league_key = league.upper()
+    if league_key not in _ESPN_LEAGUE_SLUG:
+        return {
+            "home": 0,
+            "away": 0,
+            "home_impact": 0.0,
+            "away_impact": 0.0,
+            "home_summary": "",
+            "away_summary": "",
+            "source": "espn_injuries",
+            "status": "unsupported_league",
+        }
 
     try:
-        all_injuries = _fetch_espn_injuries(league)
-        home_out = sum(
-            1 for r in all_injuries
-            if _teams_match(r["team"], home_team) and r["status"] in _OUT_STATUSES
-        )
-        away_out = sum(
-            1 for r in all_injuries
-            if _teams_match(r["team"], away_team) and r["status"] in _OUT_STATUSES
-        )
-        if home_out or away_out:
-            logger.info(f"Injuries — {home_team}: {home_out} out, {away_team}: {away_out} out")
-        return {"home": home_out, "away": away_out}
+        all_injuries = _fetch_espn_injuries(league_key)
+        home_records = [r for r in all_injuries if _teams_match(r["team"], home_team)]
+        away_records = [r for r in all_injuries if _teams_match(r["team"], away_team)]
+        home_out = sum(1 for r in home_records if r["status"] in _OUT_STATUSES)
+        away_out = sum(1 for r in away_records if r["status"] in _OUT_STATUSES)
+        home_impact = round(sum(_injury_impact(r) for r in home_records), 4)
+        away_impact = round(sum(_injury_impact(r) for r in away_records), 4)
+        status = _injury_fetch_status.get(league_key, "fetch_failed")
+        if status == "available" and not all_injuries:
+            status = "available_no_listings"
+        if home_out or away_out or home_impact or away_impact:
+            logger.info(
+                "Injuries — %s: %s hard unavailable / %.2f impact; %s: %s hard unavailable / %.2f impact",
+                home_team,
+                home_out,
+                home_impact,
+                away_team,
+                away_out,
+                away_impact,
+            )
+        return {
+            "home": home_out,
+            "away": away_out,
+            "home_impact": home_impact,
+            "away_impact": away_impact,
+            "home_summary": _injury_summary(home_records),
+            "away_summary": _injury_summary(away_records),
+            "source": "espn_injuries",
+            "status": status,
+        }
     except Exception as e:
-        logger.warning(f"Injury count failed ({league} {home_team} vs {away_team}): {e}")
-        return {"home": 0, "away": 0}
+        logger.warning(f"Injury context failed ({league} {home_team} vs {away_team}): {e}")
+        return {
+            "home": 0,
+            "away": 0,
+            "home_impact": 0.0,
+            "away_impact": 0.0,
+            "home_summary": "",
+            "away_summary": "",
+            "source": "espn_injuries",
+            "status": "fetch_failed",
+        }
+
+
+def fetch_injury_counts(league: str, home_team: str, away_team: str, game_date: str) -> dict[str, int]:
+    """Compatibility projection for existing callers that only need hard counts."""
+    context = fetch_injury_context(league, home_team, away_team, game_date)
+    return {"home": int(context["home"]), "away": int(context["away"])}
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +352,12 @@ def enrich_with_external_data(merged: pd.DataFrame) -> pd.DataFrame:
     if merged.empty:
         merged["injuries_home_count"] = 0
         merged["injuries_away_count"] = 0
+        merged["injury_home_impact"] = 0.0
+        merged["injury_away_impact"] = 0.0
+        merged["injury_home_summary"] = ""
+        merged["injury_away_summary"] = ""
+        merged["injury_context_source"] = ""
+        merged["injury_context_status"] = ""
         merged["weather_flag"] = 0.0
         return merged
 
@@ -248,7 +365,7 @@ def enrich_with_external_data(merged: pd.DataFrame) -> pd.DataFrame:
 
     game_keys = merged[["league", "home_team", "away_team", "game_date"]].drop_duplicates()
 
-    injury_cache: dict[tuple[str, str, str, str], dict[str, int]] = {}
+    injury_cache: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     weather_cache_local: dict[tuple[str, str], float] = {}
 
     for _, row in game_keys.iterrows():
@@ -259,7 +376,7 @@ def enrich_with_external_data(merged: pd.DataFrame) -> pd.DataFrame:
         key = (league, home, away, date)
 
         if key not in injury_cache:
-            injury_cache[key] = fetch_injury_counts(league, home, away, date)
+            injury_cache[key] = fetch_injury_context(league, home, away, date)
 
         if league.upper() == "MLB":
             wkey = (home, date)
@@ -281,6 +398,33 @@ def enrich_with_external_data(merged: pd.DataFrame) -> pd.DataFrame:
 
     merged["injuries_home_count"] = merged.apply(_inj_home, axis=1).astype(int)
     merged["injuries_away_count"] = merged.apply(_inj_away, axis=1).astype(int)
+    merged["injury_home_impact"] = merged.apply(
+        lambda row: injury_cache.get(
+            (str(row.get("league", "")), str(row.get("home_team", "")), str(row.get("away_team", "")), str(row.get("game_date", ""))),
+            {},
+        ).get("home_impact", 0.0),
+        axis=1,
+    ).astype(float)
+    merged["injury_away_impact"] = merged.apply(
+        lambda row: injury_cache.get(
+            (str(row.get("league", "")), str(row.get("home_team", "")), str(row.get("away_team", "")), str(row.get("game_date", ""))),
+            {},
+        ).get("away_impact", 0.0),
+        axis=1,
+    ).astype(float)
+    for column, key_name in (
+        ("injury_home_summary", "home_summary"),
+        ("injury_away_summary", "away_summary"),
+        ("injury_context_source", "source"),
+        ("injury_context_status", "status"),
+    ):
+        merged[column] = merged.apply(
+            lambda row, context_key=key_name: injury_cache.get(
+                (str(row.get("league", "")), str(row.get("home_team", "")), str(row.get("away_team", "")), str(row.get("game_date", ""))),
+                {},
+            ).get(context_key, ""),
+            axis=1,
+        )
     merged["weather_flag"] = merged.apply(_wx, axis=1)
 
     return merged
