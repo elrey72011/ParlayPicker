@@ -117,9 +117,11 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     st.caption('DFS lineups must be generated in Full Pick Board during this run. Only one Classic slate is included per publication. Empty sections remain visible as empty tabs.')
     nfl_fallback = st.checkbox('Allow NFL sportsbook fallback for research locks', value=True, key='publication_nfl_fallback',
                                help='Show a best available NFL pick when Novig is unavailable, using an exact fresh DraftKings, FanDuel or BetMGM quote labeled with its source. Novig remains preferred. These selections can be research-locked; this does not approve a wager.')
+    research_fallback = st.checkbox('Allow MLB and WNBA sportsbook fallback for research locks', value=True, key='publication_research_fallback',
+                                    help='When Novig is unavailable, use an exact fresh DraftKings, FanDuel or BetMGM quote for a research-only lock. This never approves or funds a wager.')
     selected_props = props if include_props else pd.DataFrame()
     selected_dfs = dfs.get(chosen)
-    options = {'results':public_results, 'props':include_props, 'dfs':chosen, 'slate':slate, 'start':start, 'nfl_fallback':nfl_fallback}
+    options = {'results':public_results, 'props':include_props, 'dfs':chosen, 'slate':slate, 'start':start, 'nfl_fallback':nfl_fallback, 'research_fallback':research_fallback}
     fingerprint = source_fingerprint(games,candidates,selected_props,selected_dfs,options)
     saved = st.session_state.get('publication_preview')
     if saved and saved['fingerprint'] != fingerprint:
@@ -129,7 +131,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     rebuild = st.button('Refresh preview', key='publication_build')
     if saved is None or rebuild:
         try:
-            boards = [per_game_board(games,candidates,family,novig_only=True,college_fallback=True,nfl_fallback=nfl_fallback) for family in ('overall','sides','totals')]
+            boards = [per_game_board(games,candidates,family,novig_only=True,college_fallback=True,nfl_fallback=nfl_fallback,research_fallback=research_fallback) for family in ('overall','sides','totals')]
             package = build_package(*boards, props=selected_props,
                                     dfs=selected_dfs, dfs_sport=chosen if chosen!='None' else None,
                                     dfs_slate=slate, dfs_start=start)

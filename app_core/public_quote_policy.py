@@ -1,5 +1,5 @@
 """Book labels allowed for exact quoted public game selections."""
-COLLEGE_BOOKS = {'DraftKings', 'FanDuel', 'BetMGM'}
+FALLBACK_BOOKS = {'DraftKings', 'FanDuel', 'BetMGM'}
 
 
 CANONICAL_BOOKS = {
@@ -19,4 +19,4 @@ def supported_quote(row):
     if 'quote_time_basis' in row:
         return row['quote_time_basis'] == 'espn_observed' and row.get('sport', '').upper() == 'NCAAF' and source == 'DraftKings'
 
-    return source == 'Novig' or (row.get('sport', '').upper() in {'NCAAF', 'NFL'} and source in COLLEGE_BOOKS)
+    return source == 'Novig' or (row.get('sport', '').upper() in {'NCAAF', 'NFL', 'MLB', 'WNBA'} and source in FALLBACK_BOOKS)

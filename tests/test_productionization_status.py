@@ -15,6 +15,15 @@ def test_runtime_configuration_does_not_expose_secrets(monkeypatch, tmp_path):
     assert set(result.values()) <= {'configured', 'missing', 'invalid'}
 
 
+def test_runtime_odds_status_accepts_live_pipeline_key_alias(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv('THE_ODDS_API_KEY', raising=False)
+    monkeypatch.setenv('ODDS_API_KEY', 'private-live-key')
+    result = runtime_configuration_status()
+    assert result['THE_ODDS_API_KEY'] == 'configured'
+    assert 'private-live-key' not in json.dumps(result)
+
+
 def test_health_counts_immutable_operational_tables(tmp_path):
     from app_core.prediction_evidence import connect
     from app_core.evidence_health import evidence_health
