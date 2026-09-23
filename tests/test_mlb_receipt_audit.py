@@ -44,6 +44,41 @@ def test_training_inventory_rejects_complementary_conflicts():
         audit.training_inventory([row,dict(row,reference_outcome='LOSS')])
 
 
+def _paired_rows(day_counts):
+    from datetime import date, timedelta
+    rows = []
+    for day_text, count in day_counts.items():
+        day = date.fromisoformat(day_text)
+        for game in range(count):
+            for family in ('spread', 'total'):
+                for side in ('home', 'away'):
+                    rows.append(dict(family=family, event=('mlb', f'{day_text}-{game}'),
+                        x=[1, 1.5], outcome='WIN' if side == 'home' else 'LOSS',
+                        reference_outcome='WIN', slate=day_text,
+                        start=f'{day_text}T20:00:00+00:00',
+                        cutoff=f'{day_text}T19:00:00+00:00',
+                        outcome_at=f'{day + timedelta(days=1)}T02:00:00+00:00'))
+    return rows
+
+
+def test_chronological_capacity_exposes_missing_training_split():
+    rows = _paired_rows({'2026-09-17': 2, '2026-09-18': 15,
+                         '2026-09-19': 13, '2026-09-20': 15})
+    report = audit.chronological_capacity(rows)
+    assert report['max_training_units_with_later_evaluation_floors'] == {'spread': 17, 'total': 17}
+    assert report['count_feasible_cutoff_pairs'] == 0
+    assert report['chronology_feasible_cutoff_pairs'] == 0
+    assert report['cutoff_selection_performed'] is False
+
+
+def test_chronological_capacity_only_checks_counts_and_order():
+    rows = _paired_rows({'2026-09-17': 20, '2026-09-18': 10, '2026-09-19': 10})
+    report = audit.chronological_capacity(rows)
+    assert report['count_feasible_cutoff_pairs'] == 1
+    assert report['chronology_feasible_cutoff_pairs'] == 1
+    assert report['cutoff_selection_performed'] is False
+
+
 def test_audit_downloads_never_load_raw_backup(fixture, monkeypatch):
     collect(fixture)
     original = receipts.read

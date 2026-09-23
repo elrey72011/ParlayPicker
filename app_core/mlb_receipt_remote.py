@@ -230,6 +230,15 @@ def collect_durable(games, *, max_feeds=20, reconcile_history=True):
     return games, health
 
 
+def reconcile_durable(*, path=None, max_games=100):
+    """Restore saved receipts, append verified finals, and publish the new state."""
+    client, folder = connection()
+    restored = recover(client, path)
+    reconciliation = r.reconcile(path, max_games=max_games)
+    verified = backup(client, folder, path)
+    return {"records_restored": restored, "reconciliation": reconciliation, **verified}
+
+
 def restore_diagnostic(stage, exc):
     """Never expose arbitrary exception text or provider URLs/credentials."""
     known = {

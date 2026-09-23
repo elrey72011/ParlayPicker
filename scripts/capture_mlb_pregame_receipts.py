@@ -9,7 +9,7 @@ from app_core import mlb_pregame_receipts as receipts
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["capture", "reconcile", "export", "status", "audit", "backup", "restore", "sync"])
+    parser.add_argument("command", choices=["capture", "reconcile", "reconcile-remote", "export", "status", "audit", "backup", "restore", "sync"])
     parser.add_argument("--database", type=Path)
     parser.add_argument("--max-feeds", type=int, default=20)
     parser.add_argument("--output", type=Path)
@@ -26,6 +26,12 @@ def main(argv=None):
         client, folder = connection()
         restored = recover(client, args.database)
         report = {"records_restored": restored, **backup(client, folder, args.database)}
+    elif args.command == "reconcile-remote":
+        from app_core.mlb_receipt_remote import reconcile_durable
+        try:
+            report = reconcile_durable(path=args.database, max_games=args.max_feeds)
+        except Exception as exc:
+            parser.exit(2, f"MLB receipt reconciliation failed ({type(exc).__name__})\n")
     elif args.command in {"audit", "backup"}:
         from app_core.mlb_receipt_audit import audit_store, backup_bundle
         report = audit_store(args.database) if args.command == "audit" else backup_bundle(args.database)
