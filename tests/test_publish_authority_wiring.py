@@ -50,8 +50,13 @@ def captured(request, tmp_path, monkeypatch):
     return {"candidate_audit_df":audit,"candidate_authority_df":authority},saved
 
 
-def package(card,candidates):
-    return build_package(*[per_game_board(card,candidates,f,novig_only=True) for f in ("overall","sides","totals")])
+def package(card,candidates,*,overall_overrides=None):
+    boards=[per_game_board(card,candidates,f,novig_only=True) for f in ("overall","sides","totals")]
+    # Apply simulated pipeline changes before publication so the package's
+    # frozen diagnostics and product records describe the same saved rows.
+    for field,value in (overall_overrides or {}).items():
+        boards[0][field]=value
+    return build_package(*boards)
 
 
 def test_capture_mismatch_and_authoritative_quote_lock(captured):
@@ -80,11 +85,22 @@ def test_existing_locks_cannot_be_replaced(captured,tmp_path,monkeypatch):
     ids=[x["id"] for x in lock_candidates(current,AT)]
     original=store.lock_picks(current,ids)
     assert lock_audit(current,AT,original)[0]["Lock status"]=="Already locked"
-    changed=deepcopy(current)
-    changed["games"]["overall"][0]["odds"]=-115
-    from app_core.price_value_display import display
-    leg=changed["games"]["overall"][0]
-    leg.update(display(leg["win_estimate"],leg["odds"],leg["ev"]))
+    tampered=deepcopy(current)
+    tampered["games"]["overall"][0]["odds"]=-115
+    with pytest.raises(ValueError,match="Selected-board diagnostics do not match saved game rows"):
+        store.lock_picks(tampered,ids)
+    assert locked_selections(store.all("locks"))==original
+    # A later run quotes a new price for the same game. Build its frozen public
+    # package from updated source evidence rather than editing a saved package.
+    revised_card=card.copy(deep=True)
+    revised_candidates=_publication_candidates(diagnostics).copy(deep=True)
+    revised_card.loc[revised_card.index[0],"odds_american"]=-115
+    revised_candidates.loc[revised_candidates.index[0],"odds_american"]=-115
+    quotes=json.loads(revised_candidates.iloc[0].provider_quotes)
+    quotes[0]["price"]=-115
+    revised_candidates.loc[revised_candidates.index[0],"provider_quotes"]=json.dumps(quotes)
+    changed=package(revised_card,revised_candidates)
+    assert changed["games"]["overall"][0]["odds"]==-115
     assert store.lock_picks(changed,ids)==original
     assert locked_selections(store.all("locks"))==original
 
@@ -93,17 +109,13 @@ def test_existing_locks_cannot_be_replaced(captured,tmp_path,monkeypatch):
     ("analysis","Stale analysis"),("date","Other date")])
 def test_existing_time_rules(captured,change,status):
     diagnostics,card=captured
-    current=package(card,_publication_candidates(diagnostics))
-    leg=current["games"]["overall"][0]
     checked_at = "2026-09-15T23:01:00+00:00" if change == "started" else AT
-    if change=="date":leg["start"]="2026-09-16T23:00:00+00:00"
-    if change=="quote":leg["quote_time"]="2026-09-15T17:00:00+00:00"
-    if change=="analysis":leg["as_of"]="2026-09-15T17:00:00+00:00"
-    # Fixture edits must also refresh the derived funnel, like a real build.
-    from datetime import datetime
-    from app_core.production_parlays import canonical_funnel
-    current["parlay_funnel"] = canonical_funnel(current["games"]["overall"],datetime.fromisoformat(current["built_at"]))
-    current["parlay_funnel"].pop("combinations")
+    overrides={
+        "date":{"start":"2026-09-16T23:00:00+00:00"},
+        "quote":{"quote_time":"2026-09-15T17:00:00+00:00"},
+        "analysis":{"prediction_generated_at":"2026-09-15T17:00:00+00:00"},
+    }.get(change)
+    current=package(card,_publication_candidates(diagnostics),overall_overrides=overrides)
     assert lock_audit(current,checked_at)[0]["Lock status"]==status
     assert lock_candidates(current,checked_at)==[]
 

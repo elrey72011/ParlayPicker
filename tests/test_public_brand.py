@@ -150,7 +150,8 @@ def test_v211_section_headings_and_visible_research_label():
         assert '<h2>'+duplicate+'</h2>' not in content
     parlays = re.search(r'<section id="parlays"[^>]*>(.*?)</section>', html, re.S).group(1)
     assert '<h2>Parlays</h2>' not in parlays
-    assert '<h2>Qualified Parlays</h2>' in parlays
+    assert '<h2>Parlay products</h2>' in parlays
+    assert '<h2>Legacy qualified combinations</h2>' in parlays
     assert '<h2>Research Parlays</h2>' in parlays
     assert '<div class="pp-research-view-block"><div class="pp-control-label">Research view</div><div class="pp-view-switcher" role="group" aria-label="Research view">' in html
     assert '.pp-research-view-block { margin-top: 20px; }' in html
