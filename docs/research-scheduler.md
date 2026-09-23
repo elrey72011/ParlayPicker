@@ -18,7 +18,15 @@ MLB attempts at most six new games per cycle (three data requests each plus the 
 
 Evidence is synced after capture/grade work and in cleanup. Scheduler state, including NCAAF inputs, attempt cursors and safe status, is immutable and read-back verified under `parlaypicker/research-scheduler-v1/` in Drive. Each league retains its existing evidence prefix. The workflow has one concurrency group and does not cancel a running cycle. Manual Streamlit actions are not locked by GitHub; restore afterward to reconcile evidence. Forced runner termination can still interrupt a pending backup, so successful run status matters.
 
-Failures produce a nonzero exit and a credential-free Actions summary. No raw provider exceptions or secret values are logged. The workflow does not publish evidence artifacts to GitHub, change wagers, guarantee wins, or automate closing-line capture. Repeated errors require operator attention; do not re-freeze merely because a run is pending or no games qualify.
+Failures produce a nonzero exit and a credential-free Actions summary. No raw provider exceptions or secret values are logged. The research job does not change wagers or guarantee wins. Repeated errors require operator attention; do not re-freeze merely because a run is pending or no games qualify.
+
+## Activation evidence schedule
+
+The independent `activation-evidence` job in **Research capture and grading** restores the immutable prediction evidence, checks candidates in the final 30 minutes before game start for exact closing quotes, and read-back verifies the Drive backup. It runs inside the same Eastern operating window. A closing quote is saved before any later stage can delay the run. It does not promote a sport or approve a bet.
+
+**Activation grading and validation** runs daily at 14:00 UTC, with a manual Run workflow option. It restores the same Drive evidence, grades unresolved games, backs up new score revisions before rebuilding rankings, then validates each sport. If the local plan file is absent, it uses the single immutable plan receipt for that sport restored from Drive. Multiple receipts require an explicit plan file; the workflow fails instead of guessing which development choices were frozen. It publishes validation reports and a policy candidate as an Actions artifact for owner review. No workflow activates that candidate, configures a bankroll, or places a wager.
+
+To verify readiness, run the daily workflow manually after merging, inspect the `activation-validation` artifact, and check that a sport's tier has passed its frozen holdout criteria. Review the policy candidate before using **Workspace > Review and activate validated policy** in Streamlit. Funded recommendations also require an owner-confirmed bankroll and exposure limits in the app. A saved research pick or game lock alone does not meet these conditions.
 
 
 ## Paid API protection
@@ -31,7 +39,7 @@ Each request reserves and read-back verifies its budget in Drive before contacti
 
 When a daily or rolling cap is reached, paid requests pause automatically; usage and pause reasons appear in the Actions summary and saved scheduler state. They resume only as budget becomes available. No cap is reset by rerunning a job or re-freezing a model. The existing Actions concurrency group serializes reservations; do not run separate scheduler processes against the same Drive state. Manual Streamlit buttons are outside this budget.
 
-The CLI refuses off-hours work, and paid requests check the operating window individually. No new MLB capture/grading batch starts after the cutoff; already-running MLB requests and storage verification may finish. Limits do not meter the public MLB API, Drive or Actions runner time. No closing-line automation is added.
+The CLI refuses off-hours work, and paid requests check the operating window individually. No new MLB capture/grading batch starts after the cutoff; already-running MLB requests and storage verification may finish. Limits do not meter the public MLB API, Drive, Actions runner time, or the separate activation close job.
 
 The daily UTC cap can pause captures or grading before all games are processed; a schedule is not a promise of complete coverage. Daily and rolling limits protect automation usage even if all 30 cycles have work.
 

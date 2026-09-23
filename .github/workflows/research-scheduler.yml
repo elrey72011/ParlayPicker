@@ -67,20 +67,9 @@ jobs:
       - name: Install runtime dependencies
         if: steps.window.outputs.active == 'true'
         run: python -m pip install -r requirements.txt
-      - name: Restore immutable activation evidence
+      - name: Restore, collect strict closes and verify backup
         if: steps.window.outputs.active == 'true'
-        run: python -u scripts/prediction_evidence.py restore --database data/prediction_evidence/evidence.sqlite3
-      - name: Collect strict closes, append outcomes and back up evidence
-        if: steps.window.outputs.active == 'true'
-        run: python -u scripts/bootstrap_evidence.py --capture-closes --grade --backup
+        run: python -u scripts/bootstrap_evidence.py --restore --capture-closes --skip-validation --backup
       - name: Report evidence health
         if: ${{ !cancelled() && steps.window.outputs.active == 'true' }}
         run: python -u scripts/prediction_evidence.py status --database data/prediction_evidence/evidence.sqlite3
-
-      - name: Preserve ranking evidence rebuild diagnostics
-        if: ${{ !cancelled() && steps.window.outputs.active == 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ranking-evidence-rebuild
-          path: output/sport-validation/ranking-evidence.json
-          if-no-files-found: warn

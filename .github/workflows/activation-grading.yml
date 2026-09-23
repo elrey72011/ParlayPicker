@@ -1,0 +1,44 @@
+name: Activation grading and validation
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 14 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: activation-grading-and-validation
+  cancel-in-progress: false
+jobs:
+  grade-and-validate:
+    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
+      PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Restore, grade, validate and verify backup
+        run: python -u scripts/bootstrap_evidence.py --restore --grade --backup
+      - name: Build and verify reviewable policy candidate
+        run: |
+          python scripts/build_wager_policy.py --validation-dir output/sport-validation --output output/wager-policy-candidate.json
+          python scripts/verify_wager_policy.py --policy output/wager-policy-candidate.json --validation-dir output/sport-validation
+      - name: Report evidence health
+        if: ${{ !cancelled() }}
+        run: python -u scripts/prediction_evidence.py status --database data/prediction_evidence/evidence.sqlite3
+      - name: Preserve validation and policy diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: activation-validation
+          path: |
+            output/sport-validation/
+            output/wager-policy-candidate.json
+          if-no-files-found: warn
