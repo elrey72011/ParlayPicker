@@ -1,5 +1,7 @@
 """Explicit deployment of a sanitized board to one configured Netlify site."""
 import io
+import hashlib
+import json
 import re
 import zipfile
 from urllib.parse import urlsplit
@@ -67,14 +69,18 @@ def site_info(site_id,token):
 
 def deploy(package,site_id,token):
     content=archive(package)
+    with zipfile.ZipFile(io.BytesIO(content)) as bundle:
+        expected_version=json.loads(bundle.read('version.json'))
+        expected_html_hash=hashlib.sha256(bundle.read('index.html')).hexdigest()
     site_id=identifier(site_id)
     value=api_call('POST','/sites/'+site_id+'/deploys',token,data=content)
     if value.get('site_id')!=site_id:
         raise ValueError('Deployment site mismatch; check the Netlify dashboard')
-    return {'id':identifier(value.get('id')),'site_id':site_id,'state':str(value.get('state','processing'))}
+    return {'id':identifier(value.get('id')),'site_id':site_id,'state':str(value.get('state','processing')),
+            'expected_version':expected_version,'expected_html_hash':expected_html_hash}
 
 
-def deployment_status(deploy_id,site_id,token):
+def deployment_status(deploy_id,site_id,token,expected_version=None,expected_html_hash=None):
     value=api_call('GET','/deploys/'+identifier(deploy_id),token)
     if value.get('id')!=deploy_id or value.get('site_id')!=identifier(site_id):
         raise ValueError('Deployment identity mismatch')
@@ -88,4 +94,14 @@ def deployment_status(deploy_id,site_id,token):
             result['state']='ready_not_published'
         else:
             result['url']=website(site.get('ssl_url'))
+            if expected_version is None or expected_html_hash is None:
+                result['state']='verification_missing'
+            else:
+                from app_core.hosted_board_reconciliation import HostedMismatch, reconcile
+                try:
+                    result['reconciliation']=reconcile(result['url'], expected_version=expected_version,
+                                                       expected_html_hash=expected_html_hash)
+                except HostedMismatch as exc:
+                    result['state']='verification_unavailable' if str(exc)=='HOSTED_FETCH_FAILED' else 'content_mismatch'
+                    result['reconciliation_reason']=str(exc)
     return result

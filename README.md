@@ -82,12 +82,34 @@ quote verification or the deterministic wager checks. See
 [qualified-pick evaluation](docs/qualified-picks-evaluation.md), and
 [scheduled research/grading](docs/research-scheduler.md).
 
+## True parlay production readiness
+
+Standard, Same-Game, and Cross-Game parlay research uses the fail-closed ticket
+engine in `core/true_parlay_engine.py`. Exact ticket quotes are captured through
+`app_core/parlay_ticket_quotes.py`; no sportsbook ticket quote API is connected
+by default. Unsupported products and inferred prices remain unavailable. An
+owner-confirmed quote requires an exact displayed ticket and retained source
+artifact and cannot create a validation ID.
+
+Prospective product plans, candidates, outcomes, metrics, and deployment reviews
+use the append-only parlay evidence database through
+`app_core/parlay_validation.py`. Plans must be frozen before their validation
+window. A passing validation report remains activation pending; owner
+authorization, a current quote, and exposure gates are separate requirements.
+See [the production-readiness audit](docs/audits/2026-09-23-production-readiness-gaps.md)
+for verified results and remaining external evidence blockers.
+
 ## Tests and maintenance
 
 ```sh
-python -m pip install pytest
-python -m pytest -q
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt pytest
+.venv/bin/python -m pytest -q tests
 ```
+
+On macOS, install the native OpenMP runtime (`brew install libomp`) before
+running tests that import the pinned XGBoost wheel. A missing `libomp.dylib`
+is an environment error during collection, not a failed model test.
 
 Default discovery targets `tests/`, matching the CI suite. Root-level diagnostics
 are manual tools and may perform provider calls or write data; run only the

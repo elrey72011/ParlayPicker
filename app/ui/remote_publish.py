@@ -55,7 +55,8 @@ def render_remote_publish(package, fingerprint, setting):
         return
     if job.get('id') and st.button('Check public deployment status',key='publication_remote_status'):
         try:
-            updated=remote.deployment_status(job['id'],site_id,token)
+            updated=remote.deployment_status(job['id'],site_id,token,
+                                             job.get('expected_version'),job.get('expected_html_hash'))
             jobs[key]={**job, **updated}
             job=jobs[key]
         except (ValueError,RuntimeError) as exc:
@@ -72,6 +73,9 @@ def render_remote_publish(package, fingerprint, setting):
         st.link_button('Open public website',job['url'])
     elif job['state']=='uncertain':
         st.warning(job.get('message','Submission outcome is unknown.')+' Check the Netlify dashboard before trying again.')
+    elif job['state'] in {'content_mismatch','verification_missing','verification_unavailable'}:
+        st.error('Hosted publication has not passed build reconciliation: '+
+                 job['state']+' ('+job.get('reconciliation_reason','expected build unavailable')+').')
     else:
         st.info('Deployment status: '+job['state']+'. Use Check public deployment status to refresh.')
     if job['state'] in {'uncertain','error'}:

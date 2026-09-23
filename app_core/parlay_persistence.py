@@ -195,15 +195,22 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
             decision_id TEXT NOT NULL REFERENCES parlay_ticket(decision_id),
             quote_id TEXT NOT NULL,
             parlay_id TEXT NOT NULL REFERENCES parlay_identity(parlay_id),
+            provider TEXT,
             sportsbook TEXT,
+            product_type TEXT,
             odds_american REAL,
             odds_decimal REAL,
             quoted_at TEXT,
             expires_at TEXT,
             quote_source TEXT,
+            source_type TEXT,
             provider_ticket_id TEXT,
+            provider_response_id TEXT,
             ticket_hash TEXT,
             leg_hash TEXT,
+            selection_bindings_hash TEXT,
+            component_bindings_hash TEXT,
+            raw_evidence_hash TEXT,
             verification_state TEXT,
             payload TEXT NOT NULL,
             payload_hash TEXT NOT NULL,
@@ -295,6 +302,13 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
               AND decision_id IS NOT NEW.decision_id
         ) BEGIN SELECT RAISE(ABORT, 'accepted receipt belongs to another decision'); END;
     """)
+    # Existing PR #2331 databases retain their rows and gain nullable provider
+    # columns. Unknown legacy facts remain NULL rather than being backfilled.
+    quote_columns = {row[1] for row in db.execute("PRAGMA table_info(parlay_quote)")}
+    for name in ("provider", "product_type", "source_type", "provider_response_id",
+                 "selection_bindings_hash", "component_bindings_hash", "raw_evidence_hash"):
+        if name not in quote_columns:
+            db.execute(f"ALTER TABLE parlay_quote ADD COLUMN {name} TEXT")
     for table in ("parlay_identity", "parlay_ticket", "parlay_leg", "parlay_quote", "parlay_gate",
                   "parlay_result", "parlay_validation_evidence"):
         for action in ("UPDATE", "DELETE"):
@@ -367,6 +381,8 @@ def save_decision(
             raise ValueError("quote_id mismatch")
         if quote_row.get("parlay_id") not in (None, parlay_id):
             raise ValueError("quote parlay_id mismatch")
+        if quote_row.get("product_type") not in (None, product):
+            raise ValueError("quote product_type mismatch")
         for field in ("sportsbook", "ticket_hash"):
             if ticket.get(field) is not None and quote_row.get(field) is not None and ticket[field] != quote_row[field]:
                 raise ValueError(f"quote {field} mismatch")
@@ -521,16 +537,29 @@ def save_decision(
                                      (quote_id,)).fetchone()
             if saved_quote is not None and saved_quote != (parlay_id, quote_hash):
                 raise EvidenceConflict("quote identity conflict")
+            selection_bindings = quote_row.get("selection_bindings")
+            component_bindings = quote_row.get("sgp_components")
             quote_values = (
-                decision_id, quote_id, parlay_id, quote_row.get("sportsbook"),
+                decision_id, quote_id, parlay_id, quote_row.get("provider"),
+                quote_row.get("sportsbook"), quote_row.get("product_type"),
                 _number(_first(quote_row, "odds_american", "american_odds"), "odds_american"),
                 _number(_first(quote_row, "odds_decimal", "decimal_odds"), "odds_decimal"),
                 _time(quote_row.get("quoted_at"), "quoted_at"), _time(quote_row.get("expires_at"), "expires_at"),
-                _first(quote_row, "quote_source", "source"), quote_row.get("provider_ticket_id"),
+                _first(quote_row, "quote_source", "source"), quote_row.get("source_type"),
+                quote_row.get("provider_ticket_id"), quote_row.get("provider_response_id"),
                 quote_row.get("ticket_hash"), quote_leg_hash,
+                _digest(selection_bindings) if selection_bindings is not None else None,
+                _digest(component_bindings) if component_bindings is not None else None,
+                quote_row.get("raw_evidence_hash"),
                 quote_row.get("verification_state"), quote_payload, quote_hash,
             )
-            db.execute(f"INSERT INTO parlay_quote VALUES ({','.join('?' for _ in quote_values)})", quote_values)
+            quote_columns = ("decision_id", "quote_id", "parlay_id", "provider", "sportsbook",
+                             "product_type", "odds_american", "odds_decimal", "quoted_at", "expires_at",
+                             "quote_source", "source_type", "provider_ticket_id", "provider_response_id",
+                             "ticket_hash", "leg_hash", "selection_bindings_hash", "component_bindings_hash",
+                             "raw_evidence_hash", "verification_state", "payload", "payload_hash")
+            db.execute(f"INSERT INTO parlay_quote ({','.join(quote_columns)}) "
+                       f"VALUES ({','.join('?' for _ in quote_values)})", quote_values)
         for index, gate in enumerate(gate_rows):
             gate_payload, gate_hash = _record(gate)
             db.execute("INSERT INTO parlay_gate VALUES (?,?,?,?,?,?,?,?)", (

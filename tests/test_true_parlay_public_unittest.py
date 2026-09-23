@@ -8,7 +8,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-from app_core.true_parlay_public import build_product_board
+from app_core.true_parlay_public import _stage_counts, build_product_board
 
 
 NOW = datetime(2026, 9, 23, 18, tzinfo=timezone.utc)
@@ -31,6 +31,9 @@ class TrueParlayPublicTests(unittest.TestCase):
                          {'CROSS_GAME_PARLAY': 3, 'SAME_GAME_PARLAY': 2, 'STANDARD_PARLAY': 1})
         self.assertEqual(funnel['counts']['candidate_combinations'], len(records))
         self.assertEqual(funnel['counts']['actionable_now'], 0)
+        stages = list(funnel['counts'].values())
+        self.assertEqual(stages, sorted(stages, reverse=True))
+        self.assertEqual(sum(funnel['stage_exits'].values()) + funnel['counts']['actionable_now'], len(records))
         self.assertTrue(all(r['recommended_stake'] == 0 and not r['production_eligible'] for r in records))
         self.assertTrue(all('PRICE_UNAVAILABLE' in r['blockers'] and 'PRODUCT_UNVALIDATED' in r['blockers']
                             for r in records))
@@ -77,6 +80,27 @@ class TrueParlayPublicTests(unittest.TestCase):
         tampered['parlay_products'][0]['status'] = 'ACTIONABLE'
         with self.assertRaises(ValueError):
             validate_package(tampered)
+
+    def test_saved_funnel_has_exclusive_stage_exits(self):
+        base = dict(blockers=[], quote_id='quote', quote_verification_state='VERIFIED',
+                    probability_conservative=.45, conservative_ev=.1,
+                    validation_state='PROVISIONAL_VALIDATED', validation_id='parlay-validation',
+                    exposure_snapshot_id='ledger', status='ACTIONABLE',
+                    production_eligible=True, recommended_stake=1)
+        records = [
+            {**base, 'blockers': ['LEG_IDENTITY_MISSING']},
+            {**base, 'blockers': ['PRICE_UNAVAILABLE'], 'quote_id': None},
+            {**base, 'blockers': ['JOINT_MODEL_UNAVAILABLE']},
+            {**base, 'blockers': ['NONPOSITIVE_CONSERVATIVE_EV'], 'conservative_ev': -.1},
+            {**base, 'blockers': ['PRODUCT_UNVALIDATED'], 'validation_id': None},
+            {**base, 'blockers': ['EXPOSURE_UNAVAILABLE'], 'exposure_snapshot_id': None},
+            {**base, 'blockers': ['OWNER_AUTHORIZATION_MISSING'], 'status': 'RESEARCH',
+             'production_eligible': False, 'recommended_stake': 0},
+            base,
+        ]
+        counts, exits = _stage_counts(records)
+        self.assertEqual(list(counts.values()), [8, 7, 6, 5, 4, 3, 2, 1])
+        self.assertEqual(list(exits.values()), [1] * 7)
 
 
 if __name__ == '__main__':

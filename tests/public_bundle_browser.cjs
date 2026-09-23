@@ -17,7 +17,7 @@ assert.equal(version.build_id,version.board_hash);
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;
  try{
-  browser=await chromium.launch({headless:true,...(process.platform==='win32'?{channel:'msedge'}:{})});
+  browser=await chromium.launch({headless:true,...((process.env.BROWSER_CHANNEL||process.platform==='win32')?{channel:process.env.BROWSER_CHANNEL||'msedge'}:{})});
   const page=await browser.newPage({viewport:{width:1280,height:900},colorScheme:'dark'});
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto('http://127.0.0.1:'+server.address().port+'/');
@@ -30,7 +30,7 @@ assert.equal(version.build_id,version.board_hash);
   for(const width of [1280,390]){
    await page.setViewportSize({width,height:900});
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-   await page.screenshot({path:path.join(root,'actual-sept17-'+width+'.png')});
+   await page.screenshot({path:path.join(root,'actual-public-'+width+'.png')});
    for(const view of ['overall','sides','totals']){
     await page.locator('[data-board-view='+view+']').click();
     assert.equal(await page.locator('[data-board-view='+view+']').getAttribute('aria-pressed'),'true');
