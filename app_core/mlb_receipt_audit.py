@@ -2,7 +2,7 @@
 import json
 from collections import Counter
 from app_core import mlb_pregame_receipts as receipts
-from app_core.mlb_spread_total_model import CONFIG, prepare_rows, receipt_features, digest
+from app_core.mlb_spread_total_model import CONFIG, prepare_rows, receipt_features, digest, split_rows
 
 
 def training_inventory(rows):
@@ -32,6 +32,54 @@ def training_inventory(rows):
     return result
 
 
+def chronological_capacity(rows):
+    """Count possible whole-slate partitions without looking at model performance.
+
+    This is a necessary capacity check, not a choice of cutoffs or permission to
+    train. The trainer still checks class balance, integrity and actual fitting.
+    """
+    days = sorted({r["slate"] for r in rows})
+    minimum = CONFIG["minimum_rows_per_family_split"]
+    families = ("spread", "total")
+    decided = [r for r in rows if r["outcome"] in {"WIN", "LOSS"}]
+    counts = {family: Counter(r["slate"] for r in decided if r["family"] == family)
+              for family in families}
+    units = {family: {day: set() for day in days} for family in families}
+    for row in decided:
+        if row["family"] in units:
+            units[row["family"]][row["slate"]].add((tuple(row["event"]), row["x"][-1]))
+    capacity = {family: 0 for family in families}
+    count_feasible = chronology_feasible = 0
+    for train_index in range(len(days) - 2):
+        train_day = days[train_index]
+        training = {family: len(set().union(*(units[family][day] for day in days[:train_index + 1])))
+                    for family in families}
+        for validation_index in range(train_index + 1, len(days) - 1):
+            validation_day = days[validation_index]
+            validation = {family: sum(counts[family][day] for day in days[train_index + 1:validation_index + 1])
+                          for family in families}
+            holdout = {family: sum(counts[family][day] for day in days[validation_index + 1:])
+                       for family in families}
+            if any(validation[family] < minimum or holdout[family] < minimum for family in families):
+                continue
+            for family in families:
+                capacity[family] = max(capacity[family], training[family])
+            if any(training[family] < minimum for family in families):
+                continue
+            count_feasible += 1
+            try:
+                split_rows(rows, train_day, validation_day)
+            except ValueError:
+                continue
+            chronology_feasible += 1
+    return {"count_feasible_cutoff_pairs": count_feasible,
+            "chronology_feasible_cutoff_pairs": chronology_feasible,
+            "max_training_units_with_later_evaluation_floors": capacity,
+            "minimum_training_units_per_family": minimum,
+            "minimum_decided_market_rows_per_later_period": minimum,
+            "cutoff_selection_performed": False}
+
+
 def audit_store(path=None):
     records = receipts.export_records(path)
     settled = [r for r in records if r["outcome"] is not None]
@@ -47,6 +95,7 @@ def audit_store(path=None):
         blockers.append("settled_dataset_integrity_failed")
     counts = Counter(r["family"] for r in rows if r["outcome"] in {"WIN", "LOSS"})
     days = sorted({r["slate"] for r in rows})
+    capacity = chronological_capacity(rows)
     if not records:
         blockers.append("no_pregame_receipts")
     if not settled:
@@ -58,6 +107,8 @@ def audit_store(path=None):
     for family in ("spread", "total"):
         if counts[family] < 3 * CONFIG["minimum_rows_per_family_split"]:
             blockers.append(f"insufficient_{family}_decided_rows")
+    if capacity["chronology_feasible_cutoff_pairs"] == 0:
+        blockers.append("no_chronological_split_meets_minimums")
     return {"schema": "mlb-receipt-audit-v1", "receipts": len(records),
             "unique_events": len({receipts.event_key(r["snapshot"]["payload"]) for r in records}),
             "settled_receipts": len(settled), "pending_receipts": len(records)-len(settled),
@@ -65,6 +116,7 @@ def audit_store(path=None):
             "minimum_rows_per_family_per_split": CONFIG["minimum_rows_per_family_split"],
             "blockers": blockers, "training_authorized": False,
             "training_inventory": inventory,
+            "chronological_capacity": capacity,
             "split_validation": "Not performed; requires predeclared chronological cutoffs and trainer checks",
             "remote_backup_verified": False,
             "persistence": "Local store; this audit does not prove recovery after redeployment"}
