@@ -496,11 +496,18 @@ def test_raw_sportsbook_binding_policy_identity(raw, label):
 
 
 @pytest.mark.parametrize('raw', ['draftkings','fanduel','betmgm'])
-@pytest.mark.parametrize('sport', ['MLB','NBA','WNBA','NHL','NCAAB'])
+@pytest.mark.parametrize('sport', ['NBA','NHL','NCAAB'])
 def test_canonicalization_does_not_expand_sport_fallback(raw, sport):
     from app_core.public_quote_policy import canonical_book_label, supported_quote
     assert not supported_quote({'sport':sport,'quote_source':raw})
     assert not supported_quote({'sport':sport,'quote_source':canonical_book_label(raw)})
+
+
+@pytest.mark.parametrize('raw', ['draftkings','fanduel','betmgm'])
+@pytest.mark.parametrize('sport', ['MLB','WNBA'])
+def test_research_lock_books_are_supported_for_mlb_and_wnba(raw, sport):
+    from app_core.public_quote_policy import supported_quote
+    assert supported_quote({'sport':sport,'quote_source':raw})
 
 
 @pytest.mark.parametrize('sport', ['NFL','NCAAF'])
