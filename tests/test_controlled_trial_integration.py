@@ -4,7 +4,10 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-from app_core.controlled_trial import AUTHORITY, PUBLIC_FIELDS, VERSION
+from app_core.controlled_trial import (
+    AUTHORITY, LEGACY_PUBLIC_FIELDS, LEGACY_VERSION, PUBLIC_FIELDS, VERSION,
+    public_fields_for_version, validate_contract,
+)
 from app_core.per_game_boards import per_game_board
 from app_core.public_board import build_package, pick_record, validate_package
 from app_core.public_history import selections
@@ -30,7 +33,12 @@ def contract(**updates):
         "sportsbook": "Novig",
         "quote_timestamp": QUOTE,
         "start": START,
+        "probability_source": "calibrated_probability",
+        "source_probability_semantics": "win_conditional_on_decision",
+        "probability_semantics": "win_unconditional_with_push",
         "estimated_probability": 0.3981907740602143,
+        "push_probability": 0.0,
+        "loss_probability": 1 - 0.3981907740602143,
         "break_even_probability": 1 / 2.67,
         "estimated_price_edge": 0.3981907740602143 - 1 / 2.67,
         "estimated_expected_value": 0.3981907740602143 * 2.67 - 1,
@@ -48,6 +56,16 @@ def contract(**updates):
     value.update(updates)
     assert set(value) == set(PUBLIC_FIELDS)
     return value
+
+
+def test_archived_v1_contract_is_read_only():
+    historical = {key: value for key, value in contract().items()
+                  if key in LEGACY_PUBLIC_FIELDS}
+    historical["version"] = LEGACY_VERSION
+    assert public_fields_for_version(historical) == LEGACY_PUBLIC_FIELDS
+    with pytest.raises(ValueError):
+        validate_contract(historical)
+    validate_contract(historical, read_only_legacy=True)
 
 
 def candidate():

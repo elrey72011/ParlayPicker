@@ -1703,7 +1703,8 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         best_picks_df,
         trial_reviews,
         float(controls["bankroll"]),
-        now=trial_now,
+        now=pd.Timestamp.now(tz="UTC").to_pydatetime(),
+        diagnostics=diagnostics,
     )
     diagnostics["wager_contract_audit"] = contract_audit
     funded_mask=best_picks_df.get("production_eligible",pd.Series(False,index=best_picks_df.index)).fillna(False).astype(bool)

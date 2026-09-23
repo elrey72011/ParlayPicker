@@ -35,7 +35,7 @@ const html=baseHtml.replace(/(<script id="board-data" type="application\/json">)
    assert.equal(await page.locator('h1:visible').count(),1);assert.equal(await page.locator('h1:visible').innerText(),title);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    if(['props','results','dfs'].includes(key))assert.equal(await page.locator('#'+key+' > h2').filter({hasText:/^(Player Props|Published Pick Results|DraftKings DFS)$/}).count(),0);
-   if(key==='parlays')assert.deepEqual(await page.locator('#parlays > h2').allTextContents(),['Qualified Parlays','Research Parlays']);
+   if(key==='parlays')assert.deepEqual(await page.locator('#parlays > h2').allTextContents(),['Parlay products','Legacy qualified combinations','Research Parlays']);
    await screenshot(page,'cleanup-'+key+'-'+width);
   }
   await page.locator('[data-site-tab="games"]').first().click();
@@ -91,7 +91,7 @@ const html=baseHtml.replace(/(<script id="board-data" type="application\/json">)
  await page.waitForFunction(()=>document.getElementById('siteFreshnessText').textContent.includes('Analysis 5d old'));
  assert.match(await page.locator('#siteFreshnessText').innerText(),/Analysis 5d old.*site published just now/);
  assert.equal(await page.locator('#siteFreshness').getAttribute('data-state'),'old');
- assert.match(await page.locator('#board-title').innerText(),/No approved plays right now/);
+ assert.match(await page.locator('#board-title').innerText(),/No current wagers right now/);
  await screenshot(page,'picks-old-analysis');
  await page.locator('[data-board-view=sides]').click();await page.reload();assert.equal(await page.locator('#gameBoards h2').innerText(),'Sides');
  const blocked=await browser.newPage();await blocked.addInitScript(()=>{Storage.prototype.getItem=()=>{throw Error('blocked')};Storage.prototype.setItem=()=>{throw Error('blocked')};});await blocked.goto(url);assert.equal(await blocked.locator('#gameBoards h2').innerText(),'Overall Best Picks');await blocked.locator('[data-board-view=totals]').click();assert.equal(await blocked.locator('#gameBoards h2').innerText(),'Totals');await blocked.close();

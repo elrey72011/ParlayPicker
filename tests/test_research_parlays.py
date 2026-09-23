@@ -120,6 +120,7 @@ class Element {constructor(tag,text){this.tag=tag;this.textContent=text||'';this
 const nodes={parlayRows:new Element('div'),researchParlayRows:new Element('div')};
 const document={getElementById:id=>nodes[id]};
 const el=(tag,text)=>new Element(tag,text),fmt=x=>String(x),table=rows=>el('table',JSON.stringify(rows));
+const renderParlayProducts=()=>{};
 let expired=false;const state=r=>expired?'STALE':r.status;
 function text(n){return n.textContent+' '+n.children.map(text).join(' ');}
 """ + 'const data='+json.dumps(data)+';\n' + functions + r"""

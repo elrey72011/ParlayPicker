@@ -191,8 +191,12 @@ def team_name(value, sport):
         compact = re.sub(r'[^a-z0-9]', '', str(value).casefold())
         if compact in {'floridaam', 'floridaamrattlers', 'famu', 'famurattlers'}:
             return 'FLORIDA A&M'
-    if sport.upper() == 'MLB' and str(value).strip().casefold() == 'seattle':
-        value = 'Seattle Mariners'
+    if sport.upper() == 'MLB':
+        from app_core.mlb_team_aliases import MLB_TEAM_ALIASES
+        key = re.sub(r'[^a-z0-9]+', ' ', str(value).casefold()).strip()
+        aliases = {re.sub(r'[^a-z0-9]+', ' ', name.casefold()).strip(): full
+                   for name, full in MLB_TEAM_ALIASES.items()}
+        value = aliases.get(key, value)
     return normalize_result_team(value)
 
 

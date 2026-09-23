@@ -1,16 +1,16 @@
 """Recover MLB prop start times only from the same archived analysis package."""
 import re
 from app_core.public_board import timestamp
+from app_core.mlb_team_aliases import MLB_TEAM_ALIASES
 
 
 def game_key(row):
-    from app_core.theover_ingest import TEAM_ALIAS_MAP_BY_LEAGUE
     sport=row.get('sport','').upper()
     if sport!='MLB':return None
     parts=re.split(r'\s+(?:at|@|vs?\.?)\s+',row.get('game',''),flags=re.I)
     if len(parts)!=2:return None
     clean=lambda text:re.sub(r'[^a-z0-9]+',' ',text.casefold()).strip()
-    aliases={clean(k):clean(v) for k,v in TEAM_ALIAS_MAP_BY_LEAGUE['MLB'].items()}
+    aliases={clean(k):clean(v) for k,v in MLB_TEAM_ALIASES.items()}
     def team(value):
         name=clean(value)
         for _ in range(3):name=aliases.get(name,name)

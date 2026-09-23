@@ -15,6 +15,7 @@ import pytz
 from app_core.feature_processing import robust_normalize_team
 from app_core.kalshi_integrator import team_code_for_league
 from app_core.team_name_matcher import TeamNameMatcher
+from app_core.mlb_team_aliases import MLB_TEAM_ALIASES
 
 # Assuming rapidfuzz is available as per requirements
 try:
@@ -145,35 +146,7 @@ def _is_ambiguous_match(input_team: str, matched_team: str) -> bool:
 
 # League-specific team alias mappings to prevent cross-league contamination
 TEAM_ALIAS_MAP_BY_LEAGUE = {
-    "MLB": {
-        # Full official names (Odds API format)
-        "Chicago Cubs": "Chicago Cubs", "Chicago White Sox": "Chicago White Sox",
-        "New York Yankees": "New York Yankees", "New York Mets": "New York Mets",
-        "Los Angeles Dodgers": "Los Angeles Dodgers", "Los Angeles Angels": "Los Angeles Angels",
-        # TheOver CSV abbreviated forms: "Chi. Cubs", "Chi. White Sox", "LA Dodgers" etc.
-        # After normalize_team_name strips punctuation these arrive as below.
-        "Chi Cubs": "Chicago Cubs", "Chi White Sox": "Chicago White Sox",
-        "Chi. Cubs": "Chicago Cubs", "Chi. White Sox": "Chicago White Sox",
-        "LA Dodgers": "Los Angeles Dodgers", "LA Angels": "Los Angeles Angels",
-        "NY Yankees": "New York Yankees", "NY Mets": "New York Mets",
-        # Athletics (team relocated; no city prefix in TheOver/Odds API)
-        "Athletics": "Athletics", "Oakland Athletics": "Athletics",
-        "Sacramento Athletics": "Athletics",
-        # Standard city-name mappings for all 30 teams
-        "Arizona": "Arizona Diamondbacks", "Atlanta": "Atlanta Braves",
-        "Baltimore": "Baltimore Orioles", "Boston": "Boston Red Sox",
-        "Cincinnati": "Cincinnati Reds", "Cleveland": "Cleveland Guardians",
-        "Colorado": "Colorado Rockies", "Detroit": "Detroit Tigers",
-        "Houston": "Houston Astros", "Kansas City": "Kansas City Royals",
-        "Miami": "Miami Marlins", "Milwaukee": "Milwaukee Brewers",
-        "Minnesota": "Minnesota Twins", "Oakland": "Oakland Athletics",
-        "Philadelphia": "Philadelphia Phillies", "Pittsburgh": "Pittsburgh Pirates",
-        "San Diego": "San Diego Padres", "San Francisco": "San Francisco Giants",
-        "Seattle": "Seattle Mariners", "Saint Louis": "St. Louis Cardinals",
-        "St. Louis": "St. Louis Cardinals", "St Louis": "St. Louis Cardinals",
-        "Tampa Bay": "Tampa Bay Rays", "Texas": "Texas Rangers",
-        "Toronto": "Toronto Blue Jays", "Washington": "Washington Nationals",
-    },
+    "MLB": MLB_TEAM_ALIASES,
     "NHL": {
         "Seattle": "Seattle Kraken", "New Jersey": "New Jersey Devils",
         "Buffalo": "Buffalo Sabres", "Philadelphia": "Philadelphia Flyers",
