@@ -45,11 +45,11 @@ def runtime_configuration_status():
     result = {"PARLAYPICKER_DRIVE_FOLDER_ID": "configured" if os.environ.get("PARLAYPICKER_DRIVE_FOLDER_ID", "").strip() else "missing"}
     # The live pipeline reads ODDS_API_KEY from the environment or Streamlit secrets.
     # Keep the existing status label, but report the credential the pipeline uses.
-    odds_key = os.environ.get("ODDS_API_KEY", "").strip() or os.environ.get("THE_ODDS_API_KEY", "").strip()
+    odds_key = os.environ.get("ODDS_API_KEY", "").strip()
     if not odds_key:
         try:
             import streamlit as st
-            odds_key = str(st.secrets.get("ODDS_API_KEY") or st.secrets.get("THE_ODDS_API_KEY") or "").strip()
+            odds_key = str(st.secrets.get("ODDS_API_KEY") or "").strip()
         except Exception:
             pass
     result["THE_ODDS_API_KEY"] = "configured" if odds_key else "missing"
