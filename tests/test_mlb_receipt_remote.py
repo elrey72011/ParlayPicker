@@ -71,6 +71,20 @@ def test_scheduled_reconciliation_restores_before_outcomes_and_backs_up(monkeypa
     assert result['remote_backup_verified'] is True
 
 
+def test_scheduled_cli_reports_only_error_class(monkeypatch, capsys):
+    import sys
+    from scripts import capture_mlb_pregame_receipts as cli
+    def fail(**_kwargs):
+        raise ValueError('private provider URL token=secret')
+    monkeypatch.setattr(remote, 'reconcile_durable', fail)
+    monkeypatch.setattr(sys, 'argv', ['capture_mlb_pregame_receipts.py', 'reconcile-remote'])
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 2
+    assert 'ValueError' in capsys.readouterr().err
+    assert 'secret' not in str(exc.value)
+
+
 def test_remote_corruption_fails_before_restore(fixture, tmp_path):
     collect(fixture)
     store = Store()

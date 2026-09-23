@@ -28,7 +28,10 @@ def main(argv=None):
         report = {"records_restored": restored, **backup(client, folder, args.database)}
     elif args.command == "reconcile-remote":
         from app_core.mlb_receipt_remote import reconcile_durable
-        report = reconcile_durable(path=args.database, max_games=args.max_feeds)
+        try:
+            report = reconcile_durable(path=args.database, max_games=args.max_feeds)
+        except Exception as exc:
+            parser.exit(2, f"MLB receipt reconciliation failed ({type(exc).__name__})\n")
     elif args.command in {"audit", "backup"}:
         from app_core.mlb_receipt_audit import audit_store, backup_bundle
         report = audit_store(args.database) if args.command == "audit" else backup_bundle(args.database)
