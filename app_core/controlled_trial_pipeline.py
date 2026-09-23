@@ -7,7 +7,10 @@ from typing import Any, MutableMapping
 
 import pandas as pd
 
-from app_core.controlled_trial import attach_reviews, select_review_candidates
+from app_core.controlled_trial import (
+    MAX_PICKS_PER_SLATE, MAX_REVIEW_CANDIDATES_PER_SLATE, attach_reviews,
+    enabled as trials_enabled, evaluate_candidates, select_review_candidates,
+)
 
 
 def prepare_review_candidates(
@@ -24,7 +27,32 @@ def prepare_review_candidates(
     pool = bind_authoritative_candidates(pool)
     pool = attest_candidate_integrity(pool)
     pool = prepare_live(pool)
+    pool = evaluate_candidates(pool, now=now)
     trials = select_review_candidates(pool, now=now)
+    selected = set(trials.get("candidate_id", pd.Series(dtype=str)).astype(str))
+    selected_games = set(trials.get("game_id", pd.Series(dtype=str)).astype(str))
+    active = trials_enabled(now=now)
+    pool["controlled_trial_review_status"] = [
+        ("NOT_ELIGIBLE" if not bool(row.get("controlled_trial_deterministic_eligible"))
+         else "NOT_REVIEWED_DISABLED" if not active
+         else "PENDING" if str(row.get("candidate_id")) in selected
+         else "NOT_REVIEWED_GAME_DEDUP" if str(row.get("game_id")) in selected_games
+         else "NOT_REVIEWED_BUDGET")
+        for _, row in pool.iterrows()
+    ]
+    if not trials.empty:
+        trials["controlled_trial_review_status"] = "PENDING"
+    diagnostics["controlled_trial_deterministic_eligible_count"] = int(
+        pool["controlled_trial_deterministic_eligible"].fillna(False).astype(bool).sum()
+    ) if not pool.empty else 0
+    diagnostics["controlled_trial_review_budget"] = MAX_REVIEW_CANDIDATES_PER_SLATE
+    diagnostics["controlled_trial_final_selection_cap"] = MAX_PICKS_PER_SLATE
+    diagnostics["controlled_trial_not_reviewed_budget_count"] = int(
+        pool["controlled_trial_review_status"].eq("NOT_REVIEWED_BUDGET").sum()
+    ) if not pool.empty else 0
+    diagnostics["controlled_trial_not_reviewed_game_dedup_count"] = int(
+        pool["controlled_trial_review_status"].eq("NOT_REVIEWED_GAME_DEDUP").sum()
+    ) if not pool.empty else 0
     return pool, trials
 
 
@@ -99,7 +127,28 @@ def review_candidates(
             product="best_pick",
             diagnostics=diagnostics,
         )
+        def review_state(row):
+            status = str(row.get("gemini_review_status", "")).upper()
+            error = row.get("gemini_error")
+            has_error = isinstance(error, str) and bool(error.strip())
+            if status == "APPROVE":
+                return "APPROVE"
+            if status in {"HOLD", "HARD_VETO"}:
+                return "HOLD"
+            if status in {"UNAVAILABLE", "SERVICE_ERROR", "TIMEOUT"} or has_error:
+                return "REVIEW_FAILURE"
+            return "REJECTED"
+        trial_flags = targets.get("controlled_trial_candidate", pd.Series(False, index=targets.index))
+        trial_flags = trial_flags.fillna(False).astype(str).str.lower().isin({"true", "1", "yes"})
+        targets["controlled_trial_review_status"] = [
+            review_state(row) if trial_flags.loc[idx] else None
+            for idx, row in targets.iterrows()
+        ]
         best = attach_reviews(best, targets)
         trials = attach_reviews(trials, targets)
+        diagnostics["controlled_trial_review_status_counts"] = {
+            str(key): int(value) for key, value in
+            targets["controlled_trial_review_status"].dropna().value_counts().items()
+        }
     pool_reviews = targets.drop(columns=["_review_target_key"], errors="ignore")
     return best, trials, pool_reviews, error

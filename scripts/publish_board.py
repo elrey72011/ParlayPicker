@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 
@@ -19,9 +20,19 @@ def production_source_fingerprint():
     """Invalidate owner previews when any production rendering source changes."""
     digest = hashlib.sha256()
     for name in ('publishing/board.html', 'publishing/site.css', 'publishing/site.js',
-                 'app_core/public_site_shell.py', 'scripts/publish_board.py'):
+                 'app_core/public_site_shell.py', 'scripts/publish_board.py',
+                 'app_core/public_board.py', 'app_core/board_diagnostics.py',
+                 'app_core/public_prop_timing.py', 'app_core/mlb_team_aliases.py',
+                 'app_core/true_parlay_public.py',
+                 'app_core/controlled_trial.py', 'app_core/controlled_trial_pipeline.py',
+                 'app_core/trial_authority.py', 'app_core/public_history.py',
+                 'app_core/public_quote_policy.py', 'core/true_parlay_engine.py',
+                 'core/exposure_ledger.py', 'core/price_value.py',
+                 'core/wager_decisions.py'):
         digest.update(name.encode('utf-8'))
-        digest.update((ROOT / name).read_bytes())
+        path = ROOT / name
+        if path.exists():
+            digest.update(path.read_bytes())
     return digest.hexdigest()
 
 
@@ -33,12 +44,34 @@ def public_package(package):
     return package
 
 
-def build_public_assets(package, published_at=None):
+def source_revision():
+    """Identify the checkout used to render assets; dirty code is explicit."""
+    try:
+        sha = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, check=True,
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+        dirty = bool(subprocess.run(['git', 'status', '--porcelain'], cwd=ROOT, check=True,
+                                    capture_output=True, text=True, timeout=5).stdout.strip())
+        return sha if re.fullmatch(r'[a-f0-9]{40}', sha) else None, dirty
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None, None
+
+
+def build_public_assets(package, published_at=None, *, source_git_sha=None,
+                        source_git_dirty=None, source_fingerprint=None,
+                        include_source=True, derive_source=True):
     package = public_package(package)
     board = json.dumps(package, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(',', ':'))
     digest = hashlib.sha256(board.encode('utf-8')).hexdigest()
     version = {'build_id': digest, 'board_hash': digest,
                'published_at': published_at or datetime.now(timezone.utc).isoformat()}
+    if include_source:
+        if derive_source and source_git_sha is None and source_git_dirty is None:
+            source_git_sha, source_git_dirty = source_revision()
+        if derive_source and source_fingerprint is None:
+            source_fingerprint = production_source_fingerprint()
+        version['source_git_sha'] = source_git_sha
+        version['source_git_dirty'] = source_git_dirty
+        version['source_fingerprint'] = source_fingerprint
     return board, json.dumps(version, sort_keys=True)
 
 
@@ -69,7 +102,12 @@ def assets_from_html(html):
     if 'id="board-version"' not in html:
         return assets_from_html(render(embedded('board-data'), live=True))
     version = embedded('board-version')
-    board, expected = build_public_assets(embedded('board-data'), version['published_at'])
+    board, expected = build_public_assets(embedded('board-data'), version['published_at'],
+                                          source_git_sha=version.get('source_git_sha'),
+                                          source_git_dirty=version.get('source_git_dirty'),
+                                          source_fingerprint=version.get('source_fingerprint'),
+                                          include_source='source_git_sha' in version,
+                                          derive_source=False)
     if version != json.loads(expected):
         raise ValueError('Publication payload hash mismatch')
     return {'index.html': html, 'site.css': (ROOT/'publishing/site.css').read_text(encoding='utf-8'),

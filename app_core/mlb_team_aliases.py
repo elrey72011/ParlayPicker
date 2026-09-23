@@ -1,0 +1,26 @@
+"""Lightweight MLB aliases shared by ingestion and public package timing."""
+
+MLB_TEAM_ALIASES = {
+    "Chicago Cubs": "Chicago Cubs", "Chicago White Sox": "Chicago White Sox",
+    "New York Yankees": "New York Yankees", "New York Mets": "New York Mets",
+    "Los Angeles Dodgers": "Los Angeles Dodgers", "Los Angeles Angels": "Los Angeles Angels",
+    "Chi Cubs": "Chicago Cubs", "Chi White Sox": "Chicago White Sox",
+    "Chi. Cubs": "Chicago Cubs", "Chi. White Sox": "Chicago White Sox",
+    "LA Dodgers": "Los Angeles Dodgers", "LA Angels": "Los Angeles Angels",
+    "NY Yankees": "New York Yankees", "NY Mets": "New York Mets",
+    "Athletics": "Athletics", "Oakland Athletics": "Athletics",
+    "Sacramento Athletics": "Athletics",
+    "Arizona": "Arizona Diamondbacks", "Atlanta": "Atlanta Braves",
+    "Baltimore": "Baltimore Orioles", "Boston": "Boston Red Sox",
+    "Cincinnati": "Cincinnati Reds", "Cleveland": "Cleveland Guardians",
+    "Colorado": "Colorado Rockies", "Detroit": "Detroit Tigers",
+    "Houston": "Houston Astros", "Kansas City": "Kansas City Royals",
+    "Miami": "Miami Marlins", "Milwaukee": "Milwaukee Brewers",
+    "Minnesota": "Minnesota Twins", "Oakland": "Oakland Athletics",
+    "Philadelphia": "Philadelphia Phillies", "Pittsburgh": "Pittsburgh Pirates",
+    "San Diego": "San Diego Padres", "San Francisco": "San Francisco Giants",
+    "Seattle": "Seattle Mariners", "Saint Louis": "St. Louis Cardinals",
+    "St. Louis": "St. Louis Cardinals", "St Louis": "St. Louis Cardinals",
+    "Tampa Bay": "Tampa Bay Rays", "Texas": "Texas Rangers",
+    "Toronto": "Toronto Blue Jays", "Washington": "Washington Nationals",
+}

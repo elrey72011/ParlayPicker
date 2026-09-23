@@ -8,6 +8,7 @@ import math
 from collections import defaultdict
 from core.market_policy import production_market, MARKET_POLICY_VERSION
 from core.sport_policy import SportPolicy, DEPLOYMENT_STATES
+from core.price_value import price_value
 
 
 def finite(value):
@@ -93,9 +94,10 @@ def candidate_decision(row, policy: SportPolicy, now, *, outage_policy=None):
     valid_push = push is not None and 0 <= push < 1 and (mean is None or mean + push <= 1)
     if not valid_push:
         reasons.append("missing_or_invalid_push_probability")
-    ev = p * decimal + push - 1 if valid_p and valid_push and decimal is not None else None
-    break_even = (1 - push) / decimal if valid_push and decimal is not None else None
-    edge = p - break_even if valid_p and break_even is not None else None
+    pricing = price_value(p, push, decimal, minimum_edge=policy.min_conservative_edge) if valid_p and valid_push and decimal is not None else None
+    ev = pricing['expected_value'] if pricing else None
+    break_even = pricing['break_even'] if pricing else None
+    edge = pricing['edge'] if pricing else None
     if ev is None or ev <= 0:
         reasons.append("nonpositive_conservative_ev")
     if edge is None or edge < policy.min_conservative_edge:
@@ -132,7 +134,7 @@ def candidate_decision(row, policy: SportPolicy, now, *, outage_policy=None):
     stake = 0.0
     kelly = 0.0
     if not reasons:
-        kelly = max(0.0, ev / ((decimal - 1) * (1 - push))) * policy.kelly_fraction
+        kelly = pricing['full_kelly'] * policy.kelly_fraction
         stake = min(kelly, caps[tier], policy.sport_exposure_cap) * reduction
         if outage_cap is not None:
             stake = min(stake, outage_cap)
@@ -145,7 +147,7 @@ def candidate_decision(row, policy: SportPolicy, now, *, outage_policy=None):
                 gemini_outage_capped=outage and not reasons, market_policy_version=MARKET_POLICY_VERSION, sport_policy_version=policy.version,
                 conservative_ev=ev, conservative_edge=edge, break_even_probability=break_even,
                 strategic_action=action, reason_for_pass=reasons, recommended_fraction=stake,
-                minimum_decimal_price=((1 - push) / p if valid_p and valid_push else None), push_probability=push)
+                minimum_decimal_price=(pricing['minimum_decimal_price'] if pricing else None), push_probability=push)
 
 
 def select_matchups(rows, policies, now):

@@ -205,7 +205,11 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
     summary.pop('combinations')
     qualified_parlays = build_production_parlays(games['overall'], built_at)
     research_parlays = build_research_parlays(games['overall'], built_at, qualified_parlays=qualified_parlays, diversified=True)
-    return {'schema_version':2, 'parlay_funnel':summary, 'parlay_policy':'canonical-v3', 'research_parlay_policy':'diversified-v2', 'research_parlays':research_parlays, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':qualified_parlays, 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
+    from app_core.true_parlay_public import build_product_board, POLICY_VERSION
+    parlay_products, product_funnel = build_product_board(games, public_props, built_at)
+    from app_core.board_diagnostics import build_selected_diagnostics
+    diagnostics = build_selected_diagnostics([row for _, row in overall.iterrows()], games['overall'], built_at, QUOTE_MAX_AGE_MINUTES)
+    return {'schema_version':2, 'parlay_funnel':summary, 'parlay_policy':'canonical-v3', 'research_parlay_policy':'diversified-v2', 'research_parlays':research_parlays, 'parlay_product_policy':POLICY_VERSION, 'parlay_products':parlay_products, 'parlay_product_funnel':product_funnel, 'board_diagnostics':diagnostics, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':qualified_parlays, 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
             'games':games, 'props':public_props,
             'dfs':lineups}
 
@@ -221,7 +225,7 @@ def validate_package(package):
         value = row.get('expected_stat')
         if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
             raise ValueError('Invalid expected statistic')
-    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' research_parlay_policy research_parlays' if 'research_parlay_policy' in package else '') + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else '') + (' parlay_policy' if 'parlay_policy' in package else '') + (' parlay_funnel' if 'parlay_funnel' in package else ''))
+    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' research_parlay_policy research_parlays' if 'research_parlay_policy' in package else '') + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else '') + (' parlay_policy' if 'parlay_policy' in package else '') + (' parlay_funnel' if 'parlay_funnel' in package else '') + (' parlay_product_policy parlay_products parlay_product_funnel' if 'parlay_product_policy' in package else '') + (' board_diagnostics' if 'board_diagnostics' in package else ''))
     if package.get("parlay_policy", "supported-v2") not in {"supported-v2", "canonical-v3"}:
         raise ValueError("Unsupported parlay policy")
     package_age_minutes(package)
@@ -234,6 +238,19 @@ def validate_package(package):
     if 'top_ten_policy' in package and (package['top_ten_policy'] != 'first-publication-v1' or package.get('selection_policy') != 'qualified-v1'):
         raise ValueError('Unsupported Top 10 policy')
     timestamp(package['built_at'])
+    if 'board_diagnostics' in package:
+        from app_core.board_diagnostics import validate_selected_diagnostics
+        validate_selected_diagnostics(package['board_diagnostics'], package['games']['overall'], package['built_at'], package['stale_after_minutes'])
+    if 'parlay_product_policy' in package:
+        from app_core.true_parlay_public import POLICY_VERSION, build_product_board
+        if package['parlay_product_policy'] != POLICY_VERSION:
+            raise ValueError('Unsupported true-parlay product policy')
+        expected_products, expected_funnel = build_product_board(package['games'], package['props'], datetime.fromisoformat(package['built_at']))
+        if package['parlay_products'] != expected_products or package['parlay_product_funnel'] != expected_funnel:
+            raise ValueError('True-parlay records/funnel must match frozen input')
+        if any(r['production_eligible'] or r['recommended_stake'] or r['status'] == 'ACTIONABLE'
+               for r in package['parlay_products']):
+            raise ValueError('Research publication cannot activate true parlays')
     exact(package['games'], 'overall sides totals')
     for rows in [*package['games'].values(), package['props']]:
         if not isinstance(rows, list):
@@ -252,9 +269,9 @@ def validate_package(package):
                 exact(row['wager_contract'],' '.join(PUBLIC_FIELDS))
                 validate_snapshot(row['wager_contract'])
             if 'controlled_trial_contract' in row:
-                from app_core.controlled_trial import PUBLIC_FIELDS as TRIAL_FIELDS, validate_contract
-                exact(row['controlled_trial_contract'], ' '.join(TRIAL_FIELDS))
-                validate_contract(row['controlled_trial_contract'])
+                from app_core.controlled_trial import public_fields_for_version, validate_contract
+                exact(row['controlled_trial_contract'], ' '.join(public_fields_for_version(row['controlled_trial_contract'])))
+                validate_contract(row['controlled_trial_contract'], read_only_legacy=True)
             projection_metric(row)
             if any(k in row and not isinstance(row[k],str) for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','espn_event_id','mlb_game_pk','game_number', *PUBLIC_NFL_CONTEXT_FIELDS)):
                 raise ValueError('Invalid public review labels')

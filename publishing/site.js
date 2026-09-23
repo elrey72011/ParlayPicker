@@ -36,13 +36,23 @@
     if (!version || !/^[a-f0-9]{64}$/.test(version.board_hash) ||
         version.build_id !== version.board_hash || !Number.isFinite(Date.parse(version.published_at)))
       throw new Error('Invalid publication version');
+    if ('source_git_sha' in version && version.source_git_sha !== null &&
+        !/^[a-f0-9]{40}$/.test(version.source_git_sha)) throw new Error('Invalid source revision');
+    if ('source_git_dirty' in version && version.source_git_dirty !== null &&
+        typeof version.source_git_dirty !== 'boolean') throw new Error('Invalid source state');
+    if ('source_fingerprint' in version && !/^[a-f0-9]{64}$/.test(version.source_fingerprint))
+      throw new Error('Invalid source fingerprint');
   }
   function validateData(next) {
     if (!next || ![1,2,3,4,5].includes(next.schema_version) ||
         !Number.isFinite(Date.parse(next.built_at)) || ![15,30].includes(next.stale_after_minutes) ||
         !next.games || !['overall','sides','totals'].every(key => Array.isArray(next.games[key])) ||
         !Array.isArray(next.props) || !Array.isArray(next.dfs) ||
-        (next.results !== undefined && !Array.isArray(next.results))) throw new Error('Invalid board data');
+        (next.results !== undefined && !Array.isArray(next.results)) ||
+        (next.parlay_products !== undefined && !Array.isArray(next.parlay_products)) ||
+        (next.parlay_product_funnel !== undefined &&
+          (!next.parlay_product_funnel || typeof next.parlay_product_funnel !== 'object')))
+      throw new Error('Invalid board data');
   }
   function showUpdateToast() {
     const toast = document.getElementById('updateToast');

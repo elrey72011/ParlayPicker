@@ -71,6 +71,10 @@ def test_publish_rejects_invalid_draft_and_preserves_previous(tmp_path):
     (draft/'public-board.json').write_text(json.dumps(package))
     target=publish(draft,dest);before=target.read_text(encoding='utf-8')
     package['games']['overall'][0]['pick']='new selection'
+    # Exercise legacy draft republishing. Current packages bind diagnostics and
+    # parlay candidates to the exact saved rows and correctly reject this edit.
+    for key in ('board_diagnostics','parlay_product_policy','parlay_products','parlay_product_funnel'):
+        package.pop(key,None)
     (draft/'public-board.json').write_text(json.dumps(package))
     publish(draft,dest)
     assert (dest/'previous.html').read_text(encoding='utf-8')==before
@@ -175,6 +179,9 @@ def test_public_prop_projection_is_model_count_and_validated():
     prop = pick_record(row, prop=True)
     assert prop['expected_stat'] == 6.2
     package = build_package(*boards()); package['props'] = [prop]
+    # This legacy row-mutation fixture predates frozen product derivation.
+    for key in ('board_diagnostics','parlay_product_policy','parlay_products','parlay_product_funnel'):
+        package.pop(key,None)
     validate_package(package)
     for invalid in (-1, float('nan'), True, '6.2'):
         prop['expected_stat'] = invalid
@@ -250,7 +257,7 @@ const now=Date.now();
 """+funcs+"""
 const row={sport:'NCAAF',quote_source:'FanDuel',quote_time:new Date(now-60000).toISOString(),as_of:new Date(now-30000).toISOString(),start:new Date(now+3600000).toISOString(),status:'PASS'};
 assert.equal(state(row),'PASS');
-assert.equal(state({...row,sport:'MLB'}),'UNAVAILABLE');
+assert.equal(state({...row,sport:'MLB'}),'PASS');
 assert.equal(state({...row,sport:'NFL'}),'PASS');
 assert.equal(state({...row,sport:'NFL',quote_time_basis:'espn_observed'}),'UNAVAILABLE');
 assert.equal(state({...row,quote_source:'Unknown'}),'UNAVAILABLE');

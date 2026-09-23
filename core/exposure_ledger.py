@@ -84,6 +84,17 @@ def snapshot(path,*,now=None):
         for leg in e['legs']:
             keys.update([f"sport:{leg['sport']}",f"game:{leg['sport']}:{leg['game_id']}"])
             keys.update(f"team:{leg['sport']}:{t}" for t in leg['team_ids'])
+            # The same exact market consumes leg and overlapping-ticket risk
+            # whether it was placed as a straight or within a parlay. Candidate
+            # IDs are deliberately excluded: they can change on republishing.
+            market_key=digest({'sport':leg['sport'],'game_id':leg['game_id'],
+                               'market_type':leg['market'],'selection':leg['selection'],
+                               'line':leg['line']})
+            keys.update((f'leg:{market_key}',f'overlap:{market_key}'))
+        if e.get('parlay_id'):
+            keys.add(f"parlay:{e['parlay_id']}")
+        if e.get('product_type')=='SAME_GAME_PARLAY' or e.get('sgp_component_ids'):
+            keys.add('sgp:total')
         for key in keys: used[key]=used.get(key,0)+fraction
     result={'as_of':now.isoformat(),'bankroll':float(cfg['bankroll']),'unit_value':float(cfg['unit_value']),'currency':cfg['currency'],'committed':used,'ledger_hash':digest(history),**{k:float(cfg[k]) for k in LIMITS}}
     result['snapshot_hash']=digest(result)
