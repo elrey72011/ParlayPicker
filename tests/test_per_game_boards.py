@@ -161,6 +161,47 @@ def test_college_fallback_prefers_novig_then_exact_ranked_sportsbook():
     assert per_game_board(mlb,pd.DataFrame([quoted_candidate('draftkings')]),novig_only=True,college_fallback=True).iloc[0].quote_source=='Unavailable'
 
 
+def test_mlb_wnba_fallback_creates_only_fresh_research_locks():
+    from app_core.locked_picks import lock_candidates
+    from app_core.public_board import build_package, validate_package
+
+    for league, book, label in (('MLB', 'draftkings', 'DraftKings'),
+                                ('WNBA', 'fanduel', 'FanDuel'),
+                                ('MLB', 'betmgm', 'BetMGM')):
+        board = pd.DataFrame([final(
+            league=league, best_pick='Under 8.5', market_type='total_under',
+            odds_american=-105, export_run_id='20260911T200000.000000Z',
+            game_time_est='2026-09-11 7:00 PM ET',
+            production_eligible=True, wager_approved=True,
+        )])
+        fallback = quoted_candidate(book, league=league)
+        audit = pd.DataFrame([fallback])
+        assert per_game_board(board, audit, novig_only=True).iloc[0].quote_source == 'Unavailable'
+        views = [per_game_board(board, audit, family, novig_only=True, research_fallback=True)
+                 for family in ('overall', 'sides', 'totals')]
+        package = build_package(*views)
+        validate_package(package)
+        leg = package['games']['overall'][0]
+        assert leg['quote_source'] == label
+        assert leg['status'] == 'PASS' and leg['pick'] == 'Under 8.5'
+        assert views[0].iloc[0].Play_Stake == 0
+        assert len(lock_candidates(package, '2026-09-11T20:01:00+00:00')) == 1
+        assert lock_candidates(package, '2026-09-11T20:30:00+00:00') == []
+        assert lock_candidates(package, '2026-09-11T23:00:00+00:00') == []
+        for bad in (dict(fallback, total_line=9), dict(fallback, odds_american=-115),
+                    dict(fallback, export_run_id='20260911T210000.000000Z')):
+            row = per_game_board(board, pd.DataFrame([bad]), novig_only=True, research_fallback=True).iloc[0]
+            assert row.quote_source == 'Unavailable'
+
+
+def test_mlb_fallback_still_prefers_novig():
+    board = pd.DataFrame([final(export_run_id='20260911T200000.000000Z')])
+    audit = pd.DataFrame([quoted_candidate('draftkings', best_available_rank=1),
+                          quoted_candidate('novig', best_available_rank=2)])
+    row = per_game_board(board, audit, novig_only=True, research_fallback=True).iloc[0]
+    assert row.quote_source == 'Novig'
+
+
 def test_college_sportsbook_package_lock_and_report_preserve_source():
     from app_core.public_board import build_package, validate_package
     from app_core.public_history import eligible, report
@@ -174,7 +215,7 @@ def test_college_sportsbook_package_lock_and_report_preserve_source():
     assert leg['quote_source']=='FanDuel'
     at='2026-09-11T20:01:00+00:00'
     assert eligible(leg,datetime.fromisoformat(at))
-    assert not eligible(dict(leg,sport='MLB'),datetime.fromisoformat(at))
+    assert not eligible(dict(leg,sport='NHL'),datetime.fromisoformat(at))
     assert not eligible(leg,datetime.fromisoformat('2026-09-11T20:30:00+00:00'))
     locks=lock_candidates(package,at)
     assert len(locks)==1 and locked_selections(locks)[0]['legs'][0]['quote_source']=='FanDuel'
