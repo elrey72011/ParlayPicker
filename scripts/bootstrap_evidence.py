@@ -93,7 +93,7 @@ def main():
         for sport in SPORTS:
             report = stage('validate_' + sport, lambda: validate(a.database, sport, plans[sport]))
             (output / (sport + '.json')).write_text(json.dumps(report, indent=2), encoding='utf-8')
-            (output / (sport + '.md')).write_text('# ' + sport + '\\n\\n' + json.dumps(report, indent=2), encoding='utf-8')
+            (output / (sport + '.md')).write_text('# ' + sport + '\n\n' + json.dumps(report, indent=2), encoding='utf-8')
             result[sport] = {'state': report['deployment_state'], 'blockers': report['blockers']}
     if a.backup:
         backup('backup_final')
