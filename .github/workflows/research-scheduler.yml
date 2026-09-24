@@ -35,7 +35,7 @@ jobs:
     if: vars.RESEARCH_SCHEDULER_ENABLED == 'true'
     needs: configuration-preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 60
     env:
       PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
       PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
