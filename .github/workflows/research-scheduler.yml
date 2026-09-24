@@ -15,8 +15,25 @@ concurrency:
   group: research-capture-and-grading
   cancel-in-progress: false
 jobs:
+  configuration-preflight:
+    if: github.event_name == 'workflow_dispatch' || vars.RESEARCH_SCHEDULER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      PREFLIGHT_RESEARCH_ENABLED: ${{ vars.RESEARCH_SCHEDULER_ENABLED == 'true' }}
+      PREFLIGHT_DRIVE_FOLDER_PRESENT: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID != '' }}
+      PREFLIGHT_SERVICE_ACCOUNT_PRESENT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT != '' }}
+      PREFLIGHT_ODDS_KEY_PRESENT: ${{ secrets.ODDS_API_KEY != '' }}
+      PREFLIGHT_CFBD_KEY_PRESENT: ${{ secrets.CFBD_API_KEY != '' }}
+      PREFLIGHT_NETLIFY_SITE_PRESENT: ${{ vars.PARLAYPICKER_NETLIFY_SITE_ID != '' }}
+      RESEARCH_SPORTS: ${{ inputs.sports || vars.RESEARCH_SPORTS || 'NFL,NCAAF,NBA,NCAAB,MLB,NHL' }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Report configuration presence only
+        run: python scripts/research_actions_preflight.py
   research:
     if: vars.RESEARCH_SCHEDULER_ENABLED == 'true'
+    needs: configuration-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 14
     env:
@@ -27,7 +44,6 @@ jobs:
       THE_ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       PARLAYPICKER_NETLIFY_SITE_ID: ${{ vars.PARLAYPICKER_NETLIFY_SITE_ID }}
       RESEARCH_SPORTS: ${{ inputs.sports || vars.RESEARCH_SPORTS || 'NFL,NCAAF,NBA,NCAAB,MLB,NHL' }}
-      RESEARCH_AUDIT_PATH: ${{ runner.temp }}/research-cycle-audit.json
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -44,6 +60,7 @@ jobs:
         if: steps.window.outputs.active == 'true'
         env:
           PARLAYPICKER_EVIDENCE_DIR: ${{ runner.temp }}/research-evidence
+          RESEARCH_AUDIT_PATH: ${{ runner.temp }}/research-cycle-audit.json
         run: python -u scripts/run_research_scheduler.py
       - name: Retain sanitized cycle audit
         if: ${{ always() && steps.window.outputs.active == 'true' }}
