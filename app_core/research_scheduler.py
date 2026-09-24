@@ -318,6 +318,12 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
         audit_stage(None, "FREEZE_VALIDATION_PLANS")
         report["frozen_validation_plans"] = freeze_current_validation_plans(
             canonical_path, source_commit=report["source_commit"])
+        if len(report["frozen_validation_plans"]) == 12:
+            from app_core.football_validation_v2 import freeze_plans as freeze_football_v2
+            report["frozen_football_v2_plans"] = freeze_football_v2(
+                canonical_path, source_commit=report["source_commit"])
+        else:
+            report["frozen_football_v2_plans"] = []
         audit_stage(None, "CANONICAL_BACKUP")
         report["canonical_backup"] = sync_canonical(canonical_path, client, folder,
                                                      canonical_session)

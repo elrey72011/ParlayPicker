@@ -62,7 +62,7 @@ def _uuid(value):
 
 def _plan_id(value):
     return value if isinstance(value, str) and re.fullmatch(
-        r"prospective-(?:nfl|ncaaf|nba|ncaab|mlb|nhl)-[a-z_]+-2026-09-23-v1", value
+        r"prospective-(?:nfl|ncaaf|nba|ncaab|mlb|nhl)-[a-z_]+-(?:2026-09-23-v1|football-v2)", value
     ) else None
 
 
@@ -114,6 +114,17 @@ def sanitize_cycle(report):
                 and re.fullmatch(r"[0-9a-f]{64}", item["artifact_hash"]) else None,
              "frozen_at": _stamp(item.get("frozen_at"))}
             for item in plans if isinstance(item, dict)]
+    football_v2 = report.get("frozen_football_v2_plans", [])
+    if isinstance(football_v2, list):
+        result["frozen_football_v2_plans"] = [
+            {"sport": _code(item.get("sport")),
+             "market_family": _code(item.get("market_family")),
+             "validation_plan_id": _plan_id(item.get("validation_plan_id")),
+             "artifact_hash": item.get("artifact_hash") if isinstance(item.get("artifact_hash"), str)
+                and re.fullmatch(r"[0-9a-f]{64}", item["artifact_hash"]) else None,
+             "frozen_at": _stamp(item.get("frozen_at")),
+             "validation_start": _stamp(item.get("validation_start"))}
+            for item in football_v2 if isinstance(item, dict)]
     public = report.get("public_grading")
     if isinstance(public, dict):
         result["public_grading"] = {"status": _code(public.get("status"))}

@@ -76,6 +76,28 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             st.caption("First saved pregame selections from locally restored evidence. Research counts do not authorize model training or wagers.")
             st.download_button("Download football evidence inventory", json.dumps(inventory, indent=2),
                                file_name="football-evidence-inventory.json", mime="application/json")
+        if st.button("Prepare football V2 timeline", key="football_v2_timeline_prepare"):
+            try:
+                from app_core.football_validation_v2 import timeline, evidence_inventory
+                from app_core.prediction_evidence import database_path
+                st.session_state["football_v2_timeline"] = timeline(
+                    database_path().parent / "prospective-evidence.sqlite3")
+                st.session_state["football_v2_inventory"] = evidence_inventory(
+                    database_path().parent)
+            except Exception:
+                st.session_state.pop("football_v2_timeline", None)
+                st.session_state.pop("football_v2_inventory", None)
+                st.error("Football V2 timeline could not be verified; no validation state changed.")
+        football_timeline = st.session_state.get("football_v2_timeline")
+        if football_timeline is not None:
+            st.caption("Read-only local evidence timeline. Unknown season capacity and source coverage remain unknown; no stake is authorized.")
+            st.dataframe(pd.DataFrame(football_timeline), hide_index=True)
+            st.download_button("Download football V2 timeline",
+                               json.dumps(football_timeline, indent=2, allow_nan=False),
+                               file_name="football-v2-timeline.json", mime="application/json")
+            st.download_button("Download football V2 source and coverage audit",
+                               json.dumps(st.session_state["football_v2_inventory"], indent=2, allow_nan=False),
+                               file_name="football-v2-source-audit.json", mime="application/json")
         source = st.selectbox("Readiness source", ["Current run", "Saved snapshot"], key="readiness_source")
         if source == "Saved snapshot":
             if st.button("Load saved snapshots", key="readiness_load"):

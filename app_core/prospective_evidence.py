@@ -1082,7 +1082,7 @@ def freeze_validation_plan(path: str | Path | None, plan: Mapping) -> str:
     if "source_commit" in data:
         policy_metadata["source_commit"] = _text(data["source_commit"], "source_commit")
     for name in ("model_scope", "training_cutoff_policy", "independence_policy",
-                 "push_void_policy", "promotion_criteria"):
+                 "push_void_policy", "promotion_criteria", "football_v2_methodology"):
         if name in data:
             policy_metadata[name] = _policy(data, name)
     if "model_scope" in policy_metadata:
@@ -1168,6 +1168,7 @@ def _comparable_close(db: sqlite3.Connection, quote: dict, as_of: datetime) -> d
 
 
 def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> dict:
+    is_v2 = "football_v2_methodology" in json.loads(plan["payload"])
     start = _time(plan[f"{name}_start"], f"{name}_start")
     end = _time(plan[f"{name}_end"], f"{name}_end")
     rows = db.execute("""SELECT p.observation_id,e.scheduled_start FROM prospective_prediction p
@@ -1178,14 +1179,22 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> d
     unique: dict[str, dict] = {}
     skipped_model_scope = 0
     provenance_missing = 0
+    uncertainty_missing = 0
     identity_missing = 0
     unsupported_semantics = 0
     for item in rows:
         prediction = _stored(db, "prospective_prediction", "observation_id", item["observation_id"])
+        if is_v2 and _time(item["scheduled_start"], "scheduled_start") <= max(
+                _time(plan["frozen_at"], "frozen_at"), start):
+            skipped_model_scope += 1
+            continue
         if prediction["model_id"] != plan["model_id"] or prediction["calibration_id"] != plan["calibration_id"]:
             skipped_model_scope += 1
             continue
-        if name == "holdout" and _time(prediction["prediction_timestamp"], "prediction_timestamp") < _time(plan["frozen_at"], "frozen_at"):
+        prediction_at = _time(prediction["prediction_timestamp"], "prediction_timestamp")
+        if ((is_v2 and prediction_at <= max(_time(plan["frozen_at"], "frozen_at"), start)) or
+                (not is_v2 and name == "holdout" and
+                 prediction_at < _time(plan["frozen_at"], "frozen_at"))):
             skipped_model_scope += 1
             continue
         event = _event(db, prediction["event_id"])
@@ -1201,6 +1210,17 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> d
             provenance_missing += 1
         if str(prediction["probability_semantics"] or "").upper() != "WIN_PUSH_LOSS":
             unsupported_semantics += 1
+        if is_v2:
+            from app_core.football_validation_v2 import conservative_probability
+            try:
+                interval = json.loads(prediction["payload"]).get("uncertainty")
+                if interval.get("calibration_id") != plan["calibration_id"]:
+                    raise ValueError("uncertainty calibration mismatch")
+                derived = conservative_probability(prediction["mean_probability"], interval)
+                if abs(derived["conservative_probability"] - prediction["conservative_probability"]) > 1e-12:
+                    raise ValueError("conservative probability mismatch")
+            except (AttributeError, KeyError, TypeError, ValueError):
+                uncertainty_missing += 1
         unique.setdefault(prediction["event_id"], prediction)
     outcomes = {key: 0 for key in ("WIN", "LOSS", "PUSH", "VOID", "PENDING", "NEEDS_REVIEW")}
     scored = []
@@ -1220,7 +1240,9 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> d
                            quote["line"] is not None and quote["decimal_odds"] is not None and
                            quote["sportsbook"] and
                            _time(quote["quote_timestamp"], "quote_timestamp") <
-                           _time(_event(db, prediction["event_id"])["scheduled_start"], "scheduled_start"))
+                           _time(_event(db, prediction["event_id"])["scheduled_start"], "scheduled_start") and
+                           (not is_v2 or _time(quote["quote_timestamp"], "quote_timestamp") <=
+                            _time(prediction["prediction_timestamp"], "prediction_timestamp")))
         if valid_quote:
             quote_count += 1
             close = _comparable_close(db, quote, as_of)
@@ -1236,7 +1258,7 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> d
         outcomes[outcome] += 1
         if result is not None:
             source_ids.append(result["result_id"])
-        if (outcome in {"WIN", "LOSS"} and
+        if (outcome in {"WIN", "LOSS"} and (not is_v2 or valid_quote) and
                 str(prediction["probability_semantics"] or "").upper() == "WIN_PUSH_LOSS" and
                 prediction["mean_probability"] is not None and
                 prediction["loss_probability"] is not None and
@@ -1250,8 +1272,9 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> d
                            -1.0 if outcome == "LOSS" else 0.0)
     n = len(unique)
     brier = sum((p - y) ** 2 for p, y in scored) / len(scored) if scored else None
-    log_loss = -sum(y * math.log(max(p, 1e-15)) +
-                    (1 - y) * math.log(max(1 - p, 1e-15)) for p, y in scored) / len(scored) if scored else None
+    floor = 0.01 if is_v2 else 1e-15
+    log_loss = -sum(y * math.log(max(p, floor)) +
+                    (1 - y) * math.log(max(1 - p, floor)) for p, y in scored) / len(scored) if scored else None
     buckets = []
     for i in range(10):
         members = [(p, y) for p, y in scored if min(int(p * 10), 9) == i]
@@ -1262,6 +1285,7 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> d
               for row in buckets) if scored else None
     return dict(name=name, raw_predictions=len(rows), wrong_model_or_calibration_count=skipped_model_scope,
                 missing_provenance_count=provenance_missing,
+                missing_calibrated_uncertainty_count=uncertainty_missing,
                 missing_stable_identity_count=identity_missing,
                 unsupported_probability_semantics_count=unsupported_semantics,
                 unique_events=n, effective_observations=len(scored), outcomes=outcomes,
@@ -1301,6 +1325,13 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
         method = json.loads(plan["payload"])
         validation = _cohort(db, plan, "validation", cutoff)
         holdout = _cohort(db, plan, "holdout", cutoff)
+    if "football_v2_methodology" in method:
+        from app_core.football_validation_v2 import evaluate as evaluate_football_v2
+        decision = evaluate_football_v2(plan, method, validation, holdout, cutoff)
+        return dict(validation_plan_id=plan["validation_plan_id"], sport=plan["sport"],
+                    market_family=plan["market_family"], model_id=plan["model_id"],
+                    calibration_id=plan["calibration_id"], plan_artifact_hash=plan["artifact_hash"],
+                    validation=validation, holdout=holdout, **decision)
     blockers = []
     if plan["model_id"] is None:
         blockers.append("MISSING_MODEL")
