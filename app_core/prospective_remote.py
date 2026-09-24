@@ -23,6 +23,14 @@ PREFIX = "parlaypicker/canonical-prospective-v1/"
 MAX_OBJECT_BYTES = 60_000_000
 
 
+class CanonicalMissingDependencies(ValueError):
+    """A partial remote upload left reconciled facts without source objects."""
+
+    def __init__(self, sports):
+        self.sports = frozenset(sports)
+        super().__init__("canonical_remote_missing_source_dependencies")
+
+
 def _json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
@@ -185,13 +193,25 @@ def sync(path: str | Path, client, folder: str, session: dict | None = None) -> 
                             except sqlite3.IntegrityError:
                                 raise ValueError("canonical_remote_source_conflict") from None
                             restored += 1
-                if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                violations = db.execute("PRAGMA foreign_key_check").fetchall()
+                if violations:
+                    # Only this known interrupted-upload shape is recoverable
+                    # from independently backed-up legacy source stores.
+                    if all(table == "prospective_reconciled_fact" and
+                           parent == "prospective_reconciled_source"
+                           for table, _, parent, _ in violations):
+                        sports = {db.execute("SELECT sport FROM prospective_reconciled_fact WHERE rowid=?",
+                                             (rowid,)).fetchone()[0]
+                                  for _, rowid, _, _ in violations}
+                        if sports and sports <= {"NFL", "NCAAF", "MLB"}:
+                            raise CanonicalMissingDependencies(sports)
                     raise ValueError("canonical_remote_foreign_key_conflict")
         verified.update({key: hashlib.sha256(raw).hexdigest() for key, (_, raw, _) in remote.items()})
         session["restored"] = True
-    pending = []
+    pending_by_table = {table: [] for table in table_order}
     with closing(evidence.connect(path)) as db:
-        for table, (columns, primary) in schema.items():
+        for table in table_order:
+            columns, primary = schema[table]
             for row in db.execute(f"SELECT {','.join(columns)} FROM {table}"):
                 key, raw = _encode(table, columns, primary, tuple(row))
                 if key in verified:
@@ -199,9 +219,10 @@ def sync(path: str | Path, client, folder: str, session: dict | None = None) -> 
                         raise ValueError("canonical_remote_local_conflict")
                     continue
                 _decode(key, raw, schema)
-                pending.append((key, raw))
-    if pending:
-        print(json.dumps({"stage": "CANONICAL_UPLOAD", "pending_records": len(pending)}), flush=True)
+                pending_by_table[table].append((key, raw))
+    pending_count = sum(len(items) for items in pending_by_table.values())
+    if pending_count:
+        print(json.dumps({"stage": "CANONICAL_UPLOAD", "pending_records": pending_count}), flush=True)
     def upload(worker, item):
         key, raw = item
         try:
@@ -212,18 +233,25 @@ def sync(path: str | Path, client, folder: str, session: dict | None = None) -> 
         if _readback(worker, folder, key) != raw:
             raise ValueError("canonical_remote_readback_conflict")
         return key, hashlib.sha256(raw).hexdigest()
-    def upload_progress(done, total):
-        if done == 1 or done % 100 == 0 or done == total:
-            print(json.dumps({"stage": "CANONICAL_UPLOAD", "verified_records": done,
-                              "pending_records": total}), flush=True)
-    if callable(getattr(client, "run_parallel", None)):
-        uploaded = client.run_parallel(upload, pending, progress=upload_progress)
-    else:
-        uploaded = []
-        for item in pending:
-            uploaded.append(upload(client, item))
-            upload_progress(len(uploaded), len(pending))
-    verified.update(uploaded)
+    saved = 0
+    for table in table_order:
+        pending = pending_by_table[table]
+        if not pending:
+            continue
+        def upload_progress(done, total):
+            count = saved + done
+            if count == 1 or count % 100 == 0 or count == pending_count:
+                print(json.dumps({"stage": "CANONICAL_UPLOAD", "verified_records": count,
+                                  "pending_records": pending_count}), flush=True)
+        if callable(getattr(client, "run_parallel", None)):
+            uploaded = client.run_parallel(upload, pending, progress=upload_progress)
+        else:
+            uploaded = []
+            for item in pending:
+                uploaded.append(upload(client, item))
+                upload_progress(len(uploaded), len(pending))
+        verified.update(uploaded)
+        saved += len(uploaded)
     return {"remote_records_read": read_count, "records_restored": restored,
             "records_verified": len(verified),
-            "new_records_verified": len(uploaded)}
+            "new_records_verified": saved}

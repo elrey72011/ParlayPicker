@@ -242,6 +242,7 @@ def test_reconciled_ledger_restores_from_canonical_remote(tmp_path):
         def __init__(self):
             self.objects = {}
             self.parallel_calls = 0
+            self.upload_order = []
 
         def read_objects(self, *, Prefix):
             return [(key, raw) for key, raw in self.objects.items() if key.startswith(Prefix)]
@@ -250,6 +251,7 @@ def test_reconciled_ledger_restores_from_canonical_remote(tmp_path):
             if Key in self.objects:
                 raise AssertionError("unexpected duplicate upload")
             self.objects[Key] = Body
+            self.upload_order.append(Key)
 
         def get_object(self, *, Bucket, Key):
             return {"Body": BytesIO(self.objects[Key])}
@@ -265,7 +267,9 @@ def test_reconciled_ledger_restores_from_canonical_remote(tmp_path):
     cloud = Cloud()
     uploaded = sync_canonical(first, cloud, "folder")
     assert uploaded["new_records_verified"] == 2
-    assert cloud.parallel_calls == 1
+    assert cloud.parallel_calls == 2
+    assert "prospective_reconciled_source/" in cloud.upload_order[0]
+    assert "prospective_reconciled_fact/" in cloud.upload_order[1]
     restored = sync_canonical(second, cloud, "folder")
     assert restored["remote_records_read"] == 2
     assert reconciliation_readiness(second) == reconciliation_readiness(first)
