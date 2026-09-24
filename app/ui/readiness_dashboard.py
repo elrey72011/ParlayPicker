@@ -12,6 +12,39 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
     st.session_state.pop("mlb_receipt_store_downloads", None)
     with st.expander("Run Readiness Report", expanded=False):
         st.caption("Evidence readiness and wager approval are separate. This report does not change picks or thresholds.")
+        with st.expander("Six-sport market readiness", expanded=False):
+            st.caption("Each sport and market is reviewed independently. A validation result does not activate a wager or authorize a stake.")
+            if st.button("Load prospective market readiness", key="prospective_market_readiness_prepare"):
+                try:
+                    from app_core.prospective_evidence import all_market_readiness
+                    st.session_state["prospective_market_readiness"] = all_market_readiness(None)
+                except Exception:
+                    st.session_state.pop("prospective_market_readiness", None)
+                    st.error("Prospective evidence could not be verified. All markets remain ineligible for this report.")
+                try:
+                    from app_core.prospective_source_view import all_source_readiness
+                    st.session_state["prospective_source_readiness"] = all_source_readiness()
+                except Exception:
+                    st.session_state.pop("prospective_source_readiness", None)
+                    st.error("Local research source inventory could not be verified. It grants no wager authority.")
+            market_rows = st.session_state.get("prospective_market_readiness")
+            if market_rows is not None:
+                visible = ("sport", "market_family", "capture_status", "pregame_observations",
+                           "unique_events", "settled_events", "training_count", "validation_count",
+                           "holdout_count", "effective_sample", "model_status", "calibration_status",
+                           "price_status", "close_clv_status", "validation_plan_status",
+                           "validation_state", "deployment_state", "next_blocker")
+                st.dataframe(pd.DataFrame(market_rows).reindex(columns=visible), hide_index=True)
+                st.download_button("Download prospective market readiness",
+                                   json.dumps(market_rows, indent=2, allow_nan=False),
+                                   file_name="sport-market-readiness.json", mime="application/json")
+            source_rows = st.session_state.get("prospective_source_readiness")
+            if source_rows is not None:
+                st.caption("Local research source inventory is descriptive. An absent file does not mean its remote backup is empty; these counts do not authorize a wager.")
+                st.dataframe(pd.DataFrame(source_rows), hide_index=True)
+                st.download_button("Download research source inventory",
+                                   json.dumps(source_rows, indent=2, allow_nan=False),
+                                   file_name="sport-market-source-inventory.json", mime="application/json")
         if st.button("Prepare research performance report", key="research_performance_prepare"):
             try:
                 from core.research_performance import rebuild

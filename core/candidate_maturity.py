@@ -5,7 +5,7 @@ from core.sport_policy import DEPLOYMENT_STATES
 
 INPUTS='sport game_id market_type line odds_american book start quote_time identity_verified exact_quote_verified model_validated model_version calibration_validated calibration_version evidence_snapshot_id evidence_frozen_at critical_feature_error conservative_probability mean_probability evidence_effective_sample_size calibration_uncertainty prior_clv_lower current_regime_conflict validated_evidence_family push_probability alternate alternate_quote_verified'.split()
 
-def assign(row,policy,rules,now):
+def assign(row,policy,rules,now,*,canonical_quote_verified=False):
     inputs={k:row.get(k) for k in INPUTS}
     # Only a completed, validated earlier-slate CLV aggregate may enter rules.
     reason=['missing_validated_maturity_rules'];tier='RESEARCH'
@@ -19,7 +19,8 @@ def assign(row,policy,rules,now):
             if a is None or b is None or not op(a,b):failures.append(field)
         if inputs.get('current_regime_conflict') is not False:failures.append('regime_unverified_or_conflicting')
         if inputs.get('validated_evidence_family')!=str(inputs.get('market_type','')).split('_')[0]:failures.append('evidence_family_mismatch')
-        check=candidate_decision(dict(inputs,maturity=candidate,gemini_status='CONFIRM'),policy,now)
+        check=candidate_decision(dict(inputs,maturity=candidate,gemini_status='CONFIRM'),policy,now,
+                                 canonical_quote_verified=canonical_quote_verified)
         failures.extend(check['reason_for_pass'])
         if not failures:tier=candidate;reason=['validated_candidate_evidence'];break
         reason=failures

@@ -2,14 +2,15 @@
 from datetime import datetime, timezone
 import json
 import os
+import sqlite3
 import pandas as pd
 from core.sport_policy import SportPolicy, research_policies
 from core.wager_decisions import candidate_decision, allocate_exposure, finite, aware
-from core.market_policy import production_market
+from core.market_policy import production_market, sport_market_family, SPORT_MARKET_FAMILIES
 
 VERSION = 'live-v1'
 MATURITIES = {'RESEARCH','QUALIFIED','PROVISIONAL','STANDARD','PREMIUM'}
-PUBLIC_FIELDS = ('wager_contract_version game_id matchup_id sport market_type selection line odds sportsbook quote_timestamp start raw_model_probability calibrated_probability sport_calibrated_probability hierarchical_probability conservative_probability market_probability fair_market_probability edge conservative_edge expected_value conservative_ev data_quality_status identity_verified quote_verified quote_fresh gemini_review_status gemini_gate_reason gemini_stake_multiplier gemini_outage_capped maturity evidence_maturity_score production_eligible production_gate_reason raw_kelly production_bet_amount recommended_units model_version calibration_version sport_policy_version evidence_version strategic_action').split()
+PUBLIC_FIELDS = ('wager_contract_version game_id matchup_id sport market_type market_family selection line odds sportsbook quote_timestamp start raw_model_probability calibrated_probability sport_calibrated_probability hierarchical_probability conservative_probability market_probability fair_market_probability edge conservative_edge expected_value conservative_ev data_quality_status identity_verified quote_verified quote_fresh gemini_review_status gemini_gate_reason gemini_stake_multiplier gemini_outage_capped maturity evidence_maturity_score production_eligible production_gate_reason raw_kelly production_bet_amount recommended_units model_id model_version calibration_id calibration_version validation_id validation_artifact_id deployment_state sport_policy_version evidence_version strategic_action').split()
 
 # These fields describe the exact secondary review that was performed. They are
 # not wagering authority on their own, but they must follow the same exact
@@ -26,26 +27,48 @@ GEMINI_REVIEW_PROVENANCE_FIELDS = (
 def load_configuration(now):
     """Only explicit, unexpired policy artifacts can authorize live exposure."""
     path = os.environ.get('PARLAYPICKER_WAGER_POLICY_PATH','data/policies/active_wager_policy.json')
-    fallback = (research_policies(), {}, 'No validated live sport policy configured')
+    policies, config, reason = research_policies(), {}, 'No validated live sport policy configured'
     try:
         from core.activation_policy import verify_sport
-        from core.exposure_ledger import snapshot as ledger_snapshot
         with open(path,encoding='utf-8') as file: config=json.load(file)
-        if config.get('schema')!='activation-v1' or not config.get('activation'):return fallback
-        policies=research_policies()
-        for sport,values in config['sports'].items():
+        if config.get('schema')=='activation-v1' and config.get('activation'):
+            for sport,values in config['sports'].items():
+                try:
+                    verify_sport(config,sport,now=now)
+                    policies[sport]=SportPolicy(**values)
+                except (ValueError,TypeError,KeyError):
+                    continue  # This sport has zero authority; strict expiry is mandatory.
+            config['automatic_maturity']=True
+            reason=''
+        else:
+            config={}
+    except (OSError,ValueError,TypeError,KeyError,AttributeError):
+        config={}
+    # Only owner-confirmed records in this dedicated directory may be used.
+    # They are independently verified against the current canonical deployment
+    # and ledger for every candidate below; loading JSON is not authorization.
+    from pathlib import Path
+    directory=Path(os.environ.get('PARLAYPICKER_MARKET_ACTIVATIONS_DIR','data/policies/active_markets'))
+    activations={}
+    for sport,families in SPORT_MARKET_FAMILIES.items():
+        for family in families:
+            file=directory/f'{sport}-{family}.json'
             try:
-                verify_sport(config,sport,now=now)
-                policies[sport]=SportPolicy(**values)
-            except (ValueError,TypeError,KeyError):
-                continue  # This sport has zero authority; strict expiry is mandatory.
-        try:
-            config['exposure']=ledger_snapshot(os.environ.get('PARLAYPICKER_EXPOSURE_LEDGER','data/exposure/exposure.sqlite3'),now=now)
-            config['unit_value']=config['exposure']['unit_value']
-        except ValueError:config['exposure']={}
-        config['automatic_maturity']=True
-        return policies,config,''
-    except (OSError,ValueError,TypeError,KeyError):return fallback
+                record=json.loads(file.read_text(encoding='utf-8'))
+                if record.get('sport')==sport and record.get('market_family')==family:
+                    activations[f'{sport}:{family}']=record
+            except (OSError,ValueError,TypeError,AttributeError):
+                continue
+    config.pop('_test_only',None)
+    config.pop('_test_only_market_deployments',None)
+    config['market_activations']=activations
+    try:
+        from core.exposure_ledger import snapshot as ledger_snapshot
+        config['exposure']=ledger_snapshot(os.environ.get('PARLAYPICKER_EXPOSURE_LEDGER','data/exposure/exposure.sqlite3'),now=now)
+        config['unit_value']=config['exposure']['unit_value']
+    except ValueError:
+        config['exposure']={}
+    return policies,config,reason
 
 
 
@@ -96,7 +119,13 @@ def adapt_candidate(row, review=None):
         out['critical_feature_error'] = True
     out['maturity'] = row.get('maturity') if row.get('maturity') in MATURITIES else 'RESEARCH'
     from app_core.public_quote_policy import supported_quote
-    if not supported_quote({'sport':out['sport'] or '', 'quote_source':out['book']}):
+    from app_core.public_quote_policy import FALLBACK_BOOKS,canonical_book_label
+    potential_canonical=(out['sport'] in {'NBA','NCAAB','NHL'}
+                         and canonical_book_label(out['book']) in FALLBACK_BOOKS
+                         and all(row.get(key) for key in ('quote_source_id','quote_source_hash'))
+                         and (row.get('prospective_quote_id') or row.get('quote_id'))
+                         and (row.get('prospective_event_id') or row.get('event_id')))
+    if not supported_quote({'sport':out['sport'] or '', 'quote_source':out['book']}) and not potential_canonical:
         out['exact_quote_verified'] = False
     return out
 
@@ -110,6 +139,7 @@ def snapshot(row, now, unit_value=None):
     amount = finite(row.get('recommended_stake')) or 0.0
     result.update(wager_contract_version=VERSION, game_id=str(row.get('game_id') or ''),
         matchup_id=str(row.get('matchup_id') or row.get('game_id') or ''), sport=str(row.get('sport') or ''),
+        market_family=sport_market_family(row.get('sport'),row.get('market_type')),
         sportsbook=row.get('book'), odds=finite(row.get('odds_american')), quote_timestamp=row.get('quote_time'),
         quote_verified=row.get('exact_quote_verified') is True, identity_verified=row.get('identity_verified') is True,
         quote_fresh=bool(aware(row.get('quote_time')) and 0 <= (now-aware(row['quote_time'])).total_seconds() <= 1800),
@@ -144,8 +174,42 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
         row = adapt_candidate(raw, review_map.get(_ticket(raw)))
         policy = policies.get(row['sport'])
         if policy is None: continue
+        family=sport_market_family(row['sport'],row.get('market_type'))
+        key=f"{row['sport']}:{family}" if family else ''
+        if config.get('_test_only') is True and isinstance(config.get('_test_only_market_deployments'),dict):
+            deployment=config['_test_only_market_deployments'].get(key)
+        else:
+            try:
+                from app_core.prospective_evidence import deployment_state
+                deployment=deployment_state(config.get('prospective_evidence_path'),row['sport'],family) if family else None
+            except (OSError,ValueError,TypeError,KeyError,sqlite3.Error):
+                deployment=None
+        from core.sport_market_gate import market_gate
+        owner=(config.get('market_activations') or {}).get(key)
+        authority_policy,market_blockers=market_gate(
+            row,deployment,owner,config.get('exposure'),now,
+            allow_test_only=config.get('_test_only') is True,
+            evidence_path=config.get('prospective_evidence_path'))
+        if authority_policy is not None:
+            policy=authority_policy
+            row.update(market_family=family,validation_id=deployment['validation_id'],
+                       validation_artifact_id=deployment['artifact_id'],
+                       deployment_state=deployment['deployment_state'])
+        from app_core.public_quote_policy import FALLBACK_BOOKS,canonical_book_label
+        canonical_book_verified=(authority_policy is not None and row['sport'] in {'NBA','NCAAB','NHL'}
+                                 and canonical_book_label(row.get('book')) in FALLBACK_BOOKS)
         runtime=config.get('validation_results',{}).get(row['sport'],{}).get('supported_policy') or {}
-        if config.get('automatic_maturity'):
+        if authority_policy is not None:
+            from core.candidate_maturity import assign
+            rules=deployment.get('maturity_rules') or (deployment.get('deployment_criteria') or {}).get('maturity_rules')
+            report=deployment.get('validation_report') or {}
+            if not isinstance(rules,dict) or not rules:
+                market_blockers.append('frozen_market_maturity_rules_missing')
+            else:
+                row['validated_evidence_family']=str(row.get('market_type','')).split('_')[0]
+                row['prior_clv_lower']=(report.get('metrics') or {}).get('price_clv_lower_95')
+                row=assign(row,policy,rules,now,canonical_quote_verified=canonical_book_verified)
+        if config.get('automatic_maturity') and (config.get('_test_only') is True or authority_policy is None):
             from core.candidate_maturity import assign
             validation=config.get('validation_results',{}).get(row['sport'],{})
             # The loader verifies active policy artifacts. Bind the study again
@@ -174,7 +238,14 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
             if row.get('critical_feature_error') is False:
                 row['validated_evidence_family'] = validation.get('market_family')
             row=assign(row,policy,runtime.get('maturity_rules',{}),now)
-        decision = candidate_decision(row, policy, now, outage_policy=runtime.get('gemini_outage',config.get('gemini_outage')))
+        decision = candidate_decision(row, policy, now,
+                                      outage_policy=runtime.get('gemini_outage',config.get('gemini_outage')),
+                                      canonical_quote_verified=canonical_book_verified)
+        if market_blockers:
+            reasons=list(dict.fromkeys(decision['reason_for_pass']+market_blockers))
+            decision.update(production_eligible=False,recommended_fraction=0.0,
+                            strategic_action='PASS',reason_for_pass=reasons,
+                            production_gate_reason='; '.join(reasons))
         grouped[(row['sport'],str(row.get('game_id') or ''))].append(decision)
     selected=[]; templates=[]
     for _,template in best.iterrows():
@@ -241,7 +312,12 @@ def enforce_frame(frame):
         c=row.get('wager_contract')
         if not isinstance(c,dict) or c.get('wager_contract_version')!=VERSION:
             continue
-        funded=c.get('production_eligible') is True and (finite(c.get('production_bet_amount')) or 0)>0 and production_market(c.get('market_type'))
+        funded=(c.get('production_eligible') is True and (finite(c.get('production_bet_amount')) or 0)>0
+                and c.get('market_family')==sport_market_family(c.get('sport'),c.get('market_type'))
+                and c.get('deployment_state') in {'PROVISIONAL_VALIDATED','STANDARD_VALIDATED','PREMIUM_VALIDATED'}
+                and all(isinstance(c.get(key),str) and c[key].strip() for key in
+                        ('model_id','model_version','calibration_id','calibration_version',
+                         'validation_id','validation_artifact_id')))
         stake=c['production_bet_amount'] if funded else 0.0
         for key in ('production_bet_amount','Kelly_Bet_Size','Play_Stake','Suggested_Stake','recommended_bet'):
             out.at[idx,key]=stake
@@ -276,5 +352,12 @@ def validate_snapshot(c):
     if c.get('maturity') not in MATURITIES:
         raise ValueError('Invalid wager maturity')
     if c.get('production_eligible') is True:
-        if not production_market(c.get('market_type')) or c.get('maturity') not in {'PROVISIONAL','STANDARD','PREMIUM'} or (finite(c.get('production_bet_amount')) or 0)<=0 or (finite(c.get('conservative_ev')) or 0)<=0 or c.get('identity_verified') is not True or c.get('quote_verified') is not True:
+        if (not production_market(c.get('market_type')) or c.get('maturity') not in {'PROVISIONAL','STANDARD','PREMIUM'}
+                or (finite(c.get('production_bet_amount')) or 0)<=0 or (finite(c.get('conservative_ev')) or 0)<=0
+                or c.get('identity_verified') is not True or c.get('quote_verified') is not True
+                or c.get('market_family')!=sport_market_family(c.get('sport'),c.get('market_type'))
+                or c.get('deployment_state') not in {'PROVISIONAL_VALIDATED','STANDARD_VALIDATED','PREMIUM_VALIDATED'}
+                or not all(isinstance(c.get(key),str) and c[key].strip() for key in
+                           ('model_id','model_version','calibration_id','calibration_version',
+                            'validation_id','validation_artifact_id'))):
             raise ValueError('Invalid funded wager contract')

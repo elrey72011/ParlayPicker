@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       sports:
-        description: 'Optional comma-separated override: MLB,NCAAF,NFL'
+        description: 'Optional comma-separated override: NFL,NCAAF,NBA,NCAAB,MLB,NHL'
         required: false
         default: ''
         type: string
@@ -26,7 +26,7 @@ jobs:
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       THE_ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       PARLAYPICKER_NETLIFY_SITE_ID: ${{ vars.PARLAYPICKER_NETLIFY_SITE_ID }}
-      RESEARCH_SPORTS: ${{ inputs.sports || vars.RESEARCH_SPORTS || 'MLB,NCAAF' }}
+      RESEARCH_SPORTS: ${{ inputs.sports || vars.RESEARCH_SPORTS || 'NFL,NCAAF,NBA,NCAAB,MLB,NHL' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

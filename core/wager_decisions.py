@@ -42,7 +42,8 @@ def moneyline_context(home_odds, away_odds):
     return {"available": True, "home_probability": hp / (hp + ap), "away_probability": ap / (hp + ap), "wager_eligible": False}
 
 
-def candidate_decision(row, policy: SportPolicy, now, *, outage_policy=None):
+def candidate_decision(row, policy: SportPolicy, now, *, outage_policy=None,
+                       canonical_quote_verified=False):
     """Only reduce eligibility. Trusted adapter must supply evidence identifiers.
 
     Probability and policy validation are independent. Bucket rate alone is not
@@ -64,7 +65,9 @@ def candidate_decision(row, policy: SportPolicy, now, *, outage_policy=None):
     if not row.get("game_id") or row.get("identity_verified") is not True:
         reasons.append("unverified_mapping")
     from app_core.public_quote_policy import supported_quote
-    if not supported_quote({"sport":row.get("sport", ""), "quote_source":row.get("book")}) or decimal is None or row.get("exact_quote_verified") is not True:
+    if (not (supported_quote({"sport":row.get("sport", ""), "quote_source":row.get("book")})
+             or canonical_quote_verified is True)
+            or decimal is None or row.get("exact_quote_verified") is not True):
         reasons.append("invalid_exact_price")
     if finite(row.get("line")) is None:
         reasons.append("missing_exact_line")

@@ -5,7 +5,7 @@ import itertools
 import logging
 import math
 from core.wager_decisions import finite, aware
-from core.market_policy import production_market
+from core.market_policy import production_market, sport_market_family
 from app_core.public_quote_policy import supported_quote
 
 
@@ -22,6 +22,11 @@ def leg_checks(row, now):
         ('supported_books',supported_quote(row) and not row.get('quote_time_basis'),'unsupported_book'),
         ('pregame',start is not None and start>now,'game_started'),
         ('identity_verified',c.get('identity_verified') is True and c.get('quote_verified') is True and event_key(row) is not None and c.get('selection')==row.get('pick') and c.get('market_type')==row.get('market') and c.get('odds')==odds and c.get('sportsbook')==row.get('quote_source'),'identity_failure'),
+        ('exact_market_validated',c.get('market_family')==sport_market_family(row.get('sport'),row.get('market'))
+         and c.get('deployment_state') in {'STANDARD_VALIDATED','PREMIUM_VALIDATED'}
+         and all(isinstance(c.get(field),str) and c[field].strip() for field in
+                 ('model_id','model_version','calibration_id','calibration_version',
+                  'validation_id','validation_artifact_id')),'unvalidated_straight_leg'),
         ('production_eligible',c.get('wager_contract_version')=='live-v1' and c.get('production_eligible') is True and (finite(c.get('production_bet_amount')) or 0)>0,'research_only'),
         ('standard_premium',c.get('maturity') in {'STANDARD','PREMIUM'},'provisional_straight_only' if c.get('maturity')=='PROVISIONAL' else 'research_only'),
         ('secondary_review',c.get('gemini_review_status') in {'APPROVE','CONFIRM','REDUCE'},'gemini_hard_veto' if c.get('gemini_review_status')=='HARD_VETO' else 'gemini_unavailable')]
@@ -49,7 +54,7 @@ def correlation_status(legs):
 
 def canonical_funnel(rows, now=None):
     now=now or datetime.now(timezone.utc)
-    counts=Counter({key:0 for key in 'spread_total_candidates valid_prices valid_lines positive_conservative_ev fresh_quotes supported_books pregame identity_verified production_eligible standard_premium secondary_review provisional standard premium research qualified parlay_eligible same_book_candidates valid_2leg_pairs valid_3leg_combinations'.split()}); counts['total_best_picks']=len(rows); exclusions=Counter(); pool=[]
+    counts=Counter({key:0 for key in 'spread_total_candidates valid_prices valid_lines positive_conservative_ev fresh_quotes supported_books pregame identity_verified exact_market_validated production_eligible standard_premium secondary_review provisional standard premium research qualified parlay_eligible same_book_candidates valid_2leg_pairs valid_3leg_combinations'.split()}); counts['total_best_picks']=len(rows); exclusions=Counter(); pool=[]
     for row in rows:
         checks=leg_checks(row,now); reached=True
         for stage,ok,reason in checks:

@@ -102,12 +102,18 @@ def test_export_cannot_refund_failed_contract():
     assert out.iloc[0]['Kelly_Bet_Size']==0 and not out.iloc[0]['Bettable']
 
 
-def test_live_candidate_first_selects_qualified_runner_up():
-    high=candidate(league='NFL',home_team='Home',away_team='Away',matchup_id='one',selection='Home -2.5',best_pick='Home -2.5',spread_line=-2.5,conservative_probability=.7,mean_probability=.75,odds_american=-400)
-    low=candidate(league='NFL',home_team='Home',away_team='Away',matchup_id='one',selection='Over 42.5',best_pick='Over 42.5',market_type='total_over',line=42.5,total_line=42.5)
+def test_live_candidate_first_selects_qualified_runner_up(tmp_path):
+    from activation_fixture import setup
+    base,validated_policy,config=setup(tmp_path/'ledger.db')
+    validated_policy=_bound_study(validated_policy,config,market_family='total')
+    high=dict(base,selection='Home -2.5',best_pick='Home -2.5',
+              conservative_probability=.7,mean_probability=.75,odds_american=-400)
+    low=dict(base,selection='Over 42.5',best_pick='Over 42.5',market_type='total_over',
+             line=42.5,total_line=42.5)
     best=pd.DataFrame([dict(high,gemini_review_status='APPROVE')])
-    config={'gemini_outage':{'mode':'capped','cap':.001,'multiplier':.5},'exposure':{'as_of':NOW.isoformat(),'committed':{},'total_cap':.03,'daily_cap':.03,'weekly_cap':.05,'game_cap':.01,'team_cap':.01}}
-    out,audit=finalize_live_wagers(pd.DataFrame([high,low]),best,1000,now=NOW,policies={'NFL':policy()},config=config)
+    config['gemini_outage']={'mode':'capped','cap':.001,'multiplier':.5}
+    out,audit=finalize_live_wagers(pd.DataFrame([high,low]),best,1000,now=NOW,
+                                   policies={'NFL':validated_policy},config=config)
     assert out.iloc[0]['best_pick']=='Over 42.5'
     assert 0<out.iloc[0]['production_bet_amount']<=1
     assert len(audit)==2
@@ -178,7 +184,10 @@ def _bound_study(policy, config, **updates):
     study.update(updates)
     study.pop('validation_hash',None)
     study['validation_hash']=digest(study)
-    return replace(policy,validation_id=study['validation_hash'])
+    bound=replace(policy,validation_id=study['validation_hash'])
+    from activation_fixture import bind_test_market
+    bind_test_market(bound,config)
+    return bound
 
 
 @pytest.mark.parametrize('family,market',[('spread','spread_home'),('total','total_under')])
@@ -252,14 +261,17 @@ def test_eligible_alternative_and_canonical_order(tmp_path):
 @pytest.mark.parametrize('period',['daily','weekly'])
 def test_terminal_authority_passes_absolute_period_caps(tmp_path,monkeypatch,period):
     from dataclasses import replace
-    from activation_fixture import setup
+    from activation_fixture import setup,bind_test_market
+    from core.exposure_ledger import digest
     import core.live_wager_contract as live
     r,p,c=setup(tmp_path/'ledger.db')
     c['automatic_maturity']=False
     c['exposure'].update(total_cap=.1,daily_cap=.2,weekly_cap=.2,game_cap=.1,team_cap=.1,
                          committed={'total':.04,period:.04})
     c['exposure'][period+'_cap']=.05
+    c['exposure']['snapshot_hash']=digest({k:v for k,v in c['exposure'].items() if k!='snapshot_hash'})
     p=replace(p,sport_exposure_cap=.1)
+    bind_test_market(p,c)
     def decision(row,*args,**kwargs):
         return dict(row,production_eligible=True,conservative_ev=.1,recommended_fraction=.02,
                     strategic_action='BET NOW',reason_for_pass=[])
