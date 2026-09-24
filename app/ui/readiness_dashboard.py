@@ -14,10 +14,11 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
         st.caption("Evidence readiness and wager approval are separate. This report does not change picks or thresholds.")
         with st.expander("Six-sport market readiness", expanded=False):
             st.caption("Each sport and market is reviewed independently. A validation result does not activate a wager or authorize a stake.")
+            st.caption("This page reads local evidence only. Authenticated full-store restore runs in GitHub Actions; local zero counts leave remote status unknown.")
             if st.button("Load prospective market readiness", key="prospective_market_readiness_prepare"):
                 try:
                     from app_core.prospective_readiness_report import load_readiness
-                    readiness = load_readiness(authenticate=True)
+                    readiness = load_readiness(authenticate=False)
                     st.session_state["prospective_market_readiness"] = readiness["markets"]
                     st.session_state["prospective_source_readiness"] = readiness["sources"]
                     st.session_state["prospective_remote_readiness"] = readiness["remote"]
@@ -121,44 +122,9 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             st.download_button("Download MLB Receipt Health", json.dumps(receipt_health, indent=2),
                                file_name="mlb-receipt-health.json", mime="application/json")
         if source == "Current run":
-            if st.button("Catch up MLB receipt history", key="mlb_receipt_history_catchup"):
-                from app_core.mlb_receipt_remote import catch_up_history
-                try:
-                    with st.spinner("Collecting up to 100 historical feeds and verifying Drive backup..."):
-                        st.session_state["mlb_receipt_catchup_health"] = catch_up_history()
-                    st.session_state.pop("mlb_receipt_audit_downloads_v2", None)
-                except Exception as exc:
-                    st.session_state["mlb_receipt_catchup_health"] = {"failed_stage": "history_catchup", "error_type": type(exc).__name__, "remote_backup_verified": False}
-            catchup = st.session_state.get("mlb_receipt_catchup_health")
-            if catchup:
-                st.caption("Latest receipt-only catch-up; does not refresh displayed picks or run Gemini.")
-                st.json(catchup)
-                st.download_button("Download MLB catch-up health", json.dumps(catchup, indent=2), file_name="mlb-receipt-catchup-health.json", mime="application/json")
-            with st.expander("Restore or sync MLB receipt backup"):
-                uploaded = st.file_uploader("Original MLB receipt backup JSON", type=["json"], key="mlb_receipt_restore_file")
-                if st.button("Restore receipt backup and verify Drive copy", disabled=uploaded is None, key="mlb_receipt_restore"):
-                    from app_core.mlb_receipt_remote import restore, connection, recover, backup, restore_diagnostic
-                    stage = "connect"
-                    try:
-                        client, folder = connection()
-                        stage = "recover_drive"
-                        recover(client)
-                        stage = "decode_uploaded_backup"
-                        bundle = json.loads(uploaded.getvalue())
-                        stage = "restore_uploaded_backup"
-                        restored = restore(bundle)
-                        st.session_state.pop("mlb_receipt_audit_downloads_v2", None)
-                        stage = "backup_and_verify_drive"
-                        result = backup(client, folder)
-                        st.success(f"Restored {restored} records. Drive backup read-back verified.")
-                        st.session_state.pop("mlb_receipt_audit_downloads_v2", None)
-                    except Exception as exc:
-                        import logging
-                        detail = restore_diagnostic(stage, exc)
-                        logging.getLogger(__name__).error("MLB receipt restore failure: %s", detail)
-                        st.error(f"Receipt operation failed at {stage}: {detail['reason']} ({detail['error_type']}). No conflicting records were overwritten. Remote durability is not confirmed.")
-                        st.download_button("Download receipt restore error", json.dumps(detail, indent=2),
-                                           file_name="mlb-receipt-restore-error.json", mime="application/json")
+            st.caption("MLB receipt capture, catch-up and Drive restore run on the scheduled runner. Interactive analysis does not load the full receipt archive.")
+            st.link_button("Open MLB receipt workflow",
+                           "https://github.com/elrey72011/ParlayPicker/actions/workflows/mlb-receipt-reconciliation.yml")
             if st.button("Prepare MLB receipt store audit and settled records", key="mlb_receipt_store_audit"):
                 from app_core.mlb_receipt_audit import audit_downloads
                 st.session_state.pop("mlb_receipt_audit_downloads_v2", None)

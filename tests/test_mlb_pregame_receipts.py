@@ -259,7 +259,7 @@ def test_reconciliation_provider_failure_propagates_and_keeps_receipt(fixture):
     assert r.read('outcomes', fixture[0]) == {}
 
 
-def test_live_ingestion_and_expansion_preserve_stable_ids(fixture,monkeypatch):
+def test_live_ingestion_does_not_restore_full_receipt_archive(fixture,monkeypatch):
     from app_core import odds_api
     import core.streamlit_pipeline as sp
     class Client:
@@ -268,32 +268,24 @@ def test_live_ingestion_and_expansion_preserve_stable_ids(fixture,monkeypatch):
     monkeypatch.setattr(odds_api,"TheOddsAPIClient",Client)
     monkeypatch.setattr(odds_api,"filter_games_today_only",lambda games:games)
     monkeypatch.setattr(sp,"_get_odds_api_key",lambda:"test")
-    real=r.capture_live_games
-    monkeypatch.setattr(r,"capture_live_games",lambda games:real(games,path=fixture[0],fetch=fixture[2]))
     from app_core import mlb_receipt_remote
-    monkeypatch.setattr(mlb_receipt_remote, "collect_durable", lambda games, **kw: r.capture_live_games(games))
+    monkeypatch.setattr(mlb_receipt_remote, "collect_durable",
+                        lambda *a, **kw: pytest.fail("full receipt restore cannot run in Streamlit"))
     frame=sp.fetch_live_odds_dataframe(["MLB"])
-    assert frame.attrs["mlb_receipt_health"]["receipts_created"]==4
+    health = frame.attrs["mlb_receipt_health"]
+    assert health["status"] == "DEFERRED_TO_SCHEDULED_CAPTURE"
+    assert health["receipts_created"] == 0
+    assert health["remote_backup_verified"] is False
     expanded,_=sp._expand_live_odds_to_bet_rows(frame)
     assert not expanded.empty
-    from app_core.mlb_live_model_binding import verify
-    import json
-    for candidate in expanded.to_dict("records"):
-        if candidate["market_type"] in model.TARGETS:
-            receipt = json.loads(candidate["mlb_pregame_receipts"])[candidate["market_type"]]
-            verify(candidate, receipt, now=NOW)
-    assert all(ids==["mlb:112","mlb:134"] for ids in expanded.team_ids)
-    assert expanded.home_team_id.eq("mlb:112").all()
-    assert all(ids["odds_api"]=="odds-100" for ids in expanded.provider_ids)
+    assert expanded.get("mlb_pregame_receipts", pd.Series(dtype=object)).isna().all()
     from app_core.candidate_evidence_schema import authority_projection
     from core.wager_decisions import allocate_exposure
     private = authority_projection(expanded, [])
-    assert all(ids == ["mlb:112", "mlb:134"] for ids in private.team_ids)
-    # The factual IDs clear only the identity blocker; collection grants no stake.
+    # No receipt is silently fabricated or granted wager authority.
     allocated = allocate_exposure(private.to_dict("records"), 1000,
                                   total_cap=.01, game_cap=.001, sport_caps={"MLB": .01})
     assert all(x["recommended_stake"] == 0 for x in allocated)
-    assert all("missing_stable_team_ids" not in x.get("production_gate_reason", "") for x in allocated)
 
 
 @pytest.mark.parametrize("requested_date", [None, "2026-09-15"])

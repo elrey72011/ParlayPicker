@@ -2,7 +2,7 @@ name: MLB receipt reconciliation
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 12 * * *'
+    - cron: '30 12,18 * * *'
 permissions:
   contents: read
 concurrency:
@@ -16,6 +16,7 @@ jobs:
     env:
       PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
       PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
     steps:
       - uses: actions/checkout@v5
         id: checkout
@@ -38,11 +39,11 @@ jobs:
           fi
           printf '{"status":"failed","reason_code":"%s","failed_stage":"setup","remote_backup_verified":false}\n' "$reason" > "$RUNNER_TEMP/mlb-receipt-store-audit.json"
           echo "::error title=$reason::$reason"
-      - name: Restore, reconcile, grade, verify backup, and audit up to 100 saved games
+      - name: Restore, capture live receipts, reconcile, verify backup, and audit
         id: reconcile
         run: |
           export PARLAYPICKER_EVIDENCE_DIR="$RUNNER_TEMP/mlb-receipt-evidence"
-          if python -u scripts/capture_mlb_pregame_receipts.py reconcile-remote --max-feeds 100 --output "$RUNNER_TEMP/mlb-receipt-store-audit.json"; then
+          if python -u scripts/capture_mlb_pregame_receipts.py reconcile-remote --max-feeds 100 --output "$RUNNER_TEMP/mlb-receipt-store-audit.json" --capture-live --max-capture-feeds 20; then
             exit 0
           fi
           if [[ ! -s "$RUNNER_TEMP/mlb-receipt-store-audit.json" ]]; then

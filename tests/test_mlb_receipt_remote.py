@@ -94,6 +94,58 @@ def test_scheduled_reconciliation_restores_before_outcomes_and_backs_up(monkeypa
     assert result['audit']['remote_backup_verified'] is True
 
 
+def test_scheduled_live_capture_restores_then_verifies_backup_before_reconcile(monkeypatch, tmp_path):
+    from app_core import evidence_config, mlb_receipt_audit, odds_api
+    calls = []
+    monkeypatch.setenv('PARLAYPICKER_DRIVE_FOLDER_ID', 'folder')
+    monkeypatch.setenv('PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT', 'configured')
+    monkeypatch.setenv('ODDS_API_KEY', 'configured')
+    monkeypatch.setattr(evidence_config, 'service_account_info', lambda: {})
+    monkeypatch.setattr(remote, 'connection', lambda: ('client', 'folder'))
+    monkeypatch.setattr(remote, 'recover', lambda client, path: calls.append('restore') or 2)
+    class Client:
+        def __init__(self, key, *, markets):
+            assert key == 'configured' and markets == 'spreads,totals'
+        def get_odds(self, sport):
+            assert sport == 'baseball_mlb'
+            calls.append('fetch')
+            return [{'id': 'odds-event'}]
+    monkeypatch.setattr(odds_api, 'TheOddsAPIClient', Client)
+    def capture(games, *, path, max_feeds):
+        assert games == [{'id': 'odds-event'}] and max_feeds == 4
+        calls.append('capture')
+        return games, {'receipts_created': 1}
+    monkeypatch.setattr(r, 'capture_live_games', capture)
+    monkeypatch.setattr(r, 'reconcile', lambda path, max_games: calls.append('reconcile') or {'outcomes_created': 0})
+    monkeypatch.setattr(r, 'export_records', lambda path, settled_only: [])
+    monkeypatch.setattr(remote, 'prepare_rows', lambda records: calls.append('grade') or [])
+    monkeypatch.setattr(remote, 'backup', lambda client, folder, path: calls.append('backup') or
+                        {'remote_backup_verified': True, 'backup_id': 'a'*64})
+    monkeypatch.setattr(remote, 'verify_backup', lambda client, folder, report:
+                        calls.append('verify') or {'remote_backup_verified': True,
+                                                   'backup_id': report['backup_id']})
+    monkeypatch.setattr(mlb_receipt_audit, 'audit_store', lambda path: calls.append('audit') or {'blockers': []})
+    result = remote.reconcile_durable(path=tmp_path/'receipts.sqlite3', capture_live=True,
+                                      max_capture_feeds=4)
+    assert calls == ['restore', 'fetch', 'capture', 'backup', 'verify', 'reconcile',
+                     'grade', 'backup', 'verify', 'audit']
+    assert result['capture']['receipts_created'] == 1
+    assert result['remote_backup_verified'] is True
+
+
+def test_scheduled_capture_missing_odds_key_stops_before_drive(monkeypatch):
+    from app_core import evidence_config
+    monkeypatch.setenv('PARLAYPICKER_DRIVE_FOLDER_ID', 'folder')
+    monkeypatch.setenv('PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT', 'configured')
+    monkeypatch.delenv('ODDS_API_KEY', raising=False)
+    monkeypatch.setattr(evidence_config, 'service_account_info', lambda: {})
+    monkeypatch.setattr(remote, 'connection', lambda: pytest.fail('must fail before Drive'))
+    with pytest.raises(remote.ReceiptWorkflowFailure) as caught:
+        remote.reconcile_durable(capture_live=True)
+    assert caught.value.report()['failed_stage'] == 'configure'
+    assert caught.value.report()['reason_code'] == 'MISSING_CONFIGURATION'
+
+
 def test_scheduled_reconciliation_missing_configuration_is_classified(monkeypatch):
     monkeypatch.delenv('PARLAYPICKER_DRIVE_FOLDER_ID', raising=False)
     monkeypatch.delenv('PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT', raising=False)

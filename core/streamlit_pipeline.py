@@ -7408,15 +7408,18 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 continue
 
             if sk == "baseball_mlb" and date is None:
-                # Original provider objects, before candidate expansion/reporting repair.
-                from app_core.mlb_receipt_remote import collect_durable
-                try:
-                    sport_games, mlb_receipt_health = collect_durable(sport_games, reconcile_history=False)
-                except Exception as exc:
-                    # Research display must survive collector/storage failures.
-                    mlb_receipt_health = {"receipts_created": 0, "receipts_skipped": len(sport_games)*4,
-                                          "reasons": {"collector_unavailable": 1}}
-                    logger.warning("MLB receipt collection unavailable: %s", type(exc).__name__)
+                # Full Drive receipt recovery grows with every saved game. It
+                # exhausted the interactive app during analysis on 2026-09-24.
+                # The scheduled receipt runner performs restore, live capture,
+                # backup verification and grading with its own resource budget.
+                # No foreground observation may claim that scheduled evidence.
+                mlb_receipt_health = {
+                    "status": "DEFERRED_TO_SCHEDULED_CAPTURE",
+                    "receipts_created": 0,
+                    "receipts_skipped": len(sport_games) * 4,
+                    "remote_backup_verified": False,
+                    "reasons": {"foreground_receipt_capture_deferred": 1},
+                }
 
             for game in sport_games:
                 matchup_id = game.get('matchup_id')
@@ -11234,4 +11237,3 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
 
 def run_bankroll_simulation(portfolio_df: pd.DataFrame, bankroll: float) -> dict[str, float | list[list[float]]]:
     return simulate_bankroll(portfolio_df=portfolio_df, starting_bankroll=bankroll, days=30, simulations=200)
-

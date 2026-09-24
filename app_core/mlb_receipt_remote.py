@@ -249,6 +249,8 @@ def _workflow_reason(stage, exc):
     if stage == "configure":
         missing = any(not os.environ.get(key, "").strip() for key in
                       ("PARLAYPICKER_DRIVE_FOLDER_ID", "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT"))
+        missing = missing or (type(exc) is ValueError and
+                              str(exc) == "Missing scheduled receipt capture key")
         return "MISSING_CONFIGURATION" if missing else "WORKFLOW_CONFIG_ERROR"
     if status in (401, 403):
         return "AUTH_FAILURE"
@@ -261,6 +263,12 @@ def _workflow_reason(stage, exc):
         if isinstance(exc, (requests.Timeout, requests.ConnectionError)) or status in (500, 502, 503, 504):
             return "PROVIDER_NETWORK_FAILURE"
         return "RECONCILIATION_FAILURE"
+    if stage == "capture":
+        if status == 429:
+            return "PROVIDER_RATE_LIMIT"
+        if isinstance(exc, (requests.Timeout, requests.ConnectionError)) or status in (500, 502, 503, 504):
+            return "PROVIDER_NETWORK_FAILURE"
+        return "CAPTURE_FAILURE"
     if stage == "restore":
         return "RECEIPT_INTEGRITY_FAILURE" if isinstance(exc, (r.Rejected, ValueError)) and not isinstance(exc, EvidenceStorageError) else "DRIVE_RESTORE_FAILURE"
     if stage == "grade":
@@ -320,20 +328,35 @@ def collect_durable(games, *, max_feeds=20, reconcile_history=True):
     return games, health
 
 
-def reconcile_durable(*, path=None, max_games=100):
-    """Restore, append finals, grade, back up, verify, then audit."""
+def reconcile_durable(*, path=None, max_games=100, capture_live=False, max_capture_feeds=20):
+    """Restore, optionally capture live receipts, grade, verify, and audit."""
     from app_core.evidence_config import service_account_info
     from app_core.mlb_receipt_audit import audit_store
 
     def check_configuration():
         if any(not os.environ.get(key, "").strip() for key in
-               ("PARLAYPICKER_DRIVE_FOLDER_ID", "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT")):
+                      ("PARLAYPICKER_DRIVE_FOLDER_ID", "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT")):
             raise ValueError("Missing receipt reconciliation configuration")
+        if capture_live and not os.environ.get("ODDS_API_KEY", "").strip():
+            raise ValueError("Missing scheduled receipt capture key")
         service_account_info()  # Presence/schema only; never print the value.
 
     _workflow_stage("configure", check_configuration)
     client, folder = _workflow_stage("connect", connection)
     restored = _workflow_stage("restore", lambda: recover(client, path))
+    capture = None
+    capture_backup = None
+    if capture_live:
+        def capture_current_slate():
+            from app_core.odds_api import TheOddsAPIClient
+            games = TheOddsAPIClient(os.environ["ODDS_API_KEY"], markets="spreads,totals").get_odds("baseball_mlb")
+            _, report = r.capture_live_games(games, path=path, max_feeds=max_capture_feeds)
+            return report
+        capture = _workflow_stage("capture", capture_current_slate)
+        # A later reconciliation failure cannot strand newly captured receipts
+        # on the ephemeral runner without a verified remote backup.
+        capture_backup = _workflow_stage("backup", lambda: backup(client, folder, path))
+        _workflow_stage("verify_backup", lambda: verify_backup(client, folder, capture_backup))
     reconciliation = _workflow_stage("reconcile", lambda: r.reconcile(path, max_games=max_games))
     graded_rows = _workflow_stage("grade", lambda: prepare_rows(r.export_records(path, settled_only=True)))
     backed_up = _workflow_stage("backup", lambda: backup(client, folder, path))
@@ -343,7 +366,8 @@ def reconcile_durable(*, path=None, max_games=100):
         raise ReceiptWorkflowFailure("audit", "AUDIT_FAILURE", "SettledDatasetIntegrityError")
     audit.update(remote_backup_verified=True, backup_id=verified["backup_id"],
                  persistence="Google Workspace Shared Drive backup verified during this run")
-    return {"records_restored": restored, "reconciliation": reconciliation,
+    return {"records_restored": restored, "capture": capture,
+            "capture_backup": capture_backup, "reconciliation": reconciliation,
             "graded_market_rows": len(graded_rows), **backed_up,
             "backup_verification": verified, "audit": audit}
 
