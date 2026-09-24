@@ -32,6 +32,29 @@ def progress(sport, stage, **facts):
     print(json.dumps({"sport": sport, "stage": stage, **facts}), flush=True)
 
 
+_CANONICAL_FAILURE_CODES = frozenset({
+    "canonical_remote_schema_invalid", "canonical_remote_table_invalid",
+    "canonical_remote_columns_invalid", "canonical_remote_blob_invalid",
+    "canonical_remote_json_invalid", "canonical_remote_integrity_conflict",
+    "canonical_remote_evidence_hash_conflict", "canonical_remote_identity_conflict",
+    "canonical_remote_local_conflict", "canonical_remote_source_conflict",
+    "canonical_remote_foreign_key_conflict", "canonical_remote_foreign_key_cycle",
+    "canonical_remote_missing_source_dependencies",
+    "canonical_remote_object_too_large", "canonical_remote_readback_conflict",
+})
+
+
+def canonical_failure_code(exc):
+    """Expose only owned integrity codes, HTTP status, or exception class."""
+    if isinstance(exc, ValueError) and str(exc) in _CANONICAL_FAILURE_CODES:
+        return str(exc).upper()
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if type(status) is int and 400 <= status <= 599:
+        return f"DRIVE_STATUS_{status}"
+    name = type(exc).__name__.upper()
+    return name if re.fullmatch(r"[A-Z][A-Z0-9_]{2,79}", name) else "ERROR"
+
+
 def utcnow():
     return datetime.now(timezone.utc)
 
@@ -263,11 +286,35 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
     canonical_session = {}
     receipt_client = _ReceiptClient(client, folder)
     try:
-        from app_core.prospective_remote import sync as sync_canonical
+        from app_core.prospective_remote import (
+            CanonicalMissingDependencies, sync as sync_canonical,
+        )
         from app_core.prospective_validation_plans import freeze_current_validation_plans
         audit_stage(None, "CANONICAL_RESTORE")
-        report["canonical_restore"] = sync_canonical(canonical_path, client, folder,
-                                                      canonical_session)
+        try:
+            report["canonical_restore"] = sync_canonical(canonical_path, client, folder,
+                                                          canonical_session)
+        except CanonicalMissingDependencies as missing:
+            # An interrupted older upload could have published facts before
+            # their immutable source rows. Rebuild only those sources locally
+            # from independent backups, then verify the entire remote again.
+            from app_core.prospective_reconciliation import reconcile_sport
+            from app_core.prospective_source_view import SOURCE_FILENAMES
+            report["canonical_repair_sports"] = sorted(missing.sports)
+            for repair_sport in sorted(missing.sports):
+                audit_stage(repair_sport, "CANONICAL_SOURCE_REPAIR")
+                adapter = get_adapter(repair_sport)
+                adapter.restore(root / adapter.path_name, client, folder, {})
+                if repair_sport == "MLB":
+                    from app_core.mlb_receipt_remote import recover
+                    recover(receipt_client, root / SOURCE_FILENAMES[repair_sport])
+                source_path = root / (SOURCE_FILENAMES[repair_sport] if repair_sport == "MLB"
+                                      else adapter.path_name)
+                reconcile_sport(repair_sport, canonical_path, source_path)
+            canonical_session.clear()
+            audit_stage(None, "CANONICAL_RESTORE")
+            report["canonical_restore"] = sync_canonical(canonical_path, client, folder,
+                                                          canonical_session)
         audit_stage(None, "FREEZE_VALIDATION_PLANS")
         report["frozen_validation_plans"] = freeze_current_validation_plans(
             canonical_path, source_commit=report["source_commit"])
@@ -275,9 +322,11 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
         report["canonical_backup"] = sync_canonical(canonical_path, client, folder,
                                                      canonical_session)
     except Exception as exc:
-        code = type(exc).__name__
-        report["errors"].append("canonical_restore_or_plan_freeze:" + code)
-        report["failure_stages"] = {"canonical": {"stage": "restore_or_plan_freeze", "code": code}}
+        code = canonical_failure_code(exc)
+        failed_stage = report.get("active_stage") or "CANONICAL_RESTORE"
+        progress("ALL", "failed", failed_stage=failed_stage, code=code)
+        report["errors"].append("canonical:" + code)
+        report["failure_stages"] = {"canonical": {"stage": failed_stage, "code": code}}
         report["health"] = {sport: {"restore": "not_attempted", "backup": "not_attempted",
                                     "verified_backup": False, "provider_blockers": [
                                         "CANONICAL_RESTORE_OR_PLAN_FREEZE_FAILED"],

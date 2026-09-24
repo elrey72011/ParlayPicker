@@ -6,6 +6,8 @@ import pytest
 
 from app_core import prospective_evidence as evidence
 from app_core import prospective_remote
+from app_core import nfl_market_store as nfl
+from app_core.prospective_reconciliation import reconcile_sport
 
 
 class Cloud:
@@ -70,3 +72,32 @@ def test_remote_rejects_tampered_payload(tmp_path):
     cloud.objects[key] = cloud.objects[key].replace(b"Home", b"H0me")
     with pytest.raises(ValueError, match="canonical_remote_integrity_conflict|canonical_remote_evidence_hash_conflict"):
         prospective_remote.sync(tmp_path / "second.sqlite3", cloud, "folder")
+
+
+def test_interrupted_fact_upload_requires_independent_source_recovery(tmp_path):
+    cloud = Cloud()
+    source = tmp_path / "nfl-market.sqlite3"
+    first, second = tmp_path / "first.sqlite3", tmp_path / "second.sqlite3"
+    now = datetime.now(timezone.utc)
+    nfl.insert({"schema": 1, "kind": "capture", "created_at": now.isoformat(),
+                "data": {"sport": "NFL", "protocol": "nfl-market-v1", "events": [{
+                    "event_id": "orphan-1", "home": "Home", "away": "Away",
+                    "start": (now + timedelta(hours=2)).isoformat(),
+                    "quotes": [{"market": "totals", "selection": "Over", "point": 42.5,
+                                "odds_american": -110, "book": "book-a",
+                                "recorded_at": now.isoformat()}]}]}}, source)
+    reconcile_sport("NFL", first, source)
+    prospective_remote.sync(first, cloud, "folder")
+    parent = next(key for key in cloud.objects if "prospective_reconciled_source/" in key)
+    del cloud.objects[parent]  # Simulate a prior run that published the fact first.
+
+    with pytest.raises(prospective_remote.CanonicalMissingDependencies) as error:
+        prospective_remote.sync(second, cloud, "folder")
+    assert error.value.sports == {"NFL"}
+    assert not cloud.objects.get(parent)
+
+    reconcile_sport("NFL", second, source)  # Recovered from independent source backup.
+    restored = prospective_remote.sync(second, cloud, "folder")
+    assert restored["new_records_verified"] == 1
+    assert parent in cloud.objects
+    assert prospective_remote.sync(tmp_path / "third.sqlite3", cloud, "folder")["records_restored"] == 2

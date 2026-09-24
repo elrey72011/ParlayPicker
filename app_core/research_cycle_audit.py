@@ -96,8 +96,14 @@ def sanitize_cycle(report):
         "errors": [_code(error) for error in report.get("errors", []) if isinstance(error, str)],
         "canonical_restore": _counts(report.get("canonical_restore")),
         "canonical_backup": _counts(report.get("canonical_backup")),
+        "canonical_repair_sports": [_code(sport) for sport in report.get("canonical_repair_sports", [])
+                                    if sport in {"NFL", "NCAAF", "MLB"}],
         "sports": {},
     }
+    failure = report.get("failure_stages", {}).get("canonical")
+    if isinstance(failure, dict):
+        result["canonical_failure"] = {"stage": _code(failure.get("stage")),
+                                       "code": _code(failure.get("code"))}
     plans = report.get("frozen_validation_plans", [])
     if isinstance(plans, list):
         result["frozen_validation_plans"] = [

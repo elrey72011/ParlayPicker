@@ -101,3 +101,15 @@ def test_workflow_has_room_for_first_restore_and_keeps_audit_on_failure():
     assert research["timeout-minutes"] >= 60
     artifact = next(step for step in research["steps"] if step.get("name") == "Retain sanitized cycle audit")
     assert "always()" in artifact["if"]
+
+
+def test_canonical_failure_audit_identifies_stage_without_exception_text():
+    report = {"requested_sports": ["MLB"], "errors": ["canonical:DRIVE_STATUS_429"],
+              "failure_stages": {"canonical": {"stage": "CANONICAL_RESTORE",
+                                                "code": "DRIVE_STATUS_429"}},
+              "canonical_repair_sports": ["MLB"]}
+    audit = sanitize_cycle(report)
+    assert audit["errors"] == ["canonical:DRIVE_STATUS_429"]
+    assert audit["canonical_failure"] == {"stage": "CANONICAL_RESTORE",
+                                          "code": "DRIVE_STATUS_429"}
+    assert audit["canonical_repair_sports"] == ["MLB"]

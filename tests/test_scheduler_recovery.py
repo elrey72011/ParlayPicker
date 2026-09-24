@@ -127,3 +127,41 @@ def test_uncertain_upload_is_never_retried(monkeypatch):
     with pytest.raises(requests.ReadTimeout):
         store.put_object(Key="record", Body=b"{}", IfNoneMatch="*")
     assert len(calls) == 1
+
+
+def test_canonical_gap_repairs_only_from_independent_source_backup(monkeypatch, tmp_path):
+    from test_research_scheduler import Cloud
+    from app_core import prospective_remote, prospective_reconciliation, prospective_validation_plans
+    from app_core.prospective_sport_adapters import get_adapter
+
+    calls = []
+    def sync(*args):
+        calls.append("canonical_sync")
+        if calls.count("canonical_sync") == 1:
+            raise prospective_remote.CanonicalMissingDependencies({"NFL"})
+        return {"records_verified": 0}
+    monkeypatch.setattr(prospective_remote, "sync", sync)
+    monkeypatch.setattr(prospective_validation_plans, "freeze_current_validation_plans",
+                        lambda *args, **kwargs: [])
+    monkeypatch.setattr(prospective_reconciliation, "reconcile_sport",
+                        lambda *args: calls.append("reconcile") or {})
+    adapter = get_adapter("NFL")
+    monkeypatch.setattr(adapter, "restore", lambda *args: calls.append("native_restore") or {})
+    monkeypatch.setattr(adapter, "backup", lambda *args: calls.append("native_backup") or {})
+    monkeypatch.setattr(adapter, "run_cycle", lambda *args: {"errors": []})
+
+    result = scheduler.run(["NFL"], tmp_path, Cloud(), "folder")
+    assert result["canonical_repair_sports"] == ["NFL"]
+    assert result["requested_slate_success"] is True
+    assert calls[:4] == ["canonical_sync", "native_restore", "reconcile", "canonical_sync"]
+
+
+def test_canonical_failure_code_has_no_provider_text():
+    assert scheduler.canonical_failure_code(ValueError("canonical_remote_foreign_key_conflict")) == \
+        "CANONICAL_REMOTE_FOREIGN_KEY_CONFLICT"
+    assert scheduler.canonical_failure_code(RuntimeError("https://private.example/api-key")) == \
+        "RUNTIMEERROR"
+    response = requests.Response()
+    response.status_code = 429
+    error = requests.HTTPError("https://private.example/api-key", response=response)
+    assert scheduler.canonical_failure_code(error) == "DRIVE_STATUS_429"
