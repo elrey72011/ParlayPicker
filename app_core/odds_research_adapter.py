@@ -444,7 +444,8 @@ class OddsResearchAdapter:
     def health(self, path):
         return self.audit(path)
 
-    def run_cycle(self, path, state, cfbd_key, odds_key, backup, budget):
+    def run_cycle(self, path, state, cfbd_key, odds_key, backup, budget,
+                  after_capture=None):
         if not odds_key:
             raise ValueError("missing_provider_keys")
         result = {"mode": "market_tracking_only", "captured": 0, "graded": 0,
@@ -488,6 +489,14 @@ class OddsResearchAdapter:
         except Exception:
             result["errors"].append("capture_failed")
             result["capture_status"] = "failed"
+        # Canonical quote insertion has a strict live freshness window. Freeze
+        # research evidence immediately after capture, before close polling.
+        if after_capture is not None:
+            try:
+                result["model_cycle"] = after_capture()
+                result["predictions"] = result["model_cycle"]["predictions"]
+            except Exception:
+                result["errors"].append("research_model_cycle_failed")
         try:
             result.update(self.capture_closes(path, odds_key, budget.request, backup))
             result["close_capture_status"] = "partial" if any(result[k] for k in

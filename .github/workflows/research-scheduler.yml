@@ -27,6 +27,7 @@ jobs:
       THE_ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       PARLAYPICKER_NETLIFY_SITE_ID: ${{ vars.PARLAYPICKER_NETLIFY_SITE_ID }}
       RESEARCH_SPORTS: ${{ inputs.sports || vars.RESEARCH_SPORTS || 'NFL,NCAAF,NBA,NCAAB,MLB,NHL' }}
+      RESEARCH_AUDIT_PATH: ${{ runner.temp }}/research-cycle-audit.json
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -44,6 +45,13 @@ jobs:
         env:
           PARLAYPICKER_EVIDENCE_DIR: ${{ runner.temp }}/research-evidence
         run: python -u scripts/run_research_scheduler.py
+      - name: Retain sanitized cycle audit
+        if: ${{ always() && steps.window.outputs.active == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: six-sport-research-cycle-audit
+          path: ${{ runner.temp }}/research-cycle-audit.json
+          if-no-files-found: warn
 
 
   activation-evidence:

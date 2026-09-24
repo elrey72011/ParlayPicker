@@ -310,6 +310,10 @@ def test_workflow_default_and_cli_fail_on_partial_requested_slate(tmp_path, monk
     monkeypatch.setattr(cli, "run", lambda *args: {"errors": [], "requested_slate_success": False})
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
     monkeypatch.setenv("RESEARCH_SPORTS", ",".join(registry.DEFAULT_SPORTS))
+    monkeypatch.setenv("PARLAYPICKER_DRIVE_FOLDER_ID", "folder")
+    monkeypatch.setenv("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", "test-only-placeholder")
+    monkeypatch.setenv("ODDS_API_KEY", "test-only-placeholder")
+    monkeypatch.setenv("CFBD_API_KEY", "test-only-placeholder")
     monkeypatch.delenv("PARLAYPICKER_NETLIFY_SITE_ID", raising=False)
     assert cli.main() == 1
     assert '"requested_slate_success": false' in (tmp_path / "summary.md").read_text()

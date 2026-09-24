@@ -1,6 +1,12 @@
 """Bounded orchestration around frozen research modules; never fits models."""
 import hashlib
+import inspect
 import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import uuid
 from datetime import datetime, timezone, timedelta
 from app_core import mlb_prospective as mlb, mlb_prospective_store as ms
 from app_core import ncaaf_prospective as ncaaf, ncaaf_prospective_store as ns
@@ -28,6 +34,39 @@ def progress(sport, stage, **facts):
 
 def utcnow():
     return datetime.now(timezone.utc)
+
+
+def source_commit():
+    """Bind frozen plans and run audits to the code actually being executed."""
+    sha = os.getenv("GITHUB_SHA", "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        result = subprocess.run(["git", "rev-parse", "HEAD"],
+                                cwd=Path(__file__).resolve().parents[1],
+                                capture_output=True, text=True, timeout=5, check=True)
+        sha = result.stdout.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise ValueError("source_commit_unavailable")
+    return sha
+
+
+class _ReceiptClient:
+    """Supply bounded object listing for both DriveStore and test object stores."""
+    def __init__(self, client, folder):
+        self.client, self.folder = client, folder
+        self._receipt_verified = set()
+
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+    def read_objects(self, *, Prefix):
+        if callable(getattr(self.client, "read_objects", None)):
+            yield from self.client.read_objects(Prefix=Prefix)
+        else:
+            for page in self.client.get_paginator("list_objects_v2").paginate(
+                    Bucket=self.folder, Prefix=Prefix):
+                for item in page.get("Contents", []):
+                    with self.client.get_object(Bucket=self.folder, Key=item["Key"])["Body"] as body:
+                        yield item["Key"], body.read(40_000_001)
 
 
 def due(start, now):
@@ -210,8 +249,35 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
     if not isinstance(previous_health, dict):
         previous_health = {}
     budget=Budget(state,lambda:checkpoint(client,folder,state))
-    report={"started_at":utcnow().isoformat(),"requested_sports":sports,
+    report={"run_id":str(uuid.uuid4()),"source_commit":source_commit(),
+            "started_at":utcnow().isoformat(),"requested_sports":sports,
             "sports":{},"health":{},"errors":[],"production_eligible":False}
+    canonical_path = root / "prospective-evidence.sqlite3"
+    canonical_session = {}
+    receipt_client = _ReceiptClient(client, folder)
+    try:
+        from app_core.prospective_remote import sync as sync_canonical
+        from app_core.prospective_validation_plans import freeze_current_validation_plans
+        report["canonical_restore"] = sync_canonical(canonical_path, client, folder,
+                                                      canonical_session)
+        report["frozen_validation_plans"] = freeze_current_validation_plans(
+            canonical_path, source_commit=report["source_commit"])
+        report["canonical_backup"] = sync_canonical(canonical_path, client, folder,
+                                                     canonical_session)
+    except Exception as exc:
+        code = type(exc).__name__
+        report["errors"].append("canonical_restore_or_plan_freeze:" + code)
+        report["failure_stages"] = {"canonical": {"stage": "restore_or_plan_freeze", "code": code}}
+        report["health"] = {sport: {"restore": "not_attempted", "backup": "not_attempted",
+                                    "verified_backup": False, "provider_blockers": [
+                                        "CANONICAL_RESTORE_OR_PLAN_FREEZE_FAILED"],
+                                    "production_eligible": False} for sport in sports}
+        report["requested_slate_success"] = False
+        report["finished_at"] = utcnow().isoformat()
+        report["api_budget"] = budget.report()
+        state["last_run"] = report
+        checkpoint(client, folder, state)
+        return report
     for sport in sports:
         adapter=get_adapter(sport)
         path=root/adapter.path_name
@@ -223,6 +289,8 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
                 "close_capture":"not_attempted",
                 "backup":"not_attempted","verified_backup":False,
                 "discovered_events":0,"captured_events":0,"graded_events":0,
+                "captured_quote_rows":0,"research_predictions":0,
+                "research_close_candidates":0,"reconciliation_status":"not_attempted",
                 "provider_blockers":[],"production_eligible":False}
         old = previous_health.get(sport, {})
         if isinstance(old, dict):
@@ -247,10 +315,45 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
             return result
         try:
             backup()  # Restore must succeed before any capture or grading.
+            if sport == "MLB":
+                from app_core.mlb_receipt_remote import recover
+                from app_core.prospective_source_view import SOURCE_FILENAMES
+                report.setdefault("receipt_restore", {})[sport] = recover(
+                    receipt_client, root / SOURCE_FILENAMES[sport])
+            if sport in ("NFL", "NCAAF", "MLB"):
+                from app_core.prospective_reconciliation import reconcile_sport
+                from app_core.prospective_source_view import SOURCE_FILENAMES
+                stage = "canonical_reconciliation"
+                source_path = root / (SOURCE_FILENAMES[sport] if sport == "MLB" else adapter.path_name)
+                report.setdefault("restore_reconciliation", {})[sport] = reconcile_sport(
+                    sport, canonical_path, source_path)
+                report["canonical_backup"] = sync_canonical(canonical_path, client, folder,
+                                                             canonical_session)
             try:
                 stage = "capture_and_grade"
                 progress(sport, stage)
-                result=adapter.run_cycle(path,state,cfbd_key,odds_key,backup,budget)
+                if sport in ("NBA", "NCAAB", "NHL") and "after_capture" in inspect.signature(
+                        adapter.run_cycle).parameters:
+                    from app_core.prospective_research_models import run_sport_model_cycle
+                    def model_after_capture():
+                        model_report = run_sport_model_cycle(path, canonical_path, sport)
+                        report["canonical_backup"] = sync_canonical(
+                            canonical_path, client, folder, canonical_session)
+                        return model_report
+                    result=adapter.run_cycle(path,state,cfbd_key,odds_key,backup,budget,
+                        after_capture=model_after_capture)
+                else:
+                    result=adapter.run_cycle(path,state,cfbd_key,odds_key,backup,budget)
+                stage = "canonical_reconciliation"
+                if sport in ("NFL", "NCAAF", "MLB"):
+                    from app_core.prospective_reconciliation import reconcile_sport
+                    from app_core.prospective_source_view import SOURCE_FILENAMES
+                    source_path = root / (SOURCE_FILENAMES[sport] if sport == "MLB" else adapter.path_name)
+                    result["reconciliation"] = reconcile_sport(sport, canonical_path, source_path)
+                    health["reconciliation_status"] = "success"
+                else:
+                    health["reconciliation_status"] = (
+                        "research_model_cycle_completed" if "model_cycle" in result else "failed")
                 report["sports"][sport]=result
                 report["errors"].extend(sport+":"+reason for reason in result["errors"])
                 health["capture"] = result.get("capture_status", "success" if not result["errors"] else "failed")
@@ -263,12 +366,36 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
                 health["discovered_events"] = result.get("discovered", result.get("upcoming_games", 0))
                 health["captured_events"] = result.get("captured",0)
                 health["graded_events"] = result.get("graded",0)
+                health["captured_quote_rows"] = result.get("captured_quote_rows",0)
+                health["research_predictions"] = result.get("predictions",0)
+                health["research_close_candidates"] = result.get("close_candidates",0)
                 health["provider_blockers"] = sorted(set(result.get("blockers",[]) + result["errors"]))
             finally:
                 # A backup error must be distinguishable from provider capture.
                 previous_stage = stage
                 stage = "backup"
-                backup()
+                native_error = None
+                try:
+                    backup()
+                    if sport == "MLB":
+                        from app_core.mlb_receipt_remote import backup as backup_receipts, verify_backup
+                        from app_core.prospective_source_view import SOURCE_FILENAMES
+                        receipt_report = backup_receipts(receipt_client, folder,
+                                                         root / SOURCE_FILENAMES[sport])
+                        report.setdefault("receipt_backup", {})[sport] = verify_backup(
+                            receipt_client, folder, receipt_report)
+                except Exception as exc:
+                    native_error = exc
+                stage = "canonical_backup"
+                try:
+                    report["canonical_backup"] = sync_canonical(canonical_path, client, folder,
+                                                                 canonical_session)
+                except Exception:
+                    health["verified_backup"] = False
+                    raise
+                if native_error is not None:
+                    stage = "backup"
+                    raise native_error
                 stage = previous_stage
         except Exception as exc:
             # Never include provider exception text: URLs may contain API keys.
@@ -279,8 +406,8 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
             progress(sport, "failed", failed_stage=stage, code=code)
             report["errors"].append(sport+":"+code)
             report.setdefault("failure_stages", {})[sport] = {"stage": stage, "code": code}
-            health[stage if stage in ("restore","backup") else "capture"]="failed"
-            if stage == "backup":
+            health[stage if stage in ("restore","backup","canonical_backup") else "capture"]="failed"
+            if stage in ("backup", "canonical_backup"):
                 health["verified_backup"] = False
             health["provider_blockers"].append(code)
         health["api_budget"] = (budget.report()["by_sport"].get(sport)
@@ -291,6 +418,7 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
     report["requested_slate_success"] = not report["errors"] and all(
         report["health"][s]["restore"] == "success" and
         report["health"][s]["backup"] == "success" and
+        report["health"][s].get("canonical_backup") != "failed" and
         report["health"][s]["capture"] == "success" and
         report["health"][s]["grade"] == "success" and
         report["health"][s]["close_capture"] in ("success", "legacy_specialized") and
