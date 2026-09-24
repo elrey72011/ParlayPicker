@@ -241,6 +241,7 @@ def test_reconciled_ledger_restores_from_canonical_remote(tmp_path):
     class Cloud:
         def __init__(self):
             self.objects = {}
+            self.parallel_calls = 0
 
         def read_objects(self, *, Prefix):
             return [(key, raw) for key, raw in self.objects.items() if key.startswith(Prefix)]
@@ -253,9 +254,18 @@ def test_reconciled_ledger_restores_from_canonical_remote(tmp_path):
         def get_object(self, *, Bucket, Key):
             return {"Body": BytesIO(self.objects[Key])}
 
+        def run_parallel(self, operation, items, progress=None):
+            self.parallel_calls += 1
+            result = []
+            for item in items:
+                result.append(operation(self, item))
+                progress(len(result), len(items))
+            return result
+
     cloud = Cloud()
     uploaded = sync_canonical(first, cloud, "folder")
     assert uploaded["new_records_verified"] == 2
+    assert cloud.parallel_calls == 1
     restored = sync_canonical(second, cloud, "folder")
     assert restored["remote_records_read"] == 2
     assert reconciliation_readiness(second) == reconciliation_readiness(first)

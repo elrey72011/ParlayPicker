@@ -60,3 +60,44 @@ def test_missing_credentials_fail_explicitly_before_provider_or_remote_calls(tmp
     assert set(audit["missing_environment_variables"]) == {
         "PARLAYPICKER_DRIVE_FOLDER_ID", "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT",
         "ODDS_API_KEY", "CFBD_API_KEY"}
+
+
+def test_audit_checkpoint_survives_an_interrupted_research_cycle(tmp_path, monkeypatch):
+    from scripts import run_research_scheduler as script
+    audit_path = tmp_path / "audit.json"
+    monkeypatch.setenv("RESEARCH_AUDIT_PATH", str(audit_path))
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
+    monkeypatch.setenv("RESEARCH_SPORTS", "MLB")
+    monkeypatch.setenv("PARLAYPICKER_DRIVE_FOLDER_ID", "folder")
+    monkeypatch.setenv("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", "test-only-placeholder")
+    monkeypatch.delenv("PARLAYPICKER_NETLIFY_SITE_ID", raising=False)
+    monkeypatch.setattr(script, "is_open", lambda: True)
+    monkeypatch.setattr(script, "settings", lambda: ("folder", None))
+    monkeypatch.setattr(script, "DriveStore", lambda _: object())
+
+    def run_until_cancelled(*args):
+        checkpoint = args[-1]
+        checkpoint({"requested_sports": ["MLB"], "health": {"MLB": {"restore": "success"}},
+                    "active_sport": "MLB", "active_stage": "CANONICAL_RECONCILIATION",
+                    "execution_state": "IN_PROGRESS", "errors": ["https://secret.example/key"]})
+        written = json.loads(audit_path.read_text())
+        assert written["execution_state"] == "IN_PROGRESS"
+        assert written["active_stage"] == "CANONICAL_RECONCILIATION"
+        assert written["sports"]["MLB"]["restore"] == "success"
+        assert "secret.example" not in audit_path.read_text()
+        assert not audit_path.with_name("audit.json.tmp").exists()
+        raise TimeoutError("simulated cancellation")
+
+    monkeypatch.setattr(script, "run", run_until_cancelled)
+    assert script.main() == 1
+    assert json.loads(audit_path.read_text())["execution_state"] == "FAILED"
+
+
+def test_workflow_has_room_for_first_restore_and_keeps_audit_on_failure():
+    from pathlib import Path
+    import yaml
+    workflow = yaml.safe_load(Path(".github/workflows/research-scheduler.yml").read_text())
+    research = workflow["jobs"]["research"]
+    assert research["timeout-minutes"] >= 60
+    artifact = next(step for step in research["steps"] if step.get("name") == "Retain sanitized cycle audit")
+    assert "always()" in artifact["if"]

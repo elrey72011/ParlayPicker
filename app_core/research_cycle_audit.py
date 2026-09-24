@@ -86,6 +86,10 @@ def sanitize_cycle(report):
             and re.fullmatch(r"[0-9a-f]{40}", report["source_commit"]) else None,
         "started_at": _stamp(report.get("started_at")),
         "finished_at": _stamp(report.get("finished_at")),
+        "execution_state": report.get("execution_state") if report.get("execution_state")
+            in {"IN_PROGRESS", "COMPLETE", "FAILED", "SKIPPED"} else "IN_PROGRESS",
+        "active_sport": _code(report.get("active_sport")) if report.get("active_sport") else None,
+        "active_stage": _code(report.get("active_stage")) if report.get("active_stage") else None,
         "requested_sports": [_code(sport) for sport in requested],
         "requested_slate_success": report.get("requested_slate_success") is True,
         "production_eligible": False,

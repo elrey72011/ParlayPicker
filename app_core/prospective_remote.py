@@ -189,7 +189,7 @@ def sync(path: str | Path, client, folder: str, session: dict | None = None) -> 
                     raise ValueError("canonical_remote_foreign_key_conflict")
         verified.update({key: hashlib.sha256(raw).hexdigest() for key, (_, raw, _) in remote.items()})
         session["restored"] = True
-    saved = 0
+    pending = []
     with closing(evidence.connect(path)) as db:
         for table, (columns, primary) in schema.items():
             for row in db.execute(f"SELECT {','.join(columns)} FROM {table}"):
@@ -199,15 +199,31 @@ def sync(path: str | Path, client, folder: str, session: dict | None = None) -> 
                         raise ValueError("canonical_remote_local_conflict")
                     continue
                 _decode(key, raw, schema)
-                try:
-                    client.put_object(Bucket=folder, Key=key, Body=raw,
-                                      ContentType="application/json", IfNoneMatch="*")
-                except AlreadyExists:
-                    pass
-                if _readback(client, folder, key) != raw:
-                    raise ValueError("canonical_remote_readback_conflict")
-                verified[key] = hashlib.sha256(raw).hexdigest()
-                saved += 1
+                pending.append((key, raw))
+    if pending:
+        print(json.dumps({"stage": "CANONICAL_UPLOAD", "pending_records": len(pending)}), flush=True)
+    def upload(worker, item):
+        key, raw = item
+        try:
+            worker.put_object(Bucket=folder, Key=key, Body=raw,
+                              ContentType="application/json", IfNoneMatch="*")
+        except AlreadyExists:
+            pass
+        if _readback(worker, folder, key) != raw:
+            raise ValueError("canonical_remote_readback_conflict")
+        return key, hashlib.sha256(raw).hexdigest()
+    def upload_progress(done, total):
+        if done == 1 or done % 100 == 0 or done == total:
+            print(json.dumps({"stage": "CANONICAL_UPLOAD", "verified_records": done,
+                              "pending_records": total}), flush=True)
+    if callable(getattr(client, "run_parallel", None)):
+        uploaded = client.run_parallel(upload, pending, progress=upload_progress)
+    else:
+        uploaded = []
+        for item in pending:
+            uploaded.append(upload(client, item))
+            upload_progress(len(uploaded), len(pending))
+    verified.update(uploaded)
     return {"remote_records_read": read_count, "records_restored": restored,
             "records_verified": len(verified),
-            "new_records_verified": saved}
+            "new_records_verified": len(uploaded)}
