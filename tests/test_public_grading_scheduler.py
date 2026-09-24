@@ -79,6 +79,8 @@ def test_cli_optional_public_grading(monkeypatch,tmp_path,configured):
     monkeypatch.setattr(cli,'run',lambda *a:{'errors':[]})
     monkeypatch.setenv('GITHUB_STEP_SUMMARY',str(tmp_path/'summary.md'))
     monkeypatch.setenv('RESEARCH_SPORTS','MLB')
+    monkeypatch.setenv('PARLAYPICKER_DRIVE_FOLDER_ID','folder')
+    monkeypatch.setenv('PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT','test-only-placeholder')
     monkeypatch.setenv('PARLAYPICKER_NETLIFY_SITE_ID','site-1234' if configured else '')
     calls=[]
     monkeypatch.setattr(scheduler,'run',lambda *a:calls.append(a) or {'status':'ok','errors':[]})
@@ -99,6 +101,8 @@ def test_cli_public_failure_is_sanitized(monkeypatch,tmp_path):
     monkeypatch.setattr(cli,'run',lambda *a:{'errors':['research:failure']})
     monkeypatch.setenv('GITHUB_STEP_SUMMARY',str(tmp_path/'summary.md'))
     monkeypatch.setenv('RESEARCH_SPORTS','MLB')
+    monkeypatch.setenv('PARLAYPICKER_DRIVE_FOLDER_ID','folder')
+    monkeypatch.setenv('PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT','test-only-placeholder')
     monkeypatch.setenv('PARLAYPICKER_NETLIFY_SITE_ID','site-1234')
     def fail(*a):raise RuntimeError('secret-value')
     monkeypatch.setattr(scheduler,'run',fail)

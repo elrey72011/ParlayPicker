@@ -16,24 +16,29 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             st.caption("Each sport and market is reviewed independently. A validation result does not activate a wager or authorize a stake.")
             if st.button("Load prospective market readiness", key="prospective_market_readiness_prepare"):
                 try:
-                    from app_core.prospective_evidence import all_market_readiness
-                    st.session_state["prospective_market_readiness"] = all_market_readiness(None)
+                    from app_core.prospective_readiness_report import load_readiness
+                    readiness = load_readiness(authenticate=True)
+                    st.session_state["prospective_market_readiness"] = readiness["markets"]
+                    st.session_state["prospective_source_readiness"] = readiness["sources"]
+                    st.session_state["prospective_remote_readiness"] = readiness["remote"]
                 except Exception:
                     st.session_state.pop("prospective_market_readiness", None)
-                    st.error("Prospective evidence could not be verified. All markets remain ineligible for this report.")
-                try:
-                    from app_core.prospective_source_view import all_source_readiness
-                    st.session_state["prospective_source_readiness"] = all_source_readiness()
-                except Exception:
                     st.session_state.pop("prospective_source_readiness", None)
-                    st.error("Local research source inventory could not be verified. It grants no wager authority.")
+                    st.session_state.pop("prospective_remote_readiness", None)
+                    st.error("Prospective evidence could not be verified. All markets remain ineligible for this report.")
             market_rows = st.session_state.get("prospective_market_readiness")
+            remote = st.session_state.get("prospective_remote_readiness")
+            if remote:
+                st.caption("Remote evidence: " + remote["status"] +
+                           (". Local zero counts do not establish that remote stores are empty."
+                            if not remote["verified"] else ". Restored and read-back verified."))
             if market_rows is not None:
-                visible = ("sport", "market_family", "capture_status", "pregame_observations",
-                           "unique_events", "settled_events", "training_count", "validation_count",
-                           "holdout_count", "effective_sample", "model_status", "calibration_status",
-                           "price_status", "close_clv_status", "validation_plan_status",
-                           "validation_state", "deployment_state", "next_blocker")
+                visible = ("sport", "market_family", "source_observations", "canonical_predictions",
+                           "unique_events", "settled_events", "independent_validation_count",
+                           "independent_holdout_count", "effective_sample", "model_id", "model_status",
+                           "calibration_id", "calibration_status", "validation_plan_id",
+                           "price_status", "close_clv_status", "deployment_state",
+                           "remote_evidence_status", "next_blocker")
                 st.dataframe(pd.DataFrame(market_rows).reindex(columns=visible), hide_index=True)
                 st.download_button("Download prospective market readiness",
                                    json.dumps(market_rows, indent=2, allow_nan=False),

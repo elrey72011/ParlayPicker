@@ -700,16 +700,66 @@ def insert_result(path: str | Path | None, result: Mapping) -> str:
                        _snapshot(values), raw_source=raw)
 
 
+def verify_provider_score(event: Mapping, result: Mapping) -> bool:
+    """Replay an exact Odds API final score without asserting market settlement."""
+    try:
+        sport = event["sport"]
+        if sport not in {"NBA", "NCAAB", "NHL"} or result["result_source"] != "THE_ODDS_API":
+            return False
+        if (event["provider_namespace"] != "THE_ODDS_API" or
+                result["result_source_id"] != event["provider_event_id"] or
+                result["event_id"] != event["event_id"] or
+                result["sport"] != sport or result["market_family"] is not None or
+                result["selection"] is not None or result["outcome"] is not None):
+            return False
+        raw = _source_json(result["raw_source"])
+        if not isinstance(raw, dict) or raw.get("completed") is not True:
+            return False
+        if (raw.get("id") != event["provider_event_id"] or
+                raw.get("sport_key") != ODDS_API_SPORT_KEYS[sport] or
+                raw.get("home_team") != event["home_team"] or
+                raw.get("away_team") != event["away_team"]):
+            return False
+        updated = _time(raw.get("last_update"), "score.last_update")
+        observed = _time(result["observed_at"], "observed_at")
+        available = _time(result["available_at"], "available_at")
+        if not _time(event["scheduled_start"], "scheduled_start") <= updated <= observed <= available:
+            return False
+        scores = raw.get("scores")
+        if not isinstance(scores, list) or len(scores) != 2:
+            return False
+        expected = {event["home_team"]: result["home_score"],
+                    event["away_team"]: result["away_score"]}
+        found = {}
+        for item in scores:
+            if not isinstance(item, dict) or item.get("name") in found:
+                return False
+            score = item.get("score")
+            if isinstance(score, bool) or not str(score).isdigit():
+                return False
+            found[item.get("name")] = int(score)
+        return found == expected
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+
+
 def _training_results(db: sqlite3.Connection, result_ids: object, sport: str,
-                      market: str, start: datetime, cutoff: datetime) -> tuple[list[str], int]:
+                      market: str, start: datetime, cutoff: datetime, *,
+                      event_score_target: bool = False) -> tuple[list[str], int]:
     if not isinstance(result_ids, (list, tuple)) or len(set(result_ids)) != len(result_ids):
         raise ValueError("training/fit result IDs must be a unique list")
     events = set()
     for result_id in result_ids:
-        result = _market_record(db, "prospective_result", "result_id", result_id,
-                                sport, market, "training result")
-        if result["outcome"] not in {"WIN", "LOSS", "PUSH", "VOID"}:
-            raise ValueError("training result is not settled")
+        if event_score_target:
+            result = _stored(db, "prospective_result", "result_id", _text(result_id, "training result"))
+            if result is None or result["sport"] != sport or not verify_provider_score(
+                    _event(db, result["event_id"]), result):
+                raise ValueError("training score is not replayable provider evidence")
+        else:
+            result = _market_record(db, "prospective_result", "result_id", result_id,
+                                    sport, market, "training result")
+            if result["outcome"] not in {"WIN", "LOSS", "PUSH", "VOID"}:
+                raise ValueError("training result is not settled")
         available = _time(result["available_at"], "available_at")
         if not start <= available <= cutoff:
             raise ValueError("outcome was outside the available training/fit window cutoff")
@@ -733,9 +783,17 @@ def insert_model(path: str | Path | None, model: Mapping) -> str:
     available = _time(data.get("available_at"), "available_at")
     if not start < cutoff <= created <= available <= _clock():
         raise ValueError("model training/availability chronology invalid")
+    target_kind = data.get("training_target_kind", "MARKET_SETTLEMENT_V1")
+    if target_kind not in {"MARKET_SETTLEMENT_V1", "FINAL_SCORE_DISTRIBUTION_RESEARCH_V1"}:
+        raise ValueError("unsupported model training target")
+    event_score_target = target_kind == "FINAL_SCORE_DISTRIBUTION_RESEARCH_V1"
+    if event_score_target and (sport not in {"NBA", "NCAAB", "NHL"} or
+                               data.get("model_artifact") is None):
+        raise ValueError("score-distribution target requires a new-sport bound artifact")
     result_ids = data.get("training_result_ids", [])
     with closing(connect(path)) as db, db:
-        result_ids, event_count = _training_results(db, result_ids, sport, market, start, cutoff)
+        result_ids, event_count = _training_results(db, result_ids, sport, market, start, cutoff,
+                                                     event_score_target=event_score_target)
         count = _integer(data.get("training_observation_count"), "training_observation_count")
         independent = _integer(data.get("independent_event_count"), "independent_event_count")
         if count != len(result_ids) or independent != event_count:
@@ -749,6 +807,61 @@ def insert_model(path: str | Path | None, model: Mapping) -> str:
                       created_at=_iso(created), available_at=_iso(available),
                       artifact_hash=_digest_text(data.get("artifact_hash"), "artifact_hash"))
         payload = dict(values, training_result_ids=result_ids)
+        if event_score_target:
+            payload["training_target_kind"] = target_kind
+        artifact = data.get("model_artifact")
+        if artifact is not None:
+            artifact = _map(artifact)
+            if _sha(_json(artifact)) != values["artifact_hash"]:
+                raise EvidenceConflict("model artifact hash does not match content")
+            if event_score_target:
+                sources = artifact.get("training_sources")
+                if (artifact.get("sport") != sport or artifact.get("market_family") != market or
+                        artifact.get("feature_version") != values["feature_version"] or
+                        artifact.get("training_target_kind") != target_kind or
+                        artifact.get("source_commit") != values["training_code_commit"] or
+                        artifact.get("training_independent_events") != independent or
+                        artifact.get("production_eligible") is not False or
+                        artifact.get("market_settlement_certified") is not False or
+                        _time(artifact.get("validation_cutoff"), "validation_cutoff") >=
+                        _time(artifact.get("validation_first_observed_at"),
+                              "validation_first_observed_at") or
+                        not isinstance(sources, list) or
+                        [item.get("result_id") for item in sources if isinstance(item, Mapping)] != result_ids or
+                        len(sources) != count):
+                    raise ValueError("score model artifact scope or training lineage mismatch")
+                for item in sources:
+                    if not isinstance(item, Mapping):
+                        raise ValueError("invalid score model training source")
+                    result = _stored(db, "prospective_result", "result_id", item["result_id"])
+                    event = _event(db, item["event_id"])
+                    quote = _market_record(db, "prospective_quote", "quote_id", item["quote_id"],
+                                           sport, market, "training quote")
+                    if (result["event_id"] != event["event_id"] or
+                            quote["event_id"] != event["event_id"] or
+                            quote["quote_verified"] != 1 or
+                            not verify_provider_offer(event, quote) or
+                            item.get("result_hash") != result["source_hash"] or
+                            item.get("event_hash") != event["source_hash"] or
+                            item.get("quote_hash") != quote["source_hash"] or
+                            item.get("available_at") != result["available_at"] or
+                            item.get("start") != event["scheduled_start"] or
+                            item.get("observed_at") != event["observed_at"] or
+                            item.get("line") != quote["line"] or
+                            not isinstance(item.get("features"), list) or
+                            not isinstance(item.get("feature_lineage"), list)):
+                        raise ValueError("score model training source replay failed")
+                    for prior_id, prior_hash in item["feature_lineage"]:
+                        prior = _stored(db, "prospective_result", "result_id", prior_id)
+                        prior_event = _event(db, prior["event_id"])
+                        if (prior["source_hash"] != prior_hash or
+                                not verify_provider_score(prior_event, prior) or
+                                _time(prior["available_at"], "prior.available_at") >
+                                _time(event["observed_at"], "event.observed_at") or
+                                _time(prior_event["scheduled_start"], "prior.scheduled_start") >=
+                                _time(event["scheduled_start"], "event.scheduled_start")):
+                            raise ValueError("score model feature lineage leaked future evidence")
+            payload["model_artifact"] = artifact
         key = _insert(db, "prospective_model", "model_id", values, payload)
         for result_id in result_ids:
             db.execute("INSERT OR IGNORE INTO prospective_model_training_result VALUES (?,?)", (key, result_id))
@@ -785,6 +898,12 @@ def insert_calibration(path: str | Path | None, calibration: Mapping) -> str:
                       available_at=_iso(available),
                       artifact_hash=_digest_text(data.get("artifact_hash"), "artifact_hash"))
         payload = dict(values, fit_result_ids=result_ids)
+        artifact = data.get("calibration_artifact")
+        if artifact is not None:
+            artifact = _map(artifact)
+            if _sha(_json(artifact)) != values["artifact_hash"]:
+                raise EvidenceConflict("calibration artifact hash does not match content")
+            payload["calibration_artifact"] = artifact
         key = _insert(db, "prospective_calibration", "calibration_id", values, payload)
         for result_id in result_ids:
             db.execute("INSERT OR IGNORE INTO prospective_calibration_result VALUES (?,?)", (key, result_id))
@@ -869,7 +988,18 @@ def insert_prediction(path: str | Path | None, prediction: Mapping) -> str:
                       evidence_hash=_text(data.get("evidence_hash"), "evidence_hash", optional=True),
                       runtime_hash=_text(data.get("runtime_hash"), "runtime_hash", optional=True),
                       source_commit=_text(data.get("source_commit"), "source_commit", optional=True))
-        return _insert(db, "prospective_prediction", "observation_id", values, _snapshot(values))
+        payload = _snapshot(values)
+        feature_snapshot = data.get("feature_snapshot")
+        if feature_snapshot is not None:
+            feature_snapshot = _map(feature_snapshot)
+            if values["feature_snapshot_id"] != _sha(_json(feature_snapshot)):
+                raise EvidenceConflict("feature snapshot ID does not match content")
+            payload["feature_snapshot"] = feature_snapshot
+        uncertainty = data.get("uncertainty")
+        if uncertainty is not None:
+            payload["uncertainty"] = _map(uncertainty)
+            _json(payload["uncertainty"])
+        return _insert(db, "prospective_prediction", "observation_id", values, payload)
 
 
 def _policy(data: dict, name: str) -> dict:
@@ -939,6 +1069,26 @@ def freeze_validation_plan(path: str | Path | None, plan: Mapping) -> str:
     method = data.get("independence_method")
     if method != "ONE_EARLIEST_PREDICTION_PER_EVENT_V1":
         raise ValueError("independence_method must predeclare event deduplication")
+    # Optional policy provenance is part of the frozen artifact. Older plans
+    # remain readable, while current plans can bind their complete methodology
+    # without changing the append-only schema.
+    policy_metadata = {}
+    if "plan_policy_version" in data:
+        policy_metadata["plan_policy_version"] = _text(
+            data["plan_policy_version"], "plan_policy_version")
+    if "policy_source_hash" in data:
+        policy_metadata["policy_source_hash"] = _digest_text(
+            data["policy_source_hash"], "policy_source_hash")
+    if "source_commit" in data:
+        policy_metadata["source_commit"] = _text(data["source_commit"], "source_commit")
+    for name in ("model_scope", "training_cutoff_policy", "independence_policy",
+                 "push_void_policy", "promotion_criteria"):
+        if name in data:
+            policy_metadata[name] = _policy(data, name)
+    if "model_scope" in policy_metadata:
+        scope = policy_metadata["model_scope"]
+        if (scope.get("sport"), scope.get("market_family")) != (sport, market):
+            raise ValueError("plan model scope must match sport/market family")
     model_id = _text(data.get("model_id"), "model_id", optional=True)
     calibration_id = _text(data.get("calibration_id"), "calibration_id", optional=True)
     supersedes = _text(data.get("supersedes_plan_id"), "supersedes_plan_id", optional=True)
@@ -977,7 +1127,8 @@ def freeze_validation_plan(path: str | Path | None, plan: Mapping) -> str:
                            price_evidence_requirements=price_requirements, clv_policy=clv_policy,
                            value_roi_policy=value_roi_policy, deployment_criteria=deployment_criteria,
                            independence_method=method,
-                           coverage_policy="WIN_LOSS_SCORED_PUSH_VOID_REPORTED_PENDING_BLOCKS_V1")
+                           coverage_policy="WIN_LOSS_SCORED_PUSH_VOID_REPORTED_PENDING_BLOCKS_V1",
+                           **policy_metadata)
         values["artifact_hash"] = _sha(_json(methodology))
         return _insert(db, "prospective_validation_plan", "validation_plan_id", values,
                        dict(methodology, artifact_hash=values["artifact_hash"]))
