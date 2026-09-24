@@ -380,11 +380,168 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
             ON prospective_result(event_id,market_family,selection,available_at);
         CREATE INDEX IF NOT EXISTS prospective_quotes_scope
             ON prospective_quote(sport,market_family,event_id);
+        CREATE TABLE IF NOT EXISTS prospective_football_event (
+            version_id TEXT PRIMARY KEY,
+            game_id TEXT NOT NULL,
+            sport TEXT NOT NULL CHECK(sport IN ('NFL','NCAAF')),
+            season INTEGER NOT NULL,
+            week INTEGER,
+            season_type TEXT NOT NULL,
+            provider_namespace TEXT NOT NULL,
+            provider_event_id TEXT NOT NULL,
+            home_team TEXT NOT NULL,
+            away_team TEXT NOT NULL,
+            home_team_id TEXT,
+            away_team_id TEXT,
+            scheduled_start TEXT NOT NULL,
+            neutral_site INTEGER,
+            venue TEXT,
+            discovered_at TEXT NOT NULL,
+            identity_mapping_version TEXT NOT NULL,
+            source_hash TEXT NOT NULL,
+            raw_source BLOB NOT NULL,
+            payload TEXT NOT NULL,
+            payload_hash TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS prospective_football_event_game
+            ON prospective_football_event(sport,game_id);
+        CREATE TABLE IF NOT EXISTS prospective_football_quote (
+            quote_id TEXT PRIMARY KEY,
+            game_id TEXT NOT NULL,
+            event_version_id TEXT NOT NULL REFERENCES prospective_football_event(version_id),
+            sport TEXT NOT NULL,
+            market_family TEXT NOT NULL,
+            selection TEXT NOT NULL,
+            line REAL NOT NULL,
+            american_odds INTEGER NOT NULL,
+            decimal_odds REAL NOT NULL,
+            sportsbook TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            provider_event_id TEXT NOT NULL,
+            odds_event_id TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            provider_last_update TEXT NOT NULL,
+            capture_run_id TEXT NOT NULL,
+            identity_mapping_hash TEXT NOT NULL,
+            capture_horizon TEXT NOT NULL,
+            minutes_to_start REAL NOT NULL,
+            quote_verified INTEGER NOT NULL CHECK(quote_verified IN (0,1)),
+            source_hash TEXT NOT NULL,
+            raw_source BLOB NOT NULL,
+            payload TEXT NOT NULL,
+            payload_hash TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS prospective_football_quote_game
+            ON prospective_football_quote(sport,game_id,market_family);
+        CREATE TABLE IF NOT EXISTS prospective_football_result (
+            result_id TEXT PRIMARY KEY,
+            game_id TEXT NOT NULL,
+            event_version_id TEXT NOT NULL REFERENCES prospective_football_event(version_id),
+            sport TEXT NOT NULL,
+            result_source TEXT NOT NULL,
+            result_source_event_id TEXT NOT NULL,
+            home_score INTEGER,
+            away_score INTEGER,
+            observed_at TEXT NOT NULL,
+            available_at TEXT NOT NULL,
+            result_status TEXT NOT NULL,
+            source_hash TEXT NOT NULL,
+            raw_source BLOB NOT NULL,
+            payload TEXT NOT NULL,
+            payload_hash TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS prospective_football_settlement (
+            settlement_id TEXT PRIMARY KEY,
+            quote_id TEXT NOT NULL REFERENCES prospective_football_quote(quote_id),
+            result_id TEXT NOT NULL REFERENCES prospective_football_result(result_id),
+            game_id TEXT NOT NULL,
+            sport TEXT NOT NULL,
+            market_family TEXT NOT NULL,
+            selection TEXT NOT NULL,
+            line REAL NOT NULL,
+            outcome TEXT NOT NULL,
+            settled_at TEXT NOT NULL,
+            settlement_version INTEGER NOT NULL,
+            payload TEXT NOT NULL,
+            payload_hash TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS prospective_football_training_row (
+            training_row_id TEXT PRIMARY KEY,
+            quote_id TEXT NOT NULL REFERENCES prospective_football_quote(quote_id),
+            result_id TEXT NOT NULL REFERENCES prospective_football_result(result_id),
+            settlement_id TEXT NOT NULL REFERENCES prospective_football_settlement(settlement_id),
+            game_id TEXT NOT NULL,
+            sport TEXT NOT NULL,
+            market_family TEXT NOT NULL,
+            label TEXT NOT NULL,
+            training_row_status TEXT NOT NULL CHECK(training_row_status IN ('TRAINING_READY','TRAINING_BLOCKED')),
+            blockers TEXT NOT NULL,
+            available_for_training_at TEXT NOT NULL,
+            source_manifest_hash TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            payload_hash TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS prospective_football_team_identity (
+            identity_id TEXT PRIMARY KEY,
+            sport TEXT NOT NULL,
+            canonical_team_id TEXT NOT NULL,
+            provider_namespace TEXT NOT NULL,
+            provider_team_id TEXT NOT NULL,
+            canonical_name TEXT NOT NULL,
+            provider_name TEXT NOT NULL,
+            aliases TEXT NOT NULL,
+            mapping_version TEXT NOT NULL,
+            verified_at TEXT NOT NULL,
+            mapping_source TEXT NOT NULL,
+            source_hash TEXT NOT NULL,
+            raw_source BLOB NOT NULL,
+            payload TEXT NOT NULL,
+            payload_hash TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS prospective_football_theover (
+            research_row_id TEXT PRIMARY KEY,
+            source_filename TEXT NOT NULL,
+            source_file_hash TEXT NOT NULL,
+            source_hash TEXT NOT NULL,
+            source_row_number INTEGER NOT NULL,
+            ingested_at TEXT NOT NULL,
+            sport TEXT,
+            matchup TEXT,
+            selection TEXT,
+            line REAL,
+            win_probability REAL,
+            model_hit_rate REAL,
+            matched_game_id TEXT,
+            match_status TEXT NOT NULL,
+            raw_source BLOB NOT NULL,
+            payload TEXT NOT NULL,
+            payload_hash TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS prospective_football_coverage (
+            coverage_id TEXT PRIMARY KEY,
+            capture_run_id TEXT NOT NULL,
+            sport TEXT NOT NULL,
+            game_id TEXT,
+            provider_event_id TEXT,
+            regular_season_target INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            spread_status TEXT NOT NULL,
+            total_status TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            source_hash TEXT NOT NULL,
+            raw_source BLOB NOT NULL,
+            payload TEXT NOT NULL,
+            payload_hash TEXT NOT NULL
+        );
     """)
     tables = ("prospective_event", "prospective_quote", "prospective_close", "prospective_result",
               "prospective_model", "prospective_model_training_result", "prospective_calibration",
               "prospective_calibration_result", "prospective_prediction", "prospective_validation_plan",
-              "prospective_validation_artifact", "prospective_deployment_review")
+              "prospective_validation_artifact", "prospective_deployment_review",
+              "prospective_football_event", "prospective_football_quote",
+              "prospective_football_result", "prospective_football_settlement",
+              "prospective_football_training_row", "prospective_football_team_identity",
+              "prospective_football_theover", "prospective_football_coverage")
     for table in tables:
         for action in ("UPDATE", "DELETE"):
             db.execute(f"CREATE TRIGGER IF NOT EXISTS {table}_{action}_immutable "
