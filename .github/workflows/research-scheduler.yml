@@ -133,7 +133,7 @@ jobs:
   football-stage1-branch-dispatch:
     if: github.event_name == 'workflow_dispatch' && inputs.sports == 'FOOTBALL_STAGE1' && inputs.football_v3_audit != true
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
       PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}

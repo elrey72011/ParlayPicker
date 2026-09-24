@@ -12,7 +12,7 @@ jobs:
   football-stage1:
     if: github.event_name == 'workflow_dispatch' || vars.RESEARCH_SCHEDULER_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
       PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
