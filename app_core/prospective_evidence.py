@@ -1285,7 +1285,7 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> d
               for row in buckets) if scored else None
     return dict(name=name, raw_predictions=len(rows), wrong_model_or_calibration_count=skipped_model_scope,
                 missing_provenance_count=provenance_missing,
-                missing_calibrated_uncertainty_count=uncertainty_missing,
+                **({"missing_calibrated_uncertainty_count": uncertainty_missing} if is_v2 else {}),
                 missing_stable_identity_count=identity_missing,
                 unsupported_probability_semantics_count=unsupported_semantics,
                 unique_events=n, effective_observations=len(scored), outcomes=outcomes,

@@ -344,8 +344,19 @@ def evidence_inventory(directory: str | Path) -> list[dict]:
                          for r in source if r.get("result_outcome") in {"WIN", "LOSS", "PUSH", "VOID"}}),
                      "result_availability_known": sum(bool(_time(r.get("result_available_at"))) for r in source),
                      "model_ids": sorted({str(r["model_id"]) for r in source if r.get("model_id")}),
+                     "model_training_cutoffs": sorted({str(r["model_trained_through"]) for r in source
+                                                        if r.get("model_trained_through")}),
+                     "model_availability_timestamps": sorted({str(r["model_available_at"]) for r in source
+                                                               if r.get("model_available_at")}),
                      "calibration_ids": sorted({str(r["calibration_id"]) for r in source if r.get("calibration_id")}),
+                     "calibration_availability_timestamps": sorted({str(r["calibration_available_at"])
+                         for r in source if r.get("calibration_available_at")}),
                      "feature_asof_known": sum(bool(_time(r.get("feature_frozen_at"))) for r in source),
+                     "historical_seasons": sorted({_time(r["scheduled_start"]).year for r in source
+                         if _time(r.get("scheduled_start")) and _time(r["scheduled_start"]).year < 2026}),
+                     "source_2026_rows": sum(bool(_time(r.get("scheduled_start")) and
+                         _time(r["scheduled_start"]).year == 2026) for r in source),
+                     "authentic_v2_prospective_count": None,
                      "historical_replay_eligible": sum(v["eligible"] for v in replay),
                      "historical_train_count": 0, "historical_calibration_count": 0,
                      "replay_blockers": blockers,
