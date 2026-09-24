@@ -8,6 +8,7 @@ from app_core import nfl_market as nfl, nfl_market_store as fs
 from app_core.mlb_history import timestamp
 from app_core.research_api_budget import Budget, BudgetLimit
 from app_core.research_schedule import is_open
+from app_core.prospective_sport_adapters import get_adapter, parse_sports
 
 PREFIX = "parlaypicker/research-scheduler-v1/"
 _last_checkpoint_time = None
@@ -201,33 +202,68 @@ def run_ncaaf(path, state, cfbd_key, odds_key, backup, request_get=None):
 
 
 def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
-    if not sports or any(s not in ("MLB", "NCAAF", "NFL") for s in sports) or len(set(sports)) != len(sports):
-        raise ValueError("Invalid sports")
+    sports = parse_sports(sports)
     root.mkdir(parents=True,exist_ok=True)
     state=checkpoint(client,folder)
+    last_run = state.get("last_run", {})
+    previous_health = last_run.get("health", {}) if isinstance(last_run, dict) else {}
+    if not isinstance(previous_health, dict):
+        previous_health = {}
     budget=Budget(state,lambda:checkpoint(client,folder,state))
-    report={"started_at":utcnow().isoformat(),"sports":{},"errors":[],"production_eligible":False}
+    report={"started_at":utcnow().isoformat(),"requested_sports":sports,
+            "sports":{},"health":{},"errors":[],"production_eligible":False}
     for sport in sports:
-        store={"MLB": ms, "NCAAF": ns, "NFL": fs}[sport]
-        path=root/("nfl-market.sqlite3" if sport=="NFL" else sport.lower()+"-prospective.sqlite3")
+        adapter=get_adapter(sport)
+        path=root/adapter.path_name
         stage = "restore"
         sync_session = {}
+        sync_status={"attempts":0}
+        health={"last_attempt":utcnow().isoformat(),"restore":"not_attempted",
+                "capture":"not_attempted","grade":"not_attempted",
+                "close_capture":"not_attempted",
+                "backup":"not_attempted","verified_backup":False,
+                "discovered_events":0,"captured_events":0,"graded_events":0,
+                "provider_blockers":[],"production_eligible":False}
+        old = previous_health.get(sport, {})
+        if isinstance(old, dict):
+            for key in ("last_successful_restore", "last_successful_capture",
+                        "last_successful_grade", "last_successful_backup", "last_verified_backup"):
+                value = old.get(key)
+                if isinstance(value, str) and timestamp(value) is not None and timestamp(value) <= utcnow():
+                    health[key] = value
+        report["health"][sport]=health
         def backup():
-            progress(sport, "sync_started", operation="backup" if sync_session.get("restored") else "restore")
-            result = store.sync(path, client=client, folder=folder, session=sync_session)
+            operation = "restore" if sync_status["attempts"] == 0 else "backup"
+            sync_status["attempts"] += 1
+            progress(sport, "sync_started", operation=operation)
+            result = (adapter.backup if operation == "backup" else adapter.restore)(path,client,folder,sync_session)
             progress(sport, "sync_completed", **(result or {}))
+            health[operation]="success"
+            health["last_successful_"+operation]=utcnow().isoformat()
+            if operation == "backup":
+                health["verified_backup"]=True
+                health["last_verified_backup"]=utcnow().isoformat()
+            health["backup_records_verified"]=(result or {}).get("records_verified",0)
             return result
         try:
             backup()  # Restore must succeed before any capture or grading.
             try:
                 stage = "capture_and_grade"
                 progress(sport, stage)
-                if sport=="NFL":
-                    result=nfl.run(path,odds_key,backup,budget.request)
-                else:
-                    result=run_mlb(path,state,backup) if sport=="MLB" else run_ncaaf(path,state,cfbd_key,odds_key,backup,budget.request)
+                result=adapter.run_cycle(path,state,cfbd_key,odds_key,backup,budget)
                 report["sports"][sport]=result
-                report["errors"].extend(result["errors"])
+                report["errors"].extend(sport+":"+reason for reason in result["errors"])
+                health["capture"] = result.get("capture_status", "success" if not result["errors"] else "failed")
+                health["grade"] = result.get("grade_status", "success" if not result["errors"] else "failed")
+                health["close_capture"] = result.get("close_capture_status", "legacy_specialized")
+                if health["capture"] == "success":
+                    health["last_successful_capture"] = utcnow().isoformat()
+                if health["grade"] == "success":
+                    health["last_successful_grade"] = utcnow().isoformat()
+                health["discovered_events"] = result.get("discovered", result.get("upcoming_games", 0))
+                health["captured_events"] = result.get("captured",0)
+                health["graded_events"] = result.get("graded",0)
+                health["provider_blockers"] = sorted(set(result.get("blockers",[]) + result["errors"]))
             finally:
                 # A backup error must be distinguishable from provider capture.
                 previous_stage = stage
@@ -243,8 +279,22 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
             progress(sport, "failed", failed_stage=stage, code=code)
             report["errors"].append(sport+":"+code)
             report.setdefault("failure_stages", {})[sport] = {"stage": stage, "code": code}
+            health[stage if stage in ("restore","backup") else "capture"]="failed"
+            if stage == "backup":
+                health["verified_backup"] = False
+            health["provider_blockers"].append(code)
+        health["api_budget"] = (budget.report()["by_sport"].get(sport)
+                                if sport != "MLB" else
+                                {"provider":"MLB_STATS_API", "status":"legacy_bounded_cycle_no_shared_ledger"})
     report["finished_at"]=utcnow().isoformat()
     report["api_budget"]=budget.report()
+    report["requested_slate_success"] = not report["errors"] and all(
+        report["health"][s]["restore"] == "success" and
+        report["health"][s]["backup"] == "success" and
+        report["health"][s]["capture"] == "success" and
+        report["health"][s]["grade"] == "success" and
+        report["health"][s]["close_capture"] in ("success", "legacy_specialized") and
+        report["sports"].get(s,{}).get("budget_paused") is not True for s in sports)
     state["last_run"]=report
     checkpoint(client,folder,state)
     return report

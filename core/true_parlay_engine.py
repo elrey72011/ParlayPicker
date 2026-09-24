@@ -17,6 +17,7 @@ from typing import Any
 
 from app_core.public_quote_policy import canonical_book_label, supported_quote
 from core.exposure_ledger import verify_snapshot
+from core.market_policy import sport_market_family
 from core.wager_decisions import aware, decimal_price, finite
 
 
@@ -25,7 +26,9 @@ VALIDATION_STATES = frozenset({'UNVALIDATED', 'PROVISIONAL_VALIDATED', 'STANDARD
 DEPENDENCE = frozenset({'INDEPENDENT_VERIFIED', 'LOW_DEPENDENCE', 'MATERIAL_DEPENDENCE', 'UNKNOWN'})
 LEG_IDENTITY = ('candidate_id', 'game_id', 'sport', 'provider_namespace',
                 'provider_event_id', 'provider_market_id', 'provider_selection_id', 'market_type',
-                'selection', 'line', 'sportsbook')
+                'selection', 'line', 'sportsbook', 'market_family', 'model_id',
+                'model_version', 'calibration_id', 'calibration_version',
+                'validation_id', 'validation_artifact_id', 'deployment_state')
 
 
 def digest(value: Any) -> str:
@@ -82,10 +85,16 @@ def normalize_leg(row: dict) -> dict:
         'quote_verified': c.get('quote_verified'),
         'production_eligible': c.get('production_eligible'),
         'model_version': c.get('model_version'),
+        'model_id': c.get('model_id'),
         'model_trained_through': row.get('model_trained_through'),
         'model_available_at': row.get('model_available_at'),
         'calibration_version': c.get('calibration_version'),
+        'calibration_id': c.get('calibration_id'),
         'calibration_available_at': row.get('calibration_available_at'),
+        'market_family': c.get('market_family'),
+        'validation_id': c.get('validation_id'),
+        'validation_artifact_id': c.get('validation_artifact_id'),
+        'deployment_state': c.get('deployment_state'),
         'policy_version': c.get('sport_policy_version'),
         'evidence_snapshot_id': c.get('evidence_version'),
         'evidence_frozen_at': row.get('evidence_frozen_at'),
@@ -149,6 +158,12 @@ def leg_blockers(leg: dict, now: datetime) -> list[str]:
         reasons.append('LEG_STARTED_OR_TIME_UNKNOWN')
     if leg.get('production_eligible') is not True:
         reasons.append('LEG_NOT_PRODUCTION_ELIGIBLE')
+    if (leg.get('market_family') != sport_market_family(leg.get('sport'), leg.get('market_type'))
+            or leg.get('deployment_state') not in {'PROVISIONAL_VALIDATED','STANDARD_VALIDATED','PREMIUM_VALIDATED'}
+            or not all(_required_text(leg.get(k)) for k in
+                       ('model_id','model_version','calibration_id','calibration_version',
+                        'validation_id','validation_artifact_id'))):
+        reasons.append('LEG_EXACT_MARKET_VALIDATION_MISSING')
     if not all(_required_text(leg.get(k)) for k in ('model_version', 'calibration_version', 'policy_version', 'evidence_snapshot_id')):
         reasons.append('LEG_EVIDENCE_MISSING')
     trained = aware(leg.get('model_trained_through'))

@@ -29,8 +29,10 @@ def candidate(**changes):
         conservative_probability=.58, mean_probability=.62,
         identity_verified=True, exact_quote_verified=True,
         start='2026-09-14T18:00:00Z', quote_time='2026-09-14T14:55:00Z',
-        model_validated=True, model_version='m1', calibration_validated=True,
-        calibration_version='c1', evidence_frozen_at='2026-09-14T14:00:00Z',
+        model_validated=True, model_id='synthetic-model', model_version='m1', calibration_validated=True,
+        calibration_id='synthetic-calibration', calibration_version='c1',
+        validation_id='SYNTHETIC-TEST-ONLY', validation_artifact_id='synthetic-artifact',
+        deployment_state='PREMIUM_VALIDATED', evidence_frozen_at='2026-09-14T14:00:00Z',
         evidence_snapshot_id='synthetic', evidence_effective_sample_size=30, critical_feature_error=False,
         maturity='STANDARD', gemini_status='CONFIRM'), **changes)
 
