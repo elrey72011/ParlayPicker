@@ -1,6 +1,8 @@
 """Immutable full-store receipt backups with verified, transactional recovery."""
 import json
+import os
 from contextlib import closing
+import requests
 from app_core import mlb_pregame_receipts as r
 from app_core.mlb_spread_total_model import digest, canonical, receipt_features, prepare_rows
 
@@ -32,6 +34,7 @@ def restore(bundle, path=None):
     for key, outcome in tables["outcomes"].items():
         if key not in events or key != r.event_key(outcome) or outcome.get("observation_hash") not in tables["observations"]:
             raise ValueError("Outcome provenance missing")
+        r.verify_outcome_source(outcome, tables["observations"][outcome["observation_hash"]])
     # Recovery copies previously recorded bytes; it never records a new pregame
     # observation or rewrites a first receipt. Any local conflict rolls back all.
     count = 0
@@ -129,6 +132,7 @@ def recover(client, path=None):
         for record_id, outcome in tables["outcomes"].items():
             if record_id not in events or record_id != r.event_key(outcome) or outcome.get("observation_hash") not in tables["observations"]:
                 raise ValueError("Outcome provenance missing")
+            r.verify_outcome_source(outcome, tables["observations"][outcome["observation_hash"]])
         for table, values in tables.items():
             for record_id, payload in values.items():
                 old = merged_tables[table].get(record_id)
@@ -193,6 +197,92 @@ def backup(client, folder, path=None):
     return {"remote_backup_verified": True, "backup_id": sha, "backup_format": "records-v2", **counters}
 
 
+def verify_backup(client, folder, report):
+    """Read the published manifest and require every dependency to be verified."""
+    backup_id = report.get("backup_id")
+    if (report.get("remote_backup_verified") is not True or
+            not isinstance(backup_id, str) or len(backup_id) != 64 or
+            any(char not in "0123456789abcdef" for char in backup_id)):
+        raise ValueError("Receipt backup verification report invalid")
+    key = MANIFEST_PREFIX + backup_id + ".json"
+    with client.get_object(Bucket=folder, Key=key)["Body"] as stream:
+        raw = stream.read(MAX_OBJECT_BYTES + 1)
+    if len(raw) > MAX_OBJECT_BYTES:
+        raise ValueError("Receipt manifest too large")
+    try:
+        manifest = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise ValueError("Receipt backup manifest verification failed") from None
+    if (canonical(manifest) != raw or digest(manifest) != backup_id or
+            manifest.get("schema") != "mlb-receipt-manifest-v2" or
+            set(manifest.get("tables", {})) != {"observations", "receipts", "outcomes"}):
+        raise ValueError("Receipt backup manifest verification failed")
+    verified = getattr(client, "_receipt_verified", set())
+    if key not in verified or any(
+        RECORD_PREFIX + sha + ".json" not in verified
+        for refs in manifest["tables"].values() for sha in refs.values()
+    ):
+        raise ValueError("Receipt backup dependencies were not verified")
+    return {"remote_backup_verified": True, "backup_id": backup_id,
+            "verified_manifest_records": sum(len(refs) for refs in manifest["tables"].values())}
+
+
+class ReceiptWorkflowFailure(RuntimeError):
+    """Machine-readable, credential-free operational failure."""
+
+    def __init__(self, stage, reason_code, error_type):
+        self.stage = stage
+        self.reason_code = reason_code
+        self.error_type = error_type
+        super().__init__(f"{reason_code} at {stage} ({error_type})")
+
+    def report(self):
+        return {"status": "failed", "failed_stage": self.stage,
+                "reason_code": self.reason_code, "error_type": self.error_type,
+                "remote_backup_verified": False}
+
+
+def _workflow_reason(stage, exc):
+    from app_core.evidence_config import EvidenceConfigurationError, EvidenceStorageError
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    if stage == "configure":
+        missing = any(not os.environ.get(key, "").strip() for key in
+                      ("PARLAYPICKER_DRIVE_FOLDER_ID", "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT"))
+        return "MISSING_CONFIGURATION" if missing else "WORKFLOW_CONFIG_ERROR"
+    if status in (401, 403):
+        return "AUTH_FAILURE"
+    if stage == "connect":
+        return ("WORKFLOW_CONFIG_ERROR" if isinstance(exc, (EvidenceConfigurationError, EvidenceStorageError))
+                else "DRIVE_RESTORE_FAILURE")
+    if stage == "reconcile":
+        if status == 429:
+            return "PROVIDER_RATE_LIMIT"
+        if isinstance(exc, (requests.Timeout, requests.ConnectionError)) or status in (500, 502, 503, 504):
+            return "PROVIDER_NETWORK_FAILURE"
+        return "RECONCILIATION_FAILURE"
+    if stage == "restore":
+        return "RECEIPT_INTEGRITY_FAILURE" if isinstance(exc, (r.Rejected, ValueError)) and not isinstance(exc, EvidenceStorageError) else "DRIVE_RESTORE_FAILURE"
+    if stage == "grade":
+        return "RECEIPT_INTEGRITY_FAILURE"
+    if stage == "backup":
+        if type(exc) is ValueError and str(exc) == "Receipt backup read-back failed":
+            return "BACKUP_VERIFICATION_FAILURE"
+        return "BACKUP_FAILURE"
+    if stage == "verify_backup":
+        return "BACKUP_VERIFICATION_FAILURE"
+    if stage == "audit":
+        return "AUDIT_FAILURE"
+    return "UNKNOWN_FAILURE"
+
+
+def _workflow_stage(name, operation):
+    try:
+        return operation()
+    except Exception as exc:
+        raise ReceiptWorkflowFailure(name, _workflow_reason(name, exc), type(exc).__name__) from None
+
+
 def collect_durable(games, *, max_feeds=20, reconcile_history=True):
     import logging
     import time
@@ -231,12 +321,31 @@ def collect_durable(games, *, max_feeds=20, reconcile_history=True):
 
 
 def reconcile_durable(*, path=None, max_games=100):
-    """Restore saved receipts, append verified finals, and publish the new state."""
-    client, folder = connection()
-    restored = recover(client, path)
-    reconciliation = r.reconcile(path, max_games=max_games)
-    verified = backup(client, folder, path)
-    return {"records_restored": restored, "reconciliation": reconciliation, **verified}
+    """Restore, append finals, grade, back up, verify, then audit."""
+    from app_core.evidence_config import service_account_info
+    from app_core.mlb_receipt_audit import audit_store
+
+    def check_configuration():
+        if any(not os.environ.get(key, "").strip() for key in
+               ("PARLAYPICKER_DRIVE_FOLDER_ID", "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT")):
+            raise ValueError("Missing receipt reconciliation configuration")
+        service_account_info()  # Presence/schema only; never print the value.
+
+    _workflow_stage("configure", check_configuration)
+    client, folder = _workflow_stage("connect", connection)
+    restored = _workflow_stage("restore", lambda: recover(client, path))
+    reconciliation = _workflow_stage("reconcile", lambda: r.reconcile(path, max_games=max_games))
+    graded_rows = _workflow_stage("grade", lambda: prepare_rows(r.export_records(path, settled_only=True)))
+    backed_up = _workflow_stage("backup", lambda: backup(client, folder, path))
+    verified = _workflow_stage("verify_backup", lambda: verify_backup(client, folder, backed_up))
+    audit = _workflow_stage("audit", lambda: audit_store(path))
+    if "settled_dataset_integrity_failed" in audit["blockers"]:
+        raise ReceiptWorkflowFailure("audit", "AUDIT_FAILURE", "SettledDatasetIntegrityError")
+    audit.update(remote_backup_verified=True, backup_id=verified["backup_id"],
+                 persistence="Google Workspace Shared Drive backup verified during this run")
+    return {"records_restored": restored, "reconciliation": reconciliation,
+            "graded_market_rows": len(graded_rows), **backed_up,
+            "backup_verification": verified, "audit": audit}
 
 
 def restore_diagnostic(stage, exc):

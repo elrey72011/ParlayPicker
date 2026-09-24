@@ -20,7 +20,13 @@ def test_backup_preserves_all_records_and_audit_counts_pending(fixture):
     bundle = audit.backup_bundle(path)
     assert report["receipts"] == report["pending_receipts"] == 4
     assert report["unique_events"] == 1
+    assert report["pending_games"] == 1
+    assert report["settled_games"] == 0
     assert report["settled_receipts"] == 0
+    assert list(report["eastern_slates"].values()) == [1]
+    assert report["outcome_available_slates"] == []
+    assert report["valid_independent_units_by_family"] == {"spread": 0, "total": 0}
+    assert report["validation_units"] is None and report["holdout_units"] is None
     assert "no_settled_receipts" in report["blockers"]
     assert bundle["sha256"] == audit.digest(bundle["payload"])
     assert bundle["payload"]["tables"] == before
@@ -77,6 +83,16 @@ def test_chronological_capacity_only_checks_counts_and_order():
     assert report['count_feasible_cutoff_pairs'] == 1
     assert report['chronology_feasible_cutoff_pairs'] == 1
     assert report['cutoff_selection_performed'] is False
+
+
+def test_late_outcome_availability_blocks_an_aggregate_count_feasible_split():
+    rows = _paired_rows({'2026-09-17': 20, '2026-09-18': 10, '2026-09-19': 10})
+    for row in rows:
+        if row['slate'] == '2026-09-17':
+            row['outcome_at'] = '2026-09-18T20:00:00+00:00'
+    report = audit.chronological_capacity(rows)
+    assert report['count_feasible_cutoff_pairs'] == 1
+    assert report['chronology_feasible_cutoff_pairs'] == 0
 
 
 def test_audit_downloads_never_load_raw_backup(fixture, monkeypatch):

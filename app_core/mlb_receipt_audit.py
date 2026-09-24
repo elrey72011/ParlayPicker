@@ -1,8 +1,10 @@
 """Read-only receipt inventory and portable backup. Never grants model authority."""
 import json
 from collections import Counter
+from zoneinfo import ZoneInfo
 from app_core import mlb_pregame_receipts as receipts
 from app_core.mlb_spread_total_model import CONFIG, prepare_rows, receipt_features, digest, split_rows
+from app_core.mlb_history import timestamp
 
 
 def training_inventory(rows):
@@ -84,8 +86,17 @@ def audit_store(path=None):
     records = receipts.export_records(path)
     settled = [r for r in records if r["outcome"] is not None]
     blockers = []
+    event_state = {}
+    slate_events = set()
+    outcome_available_slates = set()
     for record in records:
-        receipt_features(record["snapshot"])
+        payload, _ = receipt_features(record["snapshot"])
+        event = receipts.event_key(payload)
+        slate = str(timestamp(payload["game_start_utc"]).astimezone(ZoneInfo("America/New_York")).date())
+        event_state[event] = record["outcome"] is not None
+        slate_events.add((slate, event))
+        if record["outcome"] is not None:
+            outcome_available_slates.add(slate)
     try:
         rows = prepare_rows(settled)
         inventory = training_inventory(rows)
@@ -110,9 +121,16 @@ def audit_store(path=None):
     if capacity["chronology_feasible_cutoff_pairs"] == 0:
         blockers.append("no_chronological_split_meets_minimums")
     return {"schema": "mlb-receipt-audit-v1", "receipts": len(records),
-            "unique_events": len({receipts.event_key(r["snapshot"]["payload"]) for r in records}),
+            "unique_events": len(event_state),
+            "settled_games": sum(event_state.values()),
+            "pending_games": len(event_state) - sum(event_state.values()),
             "settled_receipts": len(settled), "pending_receipts": len(records)-len(settled),
             "settled_slate_dates": days, "decided_rows_by_family": dict(counts),
+            "eastern_slates": dict(sorted(Counter(day for day, _ in slate_events).items())),
+            "outcome_available_slates": sorted(outcome_available_slates),
+            "valid_independent_units_by_family": {family: inventory[family]["independent_event_line_units"]
+                                                   for family in ("spread", "total")},
+            "validation_units": None, "holdout_units": None,
             "minimum_rows_per_family_per_split": CONFIG["minimum_rows_per_family_split"],
             "blockers": blockers, "training_authorized": False,
             "training_inventory": inventory,

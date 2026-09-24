@@ -23,7 +23,9 @@ from core.wager_decisions import aware, decimal_price, finite
 PRODUCTS = frozenset({'STANDARD_PARLAY', 'SAME_GAME_PARLAY', 'CROSS_GAME_PARLAY'})
 VALIDATION_STATES = frozenset({'UNVALIDATED', 'PROVISIONAL_VALIDATED', 'STANDARD_VALIDATED'})
 DEPENDENCE = frozenset({'INDEPENDENT_VERIFIED', 'LOW_DEPENDENCE', 'MATERIAL_DEPENDENCE', 'UNKNOWN'})
-LEG_IDENTITY = ('candidate_id', 'game_id', 'sport', 'market_type', 'selection', 'line', 'sportsbook')
+LEG_IDENTITY = ('candidate_id', 'game_id', 'sport', 'provider_namespace',
+                'provider_event_id', 'provider_market_id', 'provider_selection_id', 'market_type',
+                'selection', 'line', 'sportsbook')
 
 
 def digest(value: Any) -> str:
@@ -63,6 +65,10 @@ def normalize_leg(row: dict) -> dict:
         'candidate_id': row.get('candidate_id'),
         'game_id': c.get('game_id') or row.get('game_id'),
         'sport': c.get('sport') or row.get('sport'),
+        'provider_namespace': c.get('provider_namespace') or row.get('provider_namespace'),
+        'provider_event_id': c.get('provider_event_id') or row.get('provider_event_id'),
+        'provider_market_id': c.get('provider_market_id') or row.get('provider_market_id'),
+        'provider_selection_id': c.get('provider_selection_id') or row.get('provider_selection_id'),
         'team_ids': row.get('team_ids'),
         'market_type': c.get('market_type') or row.get('market'),
         'selection': c.get('selection') or row.get('pick'),
@@ -113,6 +119,8 @@ def leg_blockers(leg: dict, now: datetime) -> list[str]:
     reasons = []
     if any(not _required_text(leg.get(k)) for k in ('candidate_id', 'game_id', 'sport', 'market_type', 'selection')) or _number(leg.get('line')) is None:
         reasons.append('LEG_IDENTITY_MISSING')
+    if any(not _required_text(leg.get(k)) for k in ('provider_namespace', 'provider_event_id')):
+        reasons.append('LEG_PROVIDER_EVENT_MISSING')
     teams = leg.get('team_ids')
     if (not isinstance(teams, list) or len(teams) != 2 or
             any(not _required_text(team) for team in teams) or len(set(teams)) != 2):
@@ -223,6 +231,15 @@ def _joint_blockers(joint: dict | None, product_type: str, now: datetime, policy
         reasons.append('JOINT_VALIDATION_MISMATCH')
     if product_type == 'SAME_GAME_PARLAY' and 'INDEPEND' in str(joint.get('method')).upper():
         reasons.append('SGP_INDEPENDENCE_FORBIDDEN')
+    if product_type == 'SAME_GAME_PARLAY' and (
+            not _required_text(joint.get('correlation_method')) or
+            'INDEPEND' in str(joint.get('correlation_method')).upper()):
+        reasons.append('SGP_CORRELATION_METHOD_UNAVAILABLE')
+    if product_type == 'CROSS_GAME_PARLAY' and any(
+            not _required_text(joint.get(key)) for key in
+            ('component_dependence_method', 'shared_factor_method',
+             'final_calibration_id', 'final_calibration_version')):
+        reasons.append('CROSS_GAME_DEPENDENCE_UNAVAILABLE')
     generated = aware(joint.get('generated_at'))
     trained = aware(joint.get('model_trained_through'))
     if (generated is None or generated > now or trained is None or trained >= generated or
@@ -483,6 +500,32 @@ def evaluate_ticket(product_type: str, components: list[dict], *, sportsbook: st
         quote_reasons.append('TICKET_QUOTE_ID_MISSING')
     if quote.get('source') not in {'SPORTSBOOK', 'OWNER_CONFIRMED'} or quote.get('verification_state') != 'VERIFIED':
         quote_reasons.append('TICKET_QUOTE_UNVERIFIED')
+    if (not _required_text(quote.get('provider')) or
+            not isinstance(quote.get('raw_evidence_hash'), str) or
+            re.fullmatch(r'[0-9a-f]{64}', quote['raw_evidence_hash']) is None or
+            not _required_text(quote.get('settlement_rules_id')) or
+            (quote.get('source') == 'SPORTSBOOK' and
+             not _required_text(quote.get('provider_response_id'))) or
+            (quote.get('source') == 'OWNER_CONFIRMED' and
+             any(not _required_text(quote.get(k)) for k in
+                 ('owner_id', 'owner_authorization_id', 'owner_confirmed_at', 'artifact_reference')))):
+        quote_reasons.append('TICKET_QUOTE_EVIDENCE_MISSING')
+    if quote.get('source') == 'OWNER_CONFIRMED':
+        confirmed_at = aware(quote.get('owner_confirmed_at'))
+        quote_at = aware(quote.get('quoted_at'))
+        if confirmed_at is None or quote_at is None or not quote_at <= confirmed_at <= now:
+            quote_reasons.append('OWNER_QUOTE_CHRONOLOGY_INVALID')
+    try:
+        from app_core.parlay_ticket_quotes import bind_ticket_request
+        exact_binding = bind_ticket_request({'product_type': product_type,
+                                             'components': components, 'sportsbook': book})
+    except (ValueError, TypeError, OverflowError):
+        exact_binding = None
+    if (exact_binding is None or
+            quote.get('selection_bindings') != exact_binding['selection_bindings'] or
+            quote.get('component_hashes') != exact_binding['component_hashes'] or
+            quote.get('sgp_components') != exact_binding['sgp_components']):
+        quote_reasons.append('TICKET_BINDING_MISMATCH')
     if quote.get('ticket_hash') != identity_hash or quote.get('leg_hashes') != sorted(ids):
         quote_reasons.append('TICKET_HASH_MISMATCH')
     if canonical_book_label(quote.get('sportsbook')) != book:
@@ -564,19 +607,31 @@ def evaluate_ticket(product_type: str, components: list[dict], *, sportsbook: st
                       'probability_conservative', 'probability_push',
                       'probability_loss', 'sgp_component_id')}} for leg in legs],
         'ticket_hash': identity_hash, 'quote_id': quote.get('quote_id'),
+        'ticket_binding': exact_binding,
         'provider_ticket_id': quote.get('provider_ticket_id'), 'quote_source': quote.get('source'),
         'quote_verification_state': quote.get('verification_state'),
         'quoted_american_odds': quoted_american, 'quoted_decimal_odds': quoted_decimal,
         'quoted_at': quote.get('quoted_at'), 'expires_at': quote.get('expires_at'),
         'probability_mean': mean, 'probability_conservative': conservative, 'probability_push': push,
         'probability_partial': partial_probability,
+        'joint_partial_outcomes': (joint or {}).get('partial_outcomes'),
         'partial_payouts': quote.get('partial_payouts'),
         'settlement_rules_id': quote.get('settlement_rules_id'),
         'break_even_probability': break_even, 'probability_method': (joint or {}).get('method'),
         'joint_model_id': (joint or {}).get('model_id'), 'joint_model_version': (joint or {}).get('model_version'),
+        'joint_correlation_method': (joint or {}).get('correlation_method'),
+        'joint_dependence_methodology_id': (joint or {}).get('dependence_methodology_id'),
+        'joint_component_dependence_method': (joint or {}).get('component_dependence_method'),
+        'joint_shared_factor_method': (joint or {}).get('shared_factor_method'),
+        'joint_final_calibration_id': (joint or {}).get('final_calibration_id'),
+        'joint_final_calibration_version': (joint or {}).get('final_calibration_version'),
         'model_id': (joint or {}).get('model_id'), 'model_version': (joint or {}).get('model_version'),
         'joint_evidence_snapshot_id': (joint or {}).get('evidence_snapshot_id'),
         'joint_component_hashes': (joint or {}).get('component_hashes'),
+        'sgp_component_count': sum(component.get('product_type') == 'SAME_GAME_PARLAY'
+                                   for component in components),
+        'sgp_component_validation_ids': [component.get('validation_id') for component in components
+                                         if component.get('product_type') == 'SAME_GAME_PARLAY'],
         'joint_generated_at': (joint or {}).get('generated_at'),
         'joint_model_trained_through': (joint or {}).get('model_trained_through'),
         'joint_model_available_at': (joint or {}).get('model_available_at'),

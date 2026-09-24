@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
+import time
 
 import requests
 
@@ -114,7 +115,35 @@ def save_outcome(outcome, path=None):
     if not timestamp(outcome["game_start_utc"]) <= timestamp(outcome["available_at"]) <= now():
         raise Rejected("invalid_outcome_time")
     label("total_over", 8.5, outcome.get("home_score"), outcome.get("away_score"), outcome["status"])
+    with closing(connect(path)) as db:
+        row = db.execute("SELECT sha256,payload FROM observations WHERE id=?",
+                         (outcome.get("observation_hash"),)).fetchone()
+    if row is None:
+        raise Rejected("outcome_source_missing")
+    expected, raw = row
+    observation = json.loads(raw)
+    if digest(observation) != expected or expected != outcome["observation_hash"]:
+        raise Rejected("outcome_source_hash_mismatch")
+    verify_outcome_source(outcome, observation)
     return append("outcomes", event, outcome, path)
+
+
+def verify_outcome_source(outcome, observation):
+    """Bind an appended final to the exact stored MLB response and observation time."""
+    try:
+        game_id = stable_id(outcome["provider_event_id"])
+        if (observation["source"] != "mlb_statsapi" or
+                observation["endpoint"] != f"api/v1.1/game/{game_id}/feed/live" or
+                timestamp(observation["observed_at"]) != timestamp(outcome["available_at"])):
+            raise Rejected("outcome_source_mismatch")
+        game = normalize_game(observation["payload"])
+        if (str(game["game_id"]) != game_id or game["season"] != outcome["season"] or
+                any(team_id(game[side + "_id"]) != outcome[side + "_team_id"] for side in ("home", "away")) or
+                any(game[side + "_score"] != outcome[side + "_score"] for side in ("home", "away")) or
+                timestamp(game["completed_at"]) > timestamp(outcome["available_at"])):
+            raise Rejected("outcome_source_mismatch")
+    except (KeyError, TypeError, ValueError):
+        raise Rejected("outcome_source_mismatch") from None
 
 
 def export_records(path=None, *, settled_only=False):
@@ -128,11 +157,23 @@ def export_records(path=None, *, settled_only=False):
 
 
 def observe(endpoint, params=None):
-    response = requests.get(BASE + endpoint, params=params, timeout=(3, 4))
-    response.raise_for_status()
-    payload = response.json()
-    return {"source": "mlb_statsapi", "endpoint": endpoint, "params": params or {},
-            "observed_at": now().isoformat(), "payload": payload}
+    # Only transient transport failures and explicit provider 429/5xx responses
+    # can be retried. Authentication and malformed requests fail immediately.
+    for attempt in range(3):
+        try:
+            response = requests.get(BASE + endpoint, params=params, timeout=(3, 4))
+            response.raise_for_status()
+            payload = response.json()
+            return {"source": "mlb_statsapi", "endpoint": endpoint, "params": params or {},
+                    "observed_at": now().isoformat(), "payload": payload}
+        except requests.HTTPError as exc:
+            status = getattr(exc.response, "status_code", None)
+            if status not in (429, 500, 502, 503, 504) or attempt == 2:
+                raise
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt == 2:
+                raise
+        time.sleep(attempt + 1)
 
 
 def persist_observation(observation, path=None):
@@ -521,8 +562,21 @@ def reconcile(path=None, *, max_games=20, fetch=observe):
             outcome.update(status="FINAL", home_score=game["home_score"], away_score=game["away_score"],
                            available_at=obs["observed_at"], observation_hash=ref)
             created += int(save_outcome(outcome, path))
-        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-            reasons[str(exc) if isinstance(exc, Rejected) else "result_not_verified_final"] += 1
+        except requests.HTTPError as exc:
+            if getattr(exc.response, "status_code", None) in (404, 410):
+                reasons["final_result_unavailable"] += 1
+            else:
+                raise
+        except requests.RequestException:
+            # Exhausted transient retries, auth failures, and other provider
+            # errors fail the workflow; a partial pass cannot report success.
+            raise
+        except Rejected:
+            # Stored/provider identity and append-only conflicts need review.
+            raise
+        except (ValueError, KeyError, TypeError):
+            # Live, postponed, incomplete and unverifiable finals stay pending.
+            reasons["result_not_verified_final"] += 1
     return {"outcomes_created": created, "events_pending": len(pending)-created, "reasons": dict(reasons)}
 
 

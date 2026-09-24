@@ -27,11 +27,27 @@ def main(argv=None):
         restored = recover(client, args.database)
         report = {"records_restored": restored, **backup(client, folder, args.database)}
     elif args.command == "reconcile-remote":
-        from app_core.mlb_receipt_remote import reconcile_durable
+        from app_core.mlb_receipt_remote import ReceiptWorkflowFailure, reconcile_durable
         try:
-            report = reconcile_durable(path=args.database, max_games=args.max_feeds)
+            report = {"status": "succeeded", "reason_code": None,
+                      **reconcile_durable(path=args.database, max_games=args.max_feeds)}
+        except ReceiptWorkflowFailure as exc:
+            report = exc.report()
         except Exception as exc:
-            parser.exit(2, f"MLB receipt reconciliation failed ({type(exc).__name__})\n")
+            # Fail closed even for an unexpected fault. Never emit exception text,
+            # which may include provider URLs or credential material.
+            report = {"status": "failed", "failed_stage": "unknown",
+                      "reason_code": "UNKNOWN_FAILURE", "error_type": type(exc).__name__,
+                      "remote_backup_verified": False}
+        if args.output:
+            try:
+                with args.output.open("x", encoding="utf-8") as file:
+                    json.dump(report, file, indent=2, allow_nan=False)
+            except (OSError, ValueError, TypeError):
+                parser.exit(2, "MLB receipt reconciliation failed: ARTIFACT_FAILURE\n")
+        if report["status"] != "succeeded":
+            parser.exit(2, "MLB receipt reconciliation failed: " +
+                        json.dumps({k: report[k] for k in ("reason_code", "failed_stage", "error_type")}) + "\n")
     elif args.command in {"audit", "backup"}:
         from app_core.mlb_receipt_audit import audit_store, backup_bundle
         report = audit_store(args.database) if args.command == "audit" else backup_bundle(args.database)

@@ -23,6 +23,7 @@ def leg(i, *, game=None, market='spread_away', selection=None):
     line = 8.5 if market.startswith('total_') else 1.5
     return dict(candidate_id=f'synthetic-c{i}-{market}', game_id=game or f'g{i}',
                 sport='MLB', team_ids=[f'A{game or i}', f'B{game or i}'],
+                provider_namespace='synthetic-feed', provider_event_id=f'synthetic-event-{game or i}',
                 market_type=market, selection=selection or f'A{i} +{line:.1f}', line=line,
                 sportsbook='Novig', american_odds=-110, quote_timestamp=at(-1),
                 analysis_timestamp=at(-2), start=at(120), identity_verified=True,
@@ -49,14 +50,30 @@ def joint(product, components, method='INDEPENDENT_VERIFIED'):
                 model_available_at=at(-100), calibration_version='jc1',
                 calibration_available_at=at(-100), validation_id=f'{product}-v1',
                 evidence_snapshot_id='je1', evidence_frozen_at=at(-5),
+                correlation_method='synthetic-same-event-model' if product == 'SAME_GAME_PARLAY' else None,
+                component_dependence_method='synthetic-component-method' if product == 'CROSS_GAME_PARLAY' else None,
+                shared_factor_method='synthetic-shared-factor-method' if product == 'CROSS_GAME_PARLAY' else None,
+                final_calibration_id='synthetic-final-calibration' if product == 'CROSS_GAME_PARLAY' else None,
+                final_calibration_version='synthetic-fc1' if product == 'CROSS_GAME_PARLAY' else None,
                 method=method, generated_at=at(-1), probability_semantics='UNCONDITIONAL',
                 probability_mean=.36, probability_conservative=.35,
                 probability_push=0., probability_loss=.64)
 
 
 def quote(product, components, book='Novig', price=3.5):
+    from app_core.parlay_ticket_quotes import bind_ticket_request
+    try:
+        binding = bind_ticket_request(dict(product_type=product, components=components, sportsbook=book))
+    except ValueError:
+        # Invalid-ticket negative controls still reach the engine's blocker trace.
+        binding = dict(selection_bindings=[], component_hashes=component_hashes(components),
+                       sgp_components=[])
     legs = [r for c in components for r in (c['legs'] if c.get('product_type') == 'SAME_GAME_PARLAY' else [c])]
     return dict(quote_id='synthetic-q1', provider_ticket_id='synthetic-provider-ticket',
+                provider='synthetic-provider', provider_response_id='synthetic-response',
+                raw_evidence_hash='0' * 64, settlement_rules_id='synthetic-rule-v1',
+                selection_bindings=binding['selection_bindings'], component_hashes=binding['component_hashes'],
+                sgp_components=binding['sgp_components'],
                 source='SPORTSBOOK', verification_state='VERIFIED', sportsbook=book,
                 ticket_hash=ticket_hash(product, components, book),
                 leg_hashes=sorted(leg_hash(r) for r in legs), quoted_at=at(-1),
@@ -136,6 +153,9 @@ class TrueParlayEngineTests(unittest.TestCase):
         self.assertIn('PRICE_UNAVAILABLE', self.evaluate(value)['blockers'])
         value = case('SAME_GAME_PARLAY', components, 'INDEPENDENCE_PRODUCT')
         self.assertIn('SGP_INDEPENDENCE_FORBIDDEN', self.evaluate(value)['blockers'])
+        value = case('SAME_GAME_PARLAY', components, 'COPULA')
+        value['joint']['correlation_method'] = None
+        self.assertIn('SGP_CORRELATION_METHOD_UNAVAILABLE', self.evaluate(value)['blockers'])
 
     def test_cross_game_sgp_is_one_component_block(self):
         sgp_legs = [leg(1, game='g1'), leg(2, game='g1', market='total_over', selection='Over 8.5')]
@@ -143,6 +163,7 @@ class TrueParlayEngineTests(unittest.TestCase):
         sgp = self.evaluate(sgp_case)
         component = dict(product_type='SAME_GAME_PARLAY', parlay_id=sgp['parlay_id'],
                          ticket_hash=sgp['ticket_hash'], sportsbook='Novig', legs=sgp_legs,
+                         provider_component_id='synthetic-sgp-provider-ticket',
                          production_eligible=True, status='ACTIONABLE',
                          validation_id=sgp['validation_id'], validation_state=sgp['validation_state'],
                          quote_verification_state='VERIFIED', quoted_at=at(-1), expires_at=at(10), blockers=[])
@@ -153,6 +174,9 @@ class TrueParlayEngineTests(unittest.TestCase):
         value = case('CROSS_GAME_PARLAY', [component, leg(3)], 'JOINT_COMPONENT_MODEL')
         value['components'][0]['production_eligible'] = False
         self.assertIn('SGP_COMPONENT_UNVALIDATED', self.evaluate(value)['blockers'])
+        value = case('CROSS_GAME_PARLAY', [component, leg(3)], 'JOINT_COMPONENT_MODEL')
+        value['joint']['shared_factor_method'] = None
+        self.assertIn('CROSS_GAME_DEPENDENCE_UNAVAILABLE', self.evaluate(value)['blockers'])
 
     def test_quote_identity_price_and_time_fail_closed(self):
         for mutation in ({'ticket_hash': 'wrong'}, {'leg_hashes': []},

@@ -32,6 +32,20 @@ def test_corrupt_backup_rejected(fixture, tmp_path):
     with pytest.raises(ValueError): remote.restore(bundle, tmp_path/'bad.sqlite3')
 
 
+def test_final_score_must_match_its_saved_mlb_observation(fixture, tmp_path, monkeypatch):
+    from datetime import timedelta
+    from test_mlb_pregame_receipts import START
+    collect(fixture)
+    monkeypatch.setattr(r, 'now', lambda: START + timedelta(hours=4))
+    assert r.reconcile(fixture[0], fetch=fixture[2])['outcomes_created'] == 1
+    bundle = backup_bundle(fixture[0])
+    outcome = next(iter(bundle['payload']['tables']['outcomes'].values()))
+    outcome['home_score'] += 1
+    bundle['sha256'] = remote.digest(bundle['payload'])
+    with pytest.raises(r.Rejected, match='outcome_source_mismatch'):
+        remote.restore(bundle, tmp_path / 'tampered-result.sqlite3')
+
+
 def test_local_conflict_does_not_rewrite(fixture, tmp_path):
     collect(fixture)
     bundle = backup_bundle(fixture[0])
@@ -59,30 +73,121 @@ def test_collect_restores_then_backs_up_before_and_after_reconcile(monkeypatch):
 
 
 def test_scheduled_reconciliation_restores_before_outcomes_and_backs_up(monkeypatch, tmp_path):
+    from app_core import evidence_config, mlb_receipt_audit
     calls = []
+    monkeypatch.setenv('PARLAYPICKER_DRIVE_FOLDER_ID', 'folder')
+    monkeypatch.setenv('PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT', 'configured')
+    monkeypatch.setattr(evidence_config, 'service_account_info', lambda: {})
     monkeypatch.setattr(remote, 'connection', lambda: ('client', 'folder'))
     monkeypatch.setattr(remote, 'recover', lambda client, path: calls.append('restore') or 4)
     monkeypatch.setattr(r, 'reconcile', lambda path, max_games: calls.append(('reconcile', max_games)) or {'outcomes_created': 2})
-    monkeypatch.setattr(remote, 'backup', lambda client, folder, path: calls.append('backup') or {'remote_backup_verified': True})
+    monkeypatch.setattr(r, 'export_records', lambda path, settled_only: [])
+    monkeypatch.setattr(remote, 'prepare_rows', lambda records: calls.append('grade') or [])
+    monkeypatch.setattr(remote, 'backup', lambda client, folder, path: calls.append('backup') or {'remote_backup_verified': True, 'backup_id': 'a'*64})
+    monkeypatch.setattr(remote, 'verify_backup', lambda client, folder, report: calls.append('verify_backup') or {'remote_backup_verified': True, 'backup_id': report['backup_id']})
+    monkeypatch.setattr(mlb_receipt_audit, 'audit_store', lambda path: calls.append('audit') or {'blockers': []})
     result = remote.reconcile_durable(path=tmp_path / 'receipts.sqlite3', max_games=100)
-    assert calls == ['restore', ('reconcile', 100), 'backup']
+    assert calls == ['restore', ('reconcile', 100), 'grade', 'backup', 'verify_backup', 'audit']
     assert result['records_restored'] == 4
     assert result['reconciliation']['outcomes_created'] == 2
     assert result['remote_backup_verified'] is True
+    assert result['audit']['remote_backup_verified'] is True
 
 
-def test_scheduled_cli_reports_only_error_class(monkeypatch, capsys):
+def test_scheduled_reconciliation_missing_configuration_is_classified(monkeypatch):
+    monkeypatch.delenv('PARLAYPICKER_DRIVE_FOLDER_ID', raising=False)
+    monkeypatch.delenv('PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT', raising=False)
+    monkeypatch.setattr(remote, 'connection', lambda: pytest.fail('must fail before connection'))
+    with pytest.raises(remote.ReceiptWorkflowFailure) as caught:
+        remote.reconcile_durable()
+    assert caught.value.report()['reason_code'] == 'MISSING_CONFIGURATION'
+    assert caught.value.report()['failed_stage'] == 'configure'
+
+
+def test_failed_backup_verification_prevents_audit_and_success(monkeypatch, tmp_path):
+    from app_core import evidence_config, mlb_receipt_audit
+    monkeypatch.setenv('PARLAYPICKER_DRIVE_FOLDER_ID', 'folder')
+    monkeypatch.setenv('PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT', 'configured')
+    monkeypatch.setattr(evidence_config, 'service_account_info', lambda: {})
+    monkeypatch.setattr(remote, 'connection', lambda: ('client', 'folder'))
+    monkeypatch.setattr(remote, 'recover', lambda *a: 0)
+    monkeypatch.setattr(r, 'reconcile', lambda *a, **kw: {'outcomes_created': 0})
+    monkeypatch.setattr(r, 'export_records', lambda *a, **kw: [])
+    monkeypatch.setattr(remote, 'backup', lambda *a: {'remote_backup_verified': True, 'backup_id': 'a'*64})
+    def failed_verify(*_args):
+        raise ValueError('read-back failed')
+    monkeypatch.setattr(remote, 'verify_backup', failed_verify)
+    monkeypatch.setattr(mlb_receipt_audit, 'audit_store', lambda *a: pytest.fail('audit must await verification'))
+    with pytest.raises(remote.ReceiptWorkflowFailure) as caught:
+        remote.reconcile_durable(path=tmp_path / 'receipts.sqlite3')
+    assert caught.value.report()['reason_code'] == 'BACKUP_VERIFICATION_FAILURE'
+    assert caught.value.report()['remote_backup_verified'] is False
+
+
+def test_scheduled_cli_reports_only_error_class(monkeypatch, capsys, tmp_path):
     import sys
     from scripts import capture_mlb_pregame_receipts as cli
     def fail(**_kwargs):
         raise ValueError('private provider URL token=secret')
     monkeypatch.setattr(remote, 'reconcile_durable', fail)
-    monkeypatch.setattr(sys, 'argv', ['capture_mlb_pregame_receipts.py', 'reconcile-remote'])
+    output = tmp_path / 'status.json'
+    monkeypatch.setattr(sys, 'argv', ['capture_mlb_pregame_receipts.py', 'reconcile-remote', '--output', str(output)])
     with pytest.raises(SystemExit) as exc:
         cli.main()
     assert exc.value.code == 2
     assert 'ValueError' in capsys.readouterr().err
     assert 'secret' not in str(exc.value)
+    import json
+    assert json.loads(output.read_text())['reason_code'] == 'UNKNOWN_FAILURE'
+    assert 'secret' not in output.read_text()
+
+
+def test_scheduled_cli_success_writes_verified_audit_artifact(monkeypatch, tmp_path):
+    import json
+    from scripts import capture_mlb_pregame_receipts as cli
+    output = tmp_path / 'audit.json'
+    expected = {'schema': 'mlb-receipt-audit-v1', 'training_authorized': False,
+                'remote_backup_verified': True, 'blockers': ['no_chronological_split_meets_minimums']}
+    monkeypatch.setattr(remote, 'reconcile_durable', lambda **_kwargs: {
+        'remote_backup_verified': True, 'backup_id': 'a'*64, 'audit': expected})
+    assert cli.main(['reconcile-remote', '--output', str(output)]) == 0
+    report = json.loads(output.read_text())
+    assert report['status'] == 'succeeded'
+    assert report['remote_backup_verified'] is True
+    assert report['audit'] == expected
+
+
+def test_backup_verification_requires_fresh_manifest_and_all_records(fixture):
+    collect(fixture)
+    store = Store()
+    report = remote.backup(store, 'folder', fixture[0])
+    assert remote.verify_backup(store, 'folder', report)['verified_manifest_records'] > 0
+    key = remote.MANIFEST_PREFIX + report['backup_id'] + '.json'
+    store.data[key] += b'corrupt'
+    with pytest.raises(ValueError, match='manifest verification'):
+        remote.verify_backup(store, 'folder', report)
+
+
+def test_uncertain_upload_is_not_retried(fixture):
+    collect(fixture)
+    store = Store()
+    calls = []
+    def timeout(**_kw):
+        calls.append('put')
+        raise r.requests.Timeout('unknown upload state')
+    store.put_object = timeout
+    with pytest.raises(r.requests.Timeout):
+        remote.backup(store, 'folder', fixture[0])
+    assert calls == ['put']
+
+
+def test_provider_error_reason_codes_are_stage_specific():
+    response = type('Response', (), {'status_code': 429})()
+    err = r.requests.HTTPError('hidden URL', response=response)
+    assert remote._workflow_reason('reconcile', err) == 'PROVIDER_RATE_LIMIT'
+    response.status_code = 401
+    assert remote._workflow_reason('reconcile', err) == 'AUTH_FAILURE'
+    assert remote._workflow_reason('restore', r.Rejected('stored_hash_mismatch')) == 'RECEIPT_INTEGRITY_FAILURE'
 
 
 def test_remote_corruption_fails_before_restore(fixture, tmp_path):

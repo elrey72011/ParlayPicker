@@ -206,6 +206,59 @@ def test_fresh_observation_clock_comes_from_response(monkeypatch):
     assert r.observe("api/v1/schedule")["observed_at"]==NOW.isoformat()
 
 
+def test_observe_retries_only_transient_provider_failures(monkeypatch):
+    calls = []
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return {"facts": 1}
+    def get(*_args, **_kwargs):
+        calls.append(1)
+        if len(calls) < 3:
+            raise r.requests.Timeout('temporary')
+        return Response()
+    monkeypatch.setattr(r.requests, 'get', get)
+    monkeypatch.setattr(r.time, 'sleep', lambda _seconds: None)
+    assert r.observe('api/v1/schedule')['payload'] == {"facts": 1}
+    assert len(calls) == 3
+
+
+def test_observe_auth_failure_is_not_retried(monkeypatch):
+    calls = []
+    response = type('Response', (), {'status_code': 401})()
+    def get(*_args, **_kwargs):
+        calls.append(1)
+        raise r.requests.HTTPError('private URL', response=response)
+    monkeypatch.setattr(r.requests, 'get', get)
+    with pytest.raises(r.requests.HTTPError):
+        r.observe('api/v1.1/game/100/feed/live')
+    assert len(calls) == 1
+
+
+def test_observe_rate_limit_retry_is_bounded(monkeypatch):
+    calls = []
+    response = type('Response', (), {'status_code': 429})()
+    def get(*_args, **_kwargs):
+        calls.append(1)
+        raise r.requests.HTTPError('rate limited', response=response)
+    monkeypatch.setattr(r.requests, 'get', get)
+    monkeypatch.setattr(r.time, 'sleep', lambda _seconds: None)
+    with pytest.raises(r.requests.HTTPError):
+        r.observe('api/v1.1/game/100/feed/live')
+    assert len(calls) == 3
+
+
+def test_reconciliation_provider_failure_propagates_and_keeps_receipt(fixture):
+    collect(fixture)
+    before = r.read('receipts', fixture[0])
+    response = type('Response', (), {'status_code': 429})()
+    def rate_limited(*_args, **_kwargs):
+        raise r.requests.HTTPError('private URL', response=response)
+    with pytest.raises(r.requests.HTTPError):
+        r.reconcile(fixture[0], fetch=rate_limited)
+    assert r.read('receipts', fixture[0]) == before
+    assert r.read('outcomes', fixture[0]) == {}
+
+
 def test_live_ingestion_and_expansion_preserve_stable_ids(fixture,monkeypatch):
     from app_core import odds_api
     import core.streamlit_pipeline as sp
