@@ -7,6 +7,11 @@ on:
         required: false
         default: ''
         type: string
+      football_v3_audit:
+        description: 'Read-only authenticated football V3 feasibility audit'
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: '15,45 0-7,15-23 * * *'
 permissions:
@@ -16,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   configuration-preflight:
-    if: github.event_name == 'workflow_dispatch' || vars.RESEARCH_SCHEDULER_ENABLED == 'true'
+    if: (github.event_name == 'workflow_dispatch' || vars.RESEARCH_SCHEDULER_ENABLED == 'true') && inputs.football_v3_audit != true
     runs-on: ubuntu-latest
     timeout-minutes: 3
     env:
@@ -32,7 +37,7 @@ jobs:
       - name: Report configuration presence only
         run: python scripts/research_actions_preflight.py
   research:
-    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true'
+    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.football_v3_audit != true
     needs: configuration-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -72,7 +77,7 @@ jobs:
 
 
   activation-evidence:
-    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true'
+    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.football_v3_audit != true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -98,3 +103,30 @@ jobs:
       - name: Report evidence health
         if: ${{ !cancelled() && steps.window.outputs.active == 'true' }}
         run: python -u scripts/prediction_evidence.py status --database data/prediction_evidence/evidence.sqlite3
+  football-v3-feasibility:
+    if: github.event_name == 'workflow_dispatch' && inputs.football_v3_audit == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PARLAYPICKER_DRIVE_FOLDER_ID: 0AAx101w9xyZcUk9PVA
+      PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install read-only audit dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Restore and audit football evidence without remote writes
+        run: >-
+          python -u scripts/football_v3_feasibility_audit.py
+          --root "${{ runner.temp }}/football-v3-evidence"
+          --output "${{ runner.temp }}/football-v3-feasibility.json"
+      - name: Retain sanitized football feasibility audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-v3-feasibility-audit
+          path: ${{ runner.temp }}/football-v3-feasibility.json
+          if-no-files-found: warn
