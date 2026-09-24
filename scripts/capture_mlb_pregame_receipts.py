@@ -12,6 +12,9 @@ def main(argv=None):
     parser.add_argument("command", choices=["capture", "reconcile", "reconcile-remote", "export", "status", "audit", "backup", "restore", "sync"])
     parser.add_argument("--database", type=Path)
     parser.add_argument("--max-feeds", type=int, default=20)
+    parser.add_argument("--capture-live", action="store_true",
+                        help="Capture today's pregame MLB receipts on the scheduled runner")
+    parser.add_argument("--max-capture-feeds", type=int, default=20)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--input", type=Path)
     parser.add_argument("--include-pending", action="store_true")
@@ -30,7 +33,9 @@ def main(argv=None):
         from app_core.mlb_receipt_remote import ReceiptWorkflowFailure, reconcile_durable
         try:
             report = {"status": "succeeded", "reason_code": None,
-                      **reconcile_durable(path=args.database, max_games=args.max_feeds)}
+                      **reconcile_durable(path=args.database, max_games=args.max_feeds,
+                                          capture_live=args.capture_live,
+                                          max_capture_feeds=args.max_capture_feeds)}
         except ReceiptWorkflowFailure as exc:
             report = exc.report()
         except Exception as exc:
