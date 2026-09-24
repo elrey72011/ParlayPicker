@@ -6,6 +6,9 @@ import os
 from pathlib import Path
 import sys
 
+# GitHub Actions invokes this file directly, which puts scripts/ on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from app_core.football_v3_feasibility import restore_and_audit
 
 
