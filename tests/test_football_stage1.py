@@ -93,6 +93,25 @@ class FootballStage1Test(unittest.TestCase):
         self.assertTrue(created)
         self.assertNotEqual(first["version_id"], third["version_id"])
 
+    def test_capture_horizon_boundaries_cover_mid_pregame_gap(self):
+        self.assertEqual(stage1.horizon(START + timedelta(days=8), NOW), "SNAPSHOT_WINDOW_MISSED")
+        self.assertEqual(stage1.horizon(NOW + timedelta(days=7), NOW), "EARLY_RESEARCH")
+        self.assertEqual(stage1.horizon(NOW + timedelta(hours=24), NOW), "EARLY_RESEARCH")
+        self.assertEqual(stage1.horizon(NOW + timedelta(hours=23, minutes=59), NOW), "MID_PREGAME")
+        self.assertEqual(stage1.horizon(NOW + timedelta(minutes=121), NOW), "MID_PREGAME")
+        self.assertEqual(stage1.horizon(NOW + timedelta(minutes=120), NOW), "FINAL_LEGAL_PREGAME")
+        self.assertEqual(stage1.horizon(NOW + timedelta(minutes=5), NOW), "FINAL_LEGAL_PREGAME")
+        self.assertEqual(stage1.horizon(NOW + timedelta(minutes=4), NOW), "SNAPSHOT_WINDOW_MISSED")
+
+    def test_mid_pregame_quote_is_preserved_as_distinct_research_horizon(self):
+        start = NOW + timedelta(hours=6)
+        report = stage1.coverage(self.path, [nfl_event(start=start)], [odds_event(start=start)],
+                                 sport="NFL", observed=NOW, run_id="mid")
+        self.assertEqual(report["games"][0]["status"], "QUOTE_CAPTURED")
+        rows = self.rows("prospective_football_quote")
+        self.assertEqual(len(rows), 4)
+        self.assertEqual({x["capture_horizon"] for x in rows}, {"MID_PREGAME"})
+
     def test_exact_quote_and_idempotence(self):
         event = nfl_event()
         quote = odds_event()
