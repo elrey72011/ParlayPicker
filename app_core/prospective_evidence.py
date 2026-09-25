@@ -545,6 +545,15 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
             payload TEXT NOT NULL,
             payload_hash TEXT NOT NULL
         );
+        CREATE VIEW IF NOT EXISTS prospective_football_active_training_row AS
+        SELECT t.* FROM prospective_football_training_row t
+        JOIN prospective_football_result r ON r.result_id=t.result_id
+        WHERE t.training_row_status='TRAINING_READY'
+          AND NOT EXISTS (
+              SELECT 1 FROM prospective_football_result revision
+              WHERE revision.game_id=t.game_id
+                AND (revision.home_score<>r.home_score OR revision.away_score<>r.away_score)
+          );
     """)
     tables = ("prospective_event", "prospective_quote", "prospective_close", "prospective_result",
               "prospective_model", "prospective_model_training_result", "prospective_calibration",

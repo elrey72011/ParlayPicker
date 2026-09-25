@@ -166,7 +166,7 @@ def _completed_result(sport, source):
         raise ProviderFailure(sport + "_RESULT_SCHEMA_FAILURE") from None
 
 
-def _readiness(path, denominator, now):
+def _readiness(path, denominator, now, current_sources=None):
     games = []
     completed, result_count, settled_games = 0, 0, 0
     with closing(evidence.connect(path)) as db:
@@ -177,7 +177,9 @@ def _readiness(path, denominator, now):
             event_row = foundation._read(db, "prospective_football_event", "version_id", game["event_version_id"])
             identity_verified = bool(event_row["home_team_id"] and event_row["away_team_id"] and
                                      event_row["home_team_id"] != event_row["away_team_id"])
-            source = json.loads(event_row["raw_source"])
+            source = (current_sources or {}).get(game["provider_event_id"])
+            if source is None:
+                source = json.loads(event_row["raw_source"])
             is_completed = (source.get("completed") is True if denominator["sport"] == "NCAAF" else
                             source.get("status", {}).get("type", {}).get("completed") is True)
             completed += int(is_completed)
@@ -195,7 +197,7 @@ def _readiness(path, denominator, now):
                                     (game_id,)).fetchone()
                 result_versions = db.execute("SELECT DISTINCT home_score,away_score FROM prospective_football_result WHERE game_id=?",
                                              (game_id,)).fetchall()
-                ready = db.execute("SELECT training_row_id FROM prospective_football_training_row WHERE game_id=? AND market_family=? AND training_row_status='TRAINING_READY' LIMIT 1",
+                ready = db.execute("SELECT training_row_id FROM prospective_football_active_training_row WHERE game_id=? AND market_family=? LIMIT 1",
                                    (game_id, market)).fetchone()
                 conflict = len(result_versions) > 1
                 blockers = (["RESULT_CORRECTION_CONFLICT"] if conflict else [] if ready else
@@ -224,7 +226,7 @@ def _readiness(path, denominator, now):
                                  (denominator["sport"],)).fetchone()[0]
         settlement_rows = db.execute("SELECT count(*) FROM prospective_football_settlement WHERE sport=?",
                                      (denominator["sport"],)).fetchone()[0]
-        training_ready_rows = db.execute("SELECT count(*) FROM prospective_football_training_row WHERE sport=? AND training_row_status='TRAINING_READY'",
+        training_ready_rows = db.execute("SELECT count(*) FROM prospective_football_active_training_row WHERE sport=?",
                                          (denominator["sport"],)).fetchone()[0]
     return {"sport": denominator["sport"], "target_games": total,
             "completed_games_in_window": completed, "completed_games_with_result": result_count,
@@ -264,6 +266,8 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
             sport_report["discovery"] = discovery
             odds_events = _odds(sport, odds_key, get=get, ledger=ledger)
             observed = datetime.now(timezone.utc) if get is None else now
+            current_sources = {str(x["id"]): x for x in raw_schedules
+                               if isinstance(x, dict) and x.get("id") is not None}
             denominator = foundation.coverage(path, raw_schedules, odds_events, sport=sport,
                                               observed=observed, run_id=run_id, target_policy=policy,
                                               team_catalog=team_catalog, aliases=aliases)
@@ -296,7 +300,9 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
             for schedule in schedules:
                 if schedule["season_type"].casefold() != "regular" or (policy and policy(schedule)):
                     continue
-                source = json.loads(schedule["raw_source"])
+                source = current_sources.get(schedule["provider_event_id"])
+                if source is None:
+                    source = json.loads(schedule["raw_source"])
                 try:
                     raw_result = _completed_result(sport, source)
                     if raw_result is None:
@@ -306,7 +312,7 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
                 except (ProviderFailure, ValueError) as exc:
                     sport_report["errors"].append({"game_id": schedule["game_id"],
                                                    "reason": exc.code if isinstance(exc, ProviderFailure) else str(exc)})
-            sport_report["readiness"] = _readiness(path, denominator, observed)
+            sport_report["readiness"] = _readiness(path, denominator, observed, current_sources)
             target_ids = {g["game_id"] for g in denominator["games"] if g.get("regular_season_target")}
             matched_ids = {x.get("canonical_match") for x in diagnostic if x.get("canonical_match") in target_ids}
             sport_report["readiness"]["rates"]["provider_event_match_rate"] = (
@@ -319,25 +325,38 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
             sport_report["readiness"]["rates"]["pregame_valid_quote_rate"] = (
                 sum(bool(x.get("pregame_valid")) for x in diagnostic if x.get("canonical_match") in target_ids)
                 / len(target_ids) if target_ids else None)
+            quote_due = [g for g in denominator["games"] if g.get("regular_season_target") and
+                         foundation.horizon(g["kickoff"], observed) != "SNAPSHOT_WINDOW_MISSED"]
             sport_report["requested_slate_success"] = (not sport_report["errors"] and
                                                          denominator["requested_slate_success"])
             if sport == "NCAAF" and denominator["scheduled_target_games"] == 0:
                 sport_report["discovery"]["zero_discovery_reason"] = (
                     "NCAAF_QUERY_WINDOW_EMPTY" if not raw_schedules else "NCAAF_FILTER_REMOVED_ALL")
-            elif sport == "NCAAF" and not odds_events:
+            elif sport == "NCAAF" and quote_due and not odds_events:
                 sport_report["discovery"]["zero_discovery_reason"] = "NCAAF_ODDS_DISCOVERY_EMPTY"
                 sport_report["requested_slate_success"] = False
-            elif sport == "NCAAF" and all(x.get("sport_key") != foundation.SPORT_KEYS["NCAAF"]
+            elif sport == "NCAAF" and quote_due and all(x.get("sport_key") != foundation.SPORT_KEYS["NCAAF"]
                                            for x in odds_events if isinstance(x, dict)):
                 sport_report["discovery"]["zero_discovery_reason"] = "NCAAF_WRONG_SPORT_KEY"
                 sport_report["requested_slate_success"] = False
-            elif sport == "NCAAF" and target_ids and not matched_ids:
+            elif sport == "NCAAF" and quote_due and not matched_ids:
                 sport_report["discovery"]["zero_discovery_reason"] = "NCAAF_IDENTITY_PROJECTION_FAILED"
                 sport_report["requested_slate_success"] = False
             elif sport == "NCAAF" and target_ids and all(
                     foundation.horizon(g["kickoff"], observed) == "SNAPSHOT_WINDOW_MISSED"
                     for g in denominator["games"] if g.get("regular_season_target")):
                 sport_report["discovery"]["window_status"] = "NCAAF_SCHEDULER_WINDOW_MISSED"
+            due_ids = {g["game_id"] for g in quote_due}
+            priced_due_ids = {d.get("canonical_match") for d in diagnostic
+                              if d.get("canonical_match") in due_ids and
+                              d.get("spread_price_available") and d.get("total_price_available") and
+                              d.get("pregame_valid")}
+            missing_due_ids = sorted(due_ids - priced_due_ids)
+            if missing_due_ids:
+                sport_report["errors"].append({"reason": sport + "_NO_VERIFIED_PREGAME_PRICE",
+                                               "quote_due_games": len(due_ids),
+                                               "missing_game_ids": missing_due_ids})
+                sport_report["requested_slate_success"] = False
         except ProviderFailure as exc:
             sport_report["errors"].append({"reason": exc.code})
             if sport == "NCAAF":
