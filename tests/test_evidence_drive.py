@@ -127,6 +127,50 @@ def test_delayed_search_does_not_bypass_readback_integrity():
     session.files[0]["content"] = b'changed'
     assert store.get_object(Key="prefix/snapshots/new.json")["Body"].read() == b'changed'
 
+
+def test_timed_out_upload_recovers_only_after_exact_remote_readback(monkeypatch):
+    import requests
+    from app_core import evidence_drive
+
+    class CommittedThenTimedOut(DriveSession):
+        def __init__(self):
+            super().__init__()
+            self.uploads = 0
+            self.searches = 0
+
+        def post(self, *args, **kwargs):
+            self.uploads += 1
+            super().post(*args, **kwargs)
+            raise requests.ReadTimeout("response lost")
+
+        def get(self, url, params, timeout):
+            if url == API and " and name = '" in params["q"]:
+                self.searches += 1
+                if self.searches == 2:
+                    return Response({"files": []})
+            return super().get(url, params, timeout)
+
+    monkeypatch.setattr(evidence_drive.time, "sleep", lambda _: None)
+    session = CommittedThenTimedOut()
+    store = DriveStore("folder", session=session)
+    store.put_object(Key="canonical/new", Body=b"original", IfNoneMatch="*")
+    assert session.uploads == 1
+    assert store.get_object(Key="canonical/new")["Body"].read() == b"original"
+
+
+def test_timed_out_upload_with_conflicting_remote_bytes_fails_closed(monkeypatch):
+    import requests
+
+    class Conflicted(DriveSession):
+        def post(self, *args, **kwargs):
+            super().post(*args, **kwargs)
+            self.files[-1]["content"] = b"changed"
+            raise requests.ReadTimeout("response lost")
+
+    store = DriveStore("folder", session=Conflicted())
+    with pytest.raises(ValueError, match="conflicts with remote evidence"):
+        store.put_object(Key="canonical/new", Body=b"original", IfNoneMatch="*")
+
 def test_receipt_cache_requires_fresh_remote_sha_and_checks_duplicates(tmp_path):
     import hashlib
     store = object.__new__(DriveStore)
