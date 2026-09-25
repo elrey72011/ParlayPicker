@@ -62,7 +62,8 @@ def _odds_probability(american):
     return 100 / (american + 100) if american > 0 else -american / (-american + 100)
 
 
-def exact_label(market, selection, line, home_score, away_score, home_team, away_team):
+def exact_label(market, selection, line, home_score, away_score, home_team, away_team,
+                *, provider_home_team=None, provider_away_team=None):
     """The target is the stored selection's exact betting result, including push."""
     if market not in CLASSES or not all(type(score) is int and score >= 0
                                          for score in (home_score, away_score)):
@@ -70,14 +71,28 @@ def exact_label(market, selection, line, home_score, away_score, home_team, away
     if not isinstance(line, (float, int)) or not math.isfinite(line):
         raise ValueError("LINE_UNVERIFIED")
     if market == "SPREAD":
-        if selection not in (home_team, away_team) or home_team == away_team:
+        if (provider_home_team and provider_away_team and provider_home_team != provider_away_team):
+            names = (provider_home_team, provider_away_team)
+        else:
+            names = (home_team, away_team)
+        if selection not in names or names[0] == names[1]:
             raise ValueError("EVENT_IDENTITY_AMBIGUOUS")
-        margin = (home_score-away_score if selection == home_team else away_score-home_score) + line
+        margin = (home_score-away_score if selection == names[0] else away_score-home_score) + line
         return "PUSH" if margin == 0 else "COVER" if margin > 0 else "NO_COVER"
     if selection not in ("Over", "Under"):
         raise ValueError("LINE_UNVERIFIED")
     delta = home_score + away_score - line
     return "PUSH" if delta == 0 else ("OVER" if delta > 0 else "UNDER")
+
+
+def _spread_side(event, quote):
+    raw = json.loads(quote["raw_source"]) if quote.get("raw_source") else {}
+    if not isinstance(raw, dict):
+        raise ValueError("SOURCE_LINEAGE_UNVERIFIED")
+    return stage1._spread_side(dict(quote, sport=event["sport"],
+                                    home_team=event["home_team"], away_team=event["away_team"],
+                                    provider_home_team=raw.get("home_team"),
+                                    provider_away_team=raw.get("away_team")))
 
 
 def validate_feature_snapshot(snapshot, *, quote_at, kickoff, event_discovered_at, result_available_at):
@@ -102,13 +117,16 @@ def validate_feature_snapshot(snapshot, *, quote_at, kickoff, event_discovered_a
 def _snapshot(event, quote, result):
     qtime = quote["observed_at"]
     schedule_time = event["discovered_at"]
+    spread_side = _spread_side(event, quote) if quote["market_family"] == "SPREAD" else None
+    if quote["market_family"] == "SPREAD" and spread_side is None:
+        raise ValueError("EVENT_IDENTITY_AMBIGUOUS")
     snapshot = {
         "line": {"value": quote["line"], "source": "verified_quote", "available_at": qtime},
         "price_implied_probability": {"value": _odds_probability(quote["american_odds"]),
                                       "source": "verified_quote", "available_at": qtime},
         "neutral_site": {"value": int(event["neutral_site"]), "source": "pregame_schedule",
                          "available_at": schedule_time},
-        "selection_is_home_or_over": {"value": int(quote["selection"] == event["home_team"]
+        "selection_is_home_or_over": {"value": int(spread_side == "home"
                                                     if quote["market_family"] == "SPREAD" else
                                                     quote["selection"] == "Over"),
                                       "source": "verified_quote", "available_at": qtime},
@@ -184,16 +202,19 @@ def _verify_selected(db, row):
         if (quote["game_id"] != event["game_id"] or result["game_id"] != event["game_id"] or
                 settlement["quote_id"] != quote["quote_id"] or settlement["result_id"] != result["result_id"]):
             reasons.append("EVENT_IDENTITY_AMBIGUOUS")
+        raw_quote = json.loads(quote["raw_source"])
         label = exact_label(market, quote["selection"], quote["line"], result["home_score"],
-                            result["away_score"], event["home_team"], event["away_team"])
+                            result["away_score"], event["home_team"], event["away_team"],
+                            provider_home_team=raw_quote.get("home_team"),
+                            provider_away_team=raw_quote.get("away_team"))
         expected_stage1_label = ("PUSH" if label == "PUSH" else
                                  "WIN" if label in ("COVER", "OVER") and
                                  (market == "SPREAD" or quote["selection"] == "Over") else
                                  "WIN" if label == "UNDER" and quote["selection"] == "Under" else "LOSS")
         if training["label"] != expected_stage1_label or settlement["outcome"] != stage1.outcome(
                 dict(quote, home_team=event["home_team"], away_team=event["away_team"],
-                     provider_home_team=json.loads(quote["raw_source"]).get("home_team"),
-                     provider_away_team=json.loads(quote["raw_source"]).get("away_team")), result):
+                     provider_home_team=raw_quote.get("home_team"),
+                     provider_away_team=raw_quote.get("away_team")), result):
             reasons.append("SETTLEMENT_UNREPRODUCIBLE")
         snapshot = _snapshot(event, quote, result)
     except (ValueError, TypeError, KeyError, json.JSONDecodeError, sqlite3.Error) as exc:
@@ -615,6 +636,7 @@ def validate_research_prediction(model, event, quote, snapshot, timestamp):
     if model is None or model.get("model_status") != "RESEARCH_MODEL_SELECTED":
         raise ValueError("NO_VALID_EXACT_SCOPE_MODEL")
     artifact = model.get("model_artifact") or {}
+    spread_side = _spread_side(event, quote) if quote["market_family"] == "SPREAD" else None
     if (model.get("artifact_hash") != digest({k:v for k,v in artifact.items() if k != "model_id"}) or
             model.get("model_id") != artifact.get("model_id") or
             event["sport"] != artifact.get("sport") or quote["market_family"] != artifact.get("market_family") or
@@ -624,14 +646,14 @@ def validate_research_prediction(model, event, quote, snapshot, timestamp):
             artifact.get("production_eligible") is not False or artifact.get("stake") != 0 or
             event["game_id"] != quote["game_id"] or quote["event_version_id"] != event["version_id"] or
             quote.get("quote_verified") != 1 or not quote.get("quote_id") or
-            quote["selection"] not in ((event["home_team"],event["away_team"]) if
-                                       quote["market_family"] == "SPREAD" else ("Over","Under")) or
+            (spread_side is None if quote["market_family"] == "SPREAD" else
+             quote["selection"] not in ("Over", "Under")) or
             not math.isclose(quote["line"], snapshot["line"]["value"], abs_tol=1e-9) or
             not math.isclose(_odds_probability(quote["american_odds"]),
                              snapshot["price_implied_probability"]["value"], abs_tol=1e-9) or
             snapshot["neutral_site"]["value"] != int(event["neutral_site"]) or
             snapshot["selection_is_home_or_over"]["value"] != int(
-                quote["selection"] == event["home_team"] if quote["market_family"] == "SPREAD" else
+                spread_side == "home" if quote["market_family"] == "SPREAD" else
                 quote["selection"] == "Over") or
             not stage1.at(artifact["training_cutoff"]) <= stage1.at(artifact["available_at"]) <= stage1.at(timestamp) < stage1.at(event["scheduled_start"]) or
             not stage1.at(quote["provider_last_update"]) <= stage1.at(quote["observed_at"]) <= stage1.at(timestamp)):

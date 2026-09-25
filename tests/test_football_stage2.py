@@ -106,6 +106,40 @@ def test_home_win_and_moneyline_cannot_satisfy_cover_target():
         stage2.validate_probability_vector({"COVER": 0.6, "PUSH": 0.1, "NO_COVER": 0.4}, "SPREAD")
 
 
+def test_ncaaf_provider_mascot_selection_replays_exact_cover(tmp_path):
+    source = {"id": 77, "season": 2026, "week": 4, "seasonType": "regular",
+              "homeTeam": "Ohio State", "awayTeam": "Missouri", "homeId": 10, "awayId": 20,
+              "startDate": START.isoformat(), "neutralSite": True, "venue": "Test Stadium"}
+    catalog = {"10": {"id": 10, "school": "Ohio State", "mascot": "Buckeyes"},
+               "20": {"id": 20, "school": "Missouri", "mascot": "Tigers"}}
+    aliases = {"10": {stage1._name("NCAAF", "Ohio State"), stage1._name("NCAAF", "Ohio State Buckeyes")},
+               "20": {stage1._name("NCAAF", "Missouri"), stage1._name("NCAAF", "Missouri Tigers")}}
+    offer = odds_event(sport_key="americanfootball_ncaaf")
+    offer["home_team"], offer["away_team"] = "Ohio State Buckeyes", "Missouri Tigers"
+    for market in offer["bookmakers"][0]["markets"]:
+        if market["key"] == "spreads":
+            market["outcomes"][0]["name"] = offer["home_team"]
+            market["outcomes"][1]["name"] = offer["away_team"]
+    path = tmp_path / "evidence.sqlite3"
+    stage1.coverage(path, [source], [offer], sport="NCAAF", observed=NOW,
+                    run_id="stage2-ncaaf", team_catalog=catalog, aliases=aliases)
+    with evidence.connect(path) as db:
+        event = dict(db.execute("SELECT * FROM prospective_football_event").fetchone())
+    raw = {"provider_event_id": "77", "home_team_id": "10", "away_team_id": "20",
+           "home_score": 24, "away_score": 20, "status": "FINAL",
+           "provider_response": dict(source, completed=True, homePoints=24, awayPoints=20)}
+    result, _ = stage1.append_result(path, event, raw, START+timedelta(hours=3), source="CFBD")
+    stage1.settle_game(path, event, result, START+timedelta(hours=3))
+    assert stage2.exact_label("SPREAD", "Ohio State Buckeyes", -3.5, 24, 20,
+                              "Ohio State", "Missouri",
+                              provider_home_team="Ohio State Buckeyes",
+                              provider_away_team="Missouri Tigers") == "COVER"
+    reports = stage2.build_reports(path, Path(__file__).resolve().parents[1],
+                                   stage1_report=verified_refresh(), source_commit="abc")
+    assert reports["training_audit"]["scopes"]["NCAAF/SPREAD"]["legal_independent_n"] == 1
+    assert reports["training_audit"]["scopes"]["NCAAF/TOTAL"]["legal_independent_n"] == 1
+
+
 def _snapshot(quote_time="2026-09-25T12:00:00+00:00"):
     return {"line": {"value": -3.5, "source": "verified_quote", "available_at": quote_time},
             "price_implied_probability": {"value": 110/210, "source": "verified_quote", "available_at": quote_time},
