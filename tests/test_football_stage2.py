@@ -42,9 +42,14 @@ def test_authenticated_readback_required_and_empty_scopes_fail_closed(tmp_path):
     with pytest.raises(ValueError, match="STAGE1_AUTHENTICATED_REFRESH_NOT_VERIFIED"):
         stage2.build_reports(path, Path(__file__).resolve().parents[1],
                              stage1_report={"run_id": "x", "execution_state": "COMPLETE"}, source_commit="abc")
+    refresh = verified_refresh()
+    refresh["sports"] = {"NCAAF": {"readiness": {"market_summary": {
+        "SPREAD": {"blocker_counts": {"NO_VERIFIED_PREGAME_PRICE": 68}}}}}}
     reports = stage2.build_reports(path, Path(__file__).resolve().parents[1],
-                                   stage1_report=verified_refresh(), source_commit="abc")
+                                   stage1_report=refresh, source_commit="abc")
     assert len(reports) == 8
+    assert reports["training_audit"]["scopes"]["NCAAF/SPREAD"]["stage1_current_slate"][
+        "blocker_counts"]["NO_VERIFIED_PREGAME_PRICE"] == 68
     for key in ("NFL/SPREAD", "NFL/TOTAL", "NCAAF/SPREAD", "NCAAF/TOTAL"):
         assert reports["training_audit"]["scopes"][key]["legal_independent_n"] == 0
         assert reports["model_inventory"]["scopes"][key]["model_status"] == "INSUFFICIENT_TRAINING_EVIDENCE"

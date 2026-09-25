@@ -759,6 +759,8 @@ def build_reports(path, source_root, *, stage1_report, source_commit, now=None):
             "raw_training_ready_rows": source_audit[key]["training_ready_raw_rows"],
             "manifest_selected_rows": source_audit[key]["selected_manifest_rows"],
             "legal_independent_n": len(scope_rows), "legal_by_season": season_counts,
+            "stage1_current_slate": ((stage1_report.get("sports") or {}).get(sport, {})
+                .get("readiness", {}).get("market_summary", {}).get(market, {})),
             "blocked_or_nonselected_raw_reasons": source_audit[key]["blocked_reasons"],
             "quarantined_manifest_reasons": dict(sorted(quarantine_reasons.items())),
             "historical_csv_rows_promoted": 0, "legacy_rows_promoted": 0,
