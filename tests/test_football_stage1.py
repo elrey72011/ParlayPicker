@@ -175,6 +175,73 @@ class FootballStage1Test(unittest.TestCase):
                                                 schedule_window_end=NOW+timedelta(days=8))
         self.assertEqual(diagnostic[0]["status"], "OUTSIDE_SCHEDULE_WINDOW")
 
+    def test_provider_reconciliation_classifies_each_event_without_forcing_kickoff(self):
+        schedule, _ = stage1.append_schedule(self.path, "NFL", nfl_event(), NOW)
+        matched = odds_event()
+        revised = odds_event(start=START + timedelta(minutes=10))
+        revised["id"] = "revised"
+        outside = odds_event(start=START + timedelta(days=10))
+        outside["id"] = "outside"
+        invalid = odds_event(sport_key="americanfootball_ncaaf")
+        invalid["id"] = "wrong-sport"
+        events = [matched, matched, revised, outside, invalid]
+        rows = stage1.provider_diagnostic([schedule], events, sport="NFL", observed=NOW,
+                                          schedule_window_start=NOW-timedelta(days=7),
+                                          schedule_window_end=NOW+timedelta(days=8))
+        self.assertEqual([x["classification"] for x in rows],
+                         ["MATCHED_TARGET", "DUPLICATE_PROVIDER_EVENT", "KICKOFF_TIME_REVISION",
+                          "OUTSIDE_TARGET_WINDOW", "PROVIDER_DATA_INVALID"])
+        self.assertEqual(rows[2]["kickoff_delta_seconds"], 600)
+        self.assertEqual(rows[2]["candidate_game_ids"], [schedule["game_id"]])
+        self.assertTrue(all(x["classification_reason"] for x in rows))
+        coverage = stage1.coverage(self.path, [nfl_event()], [revised], sport="NFL", observed=NOW,
+                                   run_id="revision")
+        self.assertEqual(coverage["games"][0]["status"], "NO_ODDS_EVENT")
+
+    def test_ambiguous_kickoff_candidates_never_match(self):
+        first, _ = stage1.append_schedule(self.path, "NFL", nfl_event(), NOW)
+        second, _ = stage1.append_schedule(self.path, "NFL", nfl_event(start=START + timedelta(seconds=30),
+                                                                       event_id="402"), NOW)
+        rows = stage1.provider_diagnostic([first, second], [odds_event()], sport="NFL", observed=NOW)
+        self.assertEqual(rows[0]["classification"], "AMBIGUOUS_MATCH")
+        self.assertEqual(len(rows[0]["candidate_game_ids"]), 2)
+        revised = odds_event(start=START + timedelta(minutes=10))
+        rows = stage1.provider_diagnostic([first, second], [revised], sport="NFL", observed=NOW)
+        self.assertEqual(rows[0]["classification"], "AMBIGUOUS_MATCH")
+        self.assertIsNone(rows[0]["canonical_match"])
+
+    def test_training_manifest_uses_one_deterministic_observation_per_game_market(self):
+        event = nfl_event()
+        offer = odds_event()
+        second_book = copy.deepcopy(offer["bookmakers"][0])
+        second_book["key"] = "book_b"
+        offer["bookmakers"].insert(0, second_book)
+        denominator = stage1.coverage(self.path, [event], [offer], sport="NFL", observed=NOW,
+                                      run_id="manifest")
+        schedule = self.rows("prospective_football_event")[0]
+        completed = nfl_event(completed=True)
+        raw = {"provider_event_id": "401", "home_team_id": "8", "away_team_id": "9",
+               "home_score": 24, "away_score": 20, "status": "FINAL", "provider_response": completed}
+        result, _ = stage1.append_result(self.path, schedule, raw, START + timedelta(hours=3), source="ESPN")
+        self.assertEqual(stage1.settle_game(self.path, schedule, result, START + timedelta(hours=3)), 8)
+        with evidence.connect(self.path) as db:
+            first = [dict(x) for x in db.execute("SELECT * FROM prospective_football_training_manifest ORDER BY market_family")]
+            self.assertEqual(db.execute("SELECT count(*) FROM prospective_football_active_training_row").fetchone()[0], 8)
+        self.assertEqual(len(first), 2)
+        self.assertEqual({x["sportsbook"] for x in first}, {"book_a"})
+        self.assertEqual({x["market_family"] for x in first}, {"SPREAD", "TOTAL"})
+        self.assertTrue(all(x["event_source_hash"] and x["quote_source_hash"] and
+                            x["result_source_hash"] for x in first))
+        self.assertEqual(stage1.settle_game(self.path, schedule, result, START + timedelta(hours=3)), 0)
+        with evidence.connect(self.path) as db:
+            second = [dict(x) for x in db.execute("SELECT * FROM prospective_football_training_manifest ORDER BY market_family")]
+        self.assertEqual(first, second)
+        readiness = cycle._readiness(self.path, denominator, START + timedelta(hours=3),
+                                     {"401": completed})
+        self.assertEqual(readiness["market_summary"]["SPREAD"]["independent_manifest_events"], 1)
+        self.assertEqual(readiness["market_summary"]["TOTAL"]["independent_manifest_events"], 1)
+        self.assertEqual(cycle._lifecycle(self.path, denominator, readiness)["status"], "PROVED")
+
     def test_result_settlement_and_training_readiness(self):
         event = nfl_event()
         schedule, _ = stage1.append_schedule(self.path, "NFL", event, NOW)
@@ -261,6 +328,20 @@ class FootballStage1Test(unittest.TestCase):
         self.assertEqual(report["games"][0]["status"], "QUOTE_CAPTURED")
         self.assertEqual(len(self.rows("prospective_football_team_identity")), 2)
         self.assertEqual(len(self.rows("prospective_football_quote")), 4)
+        schedule = self.rows("prospective_football_event")[0]
+        completed = dict(source, completed=True, homePoints=24, awayPoints=20)
+        raw_result = {"provider_event_id": "77", "home_team_id": "10", "away_team_id": "20",
+                      "home_score": 24, "away_score": 20, "status": "FINAL",
+                      "provider_response": completed}
+        result, created = stage1.append_result(self.path, schedule, raw_result,
+                                               START + timedelta(hours=3), source="CFBD")
+        self.assertTrue(created)
+        self.assertEqual(stage1.settle_game(self.path, schedule, result, START + timedelta(hours=3)), 4)
+        labels = {q["selection"]: t["label"] for q in self.rows("prospective_football_quote")
+                  for t in self.rows("prospective_football_training_row") if t["quote_id"] == q["quote_id"]}
+        self.assertEqual(labels["Ohio State Buckeyes"], "WIN")
+        with evidence.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM prospective_football_training_manifest").fetchone()[0], 2)
         odds["away_team"] = "Ambiguous Unknown"
         self.assertFalse(stage1._same_identity(self.rows("prospective_football_event")[0], odds, aliases))
 

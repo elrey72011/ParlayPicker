@@ -554,6 +554,49 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
               WHERE revision.game_id=t.game_id
                 AND (revision.home_score<>r.home_score OR revision.away_score<>r.away_score)
           );
+        CREATE VIEW IF NOT EXISTS prospective_football_training_manifest AS
+        WITH ranked AS (
+            SELECT t.training_row_id, t.game_id, t.sport, t.market_family,
+                   t.quote_id, t.result_id, t.settlement_id, t.label,
+                   t.available_for_training_at, t.source_manifest_hash,
+                   q.selection, q.line, q.american_odds, q.decimal_odds,
+                   q.observed_at AS quote_observed_at, q.capture_horizon,
+                   q.sportsbook, e.source_hash AS event_source_hash,
+                   q.source_hash AS quote_source_hash,
+                   r.source_hash AS result_source_hash,
+                   s.payload_hash AS settlement_payload_hash,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY t.sport, t.market_family, t.game_id
+                       ORDER BY CASE q.capture_horizon
+                                    WHEN 'FINAL_LEGAL_PREGAME' THEN 0
+                                    WHEN 'MID_PREGAME' THEN 1
+                                    WHEN 'EARLY_RESEARCH' THEN 2 ELSE 3 END,
+                                q.observed_at DESC, q.sportsbook COLLATE BINARY,
+                                q.selection COLLATE BINARY, q.quote_id COLLATE BINARY,
+                                t.training_row_id COLLATE BINARY
+                   ) AS choice_rank
+            FROM prospective_football_active_training_row t
+            JOIN prospective_football_quote q ON q.quote_id=t.quote_id
+            JOIN prospective_football_result r ON r.result_id=t.result_id
+            JOIN prospective_football_settlement s ON s.settlement_id=t.settlement_id
+            JOIN prospective_football_event e ON e.version_id=q.event_version_id
+            WHERE q.quote_verified=1 AND q.observed_at<e.scheduled_start
+              AND r.available_at>q.observed_at
+              AND s.quote_id=q.quote_id AND s.result_id=r.result_id
+              AND NOT EXISTS (
+                  SELECT 1 FROM prospective_football_event revision
+                  WHERE revision.game_id=t.game_id AND revision.scheduled_start<=q.observed_at
+              )
+        )
+        SELECT 'football-one-observation-v1:' || training_row_id AS manifest_id,
+               'football-one-observation-v1' AS selection_rule_version,
+               game_id, sport, market_family, training_row_id, quote_id, result_id,
+               settlement_id, label, selection, line, american_odds, decimal_odds,
+               quote_observed_at, capture_horizon, sportsbook,
+               available_for_training_at, source_manifest_hash,
+               event_source_hash, quote_source_hash, result_source_hash,
+               settlement_payload_hash
+        FROM ranked WHERE choice_rank=1;
     """)
     tables = ("prospective_event", "prospective_quote", "prospective_close", "prospective_result",
               "prospective_model", "prospective_model_training_result", "prospective_calibration",

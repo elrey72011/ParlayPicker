@@ -75,6 +75,76 @@ def _same_identity(schedule, offer, aliases=None):
         return False
 
 
+def _matching_sides(schedule, offer, aliases=None):
+    """Return verified team-side matches without asserting an event match."""
+    matched = []
+    for side in ("home", "away"):
+        candidate = _name(schedule["sport"], offer.get(f"{side}_team"))
+        if aliases and schedule["sport"] == "NCAAF" and schedule[f"{side}_team_id"] in aliases:
+            verified = candidate in aliases[schedule[f"{side}_team_id"]]
+        else:
+            verified = candidate is not None and candidate == _name(schedule["sport"], schedule[f"{side}_team"])
+        matched.append(verified)
+    return tuple(matched)
+
+
+def _provider_classification(event, schedules, *, sport, aliases, target_policy,
+                             schedule_window_start, schedule_window_end, duplicate):
+    """Classify one provider event; candidate rows never become forced matches."""
+    if not isinstance(event, dict) or not event.get("id") or event.get("sport_key") != SPORT_KEYS[sport]:
+        return "PROVIDER_DATA_INVALID", "MISSING_ID_OR_WRONG_SPORT_KEY", [], None
+    if duplicate:
+        return "DUPLICATE_PROVIDER_EVENT", "REPEATED_PROVIDER_EVENT_ID", [], None
+    try:
+        start = at(event["commence_time"])
+        if not all(isinstance(event.get(f"{side}_team"), str) and event[f"{side}_team"].strip()
+                   for side in ("home", "away")):
+            raise ValueError("MISSING_TEAM")
+    except (KeyError, ValueError, TypeError):
+        return "PROVIDER_DATA_INVALID", "INVALID_START_OR_TEAM", [], None
+    candidates = [(s, _matching_sides(s, event, aliases)) for s in schedules if s.get("sport") == sport]
+    pair = [s for s, sides in candidates if sides == (True, True)]
+    exact = [s for s in pair if abs((start-at(s["scheduled_start"])).total_seconds()) <= 60]
+    if len(exact) > 1:
+        return "AMBIGUOUS_MATCH", "MULTIPLE_EXACT_SCHEDULE_CANDIDATES", [s["game_id"] for s in exact], None
+    if len(exact) == 1:
+        schedule = exact[0]
+        if schedule["season_type"].casefold() != "regular":
+            return "NON_TARGET_SEASON_TYPE", schedule["season_type"], [schedule["game_id"]], 0
+        excluded = target_policy(schedule) if target_policy else None
+        if excluded:
+            return "NON_TARGET_POPULATION", excluded, [schedule["game_id"]], 0
+        delta = round((start-at(schedule["scheduled_start"])).total_seconds())
+        return "MATCHED_TARGET", "STRICT_TEAM_AND_KICKOFF_MATCH", [schedule["game_id"]], delta
+    if len(pair) > 1:
+        return "AMBIGUOUS_MATCH", "MULTIPLE_TEAM_PAIR_CANDIDATES", [s["game_id"] for s in pair], None
+    if len(pair) == 1:
+        schedule = pair[0]
+        delta = round((start-at(schedule["scheduled_start"])).total_seconds())
+        if abs(delta) <= 24 * 3600:
+            return "KICKOFF_TIME_REVISION", "STRICT_60_SECOND_TOLERANCE_EXCEEDED", [schedule["game_id"]], delta
+        if schedule_window_start and schedule_window_end and not at(schedule_window_start) <= start < at(schedule_window_end):
+            return "OUTSIDE_TARGET_WINDOW", "PROVIDER_START_OUTSIDE_SCHEDULE_QUERY", [], None
+        return "SCHEDULE_EVENT_MISSING", "TEAM_PAIR_OUTSIDE_24_HOUR_REVISION_AUDIT_BOUND", [schedule["game_id"]], delta
+    outside = bool(schedule_window_start and schedule_window_end and
+                   not at(schedule_window_start) <= start < at(schedule_window_end))
+    if outside:
+        return "OUTSIDE_TARGET_WINDOW", "PROVIDER_START_OUTSIDE_SCHEDULE_QUERY", [], None
+    # A unique nearby one-sided candidate can explain a non-target game
+    # without treating the other, unverified team as a canonical match.
+    nearby = [s for s, sides in candidates if any(sides) and
+              abs((start-at(s["scheduled_start"])).total_seconds()) <= 60]
+    if len(nearby) == 1:
+        schedule = nearby[0]
+        excluded = target_policy(schedule) if target_policy else None
+        if excluded:
+            return "NON_TARGET_POPULATION", excluded + "; OTHER_TEAM_UNVERIFIED", [schedule["game_id"]], None
+        return "TEAM_IDENTITY_MISMATCH", "ONE_SCHEDULE_TEAM_VERIFIED", [schedule["game_id"]], None
+    if len(nearby) > 1:
+        return "AMBIGUOUS_MATCH", "MULTIPLE_ONE_SIDED_CANDIDATES", [s["game_id"] for s in nearby], None
+    return "SCHEDULE_EVENT_MISSING", "NO_VERIFIED_SCHEDULE_CANDIDATE", [], None
+
+
 def _read(db, table, key, value):
     row = db.execute(f"SELECT * FROM {table} WHERE {key}=?", (value,)).fetchone()
     if row is None:
@@ -360,17 +430,37 @@ def append_result(path, schedule, raw, observed, *, source):
         return _read(db, "prospective_football_result", "result_id", result_id), True
 
 
+def _spread_side(quote):
+    # append_offers verified the exact provider home/away pair when the
+    # immutable raw event was captured. A mascot suffix need not appear in
+    # the canonical CFBD school name, so the stored pair is authoritative.
+    provider_home = quote.get("provider_home_team")
+    provider_away = quote.get("provider_away_team")
+    if provider_home and provider_away and provider_home != provider_away:
+        if quote["selection"] == provider_home:
+            return "home"
+        if quote["selection"] == provider_away:
+            return "away"
+        return None
+    selected = _name(quote["sport"], quote["selection"])
+    home = _name(quote["sport"], quote["home_team"])
+    away = _name(quote["sport"], quote["away_team"])
+    if selected == home and home != away:
+        return "home"
+    if selected == away and home != away:
+        return "away"
+    return None
+
+
 def outcome(quote, result):
     if result["result_status"] != "FINAL":
         return "NEEDS_REVIEW"
     home, away, line = result["home_score"], result["away_score"], quote["line"]
     if quote["market_family"] == "SPREAD":
-        selected = _name(quote["sport"], quote["selection"])
-        home_name = _name(quote["sport"], quote["home_team"])
-        away_name = _name(quote["sport"], quote["away_team"])
-        if selected not in (home_name, away_name) or home_name == away_name:
+        side = _spread_side(quote)
+        if side is None:
             return "NEEDS_REVIEW"
-        is_home = selected == home_name
+        is_home = side == "home"
         margin = (home - away if is_home else away - home) + line
         if margin == 0:
             return "PUSH"
@@ -385,12 +475,16 @@ def outcome(quote, result):
 def settle_game(path, schedule, result, observed):
     created = 0
     with closing(evidence.connect(path)) as db, db:
-        quotes = [dict(x) for x in db.execute(
-            "SELECT * FROM prospective_football_quote WHERE game_id=? AND quote_verified=1",
-            (schedule["game_id"],))]
+        quotes = [_read(db, "prospective_football_quote", "quote_id", x[0])
+                  for x in db.execute(
+                      "SELECT quote_id FROM prospective_football_quote WHERE game_id=? AND quote_verified=1",
+                      (schedule["game_id"],))]
         for quote in quotes:
             event_version = _read(db, "prospective_football_event", "version_id", quote["event_version_id"])
             quote["home_team"], quote["away_team"] = event_version["home_team"], event_version["away_team"]
+            raw_event = json.loads(quote["raw_source"])
+            quote["provider_home_team"], quote["provider_away_team"] = (
+                raw_event.get("home_team"), raw_event.get("away_team"))
             result_kind = outcome(quote, result)
             if result_kind == "NEEDS_REVIEW":
                 continue
@@ -416,9 +510,10 @@ def settle_game(path, schedule, result, observed):
                        settled_at=iso(observed), settlement_version=1)
             created += _append(db, "prospective_football_settlement", "settlement_id", row)
             training_id = digest(["football-training-v1", settlement_id])
+            side = _spread_side(quote) if quote["market_family"] == "SPREAD" else None
             label = ("PUSH" if result_kind == "PUSH" else
-                     "WIN" if (_name(schedule["sport"], quote["selection"]) == _name(schedule["sport"], quote["home_team"]) and result_kind == "HOME_COVER") or
-                              (_name(schedule["sport"], quote["selection"]) == _name(schedule["sport"], quote["away_team"]) and result_kind == "AWAY_COVER") or
+                     "WIN" if (side == "home" and result_kind == "HOME_COVER") or
+                              (side == "away" and result_kind == "AWAY_COVER") or
                               (quote["selection"] == "Over" and result_kind == "OVER") or
                               (quote["selection"] == "Under" and result_kind == "UNDER") else "LOSS")
             blockers = []
@@ -514,12 +609,16 @@ def coverage(path, schedules, odds_events, *, sport, observed, run_id, target_po
 
 
 def provider_diagnostic(schedules, odds_events, *, sport, observed, aliases=None,
-                        schedule_window_start=None, schedule_window_end=None):
+                        target_policy=None, schedule_window_start=None, schedule_window_end=None):
     """Explain every Odds API event against the independent schedule population."""
     rows, seen = [], set()
     for event in odds_events:
         event = event if isinstance(event, dict) else {}
         event_id = str(event.get("id") or "")
+        classification, reason, candidates, delta = _provider_classification(
+            event, schedules, sport=sport, aliases=aliases, target_policy=target_policy,
+            schedule_window_start=schedule_window_start, schedule_window_end=schedule_window_end,
+            duplicate=event_id in seen)
         try:
             start = iso(event["commence_time"])
             matches = [s for s in schedules if _same_identity(s, event, aliases)]
@@ -553,11 +652,15 @@ def provider_diagnostic(schedules, odds_events, *, sport, observed, aliases=None
                          "total_price_available": "TOTAL" in markets,
                          "book_count": len({x[0] for x in valid}),
                          "pregame_valid": bool(valid), "persisted": False,
-                         "exclusion_reason": None if status == "MATCHED" else status})
+                         "exclusion_reason": None if status == "MATCHED" else status,
+                         "classification": classification, "classification_reason": reason,
+                         "candidate_game_ids": candidates, "kickoff_delta_seconds": delta})
         except (KeyError, TypeError, ValueError):
             rows.append({"provider_event_id": event_id, "provider_sport_key": event.get("sport_key"),
                          "status": "INVALID_PROVIDER_EVENT", "exclusion_reason": "INVALID_PROVIDER_EVENT",
-                         "persisted": False})
+                         "persisted": False, "classification": classification,
+                         "classification_reason": reason, "candidate_game_ids": candidates,
+                         "kickoff_delta_seconds": delta})
         seen.add(event_id)
     return rows
 
