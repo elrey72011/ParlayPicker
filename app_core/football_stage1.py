@@ -256,12 +256,20 @@ def append_offers(path, schedule, event, observed, run_id, aliases=None):
         return 0, "EVENT_IDENTITY_AMBIGUOUS"
     if not _same_identity(schedule, event, aliases):
         return 0, "EVENT_IDENTITY_AMBIGUOUS"
-    if horizon(schedule["scheduled_start"], observed) == "SNAPSHOT_WINDOW_MISSED":
+    capture_horizon = horizon(schedule["scheduled_start"], observed)
+    if capture_horizon == "SNAPSHOT_WINDOW_MISSED":
         return 0, "SNAPSHOT_WINDOW_MISSED"
     offers = _quotes(event, observed)
     count = 0
     with closing(evidence.connect(path)) as db, db:
+        existing_markets = {x[0] for x in db.execute(
+            "SELECT DISTINCT market_family FROM prospective_football_quote WHERE game_id=? AND capture_horizon=? AND quote_verified=1",
+            (schedule["game_id"], capture_horizon))}
+        if existing_markets == set(MARKETS.values()):
+            return 0, "HORIZON_ALREADY_CAPTURED"
         for book, market, selection, line, price, updated in offers:
+            if MARKETS[market["key"]] in existing_markets:
+                continue
             raw = canonical(event).encode()
             raw_hash = digest(raw)
             quote_id = digest(["football-quote-v1", schedule["game_id"], event["id"], book,
@@ -279,11 +287,11 @@ def append_offers(path, schedule, event, observed, run_id, aliases=None):
                        provider_last_update=iso(updated), capture_run_id=run_id,
                        identity_mapping_hash=digest({k: sorted((aliases or {}).get(k, set())) for k in
                                                      (schedule["home_team_id"], schedule["away_team_id"])}),
-                       capture_horizon=horizon(schedule["scheduled_start"], observed),
+                       capture_horizon=capture_horizon,
                        minutes_to_start=(at(schedule["scheduled_start"])-at(observed)).total_seconds()/60,
                        quote_verified=1)
             count += _append(db, "prospective_football_quote", "quote_id", row, event)
-    return count, None if offers else "NO_SPREAD_OR_TOTAL_PRICE"
+    return count, None if count else "NO_NEW_VERIFIED_MARKET" if existing_markets else "NO_SPREAD_OR_TOTAL_PRICE"
 
 
 def append_result(path, schedule, raw, observed, *, source):
@@ -453,28 +461,21 @@ def coverage(path, schedules, odds_events, *, sport, observed, run_id, target_po
                 _, status = append_offers(path, schedule, matches[0], observed, run_id, aliases)
         with closing(evidence.connect(path)) as db:
             markets = {x[0] for x in db.execute(
-                "SELECT DISTINCT market_family FROM prospective_football_quote WHERE game_id=? AND capture_run_id=?",
-                (schedule["game_id"], run_id))}
+                "SELECT DISTINCT market_family FROM prospective_football_quote WHERE game_id=? AND quote_verified=1",
+                (schedule["game_id"],))}
         saved[index].update(spread_price_available="SPREAD" in markets,
                             total_price_available="TOTAL" in markets,
                             status=status or "QUOTE_CAPTURED")
-    with closing(evidence.connect(path)) as db, db:
-        for index, (item, source) in enumerate(zip(saved, raw_by_row)):
-            coverage_id = digest(["football-coverage-v1", run_id, sport, index, digest(source)])
-            if _read(db, "prospective_football_coverage", "coverage_id", coverage_id):
-                continue
-            status = item["status"]
-            _append(db, "prospective_football_coverage", "coverage_id", dict(
-                coverage_id=coverage_id, capture_run_id=run_id, sport=sport,
-                game_id=item.get("game_id"), provider_event_id=item.get("provider_event_id"),
-                regular_season_target=int(bool(item.get("regular_season_target"))),
-                status=status,
-                spread_status="CAPTURED" if item.get("spread_price_available") else (
-                    "NO_VERIFIED_SPREAD_PRICE" if status == "QUOTE_CAPTURED" else status),
-                total_status="CAPTURED" if item.get("total_price_available") else (
-                    "NO_VERIFIED_TOTAL_PRICE" if status == "QUOTE_CAPTURED" else status),
-                observed_at=iso(observed)), source)
     target = [x for x in saved if x.get("regular_season_target")]
+    cycle_source = {"source_hashes": [digest(x) for x in raw_by_row],
+                    "games": saved, "duplicate_schedule_events": duplicates,
+                    "unparseable_schedule_events": dict(failures)}
+    coverage_id = digest(["football-cycle-coverage-v1", run_id, sport])
+    with closing(evidence.connect(path)) as db, db:
+        _append(db, "prospective_football_cycle_coverage", "coverage_id", dict(
+            coverage_id=coverage_id, capture_run_id=run_id, sport=sport,
+            observed_at=iso(observed), target_games=len(target),
+            requested_slate_success=int(not failures)), cycle_source)
     return {"sport": sport, "schedule_source_events": len(schedules),
             "scheduled_target_games": len(target), "persisted_events": len(saved),
             "duplicate_schedule_events": duplicates,
@@ -483,7 +484,8 @@ def coverage(path, schedules, odds_events, *, sport, observed, run_id, target_po
             "requested_slate_success": not failures}
 
 
-def provider_diagnostic(schedules, odds_events, *, sport, observed, aliases=None):
+def provider_diagnostic(schedules, odds_events, *, sport, observed, aliases=None,
+                        schedule_window_start=None, schedule_window_end=None):
     """Explain every Odds API event against the independent schedule population."""
     rows, seen = [], set()
     for event in odds_events:
@@ -493,8 +495,11 @@ def provider_diagnostic(schedules, odds_events, *, sport, observed, aliases=None
             start = iso(event["commence_time"])
             matches = [s for s in schedules if _same_identity(s, event, aliases)]
             target = [s for s in matches if s["season_type"].casefold() == "regular"]
+            outside_window = bool(not matches and schedule_window_start and schedule_window_end and
+                                  not at(schedule_window_start) <= at(start) < at(schedule_window_end))
             status = ("WRONG_SPORT_KEY" if event.get("sport_key") != SPORT_KEYS[sport] else
                       "DUPLICATE_PROVIDER_EVENT" if event_id in seen else
+                      "OUTSIDE_SCHEDULE_WINDOW" if outside_window else
                       "NO_CANONICAL_MATCH" if not matches else
                       "AMBIGUOUS_CANONICAL_MATCH" if len(matches) != 1 else
                       "NON_TARGET_SEASON" if not target else
@@ -509,6 +514,7 @@ def provider_diagnostic(schedules, odds_events, *, sport, observed, aliases=None
             rows.append({"provider_event_id": event_id, "provider_sport_key": event.get("sport_key"),
                          "home": event.get("home_team"), "away": event.get("away_team"),
                          "commence_time": start, "status": status,
+                         "target_date_utc": at(start).date().isoformat(),
                          "target_week": matches[0]["week"] if len(matches) == 1 else None,
                          "regular_season_target": bool(target),
                          "canonical_match": matches[0]["game_id"] if len(matches) == 1 else None,

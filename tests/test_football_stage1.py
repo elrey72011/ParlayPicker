@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import csv
 import copy
 from io import BytesIO
+import json
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
@@ -59,7 +60,8 @@ class FootballStage1Test(unittest.TestCase):
         self.assertEqual(report["games"][0]["status"], "NO_ODDS_EVENT")
         self.assertFalse(report["games"][0]["spread_price_available"])
         self.assertEqual(len(self.rows("prospective_football_event")), 1)
-        self.assertEqual(self.rows("prospective_football_coverage")[0]["spread_status"], "NO_ODDS_EVENT")
+        cycle_row = self.rows("prospective_football_cycle_coverage")[0]
+        self.assertEqual(json.loads(cycle_row["raw_source"])["games"][0]["status"], "NO_ODDS_EVENT")
 
     def test_duplicate_schedule_and_unparseable_rows_remain_visible(self):
         event = nfl_event()
@@ -69,7 +71,8 @@ class FootballStage1Test(unittest.TestCase):
         self.assertEqual(report["duplicate_schedule_events"], 1)
         self.assertEqual(len(report["games"]), 2)
         self.assertEqual(len(self.rows("prospective_football_event")), 1)
-        self.assertEqual(len(self.rows("prospective_football_coverage")), 2)
+        self.assertEqual(len(self.rows("prospective_football_cycle_coverage")), 1)
+        self.assertEqual(len(json.loads(self.rows("prospective_football_cycle_coverage")[0]["raw_source"])["games"]), 2)
 
     def test_exact_quote_and_idempotence(self):
         event = nfl_event()
@@ -77,6 +80,7 @@ class FootballStage1Test(unittest.TestCase):
         first = stage1.coverage(self.path, [event], [quote], sport="NFL", observed=NOW, run_id="r1")
         second = stage1.coverage(self.path, [event], [quote], sport="NFL", observed=NOW, run_id="r2")
         self.assertEqual(first["scheduled_target_games"], second["scheduled_target_games"])
+        self.assertEqual(second["games"][0]["status"], "HORIZON_ALREADY_CAPTURED")
         self.assertEqual(len(self.rows("prospective_football_quote")), 4)
         self.assertEqual({x["capture_horizon"] for x in self.rows("prospective_football_quote")},
                          {"FINAL_LEGAL_PREGAME"})
@@ -108,6 +112,11 @@ class FootballStage1Test(unittest.TestCase):
         self.assertEqual(stage1.append_offers(self.path, schedule, quote, NOW, "r")[1], "EVENT_IDENTITY_AMBIGUOUS")
         diagnostic = stage1.provider_diagnostic([schedule], [quote], sport="NFL", observed=NOW)
         self.assertEqual(diagnostic[0]["status"], "WRONG_SPORT_KEY")
+        future = odds_event(start=NOW + timedelta(days=10))
+        diagnostic = stage1.provider_diagnostic([schedule], [future], sport="NFL", observed=NOW,
+                                                schedule_window_start=NOW-timedelta(days=8),
+                                                schedule_window_end=NOW+timedelta(days=8))
+        self.assertEqual(diagnostic[0]["status"], "OUTSIDE_SCHEDULE_WINDOW")
 
     def test_result_settlement_and_training_readiness(self):
         event = nfl_event()
@@ -243,7 +252,7 @@ class FootballStage1Test(unittest.TestCase):
         game["startDate"] = START.isoformat()
         games, policy, catalog, aliases, diagnostic = cycle._ncaaf_schedule(NOW, "token", get=get, ledger=ledger)
         schedule, _ = stage1.append_schedule(self.path, "NCAAF", games[0], NOW, catalog)
-        self.assertEqual(policy(schedule), "FBS_VS_FCS_OR_UNKNOWN_EXCLUDED")
+        self.assertEqual(policy(schedule), "FBS_VS_NON_FBS_OR_UNKNOWN_EXCLUDED")
 
     def test_failed_backup_verification_fails_closed(self):
         def sync(path, client, folder, session=None):
@@ -286,7 +295,15 @@ class FootballStage1Test(unittest.TestCase):
         self.assertEqual(saved["new_records_verified"], restored["records_restored"])
         with evidence.connect(restored_path) as db:
             self.assertEqual(db.execute("SELECT count(*) FROM prospective_football_quote").fetchone()[0], 4)
-            self.assertEqual(db.execute("SELECT count(*) FROM prospective_football_coverage").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT count(*) FROM prospective_football_cycle_coverage").fetchone()[0], 1)
+
+    def test_result_coverage_counts_provider_completed_games_only(self):
+        started = NOW - timedelta(hours=1)
+        event = nfl_event(start=started, completed=False)
+        denominator = stage1.coverage(self.path, [event], [], sport="NFL", observed=NOW, run_id="r")
+        readiness = cycle._readiness(self.path, denominator, NOW)
+        self.assertEqual(readiness["completed_games_in_window"], 0)
+        self.assertIsNone(readiness["rates"]["result_coverage_for_completed_games"])
 
 
 if __name__ == "__main__":

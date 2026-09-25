@@ -533,6 +533,18 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
             payload TEXT NOT NULL,
             payload_hash TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS prospective_football_cycle_coverage (
+            coverage_id TEXT PRIMARY KEY,
+            capture_run_id TEXT NOT NULL,
+            sport TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            target_games INTEGER NOT NULL,
+            requested_slate_success INTEGER NOT NULL,
+            source_hash TEXT NOT NULL,
+            raw_source BLOB NOT NULL,
+            payload TEXT NOT NULL,
+            payload_hash TEXT NOT NULL
+        );
     """)
     tables = ("prospective_event", "prospective_quote", "prospective_close", "prospective_result",
               "prospective_model", "prospective_model_training_result", "prospective_calibration",
@@ -541,7 +553,8 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
               "prospective_football_event", "prospective_football_quote",
               "prospective_football_result", "prospective_football_settlement",
               "prospective_football_training_row", "prospective_football_team_identity",
-              "prospective_football_theover", "prospective_football_coverage")
+              "prospective_football_theover", "prospective_football_coverage",
+              "prospective_football_cycle_coverage")
     for table in tables:
         for action in ("UPDATE", "DELETE"):
             db.execute(f"CREATE TRIGGER IF NOT EXISTS {table}_{action}_immutable "

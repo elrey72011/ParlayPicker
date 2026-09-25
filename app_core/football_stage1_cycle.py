@@ -122,8 +122,12 @@ def _ncaaf_schedule(now, token, *, get, ledger):
         if first <= when < last:
             selected.append(game)
     def policy(schedule):
-        if schedule["home_team_id"] not in fbs_ids or schedule["away_team_id"] not in fbs_ids:
-            return "FBS_VS_FCS_OR_UNKNOWN_EXCLUDED"
+        home_fbs = schedule["home_team_id"] in fbs_ids
+        away_fbs = schedule["away_team_id"] in fbs_ids
+        if not home_fbs and not away_fbs:
+            return "NON_FBS_GAME_EXCLUDED"
+        if not home_fbs or not away_fbs:
+            return "FBS_VS_NON_FBS_OR_UNKNOWN_EXCLUDED"
         return None
     return selected, policy, team_catalog, aliases, {"cfbd_regular_games": len(games), "fbs_team_ids": len(fbs_ids),
                               "window_games": len(selected), "invalid_schedule_rows": invalid,
@@ -173,7 +177,9 @@ def _readiness(path, denominator, now):
             event_row = foundation._read(db, "prospective_football_event", "version_id", game["event_version_id"])
             identity_verified = bool(event_row["home_team_id"] and event_row["away_team_id"] and
                                      event_row["home_team_id"] != event_row["away_team_id"])
-            is_completed = foundation.at(game["kickoff"]) < foundation.at(now)
+            source = json.loads(event_row["raw_source"])
+            is_completed = (source.get("completed") is True if denominator["sport"] == "NCAAF" else
+                            source.get("status", {}).get("type", {}).get("completed") is True)
             completed += int(is_completed)
             has_result = db.execute("SELECT 1 FROM prospective_football_result WHERE game_id=? LIMIT 1",
                                     (game_id,)).fetchone() is not None
@@ -213,7 +219,18 @@ def _readiness(path, denominator, now):
     rates["settlement_coverage"] = settled_games / total if total else None
     rates["training_ready_rate"] = (sum(m["training_row_status"] == "TRAINING_READY" for g in games
                                          for m in g["markets"]) / (2 * total) if total else None)
-    return {"sport": denominator["sport"], "target_games": total, "rates": rates, "games": games}
+    with closing(evidence.connect(path)) as db:
+        result_rows = db.execute("SELECT count(*) FROM prospective_football_result WHERE sport=?",
+                                 (denominator["sport"],)).fetchone()[0]
+        settlement_rows = db.execute("SELECT count(*) FROM prospective_football_settlement WHERE sport=?",
+                                     (denominator["sport"],)).fetchone()[0]
+        training_ready_rows = db.execute("SELECT count(*) FROM prospective_football_training_row WHERE sport=? AND training_row_status='TRAINING_READY'",
+                                         (denominator["sport"],)).fetchone()[0]
+    return {"sport": denominator["sport"], "target_games": total,
+            "completed_games_in_window": completed, "completed_games_with_result": result_count,
+            "games_with_settlement": settled_games, "result_rows": result_rows,
+            "settlement_rows": settlement_rows, "training_ready_rows": training_ready_rows,
+            "rates": rates, "games": games}
 
 
 def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, theover_files=()):
@@ -258,8 +275,11 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
                         schedules.append(foundation._read(db, "prospective_football_event", "version_id", item["event_version_id"]))
             all_schedules.extend(schedules)
             diagnostic = foundation.provider_diagnostic(schedules, odds_events, sport=sport,
-                                                       observed=observed, aliases=aliases)
-            persisted = {x["game_id"] for x in denominator["games"] if x.get("status") == "QUOTE_CAPTURED"}
+                                                       observed=observed, aliases=aliases,
+                                                       schedule_window_start=now-timedelta(days=8),
+                                                       schedule_window_end=now+timedelta(days=8))
+            persisted = {x["game_id"] for x in denominator["games"] if x.get("game_id") and
+                         (x.get("spread_price_available") or x.get("total_price_available"))}
             for item in diagnostic:
                 item["persisted"] = item.get("canonical_match") in persisted
             sport_report["provider_events"] = diagnostic
