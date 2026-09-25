@@ -197,9 +197,12 @@ def _append_team_identities(db, fields, sport, team_catalog, observed):
 
 
 def horizon(start, observed):
+    """Classify immutable pregame research snapshots without leaving a 2h-24h gap."""
     minutes = (at(start) - at(observed)).total_seconds() / 60
     if 24 * 60 <= minutes <= 7 * 24 * 60:
         return "EARLY_RESEARCH"
+    if 120 < minutes < 24 * 60:
+        return "MID_PREGAME"
     if 5 <= minutes <= 120:
         return "FINAL_LEGAL_PREGAME"
     return "SNAPSHOT_WINDOW_MISSED"
