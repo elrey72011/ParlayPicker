@@ -80,6 +80,19 @@ def test_missing_price_and_timestamp_never_default_to_minus_110(fixture):
     assert "QUOTE_TIMESTAMP_UNVERIFIED" in row["blockers"]
 
 
+def test_legacy_theover_line_and_price_remain_unverified(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "theover_spreads.csv").write_text(
+        "Game Date,Home Team,Away Team,League,Spread Line,Odds American\n"
+        "2026-09-24,Home,Away,MLB,-1.5,-110\n", encoding="utf-8")
+    source = audit.local_csv_inventory(tmp_path)[0]
+    assert source["line_present_rows"] == 1
+    assert source["price_present_rows"] == 1
+    assert source["verified_pregame_price_rows"] == 0
+    assert source["price_status_counts"] == {"PRICE_PRESENT_TIMESTAMP_UNVERIFIED": 1}
+
+
 def test_source_tampering_and_post_start_quote_fail_closed(fixture):
     collect(fixture)
     snapshot = next(iter(receipts.read("receipts", fixture[0]).values()))
@@ -129,6 +142,11 @@ def test_remote_proof_required_and_reports_idempotent(fixture, monkeypatch, tmp_
     files = audit.write_reports(first, tmp_path / "reports")
     assert len(files) == 12
     assert json.loads((tmp_path / "reports" / audit.REPORTS["training"]).read_text())["scopes"]
+    sources = {item["source"]: item for item in first["inventory"]["sources"]}
+    assert sources["receipt_observations/odds_api"]["price_present_rows"] > 0
+    assert sources["receipt_outcomes/mlb_statsapi"]["final_result_rows"] == 1
+    assert all(item["lineage_hash_verified"] for item in sources.values()
+               if item["source"].startswith("receipt_observations/"))
 
 
 def test_chronological_plan_whole_game_and_not_random(fixture, monkeypatch):

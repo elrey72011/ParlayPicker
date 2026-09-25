@@ -377,15 +377,79 @@ def local_csv_inventory(root):
             reader = csv.DictReader(stream)
             rows = [r for r in reader if str(r.get("League") or r.get("league") or
                                               r.get("sport") or r.get("Sport") or "").upper() == "MLB"]
-        output.append({**_source_summary(path.relative_to(root).as_posix(), rows),
+        normalized = []
+        for row in rows:
+            line = next((row[name] for name in ("Spread Line", "Total Line", "market_line_used", "line")
+                         if row.get(name) not in (None, "")), None)
+            price = next((row[name] for name in ("Odds American", "odds_american", "price")
+                          if row.get(name) not in (None, "")), None)
+            normalized.append({"game_id": row.get("game_id"),
+                "scheduled_start": row.get("Game Date") or row.get("commence_time"),
+                "line": line, "price": price})
+        statuses = Counter("PRICE_PRESENT_TIMESTAMP_UNVERIFIED" if item["price"] is not None else
+                           "RESEARCH_LINE_ONLY" if item["line"] is not None else "NO_VERIFIED_PRICE"
+                           for item in normalized)
+        output.append({**_source_summary(path.relative_to(root).as_posix(), normalized),
             "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "stable_identity_rows": 0, "verified_pregame_price_rows": 0,
+            "quote_timestamp_present_rows": 0, "price_status_counts": dict(statuses),
             "reproducible_settlement_rows": 0, "training_ready_rows": 0,
             "blockers": {"SOURCE_LINEAGE_UNVERIFIED": len(rows),
                          "QUOTE_TIMESTAMP_UNVERIFIED": len(rows),
                          "FEATURE_ASOF_UNAVAILABLE": len(rows)},
             "theover_model_hit_rate_is_game_probability": False})
     return output
+
+
+def receipt_source_inventory(path):
+    """Summarize retained provider observations and final feeds without raw data."""
+    by_source = defaultdict(list)
+    for observation in receipts.read("observations", path).values():
+        raw = observation.get("payload") or {}
+        provider = observation.get("source") or "UNKNOWN"
+        games = [game for day in raw.get("dates", []) for game in day.get("games", [])]
+        event_ids = {str(game.get("gamePk")) for game in games if game.get("gamePk") is not None}
+        if raw.get("id") is not None:
+            event_ids.add(str(raw["id"]))
+        if raw.get("gamePk") is not None:
+            event_ids.add(str(raw["gamePk"]))
+        markets = [market for book in raw.get("bookmakers", [])
+                   for market in book.get("markets", [])
+                   if market.get("key") in ("spreads", "totals")]
+        outcomes = [entry for market in markets for entry in market.get("outcomes", [])]
+        by_source[provider].append({
+            "observed_at": observation.get("observed_at"),
+            "event_ids": event_ids,
+            "line": 1 if any(entry.get("point") is not None for entry in outcomes) else None,
+            "price": 1 if any(entry.get("price") is not None for entry in outcomes) else None,
+            "scheduled_start": raw.get("commence_time") or
+                               (games[0].get("gameDate") if games else None),
+        })
+    sources = []
+    for provider, items in sorted(by_source.items()):
+        summary = _source_summary("receipt_observations/" + provider, items)
+        summary.update(
+            unique_games_or_events=len(set().union(*(item["event_ids"] for item in items))),
+            timestamp_present_rows=sum(bool(item["observed_at"]) for item in items),
+            lineage_hash_verified=True, candidate_legal_training_use=False,
+            training_ready_rows=0,
+            note="Provider observations support exact receipt replay; they are not independent training rows",
+        )
+        sources.append(summary)
+    outcomes = list(receipts.read("outcomes", path).values())
+    result_source = _source_summary("receipt_outcomes/mlb_statsapi", [
+        {"game_id": item.get("provider_event_id"),
+         "scheduled_start": item.get("game_start_utc")}
+        for item in outcomes])
+    result_source.update(
+        final_result_rows=sum(item.get("status") == "FINAL" for item in outcomes),
+        timestamp_present_rows=sum(bool(item.get("available_at")) for item in outcomes),
+        lineage_hash_verified=True, candidate_legal_training_use=False,
+        training_ready_rows=0,
+        note="Final results require exact receipt, quote and settlement replay before training use",
+    )
+    sources.append(result_source)
+    return sources
 
 
 def read_canonical_remote(client, folder, path):
@@ -548,7 +612,7 @@ def _canonical_inventory(tables):
     return sources
 
 
-def model_audit(canonical):
+def model_audit(canonical, native=()):
     """Classify actual registered targets, never trust a file's model name."""
     entries = [
         {"source": "app_core/mlb_spread_total_model.py", "actual_target": "WIN_CONDITIONAL_ON_DECISION",
@@ -574,6 +638,22 @@ def model_audit(canonical):
             "current_use": "canonical research evidence only",
             "classification": "PROVENANCE_INCOMPLETE" if target in ("EXACT_RUN_LINE_COVER", "EXACT_TOTAL_OVER_UNDER")
                               else "WRONG_TARGET", "exact_scope_reusable": False})
+    for record in native:
+        if record.get("kind") != "model":
+            continue
+        data = record.get("data") or {}
+        entries.append({"source": "mlb_native/model",
+            "record_hash": digest(record), "created_at": record.get("created_at"),
+            "actual_target": "RAW_MARGIN_AND_TOTAL_POINTS" if data.get("models") else None,
+            "features": "team scoring and probable-pitcher history",
+            "algorithm": "ridge regression" if data.get("ridge_alpha") is not None else None,
+            "training_source": "historical MLB checkpoint" if data.get("history_hash") else None,
+            "training_cutoff": data.get("train_year"),
+            "training_rows": data.get("train_rows"),
+            "runtime_hash": data.get("runtime_hash"),
+            "current_use": "native research evidence only",
+            "classification": "WRONG_TARGET" if data.get("models") else "PROVENANCE_INCOMPLETE",
+            "exact_scope_reusable": False})
     return entries
 
 
@@ -658,7 +738,8 @@ def build_reports(receipt_path, root, *, source_commit, remote_verification,
         blockers={"NOT_SELECTED_BY_MLB_RECEIPT_MANIFEST": snapshot_source["record_count"]})
     inventory = {"schema": SCHEMA, "source_commit": source_commit,
         "remote_verification": remote_verification,
-        "sources": receipt_sources + _canonical_inventory(canonical) + native_sources +
+        "sources": receipt_sources + receipt_source_inventory(receipt_path) +
+                   _canonical_inventory(canonical) + native_sources +
                    [snapshot_source] + local,
         "source_categories": ["canonical prospective evidence", "MLB native evidence",
             "receipt/reconciliation stores", "historical odds/price", "The Odds API",
@@ -671,7 +752,7 @@ def build_reports(receipt_path, root, *, source_commit, remote_verification,
         "raw_books_and_reprices_do_not_increase_n": True}
     features = feature_contract()
     baselines, comparison, models, calibration, validation = {}, {}, {}, {}, {}
-    existing = model_audit(canonical)
+    existing = model_audit(canonical, native)
     for scope in SCOPES:
         blocked = split["scopes"][scope]["blockers"]
         # Historical candidate models are deliberately not retrofitted into
