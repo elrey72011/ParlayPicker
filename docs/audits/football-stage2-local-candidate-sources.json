@@ -1,0 +1,180 @@
+{
+  "audit_role": "historical candidate inventory only; these files are not available in GitHub Actions and are never promoted",
+  "schema": "football-stage2-local-candidate-inventory-v1",
+  "sources": [
+    {
+      "asof_feature_contract_rows": 0,
+      "blank_win_probability_rows": 1,
+      "blocked_counts": {
+        "FEATURE_ASOF_UNAVAILABLE": 1,
+        "NO_VERIFIED_PREGAME_PRICE": 1,
+        "QUOTE_TIMESTAMP_UNVERIFIED": 1,
+        "RESULT_UNVERIFIED": 1,
+        "SETTLEMENT_UNREPRODUCIBLE": 1,
+        "SOURCE_LINEAGE_UNVERIFIED": 1
+      },
+      "exact_line_candidate_rows": 1,
+      "legal_training_rows": 0,
+      "reproducible_settlement_rows": 0,
+      "scope": "NFL/SPREAD",
+      "source": "24 Sep TheOver (Sides).csv",
+      "source_rows": 1,
+      "source_sha256": "f53f81c2beaa097b7a1c136ffd2868e02167acb2d91a0c527deac816d2cb13ca",
+      "unique_matchups": 1,
+      "verified_final_result_rows": 0,
+      "verified_pregame_price_timestamp_rows": 0
+    },
+    {
+      "asof_feature_contract_rows": 0,
+      "blank_win_probability_rows": 1,
+      "blocked_counts": {
+        "FEATURE_ASOF_UNAVAILABLE": 1,
+        "NO_VERIFIED_PREGAME_PRICE": 1,
+        "QUOTE_TIMESTAMP_UNVERIFIED": 1,
+        "RESULT_UNVERIFIED": 1,
+        "SETTLEMENT_UNREPRODUCIBLE": 1,
+        "SOURCE_LINEAGE_UNVERIFIED": 1
+      },
+      "exact_line_candidate_rows": 1,
+      "legal_training_rows": 0,
+      "reproducible_settlement_rows": 0,
+      "scope": "NCAAF/SPREAD",
+      "source": "24 Sep TheOver (Sides).csv",
+      "source_rows": 1,
+      "source_sha256": "f53f81c2beaa097b7a1c136ffd2868e02167acb2d91a0c527deac816d2cb13ca",
+      "unique_matchups": 1,
+      "verified_final_result_rows": 0,
+      "verified_pregame_price_timestamp_rows": 0
+    },
+    {
+      "asof_feature_contract_rows": 0,
+      "blank_win_probability_rows": 1,
+      "blocked_counts": {
+        "FEATURE_ASOF_UNAVAILABLE": 1,
+        "NO_VERIFIED_PREGAME_PRICE": 1,
+        "QUOTE_TIMESTAMP_UNVERIFIED": 1,
+        "RESULT_UNVERIFIED": 1,
+        "SETTLEMENT_UNREPRODUCIBLE": 1,
+        "SOURCE_LINEAGE_UNVERIFIED": 1
+      },
+      "exact_line_candidate_rows": 1,
+      "legal_training_rows": 0,
+      "model_hit_rate_is_game_probability": false,
+      "reproducible_settlement_rows": 0,
+      "scope": "NFL/TOTAL",
+      "source": "24 Sep TheOver (Totals).csv",
+      "source_rows": 1,
+      "source_sha256": "258a7aefeb0adb442fe31eb2fb9627c3c838cdaa339839edb931d4711a209006",
+      "unique_matchups": 1,
+      "verified_final_result_rows": 0,
+      "verified_pregame_price_timestamp_rows": 0
+    },
+    {
+      "asof_feature_contract_rows": 0,
+      "blank_win_probability_rows": 1,
+      "blocked_counts": {
+        "FEATURE_ASOF_UNAVAILABLE": 1,
+        "NO_VERIFIED_PREGAME_PRICE": 1,
+        "QUOTE_TIMESTAMP_UNVERIFIED": 1,
+        "RESULT_UNVERIFIED": 1,
+        "SETTLEMENT_UNREPRODUCIBLE": 1,
+        "SOURCE_LINEAGE_UNVERIFIED": 1
+      },
+      "exact_line_candidate_rows": 1,
+      "legal_training_rows": 0,
+      "model_hit_rate_is_game_probability": false,
+      "reproducible_settlement_rows": 0,
+      "scope": "NCAAF/TOTAL",
+      "source": "24 Sep TheOver (Totals).csv",
+      "source_rows": 1,
+      "source_sha256": "258a7aefeb0adb442fe31eb2fb9627c3c838cdaa339839edb931d4711a209006",
+      "unique_matchups": 1,
+      "verified_final_result_rows": 0,
+      "verified_pregame_price_timestamp_rows": 0
+    },
+    {
+      "asof_feature_contract_rows": 0,
+      "blocked_counts": {
+        "FEATURE_ASOF_UNAVAILABLE": 2,
+        "RESULT_UNVERIFIED": 2,
+        "SETTLEMENT_UNREPRODUCIBLE": 2,
+        "SOURCE_LINEAGE_UNVERIFIED": 2
+      },
+      "embedded_provider_quote_context_rows": 2,
+      "exact_line_candidate_rows": 2,
+      "legal_training_rows": 0,
+      "note": "Embedded provider quote context is a candidate, not an independently restored, immutable Stage 1 quote/result/settlement chain.",
+      "reproducible_settlement_rows": 0,
+      "scope": "NFL/SPREAD",
+      "source": "best_picks_candidate_audit (2).csv",
+      "source_rows": 2,
+      "source_sha256": "996f82d74ff187d009af50e961a443fd18ccafc10c6993c5b3b51a746e772f1e",
+      "unique_matchups": 1,
+      "verified_final_result_rows": 0,
+      "verified_pregame_price_timestamp_rows": 0
+    },
+    {
+      "asof_feature_contract_rows": 0,
+      "blocked_counts": {
+        "FEATURE_ASOF_UNAVAILABLE": 2,
+        "RESULT_UNVERIFIED": 2,
+        "SETTLEMENT_UNREPRODUCIBLE": 2,
+        "SOURCE_LINEAGE_UNVERIFIED": 2
+      },
+      "embedded_provider_quote_context_rows": 2,
+      "exact_line_candidate_rows": 2,
+      "legal_training_rows": 0,
+      "note": "Embedded provider quote context is a candidate, not an independently restored, immutable Stage 1 quote/result/settlement chain.",
+      "reproducible_settlement_rows": 0,
+      "scope": "NFL/TOTAL",
+      "source": "best_picks_candidate_audit (2).csv",
+      "source_rows": 2,
+      "source_sha256": "996f82d74ff187d009af50e961a443fd18ccafc10c6993c5b3b51a746e772f1e",
+      "unique_matchups": 1,
+      "verified_final_result_rows": 0,
+      "verified_pregame_price_timestamp_rows": 0
+    },
+    {
+      "asof_feature_contract_rows": 0,
+      "blocked_counts": {
+        "FEATURE_ASOF_UNAVAILABLE": 2,
+        "RESULT_UNVERIFIED": 2,
+        "SETTLEMENT_UNREPRODUCIBLE": 2,
+        "SOURCE_LINEAGE_UNVERIFIED": 2
+      },
+      "embedded_provider_quote_context_rows": 2,
+      "exact_line_candidate_rows": 2,
+      "legal_training_rows": 0,
+      "note": "Embedded provider quote context is a candidate, not an independently restored, immutable Stage 1 quote/result/settlement chain.",
+      "reproducible_settlement_rows": 0,
+      "scope": "NCAAF/SPREAD",
+      "source": "best_picks_candidate_audit (2).csv",
+      "source_rows": 2,
+      "source_sha256": "996f82d74ff187d009af50e961a443fd18ccafc10c6993c5b3b51a746e772f1e",
+      "unique_matchups": 1,
+      "verified_final_result_rows": 0,
+      "verified_pregame_price_timestamp_rows": 0
+    },
+    {
+      "asof_feature_contract_rows": 0,
+      "blocked_counts": {
+        "FEATURE_ASOF_UNAVAILABLE": 2,
+        "RESULT_UNVERIFIED": 2,
+        "SETTLEMENT_UNREPRODUCIBLE": 2,
+        "SOURCE_LINEAGE_UNVERIFIED": 2
+      },
+      "embedded_provider_quote_context_rows": 2,
+      "exact_line_candidate_rows": 2,
+      "legal_training_rows": 0,
+      "note": "Embedded provider quote context is a candidate, not an independently restored, immutable Stage 1 quote/result/settlement chain.",
+      "reproducible_settlement_rows": 0,
+      "scope": "NCAAF/TOTAL",
+      "source": "best_picks_candidate_audit (2).csv",
+      "source_rows": 2,
+      "source_sha256": "996f82d74ff187d009af50e961a443fd18ccafc10c6993c5b3b51a746e772f1e",
+      "unique_matchups": 1,
+      "verified_final_result_rows": 0,
+      "verified_pregame_price_timestamp_rows": 0
+    }
+  ]
+}
