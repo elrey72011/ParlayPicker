@@ -55,6 +55,11 @@ def test_verified_receipts_one_independent_game_per_market(fixture, monkeypatch)
     assert all(summary[s]["legal_independent_n"] == 1 for s in audit.SCOPES)
     assert reconciliation["statuses"]["matched"] == 4
     assert len({r["independent_game_market_id"] for r in manifest}) == 2
+    snapshot = next(iter(receipts.read("receipts", path).values()))
+    payload, values = audit.exact_feature_values(snapshot)
+    assert len(values) == 8
+    assert values[-2] == float(payload["quote"]["line"])
+    assert values[-1] == 1 / float(payload["quote"]["decimal_odds"])
 
 
 def test_missing_price_and_timestamp_never_default_to_minus_110(fixture):

@@ -94,6 +94,18 @@ def validate_vector(vector, scope):
     return vector
 
 
+def exact_feature_values(snapshot):
+    """Replay six as-of team summaries and bind the selected line and price."""
+    payload, prior_values = old_model.receipt_features(snapshot)
+    quote = payload["quote"]
+    if len(prior_values) != 7:
+        raise ValueError("FEATURE_CONTRACT_MISMATCH")
+    values = prior_values[:6] + [float(quote["line"]), 1.0 / float(quote["decimal_odds"])]
+    if len(values) != 8 or any(not math.isfinite(value) for value in values):
+        raise ValueError("FEATURE_CONTRACT_MISMATCH")
+    return payload, values
+
+
 def _quote_source_check(payload, observations):
     """Replay the selected price from the retained Odds API response."""
     quote = payload["quote"]
@@ -210,7 +222,7 @@ def classify_receipt(snapshot, outcome, observations):
         elif not quote.get("sportsbook"):
             problems.append("NO_VERIFIED_PREGAME_PRICE")
         if not problems:
-            p, values = old_model.receipt_features(snapshot)
+            p, values = exact_feature_values(snapshot)
             if timestamp(p["quote"]["observed_at"]) >= timestamp(p["game_start_utc"]):
                 problems.append("QUOTE_TIMESTAMP_UNVERIFIED")
             for check in (_quote_source_check(p, observations), _prior_check(p, observations)):
@@ -570,7 +582,7 @@ def validate_research_prediction(model, receipt, feature_snapshot, when):
     if not isinstance(model, dict) or model.get("model_status") != "RESEARCH_MODEL_SELECTED":
         raise ValueError("NO_VALID_EXACT_SCOPE_MODEL")
     artifact = model.get("model_artifact") or {}
-    payload, values = old_model.receipt_features(receipt)
+    payload, values = exact_feature_values(receipt)
     quote = payload["quote"]
     scope = scope_for(quote["market_type"])
     if (artifact.get("schema") != SCHEMA or artifact.get("scope") != scope or
