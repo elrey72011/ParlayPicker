@@ -62,6 +62,10 @@ def _odds_probability(american):
     return 100 / (american + 100) if american > 0 else -american / (-american + 100)
 
 
+def _hex_digest(value, length=64):
+    return isinstance(value, str) and len(value) == length and all(c in "0123456789abcdef" for c in value)
+
+
 def exact_label(market, selection, line, home_score, away_score, home_team, away_team,
                 *, provider_home_team=None, provider_away_team=None):
     """The target is the stored selection's exact betting result, including push."""
@@ -637,11 +641,30 @@ def validate_research_prediction(model, event, quote, snapshot, timestamp):
         raise ValueError("NO_VALID_EXACT_SCOPE_MODEL")
     artifact = model.get("model_artifact") or {}
     spread_side = _spread_side(event, quote) if quote["market_family"] == "SPREAD" else None
+    try:
+        window = artifact["validation_window"]
+        provenance_chronology = (stage1.at(artifact["training_start"]) <
+            stage1.at(artifact["training_cutoff"]) < stage1.at(window["first_kickoff"]) <=
+            stage1.at(window["last_kickoff"]) < stage1.at(artifact["created_at"]) <=
+            stage1.at(artifact["available_at"]))
+    except (KeyError, ValueError, TypeError):
+        provenance_chronology = False
     if (model.get("artifact_hash") != digest({k:v for k,v in artifact.items() if k != "model_id"}) or
             model.get("model_id") != artifact.get("model_id") or
+            artifact.get("model_id") != "football-stage2-" + model["artifact_hash"] or
+            artifact.get("schema") != VERSION or
             event["sport"] != artifact.get("sport") or quote["market_family"] != artifact.get("market_family") or
+            quote.get("sport") != event["sport"] or
             tuple(artifact.get("target_classes") or ()) != CLASSES.get(quote["market_family"]) or
             artifact.get("feature_version") != FEATURE_VERSION or
+            artifact.get("algorithm") != "regularized_multinomial_logistic" or
+            artifact.get("independent_training_n", 0) < MINIMUM["development"] or
+            artifact.get("validation_n", 0) < MINIMUM["selection_validation"] or
+            not all(_hex_digest(artifact.get(key)) for key in
+                    ("training_manifest_hash", "runtime_environment_hash",
+                     "training_config_hash", "metrics_artifact_hash")) or
+            not _hex_digest(artifact.get("source_commit"), 40) or
+            not provenance_chronology or
             artifact.get("deployment_state") != "UNVALIDATED" or
             artifact.get("production_eligible") is not False or artifact.get("stake") != 0 or
             event["game_id"] != quote["game_id"] or quote["event_version_id"] != event["version_id"] or

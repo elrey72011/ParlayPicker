@@ -238,7 +238,14 @@ def test_baseline_distinct_and_training_model_has_immutable_provenance():
 def _model_for_prediction():
     artifact = {"schema": stage2.VERSION, "sport": "NFL", "market_family": "SPREAD",
                 "target_classes": stage2.CLASSES["SPREAD"], "feature_version": stage2.FEATURE_VERSION,
-                "training_cutoff": "2026-09-24T08:00:00Z", "available_at": "2026-09-24T12:00:00Z",
+                "training_start": "2025-09-01T00:00:00Z", "training_cutoff": "2026-08-01T08:00:00Z",
+                "validation_window": {"first_kickoff": "2026-08-15T00:00:00Z",
+                                      "last_kickoff": "2026-09-01T00:00:00Z"},
+                "independent_training_n": 200, "validation_n": 60,
+                "training_manifest_hash": "a"*64, "runtime_environment_hash": "b"*64,
+                "training_config_hash": "c"*64, "metrics_artifact_hash": "d"*64,
+                "source_commit": "e"*40, "algorithm": "regularized_multinomial_logistic",
+                "created_at": "2026-09-24T11:00:00Z", "available_at": "2026-09-24T12:00:00Z",
                 "classes": ["COVER", "PUSH", "NO_COVER"], "coefficients": [[0,0,0,0]]*3,
                 "intercept": [1.0,-1.0,0.0], "deployment_state": "UNVALIDATED",
                 "production_eligible": False, "stake": 0}
@@ -275,6 +282,7 @@ def test_prediction_binds_exact_scope_quote_time_and_stays_research_only():
         lambda m,e,q,s,t: s["price_implied_probability"].update(value=0.7),
         lambda m,e,q,s,t: q.update(quote_id="", quote_verified=0),
         lambda m,e,q,s,t: m["model_artifact"].update(available_at="2026-09-25T13:00:00Z"),
+        lambda m,e,q,s,t: m["model_artifact"].pop("training_manifest_hash"),
         lambda m,e,q,s,t: e.update(scheduled_start="2026-09-25T11:00:00Z"),
         lambda m,e,q,s,t: m["model_artifact"].update(production_eligible=True),
     ):
