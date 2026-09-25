@@ -243,14 +243,17 @@ def _readiness(path, denominator, now, current_sources=None):
         training_ready_rows = db.execute("SELECT count(*) FROM prospective_football_active_training_row WHERE sport=?",
                                          (denominator["sport"],)).fetchone()[0]
         market_summary = {}
+        target_ids = [g["game_id"] for g in games]
+        target_filter = " AND game_id IN (" + ",".join("?" for _ in target_ids) + ")" if target_ids else " AND 0"
         for market in ("SPREAD", "TOTAL"):
-            selected = sum(key[1] == market for key in selected_manifest)
-            settled_rows = db.execute("SELECT count(*) FROM prospective_football_settlement WHERE sport=? AND market_family=?",
-                                      (denominator["sport"], market)).fetchone()[0]
-            ready_rows = db.execute("SELECT count(*) FROM prospective_football_active_training_row WHERE sport=? AND market_family=?",
-                                    (denominator["sport"], market)).fetchone()[0]
-            blocked_rows = db.execute("SELECT count(*) FROM prospective_football_training_row WHERE sport=? AND market_family=? AND training_row_status='TRAINING_BLOCKED'",
-                                      (denominator["sport"], market)).fetchone()[0]
+            selected = sum((game_id, market) in selected_manifest for game_id in target_ids)
+            params = (denominator["sport"], market, *target_ids)
+            settled_rows = db.execute("SELECT count(*) FROM prospective_football_settlement WHERE sport=? AND market_family=?" +
+                                      target_filter, params).fetchone()[0]
+            ready_rows = db.execute("SELECT count(*) FROM prospective_football_active_training_row WHERE sport=? AND market_family=?" +
+                                    target_filter, params).fetchone()[0]
+            blocked_rows = db.execute("SELECT count(*) FROM prospective_football_training_row WHERE sport=? AND market_family=? AND training_row_status='TRAINING_BLOCKED'" +
+                                      target_filter, params).fetchone()[0]
             statuses = [m for g in games for m in g["markets"] if m["market_family"] == market]
             market_summary[market] = {
                 "target_games": total,

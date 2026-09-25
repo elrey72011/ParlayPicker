@@ -242,6 +242,25 @@ class FootballStage1Test(unittest.TestCase):
         self.assertEqual(readiness["market_summary"]["TOTAL"]["independent_manifest_events"], 1)
         self.assertEqual(cycle._lifecycle(self.path, denominator, readiness)["status"], "PROVED")
 
+    def test_market_summary_counts_only_current_denominator_games(self):
+        event = nfl_event(event_id="402")
+        offer = odds_event()
+        stage1.coverage(self.path, [event], [offer], sport="NFL", observed=NOW, run_id="priced")
+        schedule = next(x for x in self.rows("prospective_football_event") if x["provider_event_id"] == "402")
+        completed = nfl_event(completed=True, event_id="402")
+        raw = {"provider_event_id": "402", "home_team_id": "8", "away_team_id": "9",
+               "home_score": 24, "away_score": 20, "status": "FINAL", "provider_response": completed}
+        result, _ = stage1.append_result(self.path, schedule, raw, START + timedelta(hours=3), source="ESPN")
+        stage1.settle_game(self.path, schedule, result, START + timedelta(hours=3))
+        current = stage1.coverage(self.path, [nfl_event(event_id="401")], [], sport="NFL",
+                                  observed=NOW, run_id="current")
+        readiness = cycle._readiness(self.path, current, NOW)
+        self.assertEqual(readiness["target_games"], 1)
+        for market in ("SPREAD", "TOTAL"):
+            self.assertEqual(readiness["market_summary"][market]["independent_manifest_events"], 0)
+            self.assertEqual(readiness["market_summary"][market]["settled_rows"], 0)
+            self.assertEqual(readiness["market_summary"][market]["training_blocked_games"], 1)
+
     def test_result_settlement_and_training_readiness(self):
         event = nfl_event()
         schedule, _ = stage1.append_schedule(self.path, "NFL", event, NOW)
