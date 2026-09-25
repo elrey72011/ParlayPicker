@@ -124,6 +124,17 @@ def test_feature_blocker_does_not_erase_verified_price_or_settlement(fixture, mo
     assert row["training_status"] == "TRAINING_BLOCKED"
 
 
+def test_prior_feed_arriving_after_quote_but_before_prediction_is_legal(fixture):
+    collect(fixture)
+    snapshot = next(iter(receipts.read("receipts", fixture[0]).values()))
+    observations = receipts.read("observations", fixture[0])
+    payload = deepcopy(snapshot["payload"])
+    last_feed = max(old_model.timestamp(game["available_at"]) for game in payload["prior_games"])
+    assert last_feed <= old_model.timestamp(payload["prediction_cutoff"])
+    payload["quote"]["observed_at"] = (last_feed - timedelta(seconds=1)).isoformat()
+    assert audit._prior_check(payload, observations) is None
+
+
 def test_doubleheaders_require_distinct_stable_game_ids(fixture):
     collect(fixture)
     snapshot = next(iter(receipts.read("receipts", fixture[0]).values()))

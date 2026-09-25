@@ -195,7 +195,7 @@ def _prior_check(payload, observations):
             replay = receipts.prior_from_observation(source)
         except (KeyError, ValueError, TypeError):
             return "FEATURE_ASOF_UNAVAILABLE"
-        if replay != game or timestamp(game["available_at"]) > timestamp(payload["quote"]["observed_at"]):
+        if replay != game or timestamp(game["available_at"]) > timestamp(payload["prediction_cutoff"]):
             return "FEATURE_ASOF_UNAVAILABLE"
     return None
 
@@ -542,7 +542,7 @@ def feature_contract():
     return {"schema": SCHEMA, "feature_version": FEATURE_VERSION,
         "scopes": {scope: {"target_classes": CLASSES[scope.split("/")[1]],
                            "features": [dict(name=n, definition=d, source=s,
-                                             availability="no later than selected quote observed_at",
+                                             availability="no later than prediction_cutoff, before first pitch",
                                              missing_policy="block_row") for n, d, s in fields]}
                    for scope in SCOPES},
         "forbidden": ["same-event result/score", "post-first-pitch features",
