@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import Counter
 from contextlib import closing
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 import json
 from pathlib import Path
 import uuid
@@ -170,6 +170,10 @@ def _readiness(path, denominator, now, current_sources=None):
     games = []
     completed, result_count, settled_games = 0, 0, 0
     with closing(evidence.connect(path)) as db:
+        selected_manifest = {(row["game_id"], row["market_family"]): row["manifest_id"]
+                             for row in db.execute(
+                                 "SELECT game_id,market_family,manifest_id FROM prospective_football_training_manifest WHERE sport=?",
+                                 (denominator["sport"],))}
         for game in denominator["games"]:
             if not game.get("regular_season_target"):
                 continue
@@ -193,22 +197,32 @@ def _readiness(path, denominator, now, current_sources=None):
             for market in ("SPREAD", "TOTAL"):
                 quotes = db.execute("SELECT quote_id FROM prospective_football_quote WHERE game_id=? AND market_family=?",
                                     (game_id, market)).fetchall()
+                pregame_quotes = db.execute("""
+                    SELECT count(*) FROM prospective_football_quote q
+                    JOIN prospective_football_event e ON e.version_id=q.event_version_id
+                    WHERE q.game_id=? AND q.market_family=? AND q.quote_verified=1
+                      AND q.observed_at<e.scheduled_start
+                """, (game_id, market)).fetchone()[0]
                 result = db.execute("SELECT result_id FROM prospective_football_result WHERE game_id=?",
                                     (game_id,)).fetchone()
                 result_versions = db.execute("SELECT DISTINCT home_score,away_score FROM prospective_football_result WHERE game_id=?",
                                              (game_id,)).fetchall()
                 ready = db.execute("SELECT training_row_id FROM prospective_football_active_training_row WHERE game_id=? AND market_family=? LIMIT 1",
                                    (game_id, market)).fetchone()
+                selected = selected_manifest.get((game_id, market))
                 conflict = len(result_versions) > 1
                 blockers = (["RESULT_CORRECTION_CONFLICT"] if conflict else [] if ready else
                             ["NO_VERIFIED_PREGAME_PRICE"] if not quotes else
                             ["RESULT_PENDING"] if foundation.at(game["kickoff"]) > foundation.at(now) else
                             ["RESULT_UNVERIFIED"] if not result else ["TRAINING_ELIGIBILITY_BLOCKED"])
+                if ready and not selected and not conflict:
+                    blockers = ["MANIFEST_INTEGRITY_FILTER"]
                 market_rows.append({"market_family": market, "training_row_status":
-                                    "TRAINING_READY" if ready and not conflict else "TRAINING_BLOCKED", "blockers": blockers,
-                                    "verified_quotes": len(quotes), "result_present": bool(result)})
+                                    "TRAINING_READY" if selected and not conflict else "TRAINING_BLOCKED", "blockers": blockers,
+                                    "verified_quotes": len(quotes), "pregame_verified_quotes": pregame_quotes,
+                                    "result_present": bool(result), "manifest_id": selected})
             games.append({"game_id": game_id, "identity_verified": identity_verified,
-                          "markets": market_rows})
+                          "completed": is_completed, "markets": market_rows})
     total = len(games)
     rates = {}
     for market, field in (("SPREAD", "spread_price_available"), ("TOTAL", "total_price_available")):
@@ -228,11 +242,88 @@ def _readiness(path, denominator, now, current_sources=None):
                                      (denominator["sport"],)).fetchone()[0]
         training_ready_rows = db.execute("SELECT count(*) FROM prospective_football_active_training_row WHERE sport=?",
                                          (denominator["sport"],)).fetchone()[0]
+        market_summary = {}
+        target_ids = [g["game_id"] for g in games]
+        target_filter = " AND game_id IN (" + ",".join("?" for _ in target_ids) + ")" if target_ids else " AND 0"
+        for market in ("SPREAD", "TOTAL"):
+            selected = sum((game_id, market) in selected_manifest for game_id in target_ids)
+            params = (denominator["sport"], market, *target_ids)
+            settled_rows = db.execute("SELECT count(*) FROM prospective_football_settlement WHERE sport=? AND market_family=?" +
+                                      target_filter, params).fetchone()[0]
+            ready_rows = db.execute("SELECT count(*) FROM prospective_football_active_training_row WHERE sport=? AND market_family=?" +
+                                    target_filter, params).fetchone()[0]
+            blocked_rows = db.execute("SELECT count(*) FROM prospective_football_training_row WHERE sport=? AND market_family=? AND training_row_status='TRAINING_BLOCKED'" +
+                                      target_filter, params).fetchone()[0]
+            statuses = [m for g in games for m in g["markets"] if m["market_family"] == market]
+            market_summary[market] = {
+                "target_games": total,
+                "priced_pregame_games": sum(m["pregame_verified_quotes"] > 0 for m in statuses),
+                "completed_games": completed,
+                "settled_rows": settled_rows,
+                "training_ready_rows": ready_rows,
+                "training_blocked_rows": blocked_rows,
+                "training_blocked_games": sum(m["training_row_status"] == "TRAINING_BLOCKED" for m in statuses),
+                "independent_manifest_events": selected,
+                "blocker_counts": dict(Counter(b for m in statuses for b in m["blockers"]))}
     return {"sport": denominator["sport"], "target_games": total,
             "completed_games_in_window": completed, "completed_games_with_result": result_count,
             "games_with_settlement": settled_games, "result_rows": result_rows,
             "settlement_rows": settlement_rows, "training_ready_rows": training_ready_rows,
-            "rates": rates, "games": games}
+            "rates": rates, "market_summary": market_summary, "games": games}
+
+
+def _lifecycle(path, denominator, readiness):
+    """Prove a real game's source-to-manifest chain, or expose its blocker."""
+    sport = denominator["sport"]
+    target = [g for g in denominator["games"] if g.get("regular_season_target")]
+    by_id = {g["game_id"]: g for g in readiness["games"]}
+    if sport == "NFL":
+        selected = next((g for g in target if
+                         {foundation._name("NFL", g["home"]), foundation._name("NFL", g["away"])} ==
+                         {foundation._name("NFL", "Atlanta Falcons"), foundation._name("NFL", "Green Bay Packers")}), None)
+        case = "ATLANTA_GREEN_BAY"
+    else:
+        priced_completed = [g for g in target if by_id[g["game_id"]]["completed"] and
+                            any(m["pregame_verified_quotes"] for m in by_id[g["game_id"]]["markets"])]
+        selected = min(priced_completed, key=lambda g: (g["kickoff"], g["game_id"])) if priced_completed else None
+        case = "EARLIEST_COMPLETED_PRICED_NCAAF"
+    if selected is None:
+        return {"case": case, "status": "BLOCKED",
+                "blocker": ("TARGET_GAME_OUTSIDE_CURRENT_SCHEDULE_WINDOW" if sport == "NFL" else
+                            "NO_COMPLETED_TARGET_WITH_VERIFIED_PREGAME_PRICE"),
+                "completed_target_games": sum(x["completed"] for x in readiness["games"]),
+                "priced_pregame_target_games": sum(any(m["pregame_verified_quotes"] for m in x["markets"])
+                                                   for x in readiness["games"])}
+    game_id = selected["game_id"]
+    with closing(evidence.connect(path)) as db:
+        event = foundation._read(db, "prospective_football_event", "version_id", selected["event_version_id"])
+        quotes = [foundation._read(db, "prospective_football_quote", "quote_id", x[0])
+                  for x in db.execute("SELECT quote_id FROM prospective_football_quote WHERE game_id=? ORDER BY observed_at,quote_id",
+                                      (game_id,))]
+        results = [foundation._read(db, "prospective_football_result", "result_id", x[0])
+                   for x in db.execute("SELECT result_id FROM prospective_football_result WHERE game_id=? ORDER BY observed_at,result_id",
+                                       (game_id,))]
+        settlements = [dict(x) for x in db.execute(
+            "SELECT settlement_id,quote_id,result_id,market_family,selection,line,outcome,settled_at "
+            "FROM prospective_football_settlement WHERE game_id=? ORDER BY market_family,settlement_id", (game_id,))]
+        manifest = [dict(x) for x in db.execute(
+            "SELECT * FROM prospective_football_training_manifest WHERE game_id=? ORDER BY market_family", (game_id,))]
+    market_status = {m["market_family"]: m for m in by_id[game_id]["markets"]}
+    blockers = {market: item["blockers"] for market, item in market_status.items()}
+    return {"case": case, "status": "PROVED" if len(manifest) == 2 else "BLOCKED",
+            "game_id": game_id, "home": selected["home"], "away": selected["away"],
+            "kickoff": selected["kickoff"], "event_version_id": event["version_id"],
+            "event_source_hash": event["source_hash"], "identity_mapping_version": event["identity_mapping_version"],
+            "quotes": [{k: q[k] for k in ("quote_id", "market_family", "selection", "line",
+                                           "american_odds", "sportsbook", "observed_at", "provider_last_update",
+                                           "capture_horizon", "source_hash", "quote_verified")}
+                       for q in quotes],
+            "results": [{k: r[k] for k in ("result_id", "home_score", "away_score", "observed_at",
+                                           "available_at", "result_status", "source_hash")}
+                        for r in results],
+            "settlements": settlements, "manifest": manifest, "market_blockers": blockers,
+            "blocker": None if len(manifest) == 2 else
+            ("RESULT_NOT_FINAL" if not results else "MARKET_TRAINING_READINESS_BLOCKED")}
 
 
 def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, theover_files=()):
@@ -278,15 +369,37 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
                     if item.get("event_version_id"):
                         schedules.append(foundation._read(db, "prospective_football_event", "version_id", item["event_version_id"]))
             all_schedules.extend(schedules)
+            schedule_window_start = (datetime.combine((now-timedelta(days=7)).date(), time.min,
+                                                      tzinfo=timezone.utc) if sport == "NFL"
+                                     else now-timedelta(days=7))
+            schedule_window_end = schedule_window_start + timedelta(days=15)
             diagnostic = foundation.provider_diagnostic(schedules, odds_events, sport=sport,
                                                        observed=observed, aliases=aliases,
-                                                       schedule_window_start=now-timedelta(days=8),
-                                                       schedule_window_end=now+timedelta(days=8))
+                                                       target_policy=policy,
+                                                       schedule_window_start=schedule_window_start,
+                                                       schedule_window_end=schedule_window_end)
             persisted = {x["game_id"] for x in denominator["games"] if x.get("game_id") and
                          (x.get("spread_price_available") or x.get("total_price_available"))}
             for item in diagnostic:
                 item["persisted"] = item.get("canonical_match") in persisted
             sport_report["provider_events"] = diagnostic
+            classes = Counter(x["classification"] for x in diagnostic)
+            revised = [x for x in diagnostic if x["classification"] == "KICKOFF_TIME_REVISION"]
+            sport_report["reconciliation"] = {
+                "classification_counts": dict(classes),
+                "unexplained_provider_events": sum(not x.get("classification") or
+                                                    not x.get("classification_reason") for x in diagnostic),
+                "unexplained_target_games": sum(not x.get("status") or
+                                                x.get("status") == "PENDING_ODDS_LOOKUP"
+                                                for x in denominator["games"] if x.get("regular_season_target")),
+                "strict_kickoff_tolerance_seconds": 60,
+                "matching_policy": "STRICT_60_SECONDS_UNCHANGED",
+                "kickoff_revision_candidates": [
+                    {k: x.get(k) for k in ("provider_event_id", "home", "away", "commence_time",
+                                            "candidate_game_ids", "kickoff_delta_seconds")}
+                    for x in revised],
+                "matched_kickoff_delta_seconds": [x["kickoff_delta_seconds"] for x in diagnostic
+                                                  if x["classification"] == "MATCHED_TARGET"]}
             sport_report["provider_event_aggregate"] = {
                 "response_events": len(diagnostic), "unique_provider_ids": len({x["provider_event_id"] for x in diagnostic}),
                 "status_counts": dict(Counter(x["status"] for x in diagnostic)),
@@ -313,6 +426,18 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
                     sport_report["errors"].append({"game_id": schedule["game_id"],
                                                    "reason": exc.code if isinstance(exc, ProviderFailure) else str(exc)})
             sport_report["readiness"] = _readiness(path, denominator, observed, current_sources)
+            sport_report["lifecycle"] = _lifecycle(path, denominator, sport_report["readiness"])
+            with closing(evidence.connect(path)) as db:
+                target_ids_for_horizons = [g["game_id"] for g in denominator["games"]
+                                           if g.get("regular_season_target")]
+                if target_ids_for_horizons:
+                    placeholders = ",".join("?" for _ in target_ids_for_horizons)
+                    sport_report["capture_horizons"] = dict(Counter(
+                        row[0] for row in db.execute(
+                            "SELECT capture_horizon FROM prospective_football_quote WHERE game_id IN (" +
+                            placeholders + ") AND quote_verified=1", target_ids_for_horizons)))
+                else:
+                    sport_report["capture_horizons"] = {}
             target_ids = {g["game_id"] for g in denominator["games"] if g.get("regular_season_target")}
             matched_ids = {x.get("canonical_match") for x in diagnostic if x.get("canonical_match") in target_ids}
             sport_report["readiness"]["rates"]["provider_event_match_rate"] = (
@@ -393,6 +518,15 @@ def write_artifacts(report, output_dir):
         "football-stage1-ncaaf-discovery-diagnostic.json": report["sports"].get("NCAAF", {}).get("discovery", {}),
         "football-stage1-odds-coverage.json": {s: v.get("provider_event_aggregate") for s, v in report["sports"].items()},
         "football-stage1-training-readiness.json": {s: v.get("readiness") for s, v in report["sports"].items()},
+        "football-stage1-provider-reconciliation.json": {
+            s: {"summary": v.get("reconciliation"), "events": v.get("provider_events")}
+            for s, v in report["sports"].items()},
+        "football-stage1-lifecycle-audit.json": {
+            s: v.get("lifecycle") for s, v in report["sports"].items()},
+        "football-stage1-research-manifest-readiness.json": {
+            s: {"market_summary": v.get("readiness", {}).get("market_summary"),
+                "capture_horizons": v.get("capture_horizons")}
+            for s, v in report["sports"].items()},
     }
     if "theover" in report:
         artifacts["football-stage1-theover-reconciliation.json"] = report["theover"]

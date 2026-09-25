@@ -235,9 +235,25 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         body = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode() + metadata
                 + f"\r\n--{boundary}\r\nContent-Type: application/json\r\n\r\n".encode() + Body
                 + f"\r\n--{boundary}--\r\n".encode())
-        response = self.session.post("https://www.googleapis.com/upload/drive/v3/files",
-                                     params={"uploadType": "multipart", "supportsAllDrives": "true", "fields": "id"},
-                                     headers={"Content-Type": f"multipart/related; boundary={boundary}"}, data=body, timeout=30)
+        try:
+            response = self.session.post("https://www.googleapis.com/upload/drive/v3/files",
+                                         params={"uploadType": "multipart", "supportsAllDrives": "true", "fields": "id"},
+                                         headers={"Content-Type": f"multipart/related; boundary={boundary}"}, data=body, timeout=30)
+        except (requests.Timeout, requests.ConnectionError):
+            # The server may have committed the immutable object before the
+            # response was lost. Never repeat an uncertain upload. A bounded
+            # listing and full-byte readback may establish that it completed.
+            for attempt in range(3):
+                if attempt:
+                    time.sleep(attempt * 2)
+                files = list(self._files(Key))
+                if not files:
+                    continue
+                if self._read_files(files) != Body:
+                    raise EvidenceStorageError("Timed-out upload conflicts with remote evidence")
+                self.created_ids[Key] = files[0]["id"]
+                return
+            raise
         response.raise_for_status()
         file_id = response.json().get("id")
         if not isinstance(file_id, str) or not file_id:
