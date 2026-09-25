@@ -1,6 +1,12 @@
 name: Football Stage 1 data foundation
 on:
   workflow_dispatch:
+    inputs:
+      stage2_audit:
+        description: 'Also run the gated Stage 2 football research audit'
+        type: boolean
+        required: false
+        default: false
   schedule:
     - cron: '20 * * * *'
 permissions:
@@ -27,6 +33,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Restore, capture, settle and verify Stage 1 evidence
+        continue-on-error: ${{ inputs.stage2_audit == true }}
         run: >-
           python -u scripts/run_football_stage1.py
           --database "${{ runner.temp }}/football-stage1/evidence.sqlite3"
@@ -37,4 +44,18 @@ jobs:
         with:
           name: football-stage1-cycle-audit
           path: ${{ runner.temp }}/football-stage1/artifacts/*.json
+          if-no-files-found: warn
+      - name: Audit Stage 2 exact-scope football research models
+        if: ${{ inputs.stage2_audit == true }}
+        run: >-
+          python -u scripts/run_football_stage2.py
+          --database "${{ runner.temp }}/football-stage1/evidence.sqlite3"
+          --stage1-audit "${{ runner.temp }}/football-stage1/artifacts/football-stage1-cycle-audit.json"
+          --output-dir "${{ runner.temp }}/football-stage1/stage2-artifacts"
+      - name: Retain sanitized Stage 2 diagnostics
+        if: ${{ always() && inputs.stage2_audit == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-stage2-research-audit
+          path: ${{ runner.temp }}/football-stage1/stage2-artifacts/*.json
           if-no-files-found: warn
