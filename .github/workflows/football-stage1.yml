@@ -2,7 +2,7 @@ name: Football Stage 1 data foundation
 on:
   workflow_dispatch:
   schedule:
-    - cron: '20 0,6,12,18 * * *'
+    - cron: '20 * * * *'
 permissions:
   contents: read
 concurrency:

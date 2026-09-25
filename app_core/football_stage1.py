@@ -376,6 +376,17 @@ def settle_game(path, schedule, result, observed):
             result_kind = outcome(quote, result)
             if result_kind == "NEEDS_REVIEW":
                 continue
+            # Provider metadata can change without changing the final score.
+            # Retain the new result evidence, but keep one settlement/label per
+            # quote and score. A changed score is quarantined by the active
+            # training view until the correction can be reviewed.
+            same_score = db.execute("""
+                SELECT 1 FROM prospective_football_settlement s
+                JOIN prospective_football_result r ON r.result_id=s.result_id
+                WHERE s.quote_id=? AND r.home_score=? AND r.away_score=? LIMIT 1
+            """, (quote["quote_id"], result["home_score"], result["away_score"])).fetchone()
+            if same_score:
+                continue
             settlement_id = digest(["football-settlement-v1", quote["quote_id"], result["result_id"],
                                     result_kind])
             if _read(db, "prospective_football_settlement", "settlement_id", settlement_id):

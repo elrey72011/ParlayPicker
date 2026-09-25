@@ -138,6 +138,44 @@ class FootballStage1Test(unittest.TestCase):
         with self.assertRaises(ValueError):
             stage1.append_result(self.path, schedule, result_raw, NOW, source="ESPN")
 
+    def test_result_revisions_do_not_expose_duplicate_or_conflicting_labels(self):
+        event = nfl_event()
+        denominator = stage1.coverage(self.path, [event], [odds_event()], sport="NFL",
+                                      observed=NOW, run_id="r")
+        schedule = self.rows("prospective_football_event")[0]
+        def result_raw(source):
+            competitors = {x["homeAway"]: x for x in source["competitions"][0]["competitors"]}
+            return {"provider_event_id": "401", "home_team_id": "8", "away_team_id": "9",
+                    "home_score": int(competitors["home"]["score"]),
+                    "away_score": int(competitors["away"]["score"]),
+                    "status": "FINAL", "provider_response": source}
+        observed = START + timedelta(hours=3)
+        first_source = nfl_event(completed=True)
+        first, _ = stage1.append_result(self.path, schedule, result_raw(first_source), observed, source="ESPN")
+        self.assertEqual(stage1.settle_game(self.path, schedule, first, observed), 4)
+        revision = copy.deepcopy(first_source)
+        revision["summary"] = "provider metadata revision"
+        same_score, created = stage1.append_result(self.path, schedule, result_raw(revision),
+                                                   observed + timedelta(minutes=1), source="ESPN")
+        self.assertTrue(created)
+        self.assertEqual(stage1.settle_game(self.path, schedule, same_score,
+                                            observed + timedelta(minutes=1)), 0)
+        with evidence.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM prospective_football_active_training_row").fetchone()[0], 4)
+        corrected = copy.deepcopy(revision)
+        corrected["competitions"][0]["competitors"][0]["score"] = "21"
+        corrected_result, created = stage1.append_result(
+            self.path, schedule, result_raw(corrected), observed + timedelta(minutes=2), source="ESPN")
+        self.assertTrue(created)
+        self.assertEqual(stage1.settle_game(self.path, schedule, corrected_result,
+                                            observed + timedelta(minutes=2)), 4)
+        with evidence.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM prospective_football_active_training_row").fetchone()[0], 0)
+        readiness = cycle._readiness(self.path, denominator, observed + timedelta(minutes=2))
+        self.assertEqual(readiness["training_ready_rows"], 0)
+        self.assertEqual({m["blockers"][0] for m in readiness["games"][0]["markets"]},
+                         {"RESULT_CORRECTION_CONFLICT"})
+
     def test_pushes_and_ncaaf_exact_alias(self):
         self.assertEqual(stage1.outcome({"sport": "NFL", "market_family": "TOTAL", "selection": "Over",
                                          "line": 44.0}, {"result_status": "FINAL", "home_score": 24,
@@ -231,6 +269,30 @@ class FootballStage1Test(unittest.TestCase):
         for table in ("prospective_model", "prospective_calibration", "prospective_prediction",
                       "prospective_validation_plan", "prospective_deployment_review"):
             self.assertEqual(len(self.rows(table)), 0)
+
+    def test_due_games_without_verified_quotes_fail_requested_slate(self):
+        class Response:
+            status_code = 200
+            def __init__(self, payload): self.payload = payload
+            def json(self): return self.payload
+        def get(url, *, params, **kwargs):
+            if url == cycle.ESPN:
+                return Response({"events": [nfl_event()] if params["dates"] == "20260924" else []})
+            if url.endswith("americanfootball_nfl/odds"):
+                return Response([])
+            if url.endswith("/games"):
+                return Response([{"id": 77, "startDate": (NOW + timedelta(days=30)).isoformat()}])
+            if url.endswith("/teams/fbs"):
+                return Response([{"id": 10, "school": "Ohio State"}])
+            if url.endswith("americanfootball_ncaaf/odds"):
+                return Response([])
+            raise AssertionError(url)
+        with patch.object(cycle.prospective_remote, "sync", return_value={"records_verified": 0}):
+            report = cycle.run_cycle(self.path, "folder", object(), "o", "c", now=NOW, get=get)
+        self.assertFalse(report["requested_slate_success"])
+        self.assertEqual(report["sports"]["NFL"]["errors"][-1]["reason"],
+                         "NFL_NO_VERIFIED_PREGAME_PRICE")
+        self.assertTrue(report["sports"]["NCAAF"]["requested_slate_success"])
 
     def test_ncaaf_fbs_population_and_legitimate_empty_window(self):
         class Response:
