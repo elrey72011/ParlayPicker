@@ -329,9 +329,18 @@ def append_result(path, schedule, raw, observed, *, source):
     if not complete or provider_values != (raw["provider_event_id"], raw["home_team_id"],
                                           raw["away_team_id"], home, away):
         raise ValueError("RESULT_PROVIDER_SOURCE_MISMATCH")
-    raw_hash = digest(canonical(raw).encode())
-    result_id = digest(["football-result-v1", schedule["game_id"], raw_hash])
+    # Score/status are the result facts. ESPN may revise presentation metadata
+    # on every fetch without changing those facts, so reuse the first verified
+    # immutable source for the same score. A score correction remains a new row.
+    result_id = digest(["football-result-v2", schedule["game_id"], source, home, away])
     with closing(evidence.connect(path)) as db, db:
+        same_score = db.execute("""
+            SELECT result_id FROM prospective_football_result
+            WHERE game_id=? AND home_score=? AND away_score=?
+            ORDER BY observed_at, result_id LIMIT 1
+        """, (schedule["game_id"], home, away)).fetchone()
+        if same_score:
+            return _read(db, "prospective_football_result", "result_id", same_score[0]), False
         old = _read(db, "prospective_football_result", "result_id", result_id)
         if old is not None:
             return old, False

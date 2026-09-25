@@ -176,7 +176,9 @@ class FootballStage1Test(unittest.TestCase):
         revision["summary"] = "provider metadata revision"
         same_score, created = stage1.append_result(self.path, schedule, result_raw(revision),
                                                    observed + timedelta(minutes=1), source="ESPN")
-        self.assertTrue(created)
+        self.assertFalse(created)
+        self.assertEqual(same_score["result_id"], first["result_id"])
+        self.assertEqual(len(self.rows("prospective_football_result")), 1)
         self.assertEqual(stage1.settle_game(self.path, schedule, same_score,
                                             observed + timedelta(minutes=1)), 0)
         with evidence.connect(self.path) as db:
