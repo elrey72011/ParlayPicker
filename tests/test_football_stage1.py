@@ -319,6 +319,30 @@ class FootballStage1Test(unittest.TestCase):
                          "NFL_NO_VERIFIED_PREGAME_PRICE")
         self.assertTrue(report["sports"]["NCAAF"]["requested_slate_success"])
 
+    def test_one_priced_game_cannot_hide_other_due_game_without_price(self):
+        class Response:
+            status_code = 200
+            def __init__(self, payload): self.payload = payload
+            def json(self): return self.payload
+        other = nfl_event(start=START - timedelta(minutes=30), event_id="402")
+        def get(url, *, params, **kwargs):
+            if url == cycle.ESPN:
+                return Response({"events": [nfl_event(), other] if params["dates"] == "20260924" else []})
+            if url.endswith("americanfootball_nfl/odds"):
+                return Response([odds_event()])
+            if url.endswith("/games"):
+                return Response([{"id": 77, "startDate": (NOW + timedelta(days=30)).isoformat()}])
+            if url.endswith("/teams/fbs"):
+                return Response([{"id": 10, "school": "Ohio State"}])
+            if url.endswith("americanfootball_ncaaf/odds"):
+                return Response([])
+            raise AssertionError(url)
+        with patch.object(cycle.prospective_remote, "sync", return_value={"records_verified": 0}):
+            report = cycle.run_cycle(self.path, "folder", object(), "o", "c", now=NOW, get=get)
+        self.assertFalse(report["requested_slate_success"])
+        self.assertEqual(report["sports"]["NFL"]["errors"][-1]["missing_game_ids"],
+                         ["nfl:espn:402"])
+
     def test_ncaaf_fbs_population_and_legitimate_empty_window(self):
         class Response:
             status_code = 200

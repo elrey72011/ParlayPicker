@@ -347,11 +347,15 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
                     for g in denominator["games"] if g.get("regular_season_target")):
                 sport_report["discovery"]["window_status"] = "NCAAF_SCHEDULER_WINDOW_MISSED"
             due_ids = {g["game_id"] for g in quote_due}
-            if quote_due and not any(d.get("canonical_match") in due_ids and
-                                     d.get("spread_price_available") and d.get("total_price_available") and
-                                     d.get("pregame_valid") for d in diagnostic):
+            priced_due_ids = {d.get("canonical_match") for d in diagnostic
+                              if d.get("canonical_match") in due_ids and
+                              d.get("spread_price_available") and d.get("total_price_available") and
+                              d.get("pregame_valid")}
+            missing_due_ids = sorted(due_ids - priced_due_ids)
+            if missing_due_ids:
                 sport_report["errors"].append({"reason": sport + "_NO_VERIFIED_PREGAME_PRICE",
-                                               "quote_due_games": len(quote_due)})
+                                               "quote_due_games": len(due_ids),
+                                               "missing_game_ids": missing_due_ids})
                 sport_report["requested_slate_success"] = False
         except ProviderFailure as exc:
             sport_report["errors"].append({"reason": exc.code})
