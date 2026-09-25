@@ -340,8 +340,10 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
                     foundation.horizon(g["kickoff"], observed) == "SNAPSHOT_WINDOW_MISSED"
                     for g in denominator["games"] if g.get("regular_season_target")):
                 sport_report["discovery"]["window_status"] = "NCAAF_SCHEDULER_WINDOW_MISSED"
-            if quote_due and not any(g.get("spread_price_available") and g.get("total_price_available")
-                                     for g in quote_due):
+            due_ids = {g["game_id"] for g in quote_due}
+            if quote_due and not any(d.get("canonical_match") in due_ids and
+                                     d.get("spread_price_available") and d.get("total_price_available") and
+                                     d.get("pregame_valid") for d in diagnostic):
                 sport_report["errors"].append({"reason": sport + "_NO_VERIFIED_PREGAME_PRICE",
                                                "quote_due_games": len(quote_due)})
                 sport_report["requested_slate_success"] = False

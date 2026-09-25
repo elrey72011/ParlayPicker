@@ -271,6 +271,9 @@ class FootballStage1Test(unittest.TestCase):
             self.assertEqual(len(self.rows(table)), 0)
 
     def test_due_games_without_verified_quotes_fail_requested_slate(self):
+        # A previous valid snapshot must not hide a broken current provider response.
+        stage1.coverage(self.path, [nfl_event()], [odds_event()], sport="NFL", observed=NOW,
+                        run_id="earlier")
         class Response:
             status_code = 200
             def __init__(self, payload): self.payload = payload
@@ -290,6 +293,7 @@ class FootballStage1Test(unittest.TestCase):
         with patch.object(cycle.prospective_remote, "sync", return_value={"records_verified": 0}):
             report = cycle.run_cycle(self.path, "folder", object(), "o", "c", now=NOW, get=get)
         self.assertFalse(report["requested_slate_success"])
+        self.assertTrue(report["sports"]["NFL"]["denominator"]["games"][0]["spread_price_available"])
         self.assertEqual(report["sports"]["NFL"]["errors"][-1]["reason"],
                          "NFL_NO_VERIFIED_PREGAME_PRICE")
         self.assertTrue(report["sports"]["NCAAF"]["requested_slate_success"])
