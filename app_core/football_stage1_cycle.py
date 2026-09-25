@@ -166,7 +166,7 @@ def _completed_result(sport, source):
         raise ProviderFailure(sport + "_RESULT_SCHEMA_FAILURE") from None
 
 
-def _readiness(path, denominator, now):
+def _readiness(path, denominator, now, current_sources=None):
     games = []
     completed, result_count, settled_games = 0, 0, 0
     with closing(evidence.connect(path)) as db:
@@ -177,7 +177,9 @@ def _readiness(path, denominator, now):
             event_row = foundation._read(db, "prospective_football_event", "version_id", game["event_version_id"])
             identity_verified = bool(event_row["home_team_id"] and event_row["away_team_id"] and
                                      event_row["home_team_id"] != event_row["away_team_id"])
-            source = json.loads(event_row["raw_source"])
+            source = (current_sources or {}).get(game["provider_event_id"])
+            if source is None:
+                source = json.loads(event_row["raw_source"])
             is_completed = (source.get("completed") is True if denominator["sport"] == "NCAAF" else
                             source.get("status", {}).get("type", {}).get("completed") is True)
             completed += int(is_completed)
@@ -264,6 +266,8 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
             sport_report["discovery"] = discovery
             odds_events = _odds(sport, odds_key, get=get, ledger=ledger)
             observed = datetime.now(timezone.utc) if get is None else now
+            current_sources = {str(x["id"]): x for x in raw_schedules
+                               if isinstance(x, dict) and x.get("id") is not None}
             denominator = foundation.coverage(path, raw_schedules, odds_events, sport=sport,
                                               observed=observed, run_id=run_id, target_policy=policy,
                                               team_catalog=team_catalog, aliases=aliases)
@@ -296,7 +300,9 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
             for schedule in schedules:
                 if schedule["season_type"].casefold() != "regular" or (policy and policy(schedule)):
                     continue
-                source = json.loads(schedule["raw_source"])
+                source = current_sources.get(schedule["provider_event_id"])
+                if source is None:
+                    source = json.loads(schedule["raw_source"])
                 try:
                     raw_result = _completed_result(sport, source)
                     if raw_result is None:
@@ -306,7 +312,7 @@ def run_cycle(path, folder, client, odds_key, cfbd_key, *, now=None, get=None, t
                 except (ProviderFailure, ValueError) as exc:
                     sport_report["errors"].append({"game_id": schedule["game_id"],
                                                    "reason": exc.code if isinstance(exc, ProviderFailure) else str(exc)})
-            sport_report["readiness"] = _readiness(path, denominator, observed)
+            sport_report["readiness"] = _readiness(path, denominator, observed, current_sources)
             target_ids = {g["game_id"] for g in denominator["games"] if g.get("regular_season_target")}
             matched_ids = {x.get("canonical_match") for x in diagnostic if x.get("canonical_match") in target_ids}
             sport_report["readiness"]["rates"]["provider_event_match_rate"] = (

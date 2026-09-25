@@ -147,8 +147,10 @@ def append_schedule(path, sport, source, observed, team_catalog=None):
     if not fields["provider_event_id"]:
         raise ValueError("NO_PROVIDER_EVENT")
     game_id = f"{sport.lower()}:{fields['provider_namespace'].lower()}:{fields['provider_event_id']}"
-    raw_hash = digest(canonical(source).encode())
-    version_id = digest(["football-event-v1", game_id, raw_hash])
+    # ESPN refreshes presentation/status metadata on every read. Version the
+    # schedule facts themselves; result revisions live in the result table.
+    # The first provider response for each schedule version remains immutable.
+    version_id = digest(["football-event-v2", game_id, fields])
     with closing(evidence.connect(path)) as db, db:
         old = _read(db, "prospective_football_event", "version_id", version_id)
         if old is not None:

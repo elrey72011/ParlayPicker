@@ -74,6 +74,25 @@ class FootballStage1Test(unittest.TestCase):
         self.assertEqual(len(self.rows("prospective_football_cycle_coverage")), 1)
         self.assertEqual(len(json.loads(self.rows("prospective_football_cycle_coverage")[0]["raw_source"])["games"]), 2)
 
+    def test_schedule_versions_follow_schedule_facts_not_live_status_metadata(self):
+        original = nfl_event()
+        first, created = stage1.append_schedule(self.path, "NFL", original, NOW)
+        self.assertTrue(created)
+        changed_status = copy.deepcopy(original)
+        changed_status["status"]["type"]["completed"] = True
+        changed_status["presentation_updated"] = "later"
+        second, created = stage1.append_schedule(self.path, "NFL", changed_status,
+                                                  NOW + timedelta(minutes=30))
+        self.assertFalse(created)
+        self.assertEqual(first["version_id"], second["version_id"])
+        self.assertEqual(len(self.rows("prospective_football_event")), 1)
+        rescheduled = copy.deepcopy(changed_status)
+        rescheduled["competitions"][0]["date"] = (START + timedelta(hours=1)).isoformat()
+        third, created = stage1.append_schedule(self.path, "NFL", rescheduled,
+                                                 NOW + timedelta(minutes=31))
+        self.assertTrue(created)
+        self.assertNotEqual(first["version_id"], third["version_id"])
+
     def test_exact_quote_and_idempotence(self):
         event = nfl_event()
         quote = odds_event()
@@ -370,6 +389,15 @@ class FootballStage1Test(unittest.TestCase):
         readiness = cycle._readiness(self.path, denominator, NOW)
         self.assertEqual(readiness["completed_games_in_window"], 0)
         self.assertIsNone(readiness["rates"]["result_coverage_for_completed_games"])
+        completed = nfl_event(start=started, completed=True)
+        raw_result = {"provider_event_id": "401", "home_team_id": "8", "away_team_id": "9",
+                      "home_score": 24, "away_score": 20, "status": "FINAL",
+                      "provider_response": completed}
+        schedule = self.rows("prospective_football_event")[0]
+        stage1.append_result(self.path, schedule, raw_result, NOW, source="ESPN")
+        refreshed = cycle._readiness(self.path, denominator, NOW, {"401": completed})
+        self.assertEqual(refreshed["completed_games_in_window"], 1)
+        self.assertEqual(refreshed["completed_games_with_result"], 1)
 
 
 if __name__ == "__main__":
