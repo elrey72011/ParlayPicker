@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       sports:
-        description: 'Optional comma-separated override: NFL,NCAAF,NBA,NCAAB,MLB,NHL'
+        description: 'Optional sport override, or FOOTBALL_STAGE1 for an authenticated Stage 1 capture'
         required: false
         default: ''
         type: string
@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   configuration-preflight:
-    if: (github.event_name == 'workflow_dispatch' || vars.RESEARCH_SCHEDULER_ENABLED == 'true') && inputs.football_v3_audit != true
+    if: (github.event_name == 'workflow_dispatch' || vars.RESEARCH_SCHEDULER_ENABLED == 'true') && inputs.football_v3_audit != true && inputs.sports != 'FOOTBALL_STAGE1'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     env:
@@ -37,7 +37,7 @@ jobs:
       - name: Report configuration presence only
         run: python scripts/research_actions_preflight.py
   research:
-    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.football_v3_audit != true
+    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.football_v3_audit != true && inputs.sports != 'FOOTBALL_STAGE1'
     needs: configuration-preflight
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -77,7 +77,7 @@ jobs:
 
 
   activation-evidence:
-    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.football_v3_audit != true
+    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.football_v3_audit != true && inputs.sports != 'FOOTBALL_STAGE1'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -129,4 +129,33 @@ jobs:
         with:
           name: football-v3-feasibility-audit
           path: ${{ runner.temp }}/football-v3-feasibility.json
+          if-no-files-found: warn
+  football-stage1-branch-dispatch:
+    if: github.event_name == 'workflow_dispatch' && inputs.sports == 'FOOTBALL_STAGE1' && inputs.football_v3_audit != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
+      PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Restore, capture, settle and verify Stage 1 evidence
+        run: >-
+          python -u scripts/run_football_stage1.py
+          --database "${{ runner.temp }}/football-stage1/evidence.sqlite3"
+          --output-dir "${{ runner.temp }}/football-stage1/artifacts"
+      - name: Retain sanitized Stage 1 diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-stage1-branch-cycle-audit
+          path: ${{ runner.temp }}/football-stage1/artifacts/*.json
           if-no-files-found: warn
