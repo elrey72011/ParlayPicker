@@ -107,6 +107,23 @@ def test_source_tampering_and_post_start_quote_fail_closed(fixture):
     assert audit.classify_receipt(bad, None, observations)["training_status"] == "TRAINING_BLOCKED"
 
 
+def test_feature_blocker_does_not_erase_verified_price_or_settlement(fixture, monkeypatch):
+    path = settled(fixture, monkeypatch)
+    snapshot = next(iter(receipts.read("receipts", path).values()))
+    outcome = next(iter(receipts.read("outcomes", path).values()))
+    observations = receipts.read("observations", path)
+    bad = deepcopy(snapshot)
+    bad["payload"]["prior_games"][0]["home_score"] += 1
+    bad["sha256"] = old_model.digest(bad["payload"])
+    row = audit.classify_receipt(bad, outcome, observations)
+    assert row["price_status"] == "VERIFIED_PREGAME_PRICE"
+    assert row["result_verified"] is True
+    assert row["label"] in audit.CLASSES[row["scope"].split("/")[1]]
+    assert "FEATURE_ASOF_UNAVAILABLE" in row["blockers"]
+    assert "feature_hash" not in row
+    assert row["training_status"] == "TRAINING_BLOCKED"
+
+
 def test_doubleheaders_require_distinct_stable_game_ids(fixture):
     collect(fixture)
     snapshot = next(iter(receipts.read("receipts", fixture[0]).values()))

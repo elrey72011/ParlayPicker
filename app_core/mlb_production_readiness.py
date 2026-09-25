@@ -211,7 +211,8 @@ def classify_receipt(snapshot, outcome, observations):
     try:
         scope = scope_for(quote.get("market_type"))
         result["scope"] = scope
-        if not isinstance(quote.get("line"), (int, float)) or isinstance(quote.get("line"), bool):
+        line_ok = isinstance(quote.get("line"), (int, float)) and not isinstance(quote.get("line"), bool)
+        if not line_ok:
             problems.append("LINE_UNVERIFIED")
         if quote.get("decimal_odds") is None:
             result["price_status"] = "LINE_PRESENT_PRICE_MISSING"
@@ -221,24 +222,38 @@ def classify_receipt(snapshot, outcome, observations):
             problems.append("QUOTE_TIMESTAMP_UNVERIFIED")
         elif not quote.get("sportsbook"):
             problems.append("NO_VERIFIED_PREGAME_PRICE")
+        quote_proven = False
         if not problems:
-            p, values = exact_feature_values(snapshot)
-            if timestamp(p["quote"]["observed_at"]) >= timestamp(p["game_start_utc"]):
+            if timestamp(quote["observed_at"]) >= timestamp(payload["game_start_utc"]):
                 problems.append("QUOTE_TIMESTAMP_UNVERIFIED")
-            for check in (_quote_source_check(p, observations), _prior_check(p, observations)):
-                if check:
-                    problems.append(check)
-            schedule_problem, game_number = _schedule_check(p, observations)
+                result["price_status"] = "PRICE_PRESENT_TIMESTAMP_UNVERIFIED"
+            else:
+                quote_problem = _quote_source_check(payload, observations)
+                if quote_problem:
+                    problems.append(quote_problem)
+                    if quote_problem == "QUOTE_TIMESTAMP_UNVERIFIED":
+                        result["price_status"] = "PRICE_PRESENT_TIMESTAMP_UNVERIFIED"
+                else:
+                    quote_proven = True
+                    result["price_status"] = "VERIFIED_PREGAME_PRICE"
+        if quote_proven:
+            try:
+                p, values = exact_feature_values(snapshot)
+                feature_problem = _prior_check(p, observations)
+                if feature_problem:
+                    problems.append(feature_problem)
+                else:
+                    result["feature_values"] = values
+                    result["feature_hash"] = digest(values)
+            except (KeyError, ValueError, TypeError, OverflowError):
+                problems.append("FEATURE_ASOF_UNAVAILABLE")
+            schedule_problem, game_number = _schedule_check(payload, observations)
             if schedule_problem:
                 problems.append(schedule_problem)
             result["game_number"] = game_number
-            result["feature_values"] = values
-            result["feature_hash"] = digest(values)
-            if not problems:
-                result["price_status"] = "VERIFIED_PREGAME_PRICE"
         if outcome is None:
             problems.append("RESULT_UNVERIFIED")
-        elif not problems or all(x == "RESULT_UNVERIFIED" for x in problems):
+        elif quote_proven:
             if old_model.identity(outcome) != old_model.identity(payload):
                 problems.append("RESULT_CONFLICT")
             else:
@@ -247,6 +262,7 @@ def classify_receipt(snapshot, outcome, observations):
                     problems.append("SOURCE_LINEAGE_UNVERIFIED")
                 else:
                     receipts.verify_outcome_source(outcome, source)
+                    result["result_verified"] = True
                     if timestamp(outcome["available_at"]) <= timestamp(quote["observed_at"]):
                         problems.append("RESULT_LEAKAGE_RISK")
                     result["label"] = exact_label(quote["market_type"], quote["line"],
@@ -316,7 +332,7 @@ def receipt_reports(path):
             "unique_games": len({x["game_id"] for x in subset}),
             "exact_line_rows": sum(x.get("line") is not None for x in subset),
             "verified_pregame_price_rows": sum(x["price_status"] == "VERIFIED_PREGAME_PRICE" for x in subset),
-            "final_result_rows": sum(x.get("outcome_id") is not None for x in subset),
+            "final_result_rows": sum(x.get("result_verified") is True for x in subset),
             "reproducible_settlement_rows": sum(x.get("label") in CLASSES[scope.split("/")[1]] for x in subset),
             "asof_feature_rows": sum(x.get("feature_hash") is not None for x in subset),
             "training_ready_raw_rows": sum(x["training_status"] == "TRAINING_READY" for x in subset),
