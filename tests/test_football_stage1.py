@@ -112,6 +112,25 @@ class FootballStage1Test(unittest.TestCase):
         self.assertEqual(len(rows), 4)
         self.assertEqual({x["capture_horizon"] for x in rows}, {"MID_PREGAME"})
 
+    def test_unchanged_offer_crossing_horizon_boundary_keeps_both_snapshots(self):
+        start = NOW + timedelta(hours=24)
+        event = nfl_event(start=start)
+        offer = odds_event(start=start)
+        first = stage1.coverage(self.path, [event], [offer], sport="NFL", observed=NOW, run_id="early")
+        self.assertEqual(first["games"][0]["status"], "QUOTE_CAPTURED")
+        early = {row["quote_id"]: row for row in self.rows("prospective_football_quote")}
+        observed = NOW + timedelta(minutes=1)
+        second = stage1.coverage(self.path, [event], [offer], sport="NFL", observed=observed, run_id="mid")
+        self.assertEqual(second["games"][0]["status"], "QUOTE_CAPTURED")
+        rows = self.rows("prospective_football_quote")
+        self.assertEqual(len(rows), 8)
+        self.assertEqual({row["capture_horizon"] for row in rows}, {"EARLY_RESEARCH", "MID_PREGAME"})
+        self.assertTrue(all(row in rows for row in early.values()))
+        repeated = stage1.coverage(self.path, [event], [offer], sport="NFL", observed=observed,
+                                   run_id="mid-repeat")
+        self.assertEqual(repeated["games"][0]["status"], "HORIZON_ALREADY_CAPTURED")
+        self.assertEqual(len(self.rows("prospective_football_quote")), 8)
+
     def test_exact_quote_and_idempotence(self):
         event = nfl_event()
         quote = odds_event()

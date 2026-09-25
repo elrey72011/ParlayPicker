@@ -17,7 +17,7 @@ from app_core.ncaaf_identity import ALIASES as NCAAF_ALIASES, _key as ncaaf_key
 SPORT_KEYS = {"NFL": "americanfootball_nfl", "NCAAF": "americanfootball_ncaaf"}
 MARKETS = {"spreads": "SPREAD", "totals": "TOTAL"}
 IDENTITY_VERSION = "football-exact-provider-pair-v1"
-HORIZON_VERSION = "football-early-7d-final-2h-v1"
+HORIZON_VERSION = "football-early-7d-mid-24h-final-2h-v2"
 TRAINING_VERSION = "football-score-settlement-v1"
 
 
@@ -277,8 +277,12 @@ def append_offers(path, schedule, event, observed, run_id, aliases=None):
                 continue
             raw = canonical(event).encode()
             raw_hash = digest(raw)
-            quote_id = digest(["football-quote-v1", schedule["game_id"], event["id"], book,
-                               market["key"], selection, line, price, iso(updated), raw_hash])
+            # An unchanged offer may be observed on both sides of a capture
+            # boundary. Keep one immutable snapshot per horizon, while the
+            # existing-market guard prevents duplicate snapshots within it.
+            quote_id = digest(["football-quote-v2", HORIZON_VERSION, capture_horizon,
+                               schedule["game_id"], event["id"], book, market["key"],
+                               selection, line, price, iso(updated), raw_hash])
             old = _read(db, "prospective_football_quote", "quote_id", quote_id)
             if old is not None:
                 continue
