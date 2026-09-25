@@ -10,7 +10,7 @@ def test_receipt_workflow_has_valid_runner_context_and_audited_order():
     assert 'workflow_dispatch' in workflow['on']
     assert workflow['on']['schedule'][0]['cron'] == '30 12,18 * * *'
     job = workflow['jobs']['reconcile']
-    assert job['if'] == "vars.RESEARCH_SCHEDULER_ENABLED == 'true'"
+    assert job['if'] == "vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.readiness_audit != true"
     assert 'ODDS_API_KEY' in job['env']
     # `runner` is only available in step scope, not in jobs.<job>.env.
     assert 'runner.' not in str(job.get('env', {}))
@@ -25,3 +25,9 @@ def test_receipt_workflow_has_valid_runner_context_and_audited_order():
     assert steps[artifact]['with']['if-no-files-found'] == 'error'
     assert any('DEPENDENCY_INSTALL_ERROR' in step.get('run', '') for step in steps)
     assert any('ARTIFACT_FAILURE' in step.get('run', '') for step in steps)
+    readiness = workflow['jobs']['readiness-audit']
+    assert readiness['if'] == 'inputs.readiness_audit == true'
+    assert 'ODDS_API_KEY' not in readiness['env']
+    assert any('run_mlb_production_readiness.py' in step.get('run', '') for step in readiness['steps'])
+    assert any(step.get('with', {}).get('name') == 'mlb-production-readiness-audit'
+               for step in readiness['steps'])
