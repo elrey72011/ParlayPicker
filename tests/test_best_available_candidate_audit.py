@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from core.smart_parlay_engine import generate_smart_parlays
 from core.streamlit_pipeline import (
@@ -9,6 +10,11 @@ from core.streamlit_pipeline import (
     build_best_picks_df,
     classify_best_available_picks,
 )
+
+
+@pytest.fixture(autouse=True)
+def _fixed_pregame_clock(monkeypatch):
+    monkeypatch.setattr("app_core.candidate_chronology.now_utc", lambda: pd.Timestamp("2026-07-27T21:00:00Z"))
 
 
 def _candidate(
@@ -27,6 +33,8 @@ def _candidate(
         "home_team": "Chicago Cubs",
         "away_team": "Pittsburgh Pirates",
         "game_date": pd.Timestamp("2026-07-27", tz="UTC"),
+        "game_start_utc": "2026-07-27T23:00:00Z",
+        "odds_recorded_at": "2026-07-27T22:00:00Z",
         "market_type": market_type,
         "total_line": total_line if is_total else pd.NA,
         "spread_line": spread_line,

@@ -1,4 +1,5 @@
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 from core.streamlit_pipeline import build_best_picks_df
 
 def test_side_floor_and_consensus_overlays(monkeypatch):
@@ -71,7 +72,7 @@ def test_side_floor_and_consensus_overlays(monkeypatch):
         create_row("M", "N", "total_under", 0.57, 0.015, 0.025, "Agrees"),
     ])
 
-    best = build_best_picks_df(df)
+    best = build_pregame_best_picks_df(df)
 
     # 1. Side failing floor -> Below Threshold
     assert best.loc[best["home_team"] == "A", "Pick_Status"].iloc[0] == "Below Threshold"

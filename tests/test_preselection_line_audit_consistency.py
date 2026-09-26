@@ -1,8 +1,14 @@
 """Best Available line integrity must be settled before scoring and auditing."""
 
 import pandas as pd
+import pytest
 
 from core.streamlit_pipeline import build_best_picks_df
+
+
+@pytest.fixture(autouse=True)
+def _fixed_pregame_clock(monkeypatch):
+    monkeypatch.setattr("app_core.candidate_chronology.now_utc", lambda: pd.Timestamp("2026-07-27T21:00:00Z"))
 
 
 def _candidate(
@@ -20,6 +26,8 @@ def _candidate(
         "home_team": "Texas",
         "away_team": "Seattle",
         "game_date": "2026-07-27",
+        "game_start_utc": "2026-07-27T23:00:00Z",
+        "odds_recorded_at": "2026-07-27T22:00:00Z",
         "game_time_est": "2026-07-27 6:40 PM ET",
         "matchup_id": "2026-07-27|texas|seattle",
         "market_type": market_type,

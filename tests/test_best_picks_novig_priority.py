@@ -2,6 +2,7 @@ import os
 import sys
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -46,7 +47,7 @@ def test_best_picks_uses_highest_ev_even_when_novig_live_is_present():
         ]
     )
 
-    best = build_best_picks_df(analysis_df)
+    best = build_pregame_best_picks_df(analysis_df)
 
     assert len(best) == 1
     assert best.loc[0, "odds_source"] == "fallback_novig"
@@ -72,7 +73,7 @@ def test_best_picks_uses_highest_ev_when_no_novig_live_rows_exist():
         ]
     )
 
-    best = build_best_picks_df(analysis_df)
+    best = build_pregame_best_picks_df(analysis_df)
 
     assert len(best) == 1
     assert best.loc[0, "odds_source"] == "uploaded"
@@ -98,7 +99,7 @@ def test_best_picks_uses_fallback_when_only_fallback_rows_exist():
         ]
     )
 
-    best = build_best_picks_df(analysis_df)
+    best = build_pregame_best_picks_df(analysis_df)
 
     assert len(best) == 1
     assert best.loc[0, "odds_source"] == "fallback_novig"

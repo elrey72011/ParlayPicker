@@ -39,6 +39,15 @@ def row_is_untrusted(row: Any) -> bool:
     """Return True when the row is not safe for production parlay use."""
     get = row.get if hasattr(row, "get") else lambda key, default=None: default
 
+    if "candidate_context" in row and str(get("candidate_context")) != "CURRENT_PREGAME":
+        return True
+    if "pregame_quote_valid" in row and not _truthy(get("pregame_quote_valid")):
+        return True
+    if "production_model_eligible" in row and not _truthy(get("production_model_eligible")):
+        return True
+    if "market_validation_status" in row and str(get("market_validation_status")) != "VALIDATED":
+        return True
+
     for key in (
         "is_fallback",
         "fallback_used",

@@ -2,6 +2,7 @@ import os
 import sys
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -31,7 +32,7 @@ def test_best_picks_returns_one_pick_per_game_key_even_without_positive_ev():
         }
     )
 
-    best = build_best_picks_df(analysis_df)
+    best = build_pregame_best_picks_df(analysis_df)
 
     assert len(best) == 2
     matchups = set(zip(best["home_team"].tolist(), best["away_team"].tolist()))
@@ -63,7 +64,7 @@ def test_best_picks_marks_no_edge_when_ev_missing():
         }
     )
 
-    best = build_best_picks_df(analysis_df)
+    best = build_pregame_best_picks_df(analysis_df)
 
     assert len(best) == 1
     # We now mark invalid picks in Pick_Status, not in Pick_Quality

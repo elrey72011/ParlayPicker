@@ -7,12 +7,18 @@ from activation_fixture import setup, NOW
 from core.streamlit_pipeline import build_best_picks_df
 
 
+@pytest.fixture(autouse=True)
+def pregame_clock(monkeypatch):
+    monkeypatch.setattr('app_core.candidate_chronology.now_utc', lambda: pd.Timestamp(NOW))
+
+
 def source(tmp_path):
     row, policy, config = setup(tmp_path / 'ledger.db')
     row.update(home_team='Indianapolis Colts', away_team='Baltimore Ravens', selection='Indianapolis Colts -2.5', best_pick='Indianapolis Colts -2.5', game_date='2026-09-14', game_start_utc=row['start'],
                calibrated_probability=.62, model_probability=.62, expected_value=.1,
                edge=.1, market_probability=.5, odds_source='DraftKings',
-               line_source='live', market_line_source='live', candidate_id='original')
+               line_source='live', market_line_source='live', live_spread_line=-2.5,
+               candidate_id='original')
     row['provider_quotes'] = json.dumps([
         dict(book='draftkings', market_type=kind, point=line, price=-110,
              recorded_at=row['quote_time'], provider_event_id='one', provider_namespace='odds_api')
@@ -105,6 +111,11 @@ def test_real_projection_still_fails_closed(tmp_path, monkeypatch, change):
             del row['team_ids']
     best, diag = build([row], monkeypatch)
     frame = diag['candidate_authority_df']
+    if 'quote_time' in change:
+        assert best.empty
+        assert frame.iloc[0]['quote_chronology_status'] == 'PROVIDER_TIME_INCONSISTENT'
+        assert not bool(frame.iloc[0]['best_available_selected'])
+        return
     if 'team_ids' not in row:
         assert 'team_ids' not in frame
     prepared = prepare_live(frame, database=tmp_path/'evidence.db', plan_dir=tmp_path/'plans', now=NOW)
@@ -123,7 +134,8 @@ def test_real_runner_up_capture_and_boundary(tmp_path, monkeypatch):
     from app_core.prediction_evidence import begin_run, capture_run
     row, policy, config = source(tmp_path)
     runner = dict(row, candidate_id='runner', market_type='spread_away', line=2.5,
-        spread_line=2.5, selection='Baltimore Ravens +2.5', best_pick='Baltimore Ravens +2.5',
+        spread_line=2.5, live_spread_line=2.5,
+        selection='Baltimore Ravens +2.5', best_pick='Baltimore Ravens +2.5',
         calibrated_probability=.60, model_probability=.60)
     row['identity_verified'] = False
     moneyline = dict(runner, candidate_id='moneyline', market_type='moneyline_away')
@@ -209,6 +221,11 @@ def test_real_builder_through_live_pipeline(tmp_path, monkeypatch, fallback_star
     state, _, _ = app._run_pipeline({'sports':['NFL'], 'use_ml':False, 'theover_spreads':None,
         'theover_totals':None, 'bankroll':1000., 'use_gemini':False})
     diag = state['diagnostics']
+    if fallback_start:
+        assert state['best_picks_df'].empty
+        assert diag['candidate_audit_df'].iloc[0]['quote_chronology_status'] == 'GAME_START_MISSING'
+        assert not diag.get('prediction_snapshot_saved', False)
+        return
     assert diag['prediction_snapshot_saved'], diag.get('prediction_snapshot_error')
     if not fallback_start:
         assert state['best_picks_df'].iloc[0]['production_bet_amount'] == 2.5

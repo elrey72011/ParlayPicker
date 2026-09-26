@@ -1,4 +1,5 @@
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import numpy as np
 from core.streamlit_pipeline import build_best_picks_df, BEST_PICK_COLUMNS
 
@@ -29,7 +30,7 @@ def test_two_stage_finalist_selection_logic():
     })
 
     diagnostics = {}
-    best = build_best_picks_df(analysis_df, diagnostics_out=diagnostics)
+    best = build_pregame_best_picks_df(analysis_df, diagnostics_out=diagnostics)
 
     # We expect 2 games total, meaning exactly 2 winners
     assert len(best) == 2, "One pick per game not preserved"

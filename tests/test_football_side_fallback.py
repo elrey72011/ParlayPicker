@@ -1,4 +1,5 @@
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import pytest
 from core.streamlit_pipeline import _expand_live_odds_to_bet_rows, build_best_picks_df
 from app_core.per_game_boards import per_game_board
@@ -41,7 +42,7 @@ def rank(row):
     expanded['edge']=-.01
     expanded['market_probability']=.5
     diagnostics={}
-    final=build_best_picks_df(expanded,diagnostics_out=diagnostics)
+    final=build_pregame_best_picks_df(expanded,diagnostics_out=diagnostics)
     return expanded,final,diagnostics['candidate_audit_df']
 
 

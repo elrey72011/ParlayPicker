@@ -1,5 +1,6 @@
 import pytest
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 from core.streamlit_pipeline import _apply_analysis_calculations, build_best_picks_df
 
 from core import streamlit_pipeline as sp
@@ -81,7 +82,7 @@ def test_best_picks_keeps_negative_ev():
         }
     ])
 
-    best = build_best_picks_df(df)
+    best = build_pregame_best_picks_df(df)
 
     # We no longer filter by EV > 0, so both rows should remain
     # best_picks_df no longer filters by negative EV

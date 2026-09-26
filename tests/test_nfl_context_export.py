@@ -1,4 +1,5 @@
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 from core.streamlit_pipeline import (
     BEST_PICK_COLUMNS,
@@ -40,7 +41,7 @@ def test_nfl_context_values_survive_candidate_audit_and_best_pick(monkeypatch):
     )
     diagnostics = {}
 
-    best = build_best_picks_df(pd.DataFrame([row]), diagnostics_out=diagnostics)
+    best = build_pregame_best_picks_df(pd.DataFrame([row]), diagnostics_out=diagnostics)
     audit = diagnostics["candidate_audit_df"]
 
     assert best.iloc[0]["feature_home_last_game_summary"].startswith("L 7-27")

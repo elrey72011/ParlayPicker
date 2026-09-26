@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import pytest
 
 from app.ui.sidebar_controls import FALLBACK_SPORTS, _resolve_sports_options
@@ -342,7 +343,7 @@ def test_espn_ncaaf_fallback_can_rank_but_cannot_be_wager_approved():
         ]
     )
 
-    best = sp.build_best_picks_df(analysis)
+    best = build_pregame_best_picks_df(analysis)
 
     assert len(best) == 1
     assert best.loc[0, "odds_source"] == "espn_draftkings_fallback"

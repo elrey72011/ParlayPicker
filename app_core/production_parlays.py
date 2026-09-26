@@ -13,6 +13,11 @@ def leg_checks(row, now):
     c=row.get('wager_contract') or {}
     odds=finite(row.get('odds')); p=finite(c.get('conservative_probability'))
     start=aware(row.get('start')); quote=aware(row.get('quote_time'))
+    positive=lambda value: str(value).strip().casefold() in {'true','1'}
+    chronology_ok=(row.get('candidate_context','CURRENT_PREGAME')=='CURRENT_PREGAME'
+                   and positive(row.get('pregame_quote_valid',True))
+                   and positive(row.get('production_model_eligible',True))
+                   and row.get('market_validation_status','VALIDATED')=='VALIDATED')
     from app_core.public_history import resolved_pick, event_key
     checks=[('spread_total_candidates',production_market(row.get('market')),'moneyline_excluded'),
         ('valid_prices',odds is not None and 100<=abs(odds)<=10000,'invalid_price'),
@@ -20,7 +25,7 @@ def leg_checks(row, now):
         ('positive_conservative_ev',(finite(c.get('conservative_ev')) or 0)>0 and (finite(c.get('conservative_edge')) or 0)>0 and p is not None and 0<p<1,'negative_conservative_ev'),
         ('fresh_quotes',quote is not None and 0<=(now-quote).total_seconds()<=1800,'stale_quote'),
         ('supported_books',supported_quote(row) and not row.get('quote_time_basis'),'unsupported_book'),
-        ('pregame',start is not None and start>now,'game_started'),
+        ('pregame',start is not None and start>now and quote is not None and quote<start and chronology_ok,'game_started'),
         ('identity_verified',c.get('identity_verified') is True and c.get('quote_verified') is True and event_key(row) is not None and c.get('selection')==row.get('pick') and c.get('market_type')==row.get('market') and c.get('odds')==odds and c.get('sportsbook')==row.get('quote_source'),'identity_failure'),
         ('exact_market_validated',c.get('market_family')==sport_market_family(row.get('sport'),row.get('market'))
          and c.get('deployment_state') in {'STANDARD_VALIDATED','PREMIUM_VALIDATED'}

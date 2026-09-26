@@ -1,6 +1,7 @@
 import re
 import unittest
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import app_core.weights_config as weights_config
 from core.streamlit_pipeline import build_best_picks_df
 
@@ -81,7 +82,7 @@ class TestCalibrationUpdate(unittest.TestCase):
             {"league": "NFL", "market_type": "total_under", "expected_value": 0.03, "edge": 0.03, "calibrated_probability": 0.55, "best_pick": "Under 45.5", "home_team": "Team E", "away_team": "Team F"},
         ])
 
-        best = build_best_picks_df(df)
+        best = build_pregame_best_picks_df(df)
         self.assertEqual(len(best), 3)
 
         # Team A vs Team B (Weak over) -> Below Threshold
@@ -119,7 +120,7 @@ class TestCalibrationUpdate(unittest.TestCase):
         {"league": "MLB", "market_type": "total_under", "expected_value": 0.03, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Under 8.5", "home_team": "Team M", "away_team": "Team N"},
         ])
 
-        best = build_best_picks_df(df)
+        best = build_pregame_best_picks_df(df)
 
         # Team A (NHL 0.57) -> Below Threshold
         nhl_weak = best[best["home_team"] == "Team A"].iloc[0]
@@ -158,7 +159,7 @@ class TestCalibrationUpdate(unittest.TestCase):
             {"league": "NBA", "market_type": "spread_home", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.51, "kalshi_probability": 0.45, "best_pick": "Team C -3.5", "home_team": "Team C", "away_team": "Team D"},
         ])
 
-        best = build_best_picks_df(df)
+        best = build_pregame_best_picks_df(df)
 
         # Team A (MLB Spread 0.51) -> Below Threshold
         mlb_spread = best[best["home_team"] == "Team A"].iloc[0]
@@ -183,7 +184,7 @@ class TestCalibrationUpdate(unittest.TestCase):
             {"league": "NFL", "market_type": "total_under", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.50, "best_pick": "Under 45.5", "home_team": "Team E", "away_team": "Team F"},
         ])
 
-        best = build_best_picks_df(df)
+        best = build_pregame_best_picks_df(df)
 
         # Team A (Total Over) -> Actionable
         over_pick = best[best["home_team"] == "Team A"].iloc[0]
@@ -207,13 +208,13 @@ class TestCalibrationUpdate(unittest.TestCase):
 
         # 1. Normal slate -> Actionable
         diags = {"is_fallback_heavy": False}
-        best_normal = build_best_picks_df(df.copy(), diagnostics_out=diags)
+        best_normal = build_pregame_best_picks_df(df.copy(), diagnostics_out=diags)
         self.assertEqual(best_normal.iloc[0]["Pick_Status"], "Actionable")
         self.assertEqual(diags.get("ev_dampener_impact_count"), 0)
 
         # 2. Fallback-heavy slate -> dampened EV (0.05 * 0.85 = 0.0425) drops below the bar -> Below Threshold
         diags_heavy = {"is_fallback_heavy": True}
-        best_heavy = build_best_picks_df(df.copy(), diagnostics_out=diags_heavy)
+        best_heavy = build_pregame_best_picks_df(df.copy(), diagnostics_out=diags_heavy)
         self.assertEqual(best_heavy.iloc[0]["Pick_Status"], "Below Threshold")
         self.assertEqual(diags_heavy.get("ev_dampener_impact_count"), 1)
         self.assertEqual(best_heavy.iloc[0]["expected_value"], 0.05) # Must not overwrite the raw column
@@ -233,7 +234,7 @@ class TestCalibrationUpdate(unittest.TestCase):
             {"league": "NBA", "market_type": "total_over", "expected_value": 0.06, "edge": 0.06, "calibrated_probability": 0.60, "ml_probability": 0.40, "kalshi_probability": 0.70, "best_pick": "Over 220.5", "home_team": "Team E", "away_team": "Team F"},
         ])
 
-        best = build_best_picks_df(df)
+        best = build_pregame_best_picks_df(df)
 
         # Team A (Strong Spread): in this isolated threshold test, same-side
         # Kalshi support and sufficient raw viability leave the row Actionable.
@@ -254,7 +255,7 @@ class TestCalibrationUpdate(unittest.TestCase):
         df = self._build_df([
             {"league": "NBA", "market_type": "spread", "home_team": "Team A", "away_team": "Team B"},
         ])
-        best = build_best_picks_df(df)
+        best = build_pregame_best_picks_df(df)
 
         required_cols = [
             "Pick_Status", "market_type", "candidate_source", "orientation_source",

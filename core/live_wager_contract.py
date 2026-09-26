@@ -149,6 +149,15 @@ def snapshot(row, now, unit_value=None):
     return result
 
 
+def _invalid_selection_facts(row):
+    """Honor optional chronology and model facts without inventing missing ones."""
+    for flag in ('pregame_quote_valid', 'final_pick_valid', 'production_model_eligible'):
+        if flag in row and str(row.get(flag)).strip().casefold() not in {'true', '1'}:
+            return True
+    return (('candidate_context' in row and str(row.get('candidate_context')) != 'CURRENT_PREGAME')
+            or ('market_validation_status' in row and str(row.get('market_validation_status')) != 'VALIDATED'))
+
+
 def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None, config=None, reviews=None):
     """Evaluate all candidates before selecting a funded winner; retain research separately."""
     now = now or datetime.now(timezone.utc)
@@ -246,6 +255,10 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
             decision.update(production_eligible=False,recommended_fraction=0.0,
                             strategic_action='PASS',reason_for_pass=reasons,
                             production_gate_reason='; '.join(reasons))
+        if _invalid_selection_facts(row):
+            decision.update(production_eligible=False,recommended_fraction=0.0,
+                            strategic_action='PASS',
+                            production_gate_reason='invalid_quote_chronology_or_model_authority')
         grouped[(row['sport'],str(row.get('game_id') or ''))].append(decision)
     selected=[]; templates=[]
     for _,template in best.iterrows():
@@ -259,6 +272,12 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
             row=dict(exact[0] if exact else adapt_candidate(template.to_dict()))
             reasons=sorted({reason for r in pool for reason in r['reason_for_pass']})
             row.update(recommended_fraction=0,production_eligible=False,strategic_action='PASS',production_gate_reason='; '.join(reasons) or configuration_reason or 'No valid candidate evidence')
+        # A valid market contract cannot override the final selected line or
+        # its quote chronology.  Veto before allocation so the saved contract
+        # and public card both carry a zero stake.
+        if _invalid_selection_facts(template):
+            row=dict(row, recommended_fraction=0,production_eligible=False,
+                     strategic_action='PASS',production_gate_reason='invalid_quote_chronology_or_model_authority')
         selected.append(row);templates.append(template.to_dict())
     # Missing committed exposure/caps cannot be interpreted as unused bankroll.
     caps=config.get('exposure',{})
@@ -318,6 +337,10 @@ def enforce_frame(frame):
                 and all(isinstance(c.get(key),str) and c[key].strip() for key in
                         ('model_id','model_version','calibration_id','calibration_version',
                          'validation_id','validation_artifact_id')))
+        # The live contract cannot turn a diagnostic quote or research model
+        # back into a funded card when those facts are supplied by selection.
+        if _invalid_selection_facts(row):
+            funded = False
         stake=c['production_bet_amount'] if funded else 0.0
         for key in ('production_bet_amount','Kelly_Bet_Size','Play_Stake','Suggested_Stake','recommended_bet'):
             out.at[idx,key]=stake

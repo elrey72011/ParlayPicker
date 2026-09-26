@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 from core.streamlit_pipeline import build_best_picks_df
 from core.empirical_tiers import empirical_selection_probabilities
@@ -50,7 +51,7 @@ def test_empirical_bucket_blend_cannot_overturn_a_clearly_stronger_forecast(monk
         _candidate("total_under", probability=0.68, ev=0.12),
     ])
     diagnostics = {}
-    best = build_best_picks_df(analysis, diagnostics_out=diagnostics)
+    best = build_pregame_best_picks_df(analysis, diagnostics_out=diagnostics)
 
     assert len(best) == 1
     # Bucket history is evidence, not a replacement model. Even an extreme
@@ -82,7 +83,7 @@ def test_stale_bucket_stats_cannot_label_after_being_rejected_for_selection(monk
     monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
 
     diagnostics = {}
-    build_best_picks_df(
+    build_pregame_best_picks_df(
         pd.DataFrame(
             [
                 _candidate("total_over", probability=0.58, ev=0.05),
@@ -148,7 +149,7 @@ def test_expired_recent_window_cannot_penalize_finalist_score(monkeypatch):
     monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
 
     diagnostics = {}
-    best = build_best_picks_df(
+    best = build_pregame_best_picks_df(
         pd.DataFrame(
             [
                 _candidate("total_over", probability=0.60, ev=0.05),

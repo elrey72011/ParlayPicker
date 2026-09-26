@@ -69,9 +69,15 @@ def test_challenger_real_private_projection_snapshot(trained,tmp_path,monkeypatc
     row.update({k:p[k] for k in ("provider_namespace","provider_event_id","home_team_id","away_team_id","game_start_utc")})
     row.update(sport="MLB",league="MLB",line=-1.5,spread_line=-1.5,market_line_used=-1.5,
         start=p["game_start_utc"],mlb_pregame_receipt=r,game_date=p["game_start_utc"][:10],model_validated=False,
-        calibration_validated=False,production_eligible=False,production_bet_amount=0,provider_quotes="[]")
+        calibration_validated=False,production_eligible=False,production_bet_amount=0,
+        live_spread_line=-1.5,quote_time=now.isoformat(),
+        selection='Indianapolis Colts -1.5',best_pick='Indianapolis Colts -1.5',
+        provider_quotes=json.dumps([dict(book='draftkings',market_type='spread_home',point=-1.5,
+            price=-110,recorded_at=now.isoformat(),provider_namespace=p['provider_namespace'],
+            provider_event_id=p['provider_event_id'])]))
     monkeypatch.setenv("PARLAYPICKER_MLB_CHALLENGER_MODEL",str(trained))
     monkeypatch.setattr(m,"utcnow",lambda:now)
+    monkeypatch.setattr('app_core.candidate_chronology.now_utc',lambda:pd.Timestamp(now))
     best,diag=build([row],monkeypatch)
     private=diag["candidate_authority_df"]
     result=json.loads(private.iloc[0].mlb_challenger_result)

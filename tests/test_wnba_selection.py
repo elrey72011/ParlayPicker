@@ -1,4 +1,5 @@
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import pytest
 
 from app.ui.sidebar_controls import FALLBACK_SPORTS, _resolve_sports_options
@@ -166,7 +167,7 @@ def test_best_pick_export_restores_connecticut_after_generic_uconn_alias(monkeyp
         ]
     )
     diagnostics = {}
-    best = sp.build_best_picks_df(analysis, diagnostics_out=diagnostics)
+    best = build_pregame_best_picks_df(analysis, diagnostics_out=diagnostics)
 
     assert len(best) == 1
     winner = best.iloc[0]

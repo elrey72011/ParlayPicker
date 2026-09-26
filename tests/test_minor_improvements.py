@@ -3,6 +3,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -245,7 +246,7 @@ def test_build_best_picks_df_selects_best_per_game_across_markets_and_has_schema
         }
     )
 
-    best = sp.build_best_picks_df(analysis_df)
+    best = build_pregame_best_picks_df(analysis_df)
 
     assert len(best) == 2
     game1 = best[(best["home_team"] == "A") & (best["away_team"] == "B")].iloc[0]

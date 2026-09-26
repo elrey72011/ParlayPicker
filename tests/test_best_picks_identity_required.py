@@ -2,6 +2,7 @@ import os
 import sys
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -30,7 +31,7 @@ def test_best_picks_prefers_rows_with_identity_when_available():
         }
     )
 
-    best = build_best_picks_df(analysis_df)
+    best = build_pregame_best_picks_df(analysis_df)
 
     assert len(best) == 1
     assert best.loc[0, "league"] == "NBA"

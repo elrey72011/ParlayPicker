@@ -295,6 +295,13 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
     # Resolve the final card to the audit via existing strict export-identity joins.
     approved = join_final_selections(audit, final)["_approved"]
     audit["wager_approved"] = approved
+    if "candidate_context" in audit.columns or "pregame_quote_valid" in audit.columns:
+        from app_core.candidate_chronology import assert_integrity
+        assert_integrity(final)
+        if "candidate_id" in audit and "candidate_id" in final and "final_pick_valid" in final:
+            final_valid_by_id = final.drop_duplicates("candidate_id").set_index("candidate_id")["final_pick_valid"]
+            audit["final_pick_valid"] = audit["candidate_id"].map(final_valid_by_id).fillna(False).astype(bool)
+        assert_integrity(audit)
     if "matchup_id" not in final:
         final["matchup_id"] = ""
     from core.team_mapper import normalize_team_name
