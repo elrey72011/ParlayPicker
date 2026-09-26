@@ -170,6 +170,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
     rows=[]
     for _, final in board.iterrows():
         league = text(final, 'league', 'League').upper()
+        coverage_reason = text(final, 'coverage_reason')
         allow_fallback = ((college_fallback and league == 'NCAAF') or (nfl_fallback and league == 'NFL')
                           or (research_fallback and league in {'MLB', 'WNBA'}))
         selected=final if family=='overall' and not novig_only else None
@@ -177,7 +178,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         if family!='overall' or novig_only:
             pool=[]
             key=identity(final)
-            for candidate in candidate_rows:
+            for candidate in ([] if coverage_reason else candidate_rows):
                 if family!='overall' and family_of(candidate)!=family: continue
                 run, other_run=text(final,'export_run_id'),text(candidate,'export_run_id')
                 if run and other_run!=run: continue
@@ -211,6 +212,10 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 reason='Final overall pick; no matching family audit available'
             else:
                 reason='No matching ranked '+family+' candidate available; rerun analysis to refresh the audit'
+        if coverage_reason:
+            # An audited schedule row cannot borrow an unranked or later quote.
+            selected = None
+            reason = coverage_reason
         if selected is not None and not production_market(text(selected, 'market_type')):
             selected = None
             reason = 'No qualifying spread or total; moneyline is context only'
@@ -265,7 +270,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
             if probability is None or not 0<=probability<=1: probability=None;basis='Unavailable'
         approval_reason = text(final,'Production_Gate_Reason','Status_Reason','qualification_reason') if final_ticket else ''
         if source is None:
-            approval_reason = 'No matching ranked market available; refresh analysis'
+            approval_reason = coverage_reason or 'No matching ranked market available; refresh analysis'
         elif trial:
             approval_reason = str(trial_contract.get('reason') or 'Owner-authorized controlled trial')
         elif fallback_selected and not approved:
@@ -301,7 +306,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'status':'APPROVED' if approved else 'TRIAL' if trial else 'PASS', 'win_probability':probability,'probability_basis':basis,
                      'edge':edge,'ev':ev,'selection_score':number(selected,'best_available_score') if selected is not None else None,
                      'reason':reason,'approval_reason':approval_reason,
-                     **({'qualification_reason':approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('Sportsbook fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else (supported_unavailable_reason(final,candidates,family) if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
+                     **({'qualification_reason':coverage_reason or approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('Sportsbook fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else (coverage_reason or (supported_unavailable_reason(final,candidates,family) if allow_fallback else novig_unavailable_reason(final,candidates,family)))} if novig_only else {}),
                      **({'quote_time_basis':'espn_observed'} if observed_selected else {}),
                      **({k:final[k] for k in ('maturity','gemini_review_status','gemini_reviewed_at','gemini_review_model','gemini_review_input_hash','gemini_verified_context','gemini_supporting_evidence','gemini_missing_information','conservative_ev','espn_event_id','mlb_game_pk','game_number') if k in final} if final_ticket else {}),
                      **({'wager_contract':final['wager_contract']} if final_ticket and isinstance(final.get('wager_contract'),dict) else {}),

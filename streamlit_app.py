@@ -1921,6 +1921,7 @@ def main() -> None:
 
 
     publication_games = pd.DataFrame()
+    coverage_games = pd.DataFrame()
     publication_props = st.session_state.get("strikeout_prop_card", pd.DataFrame()).copy()
     publication_dfs = {}
     today_tab, details_tab, tab_performance, workspace_tab = _render_main_tabs()
@@ -2739,6 +2740,19 @@ def main() -> None:
         if display_df.empty:
             st.warning("⚠️ No games found.")
             st.dataframe(display_df, width="stretch")
+            from app_core.game_coverage import publication_games as with_game_coverage
+            try:
+                publication_games, coverage_games = with_game_coverage(
+                    pd.DataFrame(), _publication_candidates(diagnostics)
+                )
+                if not coverage_games.empty:
+                    st.caption(f"{len(coverage_games)} audited schedule game(s) have no verified current pick.")
+                    st.dataframe(
+                        coverage_games[["league", "Away", "Home", "Commence (Local)", "coverage_reason"]],
+                        hide_index=True, width="stretch",
+                    )
+            except ValueError as exc:
+                st.error(f"Audited game coverage could not be prepared: {exc}")
         else:
             rename_map = {
                 "Triple_Filter_Rank": "Triple Filter Rank",
@@ -2955,7 +2969,14 @@ def main() -> None:
                 _scope_cols + [column for column in best_picks_export.columns if column not in _scope_cols]
             ]
             production_game_export = production_wagers(best_picks_export)
-            publication_games = best_picks_export.copy()
+            from app_core.game_coverage import publication_games as with_game_coverage
+            try:
+                publication_games, coverage_games = with_game_coverage(
+                    best_picks_export, _publication_candidates(diagnostics)
+                )
+            except ValueError as exc:
+                publication_games = best_picks_export.copy()
+                st.error(f"Audited game coverage could not be prepared: {exc}")
             render_daily_dashboard(today_content, details_content, best_picks_export, diagnostics.get("candidate_audit_df"))
             precision_game_export = precision_shortlist(best_picks_export)
 
@@ -3046,8 +3067,19 @@ def main() -> None:
                     mime="text/csv",
                     key="export_best_picks_candidate_audit",
                 )
+                st.caption(
+                    f"Game coverage: {len(best_picks_export)} ranked pick(s) · "
+                    f"{len(coverage_games)} schedule-only game(s). Schedule-only rows "
+                    "have no verified current selection, odds, or stake."
+                )
+                if not coverage_games.empty:
+                    with st.expander(f"Games without a verified current pick — {len(coverage_games)}", expanded=False):
+                        st.dataframe(
+                            coverage_games[["league", "Away", "Home", "Commence (Local)", "coverage_reason"]],
+                            hide_index=True, width="stretch",
+                        )
 
-            # ── All-games lean view: the model's read on EVERY game, tiered honestly ──
+            # ── Ranked-game lean view; unranked schedule games are shown above. ──
             # Re-presents the same card (no new staking) so a bettor who wants the whole
             # board sees the model's side + confidence + a straight risk label per game.
             try:
@@ -3055,7 +3087,7 @@ def main() -> None:
                 lean_card = build_all_games_lean_card(best_picks_export)
                 if not lean_card.empty:
                     counts = lean_card["Tier"].value_counts().to_dict()
-                    st.subheader("🎲 All Games — Play Card")
+                    st.subheader("🎲 Ranked Games — Play Card")
                     st.caption(
                         f"BET {counts.get('BET', 0)} · LEAN {counts.get('LEAN', 0)} · "
                         f"AVOID {counts.get('AVOID', 0)}.  Ranked by Emp_Edge — the bucket-REALIZED "
@@ -3065,7 +3097,8 @@ def main() -> None:
                         f"calibrated win beats break-even (your call). AVOID = negative-EV, fading "
                         f"Kalshi, or calibrated win below break-even. Calib_Win% = the model's "
                         f"probability after the bucket-conditional calibration correction. Every game "
-                        f"shows its top-ranked best available pick; only absolute-gate BET rows receive "
+                        f"with a verified current candidate shows its top-ranked best available pick; "
+                        f"only absolute-gate BET rows receive "
                         f"a stake."
                     )
                     # Keep unit control for qualified BET rows only. LEAN/AVOID
