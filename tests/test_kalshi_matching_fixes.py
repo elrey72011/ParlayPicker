@@ -2,6 +2,7 @@ import os
 import sys
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -78,7 +79,7 @@ def test_best_picks_prefers_highest_win_probability_for_kalshi_spread_total_pair
         }
     )
 
-    best = build_best_picks_df(analysis_df)
+    best = build_pregame_best_picks_df(analysis_df)
 
     assert len(best) == 1
     # Win-probability-first: the 0.55 total outranks the 0.54 spread despite the

@@ -1,7 +1,13 @@
 import pandas as pd
 import numpy as np
+import pytest
 
 from core.streamlit_pipeline import build_best_picks_df
+
+
+@pytest.fixture(autouse=True)
+def _fixed_pregame_clock(monkeypatch):
+    monkeypatch.setattr("app_core.candidate_chronology.now_utc", lambda: pd.Timestamp("2026-08-01T18:00:00Z"))
 
 
 def _aug_10_bucket_stats() -> dict:
@@ -63,6 +69,8 @@ def _row(
         "home_team": home,
         "away_team": away,
         "game_date": "2026-08-01",
+        "game_start_utc": "2026-08-01T23:00:00Z",
+        "odds_recorded_at": "2026-08-01T19:00:00Z",
         "matchup_id": f"2026-08-01|{home}|{away}",
         "market_type": market_type,
         "expected_value": ev,

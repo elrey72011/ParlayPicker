@@ -6,6 +6,7 @@ import os
 import sys
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -37,7 +38,7 @@ def _over_row(ml_prob):
 
 def test_B_over_below_ml_floor_is_no_play():
     # ML 0.40 < 0.45 -> the over our model leans against is blocked.
-    best = build_best_picks_df(pd.DataFrame([_over_row(0.40)]))
+    best = build_pregame_best_picks_df(pd.DataFrame([_over_row(0.40)]))
     row = best.iloc[0]
     assert row["Pick_Status"] == "No Play"
     assert "ml" in str(row["status_blocker_stage"]).lower()
@@ -45,5 +46,5 @@ def test_B_over_below_ml_floor_is_no_play():
 
 def test_B_over_above_ml_floor_not_blocked_by_contradiction():
     # ML 0.50 >= 0.45 -> not blocked by the contradiction guard (may pass/other status).
-    best = build_best_picks_df(pd.DataFrame([_over_row(0.50)]))
+    best = build_pregame_best_picks_df(pd.DataFrame([_over_row(0.50)]))
     assert str(best.iloc[0]["status_blocker_stage"]) != "ml_contradiction_guardrail"

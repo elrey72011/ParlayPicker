@@ -1,5 +1,6 @@
 import pytest
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import numpy as np
 
 from app_core.weights_config import (
@@ -68,7 +69,7 @@ def test_total_over_strict_guardrails(monkeypatch):
         "live_spread_line": [np.nan, np.nan, -3.5, np.nan],
     })
 
-    best_picks_df = build_best_picks_df(analysis_df)
+    best_picks_df = build_pregame_best_picks_df(analysis_df)
 
     # We find the rows based on best_pick and home_team because matchup_id isn't guaranteed to be exported in BEST_PICK_COLUMNS
     row_a = best_picks_df[(best_picks_df["home_team"] == "Team A") & (best_picks_df["best_pick"] == "Over 50.5")].iloc[0]

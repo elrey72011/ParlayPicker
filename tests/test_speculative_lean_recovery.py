@@ -8,6 +8,7 @@ import os
 import sys
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -22,7 +23,7 @@ def _under(kalshi, win=0.512, ev=0.034, edge=0.038, line=7.5, idx=970):
     df["live_total_line"] = [line]
     df["total_line"] = [line]
     df["best_pick"] = [f"Under {line}"]
-    return build_best_picks_df(df).iloc[0]
+    return build_pregame_best_picks_df(df).iloc[0]
 
 
 def test_thin_raw_positive_but_calibrated_negative_under_not_recovered():
@@ -57,6 +58,6 @@ def test_over_not_recovered_even_if_thin_positive():
     df["live_total_line"] = [9.5]
     df["total_line"] = [9.5]
     df["best_pick"] = ["Over 9.5"]
-    row = build_best_picks_df(df).iloc[0]
+    row = build_pregame_best_picks_df(df).iloc[0]
     assert row["Pick_Status"] != "Actionable"
     assert float(row["Kelly_Bet_Size"]) == 0.0

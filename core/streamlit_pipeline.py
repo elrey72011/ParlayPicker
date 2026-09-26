@@ -207,6 +207,11 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "best_available_ranking_verified",
     "final_pick_valid",
     "final_pick_valid_reason",
+    "quote_chronology_status", "selected_quote_recorded_at",
+    "minutes_to_start_at_quote", "pregame_quote_valid", "candidate_context",
+    "independent_model_available", "probability_authority",
+    "production_model_eligible", "model_scope_status", "model_validation_status",
+    "market_validation_status",
     "best_available_selection_reason",
     "qualified_pick",
     "qualification_probability",
@@ -553,6 +558,11 @@ BEST_PICK_COLUMNS = [
     "best_available_runner_up_score", "best_available_score_gap",
     "best_available_candidate_count", "best_available_selection_verified",
     "best_available_ranking_verified", "final_pick_valid", "final_pick_valid_reason",
+    "quote_chronology_status", "selected_quote_recorded_at",
+    "minutes_to_start_at_quote", "pregame_quote_valid", "candidate_context",
+    "independent_model_available", "probability_authority",
+    "production_model_eligible", "model_scope_status", "model_validation_status",
+    "market_validation_status",
     "best_available_selection_reason", "qualified_pick", "qualification_probability",
     "qualification_reason", "display_pick", "commercial_tier", "sellable_as_premium",
     "sellable_as_value_card", "controlled_card_recovery",
@@ -4539,6 +4549,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             pool["model_direction_guard_applied"].sum()
         )
 
+    # Freeze one evaluation instant for the slate.  Retain every rejected row
+    # for audit, but only a bound quote observed before first pitch for a game
+    # that has not started may compete for the current Best Pick.
+    from app_core import candidate_chronology
+    pool = candidate_chronology.annotate(pool, as_of=candidate_chronology.now_utc())
+
     # 4. Deterministic ranking contract. Every valid pregame candidate receives an
     # auditable rank. The two-stage family comparison is mathematically equivalent
     # to the global argmax because both stages use this exact same sort contract.
@@ -4567,17 +4583,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         na_position="last",
         kind="mergesort",
     )
-    pool["best_available_rank"] = (
-        pool.groupby("matchup_id", sort=False).cumcount().add(1).astype("Int64")
+    current_pregame = (
+        pool["pregame_quote_valid"] & pool["candidate_context"].eq("CURRENT_PREGAME")
     )
-    pool["best_available_family_rank"] = (
-        pool.groupby(["matchup_id", "_market_family"], sort=False)
-        .cumcount()
-        .add(1)
-        .astype("Int64")
+    pool["best_available_rank"] = pd.Series(pd.NA, index=pool.index, dtype="Int64")
+    pool["best_available_family_rank"] = pd.Series(pd.NA, index=pool.index, dtype="Int64")
+    pool.loc[current_pregame, "best_available_rank"] = (
+        pool.loc[current_pregame].groupby("matchup_id", sort=False).cumcount().add(1).astype("Int64")
+    )
+    pool.loc[current_pregame, "best_available_family_rank"] = (
+        pool.loc[current_pregame].groupby(["matchup_id", "_market_family"], sort=False)
+        .cumcount().add(1).astype("Int64")
     )
     pool["best_available_score"] = pool["best_available_probability"]
-    pool["best_available_finalist"] = pool["best_available_family_rank"].eq(1)
+    pool["best_available_finalist"] = pool["best_available_family_rank"].eq(1).fillna(False).astype(bool)
     pool["best_available_final_rank"] = pd.Series(pd.NA, index=pool.index, dtype="Int64")
     pool["best_available_selected"] = False
 
@@ -4629,7 +4648,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         )
 
         winner_row = group_sorted.iloc[0]
-        matchup_candidates = pool[pool["matchup_id"].eq(matchup)].sort_values(
+        matchup_candidates = pool[pool["matchup_id"].eq(matchup) & pool["best_available_rank"].notna()].sort_values(
             by=best_available_sort_columns,
             ascending=best_available_sort_ascending,
             na_position="last",
@@ -4730,6 +4749,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_rejection_reason",
     ] = "family_finalist_lost_cross_family_comparison"
     pool.loc[pool["best_available_selected"], "best_available_rejection_reason"] = "selected_best_available"
+    pool.loc[~current_pregame, "best_available_rejection_reason"] = pool.loc[
+        ~current_pregame, "quote_chronology_status"
+    ].str.lower()
+    pool.loc[pool["candidate_context"].eq("POST_START_DIAGNOSTIC"),
+             "best_available_rejection_reason"] = "post_start_quote"
 
     candidate_audit_columns = [
         "pipeline_build", "league", "home_team", "away_team", "game_date", "game_time_est",
@@ -4771,6 +4795,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_runner_up_score", "best_available_score_gap",
         "best_available_candidate_count", "best_available_selection_verified",
         "best_available_ranking_verified", "best_available_rejection_reason",
+        "quote_chronology_status", "selected_quote_recorded_at",
+        "minutes_to_start_at_quote", "pregame_quote_valid", "candidate_context",
+        "independent_model_available", "probability_authority",
+        "production_model_eligible", "model_scope_status", "model_validation_status",
+        "market_validation_status",
     ]
     candidate_audit_columns.extend(_NFL_CONTEXT_COLUMNS)
     from app_core.candidate_evidence_schema import authority_projection
@@ -4804,6 +4833,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     )
     candidate_audit_df["final_pick_valid"] = False
     candidate_audit_df["final_pick_valid_reason"] = "not_selected"
+    candidate_audit_df.loc[
+        candidate_audit_df["candidate_context"].eq("POST_START_DIAGNOSTIC"),
+        "final_pick_valid_reason",
+    ] = "post_start_quote"
+
+    if not final_winner_indices:
+        from app_core.candidate_chronology import assert_integrity
+        assert_integrity(candidate_audit_df)
+        if diagnostics_out is not None:
+            diagnostics_out["candidate_audit_df"] = candidate_audit_df
+            diagnostics_out["candidate_authority_df"] = candidate_authority_df
+            diagnostics_out["best_available_candidate_audit_rows"] = len(candidate_audit_df)
+            diagnostics_out["best_available_selection_verified"] = False
+        return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
     # Select the verified rank-1 winner for each game.
     best = pool.loc[final_winner_indices].copy()
@@ -7018,6 +7061,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         & _final_line_ok
         & _final_event_ok
         & ~_final_unresolved
+        & best["pregame_quote_valid"]
+        & best["candidate_context"].eq("CURRENT_PREGAME")
     )
     best["final_pick_valid_reason"] = "validated_live_line"
     best.loc[~best["best_available_ranking_verified"], "final_pick_valid_reason"] = (
@@ -7033,6 +7078,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "line_event_identity_reason", pd.Series("line_event_identity_failed", index=best.index)
     ).fillna("line_event_identity_failed").replace("", "line_event_identity_failed")
     best.loc[_final_unresolved, "final_pick_valid_reason"] = "unresolved_pick_text"
+    best.loc[~best["pregame_quote_valid"], "final_pick_valid_reason"] = "invalid_quote_chronology"
+    best.loc[best["candidate_context"].eq("POST_START_DIAGNOSTIC"), "final_pick_valid_reason"] = "post_start_quote"
+
+    # A current line and positive EV do not validate a market-specific model.
+    # Keep research probabilities visible while removing every funding path.
+    research_only = (~best["production_model_eligible"] |
+                     ~best["market_validation_status"].eq("VALIDATED") |
+                     ~best["final_pick_valid"])
+    for column in ("production_eligible", "Bettable", "wager_approved"):
+        if column in best:
+            best.loc[research_only, column] = False
+    for column in ("production_bet_amount", "Kelly_Bet_Size", "Play_Stake", "recommended_bet", "Suggested_Stake"):
+        if column in best:
+            best.loc[research_only, column] = 0.0
 
     # An unavailable forecast remains a coverage row, never a funded selection.
     missing_forecast = _numeric_series(best, "best_available_probability").isna()
@@ -7054,6 +7113,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         candidate_audit_df,
         final_best_df,
     )
+    from app_core.candidate_chronology import assert_integrity
+    assert_integrity(candidate_audit_df)
+    assert_integrity(final_best_df)
 
     if diagnostics_out is not None:
         diagnostics_out["postvalidation_candidate_audit_sync_count"] = int(

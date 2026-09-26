@@ -9,6 +9,7 @@ import os
 import sys
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -33,7 +34,7 @@ def test_no_upload_row_not_flagged_upload_mismatch():
     row = _hi_ev_row()
     row["upload_market_match"] = False
     row["line_delta"] = pd.NA
-    out = build_best_picks_df(pd.DataFrame([row]))
+    out = build_pregame_best_picks_df(pd.DataFrame([row]))
     r = out.iloc[0]
     assert "upload_line_market_mismatch" not in str(r["suspicious_data_reasons"])
     assert r["status_blocker_stage"] != "suspicious_data_guardrail"
@@ -43,7 +44,7 @@ def test_matched_upload_with_consistent_line_not_flagged():
     row = _hi_ev_row()
     row["upload_market_match"] = True
     row["line_delta"] = 0.0
-    out = build_best_picks_df(pd.DataFrame([row]))
+    out = build_pregame_best_picks_df(pd.DataFrame([row]))
     assert "upload_line_market_mismatch" not in str(out.iloc[0]["suspicious_data_reasons"])
 
 
@@ -51,5 +52,5 @@ def test_matched_upload_with_divergent_line_is_flagged():
     row = _hi_ev_row()
     row["upload_market_match"] = True
     row["line_delta"] = 1.5  # uploaded line disagrees with the live line by 1.5
-    out = build_best_picks_df(pd.DataFrame([row]))
+    out = build_pregame_best_picks_df(pd.DataFrame([row]))
     assert "upload_line_market_mismatch" in str(out.iloc[0]["suspicious_data_reasons"])

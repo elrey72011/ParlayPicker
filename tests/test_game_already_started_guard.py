@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -55,7 +56,7 @@ def test_started_game_is_benched_to_no_play():
             ),
         ]
     )
-    best = sp.build_best_picks_df(df)
+    best = build_pregame_best_picks_df(df)
     started = best[best["home_team"] == "Philadelphia"].iloc[0]
     upcoming = best[best["home_team"] == "Atlanta"].iloc[0]
 
@@ -69,7 +70,7 @@ def test_started_game_is_benched_to_no_play():
 
 def test_missing_flag_column_changes_nothing():
     df = pd.DataFrame([_analysis_row()])
-    best = sp.build_best_picks_df(df)
+    best = build_pregame_best_picks_df(df)
     assert "already started" not in str(best.iloc[0]["Status_Reason"])
 
 

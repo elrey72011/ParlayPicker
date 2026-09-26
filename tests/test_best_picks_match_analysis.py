@@ -1,4 +1,5 @@
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import pytest
 
 from core.streamlit_pipeline import build_best_picks_df, BEST_PICK_COLUMNS
@@ -34,7 +35,7 @@ def test_best_picks_df_matches_analysis_df_values():
 
     analysis_df = pd.DataFrame(data)
 
-    best_picks_df = build_best_picks_df(analysis_df)
+    best_picks_df = build_pregame_best_picks_df(analysis_df)
 
     # Verify we got exactly one best pick (the positive EV/edge one)
     assert len(best_picks_df) == 1

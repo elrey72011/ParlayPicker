@@ -2,6 +2,7 @@
 is bad feed data (17 Jun: Dodgers Over 9.5 came in at +1983 / 4.8% implied, +850% EV).
 Block it as No Play before the garbage EV reaches the card."""
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 from core.streamlit_pipeline import build_best_picks_df
 
@@ -35,14 +36,14 @@ def _row(**over):
 
 
 def test_corrupt_odds_total_is_no_play():
-    best = build_best_picks_df(pd.DataFrame([_row()]))
+    best = build_pregame_best_picks_df(pd.DataFrame([_row()]))
     row = best.iloc[0]
     assert row["Pick_Status"] == "No Play"
     assert "corrupt odds" in str(row["Status_Reason"]).lower()
 
 
 def test_sane_odds_total_is_not_corrupt_flagged():
-    best = build_best_picks_df(pd.DataFrame([_row(
+    best = build_pregame_best_picks_df(pd.DataFrame([_row(
         odds_american=-110, market_probability=0.476,
         expected_value=0.02, edge=0.02, calibrated_probability=0.50,
     )]))

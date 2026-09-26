@@ -420,9 +420,15 @@ def generate_probability_ranked_parlays(
         "best_available_ranking_verified",
         "line_consistency_flag",
         "line_event_identity_match_flag",
+        "pregame_quote_valid",
+        "production_model_eligible",
     ):
         if column in candidates.columns:
             valid &= _strict_bool_mask(candidates, column, default=False)
+    if "candidate_context" in candidates.columns:
+        valid &= candidates["candidate_context"].astype("string").eq("CURRENT_PREGAME").fillna(False)
+    if "market_validation_status" in candidates.columns:
+        valid &= candidates["market_validation_status"].astype("string").eq("VALIDATED").fillna(False)
     if "game_already_started_flag" in candidates.columns:
         valid &= ~_strict_bool_mask(
             candidates, "game_already_started_flag", default=False
@@ -682,6 +688,14 @@ def generate_smart_parlays(
     candidates = df.copy()
     if "market_type" in candidates:
         candidates = candidates.loc[~candidates["market_type"].map(moneyline_context_only)].copy()
+
+    if "candidate_context" in candidates:
+        candidates = candidates[candidates["candidate_context"].astype("string").eq("CURRENT_PREGAME").fillna(False)].copy()
+    for evidence in ("pregame_quote_valid", "production_model_eligible"):
+        if evidence in candidates:
+            candidates = candidates[_strict_bool_mask(candidates, evidence, default=False)].copy()
+    if "market_validation_status" in candidates:
+        candidates = candidates[candidates["market_validation_status"].astype("string").eq("VALIDATED").fillna(False)].copy()
 
     strict_mode = bool(
         STRICT_PRODUCTION_PARLAYS

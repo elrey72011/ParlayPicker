@@ -1,4 +1,5 @@
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 import core.streamlit_pipeline as sp
 
@@ -45,7 +46,7 @@ def test_probability_leads_and_ev_only_breaks_ties(monkeypatch):
         _candidate("G4", "G", "H", "total_over", 0.75, 0.02),
     ])
 
-    best = sp.build_best_picks_df(frame)
+    best = build_pregame_best_picks_df(frame)
 
     g1 = best[(best["home_team"] == "A") & (best["away_team"] == "B")].iloc[0]
     g2 = best[(best["home_team"] == "C") & (best["away_team"] == "D")].iloc[0]
@@ -74,8 +75,8 @@ def test_unrelated_slate_rows_cannot_flip_a_games_probability_winner(monkeypatch
         ignore_index=True,
     )
 
-    target_pick = sp.build_best_picks_df(target).iloc[0]["market_type"]
-    expanded_pick = sp.build_best_picks_df(expanded)
+    target_pick = build_pregame_best_picks_df(target).iloc[0]["market_type"]
+    expanded_pick = build_pregame_best_picks_df(expanded)
     expanded_pick = expanded_pick[expanded_pick["home_team"] == "A"].iloc[0]["market_type"]
 
     assert target_pick == "spread_home"

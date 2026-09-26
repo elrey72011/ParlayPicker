@@ -1,4 +1,5 @@
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 from core.streamlit_pipeline import build_best_picks_df, _total_over_concentration_downgrades
 
 
@@ -31,7 +32,7 @@ def _row(i, league="MLB", market_type="total_over", prob=0.68, ev=0.12, edge=0.1
 def test_total_over_concentration_guard_downgrades_excess_and_keeps_top_ranked():
     df = pd.DataFrame([_row(i, league="NBA", prob=0.72 - i * 0.01, ev=0.14 - i * 0.01, edge=0.11 - i * 0.01) for i in range(7)])
     diags = {}
-    out = build_best_picks_df(df, diagnostics_out=diags)
+    out = build_pregame_best_picks_df(df, diagnostics_out=diags)
     actionable_overs = out[(out["Pick_Status"] == "Actionable") & (out["market_type"] == "total_over")]
     assert len(actionable_overs) <= 4
     assert diags.get("actionable_total_over_count", 0) <= 4
@@ -39,7 +40,7 @@ def test_total_over_concentration_guard_downgrades_excess_and_keeps_top_ranked()
 
 def test_probability_shrinkage_and_production_metrics_recomputed():
     df = pd.DataFrame([_row(1, league="NBA", market_type="total_over", prob=0.70, ev=0.12, edge=0.10)])
-    out = build_best_picks_df(df)
+    out = build_pregame_best_picks_df(df)
     r = out.iloc[0]
     # The effective probability may already contain the same shrinkage. The
     # production layer must never inflate it, but equality is valid/idempotent.
@@ -49,7 +50,7 @@ def test_probability_shrinkage_and_production_metrics_recomputed():
 
 def test_mlb_total_over_production_gate_downgrades_failures():
     df = pd.DataFrame([_row(1, league="MLB", market_type="total_over", prob=0.63, ev=0.09, edge=0.07)])
-    out = build_best_picks_df(df)
+    out = build_pregame_best_picks_df(df)
     r = out.iloc[0]
     assert r["status_blocker_stage"] in {"production_market_guard", "production_concentration_guard", "none", "value_guardrail", "line_provenance"}
     if r["status_blocker_stage"] == "production_market_guard":
@@ -61,7 +62,7 @@ def test_mlb_total_over_production_gate_downgrades_failures():
 def test_degraded_feature_kelly_reduction_applies_and_non_actionable_zero_kelly():
     df = pd.DataFrame([_row(i, degraded=True, league="NBA", market_type="spread_home", prob=0.65, ev=0.10, edge=0.08) for i in range(4)])
     diags = {}
-    out = build_best_picks_df(df, diagnostics_out=diags)
+    out = build_pregame_best_picks_df(df, diagnostics_out=diags)
     assert diags["degraded_feature_kelly_guard_active"] is True
     non_actionable = out[out["Pick_Status"] != "Actionable"]
     if not non_actionable.empty:
@@ -104,7 +105,7 @@ def test_under_concentration_uses_flag_col_and_binds_mlb_subcap():
 
 def test_no_regression_kelly_column_order_and_line_provenance_present():
     df = pd.DataFrame([_row(1, league="NBA", market_type="spread_home", prob=0.66, ev=0.11, edge=0.09)])
-    out = build_best_picks_df(df)
+    out = build_pregame_best_picks_df(df)
     cols = list(out.columns)
     idx = cols.index("best_pick")
     assert cols[idx + 1] == "Kelly_Bet_Size"

@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -61,7 +62,7 @@ def test_stake_floor_unstakes_high_ev_longshot():
             ml_probability=0.47, odds_american=175,
         )
     ])
-    best = sp.build_best_picks_df(df)
+    best = build_pregame_best_picks_df(df)
     row = best.iloc[0]
     assert str(row["Pick_Status"]) != "Actionable"
     assert float(pd.to_numeric(row["Kelly_Bet_Size"], errors="coerce") or 0) == 0.0
@@ -71,7 +72,7 @@ def test_stake_floor_leaves_qualified_favorites_alone():
     # A pick above the floor must not be touched by the floor stage (whether it
     # ends Actionable depends on the other gates, but never via the floor).
     df = pd.DataFrame([_row(effective_win_probability=0.62, calibrated_probability=0.62)])
-    best = sp.build_best_picks_df(df)
+    best = build_pregame_best_picks_df(df)
     assert str(best.iloc[0].get("status_blocker_stage")) != "min_win_probability_floor"
 
 
@@ -86,7 +87,7 @@ def test_ranking_orders_by_win_probability_within_tier():
              expected_value=0.06, edge=0.04,
              calibrated_probability=0.64, effective_win_probability=0.64),
     ])
-    best = sp.build_best_picks_df(df)
+    best = build_pregame_best_picks_df(df)
     # Compare positions among rows sharing the same Pick_Status bucket.
     statuses = best["Pick_Status"].astype(str)
     same_status = best[statuses.eq(statuses.iloc[0])] if len(set(statuses)) == 1 else best
@@ -106,5 +107,5 @@ def test_recovery_floor_blocks_sub_floor_candidates():
             effective_win_probability=MIN_STAKE_WIN_PROBABILITY - 0.03,
         )
     ])
-    best = sp.build_best_picks_df(df)
+    best = build_pregame_best_picks_df(df)
     assert not bool(best["production_eligible"].fillna(False).astype(bool).any())

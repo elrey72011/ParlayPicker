@@ -1,4 +1,5 @@
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import pytest
 from core.streamlit_pipeline import (
     _expand_live_odds_to_bet_rows, _trusted_live_line_source_mask, build_best_picks_df,
@@ -52,7 +53,7 @@ def test_ncaaf_consensus_totals_survive_ranking_and_public_board():
     expanded['edge'] = -.01
     expanded['market_probability'] = .5
     diagnostics = {}
-    final = build_best_picks_df(expanded, diagnostics_out=diagnostics)
+    final = build_pregame_best_picks_df(expanded, diagnostics_out=diagnostics)
     audit = diagnostics['candidate_audit_df']
     ranked_totals = audit[audit.market_type.str.startswith('total')]
     assert len(ranked_totals) == 2

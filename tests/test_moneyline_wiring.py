@@ -3,6 +3,7 @@ import os
 import sys
 
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -82,7 +83,7 @@ def test_best_picks_preserves_live_line_less_moneyline_identity(
         "kalshi_probability": None,
     }])
 
-    out = build_best_picks_df(df)
+    out = build_pregame_best_picks_df(df)
     assert out.empty  # Flags cannot promote context into Best Picks.
 
 def test_eligible_moneyline_is_parlay_only_never_single():
@@ -130,14 +131,14 @@ def test_build_best_picks_forces_moneyline_parlay_only(monkeypatch):
         "is_live_data": True, "used_stale_features": False, "odds_source": "odds_api",
         "kalshi_probability": None,
     }])
-    out = build_best_picks_df(df)
+    out = build_pregame_best_picks_df(df)
     assert out.empty
 
 
 def test_flag_off_leaves_moneyline_unenforced(monkeypatch):
     # Flag off: the enforcement is skipped (no parlay_only column added by it).
     monkeypatch.setattr(wc, "ENABLE_MONEYLINE_PARLAY_LEGS", False)
-    out = build_best_picks_df(pd.DataFrame([{
+    out = build_pregame_best_picks_df(pd.DataFrame([{
         "league": "MLB", "home_team": "HomeB", "away_team": "AwayB",
         "game_date": "2026-04-24", "matchup_id": "2026-04-24|HomeB|AwayB",
         "market_type": "total_over", "best_pick": "Over 8.5",
@@ -179,7 +180,7 @@ def test_best_picks_excludes_moneyline_when_both_gates_are_disabled(monkeypatch)
     ])
     diagnostics = {}
 
-    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    out = build_pregame_best_picks_df(df, diagnostics_out=diagnostics)
 
     assert len(out) == 1
     assert out.iloc[0]["market_type"] == "total_over"

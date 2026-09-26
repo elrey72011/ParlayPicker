@@ -1,5 +1,6 @@
 """The owner-selected objective is candidate win chance, not composite value."""
 import pandas as pd
+from pregame_selection_fixture import build_pregame_best_picks_df
 import pytest
 from core.streamlit_pipeline import build_best_picks_df, classify_best_available_picks
 from app_core.per_game_boards import per_game_board
@@ -22,7 +23,7 @@ def test_highest_forecast_wins_across_families_despite_value_and_direction(leagu
             if league in {'NFL','NCAAF'}:row.update(total_line=44.5,live_total_line=44.5)
             if row['market_type']=='total_over': row['odds_american']=-400
             row['kalshi_probability']=.25 if row['market_type']=='total_over' else .75
-    d={};best=build_best_picks_df(pd.DataFrame(rows),diagnostics_out=d)
+    d={};best=build_pregame_best_picks_df(pd.DataFrame(rows),diagnostics_out=d)
     assert best.iloc[0].market_type=='total_over'
     assert best.iloc[0].best_available_probability==pytest.approx(.68)
     audit=d['candidate_audit_df'];winner=audit[audit.best_available_selected].iloc[0]
@@ -38,13 +39,13 @@ def test_highest_forecast_wins_across_families_despite_value_and_direction(leagu
 
 def test_exact_ties_repeat_independently_of_input_order_and_ev():
     rows=[_candidate('total_over',.60,10),_candidate('spread_home',.60,-.1)]
-    a=build_best_picks_df(pd.DataFrame(rows));b=build_best_picks_df(pd.DataFrame(rows[::-1]))
+    a=build_pregame_best_picks_df(pd.DataFrame(rows));b=build_pregame_best_picks_df(pd.DataFrame(rows[::-1]))
     assert a.iloc[0].market_type==b.iloc[0].market_type=='spread_home'
 
 
 @pytest.mark.parametrize('invalid',[None,float('nan'),float('inf'),1.5,-.2,True])
 def test_invalid_estimate_never_becomes_a_fifty_percent_candidate(invalid):
-    d={};best=build_best_picks_df(pd.DataFrame([_candidate('total_under',invalid,.5),_candidate('spread_home',.45,-.1)]),diagnostics_out=d)
+    d={};best=build_pregame_best_picks_df(pd.DataFrame([_candidate('total_under',invalid,.5),_candidate('spread_home',.45,-.1)]),diagnostics_out=d)
     assert best.iloc[0].market_type=='spread_home'
     missing=d['candidate_audit_df'].query("market_type == 'total_under'").iloc[0]
     assert pd.isna(missing.best_available_probability)
@@ -52,7 +53,7 @@ def test_invalid_estimate_never_becomes_a_fifty_percent_candidate(invalid):
 
 
 def test_all_missing_forecasts_remain_coverage_only():
-    best=build_best_picks_df(pd.DataFrame([_candidate('total_under',None,.5),_candidate('spread_home',None,.5)]))
+    best=build_pregame_best_picks_df(pd.DataFrame([_candidate('total_under',None,.5),_candidate('spread_home',None,.5)]))
     assert len(best)==1
     assert pd.isna(best.iloc[0].best_available_probability)
     classified=classify_best_available_picks(best)
