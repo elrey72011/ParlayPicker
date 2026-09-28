@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "historical_contract": {
+    "release_v1_schema_preserved": true,
+    "historical_records_rewritten": false,
+    "legacy_v1_submission_reinterpreted": false
+  },
+  "current_contract": {
+    "release_schema_version": 2,
+    "recommendation_schema_version": 2,
+    "probability_semantics": "win_unconditional_with_push",
+    "mean_ev_formula": "p_win * odds_decimal + p_push - 1",
+    "conservative_ev_formula": "p_win_conservative * odds_decimal + p_push - 1",
+    "uncertainty_method": "fixed_push_lower_win_bound",
+    "ordering_constraint": "0 <= p_win_conservative <= p_win",
+    "unknown_or_conditional_semantics": "REJECTED"
+  },
+  "service_isolation": {
+    "subscriber_imports_core_price_value": false,
+    "parity_verified_by_independent_test": true
+  },
+  "authority": {
+    "accepted_upstream_gate_result": "APPROVED",
+    "qualified_market_alone_is_sufficient": false,
+    "calibration_id_binding_retained": true,
+    "signature_over_invalid_math_releases": false
+  },
+  "local_tests": {
+    "contract_and_isolation_passed": 15,
+    "scope_guard_deselected_locally": 1,
+    "postgres_cases_collected_and_skipped_without_service": 7
+  },
+  "github_postgres_tests": {
+    "status": "PASS",
+    "passed": 23,
+    "run_id": 36491587579,
+    "job_id": 109161220893
+  },
+  "commercial_state": {
+    "live_billing_enabled": false,
+    "sales_enabled": false,
+    "markets_activated": false
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parlaypicker.example/contracts/release-v2.schema.json",
+  "title": "Private reviewed release v2",
+  "description": "Version 2 separates mean EV from fixed-push conservative EV and permits only unconditional win/push/loss probability mass.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "release_id", "revision_id", "source_commit", "environment", "reviewed_payload_hash", "operator_review_id", "operator_reviewed_at", "product_code", "recommendations", "authority"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "release_id": {"type": "string", "minLength": 1},
+    "revision_id": {"type": "string", "minLength": 1},
+    "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "environment": {"enum": ["test", "staging", "production"]},
+    "reviewed_payload_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "operator_review_id": {"type": "string", "minLength": 1},
+    "operator_reviewed_at": {"type": "string", "format": "date-time"},
+    "product_code": {"type": "string", "minLength": 1},
+    "recommendations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version", "probability_semantics", "p_win", "p_push", "p_loss",
+          "mean_ev_per_unit", "p_win_conservative", "conservative_ev_per_unit",
+          "uncertainty_method"
+        ],
+        "properties": {
+          "schema_version": {"const": 2},
+          "probability_semantics": {"const": "win_unconditional_with_push"},
+          "p_win": {"type": "number", "minimum": 0, "maximum": 1},
+          "p_push": {"type": "number", "minimum": 0, "maximum": 1},
+          "p_loss": {"type": "number", "minimum": 0, "maximum": 1},
+          "mean_ev_per_unit": {"type": "number"},
+          "p_win_conservative": {"type": "number", "minimum": 0, "maximum": 1},
+          "conservative_ev_per_unit": {"type": "number"},
+          "uncertainty_method": {"const": "fixed_push_lower_win_bound"}
+        }
+      }
+    },
+    "authority": {"type": "object"}
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "focused_command_result": {
+    "passed": 81,
+    "failed": 0,
+    "duration_seconds": 3.23
+  },
+  "new_probability_integrity_cases": 32,
+  "subscriber_contract_cases": 13,
+  "github_ci": {
+    "production_safety_passed": 563,
+    "full_suite_shard_1_passed": 1518,
+    "full_suite_shard_2_passed": 1514,
+    "subscriber_postgres_security_contract_passed": 23,
+    "protected_scope": "PASS",
+    "aggregate_full_suite": "PASS"
+  },
+  "coverage": [
+    "duplicate-x calibration counterexample",
+    "pooled plateau endpoint counterexample",
+    "permutation stability",
+    "positive sample weights",
+    "length, missing, finite, range, label, and weight validation",
+    "strictly increasing x and nondecreasing y knot validation",
+    "endpoint clipping and missing query handling",
+    "sklearn isotonic oracle parity",
+    "same-date production artifact rejection",
+    "unconditional-to-conditional push-aware conversion",
+    "unknown and conditional subscriber semantics rejection",
+    "mean EV and fixed-push conservative EV arithmetic",
+    "conservative win bound ordering",
+    "core price helper parity without a subscriber runtime import",
+    "legacy v1 rejection without historical rewrite",
+    "blocked upstream release gate",
+    "valid signature over invalid probability math",
+    "calibration authority binding",
+    "force cannot write the live calibration path"
+  ]
+}

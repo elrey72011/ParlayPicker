@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "inventory_time": "2026-09-28",
+  "live_artifact": {
+    "path": "data/calibration/effective_prob_calibration.json",
+    "schema_version": 1,
+    "knot_count": 9,
+    "production_acceptance": "REJECTED",
+    "production_rejection_reasons": ["HOLDOUT_NOT_STRICTLY_FUTURE"],
+    "explicit_path_status": "RESEARCH_ONLY",
+    "calibration_version": null,
+    "fitting_implementation_version": null,
+    "modified": false
+  },
+  "candidate_output": {
+    "path": "data/calibration/candidates/effective_prob_calibration_candidate.json",
+    "generated_in_this_change": false,
+    "activation_performed": false,
+    "required_for_production_candidate": [
+      "strictly future chronological holdout passes",
+      "immutable source predictor version is supplied",
+      "exact training scope is supplied",
+      "v2 artifact digest and chronology validate"
+    ]
+  },
+  "fit_command_policy": {
+    "writes_live_path": false,
+    "force_can_grant_production_authority": false,
+    "failed_validation_output": "RESEARCH_CANDIDATE_ONLY"
+  }
+}

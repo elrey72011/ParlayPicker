@@ -14,8 +14,9 @@ from services.subscriber.settings import Settings
 
 def recommendation(now):
     p_win, p_push, p_loss, odds = 0.55, 0.02, 0.43, 1.91
+    p_win_conservative = 0.52
     return {
-        "schema_version": 1, "recommendation_id": "rec-1", "exact_sport": "NFL",
+        "schema_version": 2, "recommendation_id": "rec-1", "exact_sport": "NFL",
         "exact_market_family": "SPREAD", "canonical_event_id": "event-1", "selection": "Example +3",
         "line": 3.0, "sportsbook_id": "book-1", "odds_american": -110, "odds_decimal": odds,
         "quote_id": "quote-1", "quote_observed_at": now.isoformat(), "provider_updated_at": None,
@@ -24,8 +25,11 @@ def recommendation(now):
         "model_artifact_hash": "a" * 64, "model_target_semantics": "unconditional win/push/loss",
         "calibration_id": "cal-1", "validation_artifact_id": "validation-1", "policy_id": "policy-1",
         "activation_reference": "activation-1", "probability_semantics": "unconditional",
-        "p_win": p_win, "p_push": p_push, "p_loss": p_loss, "p_win_conservative": 0.52,
-        "conservative_ev_per_unit": p_win * (odds - 1) - p_loss,
+        "p_win": p_win, "p_push": p_push, "p_loss": p_loss,
+        "mean_ev_per_unit": p_win * odds + p_push - 1,
+        "p_win_conservative": p_win_conservative,
+        "conservative_ev_per_unit": p_win_conservative * odds + p_push - 1,
+        "uncertainty_method": "fixed_push_lower_win_bound",
         "minimum_acceptable_decimal_odds": 1.9, "minimum_acceptable_line": 3.0,
         "disclosure_version": "disclosure-v1",
     }
@@ -34,7 +38,7 @@ def recommendation(now):
 def submission(now=None):
     now = now or datetime.now(timezone.utc)
     raw = {
-        "schema_version": 1, "release_id": "release-1", "revision_id": "revision-1",
+        "schema_version": 2, "release_id": "release-1", "revision_id": "revision-1",
         "source_commit": "b" * 40, "environment": "test", "reviewed_payload_hash": "0" * 64,
         "operator_review_id": "review-1", "operator_reviewed_at": now.isoformat(),
         "product_code": "monthly-qualified-straights", "recommendations": [recommendation(now)],
@@ -93,6 +97,90 @@ def test_probability_semantics_and_supported_market_are_enforced():
     bad["exact_market_family"] = "MONEYLINE"
     with pytest.raises(ValueError, match="unsupported exact market"):
         Recommendation.model_validate(bad)
+
+
+def test_probability_semantics_reject_unknown_and_conditional_inputs():
+    now = datetime.now(timezone.utc)
+    for semantics in ("UNKNOWN", "win_conditional_on_decision", "conditional"):
+        bad = recommendation(now)
+        bad["probability_semantics"] = semantics
+        with pytest.raises(ValueError, match="unsupported probability semantics"):
+            Recommendation.model_validate(bad)
+
+
+def test_mean_and_conservative_ev_are_distinct_and_push_aware():
+    now = datetime.now(timezone.utc)
+    parsed = Recommendation.model_validate(recommendation(now))
+    assert parsed.mean_ev_per_unit == pytest.approx(0.55 * 1.91 + 0.02 - 1)
+    assert parsed.conservative_ev_per_unit == pytest.approx(0.52 * 1.91 + 0.02 - 1)
+    assert parsed.conservative_ev_per_unit < parsed.mean_ev_per_unit
+
+    bad = recommendation(now)
+    bad["conservative_ev_per_unit"] = bad["mean_ev_per_unit"]
+    with pytest.raises(ValueError, match="conservative EV"):
+        Recommendation.model_validate(bad)
+
+
+def test_conservative_win_bound_cannot_exceed_mean_probability():
+    now = datetime.now(timezone.utc)
+    bad = recommendation(now)
+    bad["p_win_conservative"] = 0.56
+    bad["conservative_ev_per_unit"] = 0.56 * bad["odds_decimal"] + bad["p_push"] - 1
+    with pytest.raises(ValueError, match="cannot exceed"):
+        Recommendation.model_validate(bad)
+
+
+def test_subscriber_ev_matches_isolated_core_price_helper():
+    from core.price_value import price_value
+
+    now = datetime.now(timezone.utc)
+    parsed = Recommendation.model_validate(recommendation(now))
+    mean = price_value(parsed.p_win, parsed.p_push, parsed.odds_decimal)
+    conservative = price_value(
+        parsed.p_win_conservative, parsed.p_push, parsed.odds_decimal
+    )
+    assert mean is not None and conservative is not None
+    assert parsed.mean_ev_per_unit == pytest.approx(mean["expected_value"])
+    assert parsed.conservative_ev_per_unit == pytest.approx(
+        conservative["expected_value"]
+    )
+
+
+def test_legacy_v1_release_is_not_silently_reinterpreted():
+    raw = submission()
+    raw["schema_version"] = 1
+    raw["recommendations"][0]["schema_version"] = 1
+    with pytest.raises(ValueError):
+        ReleaseSubmission.model_validate(raw)
+
+
+def test_blocked_upstream_result_cannot_release_with_qualified_market():
+    raw = submission()
+    raw["authority"]["upstream_gate_result"] = "BLOCKED"
+    parsed = ReleaseSubmission.model_validate(raw)
+    raw["reviewed_payload_hash"] = object_hash(parsed.review_payload())
+    with pytest.raises(AuthorityError, match="UPSTREAM_GATE_NOT_APPROVED"):
+        verify_reviewed_submission(
+            raw, signature=sign(raw, "secret"), secret="secret", environment="test"
+        )
+
+
+def test_valid_signature_cannot_hide_invalid_probability_math():
+    raw = submission()
+    raw["recommendations"][0]["mean_ev_per_unit"] = 99.0
+    with pytest.raises(ValueError, match="mean EV"):
+        verify_reviewed_submission(
+            raw, signature=sign(raw, "secret"), secret="secret", environment="test"
+        )
+
+
+def test_changed_calibration_id_invalidates_bound_release_scope():
+    raw = submission()
+    raw["recommendations"][0]["calibration_id"] = "cal-2"
+    with pytest.raises(ValueError, match="authority calibration"):
+        verify_reviewed_submission(
+            raw, signature=sign(raw, "secret"), secret="secret", environment="test"
+        )
 
 
 def test_live_key_is_rejected_when_live_billing_is_disabled():

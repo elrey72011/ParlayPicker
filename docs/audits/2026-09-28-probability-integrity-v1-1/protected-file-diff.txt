@@ -1,0 +1,25 @@
+Base: origin/main @ 76b16c96e1498961e96a8fd1077f0c1e3c8251db
+Status: PASS
+
+Protected files changed: NONE
+
+Checked paths:
+app_core/evidence_drive.py
+app_core/evidence_remote.py
+app_core/performance_spans.py
+app_core/public_history.py
+app_core/stage_timing.py
+app_core/prediction_evidence.py
+app/ui/lock_picks.py
+tests/test_refresh_lock_performance.py
+tests/test_lock_storage_performance.py
+tests/test_prediction_evidence.py
+scripts/benchmark_refresh_lock_storage.py
+
+Scope guard, baseline manifest, and paid-launch workflow changed: NONE
+Existing baseline test expectations changed: NONE
+GitHub protected-scope job: PASS (run 36491587579, job 109161221274)
+
+Note: tests/paid_launch/case_policy_and_contracts.py was introduced after the
+protected #2350 baseline and is extended additively for the #2351 subscriber
+contract. New probability tests are in tests/test_probability_integrity_v11.py.
