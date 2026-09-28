@@ -3720,7 +3720,7 @@ def _calibrated_beats_breakeven(eff_win, odds_american, calibration, buckets=Non
         odds_american = pd.Series([] if odds_american is None else odds_american)
     ew = pd.to_numeric(eff_win, errors="coerce")
     try:
-        if buckets is not None and bucket_stats:
+        if calibration and buckets is not None and bucket_stats:
             from core.probability_calibration import apply_bucket_calibration
             cw = pd.to_numeric(apply_bucket_calibration(ew, buckets, calibration, bucket_stats), errors="coerce")
         elif calibration:

@@ -1783,6 +1783,17 @@ class PredictionEngine:
                 except Exception as e:
                     logger.error(f"Error during ML RAW COMPRESSION AUDIT tier check: {e}")
             self._last_metrics["hybrid_override_trigger_reasons"] = trigger_reasons
+            self._last_metrics["batch_compression_detected"] = bool(is_flat)
+            if is_flat:
+                logger.warning(
+                    "ML compression telemetry detected (%s); preserving the per-row "
+                    "model/healing outputs because batch composition is not prediction authority.",
+                    ",".join(trigger_reasons),
+                )
+            # Flatness and uniqueness are batch diagnostics only. They cannot
+            # replace a valid per-candidate forecast. Actual inference failure is
+            # handled by the explicit unavailable return in the exception path.
+            is_flat = False
 
             root_cause_hint = "mixed_or_model_specific"
             if self._last_metrics.get("schema_mismatch_detected", False):
@@ -1813,8 +1824,7 @@ class PredictionEngine:
                 final_probs = []
 
                 chosen_market_probs = []
-                scores_before_eps = []
-                scores_after_eps = []
+                fallback_scores = []
 
                 for idx_batch, idx in enumerate(working_df.index):
                     row = working_df.loc[idx]
@@ -2047,22 +2057,10 @@ class PredictionEngine:
                     else:
                         hybrid_score = 0.5
 
-                    score_before_eps = hybrid_score
-
-                    # Deterministic Tie-break Epsilon
-                    matchup_id = row.get('matchup_id', '')
-                    game_date = row.get('game_date', '')
-                    seed_str = f"{matchup_id}|{game_date}|{market_type}"
-                    md5_hash = hashlib.md5(seed_str.encode()).hexdigest()
-                    # map hash to a tiny positive float between 0 and 9e-7
-                    epsilon = (int(md5_hash[:8], 16) / 0xFFFFFFFF) * 9e-7
-
-                    hybrid_score += epsilon
                     hybrid_score = max(0.01, min(0.99, hybrid_score))
 
                     chosen_market_probs.append(market_prob if market_prob is not None else 0.5)
-                    scores_before_eps.append(score_before_eps)
-                    scores_after_eps.append(hybrid_score)
+                    fallback_scores.append(hybrid_score)
                     final_probs.append(hybrid_score)
 
                 # Variance Diagnostics Logging
@@ -2070,22 +2068,21 @@ class PredictionEngine:
                 logger.info(f"ML UNIQUENESS AUDIT: Unique prob count after fallback: {len(set(final_probs))}")
 
                 from collections import Counter
-                unique_before = len(set(scores_before_eps))
-                unique_after = len(set(scores_after_eps))
+                unique_before = len(set(fallback_scores))
+                unique_after = unique_before
 
                 self._last_metrics["hybrid_override_triggered"] = True
-                self._last_metrics["hybrid_unique_before_eps"] = unique_before
+                self._last_metrics["hybrid_fallback_unique_count"] = unique_before
 
                 market_prob_counts = Counter(chosen_market_probs)
-                before_eps_counts = Counter(scores_before_eps)
+                fallback_score_counts = Counter(fallback_scores)
 
                 identical_market_rows = sum(count for count in market_prob_counts.values() if count > 1)
-                identical_before_rows = sum(count for count in before_eps_counts.values() if count > 1)
+                identical_before_rows = sum(count for count in fallback_score_counts.values() if count > 1)
 
                 logger.info(f"Hybrid Fallback Variance Report:")
                 logger.info(f"  - Unique chosen market probabilities: {len(set(chosen_market_probs))}/{total_count} (Rows sharing exact values: {identical_market_rows})")
-                logger.info(f"  - Unique raw scores BEFORE epsilon: {unique_before}/{total_count} (Rows sharing exact values: {identical_before_rows})")
-                logger.info(f"  - Unique final scores AFTER epsilon: {unique_after}/{total_count}")
+                logger.info(f"  - Unique fallback scores: {unique_before}/{total_count} (Rows sharing exact values: {identical_before_rows})")
 
             else:
                 self._last_metrics["hybrid_override_triggered"] = False
@@ -2103,9 +2100,9 @@ class PredictionEngine:
             logger.info(f"2. Post-Healing Unique Outputs: {self._last_metrics.get('post_healing_unique_count', 0)} (Rows healed: {self._last_metrics.get('healed_count', 0)})")
 
             if self._last_metrics.get("hybrid_override_triggered", False):
-                logger.info(f"3. Post-Hybrid Unique Outputs (Pre-Epsilon): {self._last_metrics.get('hybrid_unique_before_eps', 0)}")
+                logger.info(f"3. Hybrid Fallback Unique Outputs: {self._last_metrics.get('hybrid_fallback_unique_count', 0)}")
             else:
-                logger.info(f"3. Post-Hybrid Unique Outputs (Pre-Epsilon): N/A (Override Not Triggered)")
+                logger.info(f"3. Hybrid Fallback Unique Outputs: N/A (Override Not Triggered)")
 
             logger.info(f"4. Final Unique Outputs: {final_unique}")
 
