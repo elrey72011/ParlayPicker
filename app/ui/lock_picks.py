@@ -1,11 +1,14 @@
 """Explicit locks on the reviewed overall board; no navigation-triggered writes."""
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from copy import deepcopy
+import uuid
 import pandas as pd
 import streamlit as st
 from app_core.locked_picks import lock_candidates, lock_audit
 from app_core.quote_freshness import package_age_minutes
-from app_core.public_history import now, report, digest, lock_stage
+from app_core.public_history import now, report, digest, lock_stage, LockSavePartial
+from app_core.performance_spans import operation_ids
 from app_core.public_record import current_records
 from app_core.relock_changes import (latest_removed, compare, review_token, acknowledged, requirements,
     validate_candidates, clear_review_state, log_review, RelockReviewExpired, RelockAlreadyLocked)
@@ -25,6 +28,12 @@ def render_lock_picks(package, setting):
         st.caption(f'Lock selected picks saves the original selections to Drive and publishes the board below, including your selected props and DFS slate. Existing locks cannot be replaced. Quote updates or labeled ESPN observations must be at most {package_age_minutes(package)} minutes old and games must not have started. Locking does not place a bet.')
         if any(r.get('quote_time_basis') == 'espn_observed' for r in package['games']['overall']):
             st.caption('ESPN college research picks use the time we observed the snapshot. DraftKings update time is unknown. Refresh preview does not renew the observation time.')
+        pending = st.session_state.get('lock_publication_pending')
+        if pending:
+            st.warning('LOCKED_PUBLICATION_PENDING — the locks are saved and verified, but website publication is not verified. Retry publication without writing the locks again.')
+            if st.button('Retry publication', key='retry_lock_publication'):
+                retry_lock_publication(package, setting, saved)
+                return
         existing = saved.get('locks', [])
         try:
             if 'lock_removals' not in saved:
@@ -188,42 +197,40 @@ def confirm_relock(package, selected, setting, saved, tokens, changes, reviewed)
 
 def save_reviewed_locks(package, selected, setting, saved, tokens, notices, reviewed, changes):
     from app.ui.public_results import history
+    locks_verified = False
+    operation_id = uuid.uuid4().hex
     try:
         validate_candidates(package, selected, reviewed, now())
         for _, change in changes:
             log_review(change['lock_id'], change, 'confirmed')
-        with st.status('Saving locks...', expanded=True) as saving:
+        with st.status('LOCKS_SAVING', expanded=True) as saving:
             def show_progress(label, done, total):
                 saving.update(label=f'{label} ({done}/{total})' if total else label)
             with lock_stage('open_storage'):
                 store = history(setting)
-            store.lock_picks(package, selected, progress=show_progress, relock_review=tokens)
+            store.lock_picks(package, selected, progress=show_progress, relock_review=tokens,
+                             operation_id=operation_id)
             saving.update(label='Checking saved locks...')
             # Fresh authoritative read retains concurrent locks/removals.
             with lock_stage('verify_lock_history'):
-                locks = store.all('locks')
+                snapshot = store.active_lock_snapshot(operation_id=operation_id)
+                locks = list(snapshot.active)
             saved['locks'] = locks
-            saving.update(label='Locks saved and verified', state='complete')
+            saved['lock_removals'] = list(snapshot.removals)
+            locks_verified = True
+            saving.update(label='LOCKS_VERIFIED', state='complete')
         st.session_state['relock_reset_requested'] = True
         for _, change in changes:
             log_review(change['lock_id'], change, 'saved')
         st.session_state['changed_relock_notices'] = notices
-        st.success('Your locks are saved. Preparing and publishing the website now.')
-        with st.status('Publishing website...', expanded=True) as publishing:
-            with lock_stage('rebuild_results'):
-                saved['rows'] = report(saved['publications'], saved['revisions'], saved.get('imports',[]), locks)
-                from copy import deepcopy
-                from app_core import public_prop_history
-                from app.ui.sftp_publish import publish_action
-                updated=deepcopy(package)
-                updated['results']=current_records(saved['rows']+public_prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[])))
-            with lock_stage('publish_website'):
-                notice = publish_action(updated,setting)
-                st.session_state['lock_publish_notice'] = notice
-            publishing.update(label=notice, state='complete' if notice.startswith(('Published:', 'Records saved.')) else 'error')
-        st.session_state.pop('publication_preview', None)
-        st.session_state['lock_saved_notice'] = True
-        st.rerun()
+        st.session_state['lock_publication_pending'] = {
+            'lock_operation_id': operation_id,
+            'board_hash': digest(package),
+            'state': 'LOCKED_PUBLICATION_PENDING',
+        }
+        st.success('Your locks are saved and verified. Preparing the website now.')
+        if publish_verified_locks(package, setting, saved, locks):
+            st.rerun()
     except RelockReviewExpired as exc:
         saved.pop('lock_removals', None)
         st.session_state['relock_reset_requested'] = True
@@ -241,15 +248,90 @@ def save_reviewed_locks(package, selected, setting, saved, tokens, notices, revi
             st.warning('Other selections in this batch may have saved. Restore history before retrying.')
         for _, change in changes:
             log_review(change['lock_id'], change, 'concurrent_lock')
+    except LockSavePartial as exc:
+        saved.pop('lock_removals', None)
+        st.session_state['relock_reset_requested'] = True
+        st.error('LOCK_SAVE_PARTIAL — some lock writes verified before another write failed. Restore authoritative lock history before any retry.')
+        st.caption(f'Verified writes: {len(exc.saved_keys)} · unresolved writes: {len(exc.failed_keys)}')
+        for _, change in changes:
+            log_review(change['lock_id'], change, 'save_partial')
     except (ValueError, RuntimeError):
         for _, change in changes:
             log_review(change['lock_id'], change, 'save_failed')
-        saved.pop('lock_removals', None)
-        st.error('Lock could not complete. Restore history to check saved locks, then rebuild the preview.')
+        if locks_verified:
+            st.session_state.setdefault('lock_publication_pending', {
+                'lock_operation_id': operation_id, 'board_hash': digest(package),
+                'state': 'LOCKED_PUBLICATION_PENDING'})
+            st.error('LOCKED_PUBLICATION_PENDING — locks remain saved and verified. Retry publication; do not save the locks again.')
+        else:
+            saved.pop('lock_removals', None)
+            st.error('Lock could not complete. Restore history to check saved locks, then rebuild the preview.')
     except Exception:
         for _, change in changes:
             log_review(change['lock_id'], change, 'save_failed')
-        st.error('Drive lock save or verification failed. Some selections may have saved; restore history before retrying.')
+        if locks_verified:
+            st.session_state.setdefault('lock_publication_pending', {
+                'lock_operation_id': operation_id, 'board_hash': digest(package),
+                'state': 'LOCKED_PUBLICATION_PENDING'})
+            st.error('LOCKED_PUBLICATION_PENDING — locks remain saved and verified. Retry publication; do not save the locks again.')
+        else:
+            st.error('Drive lock save or verification failed. Some selections may have saved; restore history before retrying.')
+
+
+def _locked_publication_package(package, saved, locks):
+    """Rebuild results without changing any saved decision or quote timestamp."""
+    saved['rows'] = report(saved['publications'], saved['revisions'], saved.get('imports', []), locks)
+    from app_core import public_prop_history
+    updated = deepcopy(package)
+    updated['results'] = current_records(
+        saved['rows'] + public_prop_history.report(
+            saved['publications'], saved.get('prop_revisions', []), saved.get('prop_imports', [])))
+    return updated
+
+
+def publish_verified_locks(package, setting, saved, locks):
+    """Publish already-verified locks; never performs a lock write."""
+    from app.ui.sftp_publish import publish_action
+    attempt_id = uuid.uuid4().hex
+    ids = operation_ids(publication_attempt_id=attempt_id)
+    with st.status('PUBLISHING', expanded=True) as publishing:
+        with lock_stage('rebuild_results', ids=ids):
+            updated = _locked_publication_package(package, saved, locks)
+        with lock_stage('publish_website', ids=ids):
+            notice = publish_action(updated, setting)
+            st.session_state['lock_publish_notice'] = notice
+        verified = notice == 'Published' or notice.startswith(('Published:', 'Records saved.'))
+        publishing.update(label='PUBLISHED_VERIFIED — ' + notice if notice.startswith('Published:') else notice,
+                          state='complete' if verified else 'error')
+    if not verified:
+        pending = st.session_state.setdefault('lock_publication_pending', {})
+        pending.update(publication_attempt_id=attempt_id, board_hash=digest(package),
+                       state='PUBLICATION_FAILED', last_notice=notice)
+        st.warning('PUBLICATION_FAILED — locks remain verified. Use Retry publication; it will reconcile history first and will not write locks again.')
+        return False
+    st.session_state.pop('lock_publication_pending', None)
+    st.session_state.pop('publication_preview', None)
+    st.session_state['lock_saved_notice'] = True
+    return True
+
+
+def retry_lock_publication(package, setting, saved):
+    """Freshly reconcile lock/removal membership, then retry publication only."""
+    from app.ui.public_results import history
+    try:
+        with st.status('Reconciling verified locks...', expanded=True) as status:
+            store = history(setting)
+            snapshot = store.active_lock_snapshot(operation_id=uuid.uuid4().hex)
+            locks = list(snapshot.active)
+            saved['locks'] = locks
+            saved['lock_removals'] = list(snapshot.removals)
+            status.update(label='LOCKS_VERIFIED', state='complete')
+        if publish_verified_locks(package, setting, saved, locks):
+            st.rerun()
+    except Exception:
+        pending = st.session_state.setdefault('lock_publication_pending', {})
+        pending['state'] = 'PUBLICATION_FAILED'
+        st.error('PUBLICATION_FAILED — the retry could not reconcile or publish current history. No lock write was attempted.')
 
 
 def render_lock_correction(package, setting, saved):

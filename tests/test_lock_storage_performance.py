@@ -121,14 +121,16 @@ def test_parallel_history_save_preserves_first_write_and_reads_corrections_once(
     package = pub()['package']
     package['games']['overall'] = [dict(package['games']['overall'][0], game=f'Team {i} at Boston') for i in range(12)]
     ids = [row['id'] for row in lock_candidates(package, AT)]
-    reads, updates = [], []
-    read = store._all
-    def counted(kind):
-        reads.append(kind)
-        return read(kind)
-    monkeypatch.setattr(store, '_all', counted)
+    snapshots, updates = [], []
+    snapshot = store.active_lock_snapshot
+    def counted_snapshot(*args, **kwargs):
+        result = snapshot(*args, **kwargs)
+        snapshots.append(result.operation_id)
+        return result
+    monkeypatch.setattr(store, 'active_lock_snapshot', counted_snapshot)
     original = store.lock_picks(package, ids, progress=lambda *args: updates.append(args))
-    assert reads == ['locks', 'lock_removals']
+    # Locks and removals now share one fresh discovery phase.
+    assert len(snapshots) == 1
     assert len(original) == 12
     assert updates[-1] == ('Saving and verifying locks', 12, 12)
     assert sorted(store.all('locks'), key=lambda row: row['id']) == original

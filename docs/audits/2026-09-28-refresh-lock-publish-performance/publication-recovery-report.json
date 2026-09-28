@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "implementation_code_commit": "b79264c7",
+  "status": "PASS_LOCAL_FIXTURE_HOSTED_NOT_RUN",
+  "states": [
+    "LOCKS_SAVING",
+    "LOCKS_VERIFIED",
+    "PUBLISHING",
+    "PUBLISHED_VERIFIED",
+    "LOCK_SAVE_PARTIAL",
+    "LOCKED_PUBLICATION_PENDING",
+    "PUBLICATION_FAILED"
+  ],
+  "save_succeeds_publish_fails": {
+    "locks_retained": true,
+    "pending_operation_retained": true,
+    "retry_control": "Retry publication",
+    "retry_writes_locks": false
+  },
+  "retry_behavior": {
+    "fresh_lock_removal_snapshot": true,
+    "package_rebuilt_from_current_input_and_authoritative_locks": true,
+    "source_package_mutated": false,
+    "original_quote_analysis_decision_lock_timestamps_preserved": true
+  },
+  "provider_semantics": {
+    "verified_sftp_message_required_for_published_label": true,
+    "unresolved_provider_job_remains_not_published": true,
+    "hosted_content_verification": "NOT_RUN"
+  },
+  "production_write_test": "NOT_RUN_NO_AUTHORIZATION"
+}
