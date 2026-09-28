@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "NOT_RUN_EXTERNAL_BLOCKER",
+  "live_billing_enabled": false,
+  "implemented": [
+    "hosted checkout allowlisted server price",
+    "billing portal caller mapping",
+    "durable cancellation request",
+    "raw-body webhook verification",
+    "provider-account-environment-event deduplication",
+    "provider-state reconciliation",
+    "transactional entitlement projection",
+    "test/live event quarantine"
+  ],
+  "blockers": ["STRIPE_TEST_CREDENTIALS_NOT_CONFIGURED", "OWNER_PRODUCT_AND_POLICY_VERSIONS_NOT_CONFIGURED", "SANDBOX_JOURNEY_NOT_RUN"]
+}

@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "status": "NOT_RUN_EXTERNAL_BLOCKER",
+  "implemented": ["immutable result projection", "versioned source settlement reference", "paper return separated from actual wager receipts", "NEEDS_REVIEW state", "append-only correction revisions"],
+  "blockers": ["AUTHORIZED_SETTLEMENT_SOURCE_NOT_CONFIGURED", "FROZEN_STAGING_COHORT_NOT_RUN", "ACTUAL_WAGER_RECEIPTS_UNAVAILABLE"]
+}

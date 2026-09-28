@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parlaypicker.example/contracts/entitlement-v1.schema.json",
+  "title": "Entitlement projection v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "customer_id", "product_code", "effective_at", "expires_at", "revision", "source_subscription_id", "reason"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "customer_id": {"type": "string", "format": "uuid"},
+    "product_code": {"type": "string"},
+    "effective_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "revision": {"type": "integer", "minimum": 1},
+    "source_subscription_id": {"type": "string", "format": "uuid"},
+    "source_billing_event_id": {"type": ["string", "null"], "format": "uuid"},
+    "revoked_at": {"type": ["string", "null"], "format": "date-time"},
+    "reason": {"type": "string"}
+  }
+}

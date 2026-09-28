@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "status": "NOT_RUN_EXTERNAL_BLOCKER",
+  "implemented": ["transactional outbox", "recipient-release-type-channel deduplication", "entitlement/release/expiry dispatch recheck", "link-only premium alert", "UNKNOWN_OUTCOME state", "bounded job retries and dead letter"],
+  "blockers": ["SMTP_TEST_PROVIDER_NOT_CONFIGURED", "CRASH_RESTART_NOT_RUN", "BOUNCE_COMPLAINT_PROVIDER_RECONCILIATION_NOT_RUN"]
+}

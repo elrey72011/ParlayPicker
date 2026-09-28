@@ -1,0 +1,252 @@
+{
+  "base_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+  "changed_files": [
+    {
+      "path": ".github/workflows/paid-launch.yml",
+      "status": "A"
+    },
+    {
+      "path": "deploy/paid-launch/.env.example",
+      "status": "A"
+    },
+    {
+      "path": "deploy/paid-launch/docker-compose.yml",
+      "status": "A"
+    },
+    {
+      "path": "deploy/paid-launch/nginx.conf",
+      "status": "A"
+    },
+    {
+      "path": "deploy/paid-launch/operator-front-door.example.conf",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/contracts/approval-record-v1.schema.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/contracts/billing-event-v1.schema.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/contracts/entitlement-v1.schema.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/contracts/release-v1.schema.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/alert-fault-evidence.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/backup-restore-evidence.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/billing-sandbox-evidence.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/dependency-audit.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/launch-gate-report.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/launch-readiness.md",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/performance-load-evidence.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/pilot-ledger.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/protected-code-diff-report.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/publication-recovery-evidence.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/results-reconciliation-evidence.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/security-auth-test-results.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/source-runtime-hosted-revision-manifest.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/evidence/staging-evidence.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/launch-baseline-manifest.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/launch-compatibility-report.json",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/merge-reuse-matrix.md",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/paid-launch-architecture.md",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/paid-launch-owner-actions.md",
+      "status": "A"
+    },
+    {
+      "path": "docs/paid-launch/paid-launch-runbook.md",
+      "status": "A"
+    },
+    {
+      "path": "integrations/subscriber_release/__init__.py",
+      "status": "A"
+    },
+    {
+      "path": "integrations/subscriber_release/authority.py",
+      "status": "A"
+    },
+    {
+      "path": "scripts/check_launch_change_scope.py",
+      "status": "A"
+    },
+    {
+      "path": "scripts/submit_customer_release.py",
+      "status": "A"
+    },
+    {
+      "path": "scripts/verify_paid_launch.py",
+      "status": "A"
+    },
+    {
+      "path": "services/__init__.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/Dockerfile",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/__init__.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/app.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/auth.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/billing.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/canonical.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/contracts.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/db.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/launch_gate.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/migrate.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/migrations/0001_customer_service.sql",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/repository.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/requirements.txt",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/settings.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/worker/__init__.py",
+      "status": "A"
+    },
+    {
+      "path": "services/subscriber/worker/__main__.py",
+      "status": "A"
+    },
+    {
+      "path": "tests/paid_launch/case_isolation_and_scope.py",
+      "status": "A"
+    },
+    {
+      "path": "tests/paid_launch/case_policy_and_contracts.py",
+      "status": "A"
+    },
+    {
+      "path": "tests/paid_launch/case_postgres_api.py",
+      "status": "A"
+    },
+    {
+      "path": "tests/paid_launch/conftest.py",
+      "status": "A"
+    },
+    {
+      "path": "web/subscriber/index.html",
+      "status": "A"
+    },
+    {
+      "path": "web/subscriber/subscriber.css",
+      "status": "A"
+    },
+    {
+      "path": "web/subscriber/subscriber.js",
+      "status": "A"
+    }
+  ],
+  "existing_test_changes": [],
+  "head_sha": "724071002bc9e2184852b90f0b33bab416bdd5b8",
+  "local_changes": {
+    "staged": [],
+    "unstaged": []
+  },
+  "local_protected_changes": [],
+  "protected_changes": [],
+  "reason_codes": [],
+  "recorded_base_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+  "runtime_shadowing": [],
+  "schema_version": 1,
+  "self_protected_changes": [],
+  "status": "PASS",
+  "tooling_hash_mismatches": []
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "status": "PARTIAL",
+  "inherited_deterministic_benchmark": {
+    "status": "PASS_WITH_KNOWN_TARGET_FINDING",
+    "backend": "DriveStore deterministic fake Google Drive session",
+    "source_commit": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+    "authenticated_cloud_measurement": false,
+    "refresh_cold_reduction_percent": 57.78,
+    "refresh_warm_reduction_percent": 77.75,
+    "lock_cold_reduction_percent": 33.94,
+    "lock_warm_reduction_percent": 44.14,
+    "integrity_equivalent": true
+  },
+  "subscriber_api_25_rps_10_minutes": "NOT_RUN_EXTERNAL_BLOCKER",
+  "mobile_lcp": "NOT_RUN_EXTERNAL_BLOCKER",
+  "release_to_email_acceptance": "NOT_RUN_EXTERNAL_BLOCKER",
+  "remote_benchmark": "NOT_RUN_EXTERNAL_BLOCKER",
+  "hosted_content_verification": "NOT_RUN"
+}
