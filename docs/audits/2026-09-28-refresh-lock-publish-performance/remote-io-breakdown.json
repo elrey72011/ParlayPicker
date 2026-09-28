@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "implementation_code_commit": "b79264c7",
+  "controlled_fixture": {
+    "refresh_before": {
+      "inventory_traversals": 6,
+      "listing_pages": 30,
+      "cold_media_reads": 36,
+      "warm_unchanged_media_reads": 0,
+      "warm_new_media_reads": 1
+    },
+    "refresh_after": {
+      "inventory_traversals": 1,
+      "listing_pages": 5,
+      "cold_media_reads": 36,
+      "warm_unchanged_media_reads": 0,
+      "warm_new_media_reads": 1,
+      "listing_page_reduction_percent": 83.33
+    },
+    "lock_membership_before": {
+      "inventory_traversals": 2,
+      "listing_pages": 10,
+      "cold_media_reads": 12,
+      "warm_unchanged_media_reads": 0,
+      "warm_new_media_reads": 1
+    },
+    "lock_membership_after": {
+      "inventory_traversals": 1,
+      "listing_pages": 5,
+      "cold_media_reads": 12,
+      "warm_unchanged_media_reads": 0,
+      "warm_new_media_reads": 1,
+      "listing_page_reduction_percent": 50.0
+    },
+    "unrelated_objects_downloaded": 0,
+    "retries": 0,
+    "retry_wait_ms": 0,
+    "auth_refreshes": null
+  },
+  "production_log": {
+    "folder_traversals": null,
+    "listing_pages": null,
+    "media_reads": null,
+    "bytes_downloaded": null,
+    "retries": null,
+    "auth_refreshes": null,
+    "reason": "The supplied log predated request-level instrumentation."
+  }
+}

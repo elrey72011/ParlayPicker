@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "implementation_code_commit": "b79264c7",
+  "benchmark_kind": "three_matched_controlled_trials_with_deterministic_fake_provider",
+  "authenticated_cloud_measurement": false,
+  "runtime": {"python": "3.12.14"},
+  "fixture": {
+    "total_objects": 60,
+    "evidence_objects": 36,
+    "lock_objects": 12,
+    "unrelated_objects": 12,
+    "page_size": 12,
+    "listing_page_latency_ms": 8,
+    "media_latency_ms": 2
+  },
+  "refresh": {
+    "cold_empty_cache": {
+      "before_ms": [364.716, 365.049, 363.647],
+      "after_ms": [153.035, 155.889, 153.733],
+      "before_median_ms": 364.716,
+      "after_median_ms": 153.733,
+      "reduction_percent": 57.85,
+      "target_status": "PASS"
+    },
+    "warm_unchanged": {
+      "before_ms": [278.872, 275.2, 273.544],
+      "after_ms": [62.074, 61.147, 61.995],
+      "before_median_ms": 275.2,
+      "after_median_ms": 61.995,
+      "reduction_percent": 77.47,
+      "target_status": "PASS"
+    },
+    "warm_with_new_evidence": {
+      "before_ms": [273.936, 278.818, 279.567],
+      "after_ms": [66.678, 66.979, 64.878],
+      "before_median_ms": 278.818,
+      "after_median_ms": 66.678,
+      "reduction_percent": 76.09,
+      "target_status": "PASS"
+    }
+  },
+  "lock_membership_read": {
+    "cold_empty_cache": {
+      "before_ms": [120.878, 121.427, 122.194],
+      "after_ms": [80.241, 80.85, 80.315],
+      "before_median_ms": 121.427,
+      "after_median_ms": 80.315,
+      "reduction_percent": 33.86,
+      "target_status": "PERFORMANCE_TARGET_NOT_MET"
+    },
+    "warm_unchanged": {
+      "before_ms": [98.765, 98.641, 99.152],
+      "after_ms": [52.448, 55.366, 56.73],
+      "before_median_ms": 98.765,
+      "after_median_ms": 55.366,
+      "reduction_percent": 43.94,
+      "target_status": "PERFORMANCE_TARGET_NOT_MET"
+    },
+    "warm_with_new_evidence": {
+      "before_ms": [97.6, 100.223, 100.952],
+      "after_ms": [54.669, 58.735, 60.338],
+      "before_median_ms": 100.223,
+      "after_median_ms": 58.735,
+      "reduction_percent": 41.4,
+      "target_status": "PERFORMANCE_TARGET_NOT_MET"
+    }
+  },
+  "publication": {
+    "before_ms": [20.0, 20.0, 20.0],
+    "after_ms": [20.0, 20.0, 20.0],
+    "regression_percent": 0.0,
+    "target_status": "PASS",
+    "note": "Controlled publication cost was held constant because no publication verification was removed."
+  },
+  "release_status": {
+    "implementation_tests": "PASS_FOCUSED_LOCAL_CI_PENDING",
+    "integrity_equivalence": "PASS",
+    "remote_benchmark": "NOT_RUN_EXTERNAL_BLOCKER",
+    "hosted_content_verification": "NOT_RUN",
+    "production_rollout": "READY_FOR_REVIEW"
+  }
+}

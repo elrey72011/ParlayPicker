@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "created_at_utc": "2026-09-28T20:10:00Z",
+  "audited_repository_revision": "ed0bd408a05064ae1172c5f569a520826789e122",
+  "supplied_runtime_log": {
+    "sha256": "fbc7b3c55c923859792fe4fc88e3f3d1a36246a53d7e567b7a93c0d85e0f5d1c",
+    "deployed_commit": null,
+    "measurement_kind": "reported_stage_sum_not_end_to_end_stopwatch",
+    "reported_stage_sum_seconds": 686.319,
+    "stages_seconds": {
+      "load_inputs_and_initialize_evidence": 343.593,
+      "fetch_odds_statistics_predictions": 5.384,
+      "market_enrichment_candidate_selection": 17.346,
+      "gemini_review_wager_checks": 0.361,
+      "save_prediction_evidence": 8.487,
+      "open_lock_storage": 0.313,
+      "read_existing_locks": 141.847,
+      "archive_board": 2.625,
+      "save_verified_locks": 3.165,
+      "verify_lock_history": 139.408,
+      "rebuild_results": 7.389,
+      "publish_website": 16.401
+    },
+    "restore_child_sum_seconds": 349.864,
+    "timer_discrepancy_seconds": 6.271,
+    "caveat": "The supplied log does not identify its deployed commit and its child timers overlap or cross the reported parent boundary."
+  },
+  "controlled_fake_provider_before": {
+    "source_commit": "b79264c7",
+    "backend": "DriveStore deterministic fake Google Drive session",
+    "authenticated_cloud_measurement": false,
+    "refresh": {
+      "cold_empty_cache_ms": [364.716, 365.049, 363.647],
+      "warm_unchanged_ms": [278.872, 275.2, 273.544],
+      "warm_with_new_evidence_ms": [273.936, 278.818, 279.567]
+    },
+    "lock_membership_read": {
+      "cold_empty_cache_ms": [120.878, 121.427, 122.194],
+      "warm_unchanged_ms": [98.765, 98.641, 99.152],
+      "warm_with_new_evidence_ms": [97.6, 100.223, 100.952]
+    },
+    "publication_ms": [20.0, 20.0, 20.0]
+  }
+}

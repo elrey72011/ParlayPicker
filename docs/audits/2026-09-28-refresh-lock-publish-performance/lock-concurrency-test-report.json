@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "implementation_code_commit": "b79264c7",
+  "status": "PASS",
+  "authority_boundaries": {
+    "pre_write": "one fresh complete inventory for locks and lock_removals",
+    "write": "create-only write followed by exact-object read-back",
+    "post_write": "separate fresh complete inventory for locks and lock_removals",
+    "publication_retry": "fresh membership reconciliation with no lock write"
+  },
+  "verified_invariants": [
+    "active state excludes tombstoned lock hashes",
+    "changed re-lock generation invalidates the prior review token",
+    "conditional-write loser is not reported as the winning lock",
+    "partial batches report exact verified and unresolved keys",
+    "timed-out committed writes are resolved only by exact read-back",
+    "post-write and retry phases do not reuse pre-write membership",
+    "bounded worker sessions remain isolated and closed"
+  ],
+  "focused_command": "python -m pytest tests/test_refresh_lock_performance.py tests/test_evidence_drive.py tests/test_evidence_remote.py tests/test_public_history.py tests/test_relock_changes.py tests/test_lock_storage_performance.py tests/test_slate_performance.py tests/test_prediction_evidence.py::test_final_pick_valid_mapping_is_strict_and_missing_safe -q",
+  "focused_result": {"passed": 87, "failed": 0}
+}
