@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "base_source_revision": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
-  "feature_source_revision": "CAPTURE_AT_CI_AND_STAGING_BUILD",
+  "feature_source_revision": "a72a218ae6c7a026fb48b176eae31e7b61931d00",
+  "ci_verified_revision": "a72a218ae6c7a026fb48b176eae31e7b61931d00",
   "api_runtime_revision": "NOT_RUN",
   "worker_runtime_revision": "NOT_RUN",
   "shell_hosted_revision": "NOT_RUN",

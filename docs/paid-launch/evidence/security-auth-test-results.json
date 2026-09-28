@@ -12,7 +12,13 @@
     "release command import isolation",
     "protected scope guard"
   ],
-  "postgres_api_suite": "PENDING_GITHUB_CI_NO_LOCAL_POSTGRES_RUNTIME",
+  "postgres_api_suite": {
+    "status": "PASS",
+    "passed": 15,
+    "failed": 0,
+    "workflow_run": 36485293151,
+    "implementation_revision": "a72a218ae6c7a026fb48b176eae31e7b61931d00"
+  },
   "browser_oidc_mfa": "NOT_RUN_EXTERNAL_BLOCKER",
   "cdn_service_worker_cache": "NOT_RUN_EXTERNAL_BLOCKER"
 }

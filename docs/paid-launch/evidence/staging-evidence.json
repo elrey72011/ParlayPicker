@@ -6,7 +6,13 @@
   "local_paid_contract_tests": "8_PASS",
   "local_inherited_regressions": "125_PASS",
   "local_inherited_benchmark": "PASS_WITH_KNOWN_LOCK_TARGET_FINDING",
-  "postgres_ci": "PENDING",
+  "postgres_ci": {
+    "status": "PASS",
+    "passed": 15,
+    "failed": 0,
+    "workflow_run": 36485293151,
+    "implementation_revision": "a72a218ae6c7a026fb48b176eae31e7b61931d00"
+  },
   "deployed_source_revision": null,
   "hosted_source_revision": null,
   "endpoint_verification": "NOT_RUN",
