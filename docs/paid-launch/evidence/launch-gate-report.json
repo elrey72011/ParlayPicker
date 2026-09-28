@@ -281,16 +281,10 @@
       ],
       "existing_test_changes": [],
       "exit_code": 0,
-      "head_sha": "a72a218ae6c7a026fb48b176eae31e7b61931d00",
+      "head_sha": "88fa7887be87076bbbb334798d5eaf7eac433d90",
       "local_changes": {
         "staged": [],
-        "unstaged": [
-          "docs/paid-launch/evidence/security-auth-test-results.json",
-          "docs/paid-launch/evidence/source-runtime-hosted-revision-manifest.json",
-          "docs/paid-launch/evidence/staging-evidence.json",
-          "docs/paid-launch/launch-compatibility-report.json",
-          "docs/paid-launch/paid-launch-owner-actions.md"
-        ]
+        "unstaged": []
       },
       "local_protected_changes": [],
       "protected_changes": [],
@@ -309,7 +303,7 @@
   "completion_label": "IMPLEMENTED_LOCAL_VERIFIED",
   "environment": "staging",
   "errors": [],
-  "generated_at": "2026-09-28T21:25:22.415890+00:00",
+  "generated_at": "2026-09-28T21:26:26.192975+00:00",
   "read_only": true,
   "schema_version": 1,
   "status": "BLOCKED"
