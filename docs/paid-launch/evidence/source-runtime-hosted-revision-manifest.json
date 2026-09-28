@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "base_source_revision": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+  "feature_source_revision": "CAPTURE_AT_CI_AND_STAGING_BUILD",
+  "api_runtime_revision": "NOT_RUN",
+  "worker_runtime_revision": "NOT_RUN",
+  "shell_hosted_revision": "NOT_RUN",
+  "database_migration_versions": ["0001_customer_service"],
+  "match_status": "NOT_VERIFIED",
+  "live_billing_enabled": false
+}

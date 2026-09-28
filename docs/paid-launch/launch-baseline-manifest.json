@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-28T20:20:47Z",
+  "base_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+  "base_branch": "origin/main",
+  "required_ancestry": {
+    "pr_2349_merge_commit": "8dfeb4da",
+    "pr_2350_merge_commit": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+    "pr_2350_status": "MERGED",
+    "pr_2350_merged_at": "2026-09-28T20:20:47Z"
+  },
+  "protected_files": [
+    "app_core/evidence_drive.py",
+    "app_core/evidence_remote.py",
+    "app_core/performance_spans.py",
+    "app_core/public_history.py",
+    "app_core/stage_timing.py",
+    "app_core/prediction_evidence.py",
+    "app/ui/lock_picks.py",
+    "tests/test_refresh_lock_performance.py",
+    "tests/test_lock_storage_performance.py",
+    "tests/test_prediction_evidence.py",
+    "scripts/benchmark_refresh_lock_storage.py"
+  ],
+  "protected_git_blobs": {
+    "app_core/evidence_drive.py": "34ee9ee097488a42c7d6d27dfab7d36dc2a786a7",
+    "app_core/evidence_remote.py": "935e2afcf5f68ba93e74e3befc17043d3bcf36ab",
+    "app_core/performance_spans.py": "e345a82e6b551a23d55606b7522534a985591471",
+    "app_core/public_history.py": "10013f41815e67de2953deb8d6dff7660261f675",
+    "app_core/stage_timing.py": "f1eae2e04cb6c05c71f6ea08aa0c55ec94c117b6",
+    "app_core/prediction_evidence.py": "8a154fa6643d047b131891418f7e791a20bfd005",
+    "app/ui/lock_picks.py": "0cf998d73e3c02d7f05d207fe26014ff57e1432e",
+    "tests/test_refresh_lock_performance.py": "68ef650b24c2f3343f0c3ab1eabf65e91894a827",
+    "tests/test_lock_storage_performance.py": "b94f32e8a5f2d49ff6f8727463fcaed7a59b4273",
+    "tests/test_prediction_evidence.py": "8289d59b6667db65099dcd4fb0ac606226b44870",
+    "scripts/benchmark_refresh_lock_storage.py": "8e383434bb2646f61dff523efc8f7c92a9c97426"
+  },
+  "tooling_sha256": {
+    "scripts/check_launch_change_scope.py": "d9e4b9c3954d7b1803d23527a77b7e7c34ed5d73e5936d7fe07111da3c930ee8",
+    ".github/workflows/paid-launch.yml": "224f3d2979544318d77ff733d5427fd82b7bce6c878c345ccb1f1d907c20492d"
+  },
+  "exception_policy": "No exception is encoded. Any protected-file or existing-test change requires separately approved, exact-scope integration work."
+}

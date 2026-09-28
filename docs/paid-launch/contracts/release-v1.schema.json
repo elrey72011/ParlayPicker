@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parlaypicker.example/contracts/release-v1.schema.json",
+  "title": "Private reviewed release v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "release_id", "revision_id", "source_commit", "environment", "reviewed_payload_hash", "operator_review_id", "operator_reviewed_at", "product_code", "recommendations", "authority"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "release_id": {"type": "string", "minLength": 1},
+    "revision_id": {"type": "string", "minLength": 1},
+    "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "environment": {"enum": ["test", "staging", "production"]},
+    "reviewed_payload_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "operator_review_id": {"type": "string", "minLength": 1},
+    "operator_reviewed_at": {"type": "string", "format": "date-time"},
+    "product_code": {"type": "string", "minLength": 1},
+    "recommendations": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "authority": {"type": "object"}
+  }
+}

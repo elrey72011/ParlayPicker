@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "status": "NOT_STARTED",
+  "billed": false,
+  "observed_consecutive_days": 0,
+  "required_consecutive_days": 14,
+  "observed_active_slates": 0,
+  "required_active_slates": 2,
+  "entries": [],
+  "note": "Pilot time and incidents must be observed prospectively; this artifact cannot simulate PASS."
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parlaypicker.example/contracts/approval-record-v1.schema.json",
+  "title": "Commercial approval record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "approval_type", "scope", "status", "reviewer", "evidence_reference", "evidence_hash", "reviewed_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "approval_type": {"enum": ["PRODUCT_CLAIMS", "DATA_RIGHTS", "PROCESSOR_SUPPORT", "LEGAL_JURISDICTION", "TERMS_PRIVACY_RENEWALS", "RESPONSIBLE_USE", "MARKET_QUALIFICATION"]},
+    "scope": {"type": "string"},
+    "status": {"enum": ["PENDING", "APPROVED", "REVOKED"]},
+    "reviewer": {"type": "string"},
+    "evidence_reference": {"type": "string"},
+    "evidence_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "reviewed_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

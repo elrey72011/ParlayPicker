@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "NOT_RUN_EXTERNAL_BLOCKER",
+  "source_base_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+  "local_compile": "PASS",
+  "local_paid_contract_tests": "8_PASS",
+  "local_inherited_regressions": "125_PASS",
+  "local_inherited_benchmark": "PASS_WITH_KNOWN_LOCK_TARGET_FINDING",
+  "postgres_ci": "PENDING",
+  "deployed_source_revision": null,
+  "hosted_source_revision": null,
+  "endpoint_verification": "NOT_RUN",
+  "live_billing_enabled": false,
+  "reason": "No staging database, OIDC tenant, Stripe sandbox credentials, email provider, or deployed route was supplied to this worktree."
+}

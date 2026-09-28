@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="ParlayPicker subscriber service">
+  <title>ParlayPicker Subscriber</title>
+  <link rel="stylesheet" href="/subscriber.css">
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="/">Parlay<span>Picker</span></a>
+    <nav aria-label="Subscriber navigation">
+      <a href="#current">Current picks</a>
+      <a href="#results">Results</a>
+      <a href="#account">Account</a>
+      <a href="#help">Help</a>
+    </nav>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="page-title">
+      <p class="eyebrow">SUBSCRIBER BETA</p>
+      <h1 id="page-title">Qualified releases, with the original terms intact.</h1>
+      <p>ParlayPicker provides information, not wagering services. It does not place bets, hold funds, guarantee results, or promise a daily pick.</p>
+      <p id="service-state" class="status" role="status">Checking service availability…</p>
+      <a id="sign-in" class="button" href="#">Sign in</a>
+    </section>
+
+    <section id="current" aria-labelledby="current-heading">
+      <p class="eyebrow">CURRENT RELEASE</p>
+      <h2 id="current-heading">Current picks</h2>
+      <div id="current-content" class="panel" aria-live="polite">Sign in with an active entitlement to view a verified release.</div>
+    </section>
+
+    <section id="results" aria-labelledby="results-heading">
+      <p class="eyebrow">COMPLETE HISTORY</p>
+      <h2 id="results-heading">Results</h2>
+      <div id="results-content" class="panel">Paper results and actual accepted wagers are reported separately. Actual wagers remain unavailable without receipts.</div>
+    </section>
+
+    <section id="account" aria-labelledby="account-heading">
+      <p class="eyebrow">ACCOUNT</p>
+      <h2 id="account-heading">Subscription and controls</h2>
+      <div id="account-content" class="panel">Sign in to see entitlement, renewal, paid-through, billing portal, and cancellation status.</div>
+    </section>
+
+    <section id="help" aria-labelledby="help-heading">
+      <p class="eyebrow">SERVICE &amp; SUPPORT</p>
+      <h2 id="help-heading">Know the limits</h2>
+      <div class="panel copy">
+        <p>No-pick days are possible. Delayed data, unavailable authority, price movement, market suspension, and service interruption are shown as distinct states.</p>
+        <p>Only owner-configured markets and jurisdictions may be offered. Age, jurisdiction, cancellation, refund, privacy, responsible-use, and support policies must be reviewed before checkout is enabled.</p>
+        <p><a href="mailto:support@example.invalid">Support address pending owner configuration</a></p>
+      </div>
+    </section>
+  </main>
+  <footer>Informational research only. Never wager more than you can afford to lose.</footer>
+  <script src="/subscriber.js" defer></script>
+</body>
+</html>

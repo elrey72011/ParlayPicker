@@ -1,0 +1,77 @@
+{
+  "blockers": [
+    "ALERT_FAULTS_NOT_VERIFIED",
+    "BACKUP_RESTORE_NOT_VERIFIED",
+    "BILLING_SANDBOX_NOT_VERIFIED",
+    "LOAD_NOT_VERIFIED",
+    "PILOT_NOT_VERIFIED",
+    "PUBLICATION_RECOVERY_NOT_VERIFIED",
+    "RESULTS_RECONCILIATION_NOT_VERIFIED",
+    "STAGING_CONFIGURATION_INCOMPLETE",
+    "STAGING_ENDPOINT_NOT_CONFIGURED"
+  ],
+  "checks": {
+    "configuration": {
+      "missing_names": [
+        "PAID_DATABASE_URL",
+        "PAID_PUBLIC_BASE_URL",
+        "PAID_ALLOWED_ORIGINS",
+        "PAID_ALLOWED_RETURN_URLS",
+        "PAID_OIDC_ISSUER",
+        "PAID_OIDC_CLIENT_ID",
+        "PAID_OIDC_CLIENT_SECRET",
+        "PAID_OIDC_CALLBACK_URL",
+        "PAID_RELEASE_HMAC_SECRET",
+        "PAID_GATEWAY_PROBE_TOKEN",
+        "PAID_RELEASE_PROBE_URL",
+        "PAID_STRIPE_SECRET_KEY",
+        "PAID_STRIPE_WEBHOOK_SECRET",
+        "PAID_STRIPE_ACCOUNT_ID",
+        "PAID_STRIPE_PRICE_ID"
+      ],
+      "status": "BLOCKED"
+    },
+    "evidence": {
+      "alert_faults": "NOT_RUN_EXTERNAL_BLOCKER",
+      "backup_restore": "NOT_RUN_EXTERNAL_BLOCKER",
+      "billing_sandbox": "NOT_RUN_EXTERNAL_BLOCKER",
+      "load": "PARTIAL",
+      "pilot": "NOT_STARTED",
+      "publication_recovery": "PARTIAL",
+      "results_reconciliation": "NOT_RUN_EXTERNAL_BLOCKER"
+    },
+    "live_billing": {
+      "status": "BLOCKED_AS_REQUIRED"
+    },
+    "protected_scope": {
+      "base_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+      "changed_files": [],
+      "existing_test_changes": [],
+      "exit_code": 0,
+      "head_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+      "local_changes": {
+        "staged": [],
+        "unstaged": []
+      },
+      "local_protected_changes": [],
+      "protected_changes": [],
+      "reason_codes": [],
+      "recorded_base_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+      "runtime_shadowing": [],
+      "schema_version": 1,
+      "self_protected_changes": [],
+      "status": "PASS",
+      "tooling_hash_mismatches": []
+    },
+    "staging_status_endpoint": {
+      "status": "NOT_RUN_EXTERNAL_BLOCKER"
+    }
+  },
+  "completion_label": "IMPLEMENTED_LOCAL_VERIFIED",
+  "environment": "staging",
+  "errors": [],
+  "generated_at": "2026-09-28T20:57:17.794120+00:00",
+  "read_only": true,
+  "schema_version": 1,
+  "status": "BLOCKED"
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parlaypicker.example/contracts/billing-event-v1.schema.json",
+  "title": "Durable billing event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "provider", "provider_account_id", "environment", "provider_event_id", "event_type", "payload_hash", "received_at", "status"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "provider": {"const": "stripe"},
+    "provider_account_id": {"type": "string"},
+    "environment": {"enum": ["test", "live"]},
+    "provider_event_id": {"type": "string"},
+    "event_type": {"type": "string"},
+    "payload_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "received_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["RECEIVED", "PROCESSING", "PROCESSED", "RETRY", "DEAD_LETTER", "QUARANTINED"]}
+  }
+}

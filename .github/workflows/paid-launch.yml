@@ -1,0 +1,69 @@
+name: Paid launch service
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paid-launch-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  protected-scope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v6
+        with: {python-version: "3.12"}
+      - name: Verify protected files and existing test expectations
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '5fb8e13577c3092f1eda4ad9b787368d3f691c71' }}
+        run: python scripts/check_launch_change_scope.py --base "$BASE_SHA" --json-output protected-code-diff-report.json
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: protected-code-diff-report
+          path: protected-code-diff-report.json
+          retention-days: 14
+
+  subscriber-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: subscriber_test
+          POSTGRES_USER: subscriber
+          POSTGRES_PASSWORD: test-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U subscriber -d subscriber_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    env:
+      PAID_TEST_DATABASE_URL: postgresql://subscriber:test-only@localhost:5432/subscriber_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/subscriber/requirements.txt
+      - run: python -m pip install --upgrade pip && python -m pip install -r services/subscriber/requirements.txt
+      - name: Audit isolated service dependencies
+        run: python -m pip install pip-audit==2.10.1 && python -m pip_audit -r services/subscriber/requirements.txt
+      - name: Compile isolated service
+        run: python -m compileall -q services/subscriber integrations/subscriber_release scripts/check_launch_change_scope.py scripts/submit_customer_release.py scripts/verify_paid_launch.py
+      - name: Run paid-launch PostgreSQL, security, and contract tests
+        run: python -m pytest -q tests/paid_launch/case_policy_and_contracts.py tests/paid_launch/case_postgres_api.py tests/paid_launch/case_isolation_and_scope.py --junitxml=paid-launch-tests.xml
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: paid-launch-test-results
+          path: paid-launch-tests.xml
+          retention-days: 14

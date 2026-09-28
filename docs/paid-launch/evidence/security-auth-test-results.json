@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "status": "PARTIAL",
+  "local_unit_contract_tests": {"status": "PASS", "passed": 8, "failed": 0},
+  "covered_locally": [
+    "fail-closed checkout policy",
+    "stale/research authority rejection",
+    "exact review-hash binding",
+    "probability and exact-market validation",
+    "live-key rejection while live billing is disabled",
+    "subscriber import isolation",
+    "release command import isolation",
+    "protected scope guard"
+  ],
+  "postgres_api_suite": "PENDING_GITHUB_CI_NO_LOCAL_POSTGRES_RUNTIME",
+  "browser_oidc_mfa": "NOT_RUN_EXTERNAL_BLOCKER",
+  "cdn_service_worker_cache": "NOT_RUN_EXTERNAL_BLOCKER"
+}

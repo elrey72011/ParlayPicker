@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "PARTIAL",
+  "implemented": [
+    "immutable pending revision",
+    "privileged routed-hash probe",
+    "post-I/O authority and expiry check",
+    "transactional compare-and-set active pointer",
+    "bounded leased retry job",
+    "withdrawal and unsent-alert suppression",
+    "no research/Drive/lock imports"
+  ],
+  "verified": ["static import isolation", "review hash and stale authority unit contracts"],
+  "blockers": ["POSTGRES_INTEGRATION_PENDING_CI", "DEPLOYED_GATEWAY_PROBE_NOT_RUN", "WORKER_CRASH_RECOVERY_NOT_RUN_IN_STAGING"]
+}

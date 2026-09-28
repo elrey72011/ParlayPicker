@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "status": "NOT_RUN_EXTERNAL_BLOCKER",
+  "proposed_targets": {"customer_state_rpo_minutes": 15, "rto_minutes": 60},
+  "blockers": ["MANAGED_POSTGRES_NOT_PROVISIONED", "PITR_NOT_VERIFIED", "ISOLATED_RESTORE_NOT_RUN", "POST_RESTORE_PROVIDER_RECONCILIATION_NOT_RUN"]
+}

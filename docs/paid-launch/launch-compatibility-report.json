@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "base_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+  "pr_2350_status": "MERGED",
+  "completion_label": "IMPLEMENTED_LOCAL_VERIFIED",
+  "protected_files": "PASS",
+  "existing_test_expectations": "PASS",
+  "paid_launch_unit_contract_tests": {
+    "status": "PASS",
+    "passed": 8,
+    "failed": 0
+  },
+  "inherited_regressions": {
+    "status": "PASS",
+    "passed": 125,
+    "failed": 0,
+    "warnings": 202,
+    "files": [
+      "tests/test_refresh_lock_performance.py",
+      "tests/test_lock_storage_performance.py",
+      "tests/test_prediction_evidence.py"
+    ]
+  },
+  "full_suite_local_attempt": {
+    "status": "NON_AUTHORITATIVE_ENVIRONMENT_MISMATCH",
+    "passed": 2947,
+    "failed": 53,
+    "reason": "The host research runtime has pandas 3.x and a Streamlit version without the pinned tabs key API; repository CI installs pandas 2.2.3 and Streamlit 1.59.1 from unchanged requirements.txt. No failing test or research source was modified.",
+    "authoritative_result": "PENDING_GITHUB_CI"
+  },
+  "deterministic_inherited_benchmark": {
+    "status": "PASS_WITH_KNOWN_TARGET_FINDING",
+    "authenticated_cloud_measurement": false,
+    "refresh_cold_wall_time_reduction_percent": 57.78,
+    "refresh_warm_wall_time_reduction_percent": 77.75,
+    "lock_cold_wall_time_reduction_percent": 33.94,
+    "lock_warm_wall_time_reduction_percent": 44.14,
+    "integrity_equivalent": true,
+    "note": "The inherited lock timing does not meet the prior proposed 60% target; no protected optimization was attempted."
+  },
+  "subscriber_postgresql_tests": "PENDING_GITHUB_CI_NO_LOCAL_POSTGRES_RUNTIME",
+  "staging": "NOT_RUN_EXTERNAL_BLOCKER",
+  "live_billing": "DISABLED"
+}
