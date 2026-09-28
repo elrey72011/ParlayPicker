@@ -11,6 +11,7 @@ import sqlite3
 import uuid
 
 import pandas as pd
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESS_INSTANCE = uuid.uuid4().hex
@@ -37,6 +38,13 @@ GEMINI_REVIEW_COLUMNS = {
     "controlled_trial_estimated_expected_value", "controlled_trial_eligible",
     "controlled_trial_stake",
 }
+
+
+def _strict_boolean_values(values):
+    """Map only real boolean scalars; missing IDs and strings remain false."""
+    return values.map(
+        lambda value: bool(value) if isinstance(value, (bool, np.bool_)) else False
+    ).astype(bool)
 
 
 def now_utc():
@@ -300,7 +308,7 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
         assert_integrity(final)
         if "candidate_id" in audit and "candidate_id" in final and "final_pick_valid" in final:
             final_valid_by_id = final.drop_duplicates("candidate_id").set_index("candidate_id")["final_pick_valid"]
-            audit["final_pick_valid"] = audit["candidate_id"].map(final_valid_by_id).fillna(False).astype(bool)
+            audit["final_pick_valid"] = _strict_boolean_values(audit["candidate_id"].map(final_valid_by_id))
         assert_integrity(audit)
     if "matchup_id" not in final:
         final["matchup_id"] = ""

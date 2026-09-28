@@ -2,16 +2,21 @@
 from app_core.public_quote_policy import supported_quote
 from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES, package_age_minutes
 from contextlib import contextmanager
+from dataclasses import dataclass
 from time import perf_counter
 import logging
 import hashlib
 import json
 import math
+import os
+from pathlib import Path
 import re
+import uuid
 from functools import lru_cache
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from app_core.result_team_names import normalize_result_team
+from app_core.performance_spans import PerformanceSpan, opaque_hash, operation_ids
 
 
 def encoded(value):
@@ -27,16 +32,51 @@ def now():
 
 
 @contextmanager
-def lock_stage(name, records=0):
+def lock_stage(name, records=None, *, ids=None, **fields):
     started = perf_counter()
     outcome = 'error'
-    try:
-        yield
-        outcome = 'ok'
-    finally:
-        logging.getLogger(__name__).warning(
-            'PERFORMANCE lock_stage=%s seconds=%.3f records=%d outcome=%s',
-            name, perf_counter() - started, records, outcome)
+    with PerformanceSpan('lock_' + name, ids=ids, **fields) as span:
+        try:
+            yield span
+            outcome = 'ok'
+        finally:
+            span.set(outcome=outcome)
+            if records is not None:
+                span.set(records_returned=records)
+            logging.getLogger(__name__).warning(
+                'PERFORMANCE lock_stage=%s seconds=%.3f records=%s outcome=%s',
+                name, perf_counter() - started, records, outcome)
+
+
+def _shared_inventory_enabled():
+    return os.environ.get('PARLAYPICKER_SHARED_INVENTORY', '1').strip().lower() not in {
+        '0', 'false', 'no', 'off'}
+
+
+@dataclass(frozen=True)
+class VerifiedWriteReceipt:
+    key: str
+    value: dict
+    content_sha256: str
+    created: bool
+    verification_status: str = 'exact_readback_verified'
+
+
+@dataclass(frozen=True)
+class ActiveLockSnapshot:
+    originals: tuple
+    removals: tuple
+    active: tuple
+    operation_id: str
+    inventory_scope_hash: str | None
+
+
+class LockSavePartial(RuntimeError):
+    """Some lock writes verified before another write failed."""
+    def __init__(self, saved_keys, failed_keys):
+        super().__init__('Lock batch partially saved; reconcile authoritative history before retrying.')
+        self.saved_keys = tuple(saved_keys)
+        self.failed_keys = tuple(failed_keys)
 
 
 class History:
@@ -47,6 +87,11 @@ class History:
             raise ValueError('Configure Shared Drive storage before tracking public publications.')
         self.client = client or DriveStore(folder)
         self.prefix = 'parlaypicker/public-history-v1/' + identifier(site) + '/'
+        root = Path(os.environ.get('PARLAYPICKER_EVIDENCE_DIR', 'data/prediction_evidence'))
+        client_scope = (self.client.storage_scope_hash()
+                        if callable(getattr(self.client, 'storage_scope_hash', None)) else type(self.client).__name__)
+        self.cache_dir = root / 'remote-cache' / 'public-history' / opaque_hash(self.prefix, client_scope)
+        self.last_write_receipts = ()
 
     def read(self, key, *, client=None):
         client = self.client if client is None else client
@@ -56,18 +101,24 @@ class History:
         finally:
             body.close()
 
-    def put(self, key, value, first=False, *, client=None):
+    def put_verified(self, key, value, first=False, *, client=None):
         client = self.client if client is None else client
         raw=encoded(value)
+        created = True
         try:
             client.put_object(Key=self.prefix+key,Body=raw,IfNoneMatch='*')
         except Exception as exc:
             if getattr(exc,'response',{}).get('Error',{}).get('Code') not in {'412','PreconditionFailed'}:
                 raise
+            created = False
         saved=self.read(key, client=client)
         if not first and saved!=value:
             raise ValueError('Public history conflict; preserve the existing record.')
-        return saved
+        return VerifiedWriteReceipt(key, saved, hashlib.sha256(encoded(saved)).hexdigest(), created)
+
+    def put(self, key, value, first=False, *, client=None, receipt=False):
+        verified = self.put_verified(key, value, first=first, client=client)
+        return verified if receipt else verified.value
 
     def archive(self, package):
         from app_core.public_board import validate_package
@@ -89,7 +140,7 @@ class History:
             raise ValueError('Deployment history conflict')
         return saved
 
-    def _all(self, kind):
+    def _all_legacy(self, kind):
         if hasattr(self.client, 'read_objects'):
             return [json.loads(raw) for _, raw in self.client.read_objects(Prefix=self.prefix+kind+'/')]
         values=[]
@@ -98,28 +149,68 @@ class History:
                 values.append(self.read(item['Key'][len(self.prefix):]))
         return values
 
+    def _read_kinds(self, kinds, *, operation_id=None, full_verification=False, ids=None):
+        kinds = tuple(dict.fromkeys(kinds))
+        ids = ids or operation_ids(action_id=operation_id)
+        operation_id = operation_id or ids['action_id']
+        optimized = (_shared_inventory_enabled()
+                     and callable(getattr(self.client, 'discover_complete_inventory', None))
+                     and callable(getattr(self.client, 'read_verified_prefixes', None)))
+        if not optimized:
+            return {kind: self._all_legacy(kind) for kind in kinds}, None
+        prefixes = {kind: self.prefix + kind + '/' for kind in kinds}
+        inventory = self.client.discover_complete_inventory(
+            operation_id=operation_id, namespace=self.prefix, ids=ids)
+        objects = self.client.read_verified_prefixes(
+            Prefixes=list(prefixes.values()), inventory=inventory, cache_dir=self.cache_dir,
+            full_verify=full_verification, ids=ids)
+        values = {
+            kind: [json.loads(raw) for _, raw in objects[prefix]]
+            for kind, prefix in prefixes.items()
+        }
+        return values, inventory
+
+    def active_lock_snapshot(self, *, operation_id=None, full_verification=False, ids=None):
+        ids = ids or operation_ids(lock_operation_id=operation_id or uuid.uuid4().hex)
+        operation_id = operation_id or ids['lock_operation_id']
+        with lock_stage('active_lock_snapshot', ids=ids, table_or_kind='locks+lock_removals') as span:
+            values, inventory = self._read_kinds(
+                ('locks', 'lock_removals'), operation_id=operation_id,
+                full_verification=full_verification, ids=ids)
+            originals = values['locks']
+            removals = values['lock_removals']
+            removed = {row['lock_hash'] for row in removals}
+            active = [row for row in originals if digest(row) not in removed]
+            span.set(records_returned=len(active), objects_matched=len(originals) + len(removals),
+                     verification_status='active_state_rebuilt_from_fresh_membership')
+        return ActiveLockSnapshot(tuple(originals), tuple(removals), tuple(active), operation_id,
+                                  getattr(inventory, 'scope_hash', None))
+
+    def _all(self, kind):
+        return self._read_kinds((kind,))[0][kind]
+
     def all(self, kind):
-        values = self._all(kind)
         if kind == 'locks':
-            removed = {r['lock_hash'] for r in self._all('lock_removals')}
-            values = [r for r in values if digest(r) not in removed]
-        return values
+            return list(self.active_lock_snapshot().active)
+        return self._all(kind)
 
     def remove_locks(self, selected_hashes, reason):
         """Append owner corrections; never delete original locks or remove later relocks."""
         if not reason.strip() or not selected_hashes:
             raise ValueError('Select locks and provide a correction reason.')
-        originals = {digest(r): r for r in self._all('locks')}
+        snapshot = self.active_lock_snapshot()
+        originals = {digest(r): r for r in snapshot.originals}
         if not set(selected_hashes) <= originals.keys():
             raise ValueError('Lock history changed. Restore history before correcting it.')
         for key in sorted(set(selected_hashes)):
             self.put('lock_removals/'+key+'.json',
                      {'lock_hash':key, 'lock_id':originals[key]['id'],
                       'removed_at':now(), 'reason':reason.strip(), 'lock':originals[key]}, first=True)
-        return self.all('locks')
+        return list(self.active_lock_snapshot().active)
 
-    def lock_picks(self, package, selected_ids, *, progress=None, relock_review=None):
+    def lock_picks(self, package, selected_ids, *, progress=None, relock_review=None, operation_id=None):
         from app_core.locked_picks import lock_candidates
+        ids = operation_ids(lock_operation_id=operation_id or uuid.uuid4().hex)
         # One authoritative server acceptance time, unchanged by I/O completion.
         at = now()
         choices = {row['id']: row for row in lock_candidates(package, at)}
@@ -133,11 +224,11 @@ class History:
             if progress:
                 progress(label, done, total)
         update('Reading existing locks')
-        with lock_stage('read_existing_locks'):
-            originals = self._all('locks')
-            removals = self._all('lock_removals')
-            removed = {r['lock_hash'] for r in removals}
-            active = {r['id']: r for r in originals if digest(r) not in removed}
+        with lock_stage('read_existing_locks', ids=ids):
+            snapshot = self.active_lock_snapshot(operation_id=ids['lock_operation_id'], ids=ids)
+            originals = list(snapshot.originals)
+            removals = list(snapshot.removals)
+            active = {r['id']: r for r in snapshot.active}
         if relock_review is not None:
             from app_core.relock_changes import verify_review, validate_candidates, RelockAlreadyLocked
             if requested & active.keys():
@@ -145,7 +236,7 @@ class History:
             choices = validate_candidates(package, requested, choices, now())
             verify_review(removals, choices, requested, relock_review)
         update('Saving reviewed board')
-        with lock_stage('archive_board'):
+        with lock_stage('archive_board', ids=ids):
             self.archive(package)
         pending = []
         for identity in sorted(requested):
@@ -156,16 +247,31 @@ class History:
             suffix = '-'+digest(generation) if generation else ''
             pending.append(('locks/' + identity + suffix + '.json', choices[identity]))
         update('Saving and verifying locks', 0, len(pending))
-        with lock_stage('save_verified_locks', len(pending)):
-            if hasattr(self.client, 'run_parallel'):
-                saved = self.client.run_parallel(
-                    lambda worker, item: self.put(item[0], item[1], first=True, client=worker),
-                    pending, progress=lambda done, total: update('Saving and verifying locks', done, total))
-            else:
-                saved = []
-                for key, value in pending:
-                    saved.append(self.put(key, value, first=True))
-                    update('Saving and verifying locks', len(saved), len(pending))
+        receipts = []
+        with lock_stage('save_verified_locks', len(pending), ids=ids) as span:
+            def save(worker, item):
+                # Route through put() so existing concurrency hooks and test
+                # adapters observe the same write boundary as before.
+                receipt = self.put(item[0], item[1], first=True, client=worker, receipt=True)
+                receipts.append(receipt)
+                return receipt
+            try:
+                if hasattr(self.client, 'run_parallel'):
+                    receipts = self.client.run_parallel(
+                        save, pending, progress=lambda done, total: update('Saving and verifying locks', done, total))
+                else:
+                    receipts = []
+                    for key, value in pending:
+                        receipts.append(self.put(key, value, first=True, receipt=True))
+                        update('Saving and verifying locks', len(receipts), len(pending))
+            except Exception as exc:
+                self.last_write_receipts = tuple(receipts)
+                saved_keys = {receipt.key for receipt in receipts}
+                span.set(partial_result=bool(receipts), reason_code=type(exc).__name__,
+                         verification_status='partial' if receipts else 'failed')
+                raise LockSavePartial(saved_keys, [key for key, _ in pending if key not in saved_keys]) from exc
+        self.last_write_receipts = tuple(receipts)
+        saved = [receipt.value for receipt in receipts]
         if relock_review is not None and any(r != choices[r['id']] for r in saved):
             # A concurrent create won the conditional write. Never claim its
             # selection as this owner's confirmed new lock. Other batch rows

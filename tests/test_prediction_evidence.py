@@ -3,10 +3,16 @@ import json
 import sqlite3
 
 import pandas as pd
+import numpy as np
 import pytest
 
 from app_core import prediction_evidence as evidence
 from core.selector_validation import build_report
+
+
+def test_final_pick_valid_mapping_is_strict_and_missing_safe():
+    values = pd.Series([True, np.bool_(False), pd.NA, None, 'True', 1], dtype='object')
+    assert evidence._strict_boolean_values(values).tolist() == [True, False, False, False, False, False]
 
 
 def fixture_frames():

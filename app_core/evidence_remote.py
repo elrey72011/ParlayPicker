@@ -10,6 +10,7 @@ from pathlib import Path
 import threading
 
 from app_core.evidence_config import safe_error, EvidenceStorageError
+from app_core.performance_spans import PerformanceSpan, opaque_hash, operation_ids
 
 TABLES = {
     "validation_plans": ("plan_id", "sport", "payload"),
@@ -28,9 +29,29 @@ _status = {}
 _verified = {}
 
 
+def _shared_inventory_enabled():
+    return os.environ.get("PARLAYPICKER_SHARED_INVENTORY", "1").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
+
+
+def _database_generation(path):
+    """Process-local file identity that changes when a DB is replaced in place."""
+    try:
+        stat = Path(path).stat()
+    except OSError:
+        return "missing"
+    inode = getattr(stat, "st_ino", 0)
+    device = getattr(stat, "st_dev", 0)
+    # st_ino/st_dev are stable across ordinary SQLite writes. On a filesystem
+    # without a usable file ID, ctime is a conservative invalidation fallback.
+    return opaque_hash(device, inode) if inode else opaque_hash(device, stat.st_ctime_ns)
+
+
 def _scope(path):
     from app_core.prediction_evidence import database_path
-    return (*settings(), str(Path(path or database_path()).resolve()))
+    resolved = Path(path or database_path()).resolve()
+    return (*settings(), str(resolved), _database_generation(resolved))
 
 
 def _receipt(table, row):
@@ -134,47 +155,90 @@ def register_bundle(version, frozen, manifest):
     return _put(_client(), "bundles", (version, frozen, manifest), choose_existing=True)[1]
 
 
-def restore(path=None, *, client=None):
+def restore(path=None, *, client=None, full_verification=False, ids=None):
     from app_core.prediction_evidence import connect, database_path
     if not settings()[0]:
         return 0
     client = client or _client()
     bucket, prefix = settings()
+    database = Path(path or database_path()).resolve()
+    ids = ids or operation_ids(refresh_run_id=os.urandom(8).hex())
     rows = {table: [] for table in TABLES}
-    # Table-specific listing preserves referential order; all pages are consumed.
-    for table in TABLES:
-        _status["operation"] = f"restore:{table}"
-        import time
-        import logging
-        started = time.monotonic()
-        if callable(getattr(client, "read_objects", None)):
-            objects = client.read_objects(Prefix=f"{prefix}/{table}/")
+    prefixes = {table: f"{prefix}/{table}/" for table in TABLES}
+    scope_hash = opaque_hash(bucket, prefix)
+    with PerformanceSpan("evidence_restore", ids=ids, database_generation=_database_generation(database),
+                         storage_scope_hash=scope_hash) as restore_span:
+        optimized = (_shared_inventory_enabled()
+                     and callable(getattr(client, "discover_complete_inventory", None))
+                     and callable(getattr(client, "read_verified_prefixes", None)))
+        if optimized:
+            _status["operation"] = "restore:discover"
+            inventory = client.discover_complete_inventory(
+                operation_id=ids["action_id"], namespace=prefix, ids=ids)
+            objects_by_prefix = client.read_verified_prefixes(
+                Prefixes=list(prefixes.values()), inventory=inventory,
+                cache_dir=database.with_name(database.name + ".remote-cache") / inventory.scope_hash,
+                full_verify=full_verification, ids=ids)
+            read_report = getattr(client, "last_read_report", None)
+            if read_report is not None:
+                _status["read_report"] = dict(read_report.__dict__)
         else:
-            pages = client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=f"{prefix}/{table}/")
-            objects = ((item["Key"], _get(client, item["Key"]))
-                       for page in pages for item in page.get("Contents", []))
-        for key, raw in objects:
-            row = _decode(raw, table)
-            if key != _key(table, row):
-                raise EvidenceStorageError("Remote record key does not match its identity")
-            rows[table].append(row)
-        logging.getLogger(__name__).warning("PERFORMANCE evidence_restore table=%s records=%s seconds=%.3f",
-                                          table, len(rows[table]), time.monotonic() - started)
+            objects_by_prefix = {}
+            for table, table_prefix in prefixes.items():
+                if callable(getattr(client, "read_objects", None)):
+                    objects_by_prefix[table_prefix] = client.read_objects(Prefix=table_prefix)
+                else:
+                    pages = client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=table_prefix)
+                    objects_by_prefix[table_prefix] = [
+                        (item["Key"], _get(client, item["Key"]))
+                        for page in pages for item in page.get("Contents", [])]
+        for table, table_prefix in prefixes.items():
+            _status["operation"] = f"restore:{table}"
+            with PerformanceSpan("evidence_decode_validate", ids=ids,
+                                 database_generation=_database_generation(database),
+                                 storage_scope_hash=scope_hash, table_or_kind=table) as table_span:
+                for key, raw in objects_by_prefix[table_prefix]:
+                    row = _decode(raw, table)
+                    if key != _key(table, row):
+                        raise EvidenceStorageError("Remote record key does not match its identity")
+                    rows[table].append(row)
+                table_span.set(records_returned=len(rows[table]), verification_status="payload_verified")
+        restore_span.set(
+            listing_traversals=(getattr(getattr(client, "last_read_report", None), "listing_traversals", None)
+                                if optimized else len(TABLES)),
+            listing_pages=getattr(getattr(client, "last_read_report", None), "listing_pages", None),
+            metadata_items_seen=getattr(getattr(client, "last_read_report", None), "metadata_items_seen", None),
+            objects_matched=sum(len(value) for value in objects_by_prefix.values()),
+            objects_downloaded=getattr(getattr(client, "last_read_report", None), "objects_downloaded", None),
+            objects_reused=getattr(getattr(client, "last_read_report", None), "objects_reused", None),
+            bytes_downloaded=getattr(getattr(client, "last_read_report", None), "bytes_downloaded", None),
+            cache_hits=getattr(getattr(client, "last_read_report", None), "cache_hits", None),
+            cache_misses=getattr(getattr(client, "last_read_report", None), "cache_misses", None),
+            records_returned=sum(len(entries) for entries in rows.values()),
+            verification_status="full_bytes_verified" if full_verification else "verified")
     imported = 0
-    with closing(connect(path or database_path())) as db, db:
-        for table, entries in rows.items():
-            if table == "score_revisions":
-                entries.sort(key=lambda row: (row[2], row[1]))
-            for row in entries:
-                where = " AND ".join(f"{TABLES[table][i]}=?" for i in KEYS[table])
-                identity = tuple(row[i] for i in KEYS[table])
-                existing = db.execute(f"SELECT {','.join(TABLES[table])} FROM {table} WHERE {where}", identity).fetchone()
-                same_score = existing and table == "score_revisions" and existing[:2] == row[:2] and existing[3] == row[3]
-                if existing and existing != row and not same_score:
-                    raise EvidenceStorageError("Restore conflicts with immutable local evidence")
-                if not existing:
-                    db.execute(f"INSERT INTO {table} ({','.join(TABLES[table])}) VALUES ({','.join('?' for _ in row)})", row)
-                    imported += int(table == "snapshots")
+    unchanged = 0
+    with PerformanceSpan("evidence_local_merge", ids=ids, database_generation=_database_generation(database),
+                         storage_scope_hash=scope_hash) as merge_span:
+        with closing(connect(database)) as db, db:
+            for table, entries in rows.items():
+                if table == "score_revisions":
+                    entries.sort(key=lambda row: (row[2], row[1]))
+                for row in entries:
+                    where = " AND ".join(f"{TABLES[table][i]}=?" for i in KEYS[table])
+                    identity = tuple(row[i] for i in KEYS[table])
+                    existing = db.execute(f"SELECT {','.join(TABLES[table])} FROM {table} WHERE {where}", identity).fetchone()
+                    same_score = existing and table == "score_revisions" and existing[:2] == row[:2] and existing[3] == row[3]
+                    if existing and existing != row and not same_score:
+                        raise EvidenceStorageError("Restore conflicts with immutable local evidence")
+                    if not existing:
+                        db.execute(f"INSERT INTO {table} ({','.join(TABLES[table])}) VALUES ({','.join('?' for _ in row)})", row)
+                        imported += int(table == "snapshots")
+                    else:
+                        unchanged += 1
+        merge_span.set(records_imported=imported, records_unchanged=unchanged,
+                       records_returned=sum(len(entries) for entries in rows.values()),
+                       verification_status="transaction_committed")
     with _lock:
         _verified.setdefault(_scope(path), set()).update(
             _receipt(table, row) for table, entries in rows.items() for row in entries)
@@ -182,17 +246,17 @@ def restore(path=None, *, client=None):
     return imported
 
 
-def restore_once(path=None):
+def restore_once(path=None, *, full_verification=False):
     from app_core.prediction_evidence import database_path
     bucket, prefix = settings()
     if not bucket:
         return
-    identity = (bucket, prefix, str(Path(path or database_path()).resolve()))
+    identity = _scope(path)
     with _lock:
-        if identity not in _restored:
+        if full_verification or identity not in _restored:
             try:
-                restore(path)
-                _restored.add(identity)
+                restore(path, full_verification=full_verification)
+                _restored.add(_scope(path))
             except Exception as exc:
                 _status.update(status="error", error=safe_error(exc, "Restore"))
                 raise RuntimeError(_status["error"]) from None

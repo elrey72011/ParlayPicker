@@ -1,16 +1,22 @@
 """Create/read-only evidence objects in a Google Workspace Shared Drive folder."""
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from threading import local
 from io import BytesIO
+import hashlib
 import json
+from pathlib import Path
 import re
 import uuid
 import time
 import requests
 
+from app_core.performance_spans import PerformanceSpan, opaque_hash, operation_ids
+
 
 def _read(session, url, **kwargs):
     """Retry transient read failures only; never retry an uncertain upload."""
+    metrics = kwargs.pop("_metrics", None)
     for attempt in range(3):
         try:
             response = session.get(url, **kwargs)
@@ -22,7 +28,11 @@ def _read(session, url, **kwargs):
         except requests.HTTPError as exc:
             if exc.response is None or exc.response.status_code not in (429, 500, 502, 503, 504) or attempt == 2:
                 raise
-        time.sleep(attempt + 1)
+        wait_seconds = attempt + 1
+        if metrics is not None:
+            metrics["retries"] = metrics.get("retries", 0) + 1
+            metrics["retry_wait_ms"] = metrics.get("retry_wait_ms", 0) + wait_seconds * 1000
+        time.sleep(wait_seconds)
 
 from app_core.evidence_config import EvidenceStorageError
 
@@ -31,6 +41,42 @@ API = "https://www.googleapis.com/drive/v3/files"
 
 class AlreadyExists(Exception):
     response = {"Error": {"Code": "PreconditionFailed"}}
+
+
+@dataclass(frozen=True)
+class DriveInventory:
+    """A complete, operation-scoped Drive folder inventory.
+
+    The object is deliberately immutable and is never kept as global authority.
+    Callers must discover a new inventory at each required action boundary.
+    """
+    scope_hash: str
+    operation_id: str
+    namespace: str | None
+    files: tuple
+    listing_pages: int
+    metadata_items_seen: int
+    complete: bool = True
+
+
+@dataclass(frozen=True)
+class VerifiedReadReport:
+    inventory_scope_hash: str
+    operation_id: str
+    requested_prefixes: tuple
+    listing_traversals: int
+    listing_pages: int
+    metadata_items_seen: int
+    objects_matched: int
+    objects_downloaded: int
+    objects_reused: int
+    bytes_downloaded: int
+    retries: int
+    retry_wait_ms: int
+    cache_hits: int
+    cache_misses: int
+    verification_status: str
+    full_verification: bool
 
 
 def _authorized_session():
@@ -69,8 +115,18 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         if not metadata.get("driveId") or metadata.get("trashed") or metadata.get("mimeType") != "application/vnd.google-apps.folder":
             raise EvidenceStorageError("Evidence folder must be an active Google Workspace Shared Drive folder")
         self.drive = metadata["driveId"]
+        self.last_read_report = None
 
-    def _files(self, name=None):
+    def storage_scope_hash(self):
+        session = getattr(self, "session", None)
+        credentials = getattr(session, "credentials", None)
+        identity = (getattr(credentials, "service_account_email", None)
+                    or getattr(credentials, "client_email", None)
+                    or type(session).__name__)
+        return opaque_hash("google_workspace_shared_drive", identity,
+                           getattr(self, "drive", "injected"), getattr(self, "folder", "injected"))
+
+    def _files(self, name=None, stats=None):
         query = f"'{self.folder}' in parents and trashed = false"
         if name is not None:
             escaped = name.replace("\\", "\\\\").replace("'", "\\'")
@@ -81,12 +137,17 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
                       "supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "corpora": "drive", "driveId": self.drive}
             if token:
                 params["pageToken"] = token
-            response = _read(self.session, API, params=params, timeout=20)
+            response = _read(self.session, API, params=params, timeout=20, _metrics=stats)
             response.raise_for_status()
             data = response.json()
+            if stats is not None:
+                stats["listing_pages"] = stats.get("listing_pages", 0) + 1
             if data.get("incompleteSearch"):
                 raise EvidenceStorageError("Drive listing was incomplete; restore cannot be verified")
-            yield from data.get("files", [])
+            files = data.get("files", [])
+            if stats is not None:
+                stats["metadata_items_seen"] = stats.get("metadata_items_seen", 0) + len(files)
+            yield from files
             token = data.get("nextPageToken")
             if not token:
                 return
@@ -102,12 +163,16 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
             raise EvidenceStorageError("Remote evidence object is missing")
         return {"Body": BytesIO(self._read_files(files))}
 
-    def _read_files(self, files):
+    def _read_files(self, files, metrics=None):
         contents = []
         for item in files:
-            response = _read(self.session, f"{API}/{item['id']}", params={"alt": "media", "supportsAllDrives": "true"}, timeout=20)
+            response = _read(self.session, f"{API}/{item['id']}", params={"alt": "media", "supportsAllDrives": "true"}, timeout=20,
+                             _metrics=metrics)
             response.raise_for_status()
             contents.append(response.content)
+            if metrics is not None:
+                metrics["objects_downloaded"] = metrics.get("objects_downloaded", 0) + 1
+                metrics["bytes_downloaded"] = metrics.get("bytes_downloaded", 0) + len(response.content)
         if any(raw != contents[0] for raw in contents):
             raise EvidenceStorageError("Drive contains conflicting duplicate evidence names")
         return contents[0]
@@ -158,58 +223,94 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
             for session in sessions:
                 session.close()
 
-    def read_objects(self, *, Prefix):
-        """One fresh listing, then verified reads by ID; no persistent cache."""
-        grouped = {}
-        for item in self._files():
-            if item['name'].startswith(Prefix):
-                grouped.setdefault(item['name'], {})[item['id']] = item
+    def discover_complete_inventory(self, *, operation_id=None, namespace=None, ids=None):
+        """List the entire folder exactly once for one bounded read phase."""
+        ids = ids or operation_ids(action_id=operation_id)
+        operation_id = operation_id or ids["action_id"]
+        stats = {"listing_pages": 0, "metadata_items_seen": 0, "retries": 0, "retry_wait_ms": 0}
+        with PerformanceSpan("drive_inventory", ids=ids, storage_scope_hash=self.storage_scope_hash()) as span:
+            try:
+                files = list(self._files(stats=stats))
+            except TypeError:
+                # Compatibility for deterministic injected stores that override
+                # _files() without the optional instrumentation argument.
+                files = list(self._files())
+                stats["metadata_items_seen"] = len(files)
+                stats["listing_pages"] = None
+            span.set(listing_traversals=1, listing_pages=stats["listing_pages"],
+                     metadata_items_seen=stats["metadata_items_seen"], retries=stats["retries"],
+                     retry_wait_ms=stats["retry_wait_ms"], verification_status="complete")
+        return DriveInventory(self.storage_scope_hash(), operation_id, namespace, tuple(files),
+                              stats["listing_pages"], stats["metadata_items_seen"])
+
+    def _inventory_groups(self, inventory, prefixes):
+        if not inventory.complete or inventory.scope_hash != self.storage_scope_hash():
+            raise EvidenceStorageError("Drive inventory is incomplete or belongs to a different storage scope")
+        grouped = {prefix: {} for prefix in prefixes}
+        for item in inventory.files:
+            for prefix in prefixes:
+                if item["name"].startswith(prefix):
+                    grouped[prefix].setdefault(item["name"], {})[item["id"]] = item
         for name, file_id in self.created_ids.items():
-            if name.startswith(Prefix):
-                grouped.setdefault(name, {})[file_id] = {'id': file_id, 'name': name}
-        return self.run_parallel(
-            lambda worker, name: (name, worker._read_files(list(grouped[name].values()))),
-            sorted(grouped))
+            for prefix in prefixes:
+                if name.startswith(prefix):
+                    grouped[prefix].setdefault(name, {}).setdefault(file_id, {"id": file_id, "name": name})
+        return grouped
 
-    def read_cached_objects(self, *, Prefix, cache_dir):
-        """Fresh complete listing; reuse only bytes matching Drive's SHA-256.
+    def read_verified_prefixes(self, *, Prefixes, inventory=None, cache_dir=None,
+                               full_verify=False, progress=None, ids=None):
+        """Read several prefixes from one complete inventory.
 
-        Missing checksums always force media reads. Every duplicate is checked;
-        cached bytes alone never establish remote presence or durability.
+        Cached bytes are reusable only when their local SHA-256 agrees with the
+        fresh provider checksum. Missing checksums and full verification always
+        download media. Duplicate names retain fail-closed byte comparison.
         """
-        from pathlib import Path
-        import hashlib
-        root = Path(cache_dir)
-        root.mkdir(parents=True, exist_ok=True)
-        grouped = {}
-        for item in self._files():
-            if item['name'].startswith(Prefix):
-                grouped.setdefault(item['name'], {})[item['id']] = item
-        for name, file_id in self.created_ids.items():
-            if name.startswith(Prefix):
-                grouped.setdefault(name, {}).setdefault(file_id, {'id':file_id, 'name':name})
-        cache_events = []
+        prefixes = tuple(dict.fromkeys(Prefixes))
+        ids = ids or operation_ids(action_id=getattr(inventory, "operation_id", None))
+        inventory = inventory or self.discover_complete_inventory(ids=ids)
+        grouped_by_prefix = self._inventory_groups(inventory, prefixes)
+        by_name = {}
+        for groups in grouped_by_prefix.values():
+            for name, items in groups.items():
+                by_name.setdefault(name, {}).update(items)
+        root = Path(cache_dir) if cache_dir is not None else None
+        if root is not None:
+            root.mkdir(parents=True, exist_ok=True)
+
         def read(worker, name):
+            local_metrics = {"objects_downloaded": 0, "objects_reused": 0,
+                             "bytes_downloaded": 0, "cache_hits": 0,
+                             "cache_misses": 0, "retries": 0, "retry_wait_ms": 0}
             contents = []
-            for item in grouped[name].values():
-                sha = item.get('sha256Checksum', '')
-                target = root / sha if re.fullmatch(r'[a-f0-9]{64}', sha) else None
+            for item in by_name[name].values():
+                checksum = item.get("sha256Checksum", "")
+                target = root / checksum if root is not None and re.fullmatch(r"[a-f0-9]{64}", checksum) else None
                 raw = None
-                if target is not None:
+                if not full_verify and target is not None:
                     try:
                         candidate = target.read_bytes()
-                        if hashlib.sha256(candidate).hexdigest() == sha:
+                        if hashlib.sha256(candidate).hexdigest() == checksum:
                             raw = candidate
-                            cache_events.append("reused")
+                            local_metrics["objects_reused"] += 1
+                            local_metrics["cache_hits"] += 1
                     except OSError:
                         pass
                 if raw is None:
-                    raw = worker._read_files([item])
-                    cache_events.append("downloaded")
+                    local_metrics["cache_misses"] += 1
+                    before = local_metrics["objects_downloaded"]
+                    try:
+                        raw = worker._read_files([item], metrics=local_metrics)
+                    except TypeError:
+                        # Backward-compatible injected readers used by tests and
+                        # local adapters may not accept instrumentation yet.
+                        raw = worker._read_files([item])
+                    if local_metrics["objects_downloaded"] == before:
+                        local_metrics["objects_downloaded"] += 1
+                        local_metrics["bytes_downloaded"] += len(raw)
                     if target is not None:
-                        if hashlib.sha256(raw).hexdigest() != sha:
-                            raise EvidenceStorageError('Remote evidence checksum changed during read')
-                        temporary = root / (sha + '.' + uuid.uuid4().hex + '.tmp')
+                        if hashlib.sha256(raw).hexdigest() != checksum:
+                            raise EvidenceStorageError("Remote evidence checksum changed during read")
+                        temporary = root / (checksum + "." + uuid.uuid4().hex + ".tmp")
                         try:
                             temporary.write_bytes(raw)
                             temporary.replace(target)
@@ -217,13 +318,49 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
                             temporary.unlink(missing_ok=True)
                 contents.append(raw)
             if any(raw != contents[0] for raw in contents):
-                raise EvidenceStorageError('Drive contains conflicting duplicate evidence names')
-            return name, contents[0]
-        result = self.run_parallel(read, sorted(grouped))
-        import logging
-        logging.getLogger(__name__).warning('PERFORMANCE receipt_remote_cache objects=%s reused=%s downloaded=%s',
-                                           len(grouped), cache_events.count('reused'), cache_events.count('downloaded'))
-        return result
+                raise EvidenceStorageError("Drive contains conflicting duplicate evidence names")
+            return name, contents[0], local_metrics
+
+        with PerformanceSpan("drive_verified_prefixes", ids=ids,
+                             storage_scope_hash=inventory.scope_hash) as span:
+            results = self.run_parallel(read, sorted(by_name), progress=progress)
+            totals = {name: sum(result[2][name] for result in results) for name in (
+                "objects_downloaded", "objects_reused", "bytes_downloaded", "cache_hits",
+                "cache_misses", "retries", "retry_wait_ms")}
+            values = {prefix: [] for prefix in prefixes}
+            raw_by_name = {name: raw for name, raw, _ in results}
+            for prefix, groups in grouped_by_prefix.items():
+                values[prefix] = [(name, raw_by_name[name]) for name in sorted(groups)]
+            report = VerifiedReadReport(
+                inventory.scope_hash, inventory.operation_id, prefixes, 1,
+                inventory.listing_pages, inventory.metadata_items_seen, len(by_name),
+                totals["objects_downloaded"], totals["objects_reused"], totals["bytes_downloaded"],
+                totals["retries"], totals["retry_wait_ms"], totals["cache_hits"],
+                totals["cache_misses"], "full_bytes_verified" if full_verify else "checksum_or_bytes_verified",
+                full_verify)
+            self.last_read_report = report
+            span.set(listing_traversals=0, listing_pages=0, metadata_items_seen=0,
+                     objects_matched=len(by_name), objects_downloaded=totals["objects_downloaded"],
+                     objects_reused=totals["objects_reused"], bytes_downloaded=totals["bytes_downloaded"],
+                     retries=totals["retries"], retry_wait_ms=totals["retry_wait_ms"],
+                     cache_hits=totals["cache_hits"], cache_misses=totals["cache_misses"],
+                     records_returned=sum(len(items) for items in values.values()),
+                     verification_status=report.verification_status)
+        return values
+
+    def read_objects(self, *, Prefix):
+        """Compatibility wrapper using a fresh single-phase inventory."""
+        return self.read_verified_prefixes(Prefixes=[Prefix])[Prefix]
+
+    def read_cached_objects(self, *, Prefix, cache_dir):
+        """Fresh complete listing; reuse only bytes matching Drive's SHA-256.
+
+        Missing checksums always force media reads. Every duplicate is checked;
+        cached bytes alone never establish remote presence or durability.
+        """
+        inventory = self.discover_complete_inventory(namespace=Prefix)
+        return self.read_verified_prefixes(Prefixes=[Prefix], inventory=inventory,
+                                           cache_dir=cache_dir)[Prefix]
 
     def put_object(self, *, Key, Body, IfNoneMatch, **kwargs):
         if IfNoneMatch != "*":
