@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "implementation": "weighted-pav-unique-x-v2",
+  "status": "PASS",
+  "cases": [
+    {
+      "id": "duplicate-predictor-value",
+      "input": {
+        "probabilities": {"value": 0.6, "count": 200},
+        "outcomes": {"wins": 120, "losses": 80},
+        "queries": [0.599999, 0.6, 0.600001]
+      },
+      "before": {
+        "defect": "duplicate x coordinates were emitted with conflicting y values",
+        "predictions": [0.0, 0.0, 1.0]
+      },
+      "after": {
+        "knots": [[0.6, 0.6]],
+        "predictions": [0.6, 0.6, 0.6]
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "pooled-plateau-endpoints",
+      "input": {
+        "probabilities": [0.1, 0.2, 0.3, 0.4],
+        "outcomes": [0, 1, 0, 1]
+      },
+      "before": {
+        "knots": [[0.1, 0.0], [0.25, 0.5], [0.4, 1.0]],
+        "predictions_at_observed_x": [0.0, 0.33333333333333337, 0.6666666666666667, 1.0]
+      },
+      "after": {
+        "knots": [[0.1, 0.0], [0.2, 0.5], [0.3, 0.5], [0.4, 1.0]],
+        "predictions_at_observed_x": [0.0, 0.5, 0.5, 1.0]
+      },
+      "result": "PASS"
+    }
+  ]
+}

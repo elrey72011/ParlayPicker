@@ -12,7 +12,7 @@ unused. This wrapper closes that gap and makes the loop one command:
      join — same pipeline run that produced the graded card). When several recaps map
      to one game date, keep the latest run.
   3. grade() each pair into data/backtest_exports/<game-date>.csv.
-  4. Refit data/calibration/effective_prob_calibration.json and bucket_stats.json.
+  4. Build a non-activated calibration candidate and refresh bucket_stats.json.
 
 Usage:
     python3 scripts/refresh_calibration.py <raw_dir>
@@ -36,6 +36,10 @@ from grade_slate import grade  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 EXPORTS_DIR = ROOT / "data" / "backtest_exports"
 CAL_JSON = ROOT / "data" / "calibration" / "effective_prob_calibration.json"
+CAL_CANDIDATE_JSON = (
+    ROOT / "data" / "calibration" / "candidates"
+    / "effective_prob_calibration_candidate.json"
+)
 BUCKET_JSON = ROOT / "data" / "calibration" / "bucket_stats.json"
 
 _SCOPED_EXPORT_PREFIXES = (
@@ -116,7 +120,7 @@ def _load_meta(path: Path) -> dict:
 
 
 def _run_refits(exports_dir: Path = EXPORTS_DIR) -> bool:
-    """Refresh both artifacts; return whether global calibration promoted.
+    """Refresh both artifacts; return whether the calibration candidate is review-ready.
 
     ``fit_calibration.py`` uses exit code 2 for a statistically valid refusal to
     promote. That is not a pipeline failure and must not prevent bucket history
@@ -129,17 +133,26 @@ def _run_refits(exports_dir: Path = EXPORTS_DIR) -> bool:
             sys.executable,
             str(ROOT / "scripts" / "fit_calibration.py"),
             str(exports_dir),
-            str(CAL_JSON),
+            str(CAL_CANDIDATE_JSON),
         ],
         check=False,
     )
     if calibration.returncode not in (0, 2):
         calibration.check_returncode()
-    calibration_promoted = calibration.returncode == 0
-    if not calibration_promoted:
+    candidate_meta = _load_meta(CAL_CANDIDATE_JSON)
+    calibration_candidate_ready = (
+        calibration.returncode == 0
+        and candidate_meta.get("artifact_status") == "PRODUCTION_CANDIDATE"
+    )
+    if calibration.returncode == 2:
         print(
             "Global calibration promotion was rejected by chronological validation; "
             "retaining the prior artifact and continuing with bucket statistics."
+        )
+    elif not calibration_candidate_ready:
+        print(
+            "Calibration research candidate was written but lacks production-candidate "
+            "metadata; activation remains blocked."
         )
 
     print("\n=== fit_bucket_stats.py ===")
@@ -152,7 +165,7 @@ def _run_refits(exports_dir: Path = EXPORTS_DIR) -> bool:
         ],
         check=True,
     )
-    return calibration_promoted
+    return calibration_candidate_ready
 
 
 def main() -> int:
@@ -202,16 +215,17 @@ def main() -> int:
         print("--dry-run: skipping refit")
         return 0
 
-    before_cal, before_bkt = _load_meta(CAL_JSON), _load_meta(BUCKET_JSON)
-    calibration_promoted = _run_refits(EXPORTS_DIR)
+    before_cal, before_bkt = _load_meta(CAL_CANDIDATE_JSON), _load_meta(BUCKET_JSON)
+    calibration_candidate_ready = _run_refits(EXPORTS_DIR)
 
-    after_cal, after_bkt = _load_meta(CAL_JSON), _load_meta(BUCKET_JSON)
+    after_cal, after_bkt = _load_meta(CAL_CANDIDATE_JSON), _load_meta(BUCKET_JSON)
     print("\n=== refit summary ===")
     print(f"calibration  n_graded: {before_cal.get('n_graded')} -> {after_cal.get('n_graded')}"
           f"   fitted_on: {before_cal.get('fitted_on')} -> {after_cal.get('fitted_on')}")
     print(f"bucket_stats fitted_on: {before_bkt.get('fitted_on')} -> {after_bkt.get('fitted_on')}")
-    if not calibration_promoted:
-        print("calibration  promotion: BLOCKED (production falls back to upstream probabilities)")
+    print("calibration  activation: NOT PERFORMED (candidate output only)")
+    if not calibration_candidate_ready:
+        print("calibration  candidate: NOT REVIEW-READY (live artifact unchanged)")
     return 0
 
 

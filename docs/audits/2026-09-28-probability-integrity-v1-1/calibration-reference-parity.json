@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "runtime_implementation": "core.probability_calibration.fit_isotonic_calibration",
+  "reference": "sklearn.isotonic.IsotonicRegression(out_of_bounds='clip')",
+  "test": "tests/test_probability_integrity_v11.py::test_runtime_pav_matches_sklearn_reference",
+  "seeds": 10,
+  "observations_per_seed": 250,
+  "query_points_per_seed": 301,
+  "duplicate_x_values": true,
+  "positive_integer_sample_weights": true,
+  "absolute_tolerance": 1e-12,
+  "maximum_observed_absolute_delta": 1.1102230246251565e-16,
+  "dependency_change": "NONE; scikit-learn 1.6.1 was already pinned for application tests"
+}

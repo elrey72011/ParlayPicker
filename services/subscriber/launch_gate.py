@@ -67,6 +67,8 @@ def release_decision(
     reasons: list[str] = []
     if authority.get("revoked") is True:
         reasons.append("AUTHORITY_REVOKED")
+    if authority.get("upstream_gate_result") != "APPROVED":
+        reasons.append("UPSTREAM_GATE_NOT_APPROVED")
     if authority.get("market_status") != "QUALIFIED":
         reasons.append("MARKET_NOT_QUALIFIED")
     effective = authority.get("effective_at")

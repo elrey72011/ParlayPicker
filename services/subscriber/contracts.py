@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import StrEnum
 import math
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -54,6 +54,18 @@ class RecommendationStatus(StrEnum):
     SETTLED = "SETTLED"
 
 
+class ProbabilitySemantics(StrEnum):
+    """Supported subscriber probability mass is unconditional and push-aware."""
+
+    WIN_UNCONDITIONAL_WITH_PUSH = "win_unconditional_with_push"
+
+
+class UncertaintyMethod(StrEnum):
+    """Conservative EV lowers win mass while holding recorded push mass fixed."""
+
+    FIXED_PUSH_LOWER_WIN_BOUND = "fixed_push_lower_win_bound"
+
+
 SUPPORTED_MARKETS = frozenset(
     {
         ("NFL", "SPREAD"), ("NFL", "TOTAL"),
@@ -91,7 +103,7 @@ class AuthorityBinding(StrictModel):
 
 
 class Recommendation(StrictModel):
-    schema_version: int = 1
+    schema_version: Literal[2] = 2
     recommendation_id: str = Field(min_length=1, max_length=200)
     exact_sport: str
     exact_market_family: str
@@ -114,15 +126,42 @@ class Recommendation(StrictModel):
     validation_artifact_id: str
     policy_id: str
     activation_reference: str
-    probability_semantics: str
+    probability_semantics: ProbabilitySemantics
     p_win: float = Field(ge=0.0, le=1.0)
     p_push: float = Field(ge=0.0, le=1.0)
     p_loss: float = Field(ge=0.0, le=1.0)
+    mean_ev_per_unit: float
     p_win_conservative: float = Field(ge=0.0, le=1.0)
     conservative_ev_per_unit: float
+    uncertainty_method: UncertaintyMethod
     minimum_acceptable_decimal_odds: float = Field(gt=1.0)
     minimum_acceptable_line: float | None = None
     disclosure_version: str
+
+    @field_validator("probability_semantics", mode="before")
+    @classmethod
+    def normalize_probability_semantics(cls, value: object) -> object:
+        if isinstance(value, ProbabilitySemantics):
+            return value
+        token = str(value).strip().casefold().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "unconditional",
+            "unconditional_win_push_loss",
+            "win_unconditional_with_push",
+        }
+        if token in aliases:
+            return ProbabilitySemantics.WIN_UNCONDITIONAL_WITH_PUSH
+        raise ValueError("unsupported probability semantics")
+
+    @field_validator("uncertainty_method", mode="before")
+    @classmethod
+    def normalize_uncertainty_method(cls, value: object) -> object:
+        if isinstance(value, UncertaintyMethod):
+            return value
+        token = str(value).strip().casefold().replace("-", "_").replace(" ", "_")
+        if token == UncertaintyMethod.FIXED_PUSH_LOWER_WIN_BOUND.value:
+            return UncertaintyMethod.FIXED_PUSH_LOWER_WIN_BOUND
+        raise ValueError("unsupported uncertainty method")
 
     @model_validator(mode="after")
     def valid_recommendation(self) -> "Recommendation":
@@ -130,16 +169,24 @@ class Recommendation(StrictModel):
             raise ValueError("unsupported exact market")
         numeric = (
             self.line, self.odds_decimal, self.p_win, self.p_push, self.p_loss,
-            self.p_win_conservative, self.conservative_ev_per_unit,
+            self.mean_ev_per_unit, self.p_win_conservative,
+            self.conservative_ev_per_unit,
             self.minimum_acceptable_decimal_odds,
         )
         if not all(math.isfinite(value) for value in numeric):
             raise ValueError("recommendation numbers must be finite")
         if abs((self.p_win + self.p_push + self.p_loss) - 1.0) > 1e-6:
             raise ValueError("p_win + p_push + p_loss must equal 1")
-        expected = self.p_win * (self.odds_decimal - 1.0) - self.p_loss
-        if abs(expected - self.conservative_ev_per_unit) > 1e-6:
-            raise ValueError("EV does not match win/push/loss settlement semantics")
+        if self.p_win_conservative > self.p_win + 1e-12:
+            raise ValueError("p_win_conservative cannot exceed mean p_win")
+        mean_expected = self.p_win * self.odds_decimal + self.p_push - 1.0
+        if abs(mean_expected - self.mean_ev_per_unit) > 1e-6:
+            raise ValueError("mean EV does not match unconditional win/push/loss semantics")
+        conservative_expected = (
+            self.p_win_conservative * self.odds_decimal + self.p_push - 1.0
+        )
+        if abs(conservative_expected - self.conservative_ev_per_unit) > 1e-6:
+            raise ValueError("conservative EV does not match fixed-push lower win bound")
         times = (self.quote_observed_at, self.analysis_generated_at, self.event_start_utc, self.expiry_at)
         if any(value.tzinfo is None for value in times):
             raise ValueError("recommendation timestamps must be timezone-aware")
@@ -149,11 +196,12 @@ class Recommendation(StrictModel):
 
     def customer_projection(self) -> dict[str, Any]:
         fields = {
-            "recommendation_id", "exact_sport", "exact_market_family", "canonical_event_id",
+            "schema_version", "recommendation_id", "exact_sport", "exact_market_family", "canonical_event_id",
             "selection", "line", "sportsbook_id", "odds_american", "odds_decimal",
             "quote_observed_at", "analysis_generated_at", "event_start_utc", "expiry_at",
-            "probability_semantics", "p_win", "p_push", "p_loss", "p_win_conservative",
-            "conservative_ev_per_unit", "minimum_acceptable_decimal_odds",
+            "probability_semantics", "p_win", "p_push", "p_loss", "mean_ev_per_unit",
+            "p_win_conservative", "conservative_ev_per_unit", "uncertainty_method",
+            "minimum_acceptable_decimal_odds",
             "minimum_acceptable_line", "disclosure_version",
         }
         raw = self.model_dump(mode="json")
@@ -161,7 +209,7 @@ class Recommendation(StrictModel):
 
 
 class ReleaseSubmission(StrictModel):
-    schema_version: int = 1
+    schema_version: Literal[2] = 2
     release_id: str = Field(min_length=1, max_length=200)
     revision_id: str = Field(min_length=1, max_length=200)
     source_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
@@ -201,7 +249,7 @@ class ReleaseSubmission(StrictModel):
     def customer_projection(self) -> dict[str, Any]:
         expiry = min(item.expiry_at for item in self.recommendations)
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "release_id": self.release_id,
             "revision_id": self.revision_id,
             "published_at": None,

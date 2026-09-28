@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
+from typing import Iterable, Sequence
 
 import pandas as pd
 
@@ -10,36 +12,128 @@ import pandas as pd
 # it explicitly — nothing in core auto-loads it, so unit tests and callers that
 # want raw probabilities are unaffected.
 DEFAULT_CALIBRATION_PATH = Path("data/calibration/effective_prob_calibration.json")
+CALIBRATION_SCHEMA_VERSION = 2
+FITTING_IMPLEMENTATION_VERSION = "weighted-pav-unique-x-v2"
 
 
-def fit_isotonic_calibration(probs: list[float], outcomes: list[int]) -> list[list[float]]:
+def _is_missing(value: object) -> bool:
+    try:
+        result = pd.isna(value)
+        return bool(result) if not hasattr(result, "__len__") else False
+    except (TypeError, ValueError):
+        return False
+
+
+def _finite_number(value: object, *, name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a finite number")
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite number") from exc
+    if not math.isfinite(result):
+        raise ValueError(f"{name} must be a finite number")
+    return result
+
+
+def validate_calibration_knots(table: Sequence[Sequence[float]]) -> list[list[float]]:
+    """Return normalized knots or reject an ambiguous calibration mapping."""
+    if isinstance(table, (str, bytes)) or not isinstance(table, Sequence) or not table:
+        raise ValueError("calibration table must contain at least one knot")
+    normalized: list[list[float]] = []
+    for index, knot in enumerate(table):
+        if isinstance(knot, (str, bytes)) or not isinstance(knot, Sequence) or len(knot) != 2:
+            raise ValueError(f"calibration knot {index} must be an [x, y] pair")
+        x = _finite_number(knot[0], name=f"calibration knot {index} x")
+        y = _finite_number(knot[1], name=f"calibration knot {index} y")
+        if not 0.0 <= x <= 1.0 or not 0.0 <= y <= 1.0:
+            raise ValueError("calibration knots must lie in [0, 1]")
+        if normalized and x <= normalized[-1][0]:
+            raise ValueError("calibration knot x values must be strictly increasing")
+        if normalized and y < normalized[-1][1]:
+            raise ValueError("calibration knot y values must be nondecreasing")
+        normalized.append([x, y])
+    return normalized
+
+
+def fit_isotonic_calibration(
+    probs: Iterable[float],
+    outcomes: Iterable[int],
+    *,
+    sample_weights: Iterable[float] | None = None,
+    missing: str = "reject",
+) -> list[list[float]]:
     """Fit a monotone predicted->realized probability mapping via pooled adjacent
     violators (PAV). Dependency-free on purpose: sklearn is not guaranteed in the
     runtime environments this repo deploys to.
 
-    Returns a list of [predicted, realized] knots (block means), suitable for
-    ``apply_calibration`` linear interpolation. Outcomes are 1 for WIN, 0 for LOSS;
-    pushes/voids must be excluded by the caller.
+    Duplicate predictor values are grouped before fitting and every unique
+    predictor coordinate is retained in the returned knots. This makes the
+    piecewise-linear representation agree with isotonic regression at the
+    observed inputs, including the endpoints of pooled plateaus.
+
+    Outcomes are exactly 1 for WIN or 0 for LOSS; pushes/voids must be excluded
+    by the caller. ``missing`` is explicit: ``"reject"`` is the production-safe
+    default and ``"drop"`` is available to research callers that deliberately
+    choose complete-case fitting.
     """
-    pairs = sorted(
-        (float(p), float(o)) for p, o in zip(probs, outcomes)
-        if pd.notna(p) and pd.notna(o) and 0.0 < float(p) < 1.0
-    )
-    if len(pairs) < 2:
+    if missing not in {"reject", "drop"}:
+        raise ValueError("missing must be 'reject' or 'drop'")
+    probability_values = list(probs)
+    outcome_values = list(outcomes)
+    weight_values = [1.0] * len(probability_values) if sample_weights is None else list(sample_weights)
+    if len(probability_values) != len(outcome_values):
+        raise ValueError("probabilities and outcomes must have equal lengths")
+    if len(weight_values) != len(probability_values):
+        raise ValueError("sample_weights must match probabilities and outcomes")
+
+    observations: list[tuple[float, float, float]] = []
+    for index, (raw_probability, raw_outcome, raw_weight) in enumerate(
+        zip(probability_values, outcome_values, weight_values)
+    ):
+        if any(_is_missing(value) for value in (raw_probability, raw_outcome, raw_weight)):
+            if missing == "drop":
+                continue
+            raise ValueError(f"missing calibration observation at index {index}")
+        probability = _finite_number(raw_probability, name=f"probability at index {index}")
+        outcome = _finite_number(raw_outcome, name=f"outcome at index {index}")
+        weight = _finite_number(raw_weight, name=f"sample weight at index {index}")
+        if not 0.0 <= probability <= 1.0:
+            raise ValueError("calibration probabilities must lie in [0, 1]")
+        if outcome not in {0.0, 1.0}:
+            raise ValueError("calibration outcomes must be binary 0/1")
+        if weight <= 0.0:
+            raise ValueError("calibration sample weights must be positive")
+        observations.append((probability, outcome, weight))
+    if len(observations) < 2:
         raise ValueError("need at least 2 graded picks to fit calibration")
 
-    # Each block: [sum_x, sum_y, weight]
-    blocks: list[list[float]] = []
-    for x, y in pairs:
-        blocks.append([x, y, 1.0])
-        # Merge while the realized mean is non-monotone
-        while len(blocks) >= 2 and blocks[-2][1] / blocks[-2][2] > blocks[-1][1] / blocks[-1][2]:
-            x2, y2, w2 = blocks.pop()
-            blocks[-1][0] += x2
-            blocks[-1][1] += y2
-            blocks[-1][2] += w2
+    # Isotonic regression is a function of x. Collapse duplicate predictor
+    # coordinates first so their aggregate weight and label mean are inseparable.
+    grouped: dict[float, list[float]] = {}
+    for probability, outcome, weight in sorted(observations):
+        aggregate = grouped.setdefault(probability, [0.0, 0.0])
+        aggregate[0] += outcome * weight
+        aggregate[1] += weight
+    xs = sorted(grouped)
 
-    return [[sx / w, sy / w] for sx, sy, w in blocks]
+    # Blocks contain [start_unique_index, end_unique_index, weighted_y, weight].
+    blocks: list[list[float]] = []
+    for index, x in enumerate(xs):
+        weighted_y, weight = grouped[x]
+        blocks.append([float(index), float(index), weighted_y, weight])
+        while len(blocks) >= 2 and blocks[-2][2] / blocks[-2][3] > blocks[-1][2] / blocks[-1][3]:
+            right = blocks.pop()
+            blocks[-1][1] = right[1]
+            blocks[-1][2] += right[2]
+            blocks[-1][3] += right[3]
+
+    fitted = [0.0] * len(xs)
+    for start, end, weighted_y, weight in blocks:
+        mean = weighted_y / weight
+        for index in range(int(start), int(end) + 1):
+            fitted[index] = mean
+    return validate_calibration_knots([[x, fitted[index]] for index, x in enumerate(xs)])
 
 
 def apply_calibration(probs: pd.Series, table: list[list[float]] | None) -> pd.Series:
@@ -48,12 +142,15 @@ def apply_calibration(probs: pd.Series, table: list[list[float]] | None) -> pd.S
     Returns ``probs`` unchanged when no table is available."""
     if not table:
         return probs
-    xs = [float(k[0]) for k in table]
-    ys = [float(k[1]) for k in table]
+    normalized = validate_calibration_knots(table)
+    xs = [k[0] for k in normalized]
+    ys = [k[1] for k in normalized]
 
     def _interp(p: float) -> float:
         if pd.isna(p):
             return p
+        if not math.isfinite(float(p)) or not 0.0 <= float(p) <= 1.0:
+            return float("nan")
         if p <= xs[0]:
             return ys[0]
         if p >= xs[-1]:
@@ -121,10 +218,11 @@ def calibration_digest(payload: dict) -> str:
 
 class CalibrationTable(list):
     """Keep the exact loaded artifact with its knots; no second metadata read."""
-    def __init__(self, payload):
+    def __init__(self, payload, *, acceptance=None):
         from copy import deepcopy
         super().__init__(payload["knots"])
         self.payload = deepcopy(payload)
+        self.acceptance = deepcopy(acceptance or {})
 
 
 def calibration_provenance(table, *, now=None) -> dict:
@@ -154,10 +252,96 @@ def calibration_provenance(table, *, now=None) -> dict:
 
 
 def save_calibration(table: list[list[float]], path: Path | str, meta: dict | None = None) -> None:
-    payload = {"knots": table, "meta": meta or {}}
+    payload = {"knots": validate_calibration_knots(table), "meta": meta or {}}
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2))
+
+
+def inspect_calibration_artifact(
+    path: Path | str | None = None, *, now: object | None = None
+) -> dict:
+    """Return structured, non-authorizing acceptance diagnostics for one artifact."""
+    production_default = path is None
+    calibration_path = DEFAULT_CALIBRATION_PATH if production_default else Path(path)
+    result = {
+        "path": str(calibration_path),
+        "requested_mode": "production_default" if production_default else "explicit_research",
+        "acceptance_state": "REJECTED",
+        "rejection_reasons": [],
+    }
+    try:
+        payload = json.loads(calibration_path.read_text())
+    except (OSError, ValueError, TypeError) as exc:
+        result["rejection_reasons"].append(f"ARTIFACT_UNREADABLE:{type(exc).__name__}")
+        return result
+    if not isinstance(payload, dict):
+        result["rejection_reasons"].append("ARTIFACT_NOT_OBJECT")
+        return result
+    try:
+        knots = validate_calibration_knots(payload.get("knots"))
+    except (TypeError, ValueError) as exc:
+        result["rejection_reasons"].append(f"KNOTS_INVALID:{exc}")
+        return result
+    meta = payload.get("meta") or {}
+    if not isinstance(meta, dict):
+        result["rejection_reasons"].append("METADATA_INVALID")
+        return result
+    result.update(
+        knot_count=len(knots),
+        calibration_version=meta.get("calibration_version"),
+        schema_version=meta.get("schema_version", 1),
+        fitting_implementation_version=meta.get("fitting_implementation_version"),
+    )
+    if not production_default:
+        result["acceptance_state"] = "RESEARCH_ONLY"
+        return result
+
+    validation = meta.get("validation") or {}
+    if validation.get("promotable") is not True:
+        result["rejection_reasons"].append("CHRONOLOGICAL_VALIDATION_NOT_PROMOTABLE")
+    train_end = pd.to_datetime(validation.get("train_end"), errors="coerce", utc=True)
+    test_start = pd.to_datetime(validation.get("test_start"), errors="coerce", utc=True)
+    if pd.isna(train_end) or pd.isna(test_start):
+        result["rejection_reasons"].append("CHRONOLOGICAL_BOUNDARY_MISSING")
+    elif train_end.normalize() >= test_start.normalize():
+        result["rejection_reasons"].append("HOLDOUT_NOT_STRICTLY_FUTURE")
+
+    # Versioned artifacts use the strict v2 provenance contract. Legacy artifacts
+    # retain their previous acceptance rules, which avoids silently reinterpreting
+    # historical releases while all newly fitted candidates are held to v2.
+    if meta.get("schema_version") == CALIBRATION_SCHEMA_VERSION:
+        required = (
+            "calibration_version", "calibration_trained_through",
+            "calibration_available_at", "source", "probability_semantics",
+            "fitting_implementation_version", "artifact_status",
+            "source_predictor_version", "training_scope",
+        )
+        missing = [field for field in required if not meta.get(field)]
+        if missing:
+            result["rejection_reasons"].append("REQUIRED_METADATA_MISSING:" + ",".join(missing))
+        if meta.get("fitting_implementation_version") != FITTING_IMPLEMENTATION_VERSION:
+            result["rejection_reasons"].append("FITTING_IMPLEMENTATION_INCOMPATIBLE")
+        if meta.get("artifact_status") != "PRODUCTION_CANDIDATE":
+            result["rejection_reasons"].append("ARTIFACT_NOT_PRODUCTION_CANDIDATE")
+        if meta.get("calibration_version") != calibration_digest(payload):
+            result["rejection_reasons"].append("CALIBRATION_DIGEST_MISMATCH")
+        if meta.get("probability_semantics") != "win_unconditional_with_push; pushes excluded from binary fit":
+            result["rejection_reasons"].append("PROBABILITY_SEMANTICS_INCOMPATIBLE")
+        trained_through = pd.to_datetime(
+            meta.get("calibration_trained_through"), errors="coerce", utc=True
+        )
+        available_at = pd.to_datetime(
+            meta.get("calibration_available_at"), errors="coerce", utc=True
+        )
+        clock = pd.to_datetime(now, errors="coerce", utc=True) if now is not None else pd.Timestamp.now(tz="UTC")
+        if any(pd.isna(value) for value in (trained_through, available_at, clock)):
+            result["rejection_reasons"].append("ARTIFACT_CHRONOLOGY_INVALID")
+        elif not test_start <= trained_through <= available_at <= clock:
+            result["rejection_reasons"].append("ARTIFACT_CHRONOLOGY_INVALID")
+    if not result["rejection_reasons"]:
+        result["acceptance_state"] = "PRODUCTION_ACCEPTED"
+    return result
 
 
 def load_calibration(path: Path | str | None = None) -> list[list[float]] | None:
@@ -171,22 +355,15 @@ def load_calibration(path: Path | str | None = None) -> list[list[float]] | None
     callers fall back to the upstream effective probability.
     """
     production_default = path is None
-    calibration_path = DEFAULT_CALIBRATION_PATH if path is None else Path(path)
+    calibration_path = DEFAULT_CALIBRATION_PATH if production_default else Path(path)
     try:
         payload = json.loads(calibration_path.read_text())
-        if production_default:
-            validation = (payload.get("meta") or {}).get("validation") or {}
-            if validation.get("promotable") is not True:
-                return None
-            # Older artifacts were promoted by a row split that could divide one
-            # slate. Never trust the flag without a strictly later holdout.
-            train_end = pd.to_datetime(validation.get("train_end"), errors="coerce", utc=True)
-            test_start = pd.to_datetime(validation.get("test_start"), errors="coerce", utc=True)
-            if pd.isna(train_end) or pd.isna(test_start) or train_end.normalize() >= test_start.normalize():
-                return None
-        knots = payload.get("knots")
-        return CalibrationTable(payload) if knots else None
-    except (OSError, ValueError):
+        acceptance = inspect_calibration_artifact(None if production_default else calibration_path)
+        if acceptance["acceptance_state"] == "REJECTED":
+            return None
+        payload["knots"] = validate_calibration_knots(payload.get("knots"))
+        return CalibrationTable(payload, acceptance=acceptance)
+    except (OSError, TypeError, ValueError):
         return None
 
 

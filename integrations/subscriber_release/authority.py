@@ -37,6 +37,8 @@ def verify_reviewed_submission(
     authority = submission.authority
     if authority.revoked:
         raise AuthorityError("AUTHORITY_REVOKED")
+    if authority.upstream_gate_result != "APPROVED":
+        raise AuthorityError("UPSTREAM_GATE_NOT_APPROVED")
     if authority.market_status.value != "QUALIFIED":
         raise AuthorityError("MARKET_NOT_QUALIFIED")
     if not (authority.effective_at <= current < authority.expires_at):

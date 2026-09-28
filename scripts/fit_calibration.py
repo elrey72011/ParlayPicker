@@ -7,14 +7,13 @@ Motivation (Jun 5-10 recaps): effective_win_probability is overconfident in the
 0.55-0.65 band — the band that feeds Actionable/HV promotion and parlay legs.
 Dozens of hand-tuned shrink/penalty knobs in weights_config.py have been patching
 this symptom one slate at a time; this fits the mapping once, from all graded data,
-and writes it to data/calibration/effective_prob_calibration.json where
-generate_parlays (and later the gating pipeline) can apply it.
+and writes a non-activated candidate artifact for independent review.
 
 Usage
 -----
     python3 scripts/fit_calibration.py [exports_dir] [out_json]
 
-Defaults: data/backtest_exports -> data/calibration/effective_prob_calibration.json
+Defaults: data/backtest_exports -> data/calibration/candidates/effective_prob_calibration_candidate.json
 Re-run after each graded slate is added (scripts/grade_slate.py).
 """
 from __future__ import annotations
@@ -29,7 +28,9 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.probability_calibration import (  # noqa: E402
+    CALIBRATION_SCHEMA_VERSION,
     DEFAULT_CALIBRATION_PATH,
+    FITTING_IMPLEMENTATION_VERSION,
     apply_calibration,
     fit_isotonic_calibration,
     save_calibration,
@@ -39,6 +40,9 @@ from core.walk_forward import chronological_split, probability_metrics  # noqa: 
 
 PROB_COLS = ["effective_win_probability", "WinProbability"]
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CANDIDATE_PATH = Path(
+    "data/calibration/candidates/effective_prob_calibration_candidate.json"
+)
 
 
 def _source_label(path: Path) -> str:
@@ -193,15 +197,35 @@ def validate_calibration_promotion(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("exports_dir", nargs="?", default="data/backtest_exports")
-    parser.add_argument("out_json", nargs="?", default=str(DEFAULT_CALIBRATION_PATH))
+    parser.add_argument("out_json", nargs="?", default=str(DEFAULT_CANDIDATE_PATH))
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Write even when chronological validation fails (emergency/manual use only).",
+        help=(
+            "Write a RESEARCH_CANDIDATE_ONLY artifact to a non-production path when "
+            "chronological validation fails. This never grants production authority."
+        ),
+    )
+    parser.add_argument(
+        "--source-predictor-version",
+        help="Immutable source predictor or ensemble version used by every fitted row.",
+    )
+    parser.add_argument(
+        "--training-scope",
+        help="Exact sport/market/time scope represented by the fitted rows.",
     )
     args = parser.parse_args(argv)
     exports_dir = Path(args.exports_dir)
     out_json = Path(args.out_json)
+    default_live_path = (ROOT / DEFAULT_CALIBRATION_PATH).resolve()
+    requested_output = out_json.resolve()
+    if requested_output == default_live_path:
+        print(
+            "ACTIVATION BLOCKED: fitting may only write a candidate artifact; "
+            "the live calibration path is immutable in this command",
+            file=sys.stderr,
+        )
+        return 2
 
     graded = load_graded(exports_dir)
     validation = validate_calibration_promotion(graded)
@@ -221,18 +245,35 @@ def main(argv: list[str] | None = None) -> int:
     fitted = graded.loc[graded["prob"].gt(0) & graded["prob"].lt(1)]
     dates = pd.to_datetime(fitted.get("slate_date"), errors="coerce", utc=True)
     cutoff = dates.max().isoformat() if dates is not None and not dates.isna().any() else None
+    candidate_reasons = []
+    if not validation["promotable"]:
+        candidate_reasons.append("CHRONOLOGICAL_VALIDATION_NOT_PROMOTABLE")
+    if not args.source_predictor_version:
+        candidate_reasons.append("SOURCE_PREDICTOR_VERSION_NOT_RECORDED")
+    if not args.training_scope:
+        candidate_reasons.append("EXACT_TRAINING_SCOPE_NOT_RECORDED")
     meta = {
+        "schema_version": CALIBRATION_SCHEMA_VERSION,
+        "fitting_implementation_version": FITTING_IMPLEMENTATION_VERSION,
+        "artifact_status": "RESEARCH_CANDIDATE_ONLY" if candidate_reasons else "PRODUCTION_CANDIDATE",
+        "candidate_rejection_reasons": candidate_reasons,
         "n_graded": int(len(graded)),
         "source": _source_label(exports_dir),
         "fitted_on": pd.Timestamp.now().strftime("%Y-%m-%d"),
         "prob_col": "effective_win_probability (fallback WinProbability)",
+        "probability_semantics": "win_unconditional_with_push; pushes excluded from binary fit",
+        "source_predictor_version": args.source_predictor_version,
+        "training_scope": args.training_scope,
         "validation": validation,
         "calibration_trained_through": cutoff,
         "calibration_available_at": pd.Timestamp.now(tz="UTC").isoformat(),
     }
     meta["calibration_version"] = calibration_digest({"knots": knots, "meta": meta})
     save_calibration(knots, out_json, meta=meta)
-    print(f"\nfit on {len(graded)} graded picks -> {len(knots)} knots -> {out_json}")
+    print(
+        f"\nfit on {len(graded)} graded picks -> {len(knots)} knots -> {out_json} "
+        f"[{meta['artifact_status']}; NOT ACTIVATED]"
+    )
     report(graded)
     return 0
 
