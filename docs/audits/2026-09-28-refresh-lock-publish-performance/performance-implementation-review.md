@@ -3,7 +3,7 @@
 ## Release status
 
 ```text
-implementation_tests: PASS (focused local); full Linux CI pending
+implementation_tests: PASS
 integrity_equivalence: PASS
 remote_benchmark: NOT_RUN_EXTERNAL_BLOCKER
 hosted_content_verification: NOT_RUN
@@ -17,6 +17,7 @@ This work changes storage discovery, immutable-byte reuse, telemetry and recover
 - PRD audited revision and actual branch base: `ed0bd408a05064ae1172c5f569a520826789e122`. The two revisions were identical when work began.
 - Verified implementation code commit: `b79264c7`.
 - Artifact commit: the pull request head containing this report.
+- GitHub CI verified commit: `a7daf3ef90cae854ea854f50da0a4e0f6856f092`, run `36477150153`.
 - Primary files: `app_core/evidence_drive.py`, `app_core/evidence_remote.py`, `app_core/performance_spans.py`, `app_core/public_history.py`, `app/ui/lock_picks.py`, and `app_core/stage_timing.py`.
 - Isolated P2 warning fix: `app_core/prediction_evidence.py`.
 - Tests/benchmark: `tests/test_refresh_lock_performance.py`, existing storage/re-lock tests, and `scripts/benchmark_refresh_lock_storage.py`.
@@ -60,6 +61,7 @@ The lock wall-time target was not met in this controlled fixture because cold me
 - Compilation: PASS for every changed Python module.
 - `git diff --check`: PASS.
 - Focused storage, evidence, lock, re-lock, recovery, telemetry and warning suite: **87 passed**.
+- GitHub CI: production-safety, both full-suite shards and the full-suite aggregate all passed on commit `a7daf3ef90cae854ea854f50da0a4e0f6856f092`.
 - Full local suite: **2,976 passed, 22 failed, 38 subtests passed** on the first run. One failure was the intentionally changed lock-discovery expectation and was updated, then passed in the focused run. The remaining 21 local failures reproduce outside the changed paths: 20 Windows `TemporaryDirectory` cleanup failures from open SQLite handles and one assertion affected by locally configured Streamlit secrets. Clean Linux pull-request CI is the release gate.
 - Authenticated remote benchmark: `NOT_RUN_EXTERNAL_BLOCKER` (no production credentials used).
 - Hosted content verification: `NOT_RUN`.

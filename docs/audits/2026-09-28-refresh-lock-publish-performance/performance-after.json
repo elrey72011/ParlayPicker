@@ -73,10 +73,18 @@
     "note": "Controlled publication cost was held constant because no publication verification was removed."
   },
   "release_status": {
-    "implementation_tests": "PASS_FOCUSED_LOCAL_CI_PENDING",
+    "implementation_tests": "PASS",
     "integrity_equivalence": "PASS",
     "remote_benchmark": "NOT_RUN_EXTERNAL_BLOCKER",
     "hosted_content_verification": "NOT_RUN",
-    "production_rollout": "READY_FOR_REVIEW"
+    "production_rollout": "READY_FOR_REVIEW",
+    "github_ci": {
+      "verified_commit": "a7daf3ef90cae854ea854f50da0a4e0f6856f092",
+      "run_id": 36477150153,
+      "production_safety": "PASS",
+      "full_suite_tests_1": "PASS",
+      "full_suite_tests_2": "PASS",
+      "full_suite_aggregate": "PASS"
+    }
   }
 }
