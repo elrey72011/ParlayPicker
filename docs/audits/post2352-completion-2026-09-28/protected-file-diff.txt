@@ -1,0 +1,14 @@
+Comparison base: fc43d6492986874df996f8ecb744c73933432681
+PR A code evidence revision: 51f66aaf81e1302f44b207956a96c7025e1c8acf
+
+Protected dependency changes: NONE
+Existing test expectation changes: NONE
+Historical calibration artifact changes: NONE
+Historical release changes: NONE
+Live calibration replacement: NOT PERFORMED
+Market activation: NOT PERFORMED
+Wager placement: NOT PERFORMED
+
+The local scope-guard byte check reports tooling hash mismatches for CRLF-normalized
+working-tree copies of the guard and workflow. Neither file is changed by PR A.
+The authoritative Linux pull-request check remains required.
