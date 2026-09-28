@@ -49,6 +49,7 @@ jobs:
       PAID_TEST_DATABASE_URL: postgresql://subscriber:test-only@localhost:5432/subscriber_test
     steps:
       - uses: actions/checkout@v5
+        with: {fetch-depth: 0}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"

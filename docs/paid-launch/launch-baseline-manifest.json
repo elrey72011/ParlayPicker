@@ -37,7 +37,7 @@
   },
   "tooling_sha256": {
     "scripts/check_launch_change_scope.py": "d9e4b9c3954d7b1803d23527a77b7e7c34ed5d73e5936d7fe07111da3c930ee8",
-    ".github/workflows/paid-launch.yml": "224f3d2979544318d77ff733d5427fd82b7bce6c878c345ccb1f1d907c20492d"
+    ".github/workflows/paid-launch.yml": "fccb75c4d4b9c9e99037e4888b2f7ad283cdc150e69fb0578ffa7b0ebcd9384b"
   },
   "exception_policy": "No exception is encoded. Any protected-file or existing-test change requires separately approved, exact-scope integration work."
 }

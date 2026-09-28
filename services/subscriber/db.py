@@ -9,6 +9,7 @@ import uuid
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import JsonbDumper
 
 
 ROOT = Path(__file__).resolve().parent
@@ -20,18 +21,26 @@ class Database:
             raise ValueError("subscriber service requires PostgreSQL")
         self.url = url
 
+    def connect(self, **kwargs: Any) -> psycopg.Connection:
+        connection = psycopg.connect(self.url, row_factory=dict_row, **kwargs)
+        # The subscriber schema uses JSONB for immutable payloads and outbox
+        # facts. Registering this on each isolated connection keeps callers
+        # explicit about arrays while making dictionary writes type-safe.
+        connection.adapters.register_dumper(dict, JsonbDumper)
+        return connection
+
     @contextmanager
     def transaction(self) -> Iterator[psycopg.Connection]:
-        with psycopg.connect(self.url, row_factory=dict_row) as connection:
+        with self.connect() as connection:
             with connection.transaction():
                 yield connection
 
     def fetch_one(self, sql: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
-        with psycopg.connect(self.url, row_factory=dict_row) as connection:
+        with self.connect() as connection:
             return connection.execute(sql, params).fetchone()
 
     def fetch_all(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
-        with psycopg.connect(self.url, row_factory=dict_row) as connection:
+        with self.connect() as connection:
             return list(connection.execute(sql, params).fetchall())
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> int:
@@ -41,7 +50,7 @@ class Database:
 
     def migrate(self) -> None:
         migrations = sorted((ROOT / "migrations").glob("*.sql"))
-        with psycopg.connect(self.url, autocommit=True) as connection:
+        with self.connect(autocommit=True) as connection:
             for migration in migrations:
                 connection.execute(migration.read_text(encoding="utf-8"))
 

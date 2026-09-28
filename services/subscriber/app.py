@@ -3,8 +3,6 @@
 Run with ``uvicorn services.subscriber.app:create_from_env --factory``.
 """
 
-from __future__ import annotations
-
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 import hashlib

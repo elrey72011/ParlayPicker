@@ -55,6 +55,7 @@ class SubscriberRepository:
             "SELECT * FROM subscriber.product_version WHERE environment=%s AND active=true" + clause + " ORDER BY version DESC LIMIT 1",
             params,
         )
+        return row
 
     def entitlement(self, customer_id: object, product_id: object | None = None) -> dict[str, Any] | None:
         sql = """
@@ -85,7 +86,7 @@ class SubscriberRepository:
         entitlement = self.entitlement(customer_id)
         if not entitlement:
             return None
-        return self.db.fetch_one(
+        row = self.db.fetch_one(
             """
             SELECT rr.id,rr.release_id,rr.revision_id,rr.payload,rr.customer_payload_hash,rr.promoted_at,rr.expires_at,rr.authority
             FROM subscriber.active_release ar
