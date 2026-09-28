@@ -11,19 +11,23 @@ from conftest import grant_entitlement, seed_product, session
 def _seed_release_and_results(database, *, product_code: str, suffix: str = "owned") -> None:
     release_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
-    recommendation = {
-        "recommendation_id": f"rec-{suffix}",
-        "selection": f"Selection {suffix}",
-        "line": 3.5,
-        "odds_american": -110,
-        "sportsbook_id": "book-test",
-        "quote_observed_at": (now - timedelta(hours=2)).isoformat(),
-        "analysis_generated_at": (now - timedelta(hours=1)).isoformat(),
-        "event_start_utc": (now + timedelta(hours=1)).isoformat(),
-        "expiry_at": (now + timedelta(minutes=30)).isoformat(),
-        "exact_sport": "NFL",
-        "exact_market_family": "SPREAD",
-    }
+    statuses = ["WIN", "LOSS", "PUSH", "VOID", "PENDING", "NEEDS_REVIEW", "CORRECTED"]
+    recommendations = [
+        {
+            "recommendation_id": f"rec-{suffix}-{index}",
+            "selection": f"Selection {suffix} {status}",
+            "line": 3.5,
+            "odds_american": -110,
+            "sportsbook_id": "book-test",
+            "quote_observed_at": (now - timedelta(hours=2)).isoformat(),
+            "analysis_generated_at": (now - timedelta(hours=1)).isoformat(),
+            "event_start_utc": (now + timedelta(hours=1)).isoformat(),
+            "expiry_at": (now + timedelta(minutes=30)).isoformat(),
+            "exact_sport": "NFL",
+            "exact_market_family": "SPREAD",
+        }
+        for index, status in enumerate(statuses, start=1)
+    ]
     database.execute(
         """
         INSERT INTO subscriber.release_revision(
@@ -44,12 +48,11 @@ def _seed_release_and_results(database, *, product_code: str, suffix: str = "own
             f"authority-{suffix}",
             "e" * 64,
             json.dumps({"fixture": True}),
-            json.dumps({"schema_version": 2, "recommendations": [recommendation]}),
+            json.dumps({"schema_version": 2, "recommendations": recommendations}),
             now - timedelta(hours=1),
             now + timedelta(hours=1),
         ),
     )
-    statuses = ["WIN", "LOSS", "PUSH", "VOID", "PENDING", "NEEDS_REVIEW", "CORRECTED"]
     for index, status in enumerate(statuses, start=1):
         database.execute(
             """
@@ -60,7 +63,7 @@ def _seed_release_and_results(database, *, product_code: str, suffix: str = "own
             """,
             (
                 uuid.uuid4(),
-                f"rec-{suffix}",
+                f"rec-{suffix}-{index}",
                 release_id,
                 f"settlement-{suffix}-{index}",
                 f"{index:064x}",
@@ -113,7 +116,7 @@ def test_results_are_complete_and_scoped_to_entitled_product(settings, database)
         "WIN", "LOSS", "PUSH", "VOID", "PENDING", "NEEDS_REVIEW", "CORRECTED"
     }
     assert all(item["release_id"] == "release-owned" for item in payload["items"])
-    assert all(item["recommendation"]["selection"] == "Selection owned" for item in payload["items"])
+    assert all(item["recommendation"]["selection"].startswith("Selection owned ") for item in payload["items"])
     corrected = next(item for item in payload["items"] if item["status"] == "CORRECTED")
     assert corrected["projection_revision"] == 2
     assert corrected["recommendation"]["quote_observed_at"]
