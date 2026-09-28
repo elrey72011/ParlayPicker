@@ -82,6 +82,55 @@ def test_one_complete_inventory_serves_six_prefixes_and_warm_cache(tmp_path):
     assert store.last_read_report.objects_reused == 6
     assert store.last_read_report.objects_downloaded == 0
 
+    full_inventory = store.discover_complete_inventory(namespace='evidence/')
+    store.read_verified_prefixes(Prefixes=prefixes, inventory=full_inventory,
+                                 cache_dir=tmp_path, full_verify=True)
+    assert len(session.media_requests) == 12
+    assert store.last_read_report.full_verification
+
+
+def test_interrupted_cache_write_is_removed_and_retry_is_clean(tmp_path, monkeypatch):
+    raw = b'immutable'
+    session = PagedDriveSession([remote_file('one', 'evidence/snapshots/one.json', raw)])
+    store = DriveStore('folder', session=session)
+    original_replace = __import__('pathlib').Path.replace
+
+    def interrupted(self, target):
+        raise OSError('simulated interrupted atomic replace')
+
+    monkeypatch.setattr('pathlib.Path.replace', interrupted)
+    inventory = store.discover_complete_inventory(namespace='evidence/')
+    with pytest.raises(OSError, match='interrupted'):
+        store.read_verified_prefixes(Prefixes=['evidence/snapshots/'], inventory=inventory,
+                                     cache_dir=tmp_path)
+    assert not list(tmp_path.glob('*.tmp'))
+    monkeypatch.setattr('pathlib.Path.replace', original_replace)
+    inventory = store.discover_complete_inventory(namespace='evidence/')
+    result = store.read_verified_prefixes(Prefixes=['evidence/snapshots/'], inventory=inventory,
+                                          cache_dir=tmp_path)
+    assert result['evidence/snapshots/'][0][1] == raw
+
+
+def test_transient_reads_are_bounded_and_report_retry_wait(monkeypatch):
+    import requests
+    from app_core import evidence_drive
+
+    class Flaky:
+        def __init__(self): self.calls = 0
+        def get(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls < 3:
+                raise requests.ReadTimeout('private provider detail')
+            return Response({'ok': True})
+
+    waits, metrics = [], {}
+    monkeypatch.setattr(evidence_drive.time, 'sleep', waits.append)
+    response = evidence_drive._read(Flaky(), 'https://example.invalid/signed-secret',
+                                    timeout=1, _metrics=metrics)
+    assert response.json() == {'ok': True}
+    assert waits == [1, 2]
+    assert metrics == {'retries': 2, 'retry_wait_ms': 3000}
+
 
 def test_evidence_restore_uses_one_inventory_even_for_six_empty_tables(tmp_path, monkeypatch):
     monkeypatch.setenv('PARLAYPICKER_DRIVE_FOLDER_ID', 'folder')

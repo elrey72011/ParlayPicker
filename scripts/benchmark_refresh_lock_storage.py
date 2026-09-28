@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from hashlib import sha256
 import json
+import logging
 from pathlib import Path
 import statistics
 from time import perf_counter, sleep
@@ -141,6 +142,7 @@ def trials(work, files, prefixes, state):
 
 
 def main():
+    logging.disable(logging.CRITICAL)
     parser = argparse.ArgumentParser()
     parser.add_argument('--work-dir', type=Path, required=True)
     parser.add_argument('--source-commit', required=True)
