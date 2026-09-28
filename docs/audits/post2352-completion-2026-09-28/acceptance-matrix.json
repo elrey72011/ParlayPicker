@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "status_as_of_revision": "51f66aaf81e1302f44b207956a96c7025e1c8acf",
+  "pr_a": {
+    "A01": {"status": "PASS", "evidence": "test_a01_unknown_and_malformed_schema_never_gets_production_acceptance"},
+    "A02": {"status": "PASS", "evidence": "test_a02_a03_metadata_removal_rejection_digest_predictor_and_scope_fail_closed"},
+    "A03": {"status": "PASS", "evidence": "test_a02_a03_metadata_removal_rejection_digest_predictor_and_scope_fail_closed"},
+    "A04": {"status": "PASS", "evidence": "test_a04_loader_reads_and_validates_one_snapshot"},
+    "A05": {"status": "PASS", "evidence": "test_a05_mutation_invalidates_snapshot_binding"},
+    "A06": {"status": "PASS", "evidence": "test_a06_explicit_research_identity_is_not_production_authority; runtime production decision BLOCKED"},
+    "A07": {"status": "PASS", "evidence": "tests/test_probability_integrity_v11.py duplicate, plateau, oracle, serialization regressions"},
+    "A08": {"status": "PASS", "evidence": "test_a08_trainer_preserves_pushes_while_fit_rate_stays_conditional; test_a08_a10_conditional_push_chain_and_subscriber_ev_contract"},
+    "A09": {"status": "PASS", "evidence": "shared price_value results 0.18 and -0.09; subscriber Recommendation v2 validation"},
+    "A10": {"status": "PASS", "evidence": "fixed-push lower-bound EV 0.09; no-push 0.20/0.10"},
+    "A11": {"status": "PASS", "evidence": "test_a11_push_evidence_is_never_invented"},
+    "A12": {"status": "PASS", "evidence": "test_a12_a14_manifest_cutoffs_endpoints_weights_and_refit_identity"},
+    "A13": {"status": "PASS", "evidence": "manifest row lineage/scope checks and independent-event count"},
+    "A14": {"status": "PASS", "evidence": "refit changed identity and later cutoffs; candidate-only writer retained"},
+    "A15": {"status": "PASS", "evidence": "test_a15_a17_batch_composition_order_and_ties_do_not_change_probabilities"},
+    "A16": {"status": "PASS", "evidence": "alone, reordered, additions, and repeat paths equal at 1e-12"},
+    "A17": {"status": "PASS", "evidence": "equal 0.57 outputs retained; no epsilon in probability"},
+    "A18": {"status": "PASS", "evidence": "test_a18_actual_model_failure_remains_explicitly_unavailable"},
+    "A19": {"status": "PASS", "evidence": "probability-runtime-traces.json runtime_trace.records; static inventory separately labeled"},
+    "A20": {"status": "PASS", "evidence": "12 required scopes, five route statuses each; research fixture production paths EXPECTED_BLOCK_VERIFIED"},
+    "A21": {"status": "PASS", "evidence": "identity-change regression, subscriber binding contract, and runtime authority block"},
+    "A22": {"status": "PASS", "evidence": "protected-file-diff.txt; no artifacts/releases/activation changed"}
+  },
+  "pr_b": {
+    "B01": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B02": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B03": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B04": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B05": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B06": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B07": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B08": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B09": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B10": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B11": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
+    "B12": {"status": "NOT_RUN_EXTERNAL_BLOCKER", "evidence": "No authorized hosted staging journey run"}
+  }
+}

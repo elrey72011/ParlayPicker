@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "audit_anchor": "fc43d6492986874df996f8ecb744c73933432681",
+  "pr_a_base": "fc43d6492986874df996f8ecb744c73933432681",
+  "pr_a_code_evidence_revision": "51f66aaf81e1302f44b207956a96c7025e1c8acf",
+  "local_runtime": "Windows; Python 3.12 isolated bundled runtime",
+  "runtime_trace_context": "ISOLATED_FIXTURE",
+  "database_context": "NOT_RUN_FOR_PR_A",
+  "browser_context": "NOT_RUN_FOR_PR_A",
+  "authorized_staging_revision": null,
+  "hosted_verification": "NOT_RUN_EXTERNAL_BLOCKER",
+  "deployed_revision": "NOT_VERIFIED",
+  "served_revision": "NOT_VERIFIED"
+}
