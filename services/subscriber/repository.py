@@ -72,7 +72,7 @@ class SubscriberRepository:
 
     def customer_account(self, customer_id: object) -> dict[str, Any]:
         customer = self.db.fetch_one(
-            "SELECT id,contact_email,email_verified,status,role,created_at FROM subscriber.customer WHERE id=%s",
+            "SELECT id,contact_email,email_verified,status,role,alerts_enabled,created_at FROM subscriber.customer WHERE id=%s",
             (customer_id,),
         )
         entitlement = self.entitlement(customer_id)
@@ -119,16 +119,27 @@ class SubscriberRepository:
         )
 
     def results(self, customer_id: object) -> list[dict[str, Any]]:
-        if not self.entitlement(customer_id):
+        entitlement = self.entitlement(customer_id)
+        if not entitlement:
             return []
         return self.db.fetch_all(
             """
             SELECT rp.recommendation_id,rp.status,rp.paper_return,rp.settlement_rules_version,
-                   rp.projection_revision,rp.created_at,rr.release_id,rr.revision_id
-            FROM subscriber.result_projection rp JOIN subscriber.release_revision rr ON rr.id=rp.release_revision_id
-            WHERE rr.environment=%s ORDER BY rp.created_at DESC
+                   rp.projection_revision,rp.created_at,rr.release_id,rr.revision_id,
+                   rr.status AS release_status,rr.promoted_at,rr.expires_at,
+                   original.payload AS recommendation
+            FROM subscriber.result_projection rp
+            JOIN subscriber.release_revision rr ON rr.id=rp.release_revision_id
+            LEFT JOIN LATERAL (
+              SELECT value AS payload
+              FROM jsonb_array_elements(COALESCE(rr.payload->'recommendations','[]'::jsonb)) AS recommendation_item(value)
+              WHERE value->>'recommendation_id'=rp.recommendation_id
+              LIMIT 1
+            ) AS original ON true
+            WHERE rr.environment=%s AND rr.product_code=%s
+            ORDER BY rp.created_at DESC,rp.projection_revision DESC
             """,
-            (self.environment,),
+            (self.environment, entitlement["product_code"]),
         )
 
     def stage_release(self, submission: ReleaseSubmission, request_id: str, actor_id: object) -> dict[str, Any]:
