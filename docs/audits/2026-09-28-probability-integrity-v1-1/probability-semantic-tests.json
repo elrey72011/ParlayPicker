@@ -8,6 +8,14 @@
   },
   "new_probability_integrity_cases": 32,
   "subscriber_contract_cases": 13,
+  "github_ci": {
+    "production_safety_passed": 563,
+    "full_suite_shard_1_passed": 1518,
+    "full_suite_shard_2_passed": 1514,
+    "subscriber_postgres_security_contract_passed": 23,
+    "protected_scope": "PASS",
+    "aggregate_full_suite": "PASS"
+  },
   "coverage": [
     "duplicate-x calibration counterexample",
     "pooled plateau endpoint counterexample",

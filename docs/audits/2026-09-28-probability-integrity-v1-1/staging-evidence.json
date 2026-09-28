@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "pull_request": "https://github.com/elrey72011/ParlayPicker/pull/2352",
+  "implementation_commit": "bc0e9ccc2062133a3361ced5de2221ba867acd06",
+  "status": "CI_VERIFIED_HOSTED_STAGING_NOT_RUN",
+  "github_ci": {
+    "run_ids": [36491587579, 36491587629],
+    "protected_scope": "PASS",
+    "subscriber_postgres_security_contract": {"status": "PASS", "passed": 23},
+    "production_safety": {"status": "PASS", "passed": 563},
+    "full_application_shard_1": {"status": "PASS", "passed": 1518},
+    "full_application_shard_2": {"status": "PASS", "passed": 1514, "subtests_passed": 38},
+    "aggregate_full_suite": "PASS"
+  },
+  "environment_boundaries": {
+    "postgresql": "GitHub ephemeral PostgreSQL 16 service",
+    "hosted_staging_deployment": "NOT_RUN",
+    "hosted_staging_credentials_available": false,
+    "oidc_staging_verified": false,
+    "payment_gateway_staging_verified": false
+  },
+  "activation_state": {
+    "live_calibration_replaced": false,
+    "markets_activated": false,
+    "sales_enabled": false,
+    "live_billing_enabled": false
+  },
+  "remaining_blockers": [
+    "hosted staging credentials and deployment verification",
+    "independently reviewed v2 calibration production candidate",
+    "commercial approvals and explicit owner activation"
+  ]
+}

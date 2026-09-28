@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "PASS_LOCAL_PENDING_POSTGRES_CI",
+  "status": "PASS",
   "historical_contract": {
     "release_v1_schema_preserved": true,
     "historical_records_rewritten": false,
@@ -30,6 +30,12 @@
     "contract_and_isolation_passed": 15,
     "scope_guard_deselected_locally": 1,
     "postgres_cases_collected_and_skipped_without_service": 7
+  },
+  "github_postgres_tests": {
+    "status": "PASS",
+    "passed": 23,
+    "run_id": 36491587579,
+    "job_id": 109161220893
   },
   "commercial_state": {
     "live_billing_enabled": false,

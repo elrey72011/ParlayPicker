@@ -18,6 +18,7 @@ scripts/benchmark_refresh_lock_storage.py
 
 Scope guard, baseline manifest, and paid-launch workflow changed: NONE
 Existing baseline test expectations changed: NONE
+GitHub protected-scope job: PASS (run 36491587579, job 109161221274)
 
 Note: tests/paid_launch/case_policy_and_contracts.py was introduced after the
 protected #2350 baseline and is extended additively for the #2351 subscriber
