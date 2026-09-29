@@ -17,6 +17,7 @@ import sqlite3
 import re
 
 from app_core import prospective_evidence as evidence
+from app_core.canonical_schema import CANONICAL_PRIMARY_KEYS
 
 
 PREFIX = "parlaypicker/canonical-prospective-v1/"
@@ -43,7 +44,8 @@ def _schema(db):
         details = db.execute(f"PRAGMA table_info({table})").fetchall()
         columns = tuple(row[1] for row in details)
         primary = tuple(row[1] for row in sorted((row for row in details if row[5]), key=lambda row: row[5]))
-        if not columns or not primary:
+        if (not columns or not primary
+                or CANONICAL_PRIMARY_KEYS.get(table) != primary):
             raise ValueError("canonical_remote_schema_invalid")
         tables[table] = (columns, primary)
     return tables

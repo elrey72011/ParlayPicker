@@ -16,6 +16,11 @@ import json
 from pathlib import Path
 import time
 
+from app_core.canonical_schema import (
+    CANONICAL_PRIMARY_KEYS,
+    RECONCILED_RESEARCH_TABLES,
+)
+
 
 SCHEMA = "parlaypicker-read-only-census-v1"
 CHECKPOINT_SCHEMA = "parlaypicker-read-only-census-checkpoint-v1"
@@ -53,32 +58,9 @@ SOURCE_KINDS = {
     "NHL": {"capture", "scores", "pregame_close_candidate"},
 }
 
-# The canonical key binds each row to its SQLite primary key.  Declaring the
-# keys here avoids opening or mutating a local database merely to inspect
-# immutable object bytes.
-PRIMARY_KEYS = {
-    "prospective_event": ("event_id",),
-    "prospective_quote": ("quote_id",),
-    "prospective_close": ("close_id",),
-    "prospective_result": ("result_id",),
-    "prospective_model": ("model_id",),
-    "prospective_model_training_result": ("model_id", "result_id"),
-    "prospective_calibration": ("calibration_id",),
-    "prospective_calibration_result": ("calibration_id", "result_id"),
-    "prospective_prediction": ("observation_id",),
-    "prospective_validation_plan": ("validation_plan_id",),
-    "prospective_validation_artifact": ("artifact_id",),
-    "prospective_deployment_review": ("deployment_id",),
-    "prospective_football_event": ("version_id",),
-    "prospective_football_quote": ("quote_id",),
-    "prospective_football_result": ("result_id",),
-    "prospective_football_settlement": ("settlement_id",),
-    "prospective_football_training_row": ("training_row_id",),
-    "prospective_football_team_identity": ("identity_id",),
-    "prospective_football_theover": ("research_row_id",),
-    "prospective_football_coverage": ("coverage_id",),
-    "prospective_football_cycle_coverage": ("coverage_id",),
-}
+# Backward-compatible alias for callers/tests that inspect the census
+# registry.  The canonical writer and this consumer share the same contract.
+PRIMARY_KEYS = CANONICAL_PRIMARY_KEYS
 
 
 class CensusIntegrityError(ValueError):
@@ -233,6 +215,12 @@ def _canonical_fact(name, raw):
         "market_family": market,
         "event_id": row.get("event_id") or row.get("game_id"),
     }
+    if table in RECONCILED_RESEARCH_TABLES:
+        fact.update({
+            "research_only": True,
+            "production_eligible": False,
+            "recommended_stake": 0.0,
+        })
     keep = (
         "model_id", "model_version", "training_start", "training_cutoff",
         "training_observation_count", "independent_event_count", "feature_version",
