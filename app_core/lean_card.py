@@ -35,6 +35,18 @@ def _first_col(df: pd.DataFrame, *names: str):
     return pd.Series([None] * len(df), index=df.index)
 
 
+def _coalesced_col(df: pd.DataFrame, *names: str) -> pd.Series:
+    """Return the first non-empty value per row across established aliases."""
+
+    result = pd.Series([None] * len(df), index=df.index, dtype="object")
+    for name in names:
+        if name not in df.columns:
+            continue
+        missing = result.isna() | result.astype("string").fillna("").str.strip().eq("")
+        result = result.where(~missing, df[name])
+    return result
+
+
 def _strict_bool_col(df: pd.DataFrame, name: str, *, default: bool = False) -> pd.Series:
     """Return a fail-closed boolean Series for an optional authorization column."""
 
@@ -281,7 +293,11 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         except Exception:
             bucket_stats = None
 
-    df = best_picks_df
+    original_index = best_picks_df.index.copy()
+    # Contract evaluation is positional.  A temporary unique index prevents
+    # duplicate/non-default labels from changing alignment while the exact
+    # original index is restored on the returned frame.
+    df = best_picks_df.reset_index(drop=True)
     home = _first_col(df, "Home", "home_team").astype(str)
     away = _first_col(df, "Away", "away_team").astype(str)
     status = _first_col(df, "Pick_Status")
@@ -382,22 +398,24 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     # with the same per-candidate push mass before pricing.  Research values may
     # remain visible when authority is absent, but they cannot pass the gate.
     calib_num = pd.to_numeric(calib_win, errors="coerce")
-    source_semantics = _first_col(df, "probability_semantics").fillna("").astype(str).str.strip()
-    push_input = pd.to_numeric(_first_col(df, "push_probability"), errors="coerce")
-    supplied_decimal = pd.to_numeric(_first_col(df, "decimal_odds"), errors="coerce")
-    # Export normalizers add empty schema columns to legacy rows.  Presence of an
-    # all-empty column is not an opt-in to the explicit push-aware contract; only
-    # a supplied semantic, push value, or decimal quote is.  This preserves an
-    # already approved legacy row while keeping partially declared contracts on
-    # the strict path, where missing pieces fail closed.
-    explicit_contract = bool(
-        source_semantics.ne("").any()
-        or push_input.notna().any()
-        or supplied_decimal.notna().any()
+    source_semantics = _coalesced_col(
+        df, "probability_semantics", "source_probability_semantics"
+    ).fillna("").astype(str).str.strip()
+    push_input = pd.to_numeric(
+        _coalesced_col(df, "push_probability", "p_push"), errors="coerce"
     )
-    pricing_push = push_input.copy()
-    if not explicit_contract:
-        pricing_push = pricing_push.fillna(0.0)
+    supplied_decimal = pd.to_numeric(
+        _coalesced_col(df, "decimal_odds", "odds_decimal"), errors="coerce"
+    )
+    # Export normalizers add empty schema columns to legacy rows.  Contract
+    # declaration is row-local: an unrelated row must never opt this row into a
+    # different pricing or optional-bound validation path.
+    explicit_contract = (
+        source_semantics.ne("")
+        | push_input.notna()
+        | supplied_decimal.notna()
+    )
+    pricing_push = push_input.where(explicit_contract, 0.0)
     line = pd.to_numeric(
         _first_col(df, "line", "selected_line", "spread_line", "total_line"),
         errors="coerce",
@@ -424,6 +442,19 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     pricing_decimal = pricing_decimal.mask(~quote_consistent)
 
     conditional_semantics = "win_conditional_on_decision"
+    supported_unconditional_semantics = {
+        "unconditional",
+        "unconditional_win_push_loss",
+        "win_unconditional_with_push",
+    }
+    normalized_semantics = source_semantics.str.casefold()
+    supported_semantics = normalized_semantics.eq(
+        conditional_semantics
+    ) | normalized_semantics.isin(supported_unconditional_semantics)
+    missing_explicit_semantics = explicit_contract & normalized_semantics.eq("")
+    unsupported_semantics = explicit_contract & normalized_semantics.ne(
+        ""
+    ) & ~supported_semantics
     already_unconditional = calibration_status.isin(
         {
             "PRODUCTION_CALIBRATION_APPLIED",
@@ -432,17 +463,21 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         }
     )
     pricing_win = calib_num.copy()
-    convert_mean = source_semantics.eq(conditional_semantics) & ~already_unconditional
+    convert_mean = normalized_semantics.eq(
+        conditional_semantics
+    ) & ~already_unconditional
     pricing_win.loc[convert_mean] = (
         calib_num.loc[convert_mean] * (1.0 - pricing_push.loc[convert_mean])
     )
 
     conservative_raw = pd.to_numeric(
-        _first_col(df, "conservative_probability", "p_win_conservative"),
+        _coalesced_col(df, "conservative_probability", "p_win_conservative"),
         errors="coerce",
     )
-    conservative_semantics = _first_col(
-        df, "conservative_probability_semantics"
+    conservative_semantics = _coalesced_col(
+        df,
+        "conservative_probability_semantics",
+        "p_win_conservative_semantics",
     ).fillna("").astype(str).str.strip().str.casefold()
     conservative_final = pd.Series(float("nan"), index=df.index, dtype=float)
     conservative_conditional = conservative_semantics.eq(conditional_semantics)
@@ -460,27 +495,19 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     conservative_final.loc[conservative_unconditional] = conservative_raw.loc[
         conservative_unconditional
     ]
-    conservative_for_gate: object = (
-        conservative_final if conservative_raw.notna().any() else None
+    legacy_break_even = pd.Series(
+        [_american_breakeven(value) for value in odds], index=df.index
+    ).where(~explicit_contract)
+    gate = evaluate_absolute_production_gate(
+        pricing_win,
+        legacy_break_even,
+        eff_ev,
+        push_probability=pricing_push,
+        decimal_odds=pricing_decimal,
+        conservative_probability=conservative_final,
+        explicit_contract_mask=explicit_contract,
+        conservative_bound_mask=conservative_raw.notna(),
     )
-
-    if explicit_contract:
-        gate = evaluate_absolute_production_gate(
-            pricing_win,
-            model_expected_value=eff_ev,
-            push_probability=pricing_push,
-            decimal_odds=pricing_decimal,
-            conservative_probability=conservative_for_gate,
-        )
-    else:
-        legacy_break_even = pd.Series(
-            [_american_breakeven(value) for value in odds], index=df.index
-        )
-        gate = evaluate_absolute_production_gate(
-            pricing_win,
-            legacy_break_even,
-            eff_ev,
-        )
     breakeven = gate["sportsbook_break_even_probability"]
 
     calibration_authoritative = pd.Series(True, index=df.index, dtype=bool)
@@ -492,17 +519,27 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         gate["pricing_contract_status"].eq("PUSH_AWARE_VERIFIED")
         & quote_consistent
         & ~half_point_with_push
+        & supported_semantics
         & calibration_authoritative
     )
-    if not explicit_contract:
-        value_contract_authoritative = gate["pricing_contract_status"].eq(
-            "LEGACY_NO_PUSH_COMPATIBILITY"
-        )
+    value_contract_authoritative = value_contract_authoritative.where(
+        explicit_contract,
+        gate["pricing_contract_status"].eq("LEGACY_NO_PUSH_COMPATIBILITY"),
+    )
     value_contract_status = gate["pricing_contract_status"].copy()
     value_contract_status.loc[~quote_consistent] = "QUOTE_PRICE_MISMATCH"
     value_contract_status.loc[half_point_with_push] = "ILLEGAL_LINE_PUSH_PAIRING"
+    value_contract_status.loc[missing_explicit_semantics] = (
+        "MISSING_PROBABILITY_SEMANTICS"
+    )
+    value_contract_status.loc[unsupported_semantics] = (
+        "UNSUPPORTED_PROBABILITY_SEMANTICS"
+    )
     value_contract_status.loc[
-        gate["pricing_contract_status"].ne("INVALID") & ~calibration_authoritative
+        value_contract_status.isin(
+            {"PUSH_AWARE_VERIFIED", "LEGACY_NO_PUSH_COMPATIBILITY"}
+        )
+        & ~calibration_authoritative
     ] = "CALIBRATION_OR_TRANSFORM_NOT_AUTHORIZED"
 
     tier = [
@@ -613,7 +650,10 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     )
     selection_mode.loc[production_gate_pass & ~controlled_value] = "Premium Pick"
 
-    return pd.DataFrame({
+    default_push_source = pd.Series(
+        "legacy_implicit_zero", index=df.index, dtype="object"
+    ).where(~explicit_contract, "candidate_push_probability")
+    result = pd.DataFrame({
         "League": _first_col(df, "league", "League"),
         "Matchup": (away + " @ " + home).str.strip(" @"),
         "Pick": _first_col(df, "best_pick", "display_pick"),
@@ -631,10 +671,15 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         "Odds_Decimal": pricing_decimal,
         "Probability_Semantics": pd.Series(
             "win_unconditional_with_push", index=df.index, dtype="object"
-        ).where(gate["pricing_contract_status"].ne("INVALID"), "UNRESOLVED"),
+        ).where(
+            value_contract_status.isin(
+                {"PUSH_AWARE_VERIFIED", "LEGACY_NO_PUSH_COMPATIBILITY"}
+            ),
+            "UNRESOLVED",
+        ),
         "Push_Source": _first_col(df, "push_probability_source").fillna("").astype(str).where(
             _first_col(df, "push_probability_source").fillna("").astype(str).str.strip().ne(""),
-            "candidate_push_probability" if explicit_contract else "legacy_implicit_zero",
+            default_push_source,
         ),
         "Value_Contract_Version": "unconditional-refunded-push-v1",
         "Value_Contract_Status": value_contract_status,
@@ -673,6 +718,8 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         # Stake only on rows that pass the independent absolute price gate.
         "Suggested_Stake": kelly.where(production_gate_pass, 0.0),
     }, index=df.index)
+    result.index = original_index
+    return result
 
 
 def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: object = _UNSET,
