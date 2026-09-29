@@ -996,6 +996,24 @@
     "unrelated_commitment_dollars": 50
   },
   "schema": "post2366-local-entrypoint-reproductions-v1",
+  "source_git_blobs": {
+    "app_core/census_eligibility.py": "b486400d71fefb49b4b567562a3832e054207834",
+    "app_core/read_only_census.py": "b1e65354c921d861b8acefb4c1e6aa7b30e6d402",
+    "app_core/release_authority.py": "40becca9301ca3aac118cc22e7f6739eea73e180",
+    "app_core/release_capacity.py": "38001837c8971c0dd25ede35f3697c58818153f4",
+    "core/exposure_ledger.py": "264701b17836334fabcb65fceca224b6735f78b1",
+    "core/wager_decisions.py": "8cf2cc19d0e96c2bbf8813817a22f0f50cf9c7ff",
+    "tests/test_post2366_eligibility_capacity.py": "5ecd0d10eeba6ceab54aa846ce48eb1f9082af99"
+  },
+  "source_git_normalized_sha256": {
+    "app_core/census_eligibility.py": "edc67e4b7031df195053bba44f303a766a78097b90c6ed24859a3f590f6ea4b0",
+    "app_core/read_only_census.py": "fadb47922e32fbd1a8fe4ce35cf092531d7d343fed8323fc6fd3c5d675fa1998",
+    "app_core/release_authority.py": "b3d3c32d85c8e87f85b5b1ddf8ddfa2952ad0ce9f2eb7a77b58b0a854dce6a27",
+    "app_core/release_capacity.py": "89483a0f56d220e98ea0126169dab24f7c688747de189e48fe8a2a6aee61a619",
+    "core/exposure_ledger.py": "33c81bf04d6acb4ffe6ef249a240ec25169549a9d8e2ca106d7921e08866d652",
+    "core/wager_decisions.py": "cac376ed94bd0b371fb24b77eb050bb06bbd397e05e7a950af0bfd7c18519d89",
+    "tests/test_post2366_eligibility_capacity.py": "1cf4d2d7cf78a9c0144674555c6857977346d87c110d8f7bf2186352b8757b27"
+  },
   "source_sha256": {
     "app_core/census_eligibility.py": "6a32b26b68fd1fa6e8c77198dd7716ac5cf40d5fba07805df8397dc76ecd9423",
     "app_core/read_only_census.py": "4fc1333ee1d230a844ae614107ecdc949c3be8a40a67452afe1b05fddfe9041d",
@@ -1004,5 +1022,6 @@
     "core/exposure_ledger.py": "840619cb1e6c054c018b83ae77866f522ff6f34f9d84d65491911aba195f67fd",
     "core/wager_decisions.py": "33b48cee53e66ce0eb0ee5fba8931359e4ae47bd86a46539c7061285c809242e",
     "tests/test_post2366_eligibility_capacity.py": "1cad7f682d99cff973ec1e46deacf27ea91b415029d920c85e28685214f603bc"
-  }
+  },
+  "source_sha256_definition": "Exact local source bytes used by the recorded execution; Git may normalize CRLF to LF."
 }

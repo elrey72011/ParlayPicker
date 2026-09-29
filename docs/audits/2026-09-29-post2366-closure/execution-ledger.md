@@ -103,8 +103,10 @@ execution. A CI fixture never establishes model or hosted subscriber proof.
   No existing expectation was weakened. This Windows result is not a passing
   final full-suite claim. CI uses the repository's Linux/pinned-runtime workflows.
 - `local-entrypoint-reproductions.json` records exact source-file SHA256 values,
-  writer/reader identities, manifest IDs, counts, real publisher blocker report
+  writer/reader identities, Git blob/normalized-byte identities, manifest IDs, counts, real publisher blocker report
   and zero upload calls after the fix. It is explicitly fixture-marked.
+  Execution source hashes describe exact local bytes; separately recorded Git
+  identities account for checkout CRLF/LF normalization.
 - The machine-readable artifact register and protected-file report accompany
   this ledger. Final CI run/head/artifact identities are recorded separately.
 

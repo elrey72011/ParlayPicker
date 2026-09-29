@@ -1,14 +1,15 @@
 {
+  "artifact_sha256_definition": "LF-normalized repository artifact bytes; local_output hashes describe the exact retained local output bytes.",
   "artifacts": [
     {
-      "bytes": 6885,
+      "bytes": 6791,
       "path": "anchor-comparison.xml",
-      "sha256": "dad1711203c58b87d9e3bc0372aa08aa325f4a2516b5c41f2a760a9e82496a33"
+      "sha256": "a56b9a9b23b28f27dbd1d0b9d5f20a7f35205f40650646f5c1a78d1fb9df54d5"
     },
     {
-      "bytes": 12343,
+      "bytes": 12514,
       "path": "execution-ledger.md",
-      "sha256": "f1cc595b320fc11dbcf23aa7d643ede1a0abf3cf8e983e02db00645c28641ada"
+      "sha256": "fd0c27ed37f39aec8521708435e1f4b2b7dbc0777d82532717104ff86dc684e2"
     },
     {
       "bytes": 16512,
@@ -16,19 +17,19 @@
       "sha256": "ce0d2c01c09599bbb63b13cd0f300d9f0561b52c80320a2f7c9d5115a736e8fa"
     },
     {
-      "bytes": 44242,
+      "bytes": 44726,
       "path": "local-entrypoint-reproductions.json",
-      "sha256": "5070928d824d4ba29cc7ac1d993d6a44ef528dcae358f6590527caed361b1afe"
+      "sha256": "d0e623624de14203fb70e2ca5a0a2e39013ea49d57bef589b9bde070c8df5b71"
     },
     {
-      "bytes": 5422,
+      "bytes": 5250,
       "path": "protected-file-diff.json",
-      "sha256": "205dc55df94b6c87572e169b09691cab2a9c2fa7c1c041176a793a14b4c21918"
+      "sha256": "59ab3f0a2d90a1d71406bd18aa1bc5ed59fb8ca8541c33a3c6c8ca85a79a4e7d"
     },
     {
-      "bytes": 2201,
+      "bytes": 2178,
       "path": "reproduction-before.xml",
-      "sha256": "604ed476e3e2a5b318589dc1870cc486092e01c59bb2ee4ccbc7983908b97df4"
+      "sha256": "c444dfc7247c40269b5412487085bae23f63ec85c69482db53faad7187dd3a7d"
     },
     {
       "bytes": 7105,
