@@ -1,0 +1,172 @@
+{
+  "base_sha": "095b594460e94085051162a158b111dd8be31486",
+  "changed_files": [
+    {
+      "path": "app_core/census_eligibility.py",
+      "status": "A"
+    },
+    {
+      "path": "app_core/read_only_census.py",
+      "status": "M"
+    },
+    {
+      "path": "app_core/release_authority.py",
+      "status": "M"
+    },
+    {
+      "path": "app_core/release_capacity.py",
+      "status": "A"
+    },
+    {
+      "path": "core/exposure_ledger.py",
+      "status": "M"
+    },
+    {
+      "path": "core/wager_decisions.py",
+      "status": "M"
+    },
+    {
+      "path": "docs/audits/2026-09-29-post2366-closure/anchor-comparison.xml",
+      "status": "A"
+    },
+    {
+      "path": "docs/audits/2026-09-29-post2366-closure/execution-ledger.md",
+      "status": "A"
+    },
+    {
+      "path": "docs/audits/2026-09-29-post2366-closure/focused.xml",
+      "status": "A"
+    },
+    {
+      "path": "docs/audits/2026-09-29-post2366-closure/reproduction-before.xml",
+      "status": "A"
+    },
+    {
+      "path": "docs/audits/2026-09-29-post2366-closure/subscriber-local.xml",
+      "status": "A"
+    },
+    {
+      "path": "tests/test_post2366_eligibility_capacity.py",
+      "status": "A"
+    }
+  ],
+  "existing_test_changes": [],
+  "head_sha": "aacfa95e4dbf6a8e0dfa29d83bc2852143b7bd78",
+  "local_changes": {
+    "staged": [],
+    "unstaged": []
+  },
+  "local_protected_changes": [],
+  "post2366_protected_identity_checks": [
+    {
+      "base_blob": "34ee9ee097488a42c7d6d27dfab7d36dc2a786a7",
+      "head_blob": "34ee9ee097488a42c7d6d27dfab7d36dc2a786a7",
+      "path": "app_core/evidence_drive.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "935e2afcf5f68ba93e74e3befc17043d3bcf36ab",
+      "head_blob": "935e2afcf5f68ba93e74e3befc17043d3bcf36ab",
+      "path": "app_core/evidence_remote.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "10013f41815e67de2953deb8d6dff7660261f675",
+      "head_blob": "10013f41815e67de2953deb8d6dff7660261f675",
+      "path": "app_core/public_history.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "e345a82e6b551a23d55606b7522534a985591471",
+      "head_blob": "e345a82e6b551a23d55606b7522534a985591471",
+      "path": "app_core/performance_spans.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "f1eae2e04cb6c05c71f6ea08aa0c55ec94c117b6",
+      "head_blob": "f1eae2e04cb6c05c71f6ea08aa0c55ec94c117b6",
+      "path": "app_core/stage_timing.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "8a154fa6643d047b131891418f7e791a20bfd005",
+      "head_blob": "8a154fa6643d047b131891418f7e791a20bfd005",
+      "path": "app_core/prediction_evidence.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "0cf998d73e3c02d7f05d207fe26014ff57e1432e",
+      "head_blob": "0cf998d73e3c02d7f05d207fe26014ff57e1432e",
+      "path": "app/ui/lock_picks.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "762840f961544b9b1e1aec74baf49318914e6d77",
+      "head_blob": "762840f961544b9b1e1aec74baf49318914e6d77",
+      "path": "scripts/check_launch_change_scope.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "92bacece033e358ef17061bd65d4abafdaba6874",
+      "head_blob": "92bacece033e358ef17061bd65d4abafdaba6874",
+      "path": "docs/paid-launch/launch-baseline-manifest.json",
+      "unchanged": true
+    },
+    {
+      "base_blob": "8e383434bb2646f61dff523efc8f7c92a9c97426",
+      "head_blob": "8e383434bb2646f61dff523efc8f7c92a9c97426",
+      "path": "scripts/benchmark_refresh_lock_storage.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "ee350ae0e470b9b04275d656388e98bc8ddc4e61",
+      "head_blob": "ee350ae0e470b9b04275d656388e98bc8ddc4e61",
+      "path": "app_core/current_wagers_trace.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "0c919c632a0351090b82f287048992a6d4ed7c00",
+      "head_blob": "0c919c632a0351090b82f287048992a6d4ed7c00",
+      "path": "app_core/per_game_boards.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "2d9fd6af3074f18f02d62dd714a520052ed33879",
+      "head_blob": "2d9fd6af3074f18f02d62dd714a520052ed33879",
+      "path": "app_core/public_board.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "c61bd124a6942a1e081d340737736f88ad9861c3",
+      "head_blob": "c61bd124a6942a1e081d340737736f88ad9861c3",
+      "path": "app_core/price_value_display.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "5b52d2aa5203c67f70445a67e9883b6fc0fcc246",
+      "head_blob": "5b52d2aa5203c67f70445a67e9883b6fc0fcc246",
+      "path": "core/price_value.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "cd70a568dfcfdc3126b27aa4a38dcde2c2eb04dd",
+      "head_blob": "cd70a568dfcfdc3126b27aa4a38dcde2c2eb04dd",
+      "path": "core/probability_semantics.py",
+      "unchanged": true
+    },
+    {
+      "base_blob": "a8b996bf4baf3e40bcad3937ff96b5b84000c930",
+      "head_blob": "a8b996bf4baf3e40bcad3937ff96b5b84000c930",
+      "path": "app_core/quote_freshness.py",
+      "unchanged": true
+    }
+  ],
+  "protected_changes": [],
+  "reason_codes": [],
+  "recorded_base_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+  "runtime_shadowing": [],
+  "schema_version": 1,
+  "self_protected_changes": [],
+  "status": "PASS",
+  "tooling_hash_mismatches": []
+}

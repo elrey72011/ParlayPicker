@@ -1,0 +1,1008 @@
+{
+  "base_revision": "095b594460e94085051162a158b111dd8be31486",
+  "census": {
+    "after_counts": {
+      "active_eligible_games": 0,
+      "active_eligible_rows": 0,
+      "active_training_rows": 0,
+      "independent_eligible_games": 0,
+      "independent_eligible_reason": null,
+      "quotes": 2,
+      "raw_objects": 16,
+      "records": 16,
+      "results": 2,
+      "settlements": 4,
+      "stored_ready_games": 1,
+      "stored_ready_rows": 4,
+      "unique_events": 2,
+      "verified_quotes": 2
+    },
+    "after_reference_manifest_ids": [],
+    "before_counts": {
+      "active_eligible_games": 1,
+      "active_eligible_rows": 2,
+      "active_training_rows": 2,
+      "independent_eligible_games": 1,
+      "independent_eligible_reason": null,
+      "quotes": 2,
+      "raw_objects": 11,
+      "records": 11,
+      "results": 1,
+      "settlements": 2,
+      "stored_ready_games": 1,
+      "stored_ready_rows": 2,
+      "unique_events": 2,
+      "verified_quotes": 2
+    },
+    "entrypoint": "app_core.read_only_census.run_census",
+    "reference": "prospective_football_active_training_row / prospective_football_training_manifest",
+    "scopes": [
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": 0,
+          "active_eligible_rows": 0,
+          "active_training_rows": 0,
+          "independent_eligible_games": 0,
+          "independent_eligible_reason": null,
+          "quotes": 2,
+          "raw_objects": 16,
+          "records": 16,
+          "results": 2,
+          "settlements": 4,
+          "stored_ready_games": 1,
+          "stored_ready_rows": 4,
+          "unique_events": 2,
+          "verified_quotes": 2
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": null,
+          "manifest_ids": [],
+          "projection_version": "census-active-manifest-v1",
+          "reader": "prospective_football_training_manifest",
+          "reason": null,
+          "selection_rule_version": "football-one-observation-v1",
+          "status": "KNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NFL/SPREAD"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": 0,
+          "active_eligible_rows": 0,
+          "active_training_rows": 0,
+          "independent_eligible_games": 0,
+          "independent_eligible_reason": null,
+          "quotes": 2,
+          "raw_objects": 16,
+          "records": 16,
+          "results": 2,
+          "settlements": 4,
+          "stored_ready_games": 1,
+          "stored_ready_rows": 4,
+          "unique_events": 2,
+          "verified_quotes": 2
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": null,
+          "manifest_ids": [],
+          "projection_version": "census-active-manifest-v1",
+          "reader": "prospective_football_training_manifest",
+          "reason": null,
+          "selection_rule_version": "football-one-observation-v1",
+          "status": "KNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NFL/TOTAL"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": 0,
+          "active_eligible_rows": 0,
+          "active_training_rows": 0,
+          "independent_eligible_games": 0,
+          "independent_eligible_reason": null,
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": 0,
+          "stored_ready_rows": 0,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": null,
+          "manifest_ids": [],
+          "projection_version": "census-active-manifest-v1",
+          "reader": "prospective_football_training_manifest",
+          "reason": null,
+          "selection_rule_version": "football-one-observation-v1",
+          "status": "KNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NCAAF/SPREAD"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.football_stage2.chronological_partitions",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": 0,
+          "active_eligible_rows": 0,
+          "active_training_rows": 0,
+          "independent_eligible_games": 0,
+          "independent_eligible_reason": null,
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": 0,
+          "stored_ready_rows": 0,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": null,
+          "manifest_ids": [],
+          "projection_version": "census-active-manifest-v1",
+          "reader": "prospective_football_training_manifest",
+          "reason": null,
+          "selection_rule_version": "football-one-observation-v1",
+          "status": "KNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NCAAF/TOTAL"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": null,
+          "active_eligible_rows": null,
+          "active_training_rows": null,
+          "independent_eligible_games": null,
+          "independent_eligible_reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": null,
+          "stored_ready_rows": null,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": "OWNER_AUTHORIZED_READ_ONLY_EXACT_SCOPE_QUALIFICATION_REPORT",
+          "manifest_ids": null,
+          "projection_version": "census-active-manifest-v1",
+          "reader": "app_core.prospective_evidence.market_readiness",
+          "reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "selection_rule_version": null,
+          "status": "UNKNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NBA/SPREAD"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": null,
+          "active_eligible_rows": null,
+          "active_training_rows": null,
+          "independent_eligible_games": null,
+          "independent_eligible_reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": null,
+          "stored_ready_rows": null,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": "OWNER_AUTHORIZED_READ_ONLY_EXACT_SCOPE_QUALIFICATION_REPORT",
+          "manifest_ids": null,
+          "projection_version": "census-active-manifest-v1",
+          "reader": "app_core.prospective_evidence.market_readiness",
+          "reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "selection_rule_version": null,
+          "status": "UNKNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NBA/TOTAL"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": null,
+          "active_eligible_rows": null,
+          "active_training_rows": null,
+          "independent_eligible_games": null,
+          "independent_eligible_reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": null,
+          "stored_ready_rows": null,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": "OWNER_AUTHORIZED_READ_ONLY_EXACT_SCOPE_QUALIFICATION_REPORT",
+          "manifest_ids": null,
+          "projection_version": "census-active-manifest-v1",
+          "reader": "app_core.prospective_evidence.market_readiness",
+          "reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "selection_rule_version": null,
+          "status": "UNKNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NCAAB/SPREAD"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": null,
+          "active_eligible_rows": null,
+          "active_training_rows": null,
+          "independent_eligible_games": null,
+          "independent_eligible_reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": null,
+          "stored_ready_rows": null,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": "OWNER_AUTHORIZED_READ_ONLY_EXACT_SCOPE_QUALIFICATION_REPORT",
+          "manifest_ids": null,
+          "projection_version": "census-active-manifest-v1",
+          "reader": "app_core.prospective_evidence.market_readiness",
+          "reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "selection_rule_version": null,
+          "status": "UNKNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NCAAB/TOTAL"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": null,
+          "active_eligible_rows": null,
+          "active_training_rows": null,
+          "independent_eligible_games": null,
+          "independent_eligible_reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": null,
+          "stored_ready_rows": null,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": "OWNER_AUTHORIZED_READ_ONLY_EXACT_SCOPE_QUALIFICATION_REPORT",
+          "manifest_ids": null,
+          "projection_version": "census-active-manifest-v1",
+          "reader": "app_core.prospective_evidence.market_readiness",
+          "reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "selection_rule_version": null,
+          "status": "UNKNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "MLB/RUN_LINE"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": null,
+          "active_eligible_rows": null,
+          "active_training_rows": null,
+          "independent_eligible_games": null,
+          "independent_eligible_reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": null,
+          "stored_ready_rows": null,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": "OWNER_AUTHORIZED_READ_ONLY_EXACT_SCOPE_QUALIFICATION_REPORT",
+          "manifest_ids": null,
+          "projection_version": "census-active-manifest-v1",
+          "reader": "app_core.prospective_evidence.market_readiness",
+          "reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "selection_rule_version": null,
+          "status": "UNKNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "MLB/TOTAL"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": null,
+          "active_eligible_rows": null,
+          "active_training_rows": null,
+          "independent_eligible_games": null,
+          "independent_eligible_reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": null,
+          "stored_ready_rows": null,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": "OWNER_AUTHORIZED_READ_ONLY_EXACT_SCOPE_QUALIFICATION_REPORT",
+          "manifest_ids": null,
+          "projection_version": "census-active-manifest-v1",
+          "reader": "app_core.prospective_evidence.market_readiness",
+          "reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "selection_rule_version": null,
+          "status": "UNKNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NHL/PUCK_LINE"
+      },
+      {
+        "cohorts": {
+          "calibration": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "selection": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "training": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          },
+          "untouched_evaluation": {
+            "follow_up": "OWNER_AUTHORIZED_READ_ONLY_BOUND_MODEL_PLAN_COHORT_REPORT",
+            "independent_games": null,
+            "reader": "app_core.prospective_evidence.evaluate_validation_plan",
+            "reason": "BOUND_COHORT_NOT_EVALUATED_FROM_REMOTE_INVENTORY",
+            "status": "UNKNOWN"
+          }
+        },
+        "counts": {
+          "active_eligible_games": null,
+          "active_eligible_rows": null,
+          "active_training_rows": null,
+          "independent_eligible_games": null,
+          "independent_eligible_reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "quotes": 0,
+          "raw_objects": 1,
+          "records": 1,
+          "results": 0,
+          "settlements": 0,
+          "stored_ready_games": null,
+          "stored_ready_rows": null,
+          "unique_events": 1,
+          "verified_quotes": 0
+        },
+        "eligibility": {
+          "active_eligible_rows_definition": "canonical manifest joins and exclusions before independent selection",
+          "active_training_rows_definition": "canonical active view before quote/settlement/event chronology",
+          "follow_up": "OWNER_AUTHORIZED_READ_ONLY_EXACT_SCOPE_QUALIFICATION_REPORT",
+          "manifest_ids": null,
+          "projection_version": "census-active-manifest-v1",
+          "reader": "app_core.prospective_evidence.market_readiness",
+          "reason": "NO_REMOTE_CANONICAL_TRAINING_MANIFEST_READER_FOR_SCOPE",
+          "selection_rule_version": null,
+          "status": "UNKNOWN"
+        },
+        "qualification_binding": {
+          "production_eligible": false,
+          "reader": "app_core.prospective_evidence.deployment_state",
+          "reason": "INVENTORY_PRESENCE_IS_NOT_EXACT_MODEL_CALIBRATION_PLAN_VALIDATION_BINDING",
+          "status": "NOT_VERIFIED"
+        },
+        "scope": "NHL/TOTAL"
+      }
+    ],
+    "writer": "app_core.football_stage1 + app_core.prospective_remote._encode"
+  },
+  "execution_kind": "LOCAL_WRITER_AND_MOCKED_TRANSPORT",
+  "external_model_or_hosted_proof": false,
+  "fixture": true,
+  "release": {
+    "entrypoint": "app_core.netlify_publishing.deploy",
+    "publisher_network_calls": 0,
+    "report": {
+      "actionable_release_allowed": false,
+      "actionable_row_count": 1,
+      "authority_resolution": {
+        "provider_status": "FROZEN_QUOTE_POLICY",
+        "reason_codes": [],
+        "required": true,
+        "resolved_at": "2026-09-14T15:01:00+00:00",
+        "source_status": "VERIFIED"
+      },
+      "blocker_counts": {
+        "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT": 1
+      },
+      "capacity_check": {
+        "as_of": "2026-09-14T15:01:00+00:00",
+        "decision_changes": 0,
+        "ledger_hash": "b6adad400e5782f1f63947062fbbce59ecd3fd2a3dfead685e6070d7789dbf89",
+        "reason_codes": [
+          "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT"
+        ],
+        "reservations": 0,
+        "snapshot_hash": "8cd1a5d81f2b5b4f9b14c55caaafebebf75f8d4e4a414c2d3356b803850bb274",
+        "status": "BLOCKED",
+        "tickets": [
+          {
+            "failed_limits": [
+              "total",
+              "sport:NFL",
+              "daily",
+              "unknown_team_bound:NFL"
+            ],
+            "reason_codes": [
+              "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT"
+            ],
+            "row_id": "a05d8912cd42a352385842c53782fa7ce06fae7c7b07e045d5f62f58cd4b31a2",
+            "stake_dollars": 10.0,
+            "status": "BLOCKED",
+            "team_identity_status": "UNKNOWN_CONSERVATIVE_ALL_TEAM_BOUND"
+          }
+        ],
+        "writes": 0
+      },
+      "current_authority_required": true,
+      "evaluated_at": "2026-09-14T15:01:00+00:00",
+      "freshness_policy_minutes": 30,
+      "legacy_history_only": false,
+      "overall_current_overlapping_blocker_counts": {},
+      "overall_current_primary_counts": {
+        "CURRENT_ACTIONABLE": 1
+      },
+      "package_built_at": "2026-09-14T15:00:00+00:00",
+      "preflight_enforced": true,
+      "primary_counts": {
+        "CURRENT_ACTIONABLE": 1
+      },
+      "published_at": null,
+      "rows": [
+        {
+          "analysis_age_seconds": 60.0,
+          "current_authority_status": "VERIFIED",
+          "current_blockers": [
+            "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT"
+          ],
+          "current_primary_reason": "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT",
+          "current_status": "BLOCKED_ACTIONABLE",
+          "duplicate_view": false,
+          "event_seconds_remaining": 10740.0,
+          "expires_at": "2026-09-14T15:20:00+00:00",
+          "game": "Away0 at Home0",
+          "market": "spread_home",
+          "odds": -110.0,
+          "position": 0,
+          "quote_age_seconds": 360.0,
+          "release_blockers": [
+            "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT"
+          ],
+          "remaining_validity_seconds": 1140.0,
+          "row_id": "a05d8912cd42a352385842c53782fa7ce06fae7c7b07e045d5f62f58cd4b31a2",
+          "saved_actionable": true,
+          "saved_producer_blockers": [],
+          "saved_producer_primary_reason": "SAVED_VALIDATED_APPROVAL",
+          "saved_status": "APPROVED",
+          "section": "overall",
+          "selection": "Home0 -2.5",
+          "sport": "NFL"
+        },
+        {
+          "analysis_age_seconds": 60.0,
+          "current_authority_status": "VERIFIED",
+          "current_blockers": [
+            "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT"
+          ],
+          "current_primary_reason": "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT",
+          "current_status": "BLOCKED_ACTIONABLE",
+          "duplicate_view": true,
+          "event_seconds_remaining": 10740.0,
+          "expires_at": "2026-09-14T15:20:00+00:00",
+          "game": "Away0 at Home0",
+          "market": "spread_home",
+          "odds": -110.0,
+          "position": 0,
+          "quote_age_seconds": 360.0,
+          "release_blockers": [
+            "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT"
+          ],
+          "remaining_validity_seconds": 1140.0,
+          "row_id": "a05d8912cd42a352385842c53782fa7ce06fae7c7b07e045d5f62f58cd4b31a2",
+          "saved_actionable": true,
+          "saved_producer_blockers": [],
+          "saved_producer_primary_reason": null,
+          "saved_status": "APPROVED",
+          "section": "sides",
+          "selection": "Home0 -2.5",
+          "sport": "NFL"
+        },
+        {
+          "analysis_age_seconds": 60.0,
+          "current_authority_status": "VERIFIED",
+          "current_blockers": [
+            "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT"
+          ],
+          "current_primary_reason": "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT",
+          "current_status": "BLOCKED_ACTIONABLE",
+          "duplicate_view": true,
+          "event_seconds_remaining": 10740.0,
+          "expires_at": "2026-09-14T15:20:00+00:00",
+          "game": "Away0 at Home0",
+          "market": "spread_home",
+          "odds": -110.0,
+          "position": 0,
+          "quote_age_seconds": 360.0,
+          "release_blockers": [
+            "CURRENT_EXPOSURE_CAPACITY_INSUFFICIENT"
+          ],
+          "remaining_validity_seconds": 1140.0,
+          "row_id": "a05d8912cd42a352385842c53782fa7ce06fae7c7b07e045d5f62f58cd4b31a2",
+          "saved_actionable": true,
+          "saved_producer_blockers": [],
+          "saved_producer_primary_reason": null,
+          "saved_status": "APPROVED",
+          "section": "totals",
+          "selection": "Home0 -2.5",
+          "sport": "NFL"
+        }
+      ],
+      "saved_producer_primary_counts": {
+        "SAVED_VALIDATED_APPROVAL": 1
+      },
+      "schema_version": "public-release-preflight-v1",
+      "selected_current_overlapping_blocker_counts": {},
+      "selected_current_primary_counts": {
+        "CURRENT_ACTIONABLE": 1
+      }
+    },
+    "saved_stake_dollars": 10.0,
+    "unrelated_commitment_dollars": 50
+  },
+  "schema": "post2366-local-entrypoint-reproductions-v1",
+  "source_sha256": {
+    "app_core/census_eligibility.py": "6a32b26b68fd1fa6e8c77198dd7716ac5cf40d5fba07805df8397dc76ecd9423",
+    "app_core/read_only_census.py": "4fc1333ee1d230a844ae614107ecdc949c3be8a40a67452afe1b05fddfe9041d",
+    "app_core/release_authority.py": "1121899d9fff82efaced37316f21fc3dc71e6db0b38009ceacec0d332804aa33",
+    "app_core/release_capacity.py": "ae7d7cf97d4b9c76ae616d9baf427ddc195a97e36e6198083c51409a8bbd0293",
+    "core/exposure_ledger.py": "840619cb1e6c054c018b83ae77866f522ff6f34f9d84d65491911aba195f67fd",
+    "core/wager_decisions.py": "33b48cee53e66ce0eb0ee5fba8931359e4ae47bd86a46539c7061285c809242e",
+    "tests/test_post2366_eligibility_capacity.py": "1cad7f682d99cff973ec1e46deacf27ea91b415029d920c85e28685214f603bc"
+  }
+}
