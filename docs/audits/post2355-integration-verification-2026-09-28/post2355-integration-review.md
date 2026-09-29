@@ -23,8 +23,8 @@ No threshold, live artifact, market activation, sales mode, billing mode, produc
 |---|---|---|
 | N01 | PASS | Base `72aba315…`; implementation `2eccc880…`; owner files preserved. |
 | N02 | PASS | Additive exact-node PostgreSQL workflow; protected paid workflow/guard/manifest unchanged. |
-| N03 | PENDING_PR_CI | Three exact PostgreSQL node IDs are configured; authoritative run pending. |
-| N04 | PENDING_PR_CI | Existing paid, protected-scope, production-safety, and full-suite CI pending. |
+| N03 | PASS | All three exact PostgreSQL node IDs passed against PostgreSQL 16 in run `36508079185`. |
+| N04 | PASS | Paid `23/23`, protected scope, production safety `563/563`, full shard 1 `1508/1508`, full shard 2 `1598/1598`, and aggregate checks passed. |
 | N05 | PASS | Non-null static inventory finds actual `load_calibration` call sites. |
 | N06 | PASS | All three modes pass; missing requested static evidence returns nonzero. |
 | N07 | PASS | 12 calls each through research, public, strict, parlay, and subscriber consumers. |
@@ -43,14 +43,17 @@ No threshold, live artifact, market activation, sales mode, billing mode, produc
 
 - Focused integration plus preserved probability/semantics/lean suites: `105 passed`.
 - Runtime route trace: `12/12` scopes; each of five consumers invoked 12 times; all assertions passed or verified the expected authority block.
-- Full local Windows shards were attempted but are non-authoritative because pre-existing Anaconda/Windows fixture behavior produced broad baseline failures. Exact counts are recorded in `ci-test-execution-manifest.json`; Linux PR CI is required.
-- PostgreSQL completion and final combined CI: pending PR execution at the time of this evidence commit.
+- Full local Windows shards were attempted but are non-authoritative because pre-existing Anaconda/Windows fixture behavior produced broad baseline failures. Exact counts are recorded in `ci-test-execution-manifest.json`; authoritative Linux PR CI passed.
+- PostgreSQL completion: all three named completion tests passed against PostgreSQL 16 in [run 36508079185](https://github.com/elrey72011/ParlayPicker/actions/runs/36508079185).
+- Existing paid suite: `23 passed`; protected-scope check passed in [run 36508079144](https://github.com/elrey72011/ParlayPicker/actions/runs/36508079144).
+- Production safety: `563 passed`; full-suite shard 1: `1508 passed`; full-suite shard 2: `1598 passed`; aggregate passed in [run 36508079149](https://github.com/elrey72011/ParlayPicker/actions/runs/36508079149).
+- These CI results were collected on PR evidence revision `13d5455fc6fde4ada094b35b342ce690b03f3a04`.
 
 ## Status separation
 
 ```text
 code_integration: COMPLETE_VERIFIED
-required_ci_execution: PENDING_PR_CI
+required_ci_execution: PASS
 hosted_staging: NOT_RUN
 empirical_market_qualification: UNCHANGED_NOT_QUALIFIED_BY_THIS_TASK
 commercial_authorization: NOT_GRANTED
