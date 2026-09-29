@@ -154,6 +154,8 @@ def apply_calibration(probs: pd.Series, table: list[list[float]] | None) -> pd.S
     Returns ``probs`` unchanged when no table is available."""
     if table is None or len(table) == 0:
         return probs
+    if isinstance(table, CalibrationTable) and not table.trusted_snapshot_valid():
+        return pd.Series(float("nan"), index=probs.index, dtype=float)
     normalized = validate_calibration_knots(table)
     xs = [k[0] for k in normalized]
     ys = [k[1] for k in normalized]

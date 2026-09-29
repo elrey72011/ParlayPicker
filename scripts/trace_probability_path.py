@@ -19,6 +19,9 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app_core.prediction_engine import PredictionEngine, VERTEX_FEATURE_COLUMNS  # noqa: E402
+from app_core.export_scope import label_wager_export, production_wagers  # noqa: E402
+from app_core.lean_card import attach_play_stakes, score_best_picks_rows  # noqa: E402
+from core.parlay_engine import generate_parlays  # noqa: E402
 from core.price_value import price_value  # noqa: E402
 from core.probability_calibration import (  # noqa: E402
     CALIBRATION_SCHEMA_VERSION,
@@ -54,6 +57,54 @@ TRACKED_SYMBOLS = frozenset(
 def build_trace(root: Path = ROOT) -> dict:
     calls: dict[str, list[dict[str, object]]] = {
         symbol: [] for symbol in sorted(TRACKED_SYMBOLS)
+    }
+    parse_errors: list[dict[str, str]] = []
+    excluded_parts = {
+        ".git", ".venv", "archive", "node_modules", "outputs", "site-packages",
+        "test-results",
+    }
+    for path in sorted(root.rglob("*.py")):
+        relative = path.relative_to(root)
+        if excluded_parts.intersection(relative.parts) or any(
+            part.startswith(".") for part in relative.parts
+        ):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (OSError, SyntaxError, UnicodeDecodeError) as exc:
+            parse_errors.append(
+                {"path": relative.as_posix(), "error": type(exc).__name__}
+            )
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = None
+            if isinstance(node.func, ast.Name):
+                name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                name = node.func.attr
+            if name in calls:
+                calls[name].append(
+                    {
+                        "path": relative.as_posix(),
+                        "line": int(node.lineno),
+                    }
+                )
+    return {
+        "schema_version": 1,
+        "trace_kind": "static_python_call_sites",
+        "read_only": True,
+        "tracked_symbols": sorted(TRACKED_SYMBOLS),
+        "calls": calls,
+        "parse_errors": parse_errors,
+        "qualification_authority": "integrations/subscriber_release/authority.py",
+        "subscriber_contract": "services/subscriber/contracts.py",
+        "calibration_runtime": "core/probability_calibration.py",
+        "notes": [
+            "This trace locates source-level consumers; it does not activate calibration or markets.",
+            "Dynamic imports and non-Python consumers require separate runtime evidence.",
+        ],
     }
 
 
@@ -140,9 +191,9 @@ def _runtime_rows() -> pd.DataFrame:
     for index, (sport, market) in enumerate(MARKET_SCOPES):
         base = {column: 0.0 for column in VERTEX_FEATURE_COLUMNS}
         if market in {"SPREAD", "RUN_LINE", "PUCK_LINE"}:
-            market_type, line = "spread_home", -1.5
+            market_type, line = "spread_home", -2.0
         else:
-            market_type, line = "total_over", 45.5
+            market_type, line = "total_over", 46.0
         base.update(
             league=sport,
             home_team=f"{sport} Home",
@@ -193,6 +244,83 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
         gate = evaluate_absolute_production_gate(
             mean["p_win"], mean_price["break_even"], mean_price["expected_value"]
         ).iloc[0]
+        consumer_frame = pd.DataFrame(
+            [
+                {
+                    "league": sport,
+                    "Home": str(row["home_team"]),
+                    "Away": str(row["away_team"]),
+                    "home_team": str(row["home_team"]),
+                    "away_team": str(row["away_team"]),
+                    "matchup_id": candidate_id,
+                    "market_type": str(row["market_type"]),
+                    "source_predictor_version": "trace-model-v1",
+                    "effective_win_probability": mean["p_win"],
+                    "effective_expected_value": mean_price["expected_value"],
+                    "effective_edge": mean["p_win"] - mean_price["break_even"],
+                    "expected_value": mean_price["expected_value"],
+                    "odds_american": 100,
+                    "Pick_Status": "Actionable",
+                    "consensus_agreement": "Agrees",
+                    "best_pick": f"{sport} trace selection",
+                    "line": float(row["line"]),
+                    "quote_id": str(row["quote_id"]),
+                    "qualified_pick": False,
+                    "wager_approved": False,
+                    "production_eligible": False,
+                    "Kelly_Bet_Size": 0.0,
+                    "game_already_started_flag": False,
+                }
+            ]
+        )
+        route_assertions: dict[str, dict[str, object]] = {}
+        research_card = score_best_picks_rows(
+            consumer_frame, calibration=None, bucket_stats=None
+        )
+        research_ok = (
+            len(research_card) == 1
+            and float(research_card.iloc[0]["Calib_Win%"]) == mean["p_win"]
+        )
+        route_assertions["controlled_research"] = {
+            "invoked": True,
+            "status": "EXERCISED_PASS" if research_ok else "EXERCISED_FAIL",
+            "consumer": "app_core.lean_card.score_best_picks_rows",
+            "assertion": "one research row preserves the calibrated unconditional win value",
+        }
+        staked_card = attach_play_stakes(research_card, unit=1.0)
+        public_input = consumer_frame.copy()
+        for column in (
+            "Bet_Decision",
+            "Production_Gate_Reason",
+            "Suggested_Stake",
+        ):
+            public_input[column] = staked_card[column].to_numpy()
+        public_board = label_wager_export(public_input)
+        public_blocked = (
+            len(public_board) == 1
+            and not bool(public_board.iloc[0]["Bettable"])
+            and float(public_board.iloc[0]["Kelly_Bet_Size"]) == 0.0
+        )
+        route_assertions["public_board"] = {
+            "invoked": True,
+            "status": "EXPECTED_BLOCK_VERIFIED" if public_blocked else "EXERCISED_FAIL",
+            "consumer": "app_core.export_scope.label_wager_export",
+            "assertion": "research-only fixture is exported as a zero-stake non-wager",
+        }
+        strict_rows = production_wagers(public_input)
+        route_assertions["strict_decision"] = {
+            "invoked": True,
+            "status": "EXPECTED_BLOCK_VERIFIED" if strict_rows.empty else "EXERCISED_FAIL",
+            "consumer": "app_core.export_scope.production_wagers",
+            "assertion": "unapproved fixture cannot enter the strict wager set",
+        }
+        parlay_rows = generate_parlays(public_input)
+        route_assertions["parlay_consumer"] = {
+            "invoked": True,
+            "status": "EXPECTED_BLOCK_VERIFIED" if parlay_rows.empty else "EXERCISED_FAIL",
+            "consumer": "core.parlay_engine.generate_parlays",
+            "assertion": "a single unapproved research row cannot create a parlay",
+        }
         recommendation = Recommendation.model_validate(
             {
                 "schema_version": 2,
@@ -228,6 +356,19 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
             }
         )
         customer = recommendation.customer_projection()
+        subscriber_ok = (
+            customer["recommendation_id"] == candidate_id
+            and customer["p_win"] == mean["p_win"]
+            and customer["mean_ev_per_unit"] == mean_price["expected_value"]
+            and customer["conservative_ev_per_unit"]
+            == conservative_price["expected_value"]
+        )
+        route_assertions["subscriber"] = {
+            "invoked": True,
+            "status": "EXERCISED_PASS" if subscriber_ok else "EXERCISED_FAIL",
+            "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+            "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+        }
         release_gate = release_decision(
             authority={
                 "revoked": False,
@@ -273,24 +414,29 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
                 "mean_ev": mean_price["expected_value"],
                 "conservative_ev": conservative_price["expected_value"],
                 "value_source": "core.price_value.price_value",
-                "selection_status": "RESEARCH_RANKED",
-                "selection_rank": index + 1,
+                "selection_status": str(research_card.iloc[0]["Tier"]),
+                "selection_rank": 1,
                 "selection_tie_break_key": candidate_id,
                 "production_numeric_gate_pass": bool(gate["production_gate_pass"]),
                 "production_decision": "BLOCKED",
                 "production_blockers": release_gate.reason_codes
                 + artifact.acceptance["rejection_reasons"],
-                "subscriber_contract_status": "EXERCISED_PASS",
+                "subscriber_contract_status": route_assertions["subscriber"]["status"],
                 "exported_subscriber_values": customer,
+                "route_assertions": route_assertions,
                 "route_status": {
-                    "strict_decision": "EXPECTED_BLOCK_VERIFIED",
-                    "controlled_research": "EXERCISED_PASS",
-                    "public_board": "EXPECTED_BLOCK_VERIFIED",
-                    "subscriber": "EXERCISED_PASS",
-                    "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+                    name: assertion["status"]
+                    for name, assertion in route_assertions.items()
                 },
             }
         )
+    route_names = (
+        "controlled_research",
+        "parlay_consumer",
+        "public_board",
+        "strict_decision",
+        "subscriber",
+    )
     return {
         "schema_version": 2,
         "trace_kind": "runtime_probability_value_trace",
@@ -301,56 +447,44 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
         "external_io": "FROZEN_STUB",
         "model_quality": "NOT_VERIFIED",
         "market_scope_count": len(MARKET_SCOPES),
+        "route_invocation_counts": {
+            name: sum(
+                bool(record["route_assertions"][name]["invoked"]) for record in traces
+            )
+            for name in route_names
+        },
         "records": traces,
     }
-    parse_errors: list[dict[str, str]] = []
-    excluded_parts = {
-        ".git", ".venv", "archive", "node_modules", "outputs", "site-packages",
-        "test-results",
-    }
-    for path in sorted(root.rglob("*.py")):
-        relative = path.relative_to(root)
-        if excluded_parts.intersection(relative.parts) or any(
-            part.startswith(".") for part in relative.parts
-        ):
-            continue
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except (OSError, SyntaxError, UnicodeDecodeError) as exc:
-            parse_errors.append(
-                {"path": relative.as_posix(), "error": type(exc).__name__}
-            )
-            continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            name = None
-            if isinstance(node.func, ast.Name):
-                name = node.func.id
-            elif isinstance(node.func, ast.Attribute):
-                name = node.func.attr
-            if name in calls:
-                calls[name].append(
-                    {
-                        "path": relative.as_posix(),
-                        "line": int(node.lineno),
-                    }
-                )
-    return {
-        "schema_version": 1,
-        "trace_kind": "static_python_call_sites",
-        "read_only": True,
-        "tracked_symbols": sorted(TRACKED_SYMBOLS),
-        "calls": calls,
-        "parse_errors": parse_errors,
-        "qualification_authority": "integrations/subscriber_release/authority.py",
-        "subscriber_contract": "services/subscriber/contracts.py",
-        "calibration_runtime": "core/probability_calibration.py",
-        "notes": [
-            "This trace locates source-level consumers; it does not activate calibration or markets.",
-            "Dynamic imports and non-Python consumers require separate runtime evidence.",
-        ],
-    }
+
+
+def _validation_errors(payload: object, mode: str) -> list[str]:
+    errors: list[str] = []
+    static = payload.get("static_inventory") if mode == "both" and isinstance(payload, dict) else payload
+    runtime = payload.get("runtime_trace") if mode == "both" and isinstance(payload, dict) else payload
+    if mode in {"static", "both"}:
+        if not isinstance(static, dict) or static.get("trace_kind") != "static_python_call_sites":
+            errors.append("STATIC_INVENTORY_MISSING")
+        elif not any(static.get("calls", {}).values()):
+            errors.append("STATIC_CALL_SITE_EVIDENCE_MISSING")
+    if mode in {"runtime", "both"}:
+        if not isinstance(runtime, dict) or runtime.get("trace_kind") != "runtime_probability_value_trace":
+            errors.append("RUNTIME_TRACE_MISSING")
+        else:
+            records = runtime.get("records")
+            if not isinstance(records, list) or not records:
+                errors.append("RUNTIME_RECORDS_MISSING")
+            else:
+                for record in records:
+                    assertions = record.get("route_assertions", {})
+                    if not assertions or any(
+                        not value.get("invoked")
+                        or value.get("status") in {"EXERCISED_FAIL", "NOT_EXERCISED"}
+                        for value in assertions.values()
+                    ):
+                        errors.append(
+                            f"ROUTE_EVIDENCE_INCOMPLETE:{record.get('trace_id', 'UNKNOWN')}"
+                        )
+    return errors
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -371,13 +505,19 @@ def main(argv: list[str] | None = None) -> int:
             "runtime_trace": build_runtime_trace(),
         }
     )
+    errors = _validation_errors(payload, args.mode)
+    if isinstance(payload, dict):
+        payload["validation"] = {
+            "status": "PASS" if not errors else "FAIL",
+            "errors": errors,
+        }
     rendered = json.dumps(payload, indent=2, sort_keys=True)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(rendered + "\n", encoding="utf-8")
     else:
         print(rendered)
-    return 0
+    return 0 if not errors else 1
 
 
 if __name__ == "__main__":

@@ -92,6 +92,117 @@ def _american_breakeven(odds: object):
 _UNSET = object()
 
 
+def _production_context_calibration(
+    df: pd.DataFrame,
+    probabilities: pd.Series,
+    consensus: pd.Series,
+    bucket_stats: object,
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+    """Apply the default artifact only to rows whose provenance matches it.
+
+    The production artifact is exact-sport, exact-market, and predictor scoped.
+    Mixed frames are therefore evaluated one context at a time.  Missing or
+    rejected context leaves the upstream probability unchanged and is labelled
+    explicitly; it never borrows the first row's accepted curve.
+    """
+    from core.empirical_tiers import bucket_key
+    from core.market_policy import sport_market_family
+    from core.probability_calibration import (
+        CONDITIONAL_PROBABILITY_SEMANTICS,
+        apply_bucket_calibration,
+        calibration_provenance,
+        load_calibration,
+    )
+    from core.probability_semantics import unconditional_from_conditional
+
+    sports = _first_col(df, "exact_sport", "sport", "league", "League").fillna("").astype(str).str.strip().str.upper()
+    raw_families = _first_col(df, "exact_market_family", "market_family").fillna("").astype(str).str.strip().str.upper()
+    market_types = _first_col(df, "market_type").fillna("")
+    families = pd.Series(
+        [
+            family if family else (sport_market_family(sport, market_type) or "")
+            for sport, family, market_type in zip(sports, raw_families, market_types)
+        ],
+        index=df.index,
+        dtype="object",
+    )
+    predictors = _first_col(
+        df,
+        "source_predictor_version",
+        "predictor_version",
+        "model_version",
+        "ensemble_version",
+    ).fillna("").astype(str).str.strip()
+    semantics = _first_col(df, "probability_semantics").fillna("").astype(str).str.strip()
+    pushes = pd.to_numeric(_first_col(df, "push_probability"), errors="coerce")
+    lines = pd.to_numeric(_first_col(df, "line", "selected_line", "spread_line", "total_line"), errors="coerce")
+    buckets = pd.Series(
+        [bucket_key(sport, market_type, agreement) for sport, market_type, agreement in zip(sports, market_types, consensus)],
+        index=df.index,
+        dtype="object",
+    )
+
+    calibrated = pd.to_numeric(probabilities, errors="coerce").copy()
+    status = pd.Series("CONSUMER_CONTEXT_MISSING", index=df.index, dtype="object")
+    version = pd.Series("", index=df.index, dtype="object")
+    raw_sha256 = pd.Series("", index=df.index, dtype="object")
+    contexts = pd.DataFrame(
+        {"sport": sports, "family": families, "predictor": predictors}, index=df.index
+    )
+    semantics_ok = semantics.eq(CONDITIONAL_PROBABILITY_SEMANTICS)
+    status.loc[semantics.ne("") & ~semantics_ok] = "PROBABILITY_SEMANTICS_INCOMPATIBLE"
+    push_ok = pushes.notna() & pushes.ge(0.0) & pushes.lt(1.0)
+    half_point_with_push = (
+        lines.notna()
+        & lines.sub(lines.round()).abs().gt(1e-9)
+        & pushes.fillna(0.0).gt(0.0)
+    )
+    status.loc[semantics_ok & (~push_ok | half_point_with_push)] = (
+        "PUSH_SUPPORT_MISSING_OR_INVALID"
+    )
+    complete = contexts.ne("").all(axis=1) & semantics_ok & push_ok & ~half_point_with_push
+    for (sport, family, predictor), indexes in contexts.loc[complete].groupby(
+        ["sport", "family", "predictor"], sort=False
+    ).groups.items():
+        table = load_calibration(
+            expected_predictor_version=str(predictor),
+            expected_training_scope={
+                "exact_sport": str(sport),
+                "exact_market_family": str(family),
+            },
+        )
+        if table is None or not bool(table):
+            status.loc[indexes] = "CALIBRATION_REJECTED"
+            continue
+        try:
+            conditional_values = apply_bucket_calibration(
+                probabilities.loc[indexes], buckets.loc[indexes], table, bucket_stats
+            )
+        except (TypeError, ValueError, IndexError):
+            status.loc[indexes] = "CALIBRATION_REJECTED"
+            continue
+        values = pd.Series(index=indexes, dtype=float)
+        for row_index, conditional_value in conditional_values.items():
+            mass = unconditional_from_conditional(
+                conditional_value, pushes.loc[row_index]
+            )
+            if mass is None:
+                status.loc[row_index] = "PUSH_SUPPORT_MISSING_OR_INVALID"
+                continue
+            values.loc[row_index] = mass["p_win"]
+        facts = calibration_provenance(table)
+        if not facts:
+            status.loc[indexes] = "CALIBRATION_REJECTED"
+            continue
+        numeric_values = pd.to_numeric(values, errors="coerce")
+        valid_indexes = numeric_values[numeric_values.notna()].index
+        calibrated.loc[valid_indexes] = numeric_values.loc[valid_indexes]
+        status.loc[valid_indexes] = "PRODUCTION_CALIBRATION_APPLIED"
+        version.loc[valid_indexes] = str(facts.get("calibration_version", ""))
+        raw_sha256.loc[valid_indexes] = str(facts.get("artifact_raw_sha256", ""))
+    return calibrated, status, version, raw_sha256
+
+
 def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = _UNSET,
                           bucket_stats: object = _UNSET) -> pd.DataFrame:
     """Per-row lean scoring, INDEX-ALIGNED to the input frame (no sorting).
@@ -114,13 +225,6 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         except Exception:
             bucket_stats = None
 
-    if calibration is _UNSET:
-        try:
-            from core.probability_calibration import load_calibration
-            calibration = load_calibration()
-        except Exception:
-            calibration = None
-
     df = best_picks_df
     home = _first_col(df, "Home", "home_team").astype(str)
     away = _first_col(df, "Away", "away_team").astype(str)
@@ -140,7 +244,21 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     # conditional (global curve + per-bucket realized tilt) so a proven bucket (e.g.
     # under:Agrees ~61%) isn't crushed below break-even by the pooled curve - same number the
     # staking gate uses, so the view and the card agree.
-    if calibration:
+    calibration_status = pd.Series("CALIBRATION_DISABLED", index=df.index, dtype="object")
+    calibration_version = pd.Series("", index=df.index, dtype="object")
+    calibration_raw_sha256 = pd.Series("", index=df.index, dtype="object")
+    if calibration is _UNSET:
+        try:
+            (
+                calib_win,
+                calibration_status,
+                calibration_version,
+                calibration_raw_sha256,
+            ) = _production_context_calibration(df, win, consensus, bucket_stats)
+        except Exception:
+            calib_win = win.copy()
+            calibration_status[:] = "CALIBRATION_CONSUMER_ERROR"
+    elif calibration:
         try:
             from core.probability_calibration import apply_bucket_calibration
             from core.empirical_tiers import bucket_key
@@ -150,8 +268,10 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
             calib_win = pd.to_numeric(
                 apply_bucket_calibration(win, buckets, calibration, bucket_stats), errors="coerce"
             )
+            calibration_status[:] = "EXPLICIT_CALIBRATION_APPLIED"
         except Exception:
             calib_win = win
+            calibration_status[:] = "CALIBRATION_REJECTED"
     else:
         # The upstream effective probability is already the best available
         # calibrated value on legacy/no-artifact runs. Using it as the explicit
@@ -165,6 +285,9 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     calib_win = pd.Series(calib_win, index=df.index, dtype=float).where(
         ~controlled_empirical_available,
         controlled_empirical_win,
+    )
+    calibration_status = calibration_status.where(
+        ~controlled_empirical_available, "CONTROLLED_EMPIRICAL_OVERRIDE"
     )
     breakeven = pd.Series([_american_breakeven(o) for o in odds], index=df.index)
     calib_num = pd.to_numeric(calib_win, errors="coerce")
@@ -278,6 +401,9 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         "Pick": _first_col(df, "best_pick", "display_pick"),
         "Win%": win,
         "Calib_Win%": calib_num,
+        "Calibration_Consumer_Status": calibration_status,
+        "Calibration_Version": calibration_version,
+        "Calibration_Artifact_SHA256": calibration_raw_sha256,
         "Emp_Edge": emp_edge,
         "Edge": pd.to_numeric(edge, errors="coerce"),
         "EV": pd.to_numeric(eff_ev, errors="coerce"),
