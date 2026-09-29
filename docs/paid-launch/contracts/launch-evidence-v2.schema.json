@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parlaypicker.local/contracts/launch-evidence-v2.schema.json",
+  "title": "ParlayPicker paid-launch evidence v2",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "evidence_kind",
+    "status",
+    "environment",
+    "release_candidate",
+    "execution",
+    "provenance",
+    "scenarios",
+    "artifacts",
+    "payload_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "evidence_kind": {
+      "enum": [
+        "billing_sandbox",
+        "publication_recovery",
+        "results_reconciliation",
+        "alert_faults",
+        "load",
+        "backup_restore",
+        "pilot"
+      ]
+    },
+    "status": {"const": "PASS"},
+    "environment": {"enum": ["staging", "production"]},
+    "release_candidate": {
+      "type": "object",
+      "required": ["source_revision", "deployed_revision", "served_revision"]
+    },
+    "execution": {
+      "type": "object",
+      "required": ["kind", "started_at", "completed_at", "fixture", "synthetic", "reference"]
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["generator", "reviewer", "reviewed_at", "review_reference"]
+    },
+    "scenarios": {"type": "array", "minItems": 1},
+    "artifacts": {"type": "array", "minItems": 1},
+    "payload_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}
