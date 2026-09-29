@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "as_of_utc": "2026-09-29T11:12:38Z",
+  "source_revision": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
+  "status": "PARTIAL_LOCAL_ONLY_HOSTED_NOT_RUN",
+  "publication_and_retry": {
+    "local_fixture_evidence": "PARTIAL",
+    "deployed_gateway_probe": "NOT_RUN",
+    "worker_crash_restart_and_duplicate_suppression": "NOT_RUN"
+  },
+  "alerts": {
+    "local_fixture_evidence": "PARTIAL",
+    "smtp_provider_delivery": "NOT_RUN",
+    "crash_restart": "NOT_RUN",
+    "bounce_complaint_and_unknown_outcome_reconciliation": "NOT_RUN"
+  },
+  "database_recovery": {
+    "managed_backup_or_pitr": "NOT_RUN",
+    "isolated_restore": "NOT_RUN",
+    "post_restore_provider_reconciliation": "NOT_RUN"
+  },
+  "rollback_and_containment": {
+    "image_rollback": "NOT_RUN",
+    "legacy_publication_containment": "NOT_RUN",
+    "direct_origin_cache_and_service_worker_containment": "NOT_RUN"
+  },
+  "performance": {
+    "subscriber_25_rps_10_minutes": "NOT_RUN",
+    "mobile_lcp": "NOT_RUN",
+    "alert_latency": "NOT_RUN",
+    "authenticated_remote_cold_warm_timings": "NOT_RUN",
+    "existing_fake_provider_measurements": "LOCAL_DETERMINISTIC_ONLY_NOT_HOSTED_EVIDENCE"
+  },
+  "responsible_parties": {
+    "backup_restore_pitr_image_rollback": "database and deployment operator",
+    "alert_provider_failures": "email provider and alert operator",
+    "load_lcp_cold_warm_measurements": "performance owner",
+    "route_cache_publication_containment": "security and publication owner"
+  },
+  "live_effect": "NOT_PERFORMED"
+}

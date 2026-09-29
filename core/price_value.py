@@ -30,7 +30,8 @@ def price_value(p_win, p_push, decimal, *, minimum_edge=0.0):
         or price <= 1 or edge_floor < 0
     ):
         return None
-    loss = max(0.0, 1.0 - win - push)
+    # Match probability_semantics.unconditional_from_conditional exactly.
+    loss = max(0.0, (1.0 - push) - win)
     break_even = (1.0 - push) / price
     ev = win * price + push - 1.0
     edge = win - break_even

@@ -17,6 +17,9 @@ remains visible, but only a BET clears the absolute price gate and receives mone
 """
 from __future__ import annotations
 
+import hashlib
+import json
+
 import pandas as pd
 
 from core.production_gate import (
@@ -89,6 +92,30 @@ def _american_breakeven(odds: object):
     return abs(o) / (abs(o) + 100.0) if o < 0 else 100.0 / (o + 100.0)
 
 
+def _american_decimal(odds: object):
+    value = pd.to_numeric(pd.Series([odds]), errors="coerce").iloc[0]
+    if pd.isna(value):
+        return None
+    value = float(value)
+    if value == 0.0:
+        return None
+    return 1.0 + (100.0 / abs(value) if value < 0.0 else value / 100.0)
+
+
+def _bucket_transform_identity(bucket_stats: object) -> str:
+    """Identify supporting bucket evidence separately from calibration authority."""
+
+    if not isinstance(bucket_stats, dict) or not bucket_stats.get("buckets"):
+        return ""
+    try:
+        payload = json.dumps(
+            bucket_stats, sort_keys=True, allow_nan=False, separators=(",", ":")
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        return "bucket-conditional-tilt-v1:unserializable-supporting-evidence"
+    return f"bucket-conditional-tilt-v1:{hashlib.sha256(payload).hexdigest()}"
+
+
 _UNSET = object()
 
 
@@ -97,7 +124,7 @@ def _production_context_calibration(
     probabilities: pd.Series,
     consensus: pd.Series,
     bucket_stats: object,
-) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
     """Apply the default artifact only to rows whose provenance matches it.
 
     The production artifact is exact-sport, exact-market, and predictor scoped.
@@ -109,6 +136,7 @@ def _production_context_calibration(
     from core.market_policy import sport_market_family
     from core.probability_calibration import (
         CONDITIONAL_PROBABILITY_SEMANTICS,
+        apply_calibration,
         apply_bucket_calibration,
         calibration_provenance,
         load_calibration,
@@ -146,6 +174,8 @@ def _production_context_calibration(
     status = pd.Series("CONSUMER_CONTEXT_MISSING", index=df.index, dtype="object")
     version = pd.Series("", index=df.index, dtype="object")
     raw_sha256 = pd.Series("", index=df.index, dtype="object")
+    post_transform = pd.Series("NONE", index=df.index, dtype="object")
+    post_transform_identity = pd.Series("", index=df.index, dtype="object")
     contexts = pd.DataFrame(
         {"sport": sports, "family": families, "predictor": predictors}, index=df.index
     )
@@ -175,9 +205,21 @@ def _production_context_calibration(
             status.loc[indexes] = "CALIBRATION_REJECTED"
             continue
         try:
+            artifact_only_values = apply_calibration(
+                probabilities.loc[indexes], table
+            )
             conditional_values = apply_bucket_calibration(
                 probabilities.loc[indexes], buckets.loc[indexes], table, bucket_stats
             )
+            artifact_only_numeric = pd.to_numeric(
+                artifact_only_values, errors="coerce"
+            )
+            conditional_numeric = pd.to_numeric(
+                conditional_values, errors="coerce"
+            )
+            tilted_indexes = conditional_numeric.index[
+                ~conditional_numeric.sub(artifact_only_numeric).abs().le(1e-12)
+            ]
         except (TypeError, ValueError, IndexError):
             status.loc[indexes] = "CALIBRATION_REJECTED"
             continue
@@ -196,11 +238,25 @@ def _production_context_calibration(
             continue
         numeric_values = pd.to_numeric(values, errors="coerce")
         valid_indexes = numeric_values[numeric_values.notna()].index
+        tilted_indexes = tilted_indexes.intersection(valid_indexes)
         calibrated.loc[valid_indexes] = numeric_values.loc[valid_indexes]
         status.loc[valid_indexes] = "PRODUCTION_CALIBRATION_APPLIED"
+        if len(tilted_indexes):
+            status.loc[tilted_indexes] = "CALIBRATION_POST_TRANSFORM_UNAUTHORIZED"
+            post_transform.loc[tilted_indexes] = "BUCKET_TILT_RESEARCH_ONLY"
+            post_transform_identity.loc[tilted_indexes] = _bucket_transform_identity(
+                bucket_stats
+            )
         version.loc[valid_indexes] = str(facts.get("calibration_version", ""))
         raw_sha256.loc[valid_indexes] = str(facts.get("artifact_raw_sha256", ""))
-    return calibrated, status, version, raw_sha256
+    return (
+        calibrated,
+        status,
+        version,
+        raw_sha256,
+        post_transform,
+        post_transform_identity,
+    )
 
 
 def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = _UNSET,
@@ -247,6 +303,10 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     calibration_status = pd.Series("CALIBRATION_DISABLED", index=df.index, dtype="object")
     calibration_version = pd.Series("", index=df.index, dtype="object")
     calibration_raw_sha256 = pd.Series("", index=df.index, dtype="object")
+    calibration_post_transform = pd.Series("NONE", index=df.index, dtype="object")
+    calibration_post_transform_identity = pd.Series(
+        "", index=df.index, dtype="object"
+    )
     if calibration is _UNSET:
         try:
             (
@@ -254,13 +314,19 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
                 calibration_status,
                 calibration_version,
                 calibration_raw_sha256,
+                calibration_post_transform,
+                calibration_post_transform_identity,
             ) = _production_context_calibration(df, win, consensus, bucket_stats)
         except Exception:
             calib_win = win.copy()
             calibration_status[:] = "CALIBRATION_CONSUMER_ERROR"
-    elif calibration:
+    elif calibration is not None:
         try:
-            from core.probability_calibration import apply_bucket_calibration
+            from core.probability_calibration import (
+                CalibrationTable,
+                apply_bucket_calibration,
+                calibration_provenance,
+            )
             from core.empirical_tiers import bucket_key
             league = _first_col(df, "league", "League")
             market_type = _first_col(df, "market_type")
@@ -269,6 +335,24 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
                 apply_bucket_calibration(win, buckets, calibration, bucket_stats), errors="coerce"
             )
             calibration_status[:] = "EXPLICIT_CALIBRATION_APPLIED"
+            facts = calibration_provenance(calibration)
+            if facts:
+                calibration_version[:] = str(
+                    facts.get("calibration_version", "")
+                )
+                calibration_raw_sha256[:] = str(
+                    facts.get("artifact_raw_sha256", "")
+                )
+            elif (
+                isinstance(calibration, CalibrationTable)
+                and calibration.trusted_snapshot_valid()
+            ):
+                calibration_version[:] = str(
+                    (calibration.payload.get("meta") or {}).get(
+                        "calibration_version", ""
+                    )
+                )
+                calibration_raw_sha256[:] = str(calibration.raw_sha256 or "")
         except Exception:
             calib_win = win
             calibration_status[:] = "CALIBRATION_REJECTED"
@@ -289,14 +373,141 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     calibration_status = calibration_status.where(
         ~controlled_empirical_available, "CONTROLLED_EMPIRICAL_OVERRIDE"
     )
-    breakeven = pd.Series([_american_breakeven(o) for o in odds], index=df.index)
+    calibration_post_transform = calibration_post_transform.where(
+        ~controlled_empirical_available, "CONTROLLED_EMPIRICAL_OVERRIDE"
+    )
+
+    # One final probability/price contract.  Production calibration returns
+    # unconditional win mass; explicit/legacy conditional inputs are converted
+    # with the same per-candidate push mass before pricing.  Research values may
+    # remain visible when authority is absent, but they cannot pass the gate.
     calib_num = pd.to_numeric(calib_win, errors="coerce")
-    break_even_num = pd.to_numeric(breakeven, errors="coerce")
-    gate = evaluate_absolute_production_gate(calib_num, break_even_num, eff_ev)
+    source_semantics = _first_col(df, "probability_semantics").fillna("").astype(str).str.strip()
+    push_input = pd.to_numeric(_first_col(df, "push_probability"), errors="coerce")
+    supplied_decimal = pd.to_numeric(_first_col(df, "decimal_odds"), errors="coerce")
+    # Export normalizers add empty schema columns to legacy rows.  Presence of an
+    # all-empty column is not an opt-in to the explicit push-aware contract; only
+    # a supplied semantic, push value, or decimal quote is.  This preserves an
+    # already approved legacy row while keeping partially declared contracts on
+    # the strict path, where missing pieces fail closed.
+    explicit_contract = bool(
+        source_semantics.ne("").any()
+        or push_input.notna().any()
+        or supplied_decimal.notna().any()
+    )
+    pricing_push = push_input.copy()
+    if not explicit_contract:
+        pricing_push = pricing_push.fillna(0.0)
+    line = pd.to_numeric(
+        _first_col(df, "line", "selected_line", "spread_line", "total_line"),
+        errors="coerce",
+    )
+    half_point_with_push = (
+        line.notna()
+        & line.sub(line.round()).abs().gt(1e-9)
+        & pricing_push.fillna(0.0).gt(0.0)
+    )
+    pricing_push = pricing_push.mask(half_point_with_push)
+
+    american_decimal = pd.Series(
+        [_american_decimal(value) for value in odds], index=df.index, dtype=float
+    )
+    pricing_decimal = supplied_decimal.where(supplied_decimal.notna(), american_decimal)
+    quote_consistent = pd.Series(True, index=df.index, dtype=bool)
+    both_prices = supplied_decimal.notna() & american_decimal.notna()
+    quote_consistent.loc[both_prices] = (
+        supplied_decimal.loc[both_prices]
+        .sub(american_decimal.loc[both_prices])
+        .abs()
+        .le(1e-8)
+    )
+    pricing_decimal = pricing_decimal.mask(~quote_consistent)
+
+    conditional_semantics = "win_conditional_on_decision"
+    already_unconditional = calibration_status.isin(
+        {
+            "PRODUCTION_CALIBRATION_APPLIED",
+            "CALIBRATION_POST_TRANSFORM_UNAUTHORIZED",
+            "CONTROLLED_EMPIRICAL_OVERRIDE",
+        }
+    )
+    pricing_win = calib_num.copy()
+    convert_mean = source_semantics.eq(conditional_semantics) & ~already_unconditional
+    pricing_win.loc[convert_mean] = (
+        calib_num.loc[convert_mean] * (1.0 - pricing_push.loc[convert_mean])
+    )
+
+    conservative_raw = pd.to_numeric(
+        _first_col(df, "conservative_probability", "p_win_conservative"),
+        errors="coerce",
+    )
+    conservative_semantics = _first_col(
+        df, "conservative_probability_semantics"
+    ).fillna("").astype(str).str.strip().str.casefold()
+    conservative_final = pd.Series(float("nan"), index=df.index, dtype=float)
+    conservative_conditional = conservative_semantics.eq(conditional_semantics)
+    conservative_unconditional = conservative_semantics.isin(
+        {
+            "unconditional",
+            "unconditional_win_push_loss",
+            "win_unconditional_with_push",
+        }
+    )
+    conservative_final.loc[conservative_conditional] = (
+        conservative_raw.loc[conservative_conditional]
+        * (1.0 - pricing_push.loc[conservative_conditional])
+    )
+    conservative_final.loc[conservative_unconditional] = conservative_raw.loc[
+        conservative_unconditional
+    ]
+    conservative_for_gate: object = (
+        conservative_final if conservative_raw.notna().any() else None
+    )
+
+    if explicit_contract:
+        gate = evaluate_absolute_production_gate(
+            pricing_win,
+            model_expected_value=eff_ev,
+            push_probability=pricing_push,
+            decimal_odds=pricing_decimal,
+            conservative_probability=conservative_for_gate,
+        )
+    else:
+        legacy_break_even = pd.Series(
+            [_american_breakeven(value) for value in odds], index=df.index
+        )
+        gate = evaluate_absolute_production_gate(
+            pricing_win,
+            legacy_break_even,
+            eff_ev,
+        )
+    breakeven = gate["sportsbook_break_even_probability"]
+
+    calibration_authoritative = pd.Series(True, index=df.index, dtype=bool)
+    if calibration is _UNSET:
+        calibration_authoritative = calibration_status.isin(
+            {"PRODUCTION_CALIBRATION_APPLIED", "CONTROLLED_EMPIRICAL_OVERRIDE"}
+        )
+    value_contract_authoritative = (
+        gate["pricing_contract_status"].eq("PUSH_AWARE_VERIFIED")
+        & quote_consistent
+        & ~half_point_with_push
+        & calibration_authoritative
+    )
+    if not explicit_contract:
+        value_contract_authoritative = gate["pricing_contract_status"].eq(
+            "LEGACY_NO_PUSH_COMPATIBILITY"
+        )
+    value_contract_status = gate["pricing_contract_status"].copy()
+    value_contract_status.loc[~quote_consistent] = "QUOTE_PRICE_MISMATCH"
+    value_contract_status.loc[half_point_with_push] = "ILLEGAL_LINE_PUSH_PAIRING"
+    value_contract_status.loc[
+        gate["pricing_contract_status"].ne("INVALID") & ~calibration_authoritative
+    ] = "CALIBRATION_OR_TRANSFORM_NOT_AUTHORIZED"
 
     tier = [
         classify_lean_tier(s, e, c, calibrated_win=cw, break_even=be)
-        for s, e, c, cw, be in zip(status, eff_ev, consensus, calib_win, breakeven)
+        for s, e, c, cw, be in zip(status, eff_ev, consensus, pricing_win, breakeven)
     ]
     qualified_pick = (
         _strict_bool_col(df, "qualified_pick")
@@ -370,6 +581,7 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     production_gate_pass = (
         mathematical_bet
         & gate["production_gate_pass"]
+        & value_contract_authoritative
         & playable
         & explicitly_authorized
     )
@@ -383,6 +595,12 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     production_gate_reason.loc[
         mathematical_bet
         & gate["production_gate_pass"]
+        & ~value_contract_authoritative
+    ] = "final probability/price contract is not production-authoritative"
+    production_gate_reason.loc[
+        mathematical_bet
+        & gate["production_gate_pass"]
+        & value_contract_authoritative
         & playable
         & ~explicitly_authorized
     ] = "explicit wager approval or funded production stake is missing"
@@ -404,8 +622,36 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         "Calibration_Consumer_Status": calibration_status,
         "Calibration_Version": calibration_version,
         "Calibration_Artifact_SHA256": calibration_raw_sha256,
+        "Calibration_Post_Transform": calibration_post_transform,
+        "Calibration_Post_Transform_Identity": calibration_post_transform_identity,
+        "Candidate_ID": _first_col(df, "canonical_event_id", "matchup_id", "game_id"),
+        "Quote_ID": _first_col(df, "quote_id"),
+        "Quote_Observed_At": _first_col(df, "quote_observed_at", "odds_recorded_at"),
+        "Odds_American": pd.to_numeric(odds, errors="coerce"),
+        "Odds_Decimal": pricing_decimal,
+        "Probability_Semantics": pd.Series(
+            "win_unconditional_with_push", index=df.index, dtype="object"
+        ).where(gate["pricing_contract_status"].ne("INVALID"), "UNRESOLVED"),
+        "Push_Source": _first_col(df, "push_probability_source").fillna("").astype(str).where(
+            _first_col(df, "push_probability_source").fillna("").astype(str).str.strip().ne(""),
+            "candidate_push_probability" if explicit_contract else "legacy_implicit_zero",
+        ),
+        "Value_Contract_Version": "unconditional-refunded-push-v1",
+        "Value_Contract_Status": value_contract_status,
+        "Final_P_Win": gate["final_p_win"],
+        "Final_P_Push": gate["final_p_push"],
+        "Final_P_Loss": gate["final_p_loss"],
+        "Price_Break_Even": gate["sportsbook_break_even_probability"],
+        "Mean_EV_Per_Unit": gate["mean_expected_value_per_unit"],
+        "P_Win_Conservative": conservative_final,
+        "Conservative_EV_Per_Unit": gate["conservative_expected_value_per_unit"],
+        "Minimum_Acceptable_Decimal_Odds": gate[
+            "minimum_acceptable_decimal_odds"
+        ],
         "Emp_Edge": emp_edge,
         "Edge": pd.to_numeric(edge, errors="coerce"),
+        "Upstream_Model_EV": pd.to_numeric(eff_ev, errors="coerce"),
+        "EV_Field_Semantics": "legacy alias of upstream model EV; not final priced EV",
         "EV": pd.to_numeric(eff_ev, errors="coerce"),
         "Consensus": consensus,
         "Tier": tier,

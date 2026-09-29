@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "implementation_revision": "70804d919104190f733389362ebdd50debcaf485",
+  "base_revision": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
+  "contract_version": "unconditional-refunded-push-v1",
+  "arithmetic_authority": "core.price_value.price_value",
+  "input_contract": {
+    "calibration_input": "win_conditional_on_decision",
+    "push_probability": "explicit_per_candidate_supported_value",
+    "quote": "exact_decimal_odds_bound_to_quote_id",
+    "conservative_probability": "explicit_lower_win_bound_with_declared_semantics_only"
+  },
+  "final_contract": {
+    "probability_semantics": "win_unconditional_with_push",
+    "p_loss": "1 - p_push - p_win",
+    "break_even_unconditional": "(1 - p_push) / decimal_odds",
+    "mean_ev_per_unit": "p_win * decimal_odds + p_push - 1",
+    "absolute_edge": "p_win - break_even_unconditional",
+    "conservative_ev_per_unit": "p_win_conservative * decimal_odds + p_push - 1"
+  },
+  "counterexample": {
+    "raw_conditional_probability": 0.60,
+    "calibrated_conditional_probability": 0.575,
+    "p_push": 0.10,
+    "decimal_odds": 2.0,
+    "p_win": 0.5175,
+    "p_loss": 0.3825,
+    "break_even_unconditional": 0.45,
+    "absolute_edge": 0.0675,
+    "mean_ev_per_unit": 0.135,
+    "p_win_conservative": 0.495,
+    "conservative_ev_per_unit": 0.09,
+    "break_even_ratio_value_not_used_as_ev": 0.15,
+    "upstream_model_ev_diagnostic": 0.20
+  },
+  "legacy_compatibility": {
+    "EV": "legacy alias of upstream model EV; not final priced EV",
+    "Calibrated_EV": "final mean EV per total unit staked",
+    "no_explicit_probability_contract": "legacy no-push compatibility remains labelled and cannot supply the subscriber v2 contract"
+  },
+  "authority_separation": {
+    "calibration_artifact": "recorded by calibration version and same-byte SHA256",
+    "post_calibration_transform": "recorded separately; an unreviewed bucket tilt is research-only and cannot inherit calibration authority",
+    "numerical_gate": "does not grant chronology, identity, qualification, review, exposure, market, commercial, publication, or wager authority"
+  },
+  "live_effect": "NOT_PERFORMED"
+}
