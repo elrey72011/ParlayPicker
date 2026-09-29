@@ -5,6 +5,8 @@
 - PR A implementation revision: `17aa3492fee748eca784159f8f970040a9483463`
 - PR B implementation revision: `12d7193037f04cc863841eb694a12ee4b1a2049c`
 - PR C implementation revision: `45df8f645e71f573f73d103dd85b4cbc5eb956f5`
+- PR C final focused revision: `038fe076cc4d649b1ecb1ef4555855fde3145f47`
+- Combined A+B+C verification revision: `defffc01251d66edf6dff67e8846fb6755f8fee9`
 - Evidence boundary: local tests and GitHub pull-request CI only. No authenticated census, provider refresh, hosted execution, production publication, market/trial activation, live billing/sales enablement, production record, or wager was performed.
 
 ## Review packages
@@ -13,7 +15,8 @@
 |---|---|---|---|---|
 | A — census workflow/schema | [#2363](https://github.com/elrey72011/ParlayPicker/pull/2363) | `2c20d42350449bc4d1ecdd888256a893461026a1` | `17aa3492fee748eca784159f8f970040a9483463` | Open, mergeable, all reported checks successful |
 | B — trace/probability semantics | [#2364](https://github.com/elrey72011/ParlayPicker/pull/2364) | `2c20d42350449bc4d1ecdd888256a893461026a1` | `12d7193037f04cc863841eb694a12ee4b1a2049c` | Open, mergeable, all reported checks successful |
-| C — external verification | [#2365](https://github.com/elrey72011/ParlayPicker/pull/2365) | `2c20d42350449bc4d1ecdd888256a893461026a1` | `45df8f645e71f573f73d103dd85b4cbc5eb956f5` | Open, mergeable, CI running at ledger creation |
+| C — external verification | [#2365](https://github.com/elrey72011/ParlayPicker/pull/2365) | `2c20d42350449bc4d1ecdd888256a893461026a1` | `038fe076cc4d649b1ecb1ef4555855fde3145f47` | Open, clean/mergeable, all reported checks successful |
+| Combined verification | [#2366](https://github.com/elrey72011/ParlayPicker/pull/2366) | `2c20d42350449bc4d1ecdd888256a893461026a1` | `defffc01251d66edf6dff67e8846fb6755f8fee9` | Open, clean/mergeable, all reported checks successful |
 
 None of these pull requests has been merged. Actual landing therefore remains an owner-controlled follow-up.
 
@@ -67,7 +70,7 @@ None of these pull requests has been merged. Actual landing therefore remains an
 | R02 | PASS-LOCAL | Earliest quote/analysis/start/review/provider/authority deadline controls the release report; source timestamps are not changed. |
 | R03 | PASS-LOCAL | The real verifier loads a signed out-of-band registry; tampering and self-declaration remain blocked. No hosted run was performed. |
 | R04 | NOT-RUN-AUTH | No fresh provider-backed candidate run or complete private production audit was executed. Requires provider-spend/remote-execution authorization. |
-| Q01 | PARTIAL | #2363 and #2364 report green application, production-safety, protected-scope and both PostgreSQL jobs. #2365 CI was running when this ledger was written. No authenticated browser/hosted run occurred. |
+| Q01 | PASS-CI | The exact combined revision in #2366 passed workflow validation, production safety, protected scope, both full-suite shards, subscriber PostgreSQL and completion PostgreSQL. The local Edge/Playwright subscriber journey and named census CLI suites also passed. No authenticated hosted run occurred. |
 | Q02 | PASS | Protected-file diff is empty. No activation, calibration swap, provider spend, publication, billing change or wager occurred. |
 | Q03 | PASS | Remaining local, census, model, hosted, commercial, pilot and owner decisions are separated below. |
 
@@ -76,6 +79,10 @@ None of these pull requests has been merged. Actual landing therefore remains an
 - PR A local: 32 focused tests passed; nine workflow definitions validated. GitHub: workflow validation, production safety, protected scope, subscriber PostgreSQL, completion PostgreSQL and both full-suite shards passed.
 - PR B local: 91 focused and 139 broader regression tests passed. GitHub: production safety, protected scope, subscriber PostgreSQL, completion PostgreSQL and both full-suite shards passed.
 - PR C local final focused suite: 52 passed, covering real publishers, release preflight, hosted attestations, Netlify and public assets.
+- Combined local closure/consumer suite: 72 passed; all nine GitHub workflow definitions passed Actions-aware validation.
+- Combined GitHub CI: workflow validation, production safety, protected scope, both application full-suite shards, aggregate full-suite, subscriber PostgreSQL and completion PostgreSQL all passed on `defffc01251d66edf6dff67e8846fb6755f8fee9`.
+- Local real-browser journey: Edge/Playwright returned `PASS`; checkout, billing portal, cancellation, logout and alert mutations each executed once; all seven result states rendered; stale response suppression, open-page expiry and mobile keyboard behavior passed; premium leakage was false.
+- Named census CLI/clean-subprocess suite: 10 passed on the combined revision.
 - PR C local paid-launch/evidence discovery: 20 passed. This directory-level command did not collect the `case_*.py` PostgreSQL files and is not PostgreSQL evidence.
 - Exact local `case_*.py` attempt: collection stopped because the local interpreter lacked `authlib`; `PAID_TEST_DATABASE_URL` was not configured. Local PostgreSQL execution is therefore unperformed. The GitHub `subscriber-postgres` and `completion-postgres` service jobs are the required PostgreSQL evidence.
 - Pinned local production-safety collection before the final authority-hardening assertion: 563 passed. The final focused suite covering that hardening passed.
