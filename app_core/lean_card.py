@@ -384,9 +384,16 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     calib_num = pd.to_numeric(calib_win, errors="coerce")
     source_semantics = _first_col(df, "probability_semantics").fillna("").astype(str).str.strip()
     push_input = pd.to_numeric(_first_col(df, "push_probability"), errors="coerce")
-    explicit_contract = any(
-        column in df.columns
-        for column in ("probability_semantics", "push_probability", "decimal_odds")
+    supplied_decimal = pd.to_numeric(_first_col(df, "decimal_odds"), errors="coerce")
+    # Export normalizers add empty schema columns to legacy rows.  Presence of an
+    # all-empty column is not an opt-in to the explicit push-aware contract; only
+    # a supplied semantic, push value, or decimal quote is.  This preserves an
+    # already approved legacy row while keeping partially declared contracts on
+    # the strict path, where missing pieces fail closed.
+    explicit_contract = bool(
+        source_semantics.ne("").any()
+        or push_input.notna().any()
+        or supplied_decimal.notna().any()
     )
     pricing_push = push_input.copy()
     if not explicit_contract:
@@ -405,7 +412,6 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     american_decimal = pd.Series(
         [_american_decimal(value) for value in odds], index=df.index, dtype=float
     )
-    supplied_decimal = pd.to_numeric(_first_col(df, "decimal_odds"), errors="coerce")
     pricing_decimal = supplied_decimal.where(supplied_decimal.notna(), american_decimal)
     quote_consistent = pd.Series(True, index=df.index, dtype=bool)
     both_prices = supplied_decimal.notna() & american_decimal.notna()
