@@ -10,6 +10,7 @@ from app_core.lean_card import score_best_picks_rows
 from core import probability_calibration as pc
 from core.production_gate import evaluate_absolute_production_gate
 from scripts.trace_probability_path import build_nonidentity_priced_value_trace
+from scripts import trace_probability_path as tracer
 from services.subscriber.contracts import Recommendation
 
 
@@ -230,6 +231,29 @@ def test_s06_declared_contract_rejects_missing_push_and_mismatched_quote(
     assert len(missing_push) == 1
 
 
+@pytest.mark.parametrize(
+    ("line", "push_probability", "expected_mean_ev"),
+    [(-2.0, 0.10, 0.135), (-2.5, 0.0, 0.15)],
+)
+def test_s06_integer_and_half_point_lines_keep_explicit_push_semantics(
+    tmp_path,
+    monkeypatch,
+    line,
+    push_probability,
+    expected_mean_ev,
+):
+    priced = _priced_row(
+        tmp_path,
+        monkeypatch,
+        line=line,
+        push_probability=push_probability,
+    ).iloc[0]
+
+    assert priced["Final_P_Push"] == pytest.approx(push_probability)
+    assert priced["Mean_EV_Per_Unit"] == pytest.approx(expected_mean_ev)
+    assert priced["Value_Contract_Status"] == "PUSH_AWARE_VERIFIED"
+
+
 def test_s07_s08_selection_export_and_subscriber_share_final_values(
     tmp_path, monkeypatch
 ):
@@ -353,3 +377,12 @@ def test_s08_nonidentity_runtime_trace_reconciles_every_actual_consumer():
         assert all(
             status != "EXERCISED_FAIL" for status in row["route_status"].values()
         )
+
+
+def test_s08_priced_trace_cli_writes_validated_evidence(tmp_path):
+    output = tmp_path / "priced.json"
+
+    assert tracer.main(["--mode", "priced", "--out", str(output)]) == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["validation"] == {"status": "PASS", "errors": []}
+    assert payload["trace_kind"] == "post2356_nonidentity_priced_value_trace"

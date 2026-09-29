@@ -1,0 +1,1791 @@
+{
+  "counterexample": {
+    "calibrated_conditional_probability": 0.575,
+    "decimal_odds": 2.0,
+    "push_probability": 0.1,
+    "raw_conditional_probability": 0.6,
+    "required_final": {
+      "break_even": 0.45,
+      "conservative_ev_per_unit": 0.09,
+      "edge": 0.0675,
+      "mean_ev_per_unit": 0.135,
+      "p_loss": 0.3825,
+      "p_push": 0.1,
+      "p_win": 0.5175
+    }
+  },
+  "evidence_kind": "ISOLATED_FIXTURE",
+  "external_io": "FROZEN_STUB",
+  "market_scope_count": 12,
+  "model_quality": "NOT_VERIFIED",
+  "read_only": true,
+  "records": [
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-nfl-spread",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-nfl-spread",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "SPREAD",
+        "exact_sport": "NFL",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": -2.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-0",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-nfl-spread",
+        "schema_version": 2,
+        "selection": "NFL trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "8d9ed93304fdc7052da04a90880dcca16622003d241cecc999b037b2e91904af",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-0",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": -2.0,
+      "market": "SPREAD",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-0",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-nfl-spread",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NFL",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-01",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-nfl-total",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-nfl-total",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "TOTAL",
+        "exact_sport": "NFL",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": 46.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-1",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-nfl-total",
+        "schema_version": 2,
+        "selection": "NFL trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "821d307e6f430bd0e7440b9d99b879cebae05098e0dc1f0d7462b68862bc988a",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-1",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": 46.0,
+      "market": "TOTAL",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-1",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-nfl-total",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NFL",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-02",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-ncaaf-spread",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-ncaaf-spread",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "SPREAD",
+        "exact_sport": "NCAAF",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": -2.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-2",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-ncaaf-spread",
+        "schema_version": 2,
+        "selection": "NCAAF trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "3028dc67fcce15b0179e233a5f841e6b92d937849110c855e11fe6a1ce05432b",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-2",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": -2.0,
+      "market": "SPREAD",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-2",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-ncaaf-spread",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NCAAF",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-03",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-ncaaf-total",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-ncaaf-total",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "TOTAL",
+        "exact_sport": "NCAAF",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": 46.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-3",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-ncaaf-total",
+        "schema_version": 2,
+        "selection": "NCAAF trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "e6ee718461c66852bab9c1f4d9b6c33b315b8a79210eda6f42c579d32eb1f996",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-3",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": 46.0,
+      "market": "TOTAL",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-3",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-ncaaf-total",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NCAAF",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-04",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-nba-spread",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-nba-spread",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "SPREAD",
+        "exact_sport": "NBA",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": -2.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-4",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-nba-spread",
+        "schema_version": 2,
+        "selection": "NBA trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "c9233ed3279846e62653a0005765d9ff54ad5d0da88c25a116d1d1437233448b",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-4",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": -2.0,
+      "market": "SPREAD",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-4",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-nba-spread",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NBA",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-05",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-nba-total",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-nba-total",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "TOTAL",
+        "exact_sport": "NBA",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": 46.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-5",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-nba-total",
+        "schema_version": 2,
+        "selection": "NBA trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "4e3ed00d2e04757c6fc0dccc2ca69e58773987b154d35dc4850ac83b000e0e6d",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-5",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": 46.0,
+      "market": "TOTAL",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-5",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-nba-total",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NBA",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-06",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-ncaab-spread",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-ncaab-spread",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "SPREAD",
+        "exact_sport": "NCAAB",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": -2.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-6",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-ncaab-spread",
+        "schema_version": 2,
+        "selection": "NCAAB trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "15868296ac0c9d1aff00e2be062a510504376c9ce6a6d8a3d6ae1f4e03ef0abd",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-6",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": -2.0,
+      "market": "SPREAD",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-6",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-ncaab-spread",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NCAAB",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-07",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-ncaab-total",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-ncaab-total",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "TOTAL",
+        "exact_sport": "NCAAB",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": 46.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-7",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-ncaab-total",
+        "schema_version": 2,
+        "selection": "NCAAB trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "13be14499a787f87200c63021071eef7479ea9121c2f5437e08d587eef3efb61",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-7",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": 46.0,
+      "market": "TOTAL",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-7",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-ncaab-total",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NCAAB",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-08",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-mlb-run_line",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-mlb-run_line",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "RUN_LINE",
+        "exact_sport": "MLB",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": -2.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-8",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-mlb-run_line",
+        "schema_version": 2,
+        "selection": "MLB trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "da1e2968d2e5de9cbe648f648d5973773502176de1eb85acd2a6efdff2fd3e0c",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-8",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": -2.0,
+      "market": "RUN_LINE",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-8",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-mlb-run_line",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "MLB",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-09",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-mlb-total",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-mlb-total",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "TOTAL",
+        "exact_sport": "MLB",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": 46.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-9",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-mlb-total",
+        "schema_version": 2,
+        "selection": "MLB trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "5921ba7406018a803cc97c8be06e2b03deb371d46691a4f9d335e1dfaad42cab",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-9",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": 46.0,
+      "market": "TOTAL",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-9",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-mlb-total",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "MLB",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-10",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-nhl-puck_line",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-nhl-puck_line",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "PUCK_LINE",
+        "exact_sport": "NHL",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": -2.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-10",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-nhl-puck_line",
+        "schema_version": 2,
+        "selection": "NHL trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "0a45238cc8f3823d4f55512f4624456d77d832afbeb7fc670b1564f897927e90",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-10",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": -2.0,
+      "market": "PUCK_LINE",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-10",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-nhl-puck_line",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NHL",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-11",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    },
+    {
+      "absolute_edge": 0.06750000000000006,
+      "blend_output_conditional": 0.6,
+      "blend_version": "prediction_engine.predict_batch",
+      "calibration_acceptance": {
+        "acceptance_state": "RESEARCH_ONLY",
+        "artifact_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "canonical_artifact_digest": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "rejection_reasons": [
+          "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+        ],
+        "requested_mode": "explicit_research"
+      },
+      "calibration_content_identity": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+      "calibration_input_semantics": "win_conditional_on_decision",
+      "calibration_load_mode": "explicit_research_fixture",
+      "calibration_output_conditional": 0.5750000000000001,
+      "calibration_output_semantics": "win_conditional_on_decision",
+      "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+      "candidate_id": "trace-nhl-total",
+      "conservative_ev": 0.09000000000000008,
+      "conservative_mass": {
+        "p_loss": 0.40499999999999997,
+        "p_push": 0.1,
+        "p_win": 0.49500000000000005
+      },
+      "conservative_method": "fixed_push_lower_win_bound",
+      "evidence_kind": "ISOLATED_FIXTURE",
+      "exported_subscriber_values": {
+        "analysis_generated_at": "2026-09-28T12:01:00Z",
+        "canonical_event_id": "trace-nhl-total",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "disclosure_version": "trace-fixture-v1",
+        "event_start_utc": "2026-09-30T12:00:00Z",
+        "exact_market_family": "TOTAL",
+        "exact_sport": "NHL",
+        "expiry_at": "2026-09-30T11:00:00Z",
+        "line": 46.0,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "minimum_acceptable_decimal_odds": 1.809045226130653,
+        "minimum_acceptable_line": null,
+        "odds_american": 100,
+        "odds_decimal": 2.0,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "p_win_conservative": 0.49500000000000005,
+        "probability_semantics": "win_unconditional_with_push",
+        "quote_id": "trace-quote-11",
+        "quote_observed_at": "2026-09-28T12:00:00Z",
+        "recommendation_id": "trace-nhl-total",
+        "schema_version": 2,
+        "selection": "NHL trace selection",
+        "sportsbook_id": "fixture-book",
+        "uncertainty_method": "fixed_push_lower_win_bound"
+      },
+      "fallback_reason": null,
+      "fallback_used": false,
+      "input_snapshot_hash": "346eebda669a3c387034b6b3b900d7ab895d48863db68ece7c45af2fe35282c7",
+      "lean_value_contract": {
+        "break_even": 0.45,
+        "calibration_id": "6c3bdb3185909e9fb7d3692af0c8fe6a7636feed14d9a1d969a9509b1d0e39c7",
+        "calibration_raw_sha256": "e92fbf0d4318657378fe483dfbb23d0befe23baa5ab5819f42c7038b7a6e05b2",
+        "conservative_ev_per_unit": 0.09000000000000008,
+        "edge": 0.06750000000000006,
+        "mean_ev_per_unit": 0.13500000000000023,
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001,
+        "quote_id": "trace-quote-11",
+        "status": "PUSH_AWARE_VERIFIED"
+      },
+      "line": 46.0,
+      "market": "TOTAL",
+      "mean_ev": 0.13500000000000023,
+      "mean_mass": {
+        "p_loss": 0.38249999999999995,
+        "p_push": 0.1,
+        "p_win": 0.5175000000000001
+      },
+      "model_predictor_version": "trace-model-v1",
+      "production_blockers": [
+        "UPSTREAM_GATE_NOT_APPROVED",
+        "MARKET_NOT_QUALIFIED",
+        "MARKET_NOT_COMMERCIALLY_ENABLED",
+        "REVIEW_HASH_MISMATCH",
+        "CONTENT_RIGHTS_UNVERIFIED",
+        "ISOLATED_FIXTURE_NOT_PRODUCTION_AUTHORITY"
+      ],
+      "production_decision": "BLOCKED",
+      "production_numeric_gate_pass": true,
+      "push_conversion": "per_candidate_supported_push_v1",
+      "push_source": "fixture_per_candidate_supported_push_v1",
+      "quote_id": "trace-quote-11",
+      "raw_probability_conditional": 0.6,
+      "route_assertions": {
+        "controlled_research": {
+          "assertion": "one research row preserves the calibrated unconditional win value",
+          "consumer": "app_core.lean_card.score_best_picks_rows",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        },
+        "parlay_consumer": {
+          "assertion": "a single unapproved research row cannot create a parlay",
+          "consumer": "core.parlay_engine.generate_parlays",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "public_board": {
+          "assertion": "research-only fixture is exported as a zero-stake non-wager",
+          "consumer": "app_core.export_scope.label_wager_export",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "strict_decision": {
+          "assertion": "unapproved fixture cannot enter the strict wager set",
+          "consumer": "app_core.export_scope.production_wagers",
+          "invoked": true,
+          "status": "EXPECTED_BLOCK_VERIFIED"
+        },
+        "subscriber": {
+          "assertion": "subscriber v2 projection preserves mean and conservative EV separately",
+          "consumer": "services.subscriber.contracts.Recommendation.customer_projection",
+          "invoked": true,
+          "status": "EXERCISED_PASS"
+        }
+      },
+      "route_status": {
+        "controlled_research": "EXERCISED_PASS",
+        "parlay_consumer": "EXPECTED_BLOCK_VERIFIED",
+        "public_board": "EXPECTED_BLOCK_VERIFIED",
+        "strict_decision": "EXPECTED_BLOCK_VERIFIED",
+        "subscriber": "EXERCISED_PASS"
+      },
+      "runtime": "python-3.12",
+      "selection_rank": 1,
+      "selection_status": "AVOID",
+      "selection_tie_break_key": "trace-nhl-total",
+      "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+      "sport": "NHL",
+      "sportsbook_break_even_probability": 0.45,
+      "subscriber_contract_status": "EXERCISED_PASS",
+      "trace_id": "runtime-12",
+      "upstream_model_ev_diagnostic": 0.2,
+      "value_source": "core.price_value.price_value"
+    }
+  ],
+  "route_invocation_counts": {
+    "controlled_research": 12,
+    "parlay_consumer": 12,
+    "public_board": 12,
+    "strict_decision": 12,
+    "subscriber": 12
+  },
+  "runtime": "python-3.12",
+  "schema_version": 1,
+  "source_sha": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+  "trace_kind": "post2356_nonidentity_priced_value_trace",
+  "validation": {
+    "errors": [],
+    "status": "PASS"
+  }
+}

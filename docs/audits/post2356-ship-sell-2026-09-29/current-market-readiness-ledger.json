@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "as_of_utc": "2026-09-29T11:12:38Z",
+  "code_sha": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
+  "evidence_kind": "PARTIAL_AUTHENTICATED_REMOTE_RESTORE_PLUS_LOCAL_READ_ONLY_CENSUS",
+  "census_status": "INCOMPLETE",
+  "market_qualified_count": 0,
+  "production_eligible_count": 0,
+  "activated_market_count": 0,
+  "authoritative_unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION",
+  "access_boundary": {
+    "local_drive_or_service_account_credentials": "ABSENT",
+    "local_odds_api_key": "ABSENT",
+    "local_database_urls": "ABSENT",
+    "local_canonical_prediction_sport_databases": "ABSENT",
+    "readiness_loader_remote_status": "MISSING_CREDENTIALS",
+    "readiness_loader_blocker": "OWNER_ACTION_CONFIGURE_DRIVE_CREDENTIALS",
+    "warning": "local zero files are LOCAL_COUNTS_ONLY_REMOTE_UNKNOWN, not authoritative zero observations"
+  },
+  "latest_authenticated_research_run": {
+    "github_run_id": 36505631987,
+    "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/36505631987",
+    "source_sha": "72aba3152a87739107ef2e4e9b35f8c4f263024f",
+    "started_at": "2026-09-29T00:58:04Z",
+    "requested_sports": ["MLB", "NCAAF", "NFL"],
+    "completion": "TIMED_OUT_CANCELLED_AFTER_60_MINUTES",
+    "source_run_id": "4fbc1cff-b06a-4b2e-892c-e03c34a2a8d2",
+    "execution_state": "IN_PROGRESS",
+    "active_stage": "MLB/RECEIPT_RECOVERY",
+    "finished_at": null,
+    "verified_backup": false,
+    "remote_records_read_restored_verified": 27262,
+    "count_warning": "mixed canonical record count; not observations, events or independent samples and not allocated to markets"
+  },
+  "legacy_activation_restore": {
+    "job_id": 109206322787,
+    "prediction_snapshots": 147,
+    "score_revisions": 256,
+    "latest_snapshot_id": "a5f219f4ae2343329193f7b66a15d3f4",
+    "latest_snapshot_at": "2026-09-28T19:02:04.411319Z",
+    "latest_candidates": 4,
+    "exact_quote_times": 4,
+    "latest_model_versions": [],
+    "qualification_limit": "legacy unscoped store has no closing observations or validation plans and cannot qualify a market"
+  },
+  "tracked_artifacts_not_accepted_as_current_market_evidence": [
+    {
+      "path": "data/calibration/effective_prob_calibration.json",
+      "sha256": "ed61815881b1a0b4c1707dffda0ea963d837134624a5b8009a1c4f6eb88c247e",
+      "reason": "schema v1 global artifact rejected for HOLDOUT_NOT_STRICTLY_FUTURE; no exact-market binding"
+    },
+    {
+      "path": "models/model.json",
+      "sha256_prefix": "a0f550c5",
+      "reason": "no sport/market target identity"
+    },
+    {
+      "path": "models/xgboost_model_v2.json",
+      "sha256_prefix": "8ff2d01d",
+      "reason": "no sport/market target identity"
+    },
+    {
+      "path": "docs/research/nfl-market-model-2026-09-13.json",
+      "sha256_prefix": "2f9ddf4b",
+      "reason": "historical research-only artifact failed spread/total promotion; dated counts are not a current census"
+    }
+  ],
+  "unknown_fields_per_scope": [
+    "store_snapshot_identity",
+    "model_id_version_target_artifact_hash",
+    "calibration_id_schema_status_consumer_binding",
+    "input_output_semantics_push_source_value_contract",
+    "raw_records_unique_events_independent_eligible_observations",
+    "training_selection_calibration_evaluation_counts_windows",
+    "quoted_settled_coverage_exclusions_duplicates",
+    "evaluation_progress_metrics_probability_quality_uncertainty_returns"
+  ],
+  "markets": [
+    {
+      "scope": "NFL/SPREAD",
+      "frozen_plan_id": "prospective-nfl-spread-football-v2",
+      "frozen_plan_hash": "0daed785b547f8d7a0934109905244f76edf7fb05eede8dc973dac2e9534666d",
+      "frozen_at": "2026-09-24T19:13:58Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "NFL/TOTAL",
+      "frozen_plan_id": "prospective-nfl-total-football-v2",
+      "frozen_plan_hash": "464f0b98840f74b1d46df58e37116f81235e2e9c972563863d8fb9208c97ce04",
+      "frozen_at": "2026-09-24T19:13:58Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "NCAAF/SPREAD",
+      "frozen_plan_id": "prospective-ncaaf-spread-football-v2",
+      "frozen_plan_hash": "ef8a66576e3795b3343ef9f607cb75fc6ba3d674004fbea3d77241c9bd577250",
+      "frozen_at": "2026-09-24T19:13:58Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "NCAAF/TOTAL",
+      "frozen_plan_id": "prospective-ncaaf-total-football-v2",
+      "frozen_plan_hash": "c50dea37a1a236c44fa8526c3e4936f25031430169b4c4663c7e5b3376db43ea",
+      "frozen_at": "2026-09-24T19:13:58Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "NBA/SPREAD",
+      "frozen_plan_id": "prospective-nba-spread-2026-09-23-v1",
+      "frozen_plan_hash": "db9f0e51f7c5c4c2ece7490b46f6aeb99cc8154eff1e467394cfbddd13d8b939",
+      "frozen_at": "2026-09-24T04:04:02Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "NBA/TOTAL",
+      "frozen_plan_id": "prospective-nba-total-2026-09-23-v1",
+      "frozen_plan_hash": "15cbe5d14777da8fd01b23ae63c0afea358f4d3555bae54e088b989d67665882",
+      "frozen_at": "2026-09-24T04:04:02Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "NCAAB/SPREAD",
+      "frozen_plan_id": "prospective-ncaab-spread-2026-09-23-v1",
+      "frozen_plan_hash": "76019eb4f46174f0704362550accb23ba0e07ac353ee95e775d1b2f12a8fd2d2",
+      "frozen_at": "2026-09-24T04:04:02Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "NCAAB/TOTAL",
+      "frozen_plan_id": "prospective-ncaab-total-2026-09-23-v1",
+      "frozen_plan_hash": "fe44e16beea0abca0a7b67761a4138270850b17cf3be9d1022c97d76c72625b2",
+      "frozen_at": "2026-09-24T04:04:02Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "MLB/RUN_LINE",
+      "frozen_plan_id": "prospective-mlb-run_line-2026-09-23-v1",
+      "frozen_plan_hash": "748f2e951d965f02abff9144cfcef2fadde462cca3634efb12a9b1aaa623923b",
+      "frozen_at": "2026-09-24T04:04:02Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "MLB/TOTAL",
+      "frozen_plan_id": "prospective-mlb-total-2026-09-23-v1",
+      "frozen_plan_hash": "bc8eb36a5914cfe674bd1106dc706d6948b951e580e96145186dda4753849843",
+      "frozen_at": "2026-09-24T04:04:02Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "NHL/PUCK_LINE",
+      "frozen_plan_id": "prospective-nhl-puck_line-2026-09-23-v1",
+      "frozen_plan_hash": "6f5d935b1d9f74200ebb8873edca3a2e8dbc454659ba02e7779a48823da5652a",
+      "frozen_at": "2026-09-24T04:04:02Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    },
+    {
+      "scope": "NHL/TOTAL",
+      "frozen_plan_id": "prospective-nhl-total-2026-09-23-v1",
+      "frozen_plan_hash": "f265c7699cf9f27108f6826ee0d6ee015f90a6ba07d34b9e0111014ab3f472a2",
+      "frozen_at": "2026-09-24T04:04:02Z",
+      "model": "UNKNOWN",
+      "calibration": "UNKNOWN",
+      "counts_and_windows": "UNKNOWN",
+      "evaluation_progress_and_metrics": "UNKNOWN",
+      "qualification_state": "UNVALIDATED",
+      "production_eligible": false,
+      "recommended_stake": 0,
+      "unknown_reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION"
+    }
+  ],
+  "next_action": {
+    "owner": "model/evidence workflow operator and repository owner",
+    "action": "Run a new explicitly read-only authenticated six-sport inventory on the final revision that restores to temporary storage without backup/reconcile writes and emits sanitized per-market identities, counts, semantics and evaluation progress.",
+    "normal_scheduler_not_authorized_as_census": "load_readiness(authenticate=True) can reconcile and back up data; do not dispatch it merely to obtain counts."
+  }
+}

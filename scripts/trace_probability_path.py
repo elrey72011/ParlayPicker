@@ -560,8 +560,11 @@ def _validation_errors(payload: object, mode: str) -> list[str]:
             errors.append("STATIC_INVENTORY_MISSING")
         elif not any(static.get("calls", {}).values()):
             errors.append("STATIC_CALL_SITE_EVIDENCE_MISSING")
-    if mode in {"runtime", "both"}:
-        if not isinstance(runtime, dict) or runtime.get("trace_kind") != "runtime_probability_value_trace":
+    if mode in {"runtime", "both", "priced"}:
+        accepted_trace_kinds = {"runtime_probability_value_trace"}
+        if mode == "priced":
+            accepted_trace_kinds.add("post2356_nonidentity_priced_value_trace")
+        if not isinstance(runtime, dict) or runtime.get("trace_kind") not in accepted_trace_kinds:
             errors.append("RUNTIME_TRACE_MISSING")
         else:
             records = runtime.get("records")
@@ -585,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path)
     parser.add_argument(
-        "--mode", choices=("static", "runtime", "both"), default="both"
+        "--mode", choices=("static", "runtime", "priced", "both"), default="both"
     )
     args = parser.parse_args(argv)
     payload = (
@@ -593,6 +596,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.mode == "static"
         else build_runtime_trace()
         if args.mode == "runtime"
+        else build_nonidentity_priced_value_trace()
+        if args.mode == "priced"
         else {
             "schema_version": 2,
             "static_inventory": build_trace(),

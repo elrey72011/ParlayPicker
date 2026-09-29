@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "implementation_revision": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+  "environment": "LOCAL_WINDOWS_ANACONDA",
+  "evidence_kind": "LOCAL_EXECUTED_TESTS_AND_ISOLATED_RUNTIME_TRACE",
+  "pre_fix_reproduction": {
+    "test": "tests/test_post2356_priced_value_consistency.py::test_p01_actual_lean_gate_uses_one_push_aware_price_contract",
+    "command": "python -m pytest tests/test_post2356_priced_value_consistency.py::test_p01_actual_lean_gate_uses_one_push_aware_price_contract -q",
+    "result": "FAIL_AS_EXPECTED",
+    "failure": "actual lean output lacked Final_P_Win and retained incompatible no-push downstream values",
+    "evidence_boundary": "LOCAL_ACTUAL_LEAN_AND_GATE_CONSUMER_WITH_ISOLATED_CALIBRATION_FIXTURE",
+    "owner": "Codex implementation"
+  },
+  "post_fix_runs": [
+    {
+      "scope": "expanded priced-value, prior closure/integration, lean/gate, export, subscriber, case-policy, calibration and probability semantics regression set",
+      "command": "python -m pytest tests/test_post2356_priced_value_consistency.py tests/test_post2355_integration_verification.py tests/test_post2352_probability_closure.py tests/test_absolute_production_gate.py tests/test_price_value.py tests/test_lean_card.py tests/test_probability_integrity_v11.py tests/test_probability_semantics.py tests/test_export_scope.py tests/test_subscriber_journey.py tests/paid_launch/case_policy_and_contracts.py -q --basetemp .pytest-tmp-post2356-targeted",
+      "result": "PASS",
+      "passed": 162,
+      "failed": 0,
+      "skipped": 0,
+      "evidence_boundary": "LOCAL_EXECUTION_WITH_ISOLATED_FIXTURES; NOT_HOSTED_OR_MODEL_QUALIFICATION",
+      "blocker": null,
+      "owner": "Codex implementation"
+    }
+  ],
+  "browser_local": {
+    "result": "NOT_RUN_MISSING_LOCAL_DEPENDENCY",
+    "command": "node --test tests/subscriber_journey_browser.cjs",
+    "blocker": "Playwright module is not installed in the local checkout",
+    "required_resolution": "authoritative final-revision Linux CI browser execution"
+  },
+  "runtime_trace": {
+    "path": "producer-to-customer-value-trace.json",
+    "command": "python scripts/trace_probability_path.py --mode priced --out docs/audits/post2356-ship-sell-2026-09-29/producer-to-customer-value-trace.json",
+    "validation": "PASS",
+    "market_scopes": 12,
+    "actual_consumer_invocations_per_route": 12,
+    "routes": [
+      "app_core.lean_card.score_best_picks_rows",
+      "app_core.export_scope.label_wager_export",
+      "app_core.export_scope.production_wagers",
+      "core.parlay_engine.generate_parlays",
+      "services.subscriber.contracts.Recommendation.customer_projection"
+    ],
+    "fixture_limit": "proves arithmetic and route integration only; not model qualification, hosted staging, product validation, release authority, or wager approval"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "base_revision": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
+  "implementation_revision": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+  "final_pr_revision": "PENDING",
+  "final_revision_ci": "PENDING_PR_EXECUTION",
+  "required_final_checks": [
+    "full-suite-tests (1)",
+    "full-suite-tests (2)",
+    "full-suite",
+    "production-safety",
+    "subscriber-postgres",
+    "completion-postgres",
+    "protected-scope",
+    "subscriber browser journey"
+  ],
+  "protected_diff": {
+    "protected_performance_storage_lock_publication_files_changed": [],
+    "historical_calibration_model_release_prediction_settlement_billing_records_changed": [],
+    "existing_test_expectations_changed": [],
+    "scope_guard_or_baseline_changed": [],
+    "status": "NO_UNAPPROVED_CHANGES"
+  },
+  "local_scope_guard_note": "Windows checked-out CRLF bytes differ from LF-byte tooling hashes; committed blobs remain unchanged. Linux final-revision CI is authoritative.",
+  "thresholds_or_market_activation_changed": false,
+  "live_calibration_replaced": false,
+  "sales_or_live_billing_enabled": false,
+  "production_records_or_wagers_created": false
+}

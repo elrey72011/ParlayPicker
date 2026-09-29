@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "base_revision": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
+  "implementation_revision": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+  "final_pr_revision": "PENDING",
+  "generated_for_environment": "LOCAL_IMPLEMENTATION_PLUS_AUTHORIZED_READ_ONLY_REMOTE_INSPECTION",
+  "statuses": {
+    "CODE_VERIFIED": "PENDING_FINAL_PR_CI",
+    "HOSTED_STAGING_VERIFIED": "NOT_PERFORMED",
+    "MARKET_QUALIFIED": "NONE_EVIDENCED",
+    "COMMERCIAL_APPROVED": "NOT_PERFORMED",
+    "PILOT_COMPLETE": "NOT_STARTED",
+    "OWNER_GO_LIVE_AUTHORIZED": "NOT_GRANTED"
+  },
+  "code": {
+    "priced_value_contract": "LOCAL_VERIFIED",
+    "actual_consumer_trace": "PASS_ISOLATED_FIXTURE",
+    "final_revision_ci": "PENDING_PR_EXECUTION",
+    "live_effect": "NONE"
+  },
+  "hosted_staging": {
+    "status": "NOT_RUN_EXTERNAL_BLOCKER",
+    "source_deployed_served_identity": "UNKNOWN",
+    "migrations_and_endpoints": "UNKNOWN",
+    "actual_customer_journeys": "NOT_RUN",
+    "owner": "Robert / deployment operator, OIDC administrator, Stripe account owner, and database operator"
+  },
+  "market_readiness": {
+    "status": "INCOMPLETE",
+    "scopes_listed": 12,
+    "qualified": 0,
+    "activated": 0,
+    "reason": "LATEST_AUTHENTICATED_SIX_SPORT_RUN_INCOMPLETE_AND_NOT_FINAL_REVISION",
+    "owner": "model/evidence workflow operator and repository owner"
+  },
+  "commercial": {
+    "deployment": "PENDING",
+    "product": "PENDING",
+    "customer_policies": "PENDING",
+    "data_permissions": "PENDING",
+    "processor": "PENDING",
+    "marketing": "PENDING",
+    "owner": "Robert and the relevant legal, privacy, data-rights, processor, and marketing reviewers"
+  },
+  "pilot": {
+    "status": "NOT_STARTED",
+    "observed_days": 0,
+    "observed_slates": 0,
+    "owner": "Robert / operations owner"
+  },
+  "final_authorization": {
+    "status": "NOT_GRANTED",
+    "owner": "Robert",
+    "required_record": "separate signed go/no-go for the exact qualified market, product, environment and limited cohort"
+  },
+  "prohibited_effects_confirmed_absent": {
+    "auto_merge": true,
+    "live_billing_or_sales_enabled": false,
+    "markets_activated": false,
+    "live_calibration_replaced": false,
+    "production_test_records_created": false,
+    "wagers_placed": false,
+    "validation_requirements_weakened": false
+  },
+  "evidence": [
+    "post2356-price-consistency-review.md",
+    "priced-probability-contract.json",
+    "final-value-parity-tests.json",
+    "producer-to-customer-value-trace.json",
+    "ci-execution-and-protected-scope.json",
+    "current-market-readiness-ledger.json",
+    "staging-environment-and-journey-report.json",
+    "operational-recovery-and-performance-report.json",
+    "owner-launch-decision-register.md"
+  ]
+}

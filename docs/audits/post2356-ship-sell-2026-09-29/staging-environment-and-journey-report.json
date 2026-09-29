@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "as_of_utc": "2026-09-29T11:12:38Z",
+  "source_revision": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
+  "evidence_kind": "AUTHORIZED_READ_ONLY_REPOSITORY_AND_GITHUB_CONFIGURATION_INSPECTION",
+  "status": "NOT_RUN_EXTERNAL_BLOCKER",
+  "github": {
+    "environment_count": 0,
+    "deployment_count": 0,
+    "pages_site": "ABSENT",
+    "paid_ci_run": 36509403776,
+    "paid_ci_jobs": ["protected-scope", "subscriber-postgres"],
+    "paid_ci_is_deployment_evidence": false
+  },
+  "tracked_runtime_manifest": {
+    "path": "docs/paid-launch/evidence/source-runtime-hosted-revision-manifest.json",
+    "api_runtime_revision": "NOT_RUN",
+    "worker_runtime_revision": "NOT_RUN",
+    "shell_hosted_revision": "NOT_RUN",
+    "match_status": "NOT_VERIFIED",
+    "migration_0001": "EXPECTED_IN_REPOSITORY_NOT_PROOF_OF_HOSTED_APPLICATION"
+  },
+  "local_operator_surface": {
+    "paid_env_file": "ABSENT",
+    "paid_configuration_variables": "ABSENT",
+    "docker_cli": "ABSENT",
+    "port_8081_listener": "ABSENT",
+    "port_8025_listener": "ABSENT",
+    "secrets_read_or_recorded": false
+  },
+  "hosted_revision": {
+    "staging_host": "UNKNOWN",
+    "domain_tls_route": "UNKNOWN",
+    "deployed_source_sha": "UNKNOWN",
+    "api_image_digest": "UNKNOWN",
+    "worker_image_digest": "UNKNOWN",
+    "served_shell_hash": "UNKNOWN",
+    "migration_state": "UNKNOWN",
+    "status_endpoint": "NOT_RUN"
+  },
+  "actual_journeys": {
+    "oidc_sign_in_logout_expiry_operator_separation": "NOT_RUN",
+    "stripe_test_checkout_portal_cancel_refund_dispute_webhooks": "NOT_RUN",
+    "entitlement_and_cross_account_denials": "NOT_RUN",
+    "results_corrections_and_open_page_expiry": "NOT_RUN",
+    "direct_json_origin_cdn_cache_and_legacy_asset_denials": "NOT_RUN"
+  },
+  "blockers": [
+    {
+      "owner": "Robert / deployment operator",
+      "blocker": "Select and authorize an isolated staging host, domains, registry strategy, secret manager and operator access."
+    },
+    {
+      "owner": "OIDC administrator",
+      "blocker": "Provide a test tenant/client/callback/admin group and approved customer, operator and disabled test identities."
+    },
+    {
+      "owner": "Stripe account owner",
+      "blocker": "Provide an approved test-only account, product, price and webhook configuration; live mode remains prohibited."
+    },
+    {
+      "owner": "Database/deployment operator",
+      "blocker": "Provision isolated PostgreSQL, least privilege, migration execution, PITR/monitoring and capture source/image/served identities."
+    }
+  ],
+  "next_authorized_commands": [
+    "follow docs/paid-launch/paid-launch-runbook.md with owner-provided staging configuration",
+    "read subscriber.schema_migration after migration execution",
+    "call /api/v1/status and match the final source SHA with sales disabled",
+    "python scripts/verify_paid_launch.py --environment staging --json-output outputs/launch/launch-gate-report.json --markdown-output outputs/launch/launch-readiness.md"
+  ],
+  "verifier_limit": "verify_paid_launch.py trusts top-level evidence status and does not independently validate provenance, freshness, source/environment, migrations, runtime digests, real journeys, restore or load evidence; exit 0 alone is insufficient.",
+  "live_billing": "DISABLED",
+  "sales": "DISABLED",
+  "production_records_created": false
+}
