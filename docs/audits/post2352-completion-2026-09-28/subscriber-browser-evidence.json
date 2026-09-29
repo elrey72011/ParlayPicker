@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "source_revision": "2d6d6dfcb3cae8e6734450b5464ac6628fc15d75",
+  "context": "LOCAL_INTEGRATION",
+  "base_defect_reproduction": {
+    "revision": "fc43d6492986874df996f8ecb744c73933432681",
+    "missing_controls": [
+      "checkout",
+      "billing-portal",
+      "cancel-subscription",
+      "logout",
+      "alerts-form",
+      "result-filter",
+      "refresh-current"
+    ],
+    "results_count_only": true,
+    "no_open_page_revalidation": true,
+    "fake_support_link": true
+  },
+  "browser": {
+    "engine": "Playwright Chromium using installed Microsoft Edge channel",
+    "viewport_checks": ["1280x900", "390x844"],
+    "status": "PASS",
+    "checkout_posts": 1,
+    "portal_posts": 1,
+    "cancel_posts": 1,
+    "logout_posts": 1,
+    "alert_posts": 1,
+    "current_gets": 11,
+    "result_gets": 5,
+    "result_statuses": ["WIN", "LOSS", "PUSH", "VOID", "PENDING", "NEEDS_REVIEW", "CORRECTED"],
+    "manual_checkout_return_granted_entitlement": false,
+    "duplicate_checkout_suppressed": true,
+    "csrf_header_verified": true,
+    "expiry_cleared_actionability": true,
+    "offline_cleared_actionability": true,
+    "late_response_suppressed": true,
+    "focus_revalidation": true,
+    "sales_disabled_portal_and_cancellation": true,
+    "mobile_no_horizontal_overflow": true,
+    "keyboard_logout": true,
+    "premium_leakage": false,
+    "external_provider_calls": 0
+  },
+  "focused_tests": {
+    "command": "pytest tests/test_subscriber_journey.py tests/test_post2352_probability_closure.py tests/paid_launch/case_policy_and_contracts.py -q --basetemp .pytest-tmp-combined",
+    "result": "33 passed",
+    "browser_asset_collection": "4 passed"
+  },
+  "postgres_completion_cases": {
+    "collection_status": "PASS",
+    "collected": 3,
+    "execution_status": "NOT_RUN_EXTERNAL_BLOCKER",
+    "blocker": "No local Docker, PostgreSQL binaries, or WSL runtime; protected paid-launch workflow does not list this additive case and was not changed without the required narrow exception."
+  },
+  "hosted_staging": {
+    "status": "NOT_RUN_EXTERNAL_BLOCKER",
+    "reason": "No authorized staging OIDC/payment sandbox credentials or deployment were available to this task."
+  }
+}

@@ -140,7 +140,7 @@ def create_app(
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
         response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-        if request.url.path.startswith(("/api/v1/me", "/api/v1/picks", "/api/v1/releases", "/api/v1/results", "/api/v1/admin", "/internal/")):
+        if request.url.path.startswith(("/api/v1/me", "/api/v1/offer", "/api/v1/picks", "/api/v1/releases", "/api/v1/results", "/api/v1/admin", "/internal/")):
             response.headers["Cache-Control"] = "private, no-store"
             response.headers["Pragma"] = "no-cache"
             response.headers["Vary"] = "Cookie, Authorization"
@@ -236,6 +236,42 @@ def create_app(
     def me(customer: Annotated[AuthenticatedCustomer, Depends(current_customer)]) -> dict[str, Any]:
         return _serialize(repository.customer_account(customer.customer_id))
 
+    @app.get("/api/v1/offer")
+    def offer(customer: Annotated[AuthenticatedCustomer, Depends(current_customer)]) -> dict[str, Any]:
+        """Return the server-owned offer contract without provider authority fields."""
+        state, approvals = repository.service_state(), repository.current_approvals()
+        decision = checkout_decision(
+            engineering_status=state["engineering_status"], commercial_status=state["commercial_status"],
+            sales_status=state["sales_status"], configured_terms=bool(state["configured_terms"]),
+            qualified_markets=state["qualified_markets"], commercially_enabled_markets=state["commercially_enabled_markets"],
+            current_approvals=approvals, billing_mode=settings.billing_mode,
+            live_billing_enabled=settings.live_billing_enabled,
+        )
+        product = repository.active_product()
+        reasons = list(decision.reason_codes)
+        if not product or product["provider_price_id"] != settings.stripe_price_id:
+            reasons.append("CONFIGURED_PRODUCT_UNAVAILABLE")
+        public_product = None if not product else {
+            "product_code": product["product_code"],
+            "version": product["version"],
+            "currency": product["currency"],
+            "amount_minor": product["amount_minor"],
+            "selling_entity": product["selling_entity"],
+            "offered_markets": product["offered_markets"],
+            "eligible_jurisdictions": product["eligible_jurisdictions"],
+            "terms_version": product["terms_version"],
+            "renewal_disclosure_version": product["renewal_disclosure_version"],
+            "cancellation_policy_version": product["cancellation_policy_version"],
+            "refund_policy_version": product["refund_policy_version"],
+        }
+        return {
+            "schema_version": 1,
+            "checkout_enabled": not reasons,
+            "reason_codes": reasons,
+            "product": _serialize(public_product),
+            "evaluated_at": decision.evaluated_at.isoformat(),
+        }
+
     @app.post("/api/v1/me/alerts")
     def alert_preferences(
         body: AlertPreferenceBody,
@@ -268,6 +304,7 @@ def create_app(
                 "status": "CURRENT",
                 "published_at": _serialize(release["promoted_at"]),
                 "content_hash": release["customer_payload_hash"],
+                "as_of": datetime.now(timezone.utc).isoformat(),
             }
         )
         return payload

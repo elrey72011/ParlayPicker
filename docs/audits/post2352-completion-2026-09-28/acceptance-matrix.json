@@ -1,6 +1,20 @@
 {
   "schema_version": 1,
-  "status_as_of_revision": "51f66aaf81e1302f44b207956a96c7025e1c8acf",
+  "status_as_of_revision": "2d6d6dfcb3cae8e6734450b5464ac6628fc15d75",
+  "source_revisions": {
+    "pr_a_code": "51f66aaf81e1302f44b207956a96c7025e1c8acf",
+    "pr_a_head": "f4f87cd7ef14fbf47e652dbace7933dd42fad64d",
+    "pr_b_code": "2d6d6dfcb3cae8e6734450b5464ac6628fc15d75"
+  },
+  "commands": {
+    "probability_focused": "pytest tests/test_post2352_probability_closure.py plus existing probability/provenance suites",
+    "subscriber_focused": "pytest tests/test_subscriber_journey.py tests/test_post2352_probability_closure.py tests/paid_launch/case_policy_and_contracts.py -q --basetemp .pytest-tmp-combined",
+    "subscriber_browser": "node tests/subscriber_journey_browser.cjs web/subscriber/index.html web/subscriber/subscriber.js web/subscriber/subscriber.css",
+    "postgres_completion_collection": "pytest tests/paid_launch/case_subscriber_completion.py --collect-only -q",
+    "combined_application_ci": "GitHub Actions CI run 36500759149",
+    "combined_existing_postgres_ci": "GitHub Actions Paid launch service run 36500759207"
+  },
+  "evidence_contexts": ["ISOLATED_FIXTURE", "LOCAL_INTEGRATION", "CI_POSTGRES"],
   "pr_a": {
     "A01": {"status": "PASS", "evidence": "test_a01_unknown_and_malformed_schema_never_gets_production_acceptance"},
     "A02": {"status": "PASS", "evidence": "test_a02_a03_metadata_removal_rejection_digest_predictor_and_scope_fail_closed"},
@@ -26,17 +40,17 @@
     "A22": {"status": "PASS", "evidence": "protected-file-diff.txt; no artifacts/releases/activation changed"}
   },
   "pr_b": {
-    "B01": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B02": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B03": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B04": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B05": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B06": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B07": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B08": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B09": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B10": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B11": {"status": "NOT_RUN", "evidence": "PR B not yet implemented"},
-    "B12": {"status": "NOT_RUN_EXTERNAL_BLOCKER", "evidence": "No authorized hosted staging journey run"}
+    "B01": {"status": "PASS", "evidence": "subscriber_journey_browser.cjs sign-in/logout/expired-session/no-leakage journey; existing subscriber PostgreSQL security suite"},
+    "B02": {"status": "PASS", "evidence": "browser fetches /offer versions; one checkout POST on double-click; manual checkout return remains not entitled"},
+    "B03": {"status": "PASS", "evidence": "browser portal and two-step cancellation remain enabled with SALES_NOT_OWNER_ENABLED; existing server authorization boundary retained"},
+    "B04": {"status": "PASS", "evidence": "browser verifies CSRF and idempotency headers plus duplicate suppression; existing paid PostgreSQL CSRF tests pass"},
+    "B05": {"status": "NOT_RUN", "evidence": "browser confirmed endpoint value; real PostgreSQL persistence case collected but cannot run without approved PostgreSQL runner"},
+    "B06": {"status": "NOT_RUN", "evidence": "browser renders all seven statuses/corrections; new entitled-product PostgreSQL join case collected but not executed"},
+    "B07": {"status": "PASS", "evidence": "Playwright clock crosses expiry/start boundary; actionability clears and original timestamps remain unchanged"},
+    "B08": {"status": "PASS", "evidence": "Playwright focus/offline/reconnect/poll and two-response race; older delayed revision cannot replace newer response"},
+    "B09": {"status": "PASS", "evidence": "anonymous/direct browser requests and existing PostgreSQL cross-customer tests reveal no premium content; observed browser paths contain no analysis/Drive/sportsbook requests"},
+    "B10": {"status": "PASS", "evidence": "390px no-overflow and keyboard logout; signed-out, no-entitlement, unavailable, offline, blocked, pending and error states exercised"},
+    "B11": {"status": "PASS", "evidence": "PR A subscriber v2/release binding tests plus combined protected-scope and paid-service CI; UI consumes server values without recalculation"},
+    "B12": {"status": "NOT_RUN_EXTERNAL_BLOCKER", "evidence": "No authorized deployed staging OIDC/payment sandbox journey run; local fixture is labeled LOCAL_INTEGRATION"}
   }
 }

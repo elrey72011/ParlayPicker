@@ -28,20 +28,59 @@
 
     <section id="current" aria-labelledby="current-heading">
       <p class="eyebrow">CURRENT RELEASE</p>
-      <h2 id="current-heading">Current picks</h2>
-      <div id="current-content" class="panel" aria-live="polite">Sign in with an active entitlement to view a verified release.</div>
+      <div class="section-heading">
+        <h2 id="current-heading">Current picks</h2>
+        <button id="refresh-current" class="button button-secondary" type="button" hidden>Refresh</button>
+      </div>
+      <div id="current-state" class="notice" role="status" aria-live="polite">Sign in with an active entitlement to view a verified release.</div>
+      <div id="current-content" class="panel" data-state="signed-out">No premium release is present in this public page.</div>
     </section>
 
     <section id="results" aria-labelledby="results-heading">
       <p class="eyebrow">COMPLETE HISTORY</p>
-      <h2 id="results-heading">Results</h2>
-      <div id="results-content" class="panel">Paper results and actual accepted wagers are reported separately. Actual wagers remain unavailable without receipts.</div>
+      <div class="section-heading">
+        <h2 id="results-heading">Results</h2>
+        <label class="filter" for="result-filter">Show
+          <select id="result-filter" disabled>
+            <option value="ALL">All statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="WIN">Wins</option>
+            <option value="LOSS">Losses</option>
+            <option value="PUSH">Pushes</option>
+            <option value="VOID">Voids</option>
+            <option value="NEEDS_REVIEW">Needs review</option>
+            <option value="CORRECTED">Corrections</option>
+          </select>
+        </label>
+      </div>
+      <p id="results-summary" class="notice">Paper results and actual accepted wagers are reported separately.</p>
+      <div id="results-content" class="panel" aria-live="polite">Sign in with an active entitlement to view result history.</div>
     </section>
 
     <section id="account" aria-labelledby="account-heading">
       <p class="eyebrow">ACCOUNT</p>
       <h2 id="account-heading">Subscription and controls</h2>
-      <div id="account-content" class="panel">Sign in to see entitlement, renewal, paid-through, billing portal, and cancellation status.</div>
+      <div class="panel account-grid">
+        <div>
+          <h3>Account status</h3>
+          <p id="account-content" aria-live="polite">Sign in to see entitlement, renewal, paid-through, billing portal, and cancellation status.</p>
+          <p id="account-message" class="notice" role="status" aria-live="polite"></p>
+        </div>
+        <div id="account-controls" hidden>
+          <h3>Subscription controls</h3>
+          <div class="actions">
+            <button id="checkout" class="button" type="button" disabled>Start checkout</button>
+            <button id="billing-portal" class="button button-secondary" type="button" disabled>Billing portal</button>
+            <button id="cancel-subscription" class="button button-danger" type="button" disabled>Cancel renewal</button>
+            <button id="logout" class="button button-secondary" type="button">Sign out</button>
+          </div>
+          <div id="offer-content" class="offer notice">Checking the server-configured offer…</div>
+          <form id="alerts-form" class="alerts-form">
+            <label><input id="alerts-enabled" type="checkbox"> Email alerts for new verified releases</label>
+            <button id="save-alerts" class="button button-secondary" type="submit">Save alert preference</button>
+          </form>
+        </div>
+      </div>
     </section>
 
     <section id="help" aria-labelledby="help-heading">
@@ -50,7 +89,7 @@
       <div class="panel copy">
         <p>No-pick days are possible. Delayed data, unavailable authority, price movement, market suspension, and service interruption are shown as distinct states.</p>
         <p>Only owner-configured markets and jurisdictions may be offered. Age, jurisdiction, cancellation, refund, privacy, responsible-use, and support policies must be reviewed before checkout is enabled.</p>
-        <p><a href="mailto:support@example.invalid">Support address pending owner configuration</a></p>
+        <p class="notice">Support address pending owner configuration.</p>
       </div>
     </section>
   </main>
