@@ -13,6 +13,11 @@ from typing import Any
 
 import httpx
 
+try:
+    from scripts.paid_launch_evidence import validate_evidence
+except ModuleNotFoundError:  # Direct ``python scripts/verify_paid_launch.py``.
+    from paid_launch_evidence import validate_evidence
+
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_CONFIGURATION = (
@@ -53,6 +58,7 @@ def verify(environment: str) -> tuple[int, dict[str, Any]]:
     if live_enabled:
         errors.append("LIVE_BILLING_MUST_REMAIN_DISABLED_FOR_THIS_DELIVERY")
     base_url = os.environ.get("PAID_PUBLIC_BASE_URL", "").rstrip("/")
+    expected_revision = os.environ.get("PAID_SOURCE_REVISION", "").strip()
     if base_url and environment == "staging":
         try:
             response = httpx.get(base_url + "/api/v1/status", timeout=10, follow_redirects=False)
@@ -64,7 +70,6 @@ def verify(environment: str) -> tuple[int, dict[str, Any]]:
                 "source_revision": body.get("source_revision"),
                 "premium_fields_present": any(key in body for key in ("recommendations", "selection", "odds_american")),
             }
-            expected_revision = os.environ.get("PAID_SOURCE_REVISION", "").strip()
             checks["staging_status_endpoint"]["revision_matches"] = bool(expected_revision and body.get("source_revision") == expected_revision)
             if response.status_code != 200 or checks["staging_status_endpoint"]["premium_fields_present"] or not checks["staging_status_endpoint"]["revision_matches"]:
                 blockers.append("STAGING_STATUS_ENDPOINT_UNVERIFIED")
@@ -90,9 +95,25 @@ def verify(environment: str) -> tuple[int, dict[str, Any]]:
             checks["evidence"][name] = "MISSING"
             blockers.append(f"{name.upper()}_EVIDENCE_MISSING")
             continue
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        checks["evidence"][name] = payload.get("status", "UNKNOWN")
-        if payload.get("status") != "PASS":
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            checks["evidence"][name] = {
+                "status": "FAIL",
+                "hosted_status": "BLOCKED",
+                "reason_codes": [f"EVIDENCE_PARSE_{type(exc).__name__.upper()}"],
+            }
+            blockers.append(f"{name.upper()}_NOT_VERIFIED")
+            continue
+        validation = validate_evidence(
+            payload,
+            expected_kind=name,
+            expected_environment=environment,
+            expected_revision=expected_revision,
+            evidence_root=evidence_dir,
+        )
+        checks["evidence"][name] = validation
+        if validation.get("hosted_status") != "PASS":
             blockers.append(f"{name.upper()}_NOT_VERIFIED")
     report = {
         "schema_version": 1,
