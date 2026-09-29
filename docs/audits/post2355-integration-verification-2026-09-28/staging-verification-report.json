@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "source_revision": "2eccc880db58b6a8dd731d2d2f4aa25c5c9476de",
+  "hosted_staging": "NOT_RUN",
+  "reason": "No authorized staging deployment, OIDC credentials, payment-sandbox credentials, or subscriber staging database was supplied to this local task.",
+  "verified_locally": [
+    "isolated probability route fixture",
+    "subscriber v2 contract projection",
+    "fail-closed release authority",
+    "static and runtime tracer modes"
+  ],
+  "not_verified": [
+    "deployed and served revision identity",
+    "configured OIDC sign-in/logout/session expiry",
+    "payment sandbox checkout/webhook/portal/cancellation",
+    "staging subscriber PostgreSQL journey",
+    "staging publication retry/read-back",
+    "staging alert delivery",
+    "staging recovery and load measurements",
+    "public cache and preview containment"
+  ],
+  "production_records_created": false,
+  "live_billing_enabled": false,
+  "sales_enabled": false
+}

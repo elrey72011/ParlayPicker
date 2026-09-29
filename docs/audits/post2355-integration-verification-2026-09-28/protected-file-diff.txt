@@ -1,0 +1,17 @@
+Base: 72aba3152a87739107ef2e4e9b35f8c4f263024f
+Implementation evidence revision: 2eccc880db58b6a8dd731d2d2f4aa25c5c9476de
+
+Protected application files changed: NONE
+Protected existing tests changed: NONE
+Protected paid workflow changed: NO
+Protected scope guard changed: NO
+Protected baseline manifest changed: NO
+
+Authorized CI collection approach:
+- Added .github/workflows/subscriber-completion-postgres.yml.
+- The additive workflow runs only the three previously omitted PostgreSQL completion node IDs.
+- Existing paid-launch.yml remains intact and continues to run its 23 tests plus protected-scope check.
+
+Local guard note:
+- The Windows checkout reports tooling SHA mismatch because checked-out CRLF bytes differ from the manifest's LF-byte hashes.
+- Git diffs show no change to either protected tooling file. Linux PR CI is the authoritative protected-scope result.

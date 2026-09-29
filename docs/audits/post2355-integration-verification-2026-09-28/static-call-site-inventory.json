@@ -1,0 +1,505 @@
+{
+  "calibration_runtime": "core/probability_calibration.py",
+  "calls": {
+    "apply_bucket_calibration": [
+      {
+        "line": 178,
+        "path": "app_core/lean_card.py"
+      },
+      {
+        "line": 269,
+        "path": "app_core/lean_card.py"
+      },
+      {
+        "line": 3725,
+        "path": "core/streamlit_pipeline.py"
+      },
+      {
+        "line": 10883,
+        "path": "core/streamlit_pipeline.py"
+      },
+      {
+        "line": 42,
+        "path": "tests/test_bucket_calibration.py"
+      },
+      {
+        "line": 45,
+        "path": "tests/test_bucket_calibration.py"
+      },
+      {
+        "line": 58,
+        "path": "tests/test_bucket_calibration.py"
+      },
+      {
+        "line": 26,
+        "path": "tests/test_bucket_calibration.py"
+      },
+      {
+        "line": 34,
+        "path": "tests/test_bucket_calibration.py"
+      },
+      {
+        "line": 53,
+        "path": "tests/test_bucket_calibration.py"
+      }
+    ],
+    "apply_calibration": [
+      {
+        "line": 239,
+        "path": "app_core/prop_calibration.py"
+      },
+      {
+        "line": 300,
+        "path": "core/empirical_tiers.py"
+      },
+      {
+        "line": 547,
+        "path": "core/empirical_tiers.py"
+      },
+      {
+        "line": 224,
+        "path": "core/probability_calibration.py"
+      },
+      {
+        "line": 198,
+        "path": "core/probability_calibration.py"
+      },
+      {
+        "line": 752,
+        "path": "core/smart_parlay_engine.py"
+      },
+      {
+        "line": 754,
+        "path": "core/smart_parlay_engine.py"
+      },
+      {
+        "line": 3728,
+        "path": "core/streamlit_pipeline.py"
+      },
+      {
+        "line": 10888,
+        "path": "core/streamlit_pipeline.py"
+      },
+      {
+        "line": 322,
+        "path": "scripts/fit_calibration.py"
+      },
+      {
+        "line": 40,
+        "path": "tests/test_bucket_calibration.py"
+      },
+      {
+        "line": 25,
+        "path": "tests/test_bucket_calibration.py"
+      },
+      {
+        "line": 33,
+        "path": "tests/test_bucket_calibration.py"
+      },
+      {
+        "line": 52,
+        "path": "tests/test_bucket_calibration.py"
+      },
+      {
+        "line": 85,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 85,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 61,
+        "path": "tests/test_parlay_accuracy_changes.py"
+      },
+      {
+        "line": 66,
+        "path": "tests/test_parlay_accuracy_changes.py"
+      },
+      {
+        "line": 53,
+        "path": "tests/test_parlay_accuracy_changes.py"
+      },
+      {
+        "line": 209,
+        "path": "tests/test_post2355_integration_verification.py"
+      },
+      {
+        "line": 107,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 98,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 20,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 103,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 129,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 41,
+        "path": "tests/test_probability_integrity_v11.py"
+      }
+    ],
+    "calibration_provenance": [
+      {
+        "line": 193,
+        "path": "app_core/lean_card.py"
+      },
+      {
+        "line": 87,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 97,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 98,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 108,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 75,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 84,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 93,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 196,
+        "path": "tests/test_post2352_probability_closure.py"
+      },
+      {
+        "line": 188,
+        "path": "tests/test_post2352_probability_closure.py"
+      }
+    ],
+    "conditional_probabilities": [
+      {
+        "line": 376,
+        "path": "app_core/prediction_evidence.py"
+      },
+      {
+        "line": 378,
+        "path": "app_core/prediction_evidence.py"
+      },
+      {
+        "line": 172,
+        "path": "core/run_readiness.py"
+      },
+      {
+        "line": 228,
+        "path": "core/selector_validation.py"
+      },
+      {
+        "line": 272,
+        "path": "tests/test_candidate_authority_projection.py"
+      },
+      {
+        "line": 171,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 184,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 7,
+        "path": "tests/test_probability_semantics.py"
+      }
+    ],
+    "fit_isotonic_calibration": [
+      {
+        "line": 153,
+        "path": "app_core/prop_calibration.py"
+      },
+      {
+        "line": 321,
+        "path": "scripts/fit_calibration.py"
+      },
+      {
+        "line": 403,
+        "path": "scripts/fit_calibration.py"
+      },
+      {
+        "line": 48,
+        "path": "tests/test_parlay_accuracy_changes.py"
+      },
+      {
+        "line": 19,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 33,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 51,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 57,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 126,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 81,
+        "path": "tests/test_probability_integrity_v11.py"
+      }
+    ],
+    "load_calibration": [
+      {
+        "line": 167,
+        "path": "app_core/lean_card.py"
+      },
+      {
+        "line": 10661,
+        "path": "core/streamlit_pipeline.py"
+      },
+      {
+        "line": 10868,
+        "path": "core/streamlit_pipeline.py"
+      },
+      {
+        "line": 6906,
+        "path": "core/streamlit_pipeline.py"
+      },
+      {
+        "line": 6664,
+        "path": "core/streamlit_pipeline.py"
+      },
+      {
+        "line": 2389,
+        "path": "streamlit_app.py"
+      },
+      {
+        "line": 83,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 96,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 111,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 97,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 108,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 75,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 93,
+        "path": "tests/test_calibration_promotion.py"
+      },
+      {
+        "line": 74,
+        "path": "tests/test_parlay_accuracy_changes.py"
+      },
+      {
+        "line": 75,
+        "path": "tests/test_parlay_accuracy_changes.py"
+      },
+      {
+        "line": 86,
+        "path": "tests/test_parlay_accuracy_changes.py"
+      },
+      {
+        "line": 93,
+        "path": "tests/test_parlay_accuracy_changes.py"
+      },
+      {
+        "line": 100,
+        "path": "tests/test_parlay_accuracy_changes.py"
+      },
+      {
+        "line": 174,
+        "path": "tests/test_post2352_probability_closure.py"
+      },
+      {
+        "line": 184,
+        "path": "tests/test_post2352_probability_closure.py"
+      },
+      {
+        "line": 195,
+        "path": "tests/test_post2352_probability_closure.py"
+      },
+      {
+        "line": 248,
+        "path": "tests/test_post2352_probability_closure.py"
+      },
+      {
+        "line": 202,
+        "path": "tests/test_post2355_integration_verification.py"
+      },
+      {
+        "line": 155,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 167,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 156,
+        "path": "tests/test_probability_integrity_v11.py"
+      },
+      {
+        "line": 189,
+        "path": "tests/test_wager_integrity_audit.py"
+      }
+    ],
+    "price_value": [
+      {
+        "line": 272,
+        "path": "app_core/controlled_trial.py"
+      },
+      {
+        "line": 460,
+        "path": "app_core/controlled_trial.py"
+      },
+      {
+        "line": 784,
+        "path": "app_core/controlled_trial.py"
+      },
+      {
+        "line": 100,
+        "path": "core/wager_decisions.py"
+      },
+      {
+        "line": 240,
+        "path": "scripts/trace_probability_path.py"
+      },
+      {
+        "line": 241,
+        "path": "scripts/trace_probability_path.py"
+      },
+      {
+        "line": 138,
+        "path": "tests/paid_launch/case_policy_and_contracts.py"
+      },
+      {
+        "line": 139,
+        "path": "tests/paid_launch/case_policy_and_contracts.py"
+      },
+      {
+        "line": 252,
+        "path": "tests/test_post2352_probability_closure.py"
+      },
+      {
+        "line": 253,
+        "path": "tests/test_post2352_probability_closure.py"
+      },
+      {
+        "line": 230,
+        "path": "tests/test_post2352_probability_closure.py"
+      },
+      {
+        "line": 232,
+        "path": "tests/test_post2352_probability_closure.py"
+      },
+      {
+        "line": 11,
+        "path": "tests/test_price_value.py"
+      },
+      {
+        "line": 29,
+        "path": "tests/test_price_value.py"
+      },
+      {
+        "line": 32,
+        "path": "tests/test_price_value.py"
+      },
+      {
+        "line": 23,
+        "path": "tests/test_price_value.py"
+      },
+      {
+        "line": 27,
+        "path": "tests/test_price_value.py"
+      }
+    ],
+    "verify_reviewed_submission": [
+      {
+        "line": 449,
+        "path": "services/subscriber/app.py"
+      },
+      {
+        "line": 83,
+        "path": "tests/paid_launch/case_policy_and_contracts.py"
+      },
+      {
+        "line": 77,
+        "path": "tests/paid_launch/case_policy_and_contracts.py"
+      },
+      {
+        "line": 87,
+        "path": "tests/paid_launch/case_policy_and_contracts.py"
+      },
+      {
+        "line": 163,
+        "path": "tests/paid_launch/case_policy_and_contracts.py"
+      },
+      {
+        "line": 172,
+        "path": "tests/paid_launch/case_policy_and_contracts.py"
+      },
+      {
+        "line": 181,
+        "path": "tests/paid_launch/case_policy_and_contracts.py"
+      }
+    ]
+  },
+  "notes": [
+    "This trace locates source-level consumers; it does not activate calibration or markets.",
+    "Dynamic imports and non-Python consumers require separate runtime evidence."
+  ],
+  "parse_errors": [],
+  "qualification_authority": "integrations/subscriber_release/authority.py",
+  "read_only": true,
+  "schema_version": 1,
+  "subscriber_contract": "services/subscriber/contracts.py",
+  "trace_kind": "static_python_call_sites",
+  "tracked_symbols": [
+    "apply_bucket_calibration",
+    "apply_calibration",
+    "calibration_provenance",
+    "conditional_probabilities",
+    "fit_isotonic_calibration",
+    "load_calibration",
+    "price_value",
+    "verify_reviewed_submission"
+  ],
+  "validation": {
+    "errors": [],
+    "status": "PASS"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "source_revision": "2eccc880db58b6a8dd731d2d2f4aa25c5c9476de",
+  "evidence_context": "STATIC_INVENTORY_PLUS_EXECUTED_ISOLATED_FIXTURES",
+  "production_context_contract": {
+    "required": [
+      "source_predictor_version",
+      "exact_sport",
+      "exact_market_family",
+      "probability_semantics=win_conditional_on_decision",
+      "per-candidate push_probability",
+      "line compatible with push support"
+    ],
+    "artifact_acceptance": "schema-v3 production default only; exact predictor and scope must match",
+    "conversion": "conditional calibration is converted to unconditional win/push/loss before price use"
+  },
+  "consumers": [
+    {
+      "path": "app_core/lean_card.py",
+      "line": 95,
+      "classification": ["lean_display", "public_board", "strict_decision_input"],
+      "status": "PRODUCTION_CONTEXT_INTEGRATED",
+      "evidence": "test_n11_n12_real_lean_consumer_uses_matching_nonidentity_curve_only; test_n13_conditional_calibration_converts_push_before_downstream_value",
+      "mixed_scope_behavior": "rows are grouped by exact sport, market family, and predictor; rejected groups retain upstream probability with an explicit status"
+    },
+    {
+      "path": "app_core/lean_card.py",
+      "line": 269,
+      "classification": ["controlled_research", "test_injection"],
+      "status": "EXPLICIT_NONDEFAULT_ONLY",
+      "evidence": "explicit calibration argument remains backward compatible and does not alter default production acceptance"
+    },
+    {
+      "path": "core/streamlit_pipeline.py",
+      "line": 4240,
+      "classification": ["controlled_research", "selection"],
+      "status": "FAIL_CLOSED_CONTEXT_NOT_SUPPLIED",
+      "evidence": "schema-v3 loader rejects production authority; bucket-only research selection continues without claiming fitted calibration"
+    },
+    {
+      "path": "core/streamlit_pipeline.py",
+      "line": 6664,
+      "classification": ["controlled_research", "empirical_tier_overlay"],
+      "status": "FAIL_CLOSED_CONTEXT_NOT_SUPPLIED",
+      "evidence": "default loader cannot accept a schema-v3 artifact without consumer expectations"
+    },
+    {
+      "path": "core/streamlit_pipeline.py",
+      "line": 6906,
+      "classification": ["strict_decision", "controlled_value_recovery"],
+      "status": "FAIL_CLOSED_CONTEXT_NOT_SUPPLIED",
+      "evidence": "no production artifact is applied; existing price and empirical recovery gates remain unchanged"
+    },
+    {
+      "path": "core/streamlit_pipeline.py",
+      "line": 10661,
+      "classification": ["parlay", "research_zero_stake"],
+      "status": "RESEARCH_ONLY_FAIL_CLOSED",
+      "evidence": "generated parlay rows are forced to zero recommended bet and cannot inherit straight-market authority"
+    },
+    {
+      "path": "core/streamlit_pipeline.py",
+      "line": 10868,
+      "classification": ["strict_decision", "kelly_fallback"],
+      "status": "FAIL_CLOSED_CONTEXT_NOT_SUPPLIED",
+      "evidence": "fitted probability remains unavailable and cannot fund a row when the strict loader rejects"
+    },
+    {
+      "path": "streamlit_app.py",
+      "line": 2389,
+      "classification": ["parlay", "research_ui"],
+      "status": "RESEARCH_ONLY_FAIL_CLOSED",
+      "evidence": "no production acceptance or market activation is inferred"
+    }
+  ],
+  "raw_static_inventory": "static-call-site-inventory.json"
+}

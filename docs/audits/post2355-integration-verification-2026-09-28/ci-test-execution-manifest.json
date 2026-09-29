@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "implementation_revision": "2eccc880db58b6a8dd731d2d2f4aa25c5c9476de",
+  "base_revision": "72aba3152a87739107ef2e4e9b35f8c4f263024f",
+  "required_ci_execution": "PENDING_PR_CI",
+  "local_runs": [
+    {
+      "command": "python -m pytest tests/test_post2355_integration_verification.py tests/test_post2352_probability_closure.py tests/test_probability_integrity_v11.py tests/test_probability_semantics.py tests/test_lean_card.py -q",
+      "result": "PASS",
+      "passed": 105,
+      "failed": 0,
+      "skipped": 0,
+      "context": "LOCAL_WINDOWS_ANACONDA"
+    },
+    {
+      "command": "python scripts/run_ci_tests.py --shard 1 --shards 2 -q tests",
+      "result": "NON_AUTHORITATIVE_LOCAL_FAILURE",
+      "passed": 1446,
+      "failed": 25,
+      "errors": 17,
+      "reason": "Windows/Anaconda baseline fixture and import behavior outside the task scope; authoritative Linux PR CI pending"
+    },
+    {
+      "command": "python scripts/run_ci_tests.py --shard 2 --shards 2 -q tests",
+      "result": "NON_AUTHORITATIVE_LOCAL_FAILURE",
+      "passed": 1513,
+      "failed": 28,
+      "errors": 37,
+      "reason": "Windows/Anaconda baseline fixture and import behavior outside the task scope; authoritative Linux PR CI pending"
+    }
+  ],
+  "postgres_completion_workflow": {
+    "path": ".github/workflows/subscriber-completion-postgres.yml",
+    "change_kind": "ADDITIVE_NARROW_CI_COLLECTION",
+    "protected_paid_workflow_modified": false,
+    "named_nodes": [
+      "tests/paid_launch/case_subscriber_completion.py::test_offer_and_account_preferences_are_server_owned",
+      "tests/paid_launch/case_subscriber_completion.py::test_results_are_complete_and_scoped_to_entitled_product",
+      "tests/paid_launch/case_subscriber_completion.py::test_cancellation_remains_available_when_sales_are_disabled"
+    ],
+    "result": "PENDING_PR_CI"
+  },
+  "existing_paid_suite": {
+    "expected_count": 23,
+    "workflow": ".github/workflows/paid-launch.yml",
+    "result": "PENDING_PR_CI"
+  }
+}
