@@ -25,10 +25,23 @@
     }
   ],
   "browser_local": {
-    "result": "NOT_RUN_MISSING_LOCAL_DEPENDENCY",
-    "command": "node --test tests/subscriber_journey_browser.cjs",
-    "blocker": "Playwright module is not installed in the local checkout",
-    "required_resolution": "authoritative final-revision Linux CI browser execution"
+    "result": "PASS",
+    "command": "PLAYWRIGHT_MODULE=<bundled-playwright> BROWSER_CHANNEL=msedge <bundled-node> tests/subscriber_journey_browser.cjs web/subscriber/index.html web/subscriber/subscriber.js web/subscriber/subscriber.css",
+    "context": "LOCAL_INTEGRATION_WITH_ISOLATED_FIXTURE_SERVER",
+    "checkout_posts": 1,
+    "portal_posts": 1,
+    "cancel_posts": 1,
+    "logout_posts": 1,
+    "alert_posts": 1,
+    "current_gets": 11,
+    "result_gets": 5,
+    "result_statuses": ["WIN", "LOSS", "PUSH", "VOID", "PENDING", "NEEDS_REVIEW", "CORRECTED"],
+    "late_response_suppressed": true,
+    "expiry_cleared": true,
+    "mobile_keyboard": true,
+    "premium_leakage": false,
+    "blocker": null,
+    "evidence_boundary": "actual browser execution against a local fixture server; not hosted staging, real OIDC, Stripe, email or database evidence"
   },
   "runtime_trace": {
     "path": "producer-to-customer-value-trace.json",

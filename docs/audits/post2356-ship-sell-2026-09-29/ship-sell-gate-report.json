@@ -2,10 +2,11 @@
   "schema_version": 1,
   "base_revision": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
   "implementation_revision": "70804d919104190f733389362ebdd50debcaf485",
-  "final_pr_revision": "PENDING",
+  "ci_verified_candidate_revision": "2d363030dfbca6f97cdf411b53eb4fb0709aa6fa",
+  "final_pr_revision": "PR_HEAD_REPORTED_BY_PULL_REQUEST_2357",
   "generated_for_environment": "LOCAL_IMPLEMENTATION_PLUS_AUTHORIZED_READ_ONLY_REMOTE_INSPECTION",
   "statuses": {
-    "CODE_VERIFIED": "PENDING_FINAL_PR_CI",
+    "CODE_VERIFIED": "PASS_FINAL_CANDIDATE_CI_AND_LOCAL_BROWSER",
     "HOSTED_STAGING_VERIFIED": "NOT_PERFORMED",
     "MARKET_QUALIFIED": "NONE_EVIDENCED",
     "COMMERCIAL_APPROVED": "NOT_PERFORMED",
@@ -15,7 +16,7 @@
   "code": {
     "priced_value_contract": "LOCAL_VERIFIED",
     "actual_consumer_trace": "PASS_ISOLATED_FIXTURE",
-    "final_revision_ci": "PENDING_PR_EXECUTION",
+    "final_revision_ci": "PASS",
     "live_effect": "NONE"
   },
   "hosted_staging": {

@@ -2,8 +2,9 @@
   "schema_version": 1,
   "base_revision": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
   "implementation_revision": "70804d919104190f733389362ebdd50debcaf485",
-  "final_pr_revision": "PENDING",
-  "final_revision_ci": "PENDING_PR_EXECUTION",
+  "ci_verified_candidate_revision": "2d363030dfbca6f97cdf411b53eb4fb0709aa6fa",
+  "final_pr_revision": "PR_HEAD_REPORTED_BY_PULL_REQUEST_2357",
+  "final_revision_ci": "PASS",
   "initial_pr_ci_reproduction": {
     "run_id": 36561330163,
     "candidate_revision": "90d136b19b1b92d696a7a6289c234cf2d8abc366",
@@ -24,6 +25,50 @@
     "protected-scope",
     "subscriber browser journey"
   ],
+  "verified_ci_runs": [
+    {
+      "workflow": "CI",
+      "run_id": 36562275731,
+      "revision": "2d363030dfbca6f97cdf411b53eb4fb0709aa6fa",
+      "result": "PASS",
+      "jobs": {
+        "full-suite-tests (1)": "1694 passed, 1390 deselected, 0 failed, 0 skipped",
+        "full-suite-tests (2)": "1390 passed, 1694 deselected, 38 subtests passed, 0 failed, 0 skipped",
+        "full-suite": "PASS",
+        "production-safety": "563 passed, 0 failed, 0 skipped"
+      }
+    },
+    {
+      "workflow": "Paid launch service",
+      "run_id": 36562275575,
+      "revision": "2d363030dfbca6f97cdf411b53eb4fb0709aa6fa",
+      "result": "PASS",
+      "jobs": {
+        "protected-scope": "PASS",
+        "subscriber-postgres": "23 passed, 0 failed, 0 skipped"
+      }
+    },
+    {
+      "workflow": "Subscriber completion PostgreSQL",
+      "run_id": 36562275637,
+      "revision": "2d363030dfbca6f97cdf411b53eb4fb0709aa6fa",
+      "result": "PASS",
+      "jobs": {
+        "completion-postgres": "3 named cases passed, 0 failed, 0 skipped"
+      },
+      "named_cases": [
+        "test_offer_and_account_preferences_are_server_owned",
+        "test_results_are_complete_and_scoped_to_entitled_product",
+        "test_cancellation_remains_available_when_sales_are_disabled"
+      ]
+    }
+  ],
+  "local_browser_execution": {
+    "result": "PASS",
+    "context": "LOCAL_INTEGRATION_WITH_ISOLATED_FIXTURE_SERVER",
+    "journey": "subscriber_journey_browser.cjs",
+    "hosted_claim": false
+  },
   "protected_diff": {
     "protected_performance_storage_lock_publication_files_changed": [],
     "historical_calibration_model_release_prediction_settlement_billing_records_changed": [],
