@@ -198,7 +198,7 @@ class Recommendation(StrictModel):
         fields = {
             "schema_version", "recommendation_id", "exact_sport", "exact_market_family", "canonical_event_id",
             "selection", "line", "sportsbook_id", "odds_american", "odds_decimal",
-            "quote_observed_at", "analysis_generated_at", "event_start_utc", "expiry_at",
+            "quote_id", "quote_observed_at", "analysis_generated_at", "event_start_utc", "expiry_at",
             "probability_semantics", "p_win", "p_push", "p_loss", "mean_ev_per_unit",
             "p_win_conservative", "conservative_ev_per_unit", "uncertainty_method",
             "minimum_acceptable_decimal_odds",

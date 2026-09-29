@@ -24,7 +24,9 @@ def unconditional_from_conditional(p_win_given_decided, p_push):
         return None
     decided_mass = 1.0 - push
     win = decided_mass * decided_win
-    loss = decided_mass * (1.0 - decided_win)
+    # Subtract from the already-established decided mass so every downstream
+    # price consumer carries the exact same binary float for win/push/loss.
+    loss = max(0.0, decided_mass - win)
     if not all(math.isfinite(value) for value in (win, push, loss)):
         return None
     return {"p_win": win, "p_push": push, "p_loss": loss}

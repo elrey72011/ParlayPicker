@@ -134,7 +134,7 @@ def _source_sha(root: Path) -> str:
     return result.stdout.strip() if result.returncode == 0 else "UNAVAILABLE"
 
 
-def _artifact() -> CalibrationTable:
+def _artifact(knots: list[list[float]] | None = None) -> CalibrationTable:
     manifest = {
         "schema_version": 1,
         "fit_target": CONDITIONAL_FIT_TARGET,
@@ -169,7 +169,7 @@ def _artifact() -> CalibrationTable:
             "test_start": "2026-09-02T00:00:00Z",
         },
     }
-    payload = {"knots": [[0.0, 0.0], [1.0, 1.0]], "meta": meta}
+    payload = {"knots": knots or [[0.0, 0.0], [1.0, 1.0]], "meta": meta}
     meta["calibration_version"] = calibration_digest(payload)
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     acceptance = {
@@ -210,7 +210,11 @@ def _runtime_rows() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def build_runtime_trace(root: Path = ROOT) -> dict:
+def build_runtime_trace(
+    root: Path = ROOT,
+    *,
+    calibration_artifact: CalibrationTable | None = None,
+) -> dict:
     """Execute actual inference, calibration, price, gate, and subscriber code."""
     started = datetime.now(timezone.utc)
     source_sha = _source_sha(root)
@@ -219,7 +223,11 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
     engine.model = _FrozenTraceModel()
     engine.use_fallback = False
     raw_probabilities = engine.predict_batch(frame)
-    artifact = _artifact()
+    artifact = (
+        calibration_artifact
+        if calibration_artifact is not None
+        else _artifact()
+    )
     traces: list[dict[str, object]] = []
     for index, ((sport, market), (_, row), raw_probability) in enumerate(
         zip(MARKET_SCOPES, frame.iterrows(), raw_probabilities)
@@ -242,7 +250,11 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
             conservative["p_win"], conservative["p_push"], 2.0
         )
         gate = evaluate_absolute_production_gate(
-            mean["p_win"], mean_price["break_even"], mean_price["expected_value"]
+            mean["p_win"],
+            model_expected_value=0.20,
+            push_probability=mean["p_push"],
+            decimal_odds=2.0,
+            conservative_probability=conservative["p_win"],
         ).iloc[0]
         consumer_frame = pd.DataFrame(
             [
@@ -253,18 +265,26 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
                     "home_team": str(row["home_team"]),
                     "away_team": str(row["away_team"]),
                     "matchup_id": candidate_id,
+                    "canonical_event_id": candidate_id,
                     "market_type": str(row["market_type"]),
                     "source_predictor_version": "trace-model-v1",
-                    "effective_win_probability": mean["p_win"],
-                    "effective_expected_value": mean_price["expected_value"],
-                    "effective_edge": mean["p_win"] - mean_price["break_even"],
-                    "expected_value": mean_price["expected_value"],
+                    "effective_win_probability": raw_probability,
+                    "effective_expected_value": 0.20,
+                    "effective_edge": 0.10,
+                    "expected_value": 0.20,
+                    "probability_semantics": CONDITIONAL_PROBABILITY_SEMANTICS,
+                    "push_probability": 0.10,
+                    "push_probability_source": "fixture_per_candidate_supported_push_v1",
+                    "conservative_probability": 0.55,
+                    "conservative_probability_semantics": CONDITIONAL_PROBABILITY_SEMANTICS,
                     "odds_american": 100,
+                    "decimal_odds": 2.0,
                     "Pick_Status": "Actionable",
                     "consensus_agreement": "Agrees",
                     "best_pick": f"{sport} trace selection",
                     "line": float(row["line"]),
                     "quote_id": str(row["quote_id"]),
+                    "quote_observed_at": "2026-09-28T12:00:00Z",
                     "qualified_pick": False,
                     "wager_approved": False,
                     "production_eligible": False,
@@ -275,11 +295,20 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
         )
         route_assertions: dict[str, dict[str, object]] = {}
         research_card = score_best_picks_rows(
-            consumer_frame, calibration=None, bucket_stats=None
+            consumer_frame, calibration=artifact, bucket_stats=None
         )
         research_ok = (
             len(research_card) == 1
-            and float(research_card.iloc[0]["Calib_Win%"]) == mean["p_win"]
+            and float(research_card.iloc[0]["Final_P_Win"]) == mean["p_win"]
+            and float(research_card.iloc[0]["Final_P_Push"]) == mean["p_push"]
+            and float(research_card.iloc[0]["Final_P_Loss"]) == mean["p_loss"]
+            and float(research_card.iloc[0]["Price_Break_Even"])
+            == mean_price["break_even"]
+            and float(research_card.iloc[0]["Mean_EV_Per_Unit"])
+            == mean_price["expected_value"]
+            and str(research_card.iloc[0]["Quote_ID"]) == str(row["quote_id"])
+            and str(research_card.iloc[0]["Calibration_Version"])
+            == artifact.payload["meta"]["calibration_version"]
         )
         route_assertions["controlled_research"] = {
             "invoked": True,
@@ -288,18 +317,15 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
             "assertion": "one research row preserves the calibrated unconditional win value",
         }
         staked_card = attach_play_stakes(research_card, unit=1.0)
-        public_input = consumer_frame.copy()
-        for column in (
-            "Bet_Decision",
-            "Production_Gate_Reason",
-            "Suggested_Stake",
-        ):
-            public_input[column] = staked_card[column].to_numpy()
+        public_input = staked_card.copy()
         public_board = label_wager_export(public_input)
         public_blocked = (
             len(public_board) == 1
             and not bool(public_board.iloc[0]["Bettable"])
-            and float(public_board.iloc[0]["Kelly_Bet_Size"]) == 0.0
+            and float(public_board.iloc[0]["Suggested_Stake"]) == 0.0
+            and float(public_board.iloc[0]["Mean_EV_Per_Unit"])
+            == mean_price["expected_value"]
+            and str(public_board.iloc[0]["Quote_ID"]) == str(row["quote_id"])
         )
         route_assertions["public_board"] = {
             "invoked": True,
@@ -345,19 +371,32 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
                 "validation_artifact_id": "isolated-fixture-not-authority",
                 "policy_id": "trace-only",
                 "activation_reference": "not-activated",
-                "probability_semantics": "win_unconditional_with_push",
-                **mean,
-                "mean_ev_per_unit": mean_price["expected_value"],
-                "p_win_conservative": conservative["p_win"],
-                "conservative_ev_per_unit": conservative_price["expected_value"],
+                "probability_semantics": str(
+                    public_board.iloc[0]["Probability_Semantics"]
+                ),
+                "p_win": float(public_board.iloc[0]["Final_P_Win"]),
+                "p_push": float(public_board.iloc[0]["Final_P_Push"]),
+                "p_loss": float(public_board.iloc[0]["Final_P_Loss"]),
+                "mean_ev_per_unit": float(
+                    public_board.iloc[0]["Mean_EV_Per_Unit"]
+                ),
+                "p_win_conservative": float(
+                    public_board.iloc[0]["P_Win_Conservative"]
+                ),
+                "conservative_ev_per_unit": float(
+                    public_board.iloc[0]["Conservative_EV_Per_Unit"]
+                ),
                 "uncertainty_method": "fixed_push_lower_win_bound",
-                "minimum_acceptable_decimal_odds": mean_price["minimum_decimal_price"],
+                "minimum_acceptable_decimal_odds": float(
+                    public_board.iloc[0]["Minimum_Acceptable_Decimal_Odds"]
+                ),
                 "disclosure_version": "trace-fixture-v1",
             }
         )
         customer = recommendation.customer_projection()
         subscriber_ok = (
             customer["recommendation_id"] == candidate_id
+            and customer["quote_id"] == str(row["quote_id"])
             and customer["p_win"] == mean["p_win"]
             and customer["mean_ev_per_unit"] == mean_price["expected_value"]
             and customer["conservative_ev_per_unit"]
@@ -405,7 +444,9 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
                 "calibration_acceptance": artifact.acceptance,
                 "calibration_input_semantics": CONDITIONAL_PROBABILITY_SEMANTICS,
                 "calibration_output_semantics": CONDITIONAL_PROBABILITY_SEMANTICS,
-                "calibration_output_conditional": raw_probability,
+                "calibration_output_conditional": (
+                    mean["p_win"] / (1.0 - mean["p_push"])
+                ),
                 "push_source": "fixture_per_candidate_supported_push_v1",
                 "push_conversion": PER_CANDIDATE_PUSH_CONVERSION,
                 "mean_mass": mean,
@@ -413,6 +454,30 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
                 "conservative_method": "fixed_push_lower_win_bound",
                 "mean_ev": mean_price["expected_value"],
                 "conservative_ev": conservative_price["expected_value"],
+                "sportsbook_break_even_probability": mean_price["break_even"],
+                "absolute_edge": mean_price["edge"],
+                "upstream_model_ev_diagnostic": 0.20,
+                "lean_value_contract": {
+                    "status": str(research_card.iloc[0]["Value_Contract_Status"]),
+                    "p_win": float(research_card.iloc[0]["Final_P_Win"]),
+                    "p_push": float(research_card.iloc[0]["Final_P_Push"]),
+                    "p_loss": float(research_card.iloc[0]["Final_P_Loss"]),
+                    "break_even": float(research_card.iloc[0]["Price_Break_Even"]),
+                    "edge": float(research_card.iloc[0]["Absolute_Edge"]),
+                    "mean_ev_per_unit": float(
+                        research_card.iloc[0]["Mean_EV_Per_Unit"]
+                    ),
+                    "conservative_ev_per_unit": float(
+                        research_card.iloc[0]["Conservative_EV_Per_Unit"]
+                    ),
+                    "quote_id": str(research_card.iloc[0]["Quote_ID"]),
+                    "calibration_id": str(
+                        research_card.iloc[0]["Calibration_Version"]
+                    ),
+                    "calibration_raw_sha256": str(
+                        research_card.iloc[0]["Calibration_Artifact_SHA256"]
+                    ),
+                },
                 "value_source": "core.price_value.price_value",
                 "selection_status": str(research_card.iloc[0]["Tier"]),
                 "selection_rank": 1,
@@ -454,6 +519,35 @@ def build_runtime_trace(root: Path = ROOT) -> dict:
             for name in route_names
         },
         "records": traces,
+    }
+
+
+def build_nonidentity_priced_value_trace(root: Path = ROOT) -> dict:
+    """Exercise the actual consumers with the Post-#2356 nonidentity example."""
+
+    report = build_runtime_trace(
+        root,
+        calibration_artifact=_artifact([[0.1, 0.2], [0.9, 0.8]]),
+    )
+    return {
+        **report,
+        "schema_version": 1,
+        "trace_kind": "post2356_nonidentity_priced_value_trace",
+        "counterexample": {
+            "raw_conditional_probability": 0.60,
+            "calibrated_conditional_probability": 0.575,
+            "push_probability": 0.10,
+            "decimal_odds": 2.0,
+            "required_final": {
+                "p_win": 0.5175,
+                "p_push": 0.10,
+                "p_loss": 0.3825,
+                "break_even": 0.45,
+                "edge": 0.0675,
+                "mean_ev_per_unit": 0.135,
+                "conservative_ev_per_unit": 0.09,
+            },
+        },
     }
 
 
