@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "source_revision": "2eccc880db58b6a8dd731d2d2f4aa25c5c9476de",
+  "evidence_context": "NO_NEW_EMPIRICAL_QUALIFICATION_PERFORMED",
+  "markets": [
+    {"scope": "NFL/SPREAD", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "NFL/TOTAL", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "NCAAF/SPREAD", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "NCAAF/TOTAL", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "NBA/SPREAD", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "NBA/TOTAL", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "NCAAB/SPREAD", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "NCAAB/TOTAL", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "MLB/RUN_LINE", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "MLB/TOTAL", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "NHL/PUCK_LINE", "status": "NOT_QUALIFIED_BY_THIS_TASK"},
+    {"scope": "NHL/TOTAL", "status": "NOT_QUALIFIED_BY_THIS_TASK"}
+  ],
+  "shared_blockers": [
+    "independent authentic event counts and cohorts not re-qualified",
+    "frozen future validation not re-run",
+    "no owner-reviewed market activation",
+    "isolated fixtures do not establish model quality"
+  ],
+  "live_calibration_replaced": false,
+  "markets_activated": []
+}

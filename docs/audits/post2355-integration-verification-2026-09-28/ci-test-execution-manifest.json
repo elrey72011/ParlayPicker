@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "implementation_revision": "2eccc880db58b6a8dd731d2d2f4aa25c5c9476de",
+  "base_revision": "72aba3152a87739107ef2e4e9b35f8c4f263024f",
+  "required_ci_execution": "PASS",
+  "pr_ci_evidence_revision": "13d5455fc6fde4ada094b35b342ce690b03f3a04",
+  "local_runs": [
+    {
+      "command": "python -m pytest tests/test_post2355_integration_verification.py tests/test_post2352_probability_closure.py tests/test_probability_integrity_v11.py tests/test_probability_semantics.py tests/test_lean_card.py -q",
+      "result": "PASS",
+      "passed": 105,
+      "failed": 0,
+      "skipped": 0,
+      "context": "LOCAL_WINDOWS_ANACONDA"
+    },
+    {
+      "command": "python scripts/run_ci_tests.py --shard 1 --shards 2 -q tests",
+      "result": "NON_AUTHORITATIVE_LOCAL_FAILURE",
+      "passed": 1446,
+      "failed": 25,
+      "errors": 17,
+      "reason": "Windows/Anaconda baseline fixture and import behavior outside the task scope; authoritative Linux PR CI passed"
+    },
+    {
+      "command": "python scripts/run_ci_tests.py --shard 2 --shards 2 -q tests",
+      "result": "NON_AUTHORITATIVE_LOCAL_FAILURE",
+      "passed": 1513,
+      "failed": 28,
+      "errors": 37,
+      "reason": "Windows/Anaconda baseline fixture and import behavior outside the task scope; authoritative Linux PR CI passed"
+    }
+  ],
+  "postgres_completion_workflow": {
+    "path": ".github/workflows/subscriber-completion-postgres.yml",
+    "change_kind": "ADDITIVE_NARROW_CI_COLLECTION",
+    "protected_paid_workflow_modified": false,
+    "named_nodes": [
+      "tests/paid_launch/case_subscriber_completion.py::test_offer_and_account_preferences_are_server_owned",
+      "tests/paid_launch/case_subscriber_completion.py::test_results_are_complete_and_scoped_to_entitled_product",
+      "tests/paid_launch/case_subscriber_completion.py::test_cancellation_remains_available_when_sales_are_disabled"
+    ],
+    "result": "PASS",
+    "tests": 3,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "run_id": 36508079185,
+    "job_id": 109213927883,
+    "run_url": "https://github.com/elrey72011/ParlayPicker/actions/runs/36508079185"
+  },
+  "existing_paid_suite": {
+    "expected_count": 23,
+    "workflow": ".github/workflows/paid-launch.yml",
+    "result": "PASS",
+    "tests": 23,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "run_id": 36508079144,
+    "job_id": 109213927964,
+    "run_url": "https://github.com/elrey72011/ParlayPicker/actions/runs/36508079144"
+  },
+  "final_combined_ci": {
+    "production_safety": {
+      "result": "PASS",
+      "tests": 563,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "run_id": 36508079149,
+      "job_id": 109213927910
+    },
+    "full_suite_shard_1": {
+      "result": "PASS",
+      "tests": 1508,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "run_id": 36508079149,
+      "job_id": 109213927832
+    },
+    "full_suite_shard_2": {
+      "result": "PASS",
+      "tests": 1598,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "run_id": 36508079149,
+      "job_id": 109213927682
+    },
+    "aggregate": {
+      "result": "PASS",
+      "run_id": 36508079149,
+      "job_id": 109215093056,
+      "run_url": "https://github.com/elrey72011/ParlayPicker/actions/runs/36508079149"
+    },
+    "protected_scope": {
+      "result": "PASS",
+      "run_id": 36508079144,
+      "job_id": 109213927867
+    }
+  }
+}
