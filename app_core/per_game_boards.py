@@ -237,6 +237,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         approved=not research_only_fallback and not observed_selected and (not fallback_selected or (text(final,'production_eligible').lower() in {'true','1','yes'} and text(final,'wager_approved').lower() in {'true','1','yes'})) and source is not None and final_ticket and text(final,'Bettable').lower() in {'true','1','yes'} and (number(final,'Play_Stake') or 0)>0
         trial=not approved and not observed_selected and not fallback_selected and source is not None and final_ticket and isinstance(trial_contract,dict) and trial_contract.get('trial_eligible') is True and (number(trial_contract,'recommended_bet_amount') or 0)>0 and same
         probability=None; basis='Unavailable'; edge=None; ev=None
+        priced_push=None; priced_break_even=None; priced_semantics=''
         if source is not None:
             if trial:
                 probability=number(trial_contract,'estimated_probability');basis='Controlled-trial estimate (unvalidated)'
@@ -269,20 +270,32 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                     if line is None:
                         match=re.search(r'(?:^|\s)([+-]?\d+(?:\.\d+)?)$',text(source,'best_pick','display_pick'))
                         line=float(match.group(1)) if match else None
+                    half_point=(line is not None and abs(line*2-round(line*2))<=1e-9
+                                and abs(line-round(line))>1e-9)
                     mass=None
-                    if semantics == 'win_conditional_on_decision':
+                    if half_point and push is not None and push > 1e-9:
+                        # Integer-score half-point markets have no push state.
+                        # An explicit contradictory contract is invalid; never
+                        # coerce it to the legacy no-push compatibility route.
+                        mass=None
+                    elif semantics == 'win_conditional_on_decision':
                         mass=unconditional_from_conditional(probability,push)
                     elif semantics in {'win_unconditional_with_push','unconditional_win_push_loss','unconditional'} and push is not None:
-                        mass={'p_win':probability,'p_push':push}
-                    elif line is not None and abs(abs(line-round(line))-.5) <= 1e-9:
+                        mass=({'p_win':probability,'p_push':push}
+                              if 0<=push<1 and probability+push<=1 else None)
+                    elif not semantics and push is None and half_point:
                         # A half-point market cannot push; this is the only safe
-                        # compatibility path when an old research row omitted semantics.
+                        # compatibility path when an old research row omitted
+                        # both semantics and push mass.
                         mass={'p_win':probability,'p_push':0.0}
+                        approved=False
                     priced=price_value(mass['p_win'],mass['p_push'],decimal_price(odds)) if mass else None
                     if priced:
                         probability=priced['p_win'];edge=priced['edge'];ev=priced['expected_value']
+                        priced_push=priced['p_push'];priced_break_even=priced['break_even']
+                        priced_semantics='win_unconditional_with_push'
                     else:
-                        approved=False
+                        approved=False;probability=None;basis='Unavailable'
             if not trial and league == 'NFL' and probability is not None:
                 if text(source, 'ml_probability_source').lower() == 'score-distribution-v1:nfl':
                     basis = 'NFL score model + market (recent form and injury context; unvalidated)'
@@ -328,7 +341,10 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'Trial_Stake':number(trial_contract,'recommended_bet_amount') if trial else 0.0,
                      'selection_label': {'overall':'Best Overall','sides':'Best Side','totals':'Best Total'}[family] if source is not None else 'Unavailable',
                      'status':'APPROVED' if approved else 'TRIAL' if trial else 'PASS', 'win_probability':probability,'probability_basis':basis,
-                     'edge':edge,'ev':ev,'selection_score':number(selected,'best_available_score') if selected is not None else None,
+                     'edge':edge,'ev':ev,'push_probability':priced_push,
+                     'price_break_even':priced_break_even,
+                     'probability_semantics':priced_semantics,
+                     'selection_score':number(selected,'best_available_score') if selected is not None else None,
                      'reason':reason,'approval_reason':approval_reason,
                      **({'qualification_reason':coverage_reason or approval_reason, 'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('Sportsbook fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else (coverage_reason or (supported_unavailable_reason(final,candidates,family) if allow_fallback else novig_unavailable_reason(final,candidates,family)))} if novig_only else {}),
                      **({'quote_time_basis':'espn_observed'} if observed_selected else {}),
