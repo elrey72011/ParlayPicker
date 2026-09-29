@@ -33,6 +33,23 @@ def _numeric_series(value: object, index: pd.Index | None = None) -> pd.Series:
     return pd.to_numeric(pd.Series(value, index=index), errors="coerce")
 
 
+def _boolean_series(
+    value: object, index: pd.Index, *, default: bool
+) -> pd.Series:
+    if value is None:
+        return pd.Series(default, index=index, dtype=bool)
+    if isinstance(value, pd.Series):
+        values = value.reindex(index)
+    elif np.isscalar(value):
+        values = pd.Series(value, index=index)
+    else:
+        values = pd.Series(value, index=index)
+    if pd.api.types.is_bool_dtype(values.dtype):
+        return values.fillna(default).astype(bool)
+    normalized = values.astype("string").fillna("").str.strip().str.casefold()
+    return normalized.isin({"true", "1", "1.0", "yes", "y"})
+
+
 def evaluate_absolute_production_gate(
     calibrated_probability: object,
     break_even_probability: object = None,
@@ -41,6 +58,8 @@ def evaluate_absolute_production_gate(
     push_probability: object = None,
     decimal_odds: object = None,
     conservative_probability: object = None,
+    explicit_contract_mask: object = None,
+    conservative_bound_mask: object = None,
     min_edge: float = MIN_PRODUCTION_CALIBRATED_EDGE,
     min_model_ev: float = MIN_PRODUCTION_MODEL_EV,
 ) -> pd.DataFrame:
@@ -70,14 +89,19 @@ def evaluate_absolute_production_gate(
     if index is None:
         index = probability.index
     model_ev = _numeric_series(model_expected_value, index)
-    explicit_price_contract = push_probability is not None or decimal_odds is not None
+    explicit_price_contract = _boolean_series(
+        explicit_contract_mask,
+        index,
+        default=push_probability is not None or decimal_odds is not None,
+    )
     supplied_break_even = _numeric_series(break_even_probability, index)
-    if explicit_price_contract:
-        push = _numeric_series(push_probability, index)
-        decimal = _numeric_series(decimal_odds, index)
-    else:
-        push = pd.Series(0.0, index=index, dtype=float)
-        decimal = (1.0 / supplied_break_even).replace([np.inf, -np.inf], np.nan)
+    supplied_push = _numeric_series(push_probability, index)
+    supplied_decimal = _numeric_series(decimal_odds, index)
+    legacy_decimal = (1.0 / supplied_break_even).replace(
+        [np.inf, -np.inf], np.nan
+    )
+    push = supplied_push.where(explicit_price_contract, 0.0)
+    decimal = supplied_decimal.where(explicit_price_contract, legacy_decimal)
 
     rows: list[dict[str, float] | None] = [
         price_value(win, push_mass, price, minimum_edge=float(min_edge))
@@ -106,19 +130,28 @@ def evaluate_absolute_production_gate(
     calibrated_ev = pd.to_numeric(priced["expected_value"], errors="coerce")
     price_valid = pd.Series([item is not None for item in rows], index=index, dtype=bool)
     break_even_matches = pd.Series(True, index=index, dtype=bool)
-    if explicit_price_contract and break_even_probability is not None:
-        break_even_matches = (
-            supplied_break_even.notna()
-            & np.isclose(supplied_break_even, break_even, atol=1e-10, rtol=1e-10)
+    if break_even_probability is not None:
+        explicit_comparison = explicit_price_contract & supplied_break_even.notna()
+        break_even_matches.loc[explicit_comparison] = np.isclose(
+            supplied_break_even.loc[explicit_comparison],
+            break_even.loc[explicit_comparison],
+            atol=1e-10,
+            rtol=1e-10,
         )
 
     conservative = _numeric_series(conservative_probability, index)
-    conservative_supplied = conservative_probability is not None
+    conservative_supplied = _boolean_series(
+        conservative_bound_mask,
+        index,
+        default=conservative_probability is not None,
+    )
     conservative_rows = [
         price_value(win, push_mass, price, minimum_edge=float(min_edge))
-        if conservative_supplied
+        if bound_supplied
         else None
-        for win, push_mass, price in zip(conservative, push, decimal)
+        for win, push_mass, price, bound_supplied in zip(
+            conservative, push, decimal, conservative_supplied
+        )
     ]
     conservative_ev = pd.Series(
         [
@@ -129,10 +162,12 @@ def evaluate_absolute_production_gate(
         dtype=float,
     )
     conservative_valid = pd.Series(True, index=index, dtype=bool)
-    if conservative_supplied:
-        conservative_valid = pd.Series(
-            [item is not None for item in conservative_rows], index=index, dtype=bool
-        ) & conservative.le(probability)
+    supplied_bound_valid = pd.Series(
+        [item is not None for item in conservative_rows], index=index, dtype=bool
+    ) & conservative.le(probability)
+    conservative_valid.loc[conservative_supplied] = supplied_bound_valid.loc[
+        conservative_supplied
+    ]
 
     model_valid = model_ev.notna() & np.isfinite(model_ev)
     valid = price_valid & break_even_matches & conservative_valid & model_valid
@@ -148,34 +183,44 @@ def evaluate_absolute_production_gate(
     reason.loc[probability.notna() & ~probability.between(0.0, 1.0, inclusive="both")] = (
         "invalid calibrated probability"
     )
-    if explicit_price_contract:
-        reason.loc[push.isna()] = "missing push probability"
-        reason.loc[push.notna() & ~(push.ge(0.0) & push.lt(1.0))] = (
-            "invalid push probability"
-        )
-        reason.loc[decimal.isna()] = "missing decimal odds"
-        reason.loc[decimal.notna() & ~decimal.gt(1.0)] = "invalid decimal odds"
-        reason.loc[
-            probability.notna()
-            & push.notna()
-            & probability.add(push).gt(1.0 + 1e-10)
-        ] = "invalid unconditional probability mass"
-        reason.loc[price_valid & ~break_even_matches] = (
-            "supplied break-even does not match exact quote and push mass"
-        )
-    else:
-        reason.loc[supplied_break_even.isna()] = "missing sportsbook break-even price"
-        reason.loc[
-            supplied_break_even.notna()
-            & ~(supplied_break_even.gt(0.0) & supplied_break_even.lt(1.0))
-        ] = "invalid sportsbook break-even price"
-    if conservative_supplied:
-        reason.loc[conservative.notna() & conservative.gt(probability)] = (
-            "conservative win probability exceeds mean win probability"
-        )
-        reason.loc[~conservative_valid & conservative.le(probability)] = (
-            "invalid conservative probability mass"
-        )
+    legacy_price_contract = ~explicit_price_contract
+    reason.loc[explicit_price_contract & push.isna()] = "missing push probability"
+    reason.loc[
+        explicit_price_contract
+        & push.notna()
+        & ~(push.ge(0.0) & push.lt(1.0))
+    ] = "invalid push probability"
+    reason.loc[explicit_price_contract & decimal.isna()] = "missing decimal odds"
+    reason.loc[
+        explicit_price_contract & decimal.notna() & ~decimal.gt(1.0)
+    ] = "invalid decimal odds"
+    reason.loc[
+        explicit_price_contract
+        & probability.notna()
+        & push.notna()
+        & probability.add(push).gt(1.0 + 1e-10)
+    ] = "invalid unconditional probability mass"
+    reason.loc[
+        explicit_price_contract & price_valid & ~break_even_matches
+    ] = "supplied break-even does not match exact quote and push mass"
+    reason.loc[legacy_price_contract & supplied_break_even.isna()] = (
+        "missing sportsbook break-even price"
+    )
+    reason.loc[
+        legacy_price_contract
+        & supplied_break_even.notna()
+        & ~(supplied_break_even.gt(0.0) & supplied_break_even.lt(1.0))
+    ] = "invalid sportsbook break-even price"
+    reason.loc[
+        conservative_supplied
+        & conservative.notna()
+        & conservative.gt(probability)
+    ] = "conservative win probability exceeds mean win probability"
+    reason.loc[
+        conservative_supplied
+        & ~conservative_valid
+        & conservative.le(probability)
+    ] = "invalid conservative probability mass"
     reason.loc[~np.isfinite(model_ev)] = "missing or invalid model EV"
     reason.loc[valid & ~model_ev.gt(float(min_model_ev))] = "model EV is not positive"
     reason.loc[
@@ -207,7 +252,11 @@ def evaluate_absolute_production_gate(
             "conservative_expected_value_per_unit": conservative_ev,
             "minimum_acceptable_decimal_odds": priced["minimum_decimal_price"],
             "pricing_contract_status": pd.Series(
-                "PUSH_AWARE_VERIFIED" if explicit_price_contract else "LEGACY_NO_PUSH_COMPATIBILITY",
+                np.where(
+                    explicit_price_contract,
+                    "PUSH_AWARE_VERIFIED",
+                    "LEGACY_NO_PUSH_COMPATIBILITY",
+                ),
                 index=index,
             ).where(valid, "INVALID"),
             "production_gate_reason": reason,
