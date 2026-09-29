@@ -157,7 +157,10 @@ def pick_record(row, *, prop=False, as_of=None):
         from app_core.total_signal_quality import public_fields
         from app_core.price_value_display import display
         record.update(public_fields(row))
-        record.update(display(record["win_estimate"], record["odds"], record["ev"]))
+        record.update(display(
+            record["win_estimate"], record["odds"], record["ev"],
+            push_probability=number(row, "push_probability"),
+        ))
     return record
 
 
