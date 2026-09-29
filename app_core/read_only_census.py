@@ -23,7 +23,7 @@ from app_core.canonical_schema import (
 
 
 SCHEMA = "parlaypicker-read-only-census-v1"
-CHECKPOINT_SCHEMA = "parlaypicker-read-only-census-checkpoint-v1"
+CHECKPOINT_SCHEMA = "parlaypicker-read-only-census-checkpoint-v2"
 CANONICAL_PREFIX = "parlaypicker/canonical-prospective-v1/"
 
 SPORT_MARKETS = {
@@ -236,6 +236,10 @@ def _canonical_fact(name, raw):
         "evidence_snapshot_id", "evidence_hash", "runtime_hash", "source_commit",
         "capture_run_id", "requested_slate_success", "observed_at",
     )
+    from app_core.census_eligibility import project
+    projection = project(row, table)
+    if projection is not None:
+        fact["eligibility_row"] = projection
     fact.update({field: row[field] for field in keep if row.get(field) is not None})
     if isinstance(row.get("payload"), str):
         try:
@@ -329,15 +333,11 @@ def _public_fact(fact, fields):
     return {field: fact[field] for field in fields if fact.get(field) is not None}
 
 
-def _scope_report(scope, facts, raw_names, namespace_states, snapshot):
+def _scope_report(scope, facts, raw_names, namespace_states, snapshot, eligibility, eligibility_reason):
     sport, market = scope.split("/", 1)
     relevant = [fact for fact in facts if scope in _scope_keys(fact)]
     event_ids = sorted({str(fact["event_id"]) for fact in relevant
                         if fact.get("event_id") is not None})
-    training_ids = sorted({str(fact["event_id"]) for fact in relevant
-                           if fact.get("record_type") == "prospective_football_training_row"
-                           and fact.get("training_row_status") == "TRAINING_READY"
-                           and fact.get("event_id") is not None})
     models = [_public_fact(fact, (
         "model_id", "model_version", "artifact_hash", "training_start",
         "training_cutoff", "training_observation_count", "independent_event_count",
@@ -400,9 +400,8 @@ def _scope_report(scope, facts, raw_names, namespace_states, snapshot):
     else:
         qualification = "EVIDENCE_PRESENT_OWNER_REVIEW_REQUIRED"
         next_blocker = "OWNER_REVIEW_AND_SEPARATE_ACTIVATION_DECISION"
-    direct_eligibility = bool(any(
-        fact.get("record_type") == "prospective_football_training_row"
-        for fact in relevant))
+    from app_core.census_eligibility import scope_eligibility
+    readiness = scope_eligibility(scope, eligibility, eligibility_reason)
     return {
         "scope": scope,
         "census_state": state,
@@ -414,9 +413,7 @@ def _scope_report(scope, facts, raw_names, namespace_states, snapshot):
             # record; expanded source events are counted separately below.
             "records": len(raw_names),
             "unique_events": len(event_ids),
-            "independent_eligible_games": len(training_ids) if direct_eligibility else None,
-            "independent_eligible_reason": (None if direct_eligibility else
-                "NO_DIRECT_CANONICAL_ELIGIBILITY_ROWS_FOR_SCOPE"),
+            **readiness["counts"],
             "quotes": sum(fact.get("record_type") in
                           {"prospective_quote", "prospective_football_quote"}
                           for fact in relevant),
@@ -429,6 +426,9 @@ def _scope_report(scope, facts, raw_names, namespace_states, snapshot):
             "settlements": sum(fact.get("record_type") ==
                                "prospective_football_settlement" for fact in relevant),
         },
+        "eligibility": readiness["eligibility"],
+        "cohorts": readiness["cohorts"],
+        "qualification_binding": readiness["qualification_binding"],
         "model_records": models or [{"status": "UNKNOWN", "reason":
             "NO_MODEL_RECORD_IN_VERIFIED_CENSUS" if state == "COMPLETE" else
             "CANONICAL_CENSUS_INCOMPLETE"}],
@@ -487,8 +487,11 @@ def _build_report(*, source_revision, inventory, namespace_groups, processed,
         "inventory_listing_pages": inventory.listing_pages,
         "inventory_metadata_items_seen": inventory.metadata_items_seen,
     }
+    from app_core.census_eligibility import eligibility_by_scope
+    eligibility, eligibility_reason = eligibility_by_scope(
+        all_facts, canonical_complete=namespace_states[CANONICAL_PREFIX]["status"] == "COMPLETE")
     scopes = [_scope_report(scope, all_facts, raw_by_sport[scope],
-                            namespace_states, snapshot) for scope in SCOPES]
+                            namespace_states, snapshot, eligibility, eligibility_reason) for scope in SCOPES]
     statuses = {item["census_state"] for item in scopes}
     overall = ("BLOCKED" if "BLOCKED" in statuses else
                "PARTIAL" if "PARTIAL" in statuses else "COMPLETE")

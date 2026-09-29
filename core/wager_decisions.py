@@ -180,6 +180,23 @@ def select_matchups(rows, policies, now):
     return decisions
 
 
+def allocation_limits(sport, game, teams, *, total_cap, game_cap, sport_cap, team_cap,
+                      daily_cap=None, weekly_cap=None):
+    """Existing straight allocation limits; shared by read-only release checks."""
+    keys = {"total": total_cap, f"sport:{sport}": sport_cap, f"game:{sport}:{game}": game_cap}
+    if daily_cap is not None:
+        keys["daily"] = daily_cap
+    if weekly_cap is not None:
+        keys["weekly"] = weekly_cap
+    if teams is not None:
+        keys.update({f"team:{sport}:{team}": team_cap for team in teams})
+    return keys
+
+
+def allocation_headroom(limits, committed):
+    return max(0.0, min(limit - committed.get(key, 0) for key, limit in limits.items()))
+
+
 def allocate_exposure(decisions, bankroll, *, total_cap, game_cap, sport_caps, committed=None, team_cap=None, daily_cap=None, weekly_cap=None):
     """Deterministic downward-only allocation. Include existing straight/parlay exposure.
 
@@ -210,12 +227,8 @@ def allocate_exposure(decisions, bankroll, *, total_cap, game_cap, sport_caps, c
         cap = finite(sport_caps.get(sport))
         if cap is None or not 0 <= cap <= 1:
             cap = 0.0
-        keys = {"total": total_cap, f"sport:{sport}": cap, f"game:{sport}:{game}": game_cap}
-        keys.update(period_caps)
         teams = row.get("team_ids")
         valid_teams = isinstance(teams, (list, tuple)) and len(teams) == 2 and all(isinstance(t, str) and t.strip() for t in teams) and len(set(teams)) == 2
-        if valid_teams:
-            keys.update({f"team:{sport}:{team}": team_cap for team in teams})
         requested = max(0.0, finite(row.get("recommended_fraction")) or 0.0)
         if not valid_teams:
             requested = 0.0
@@ -223,7 +236,11 @@ def allocate_exposure(decisions, bankroll, *, total_cap, game_cap, sport_caps, c
                        + '; missing_stable_team_ids').strip('; '))
         if not production_market(row.get("market_type")) or row.get("strategic_action") not in {"BET NOW", "BET ALT LINE", "REDUCE"} or row.get("reason_for_pass"):
             requested = 0.0
-        stake = max(0.0, min([requested] + [limit - used.get(key, 0) for key, limit in keys.items()]))
+        keys = allocation_limits(sport, game, teams if valid_teams else None,
+                                 total_cap=total_cap, game_cap=game_cap, sport_cap=cap,
+                                 team_cap=team_cap, daily_cap=period_caps.get("daily"),
+                                 weekly_cap=period_caps.get("weekly"))
+        stake = min(requested, allocation_headroom(keys, used))
         for key in keys:
             used[key] = used.get(key, 0) + stake
         result.append(dict(row, recommended_fraction=stake, recommended_stake=bankroll * stake))

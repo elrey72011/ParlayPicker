@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="3.677" timestamp="2026-09-29T16:56:40.975631-04:00" hostname="Roberts-PC"><testcase classname="tests.test_football_stage2" name="test_books_and_reprices_do_not_inflate_independent_n_or_write_authority" time="0.684"><failure message="assert False&#10; +  where False = any(&lt;generator object test_books_and_reprices_do_not_inflate_independent_n_or_write_authority.&lt;locals&gt;.&lt;genexpr&gt; at 0x000001EB574179F0&gt;)">tmp_path = WindowsPath('C:/Users/Robert/.codex/visualizations/2026/09/29/01a0eed7-a505-7881-95e5-0aa48c16a194/post2366-baseline-temp/test_books_and_reprices_do_not0')
+
+    def test_books_and_reprices_do_not_inflate_independent_n_or_write_authority(tmp_path):
+        path = tmp_path / "evidence.sqlite3"
+        one_game(path, two_books=True)
+        with evidence.connect(path) as db:
+            before = {t: db.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in
+                      ("prospective_model", "prospective_calibration", "prospective_prediction",
+                       "prospective_deployment_review")}
+        reports = stage2.build_reports(path, Path(__file__).resolve().parents[1],
+                                       stage1_report=verified_refresh(), source_commit="abc")
+        for key in ("NFL/SPREAD", "NFL/TOTAL"):
+            item = reports["training_audit"]["scopes"][key]
+            assert item["raw_quote_rows"] == 4
+            assert item["raw_training_ready_rows"] == 4
+            assert item["manifest_selected_rows"] == item["legal_independent_n"] == 1
+            assert item["legal_by_season"] == {2026: 1}
+            assert item["blocked_or_nonselected_raw_reasons"] == {"NONSELECTED_BOOK_OR_REPRICE": 3}
+            assert reports["split_plan"]["scopes"][key]["status"] == "INSUFFICIENT_TRAINING_EVIDENCE"
+            assert reports["baselines"]["scopes"][key]["status"] == "NOT_EVALUATED"
+        assert reports["training_audit"]["scopes"]["NCAAF/SPREAD"]["legal_independent_n"] == 0
+        sources = reports["training_audit"]["historical_candidate_sources"]
+&gt;       assert any(item["source"] == "data/master_all_sports.csv" and item["scope"] == "NFL/UNASSIGNED"
+                   and item["source_rows"] == 16 and item["training_ready"] == 0 for item in sources)
+E       assert False
+E        +  where False = any(&lt;generator object test_books_and_reprices_do_not_inflate_independent_n_or_write_authority.&lt;locals&gt;.&lt;genexpr&gt; at 0x000001EB574179F0&gt;)
+
+tests\test_football_stage2.py:83: AssertionError</failure></testcase><testcase classname="tests.test_productionization_status" name="test_runtime_odds_status_does_not_count_unused_alias" time="0.972"><failure message="AssertionError: assert 'configured' == 'missing'&#10;  &#10;  - missing&#10;  + configured">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EB5742AF90&gt;
+tmp_path = WindowsPath('C:/Users/Robert/.codex/visualizations/2026/09/29/01a0eed7-a505-7881-95e5-0aa48c16a194/post2366-baseline-temp/test_runtime_odds_status_does_0')
+
+    def test_runtime_odds_status_does_not_count_unused_alias(monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv('ODDS_API_KEY', raising=False)
+        monkeypatch.setenv('THE_ODDS_API_KEY', 'unused-key')
+&gt;       assert runtime_configuration_status()['THE_ODDS_API_KEY'] == 'missing'
+E       AssertionError: assert 'configured' == 'missing'
+E         
+E         - missing
+E         + configured
+
+C:\Users\Robert\.codex\visualizations\2026\09\29\01a0eed7-a505-7881-95e5-0aa48c16a194\post2366-baseline\tests\test_productionization_status.py:31: AssertionError</failure></testcase><testcase classname="tests.test_football_stage1.FootballStage1Test" name="test_training_manifest_uses_one_deterministic_observation_per_game_market" time="0.611"><failure message="PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\Robert\\AppData\\Local\\Temp\\tmper7t_911\\canonical.sqlite3'">path = 'C:\\Users\\Robert\\AppData\\Local\\Temp\\tmper7t_911'
+onexc = &lt;function TemporaryDirectory._rmtree.&lt;locals&gt;.onexc at 0x000001EB57B4EFC0&gt;
+
+    def _rmtree_unsafe(path, onexc):
+        def onerror(err):
+            onexc(os.scandir, err.filename, err)
+        results = os.walk(path, topdown=False, onerror=onerror, followlinks=os._walk_symlinks_as_files)
+        for dirpath, dirnames, filenames in results:
+            for name in dirnames:
+                fullname = os.path.join(dirpath, name)
+                try:
+                    os.rmdir(fullname)
+                except OSError as err:
+                    onexc(os.rmdir, fullname, err)
+            for name in filenames:
+                fullname = os.path.join(dirpath, name)
+                try:
+&gt;                   os.unlink(fullname)
+E                   PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\Robert\\AppData\\Local\\Temp\\tmper7t_911\\canonical.sqlite3'
+
+C:\Users\Robert\anaconda3\Lib\shutil.py:633: PermissionError
+
+During handling of the above exception, another exception occurred:
+C:\Users\Robert\anaconda3\Lib\tempfile.py:950: in cleanup
+    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+C:\Users\Robert\anaconda3\Lib\tempfile.py:930: in _rmtree
+    _shutil.rmtree(name, onexc=onexc)
+C:\Users\Robert\anaconda3\Lib\shutil.py:781: in rmtree
+    return _rmtree_unsafe(path, onexc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Robert\anaconda3\Lib\shutil.py:635: in _rmtree_unsafe
+    onexc(os.unlink, fullname, err)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+func = &lt;built-in function unlink&gt;
+path = 'C:\\Users\\Robert\\AppData\\Local\\Temp\\tmper7t_911\\canonical.sqlite3'
+exc = PermissionError(13, 'The process cannot access the file because it is being used by another process')
+
+    def onexc(func, path, exc):
+        if isinstance(exc, PermissionError):
+            if repeated and path == name:
+                if ignore_errors:
+                    return
+                raise
+    
+            try:
+                if path != name:
+                    _resetperms(_os.path.dirname(path))
+                _resetperms(path)
+    
+                try:
+&gt;                   _os.unlink(path)
+E                   PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\Robert\\AppData\\Local\\Temp\\tmper7t_911\\canonical.sqlite3'
+
+C:\Users\Robert\anaconda3\Lib\tempfile.py:905: PermissionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,64 @@
+{
+  "artifact_sha256_definition": "LF-normalized repository artifact bytes; local_output hashes describe the exact retained local output bytes.",
+  "artifacts": [
+    {
+      "bytes": 6791,
+      "path": "anchor-comparison.xml",
+      "sha256": "a56b9a9b23b28f27dbd1d0b9d5f20a7f35205f40650646f5c1a78d1fb9df54d5"
+    },
+    {
+      "bytes": 12514,
+      "path": "execution-ledger.md",
+      "sha256": "fd0c27ed37f39aec8521708435e1f4b2b7dbc0777d82532717104ff86dc684e2"
+    },
+    {
+      "bytes": 16512,
+      "path": "focused.xml",
+      "sha256": "ce0d2c01c09599bbb63b13cd0f300d9f0561b52c80320a2f7c9d5115a736e8fa"
+    },
+    {
+      "bytes": 44726,
+      "path": "local-entrypoint-reproductions.json",
+      "sha256": "d0e623624de14203fb70e2ca5a0a2e39013ea49d57bef589b9bde070c8df5b71"
+    },
+    {
+      "bytes": 5250,
+      "path": "protected-file-diff.json",
+      "sha256": "59ab3f0a2d90a1d71406bd18aa1bc5ed59fb8ca8541c33a3c6c8ca85a79a4e7d"
+    },
+    {
+      "bytes": 2178,
+      "path": "reproduction-before.xml",
+      "sha256": "c444dfc7247c40269b5412487085bae23f63ec85c69482db53faad7187dd3a7d"
+    },
+    {
+      "bytes": 7105,
+      "path": "subscriber-local.xml",
+      "sha256": "9e7e953db67ba5b13eba752485a238c1961631915a85ec632d89fdb7c6bf5ba2"
+    },
+    {
+      "bytes": 341,
+      "local_output": "outputs/post2366/subscriber-browser.log",
+      "sha256": "66876b223e156a9172dc2886e9e3f356f33361bca8cf28c015dbe1ccf60826e8"
+    },
+    {
+      "bytes": 493139,
+      "local_output": "outputs/post2366/full-local.xml",
+      "sha256": "903fd9e6b0bf4f58a009d08805fb4aadce4891b119a0acd4284a93b24d41b918"
+    },
+    {
+      "bytes": 98179,
+      "local_output": "outputs/post2366/full-local.log",
+      "sha256": "58a9455d93cfac05425b903af3d3801454995cccfffc53e07cf56d6921decd71"
+    },
+    {
+      "bytes": 6444,
+      "local_output": "outputs/post2366/anchor-comparison.log",
+      "sha256": "b22a7d6883edd61dd3f05eef40349a4723794900f4545917ffb4d26b1aceca11"
+    }
+  ],
+  "audit_base_revision": "095b594460e94085051162a158b111dd8be31486",
+  "fixture_artifacts_do_not_establish_hosted_or_model_proof": true,
+  "schema": "post2366-artifact-register-v1",
+  "source_implementation_revision": "aacfa95e4dbf6a8e0dfa29d83bc2852143b7bd78"
+}
