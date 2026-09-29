@@ -204,7 +204,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
         st.caption('Local output: '+str(destination))
         if st.button('Publish reviewed board locally', key='publication_publish'):
             try:
-                publish_package(package,destination)
+                publish_package(package,destination,setting=setting)
                 st.success('Published locally. This local action does not update the public website. Download the HTML or use the separate public publish controls below.')
             except (OSError,ValueError) as exc:
                 st.error('Local publication failed: '+str(exc))

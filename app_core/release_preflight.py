@@ -73,7 +73,7 @@ def _same_time(left, right) -> bool:
     return a is not None and b is not None and a == b
 
 
-def _row_identity(row: Mapping) -> str:
+def row_identity(row: Mapping) -> str:
     value = {
         key: row.get(key)
         for key in ("sport", "game", "market", "pick", "odds", "quote_source",
@@ -191,26 +191,69 @@ def _trial_contract_blockers(row: Mapping) -> list[str]:
     return blockers
 
 
-def _external_authority_blockers(row_id: str, authority: Mapping | None, at: datetime) -> tuple[list[str], str]:
+def _external_authority_blockers(row_id: str, row: Mapping,
+                                 authority: Mapping | None, at: datetime,
+                                 required: bool) -> tuple[list[str], str, list[datetime]]:
     if authority is None:
-        return [], "NOT_AVAILABLE"
+        return (["CURRENT_AUTHORITY_UNKNOWN"] if required else []), "NOT_AVAILABLE", []
     current = authority.get(row_id) if isinstance(authority, Mapping) else None
     if not isinstance(current, Mapping):
-        return ["CURRENT_AUTHORITY_UNKNOWN"], "UNKNOWN"
+        return ["CURRENT_AUTHORITY_UNKNOWN"], "UNKNOWN", []
     blockers: list[str] = []
     if current.get("withdrawn") is True or current.get("revoked") is True:
         blockers.append("CURRENT_AUTHORITY_WITHDRAWN")
+    effective = _time(current.get("effective_at"))
     expires = _time(current.get("expires_at"))
     if current.get("status") not in {"APPROVED", "AUTHORIZED"}:
         blockers.append("CURRENT_AUTHORITY_NOT_APPROVED")
-    if expires is not None and expires <= at:
+    if required and effective is None:
+        blockers.append("CURRENT_AUTHORITY_EFFECTIVE_TIME_UNKNOWN")
+    elif effective is not None and effective > at:
+        blockers.append("CURRENT_AUTHORITY_NOT_EFFECTIVE")
+    if required and expires is None:
+        blockers.append("CURRENT_AUTHORITY_EXPIRY_UNKNOWN")
+    elif expires is not None and expires <= at:
         blockers.append("CURRENT_AUTHORITY_EXPIRED")
-    return blockers, "BLOCKED" if blockers else "VERIFIED"
+    binding = current.get("binding")
+    if required or binding is not None:
+        if not isinstance(binding, Mapping):
+            blockers.append("CURRENT_AUTHORITY_BINDING_UNKNOWN")
+        else:
+            comparisons = (
+                (binding.get("sport") == row.get("sport"), "CURRENT_AUTHORITY_SPORT_MISMATCH"),
+                (binding.get("market") == row.get("market"), "CURRENT_AUTHORITY_MARKET_MISMATCH"),
+                (binding.get("selection") == row.get("pick"), "CURRENT_AUTHORITY_SELECTION_MISMATCH"),
+                (_same_number(binding.get("line"), _selection_line(row)), "CURRENT_AUTHORITY_LINE_MISMATCH"),
+                (_same_number(binding.get("odds"), row.get("odds")), "CURRENT_AUTHORITY_PRICE_MISMATCH"),
+                (str(binding.get("sportsbook") or "").casefold() ==
+                 str(row.get("quote_source") or "").casefold(), "CURRENT_AUTHORITY_BOOK_MISMATCH"),
+                (_same_time(binding.get("quote_timestamp"), row.get("quote_time")),
+                 "CURRENT_AUTHORITY_QUOTE_MISMATCH"),
+                (_same_time(binding.get("event_start"), row.get("start")),
+                 "CURRENT_AUTHORITY_EVENT_MISMATCH"),
+            )
+            blockers.extend(code for passed, code in comparisons if not passed)
+    deadlines: list[datetime] = []
+    if expires is not None:
+        deadlines.append(expires)
+    for name, missing, expired in (
+        ("review_expires_at", "CURRENT_REVIEW_EXPIRY_UNKNOWN", "CURRENT_REVIEW_EXPIRED"),
+        ("provider_expires_at", "CURRENT_PROVIDER_EXPIRY_UNKNOWN", "CURRENT_PROVIDER_QUOTE_EXPIRED"),
+    ):
+        deadline = _time(current.get(name))
+        if required and deadline is None:
+            blockers.append(missing)
+        elif deadline is not None:
+            deadlines.append(deadline)
+            if deadline <= at:
+                blockers.append(expired)
+    return blockers, "BLOCKED" if blockers else "VERIFIED", deadlines
 
 
 def evaluate_release(package: dict, *, at: datetime | str | None = None,
                      published_at: datetime | str | None = None,
                      current_authority: Mapping | None = None,
+                     require_current_authority: bool = False,
                      validate: bool = True) -> dict:
     """Return saved-versus-current release evidence without mutating ``package``."""
     if validate:
@@ -224,7 +267,7 @@ def evaluate_release(package: dict, *, at: datetime | str | None = None,
     seen: set[str] = set()
     for section, values in package.get("games", {}).items():
         for position, row in enumerate(values):
-            row_id = _row_identity(row)
+            row_id = row_identity(row)
             duplicate_view = row_id in seen
             seen.add(row_id)
             current, timing = _current_blockers(row, clock, minutes)
@@ -243,9 +286,15 @@ def evaluate_release(package: dict, *, at: datetime | str | None = None,
                     str(contract.get("matchup_id") or contract.get("game_id") or "") !=
                     str(producer_trace["game_id"])):
                 contract_blockers.append("EVENT_IDENTITY_CHANGED")
-            external, external_status = _external_authority_blockers(
-                row_id, current_authority, clock,
-            ) if actionable else ([], "NOT_APPLICABLE")
+            external, external_status, external_deadlines = _external_authority_blockers(
+                row_id, row, current_authority, clock, require_current_authority,
+            ) if actionable else ([], "NOT_APPLICABLE", [])
+            timing_expiry = _time(timing.get("expires_at"))
+            deadlines = ([timing_expiry] if timing_expiry is not None else []) + external_deadlines
+            if deadlines:
+                expiry = min(deadlines)
+                timing["expires_at"] = expiry.isoformat()
+                timing["remaining_validity_seconds"] = (expiry - clock).total_seconds()
             observed_blockers = list(dict.fromkeys(current + contract_blockers + external)) if actionable else list(dict.fromkeys(current))
             release_blockers = observed_blockers if actionable else []
             record = {
@@ -309,6 +358,7 @@ def evaluate_release(package: dict, *, at: datetime | str | None = None,
         "package_built_at": package.get("built_at"),
         "actionable_row_count": len(unique_actionable),
         "actionable_release_allowed": allowed,
+        "current_authority_required": require_current_authority,
         "preflight_enforced": enforced,
         "legacy_history_only": bool(unique_actionable) and not enforced,
         "saved_producer_primary_counts": dict(sorted(original_primary.items())),
@@ -324,9 +374,11 @@ def evaluate_release(package: dict, *, at: datetime | str | None = None,
 
 def require_actionable_release(package: dict, *, at: datetime | str | None = None,
                                current_authority: Mapping | None = None,
+                               require_current_authority: bool = False,
                                validate: bool = True) -> dict:
     """Raise only when a saved actionable row fails current release checks."""
     report = evaluate_release(package, at=at, current_authority=current_authority,
+                              require_current_authority=require_current_authority,
                               validate=validate)
     if report["preflight_enforced"] and not report["actionable_release_allowed"]:
         raise ReleasePreflightError(report)

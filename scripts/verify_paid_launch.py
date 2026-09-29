@@ -15,8 +15,10 @@ import httpx
 
 try:
     from scripts.paid_launch_evidence import validate_evidence
+    from scripts.trusted_hosted_evidence import configured_resolver
 except ModuleNotFoundError:  # Direct ``python scripts/verify_paid_launch.py``.
     from paid_launch_evidence import validate_evidence
+    from trusted_hosted_evidence import configured_resolver
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +27,7 @@ REQUIRED_CONFIGURATION = (
     "PAID_OIDC_ISSUER", "PAID_OIDC_CLIENT_ID", "PAID_OIDC_CLIENT_SECRET", "PAID_OIDC_CALLBACK_URL",
     "PAID_RELEASE_HMAC_SECRET", "PAID_GATEWAY_PROBE_TOKEN", "PAID_RELEASE_PROBE_URL",
     "PAID_STRIPE_SECRET_KEY", "PAID_STRIPE_WEBHOOK_SECRET", "PAID_STRIPE_ACCOUNT_ID", "PAID_STRIPE_PRICE_ID",
+    "PAID_TRUSTED_ATTESTATION_REGISTRY", "PAID_TRUSTED_ATTESTATION_HMAC_SECRET",
 )
 
 
@@ -89,6 +92,20 @@ def verify(environment: str, independent_resolver=None) -> tuple[int, dict[str, 
         "backup_restore": evidence_dir / "backup-restore-evidence.json",
         "pilot": evidence_dir / "pilot-ledger.json",
     }
+    if independent_resolver is None:
+        independent_resolver, adapter = configured_resolver(
+            environment=environment,
+            source_revision=expected_revision,
+            evidence_root=evidence_dir,
+        )
+        checks["trusted_attestation_adapter"] = adapter
+        if adapter.get("status") != "READY":
+            blockers.append("TRUSTED_ATTESTATION_ADAPTER_UNAVAILABLE")
+    else:
+        checks["trusted_attestation_adapter"] = {
+            "status": "INJECTED_TEST_ADAPTER",
+            "reason_codes": [],
+        }
     checks["evidence"] = {}
     for name, path in required_evidence.items():
         if not path.exists():
@@ -105,7 +122,7 @@ def verify(environment: str, independent_resolver=None) -> tuple[int, dict[str, 
             }
             blockers.append(f"{name.upper()}_NOT_VERIFIED")
             continue
-        independent = independent_resolver(name, payload) if independent_resolver else None
+        independent = independent_resolver(name, payload)
         validation = validate_evidence(
             payload,
             expected_kind=name,

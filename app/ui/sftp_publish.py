@@ -9,10 +9,10 @@ def board_signature(package):
     return hashlib.sha256(json.dumps({k:v for k,v in package.items() if k != 'built_at'},sort_keys=True).encode()).hexdigest()
 
 
-def publish_once(package, config, store, jobs):
+def publish_once(package, config, store, jobs, setting=None):
     """Never resubmit an uncertain upload, including after the preview changes."""
     config_hash=hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest()
-    content,deploy_id=remote.prepare(package)
+    content,deploy_id=remote.prepare(package,setting=setting)
     key=deploy_id+':'+config_hash
     for existing in jobs.values():
         if existing.get('config_hash')==config_hash and not existing.get('history_saved'):
@@ -34,7 +34,9 @@ def publish_once(package, config, store, jobs):
         archive_hash=store.archive(package)
         store.submitted(deploy_id,archive_hash)
         job['archive_hash']=archive_hash
-        job.update(remote.deploy(content,deploy_id,config))
+        runtime_config=dict(config)
+        runtime_config['_release_setting']=setting
+        job.update(remote.deploy(content,deploy_id,runtime_config))
         job.update(remote.deployment_status(deploy_id,config))
         if job['state']=='ready':
             store.confirm(deploy_id,archive_hash)
@@ -49,7 +51,7 @@ def publish_action(package, setting):
         return 'Records saved. Use the public hosting controls below to publish this board.'
     try:
         from app.ui.public_results import history
-        job=publish_once(package,remote.configuration(setting),history(setting),st.session_state.setdefault('sftp_jobs',{}))
+        job=publish_once(package,remote.configuration(setting),history(setting),st.session_state.setdefault('sftp_jobs',{}),setting)
         if job.get('history_saved'):
             return 'Published: the HTTPS website matches the board and history is saved.'
         return job.get('message','Publication needs attention. Check status below; no automatic retry will occur.')

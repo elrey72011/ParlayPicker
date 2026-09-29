@@ -136,9 +136,9 @@ def publish(draft, destination):
     return publish_package(package, destination)
 
 
-def publish_package(package, destination):
-    from app_core.release_preflight import require_actionable_release
-    require_actionable_release(package)
+def publish_package(package, destination, *, setting=None, authority_resolution=None):
+    from app_core.release_authority import authorize_publication
+    authorize_publication(package, setting=setting, resolution=authority_resolution)
     html = render(package, live=True)
     dest = Path(destination).resolve()
     if dest == ROOT or dest in ROOT.parents:
@@ -151,14 +151,17 @@ def publish_package(package, destination):
     return target
 
 
-def rollback_publication(destination):
+def rollback_publication(destination, *, setting=None):
     destination = Path(destination)
     previous = (destination/'previous.html').read_text(encoding='utf-8')
     # A rollback is a new publication of the saved data, never a history rewrite.
     payload = re.search(r'<script id="board-data" type="application/json">(.*?)</script>', previous, re.S)
     if not payload:
         raise ValueError('Previous publication has no embedded fallback')
-    html = render(json.loads(payload.group(1)), live=True)
+    package = json.loads(payload.group(1))
+    from app_core.release_authority import authorize_publication
+    authorize_publication(package, setting=setting)
+    html = render(package, live=True)
     for name, content in assets_from_html(html).items():
         atomic_write(destination/name, content)
     return destination/'index.html'
