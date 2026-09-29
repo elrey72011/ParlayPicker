@@ -1,6 +1,7 @@
 """One finalized pick and one independently ranked side/total per game."""
 from app_core.quote_freshness import QUOTE_MAX_AGE_SECONDS
 import math
+import re
 import pandas as pd
 
 
@@ -259,9 +260,29 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 edge=None;ev=None
                 if probability is None or not 0<=probability<=1: approved=False
                 if probability is not None and 0<=probability<=1 and odds is not None and abs(odds)>=100:
-                    decimal=1+odds/100 if odds>0 else 1+100/abs(odds)
-                    edge=probability-1/decimal
-                    ev=probability*decimal-1
+                    from core.price_value import price_value
+                    from core.probability_semantics import unconditional_from_conditional
+                    from core.wager_decisions import decimal_price
+                    semantics=text(source,'probability_semantics')
+                    push=number(source,'push_probability')
+                    line=number(source,'total_line' if text(source,'market_type').startswith('total') else 'spread_line')
+                    if line is None:
+                        match=re.search(r'(?:^|\s)([+-]?\d+(?:\.\d+)?)$',text(source,'best_pick','display_pick'))
+                        line=float(match.group(1)) if match else None
+                    mass=None
+                    if semantics == 'win_conditional_on_decision':
+                        mass=unconditional_from_conditional(probability,push)
+                    elif semantics in {'win_unconditional_with_push','unconditional_win_push_loss','unconditional'} and push is not None:
+                        mass={'p_win':probability,'p_push':push}
+                    elif line is not None and abs(abs(line-round(line))-.5) <= 1e-9:
+                        # A half-point market cannot push; this is the only safe
+                        # compatibility path when an old research row omitted semantics.
+                        mass={'p_win':probability,'p_push':0.0}
+                    priced=price_value(mass['p_win'],mass['p_push'],decimal_price(odds)) if mass else None
+                    if priced:
+                        probability=priced['p_win'];edge=priced['edge'];ev=priced['expected_value']
+                    else:
+                        approved=False
             if not trial and league == 'NFL' and probability is not None:
                 if text(source, 'ml_probability_source').lower() == 'score-distribution-v1:nfl':
                     basis = 'NFL score model + market (recent form and injury context; unvalidated)'
@@ -295,6 +316,9 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 approval_reason = quality or 'No verified positive estimated edge at the quoted price'
         from app_core.total_signal_quality import public_fields as total_quality_fields
         rows.append({**(total_quality_fields(source) if source is not None else {}), 'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
+                     'candidate_id':text(source,'candidate_id') if source is not None else '',
+                     'quote_id':text(source,'quote_id','prospective_quote_id') if source is not None else '',
+                     'line':(number(source,'total_line') if source is not None and text(source,'market_type').startswith('total') else number(source,'spread_line') if source is not None else None),
                      'matchup_id':text(final,'matchup_id'),'game_date':text(final,'Local Date','game_date'),
                      'start':text(final,'Commence (Local)','game_time_est'),
                      'pick':text(source,'display_pick','best_pick') if source is not None else ('Sportsbook quote unavailable' if allow_fallback else 'Novig quote unavailable' if novig_only else 'No Bet — market unavailable'),

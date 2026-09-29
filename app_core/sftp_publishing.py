@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import hashlib
 import hmac
 import io
+import json
 import re
 import stat
 import socket
@@ -131,6 +132,8 @@ def site_info(config):
 
 
 def prepare(package):
+    from app_core.release_preflight import require_actionable_release
+    require_actionable_release(package)
     content = render(package, live=True).encode('utf-8')
     if len(content) > LIMIT:
         raise ValueError('Public board exceeds the 10 MB upload limit.')
@@ -140,9 +143,12 @@ def prepare(package):
 def deploy(content, deploy_id, config):
     if deploy_id != 'sftp-' + hashlib.sha256(content).hexdigest():
         raise ValueError('Publication content mismatch.')
+    from app_core.release_preflight import require_actionable_release
+    reviewed_assets = assets_from_html(content.decode('utf-8'))
+    require_actionable_release(json.loads(reviewed_assets['board-data.json']))
     with connection(config) as sftp:
         directory = config['directory']
-        for name, text in assets_from_html(content.decode('utf-8')).items():
+        for name, text in reviewed_assets.items():
             payload = text.encode('utf-8')
             temporary = directory + '/.parlaypicker-' + uuid4().hex + '.tmp'
             try:
@@ -168,5 +174,12 @@ def deployment_status(deploy_id, config):
         assets = assets_from_html(html.decode('utf-8'))
         ready = all(public_bytes(config, name) == assets[name].encode('utf-8')
                     for name in ('board-data.json', 'version.json'))
+        if ready:
+            from app_core.release_preflight import evaluate_release
+            release = evaluate_release(json.loads(assets['board-data.json']))
+            if release['preflight_enforced'] and not release['actionable_release_allowed']:
+                return {'id': deploy_id, 'url': config['url'],
+                        'state': 'expired_after_publication',
+                        'release_preflight': release}
     return {'id': deploy_id, 'url': config['url'],
             'state': 'ready' if ready else 'content_mismatch'}

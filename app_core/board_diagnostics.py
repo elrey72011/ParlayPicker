@@ -46,7 +46,8 @@ BLOCKER_CODES = frozenset("""QUOTE_UNAVAILABLE QUOTE_UPDATE_TIME_UNVERIFIED
     STRICT_GATE_REJECTED SAVED_SELECTION_NOT_APPROVED NO_VALIDATED_ALLOCATION
     TRIAL_TRACE_UNAVAILABLE TRIAL_IDENTITY_UNVERIFIED TRIAL_QUOTE_UNVERIFIED
     TRIAL_QUOTE_NOT_FRESH TRIAL_REVIEW_NOT_APPROVED TRIAL_GATE_REJECTED
-    SAVED_SELECTION_NOT_TRIAL NO_TRIAL_ALLOCATION""".split()) | {
+    SAVED_SELECTION_NOT_TRIAL NO_TRIAL_ALLOCATION UPSTREAM_MODEL_EV_NOT_POSITIVE
+    ALTERNATIVE_NOT_FINALIZED RECORDED_PRODUCER_REJECTION""".split()) | {
         "UPSTREAM_" + code.upper() for code in UPSTREAM_STRICT_REASONS
     }
 
@@ -165,7 +166,26 @@ def _trial_blockers(contract, saved_status):
     return codes
 
 
-def _trace(source, row, built_at, minutes):
+def _recorded_rejection(row):
+    """Keep an explicit saved producer reason ahead of later expiry labels."""
+    if row.get("status") != "PASS":
+        return []
+    reason = str(row.get("qualification_reason") or "").strip().casefold()
+    if not reason:
+        return []
+    codes = []
+    if "alternative selection" in reason or "not passed final wager and portfolio" in reason:
+        codes.append("ALTERNATIVE_NOT_FINALIZED")
+    if "model ev is not positive" in reason or "estimated ev is not positive" in reason:
+        codes.append("UPSTREAM_MODEL_EV_NOT_POSITIVE")
+    if "missing push probability" in reason:
+        codes.append("UPSTREAM_MISSING_OR_INVALID_PUSH_PROBABILITY")
+    if not codes:
+        codes.append("RECORDED_PRODUCER_REJECTION")
+    return codes
+
+
+def _trace(source, row, built_at, minutes, *, recorded_rejection=True, source_line=True):
     strict = row.get("wager_contract") if isinstance(row.get("wager_contract"), dict) else None
     trial = row.get("controlled_trial_contract") if isinstance(row.get("controlled_trial_contract"), dict) else None
     active = trial if row["status"] == "TRIAL" else strict
@@ -186,9 +206,10 @@ def _trace(source, row, built_at, minutes):
         timing.append("GAME_STARTED")
     strict_codes = _strict_blockers(strict, row["status"])
     trial_codes = _trial_blockers(trial, row["status"])
+    recorded_codes = _recorded_rejection(row) if recorded_rejection else []
     # A saved trial has its own authority. Strict rejection remains visible but
     # does not hide a current trial decision as the primary producer reason.
-    ordered = quote_codes + timing + (trial_codes + strict_codes if row["status"] == "TRIAL" else strict_codes + trial_codes)
+    ordered = quote_codes + timing + recorded_codes + (trial_codes + strict_codes if row["status"] == "TRIAL" else strict_codes + trial_codes)
     blockers = list(dict.fromkeys(ordered))
     primary = blockers[0] if blockers else {
         "APPROVED": "SAVED_VALIDATED_APPROVAL",
@@ -212,7 +233,8 @@ def _trace(source, row, built_at, minutes):
         "selected_row_id": _digest(row), "source_candidate_id": _identifier(source, "candidate_id"),
         "game_id": _identifier(source, "matchup_id"), "sport": row["sport"],
         "market_type": row["market"], "selection": row["pick"],
-        "line": _field(active, "line"), "sportsbook": row.get("quote_source"),
+        "line": (_field(active, "line") if _field(active, "line") is not None else
+                 _field(source, "line") if source_line else None), "sportsbook": row.get("quote_source"),
         "odds": row["odds"], "quote_timestamp": row.get("quote_time"),
         "analysis_timestamp": row["as_of"], "evaluated_at": built_at.isoformat(),
         "expires_at": expiry, "identity_status": _truth_status(identity),
@@ -273,7 +295,15 @@ def validate_selected_diagnostics(diagnostics, public_rows, built_at, stale_afte
             raise ValueError("Invalid selected-game primary reason")
         if any(value is not None and not isinstance(value, (str, int, float, bool)) for key, value in trace.items() if key not in {"producer_blockers", "strict_blockers", "trial_blockers"}):
             raise ValueError("Invalid selected-game diagnostic value")
-        rebuilt = _trace({"matchup_id": trace["game_id"], "candidate_id": trace["source_candidate_id"]},
+        rebuilt = _trace({"matchup_id": trace["game_id"], "candidate_id": trace["source_candidate_id"],
+                          "line": trace["line"]},
                          row, _time(built_at), stale_after_minutes)
         if trace != rebuilt:
-            raise ValueError("Selected-game trace is not the frozen producer decision")
+            # v1 packages built before the added producer-reason/source-line
+            # projection retain their exact historical trace.  Accept that
+            # immutable representation without rewriting or upgrading it.
+            legacy = _trace({"matchup_id": trace["game_id"], "candidate_id": trace["source_candidate_id"]},
+                            row, _time(built_at), stale_after_minutes,
+                            recorded_rejection=False, source_line=False)
+            if trace != legacy:
+                raise ValueError("Selected-game trace is not the frozen producer decision")
