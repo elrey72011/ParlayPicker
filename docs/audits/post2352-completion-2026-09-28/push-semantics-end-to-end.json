@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "LOCAL_INTEGRATION",
+  "source_revision": "51f66aaf81e1302f44b207956a96c7025e1c8acf",
+  "cohort": {"wins": 54, "pushes": 10, "losses": 36},
+  "decided_win_rate": 0.60,
+  "unconditional_win_rate": 0.54,
+  "conditional_input": 0.60,
+  "supported_push_mass": 0.10,
+  "mean_mass": {"win": 0.54, "push": 0.10, "loss": 0.36},
+  "ev_at_decimal_2": 0.18,
+  "ev_at_decimal_1_5": -0.09,
+  "conditional_lower_bound": 0.55,
+  "conservative_win_mass": 0.495,
+  "conservative_ev_at_decimal_2": 0.09,
+  "no_push_mean_ev": 0.20,
+  "no_push_conservative_ev": 0.10,
+  "unknown_push_blocked": true,
+  "result": "PASS"
+}

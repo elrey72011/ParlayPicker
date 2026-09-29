@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "LOCAL_INTEGRATION",
+  "source_revision": "51f66aaf81e1302f44b207956a96c7025e1c8acf",
+  "fixture_rows": 202,
+  "endpoint_zero_consumed": true,
+  "endpoint_one_consumed": true,
+  "latest_weight": 3.0,
+  "training_cutoff_equals_latest_consumed_event": true,
+  "availability_cutoff_equals_latest_consumed_outcome": true,
+  "duplicate_quote_independent_event_deduplication": true,
+  "refit_identity_changed": true,
+  "live_artifact_replaced": false,
+  "result": "PASS"
+}

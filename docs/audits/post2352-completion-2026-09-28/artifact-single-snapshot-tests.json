@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "LOCAL_INTEGRATION",
+  "source_revision": "51f66aaf81e1302f44b207956a96c7025e1c8acf",
+  "controlled_reads": 1,
+  "first_snapshot_status": "RESEARCH_CANDIDATE_ONLY",
+  "second_path_content_status": "PRODUCTION_CANDIDATE",
+  "returned_snapshot_status": "RESEARCH_CANDIDATE_ONLY",
+  "mixed_payload_and_acceptance": false,
+  "post_load_mutation_detected": true,
+  "result": "PASS"
+}

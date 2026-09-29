@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "LOCAL_INTEGRATION",
+  "source_revision": "51f66aaf81e1302f44b207956a96c7025e1c8acf",
+  "test": "tests/test_post2352_probability_closure.py",
+  "outcomes": {
+    "unsupported_999": "PASS_REJECTED",
+    "string_version": "PASS_REJECTED",
+    "boolean_version": "PASS_REJECTED",
+    "missing_version": "PASS_RESEARCH_ONLY_NOT_AUTHORITY",
+    "rejected_status": "PASS_REJECTED",
+    "digest_mismatch": "PASS_REJECTED",
+    "predictor_mismatch": "PASS_REJECTED",
+    "scope_mismatch": "PASS_REJECTED",
+    "explicit_path": "PASS_RESEARCH_ONLY",
+    "conforming_v3_with_consumer_expectation": "PASS_PRODUCTION_ACCEPTED"
+  }
+}
