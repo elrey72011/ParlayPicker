@@ -131,9 +131,9 @@ def site_info(config):
     return {'url': config['url']}
 
 
-def prepare(package):
-    from app_core.release_preflight import require_actionable_release
-    require_actionable_release(package)
+def prepare(package, authority_resolution=None, setting=None):
+    from app_core.release_authority import authorize_publication
+    authorize_publication(package,setting=setting,resolution=authority_resolution)
     content = render(package, live=True).encode('utf-8')
     if len(content) > LIMIT:
         raise ValueError('Public board exceeds the 10 MB upload limit.')
@@ -143,9 +143,12 @@ def prepare(package):
 def deploy(content, deploy_id, config):
     if deploy_id != 'sftp-' + hashlib.sha256(content).hexdigest():
         raise ValueError('Publication content mismatch.')
-    from app_core.release_preflight import require_actionable_release
+    from app_core.release_authority import authorize_publication
     reviewed_assets = assets_from_html(content.decode('utf-8'))
-    require_actionable_release(json.loads(reviewed_assets['board-data.json']))
+    authorize_publication(
+        json.loads(reviewed_assets['board-data.json']),
+        setting=config.get('_release_setting'),
+    )
     with connection(config) as sftp:
         directory = config['directory']
         for name, text in reviewed_assets.items():

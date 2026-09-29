@@ -67,9 +67,9 @@ def site_info(site_id,token):
     return {'id':site_id,'url':website(value.get('ssl_url'))}
 
 
-def deploy(package,site_id,token):
-    from app_core.release_preflight import require_actionable_release
-    require_actionable_release(package)
+def deploy(package,site_id,token,setting=None):
+    from app_core.release_authority import authorize_publication
+    authorize_publication(package,setting=setting)
     content=archive(package)
     with zipfile.ZipFile(io.BytesIO(content)) as bundle:
         expected_version=json.loads(bundle.read('version.json'))
