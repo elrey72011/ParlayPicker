@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="3.811" timestamp="2026-09-29T16:31:04.021814" hostname="Roberts-PC"><testcase classname="tests.test_post2366_eligibility_capacity" name="test_d03_run_census_conflicting_result_revision_matches_manifest" time="0.731"><failure message="assert 1 == 0">tmp_path = WindowsPath('C:/Users/Robert/.codex/worktrees/post2366-eligibility-capacity/ParlayPicker/.pytest-tmp/post2366-reproduction2/test_d03_run_census_conflictin0')
+
+    def test_d03_run_census_conflicting_result_revision_matches_manifest(tmp_path):
+        path = tmp_path / "writer.sqlite3"
+        schedule = _ready(path)
+        assert len(_reference(path)) == 1
+        assert _scope(_census(path))["counts"]["independent_eligible_games"] == 1
+        _result(path, schedule, home_score=27, offset=4)
+        assert _reference(path) == []
+        report = _census(path)
+&gt;       assert _scope(report)["counts"]["independent_eligible_games"] == 0
+E       assert 1 == 0
+
+tests\test_post2366_eligibility_capacity.py:84: AssertionError</failure></testcase><testcase classname="tests.test_post2366_eligibility_capacity" name="test_e01_actual_publisher_holds_after_unrelated_commitment" time="1.677"><failure message="Failed: DID NOT RAISE &lt;class 'app_core.release_preflight.ReleasePreflightError'&gt;">tmp_path = WindowsPath('C:/Users/Robert/.codex/worktrees/post2366-eligibility-capacity/ParlayPicker/.pytest-tmp/post2366-reproduction2/test_e01_actual_publisher_hold0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001964F96F590&gt;
+
+    def test_e01_actual_publisher_holds_after_unrelated_commitment(tmp_path, monkeypatch):
+        package, _, settings, calls, publisher = _publisher(tmp_path, monkeypatch)
+        original = deepcopy(package)
+        _commit(settings, package["games"]["overall"][0]["wager_contract"])
+&gt;       with pytest.raises(ReleasePreflightError):
+E       Failed: DID NOT RAISE &lt;class 'app_core.release_preflight.ReleasePreflightError'&gt;
+
+tests\test_post2366_eligibility_capacity.py:118: Failed</failure></testcase></testsuite></testsuites>

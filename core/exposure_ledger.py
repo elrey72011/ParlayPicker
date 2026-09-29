@@ -23,7 +23,8 @@ def connect(path):
 
 def events(path):
     if not Path(path).exists(): return []
-    with closing(connect(path)) as db, db: rows=db.execute('SELECT event_id,payload FROM events ORDER BY rowid').fetchall()
+    with closing(sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro',uri=True)) as db:
+        rows=db.execute('SELECT event_id,payload FROM events ORDER BY rowid').fetchall()
     out=[]
     for key,raw in rows:
         value=json.loads(raw)
@@ -61,8 +62,8 @@ def append(path,event,*,confirmed=False,now=None):
     with closing(connect(path)) as db, db: db.execute('INSERT OR IGNORE INTO events VALUES (?,?,?)',(key,value['recorded_at'],json.dumps(value,sort_keys=True,allow_nan=False)))
     return key
 
-def snapshot(path,*,now=None):
-    now=now or now_utc();history=events(path)
+def snapshot(path,*,now=None,history=None):
+    now=now or now_utc();history=events(path) if history is None else history
     cfg=next((e for e in reversed(history) if e['status']=='CONFIGURED'),None)
     if not cfg: raise ValueError('BANKROLL_AND_LIMITS_NOT_CONFIGURED')
     current={}

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
 import math
+import sqlite3
 from pathlib import Path
 from typing import Callable, Mapping
 
@@ -93,7 +94,7 @@ def _invalid_authority(reason: str, contract: Mapping, deadlines: Mapping) -> di
 def _valid_exposure(path: Path, now: datetime) -> Mapping | None:
     try:
         return verify_snapshot(snapshot(path, now=now), now=now)
-    except (OSError, ValueError, TypeError, KeyError):
+    except (OSError, ValueError, TypeError, KeyError, sqlite3.Error):
         return None
 
 
@@ -194,6 +195,11 @@ def _strict_authority(
         return _invalid_authority(reason, contract, deadlines), reason
     return {
         "status": "AUTHORIZED",
+        "allocation_policy": {
+            "sport_cap": policy["sport_exposure_cap"],
+            "configuration": {key: exposure[key] for key in
+                              ("bankroll", "unit_value", "currency", *LIMITS)},
+        },
         "revoked": False,
         "effective_at": activated.isoformat(),
         "expires_at": expires.isoformat(),
@@ -238,6 +244,10 @@ def _trial_authority(
     return {
         "status": "AUTHORIZED",
         "revoked": False,
+        "allocation_policy": {
+            "configuration": {key: exposure[key] for key in
+                              ("bankroll", "unit_value", "currency", *LIMITS)},
+        },
         "effective_at": consent.get("recorded_at"),
         "expires_at": consent.get("expires_at"),
         "authority_id": consent.get("event_id"),
@@ -352,4 +362,29 @@ def authorize_publication(
         "provider_status": current.provider_status,
         "reason_codes": list(current.reason_codes),
     }
+    from app_core.release_capacity import check_capacity
+    if report["preflight_enforced"]:
+        capacity = check_capacity(
+            package, current.authorities, now=_clock(at),
+            exposure_path=Path(_setting(setting, "PARLAYPICKER_EXPOSURE_LEDGER", "data/exposure/exposure.sqlite3")),
+            evidence_path=Path(_setting(setting, "PARLAYPICKER_EVIDENCE_DIR", "data/prediction_evidence")) / "evidence.sqlite3",
+            reservation_path=Path(_setting(setting, "PARLAYPICKER_CONTROLLED_TRIAL_RESERVATION_LEDGER",
+                                           "data/exposure/controlled-trial-reservations.sqlite3")),
+        )
+    else:
+        capacity = {"status": "NOT_APPLICABLE_LEGACY_HISTORY", "reason_codes": [], "tickets": []}
+    report["capacity_check"] = capacity
+    if capacity["status"] == "BLOCKED":
+        report["actionable_release_allowed"] = False
+        for code in capacity["reason_codes"]:
+            report["blocker_counts"][code] = sum(code in ticket["reason_codes"] for ticket in capacity["tickets"]) or 1
+        tickets = {ticket["row_id"]: ticket for ticket in capacity["tickets"]}
+        for row in report["rows"]:
+            reasons = tickets.get(row["row_id"], {}).get("reason_codes", [])
+            if reasons:
+                row["current_blockers"] = list(dict.fromkeys(row["current_blockers"] + reasons))
+                row["release_blockers"] = list(dict.fromkeys(row["release_blockers"] + reasons))
+                row["current_status"] = "BLOCKED_ACTIONABLE"
+                row["current_primary_reason"] = row["release_blockers"][0]
+        raise ReleasePreflightError(report)
     return report
