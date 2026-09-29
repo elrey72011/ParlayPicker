@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.paid_launch_evidence import EVIDENCE_POLICY, payload_digest, validate_evidence
+from scripts.paid_launch_evidence import (
+    EVIDENCE_POLICY,
+    IndependentVerification,
+    payload_digest,
+    validate_evidence,
+)
 from scripts import verify_paid_launch
 
 
@@ -64,7 +69,23 @@ def valid_payload(root: Path, kind: str = "billing_sandbox") -> dict:
     return payload
 
 
-def checked(payload: object, root: Path, kind: str = "billing_sandbox") -> dict:
+def independent(payload: dict, kind: str = "billing_sandbox") -> IndependentVerification:
+    reference = payload["execution"]["reference"]
+    return IndependentVerification(
+        evidence_kind=kind,
+        environment=payload["environment"],
+        source_revision=payload["release_candidate"]["source_revision"],
+        reference_provider=reference["provider"],
+        execution_id=str(reference.get("run_id") or reference.get("execution_id")),
+        artifact_sha256=frozenset(item["sha256"] for item in payload["artifacts"]),
+        scenario_ids=frozenset(item["id"] for item in payload["scenarios"]),
+        verified_at=NOW - timedelta(minutes=15),
+        attestation_id="trusted-resolver:12345",
+    )
+
+
+def checked(payload: object, root: Path, kind: str = "billing_sandbox",
+            proof: IndependentVerification | None = None) -> dict:
     return validate_evidence(
         payload,
         expected_kind=kind,
@@ -72,6 +93,7 @@ def checked(payload: object, root: Path, kind: str = "billing_sandbox") -> dict:
         expected_revision=REVISION,
         evidence_root=root,
         now=NOW,
+        independent_verification=proof,
     )
 
 
@@ -159,12 +181,40 @@ def test_v02_tampered_payload_and_referenced_content_fail(tmp_path):
     assert "REFERENCED_ARTIFACT_HASH_MISMATCH" in checked(payload, tmp_path)["reason_codes"]
 
 
-def test_v05_known_valid_hosted_fixture_shape_passes_all_validation(tmp_path):
+def test_v05_valid_document_is_not_independent_hosted_proof(tmp_path):
     result = checked(valid_payload(tmp_path), tmp_path)
 
     assert result["structural_status"] == "PASS"
+    assert result["document_status"] == "PASS"
+    assert result["execution_provenance_status"] == "EXECUTION_PROVENANCE_UNVERIFIED"
+    assert result["hosted_scenarios_status"] == "HOSTED_SCENARIOS_UNVERIFIED"
+    assert result["hosted_status"] == "BLOCKED"
+    assert "EXECUTION_PROVENANCE_NOT_INDEPENDENTLY_VERIFIED" in result["reason_codes"]
+
+
+def test_v05_independently_resolved_execution_and_artifacts_can_pass(tmp_path):
+    payload = valid_payload(tmp_path)
+    result = checked(payload, tmp_path, proof=independent(payload))
+
+    assert result["evidence_structure_status"] == "EVIDENCE_STRUCTURE_VALID"
+    assert result["execution_provenance_status"] == "EXECUTION_PROVENANCE_VERIFIED"
+    assert result["hosted_scenarios_status"] == "HOSTED_SCENARIOS_VERIFIED"
     assert result["hosted_status"] == "PASS"
     assert result["reason_codes"] == []
+
+
+def test_v05_independent_proof_must_match_the_declared_execution(tmp_path):
+    payload = valid_payload(tmp_path)
+    proof = independent(payload)
+    mismatched = IndependentVerification(
+        **{**proof.__dict__, "execution_id": "different-run"})
+
+    result = checked(payload, tmp_path, proof=mismatched)
+
+    assert result["document_status"] == "PASS"
+    assert result["execution_provenance_status"] == "EXECUTION_PROVENANCE_MISMATCH"
+    assert result["hosted_status"] == "BLOCKED"
+    assert "INDEPENDENT_EXECUTION_ID_MISMATCH" in result["reason_codes"]
 
 
 class _StatusResponse:
@@ -225,17 +275,33 @@ def test_v01_v06_real_verifier_rejects_status_only_and_is_read_only(tmp_path, mo
     )
 
 
-def test_v05_real_verifier_accepts_complete_isolated_contract_shapes(tmp_path, monkeypatch):
+def test_v05_real_verifier_blocks_complete_shapes_without_independent_proof(tmp_path, monkeypatch):
     evidence_root = _configure_verifier(monkeypatch, tmp_path)
     _write_required_evidence(evidence_root, status_only=False)
 
     code, report = verify_paid_launch.verify("staging")
+
+    assert code == 2
+    assert report["status"] == "BLOCKED"
+    assert all(
+        item["document_status"] == "PASS" and item["hosted_status"] == "BLOCKED"
+        for item in report["checks"]["evidence"].values()
+    )
+
+
+def test_v05_real_verifier_accepts_trusted_resolver_results(tmp_path, monkeypatch):
+    evidence_root = _configure_verifier(monkeypatch, tmp_path)
+    _write_required_evidence(evidence_root, status_only=False)
+
+    code, report = verify_paid_launch.verify(
+        "staging", independent_resolver=lambda kind, payload: independent(payload, kind))
 
     assert report["blockers"] == []
     assert code == 0
     assert report["status"] == "PASS"
     assert report["completion_label"] == "STAGING_VERIFIED_LIVE_BLOCKED"
     assert all(
-        item["hosted_status"] == "PASS"
+        item["execution_provenance_status"] == "EXECUTION_PROVENANCE_VERIFIED"
+        and item["hosted_scenarios_status"] == "HOSTED_SCENARIOS_VERIFIED"
         for item in report["checks"]["evidence"].values()
     )

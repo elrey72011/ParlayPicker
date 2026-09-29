@@ -54,11 +54,12 @@ jobs:
       - name: Create census state directory
         run: mkdir -p "$CENSUS_DIR"
       - name: Run one bounded read-only slice
+        working-directory: ${{ github.workspace }}
         env:
           CENSUS_MAX_OBJECTS: ${{ inputs.max_objects }}
           CENSUS_FULL_VERIFY_FLAG: ${{ inputs.full_verify && '--full-verify' || '' }}
         run: >-
-          python -u scripts/run_read_only_census.py
+          python -u -m scripts.run_read_only_census
           --checkpoint "$CENSUS_DIR/checkpoint.json"
           --output "$CENSUS_DIR/report.json"
           --source-revision "$GITHUB_SHA"
@@ -67,7 +68,7 @@ jobs:
           --deadline-seconds 2700
           $CENSUS_FULL_VERIFY_FLAG
       - name: Retain checkpoint and sanitized terminal report
-        if: ${{ always() && !cancelled() }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: read-only-census-state

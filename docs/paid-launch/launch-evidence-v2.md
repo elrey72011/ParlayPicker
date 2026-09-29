@@ -24,9 +24,22 @@ and digests make replacement and mismatches detectable; they do not prove that
 an arbitrary author told the truth. Independent hosted review must verify the
 upstream run and artifact identities before owner sign-off.
 
-The validator returns separate `structural_status` and `hosted_status` fields.
-A deliberately marked fixture may pass structural tests but is always blocked
-as hosted proof. Local execution is likewise not a hosted environment.
+The validator returns separate `structural_status`, `document_status`,
+`execution_provenance_status`, `hosted_scenarios_status`, and `hosted_status`
+fields. A valid document without an out-of-band resolver result reports
+`EVIDENCE_STRUCTURE_VALID`, `EXECUTION_PROVENANCE_UNVERIFIED`, and
+`HOSTED_SCENARIOS_UNVERIFIED`; it remains blocked as hosted proof. A
+deliberately marked fixture may pass structural tests but is always blocked.
+Local execution is likewise not a hosted environment.
+
+Independent proof is supplied through the immutable
+`IndependentVerification` adapter result. The resolver must retrieve or verify
+the execution outside the submitted evidence document and bind the expected
+kind, environment, source revision, provider/execution identity, artifact
+hashes, scenario set, verification time, and attestation identity. The command
+line verifier has no default resolver, so locally authored evidence remains
+structurally checkable but hosted-unverified. Self-declared provider, reviewer,
+or execution IDs cannot create an `IndependentVerification` automatically.
 
 The verifier is read-only. It cannot deploy, write production data, enable
 billing or sales, activate a market, replace calibration, or place a wager.

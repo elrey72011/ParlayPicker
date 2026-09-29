@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -79,6 +80,26 @@ EVIDENCE_POLICY: dict[str, dict[str, Any]] = {
 }
 
 
+@dataclass(frozen=True)
+class IndependentVerification:
+    """Out-of-band proof resolved by a trusted integration.
+
+    Evidence documents cannot create this proof for themselves. A caller must
+    independently retrieve or verify the referenced execution and artifacts,
+    then pass the resulting immutable facts to the validator.
+    """
+
+    evidence_kind: str
+    environment: str
+    source_revision: str
+    reference_provider: str
+    execution_id: str
+    artifact_sha256: frozenset[str]
+    scenario_ids: frozenset[str]
+    verified_at: datetime
+    attestation_id: str
+
+
 def canonical_payload(payload: Mapping[str, Any]) -> bytes:
     unsigned = dict(payload)
     unsigned.pop("payload_sha256", None)
@@ -119,12 +140,14 @@ def validate_evidence(
     expected_revision: str,
     evidence_root: Path,
     now: datetime | None = None,
+    independent_verification: IndependentVerification | None = None,
 ) -> dict[str, Any]:
-    """Validate evidence structure and whether it can prove hosted execution.
+    """Validate document consistency and separately evaluate hosted proof.
 
-    Structural validity and hosted sufficiency are separate.  A fixture can
-    exercise this schema successfully but can never satisfy hosted sign-off.
-    No network, database, billing, activation, or filesystem write is made.
+    Self-declared provider/reviewer fields and matching digests establish only
+    document consistency. Hosted proof requires an out-of-band resolver to
+    supply ``IndependentVerification``. No network, database, billing,
+    activation, or filesystem write is made here.
     """
 
     checked_at = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -134,6 +157,10 @@ def validate_evidence(
         return {
             "status": "FAIL",
             "structural_status": "FAIL",
+            "evidence_structure_status": "EVIDENCE_STRUCTURE_INVALID",
+            "document_status": "FAIL",
+            "execution_provenance_status": "EXECUTION_PROVENANCE_UNVERIFIED",
+            "hosted_scenarios_status": "HOSTED_SCENARIOS_UNVERIFIED",
             "hosted_status": "BLOCKED",
             "reason_codes": ["EVIDENCE_NOT_AN_OBJECT"],
         }
@@ -299,13 +326,89 @@ def validate_evidence(
     structural = sorted(set(structural))
     reasons = sorted(set(reasons))
     structural_status = "PASS" if not structural else "FAIL"
-    hosted_status = "PASS" if not structural and not reasons else "BLOCKED"
+    document_status = "PASS" if not structural and not reasons else "FAIL"
+    independent_reasons: list[str] = []
+    provenance_status = "EXECUTION_PROVENANCE_UNVERIFIED"
+    scenarios_status = "HOSTED_SCENARIOS_UNVERIFIED"
+    attestation_id = None
+    if independent_verification is None:
+        independent_reasons.extend([
+            "EXECUTION_PROVENANCE_NOT_INDEPENDENTLY_VERIFIED",
+            "HOSTED_SCENARIOS_NOT_INDEPENDENTLY_VERIFIED",
+        ])
+    elif not isinstance(independent_verification, IndependentVerification):
+        independent_reasons.append("INDEPENDENT_VERIFICATION_TYPE_INVALID")
+        provenance_status = "EXECUTION_PROVENANCE_MISMATCH"
+        scenarios_status = "HOSTED_SCENARIOS_MISMATCH"
+    else:
+        attestation_id = independent_verification.attestation_id
+        reference_provider = reference.get("provider") if isinstance(reference, dict) else None
+        execution_id = ((reference.get("run_id") or reference.get("execution_id"))
+                        if isinstance(reference, dict) else None)
+        provenance_checks = {
+            "INDEPENDENT_EVIDENCE_KIND_MISMATCH": (
+                independent_verification.evidence_kind == expected_kind),
+            "INDEPENDENT_ENVIRONMENT_MISMATCH": (
+                independent_verification.environment == expected_environment),
+            "INDEPENDENT_SOURCE_REVISION_MISMATCH": (
+                independent_verification.source_revision == expected_revision),
+            "INDEPENDENT_REFERENCE_PROVIDER_MISMATCH": (
+                independent_verification.reference_provider == reference_provider),
+            "INDEPENDENT_EXECUTION_ID_MISMATCH": (
+                independent_verification.execution_id == str(execution_id or "")),
+            "INDEPENDENT_ATTESTATION_ID_MISSING": (
+                isinstance(independent_verification.attestation_id, str)
+                and bool(independent_verification.attestation_id.strip())),
+            "INDEPENDENT_VERIFICATION_TIMESTAMP_INVALID": (
+                isinstance(independent_verification.verified_at, datetime)
+                and independent_verification.verified_at.tzinfo is not None
+                and independent_verification.verified_at.astimezone(timezone.utc)
+                <= checked_at + timedelta(minutes=5)
+                and (completed_at is None or
+                     independent_verification.verified_at.astimezone(timezone.utc)
+                     >= completed_at)),
+        }
+        provenance_failures = [reason for reason, passed in provenance_checks.items()
+                               if not passed]
+        if provenance_failures:
+            independent_reasons.extend(provenance_failures)
+            provenance_status = "EXECUTION_PROVENANCE_MISMATCH"
+        else:
+            provenance_status = "EXECUTION_PROVENANCE_VERIFIED"
+        declared_hashes = {
+            item.get("sha256") for item in artifacts
+            if isinstance(item, dict) and isinstance(item.get("sha256"), str)
+        }
+        required_scenarios = set(policy["scenarios"])
+        if independent_verification.artifact_sha256 != frozenset(declared_hashes):
+            independent_reasons.append("INDEPENDENT_ARTIFACT_SET_MISMATCH")
+            scenarios_status = "HOSTED_SCENARIOS_MISMATCH"
+        elif not required_scenarios.issubset(independent_verification.scenario_ids):
+            independent_reasons.append("INDEPENDENT_SCENARIO_SET_INCOMPLETE")
+            scenarios_status = "HOSTED_SCENARIOS_MISMATCH"
+        else:
+            scenarios_status = "HOSTED_SCENARIOS_VERIFIED"
+    hosted_status = (
+        "PASS" if document_status == "PASS"
+        and provenance_status == "EXECUTION_PROVENANCE_VERIFIED"
+        and scenarios_status == "HOSTED_SCENARIOS_VERIFIED"
+        else "BLOCKED"
+    )
+    combined_reasons = sorted(set(structural + reasons + independent_reasons))
     return {
-        "status": "PASS" if hosted_status == "PASS" else "FAIL",
+        "status": ("PASS" if hosted_status == "PASS" else
+                   "FAIL" if document_status == "FAIL" else "BLOCKED"),
         "structural_status": structural_status,
+        "evidence_structure_status": (
+            "EVIDENCE_STRUCTURE_VALID" if structural_status == "PASS"
+            else "EVIDENCE_STRUCTURE_INVALID"),
+        "document_status": document_status,
+        "execution_provenance_status": provenance_status,
+        "hosted_scenarios_status": scenarios_status,
         "hosted_status": hosted_status,
+        "independent_attestation_id": attestation_id,
         "schema_version": payload.get("schema_version"),
         "evidence_kind": payload.get("evidence_kind"),
         "max_age_seconds": int(policy["max_age"].total_seconds()),
-        "reason_codes": sorted(set(structural + reasons)),
+        "reason_codes": combined_reasons,
     }

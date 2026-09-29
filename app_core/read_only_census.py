@@ -43,6 +43,7 @@ PREFIX_SPORT = {prefix: sport for sport, prefix in SOURCE_PREFIXES.items()}
 TARGET_PREFIXES = (CANONICAL_PREFIX, *SOURCE_PREFIXES.values())
 MAX_CANONICAL_OBJECT_BYTES = 60_000_000
 MAX_SOURCE_OBJECT_BYTES = 40_000_000
+READ_BATCH_OBJECTS = 8
 SOURCE_KINDS = {
     "NFL": {"capture", "scores"},
     "NCAAF": {"model", "capture", "scores", "closing"},
@@ -463,7 +464,7 @@ def _scope_report(scope, facts, raw_names, namespace_states, snapshot):
 
 def _build_report(*, source_revision, inventory, namespace_groups, processed,
                   namespace_errors, metrics, checkpoint_note, started_at,
-                  terminal_reason=None):
+                  terminal_reason=None, budget_contract=None):
     namespace_states = {}
     for prefix in TARGET_PREFIXES:
         names = set(namespace_groups[prefix])
@@ -526,6 +527,7 @@ def _build_report(*, source_revision, inventory, namespace_groups, processed,
             "wager_calls": 0,
         },
         "checkpoint": checkpoint_note,
+        "budget_contract": budget_contract,
         "metrics": metrics,
         "namespaces": namespace_states,
         "scopes": scopes,
@@ -620,13 +622,26 @@ def run_census(client, *, checkpoint_path=None, output_path=None,
         "invalidated_checkpoint_objects": dict(invalidated),
     }
     terminal_reason = None
-    # Small exact-name batches bound both memory and the prefix matching work in
-    # DriveStore while retaining its duplicate-byte conflict protection.
-    for offset in range(0, len(selected), 40):
+    budget_contract = {
+        "max_objects": max_objects,
+        "max_bytes": max_bytes,
+        "deadline_seconds": deadline_seconds,
+        "read_batch_objects": READ_BATCH_OBJECTS,
+        "object_limit_enforcement": "HARD_SELECTION_LIMIT",
+        "byte_limit_enforcement": "POST_BATCH_SOFT_LIMIT",
+        "maximum_byte_limit_overrun": READ_BATCH_OBJECTS * MAX_CANONICAL_OBJECT_BYTES,
+        "deadline_enforcement": "PRE_BATCH_WITH_TRANSPORT_TIMEOUTS",
+        "workflow_shutdown_margin_seconds": 300,
+        "hard_kill_artifact_retention": "NOT_GUARANTEED",
+    }
+    # One batch is two waves at DriveStore's existing four-worker limit. This
+    # retains duplicate-byte conflict checks while bounding byte/deadline
+    # overrun and leaving five minutes for the workflow artifact-upload step.
+    for offset in range(0, len(selected), READ_BATCH_OBJECTS):
         if clock() - started >= deadline_seconds:
             terminal_reason = "DEADLINE_REACHED"
             break
-        batch = selected[offset:offset + 40]
+        batch = selected[offset:offset + READ_BATCH_OBJECTS]
         exact_names = [name for _, name in batch]
         read_started = clock()
         try:
@@ -695,7 +710,8 @@ def run_census(client, *, checkpoint_path=None, output_path=None,
             namespace_groups=groups, processed=processed,
             namespace_errors=namespace_errors, metrics=metrics,
             checkpoint_note=checkpoint_note, started_at=started_at,
-            terminal_reason=terminal_reason or "SLICE_IN_PROGRESS")
+            terminal_reason=terminal_reason or "SLICE_IN_PROGRESS",
+            budget_contract=budget_contract)
         _atomic_json(output_path, report_value)
         if progress:
             progress({
@@ -724,7 +740,7 @@ def run_census(client, *, checkpoint_path=None, output_path=None,
         namespace_groups=groups, processed=processed,
         namespace_errors=namespace_errors, metrics=metrics,
         checkpoint_note=checkpoint_note, started_at=started_at,
-        terminal_reason=terminal_reason)
+        terminal_reason=terminal_reason, budget_contract=budget_contract)
     _atomic_json(output_path, report_value)
     if progress:
         progress({

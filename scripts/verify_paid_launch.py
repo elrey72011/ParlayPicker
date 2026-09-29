@@ -41,7 +41,7 @@ def check_scope() -> dict[str, Any]:
     return payload
 
 
-def verify(environment: str) -> tuple[int, dict[str, Any]]:
+def verify(environment: str, independent_resolver=None) -> tuple[int, dict[str, Any]]:
     blockers: list[str] = []
     errors: list[str] = []
     checks: dict[str, Any] = {}
@@ -105,12 +105,14 @@ def verify(environment: str) -> tuple[int, dict[str, Any]]:
             }
             blockers.append(f"{name.upper()}_NOT_VERIFIED")
             continue
+        independent = independent_resolver(name, payload) if independent_resolver else None
         validation = validate_evidence(
             payload,
             expected_kind=name,
             expected_environment=environment,
             expected_revision=expected_revision,
             evidence_root=evidence_dir,
+            independent_verification=independent,
         )
         checks["evidence"][name] = validation
         if validation.get("hosted_status") != "PASS":

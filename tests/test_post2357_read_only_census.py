@@ -83,6 +83,13 @@ def all_source_objects():
     return dict(source_object(sport, f"{sport}-event") for sport in SOURCE_PREFIXES)
 
 
+def many_source_objects(count=20):
+    objects = all_source_objects()
+    objects.update(source_object("NFL", f"NFL-extra-{index}")
+                   for index in range(count))
+    return objects
+
+
 def test_complete_six_sport_census_is_explicitly_read_only(tmp_path):
     objects = all_source_objects()
     name, raw = canonical_object(
@@ -258,3 +265,51 @@ def test_verified_read_failure_retains_sanitized_terminal_report(tmp_path):
     saved = output.read_text()
     assert "private-token" not in saved
     assert "VERIFIED_READ_FAILED" in saved
+
+
+def test_byte_budget_stops_after_one_bounded_batch_and_retains_state(tmp_path):
+    client = FakeReadOnlyDrive(many_source_objects())
+    checkpoint = tmp_path / "checkpoint.json"
+    output = tmp_path / "report.json"
+
+    report = run_census(client, checkpoint_path=checkpoint, output_path=output,
+                        max_objects=100, max_bytes=1, deadline_seconds=60)
+
+    assert report["status"] == "PARTIAL"
+    assert report["terminal_reason"] == "BYTE_LIMIT_REACHED"
+    assert len(client.read_names) == report["budget_contract"]["read_batch_objects"] == 8
+    assert report["budget_contract"]["byte_limit_enforcement"] == "POST_BATCH_SOFT_LIMIT"
+    assert report["budget_contract"]["maximum_byte_limit_overrun"] == 480_000_000
+    assert checkpoint.is_file() and output.is_file()
+
+
+def test_deadline_self_interruption_retains_checkpoint_and_resumes_without_duplicates(tmp_path):
+    class ControlledClock:
+        def __init__(self):
+            self.values = iter([0] * 8 + [61] * 100)
+
+        def __call__(self):
+            return next(self.values)
+
+    objects = many_source_objects()
+    client = FakeReadOnlyDrive(objects)
+    checkpoint = tmp_path / "checkpoint.json"
+    output = tmp_path / "report.json"
+
+    first = run_census(client, checkpoint_path=checkpoint, output_path=output,
+                       max_objects=100, max_bytes=1_000_000,
+                       deadline_seconds=60, clock=ControlledClock())
+    first_names = tuple(client.read_names)
+
+    assert first["terminal_reason"] == "DEADLINE_REACHED"
+    assert first["status"] == "PARTIAL"
+    assert len(first_names) == 8
+    assert checkpoint.is_file() and json.loads(checkpoint.read_text())["processed"]
+    assert json.loads(output.read_text())["terminal_reason"] == "DEADLINE_REACHED"
+
+    second = run_census(client, checkpoint_path=checkpoint, output_path=output,
+                        max_objects=100, max_bytes=1_000_000, deadline_seconds=60)
+    assert second["status"] == "COMPLETE"
+    assert second["metrics"]["verified_reused_objects"] == 8
+    assert set(first_names).isdisjoint(client.read_names[len(first_names):])
+    assert len(client.read_names) == len(objects)

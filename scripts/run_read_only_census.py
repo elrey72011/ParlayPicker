@@ -26,7 +26,7 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def _failure_output(path, source_revision, exc):
+def _failure_output(path, checkpoint_path, source_revision, exc):
     # Do not serialize secrets, request objects, environment values, or a full
     # traceback.  The exception class and a bounded message are sufficient for
     # an operational blocker without leaking credentials.
@@ -37,6 +37,8 @@ def _failure_output(path, source_revision, exc):
         "source_revision": source_revision,
         "terminal_reason": type(exc).__name__,
         "sanitized_error": "EXTERNAL_CONFIGURATION_OR_RUNTIME_FAILURE",
+        "checkpoint_retained": Path(checkpoint_path).is_file(),
+        "hard_kill_artifact_retention": "NOT_GUARANTEED",
         "launch_authority": "NONE",
     }
     target = Path(path)
@@ -56,7 +58,7 @@ def main(argv=None):
             deadline_seconds=args.deadline_seconds, full_verify=args.full_verify,
             progress=lambda item: print(json.dumps(item, sort_keys=True), flush=True))
     except (Exception, KeyboardInterrupt) as exc:
-        _failure_output(args.output, args.source_revision, exc)
+        _failure_output(args.output, args.checkpoint, args.source_revision, exc)
         print(f"read-only census blocked: {type(exc).__name__}", file=sys.stderr)
         return 1
     print(json.dumps({"status": report["status"],
