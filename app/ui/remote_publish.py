@@ -45,7 +45,7 @@ def render_remote_publish(package, fingerprint, setting):
         try:
             from app.ui.public_results import history
             archive_hash=history(setting).archive(package)
-            jobs[key]=remote.deploy(package,site_id,token)
+            jobs[key]=remote.deploy(package,site_id,token,setting)
             jobs[key]['archive_hash']=archive_hash
             history(setting).submitted(jobs[key]['id'],archive_hash)
         except Exception:
