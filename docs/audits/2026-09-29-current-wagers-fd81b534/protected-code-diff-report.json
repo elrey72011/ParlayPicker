@@ -1,0 +1,33 @@
+{
+  "base_sha": "origin/main",
+  "changed_files": [],
+  "existing_test_changes": [],
+  "head_sha": "fd81b534dce193efa95ce910a447a9d6e27feb92",
+  "local_changes": {
+    "staged": [],
+    "unstaged": [
+      "app/ui/publish_panel.py",
+      "app/ui/remote_publish.py",
+      "app_core/board_diagnostics.py",
+      "app_core/hosted_board_reconciliation.py",
+      "app_core/netlify_publishing.py",
+      "app_core/per_game_boards.py",
+      "app_core/sftp_publishing.py",
+      "scripts/publish_board.py"
+    ]
+  },
+  "local_protected_changes": [],
+  "protected_changes": [],
+  "reason_codes": [
+    "SCOPE_GUARD_TOOLING_HASH_MISMATCH"
+  ],
+  "recorded_base_sha": "5fb8e13577c3092f1eda4ad9b787368d3f691c71",
+  "runtime_shadowing": [],
+  "schema_version": 1,
+  "self_protected_changes": [],
+  "status": "FAIL",
+  "tooling_hash_mismatches": [
+    "scripts/check_launch_change_scope.py",
+    ".github/workflows/paid-launch.yml"
+  ]
+}

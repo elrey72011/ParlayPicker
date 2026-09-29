@@ -1,0 +1,20 @@
+{
+  "candidate_reference": null,
+  "candidate_sha256": null,
+  "generated_at": "2026-09-29T16:59:52.519779+00:00",
+  "historical_reconstruction_complete": false,
+  "package_reference": "board-data.json",
+  "package_sha256": "6b273154a814c9a6b369f69bd5527c4ce74bf553c7984ce14b4f8c8d6b6f79e6",
+  "publication_version": {
+    "board_hash": "6b273154a814c9a6b369f69bd5527c4ce74bf553c7984ce14b4f8c8d6b6f79e6",
+    "build_id": "6b273154a814c9a6b369f69bd5527c4ce74bf553c7984ce14b4f8c8d6b6f79e6",
+    "published_at": "2026-09-29T15:38:32.370774+00:00",
+    "source_fingerprint": "f4414c529d876171c8d7d68638a194e68498d20fd3a19ee9e3dde5edc2935b4a",
+    "source_git_dirty": false,
+    "source_git_sha": "7600b449fea5936d143717a2e32a0c4363dabace"
+  },
+  "publication_version_sha256": "0f398bd6bbac0be6c31b8575ae710f0674d7a731d21a140386ffc76c655e68a3",
+  "schema_version": 1,
+  "source_git_dirty": true,
+  "source_git_sha": "fd81b534dce193efa95ce910a447a9d6e27feb92"
+}

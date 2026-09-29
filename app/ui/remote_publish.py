@@ -73,7 +73,7 @@ def render_remote_publish(package, fingerprint, setting):
         st.link_button('Open public website',job['url'])
     elif job['state']=='uncertain':
         st.warning(job.get('message','Submission outcome is unknown.')+' Check the Netlify dashboard before trying again.')
-    elif job['state'] in {'content_mismatch','verification_missing','verification_unavailable'}:
+    elif job['state'] in {'content_mismatch','verification_missing','verification_unavailable','expired_after_publication'}:
         st.error('Hosted publication has not passed build reconciliation: '+
                  job['state']+' ('+job.get('reconciliation_reason','expected build unavailable')+').')
     else:

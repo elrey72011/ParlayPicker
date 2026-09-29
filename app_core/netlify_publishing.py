@@ -68,6 +68,8 @@ def site_info(site_id,token):
 
 
 def deploy(package,site_id,token):
+    from app_core.release_preflight import require_actionable_release
+    require_actionable_release(package)
     content=archive(package)
     with zipfile.ZipFile(io.BytesIO(content)) as bundle:
         expected_version=json.loads(bundle.read('version.json'))
@@ -102,6 +104,10 @@ def deployment_status(deploy_id,site_id,token,expected_version=None,expected_htm
                     result['reconciliation']=reconcile(result['url'], expected_version=expected_version,
                                                        expected_html_hash=expected_html_hash)
                 except HostedMismatch as exc:
-                    result['state']='verification_unavailable' if str(exc)=='HOSTED_FETCH_FAILED' else 'content_mismatch'
+                    result['state']=(
+                        'verification_unavailable' if str(exc)=='HOSTED_FETCH_FAILED' else
+                        'expired_after_publication' if str(exc)=='HOSTED_ACTIONABLE_CONTENT_EXPIRED' else
+                        'content_mismatch'
+                    )
                     result['reconciliation_reason']=str(exc)
     return result

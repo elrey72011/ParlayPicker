@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 from urllib.parse import urlsplit
+from datetime import datetime, timezone
 
 import requests
 
@@ -49,6 +50,10 @@ def verify_assets(assets: dict[str, bytes], *, expected_version: dict | None = N
     if (expected_html_hash is not None and
             hashlib.sha256(assets['index.html']).hexdigest() != expected_html_hash):
         raise HostedMismatch('HOSTED_HTML_HASH_MISMATCH')
+    from app_core.release_preflight import evaluate_release
+    release = evaluate_release(board, at=datetime.now(timezone.utc))
+    if release['preflight_enforced'] and not release['actionable_release_allowed']:
+        raise HostedMismatch('HOSTED_ACTIONABLE_CONTENT_EXPIRED')
     times = sorted({str(value) for section in board.get('games', {}).values()
                     for row in section if isinstance(row, dict)
                     for key in ('as_of', 'quote_time') if (value := row.get(key))})
@@ -58,7 +63,8 @@ def verify_assets(assets: dict[str, bytes], *, expected_version: dict | None = N
             'source_fingerprint': version.get('source_fingerprint'),
             'published_at': version.get('published_at'),
             'analysis_built_at': board.get('built_at'),
-            'evidence_timestamps': times}
+            'evidence_timestamps': times,
+            'release_preflight': release}
 
 
 def fetch_assets(site_url: str) -> dict[str, bytes]:

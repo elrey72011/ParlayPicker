@@ -138,7 +138,16 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
             package['schema_version'] = 5
             package['results'] = public_results or []
             html = render(package)
-            saved = {'fingerprint':fingerprint, 'package':package, 'html':html}
+            from app_core.current_wagers_trace import build_private_candidate_trace
+            private_trace = build_private_candidate_trace(
+                candidates, package, evaluated_at=package['built_at'],
+                selection_options={
+                    'college_fallback': True, 'nfl_fallback': nfl_fallback,
+                    'research_fallback': research_fallback,
+                },
+            )
+            saved = {'fingerprint':fingerprint, 'package':package, 'html':html,
+                     'private_candidate_trace':private_trace}
             st.session_state['publication_preview'] = saved
         except (ValueError, TypeError, KeyError) as exc:
             st.session_state.pop('publication_preview',None)
@@ -153,6 +162,25 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
         from app.ui.sftp_publish import publish_action
         st.info(publish_action(package, setting))
     st.write(f"{len(package['games']['overall'])} games · {len(package['props'])} props · {len(package['dfs'])} DFS lineups")
+    private_trace = saved.get('private_candidate_trace')
+    if private_trace:
+        with st.expander('Private candidate-to-release diagnostics', expanded=False):
+            st.caption('Owner-only trace of supplied candidate evidence. It does not fetch odds, create authority, or enter the public package.')
+            st.write({
+                'trace_status': private_trace['trace_status'],
+                'candidate_count': private_trace['all_market_candidate_count'],
+                'primary_blockers': private_trace['primary_blocker_counts'],
+                'release_preflight': {
+                    key: private_trace['release_preflight'][key]
+                    for key in ('evaluated_at','actionable_row_count','actionable_release_allowed','blocker_counts')
+                },
+            })
+            st.download_button(
+                'Download private candidate trace',
+                json.dumps(private_trace, indent=2, sort_keys=True),
+                'current-wagers-candidate-trace.json', 'application/json',
+                key='download_current_wagers_candidate_trace',
+            )
     from app_core.public_parlays import parlay_funnel
     with st.expander('Parlay eligibility funnel', expanded=False):
         if package.get('parlay_policy')=='canonical-v3':

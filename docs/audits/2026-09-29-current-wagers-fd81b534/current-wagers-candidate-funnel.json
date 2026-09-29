@@ -1,0 +1,101 @@
+{
+  "authority_review": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "currently_usable_wager": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "deduplicated_candidates": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "discovered_events": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "finalist_selection": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "identity_market": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "model_calibration": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "packaged_output": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "output_row_count": 11,
+    "reason": "Selected output rows are recorded, but their full candidate-stage denominator and IDs are unavailable.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "parsed_candidate": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "pregame_fresh_quote": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "price_gate": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "raw_candidate_rows": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "raw_quote_records": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  },
+  "release_preflight": {
+    "candidate_count": null,
+    "candidate_ids": null,
+    "reason": "Candidate audit was not supplied; this stage cannot be reconstructed from selected public rows.",
+    "status": "UNAVAILABLE",
+    "unique_game_count": null
+  }
+}
