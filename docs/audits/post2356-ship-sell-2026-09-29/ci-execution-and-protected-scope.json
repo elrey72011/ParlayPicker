@@ -1,9 +1,19 @@
 {
   "schema_version": 1,
   "base_revision": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
-  "implementation_revision": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+  "implementation_revision": "70804d919104190f733389362ebdd50debcaf485",
   "final_pr_revision": "PENDING",
   "final_revision_ci": "PENDING_PR_EXECUTION",
+  "initial_pr_ci_reproduction": {
+    "run_id": 36561330163,
+    "candidate_revision": "90d136b19b1b92d696a7a6289c234cf2d8abc366",
+    "result": "FAILED_THEN_CORRECTED",
+    "failure": "tests/test_sweet_spot_export_scope.py::test_sweet_spot_keeps_explicitly_approved_stake",
+    "cause": "empty legacy schema columns were incorrectly treated as an explicit push-aware contract opt-in",
+    "correction_revision": "70804d919104190f733389362ebdd50debcaf485",
+    "local_post_fix": "165 passed, 0 failed, 0 skipped",
+    "note": "This superseded candidate run is retained as defect-reproduction evidence, not reported as final CI."
+  },
   "required_final_checks": [
     "full-suite-tests (1)",
     "full-suite-tests (2)",

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "implementation_revision": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+  "implementation_revision": "70804d919104190f733389362ebdd50debcaf485",
   "base_revision": "263cab0e1e4c4e7dc49d4906b43dea857f5f0347",
   "contract_version": "unconditional-refunded-push-v1",
   "arithmetic_authority": "core.price_value.price_value",

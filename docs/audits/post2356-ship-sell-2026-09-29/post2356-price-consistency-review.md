@@ -3,7 +3,7 @@
 ## Revision and scope
 
 - Audit/base revision: `263cab0e1e4c4e7dc49d4906b43dea857f5f0347`.
-- Implementation revision: `b5fb3a5e153d827970c8f7a05058a96ff307c843`.
+- Implementation revision: `70804d919104190f733389362ebdd50debcaf485`.
 - Final PR revision: pending the evidence commit and final CI.
 - Branch: `codex/post2356-priced-value`.
 - Overlap review: open pull requests were inspected before implementation; no open pull request contained the post-#2356 priced-value correction. Later main changes were preserved.
@@ -48,7 +48,7 @@ The actual selection, public export, strict decision filter, parlay consumer, an
 | S08 | PASS | The validated 12-scope runtime trace invokes all five actual consumers per scope with matching quote/artifact/value identity; unsupported bucket tilt is separately identified and blocked. |
 | S09 | PASS | Numerical corrections retain the existing edge floor and every identity, chronology, qualification, review, exposure, market, and commercial control. All traced recommendations remain non-bettable. |
 | S10 | PASS | Existing wrong-scope/predictor, rejected-artifact, mutation, fallback, and mixed-scope regressions remain in the targeted/full suites; the post-transform case adds a new fail-closed regression. |
-| S11 | PENDING_FINAL_PR_CI | Expanded local regression results are recorded. Final-revision application, production-safety, paid, completion PostgreSQL, protected-scope, and browser results will be recorded after PR CI. Local browser execution was not claimed because Playwright is absent. |
+| S11 | PENDING_FINAL_PR_CI | The expanded local run passed 165 tests. The initial PR run exposed and reproduced an empty-legacy-schema compatibility defect; revision `70804d919104190f733389362ebdd50debcaf485` corrects it without changing the protected expectation. Final-revision application, production-safety, paid, completion PostgreSQL, protected-scope, and browser results remain pending. Local browser execution was not claimed because Playwright is absent. |
 | S12 | PASS | No protected performance/storage/lock/publication file, historical record, scope guard, or existing test expectation was modified. |
 | S13 | BLOCKED_EXTERNAL_AUTHENTICATED_CENSUS_INCOMPLETE | The 12-scope ledger contains exact frozen plan identities and field-level `UNKNOWN` reasons. The newest authenticated run is incomplete and predates the final revision; fixture and legacy counts are excluded from qualification. |
 | S14 | NOT_RUN_EXTERNAL_BLOCKER | No GitHub environment/deployment/Pages site or local deployment configuration was available. Host, deployed/served revision, migration, image, endpoint, and TLS evidence remain unknown with owners named. |

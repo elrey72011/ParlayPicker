@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "implementation_revision": "b5fb3a5e153d827970c8f7a05058a96ff307c843",
+  "implementation_revision": "70804d919104190f733389362ebdd50debcaf485",
   "environment": "LOCAL_WINDOWS_ANACONDA",
   "evidence_kind": "LOCAL_EXECUTED_TESTS_AND_ISOLATED_RUNTIME_TRACE",
   "pre_fix_reproduction": {
@@ -14,9 +14,9 @@
   "post_fix_runs": [
     {
       "scope": "expanded priced-value, prior closure/integration, lean/gate, export, subscriber, case-policy, calibration and probability semantics regression set",
-      "command": "python -m pytest tests/test_post2356_priced_value_consistency.py tests/test_post2355_integration_verification.py tests/test_post2352_probability_closure.py tests/test_absolute_production_gate.py tests/test_price_value.py tests/test_lean_card.py tests/test_probability_integrity_v11.py tests/test_probability_semantics.py tests/test_export_scope.py tests/test_subscriber_journey.py tests/paid_launch/case_policy_and_contracts.py -q --basetemp .pytest-tmp-post2356-targeted",
+      "command": "python -m pytest tests/test_post2356_priced_value_consistency.py tests/test_post2355_integration_verification.py tests/test_post2352_probability_closure.py tests/test_absolute_production_gate.py tests/test_price_value.py tests/test_lean_card.py tests/test_probability_integrity_v11.py tests/test_probability_semantics.py tests/test_export_scope.py tests/test_subscriber_journey.py tests/paid_launch/case_policy_and_contracts.py tests/test_sweet_spot_export_scope.py -q --basetemp .pytest-tmp-post2356-targeted-final",
       "result": "PASS",
-      "passed": 162,
+      "passed": 165,
       "failed": 0,
       "skipped": 0,
       "evidence_boundary": "LOCAL_EXECUTION_WITH_ISOLATED_FIXTURES; NOT_HOSTED_OR_MODEL_QUALIFICATION",
