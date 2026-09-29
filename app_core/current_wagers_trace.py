@@ -177,32 +177,139 @@ def _authority_stage(row: Mapping) -> dict:
     return _stage("UNKNOWN", "AUTHORITY_EXECUTION_NOT_RECORDED", executed=False)
 
 
-def _selected_ids(package: dict) -> set[str]:
-    diagnostics = package.get("board_diagnostics") or {}
+def _same_time(left: object, right: object) -> bool:
+    left_time, right_time = _time(left), _time(right)
+    if left_time is not None and right_time is not None:
+        return left_time == right_time
+    return str(left or "").strip() == str(right or "").strip()
+
+
+def _same_text(left: object, right: object, *, folded: bool = False) -> bool:
+    left_text, right_text = str(left or "").strip(), str(right or "").strip()
+    return (left_text.casefold() == right_text.casefold()) if folded else left_text == right_text
+
+
+def _selected_output_records(package: dict) -> list[dict]:
+    outputs = package.get("games", {}).get("overall", [])
+    traces = (package.get("board_diagnostics") or {}).get("traces") or []
+    records = []
+    for position, output in enumerate(outputs):
+        trace = traces[position] if position < len(traces) and isinstance(traces[position], dict) else {}
+        contract = output.get("wager_contract")
+        if not isinstance(contract, dict):
+            contract = output.get("controlled_trial_contract")
+        contract = contract if isinstance(contract, dict) else {}
+        records.append({
+            "section": "overall",
+            "position": position,
+            "status": output.get("status"),
+            "source_candidate_id": str(trace.get("source_candidate_id") or ""),
+            "event_id": str(trace.get("game_id") or contract.get("matchup_id") or
+                            contract.get("game_id") or ""),
+            "run_id": str(output.get("as_of") or ""),
+            "sport": str(trace.get("sport") or output.get("sport") or contract.get("sport") or ""),
+            "market": str(trace.get("market_type") or output.get("market") or
+                          contract.get("market_type") or ""),
+            "selection": str(trace.get("selection") or output.get("pick") or
+                             contract.get("selection") or ""),
+            "line": (_number(trace, "line") if _number(trace, "line") is not None
+                     else _number(contract, "line")),
+            "sportsbook": str(trace.get("sportsbook") or output.get("quote_source") or
+                              contract.get("sportsbook") or ""),
+            "quote_id": str(trace.get("quote_id") or contract.get("quote_id") or ""),
+            "odds_american": (_number(trace, "odds") if _number(trace, "odds") is not None
+                              else _number(output, "odds")),
+            "quote_timestamp": str(trace.get("quote_timestamp") or output.get("quote_time") or
+                                   contract.get("quote_timestamp") or ""),
+        })
+    return records
+
+
+def _identity_conflicts(candidate: Mapping, selected: Mapping) -> list[str]:
+    conflicts = []
+    for field, folded in (
+        ("event_id", False), ("sport", True), ("market", True),
+        ("selection", False), ("sportsbook", True), ("quote_id", False),
+    ):
+        left, right = candidate.get(field), selected.get(field)
+        if left not in {None, ""} and right not in {None, ""} and not _same_text(
+                left, right, folded=folded):
+            conflicts.append(field)
+    for field in ("line", "odds_american"):
+        left, right = candidate.get(field), selected.get(field)
+        if left is not None and right is not None and not math.isclose(
+                float(left), float(right), rel_tol=0.0, abs_tol=1e-9):
+            conflicts.append(field)
+    for field in ("run_id", "quote_timestamp"):
+        left, right = candidate.get(field), selected.get(field)
+        if left not in {None, ""} and right not in {None, ""} and not _same_time(left, right):
+            conflicts.append(field)
+    return conflicts
+
+
+def _match_result(status: str, reason: str, record: Mapping | None = None) -> dict:
+    output = None
+    selected_identity = None
+    if record is not None:
+        output = {key: record.get(key) for key in ("section", "position", "status")}
+        selected_identity = {key: record.get(key) for key in (
+            "source_candidate_id", "event_id", "run_id", "sport", "market",
+            "selection", "line", "sportsbook", "quote_id", "odds_american",
+            "quote_timestamp",
+        )}
     return {
-        str(row.get("source_candidate_id"))
-        for row in diagnostics.get("traces", [])
-        if isinstance(row, dict) and row.get("source_candidate_id")
+        "status": status,
+        "reason": reason,
+        "output": output,
+        "selected_identity": selected_identity,
     }
 
 
-def _output_match(row: Mapping, package: dict, selected_ids: set[str]) -> dict | None:
-    source_id = _text(row, "candidate_id")
-    if source_id and source_id in selected_ids:
-        for position, output in enumerate(package.get("games", {}).get("overall", [])):
-            if (output.get("sport") == _text(row, "league", "sport", "exact_sport") and
-                    output.get("market") == _text(row, "market_type") and
-                    output.get("pick") == _text(row, "best_pick", "selection", "display_pick") and
-                    _number(output, "odds") == _number(row, "odds_american", "american_odds", "odds")):
-                return {"section": "overall", "position": position, "status": output.get("status")}
-    matches = []
-    for position, output in enumerate(package.get("games", {}).get("overall", [])):
-        if (output.get("sport") == _text(row, "league", "sport", "exact_sport") and
-                output.get("market") == _text(row, "market_type") and
-                output.get("pick") == _text(row, "best_pick", "selection", "display_pick") and
-                _number(output, "odds") == _number(row, "odds_american", "american_odds", "odds")):
-            matches.append({"section": "overall", "position": position, "status": output.get("status")})
-    return matches[0] if len(matches) == 1 else None
+def _output_match(row: Mapping, package: dict) -> dict:
+    """Bind a candidate to one exact selected diagnostic position.
+
+    Explicit candidate IDs are authoritative: a conflict or an unselected ID
+    never falls back to display text. ID-less legacy rows require complete
+    event/run/quote evidence, and ambiguity remains unresolved.
+    """
+
+    _, candidate = _candidate_identity(row)
+    records = _selected_output_records(package)
+    source_id = candidate["source_candidate_id"]
+    if source_id:
+        selected = [record for record in records
+                    if record["source_candidate_id"] == source_id]
+        if not selected:
+            return _match_result("UNRESOLVED", "EXPLICIT_CANDIDATE_ID_NOT_SELECTED")
+        if len(selected) != 1:
+            return _match_result("UNRESOLVED", "DUPLICATE_SELECTED_CANDIDATE_ID")
+        conflicts = _identity_conflicts(candidate, selected[0])
+        if conflicts:
+            return _match_result(
+                "UNRESOLVED", "EXPLICIT_IDENTITY_CONFLICT:" + ",".join(conflicts)
+            )
+        return _match_result("MATCHED", "EXACT_SELECTED_CANDIDATE_ID", selected[0])
+
+    required = (
+        "event_id", "run_id", "sport", "market", "selection", "line",
+        "sportsbook", "odds_american", "quote_timestamp",
+    )
+    missing = [field for field in required if candidate.get(field) in {None, ""}]
+    if missing:
+        return _match_result(
+            "UNRESOLVED", "LEGACY_CANDIDATE_IDENTITY_INCOMPLETE:" + ",".join(missing)
+        )
+    complete_records = [record for record in records
+                        if all(record.get(field) not in {None, ""} for field in required)]
+    matches = [record for record in complete_records
+               if not _identity_conflicts(candidate, record)]
+    if len(matches) == 1:
+        return _match_result("MATCHED", "EXACT_LEGACY_EVENT_QUOTE_IDENTITY", matches[0])
+    if len(matches) > 1:
+        return _match_result("UNRESOLVED", "AMBIGUOUS_LEGACY_OUTPUT_IDENTITY")
+    if len(complete_records) != len(records):
+        return _match_result("UNRESOLVED", "SELECTED_OUTPUT_IDENTITY_INCOMPLETE")
+    return _match_result("NOT_PRESENT", "NO_EXACT_OUTPUT_IDENTITY_MATCH")
 
 
 def _quote_stage(row: Mapping, at: datetime, options: Mapping, minutes: int) -> tuple[dict, dict]:
@@ -251,7 +358,6 @@ def build_private_candidate_trace(candidates: pd.DataFrame | None, package: dict
     current = (current or at).astimezone(timezone.utc)
     options = dict(selection_options or {})
     preflight = evaluate_release(package, at=current, validate=False)
-    selected_ids = _selected_ids(package)
     frame = candidates if isinstance(candidates, pd.DataFrame) else pd.DataFrame()
     if frame.empty:
         unavailable = {
@@ -296,13 +402,36 @@ def build_private_candidate_trace(candidates: pd.DataFrame | None, package: dict
             else "IDENTITY_OR_MARKET_INVALID",
         )
         quote_stage, timing = _quote_stage(row, at, options, package_age_minutes(package))
-        output = _output_match(row, package, selected_ids)
+        output_resolution = _output_match(row, package)
+        output = output_resolution["output"]
         finalist = _truth(row, "best_available_selected", "selected_for_finalist")
         finalist_stage = _stage(
             "PASS" if finalist is True else "BLOCK" if finalist is False else "UNKNOWN",
             "RECORDED_FINALIST" if finalist is True else "RECORDED_NOT_FINALIST" if finalist is False
             else "FINALIST_DECISION_NOT_RECORDED", executed=finalist is not None,
         )
+        if output_resolution["status"] == "MATCHED":
+            output_stage = _stage("PASS", output_resolution["reason"])
+        elif output_resolution["status"] == "UNRESOLVED":
+            output_stage = _stage("UNKNOWN", output_resolution["reason"])
+        else:
+            output_stage = _stage("BLOCK", output_resolution["reason"])
+        release_row = next((item for item in preflight.get("rows", [])
+                            if output and item.get("section") == output["section"] and
+                            item.get("position") == output["position"]), None)
+        if output and output.get("status") == "PASS":
+            release_stage = _stage("NOT_APPLICABLE", "RESEARCH_OUTPUT_NOT_ACTIONABLE")
+        elif release_row and release_row.get("current_status") == "CURRENT_ACTIONABLE":
+            release_stage = _stage("PASS", "CURRENT_ACTIONABLE_RELEASE")
+        elif release_row:
+            release_stage = _stage(
+                "BLOCK", str(release_row.get("current_primary_reason") or
+                             "MATCHED_OUTPUT_RELEASE_BLOCKED")
+            )
+        elif output_resolution["status"] == "UNRESOLVED":
+            release_stage = _stage("UNKNOWN", "OUTPUT_MAPPING_UNRESOLVED", executed=False)
+        else:
+            release_stage = _stage("BLOCK", "NO_MATCHED_ACTIONABLE_OUTPUT", executed=False)
         stages = {
             "parsed_candidate": _stage("PASS", "CANDIDATE_ROW_PARSED"),
             "identity_market": identity_stage,
@@ -311,18 +440,8 @@ def build_private_candidate_trace(candidates: pd.DataFrame | None, package: dict
             "price_gate": _price_stage(row),
             "authority_review": _authority_stage(row),
             "finalist_selection": finalist_stage,
-            "packaged_output": _stage("PASS", "MAPPED_TO_OVERALL_OUTPUT") if output else
-                               _stage("BLOCK", "NOT_PRESENT_IN_OVERALL_OUTPUT"),
-            "release_preflight": _stage(
-                "PASS" if output and output.get("status") in {"APPROVED", "TRIAL"} and
-                          preflight["actionable_release_allowed"] else
-                "NOT_APPLICABLE" if output and output.get("status") == "PASS" else "BLOCK",
-                "CURRENT_ACTIONABLE_RELEASE" if output and output.get("status") in {"APPROVED", "TRIAL"} and
-                                              preflight["actionable_release_allowed"] else
-                "RESEARCH_OUTPUT_NOT_ACTIONABLE" if output and output.get("status") == "PASS" else
-                "NO_ACTIONABLE_RELEASE",
-                executed=bool(output),
-            ),
+            "packaged_output": output_stage,
+            "release_preflight": release_stage,
         }
         usable = stages["release_preflight"]["status"] == "PASS"
         stages["currently_usable_wager"] = _stage(
@@ -346,7 +465,9 @@ def build_private_candidate_trace(candidates: pd.DataFrame | None, package: dict
             "conservative_ev": _number(row, "Conservative_EV_Per_Unit", "conservative_ev"),
             "edge": _number(row, "Absolute_Edge", "absolute_production_edge"),
             "upstream_model_ev": _number(row, "Upstream_Model_EV", "effective_expected_value", "expected_value"),
-            "output": output, "stages": stages, "primary_blocker": blockers[0] if blockers else "NONE",
+            "output": output, "output_resolution": output_resolution,
+            "package_actionable_release_allowed": preflight["actionable_release_allowed"],
+            "stages": stages, "primary_blocker": blockers[0] if blockers else "NONE",
             "overlapping_blockers": list(dict.fromkeys(blockers)), **timing,
         }
     records = sorted(records_by_id.values(), key=lambda item: item["trace_id"])
