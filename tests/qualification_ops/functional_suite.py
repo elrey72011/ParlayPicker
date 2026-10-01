@@ -33,7 +33,9 @@ import zipfile
 
 HERE=Path(__file__).resolve().parent
 sys.path.insert(0,str(HERE))
-from paths import SOURCE, DRIVER as TRACKED_DRIVER, LEGACY, TEMPLATE, verify_application
+from paths import SOURCE, DRIVER as RUNTIME_DRIVER, LEGACY, TEMPLATE, verify_application
+# Preserve the exact prior v2 hash assertion; execute runtime cases on the repair.
+TRACKED_DRIVER = HERE / 'fixtures/previous_oauth_snapshot_acquire.py'
 verify_application()
 sys.path.insert(0,str(SOURCE))
 from app_core import prospective_remote as codec, prospective_evidence as evidence
@@ -703,7 +705,7 @@ if __name__=='__main__':
             finally:
                 write_json(backend_path.with_name('fake-child-'+argv[argv.index('--worker')+1]+'-attempts.json'),{'real_socket_attempts':REAL_REQUESTS,'fake_requests':backend.calls,'synthetic_only':True})
     else:
-        parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--driver',type=Path,default=TRACKED_DRIVER);parser.add_argument('--run-directory',type=Path,required=True);parser.add_argument('--select');arguments=parser.parse_args()
+        parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--driver',type=Path,default=RUNTIME_DRIVER);parser.add_argument('--run-directory',type=Path,required=True);parser.add_argument('--select');arguments=parser.parse_args()
         DRIVER=arguments.driver.resolve();RUN_DIR=arguments.run_directory.resolve();RUN_DIR.mkdir(parents=True,exist_ok=False)
         suite=unittest.defaultTestLoader.loadTestsFromTestCase(FunctionalTests)
         if arguments.select: suite=unittest.TestSuite(test for test in suite if arguments.select in test.id())

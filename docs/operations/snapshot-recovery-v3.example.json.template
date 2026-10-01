@@ -1,0 +1,29 @@
+{
+  "additional_oauth_allowance": 0,
+  "authorization": "One owner-run invocation requires separate explicit approval of every hash and private destination.",
+  "expected_predecessor": {
+    "accepted_count": "REPLACE_WITH_VERIFIED_VALUE",
+    "attempts_used": "REPLACE_WITH_VERIFIED_VALUE",
+    "blocked_record_sha256": "REPLACE_WITH_VERIFIED_VALUE",
+    "effective_spec_sha256": "REPLACE_WITH_VERIFIED_VALUE",
+    "file_register_canonical_sha256": "REPLACE_WITH_VERIFIED_VALUE",
+    "incurred_transport": "REPLACE_WITH_VERIFIED_VALUE",
+    "journal_sha256": "REPLACE_WITH_VERIFIED_VALUE",
+    "journal_tail_sha256": "REPLACE_WITH_VERIFIED_VALUE",
+    "recovery_link_sha256": "REPLACE_WITH_VERIFIED_VALUE",
+    "state_sha256": "REPLACE_WITH_VERIFIED_VALUE"
+  },
+  "historical_elapsed_seconds": 3695.718,
+  "original_driver_sha256": "REPLACE_WITH_PRESERVED_V1_DRIVER_HASH",
+  "original_spec_sha256": "REPLACE_WITH_ORIGINAL_SPEC_HASH",
+  "predecessor_destination": "PRIVATE_VERIFIED_V2_DESTINATION",
+  "recovery_generation": 3,
+  "replacement_driver_sha256": "REPLACE_WITH_TESTED_HASH",
+  "retention": "Keep both predecessors unchanged; new-only reconciliation/provenance and verified accepted-cache reuse.",
+  "status": "PROPOSAL_NOT_AUTHORIZED",
+  "successor_destination": "PRIVATE_ABSENT_EXACT_RECOVERY_V3",
+  "successor_max_slices": 3,
+  "v2_driver_path": "PRIVATE_PRESERVED_V2_DRIVER",
+  "v2_recovery_spec_path": "PRIVATE_ORIGINAL_V2_ADDENDUM",
+  "v2_recovery_spec_sha256": "REPLACE_WITH_V2_ADDENDUM_HASH"
+}

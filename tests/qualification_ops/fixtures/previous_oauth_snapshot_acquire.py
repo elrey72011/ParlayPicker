@@ -10,8 +10,6 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import json
-import math
-import uuid
 import os
 from pathlib import Path
 import shutil
@@ -36,120 +34,11 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
 
 
-# Local retries are projections only: never repeat a journal/resource action.
-PUBLICATION_ATTEMPTS = 8
-PUBLICATION_SECONDS = 1.5
-_publication_locks = {}
-_publication_guard = threading.Lock()
-
-
-class PublicationError(RuntimeError):
-    def __init__(self, details):
-        super().__init__('LOCAL_PUBLICATION_FAILED')
-        self.first_error = details
-
-
-def error_fields(exc):
-    return {'exception_class': type(exc).__name__,
-            'errno': getattr(exc, 'errno', None),
-            'winerror': getattr(exc, 'winerror', None)}
-
-
-def file_role(path):
-    return {'transport-current.json': 'transport_mirror', 'state.json': 'accepted_state',
-            'effective-spec.json': 'effective_spec'}.get(Path(path).name, 'mutable_record')
-
-
-def transient_sharing_code(exc, target, temporary):
-    """Code 5 alone is insufficient: prove sharing contention or delete/create access."""
-    code = getattr(exc, 'winerror', None)
-    if code in (32, 33):
-        return code
-    if code != 5 or os.name != 'nt':
-        return None
-    import ctypes
-    from ctypes import wintypes
-    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
-    create = kernel.CreateFileW
-    create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-                      wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
-    create.restype = wintypes.HANDLE
-    close = kernel.CloseHandle
-    close.argtypes = [wintypes.HANDLE]
-    if not target.exists() or not temporary.exists():
-        return None
-    attributes = kernel.GetFileAttributesW
-    attributes.argtypes = [wintypes.LPCWSTR]
-    attributes.restype = wintypes.DWORD
-    for candidate in (target, temporary):
-        attr = attributes(str(candidate))
-        if attr == 0xffffffff or attr & 1:  # Invalid/read-only: no transient classification.
-            return None
-        # Request DELETE access with all sharing enabled; never delete or alter.
-        handle = create(str(candidate), 0x00010000, 7, None, 3, 0x80, None)
-        if handle == ctypes.c_void_p(-1).value:
-            probe = ctypes.get_last_error()
-            return probe if probe in (32, 33) else None
-        close(handle)
-    # Prove parent create/rename capability too. No file/ACL is changed.
-    handle = create(str(target.parent), 2, 7, None, 3, 0x02000000, None)
-    if handle == ctypes.c_void_p(-1).value:
-        probe = ctypes.get_last_error()
-        return probe if probe in (32, 33) else None
-    close(handle)
-    return 0  # Delete/create access is currently proven; bounded replacement retry.
-
-
 def save(path, value):
-    """Serialized fsynced same-directory publication, with bounded sharing retries.
-
-    Windows sharing/lock violations (32/33), or replacement-only code 5 with
-    proven delete/create access and non-read-only files, are retryable. ACL denial,
-    ENOSPC, missing paths and unsupported failures stop. Directory fsync/power-loss
-    persistence is not claimed; incomplete unique temp files remain evidence.
-    """
     path = Path(path)
-    with _publication_guard:
-        lock = _publication_locks.setdefault(str(path.resolve()), threading.RLock())
-    with lock:
-        temporary = path.with_name(path.name + '.publish-' + uuid.uuid4().hex + '.tmp')
-        operation = 'write_temp'
-        try:
-            with temporary.open('xb') as stream:
-                stream.write(json.dumps(value, sort_keys=True, indent=2).encode() + b'\n')
-                operation = 'flush_temp'
-                stream.flush()
-                os.fsync(stream.fileno())
-        except OSError as exc:
-            raise PublicationError(dict(error_fields(exc), attempted_operation=operation,
-                file_role=file_role(path), local_retry_count=0, retry_elapsed_seconds=0.0)) from None
-        begun = time.monotonic()
-        first = None
-        for attempt in range(1, PUBLICATION_ATTEMPTS + 1):
-            if first is not None and time.monotonic() - begun >= PUBLICATION_SECONDS:
-                raise PublicationError(dict(first, attempted_operation='replace',
-                    file_role=file_role(path), local_retry_count=attempt - 1,
-                    retry_elapsed_seconds=time.monotonic() - begun)) from None
-            try:
-                temporary.replace(path)
-                return
-            except OSError as exc:
-                if first is None:
-                    first = error_fields(exc)
-                elapsed = time.monotonic() - begun
-                sharing = transient_sharing_code(exc, path, temporary)
-                if sharing is not None:
-                    if sharing:
-                        first['sharing_probe_winerror'] = sharing
-                    else:
-                        first['replacement_access_checks_passed'] = True
-                retryable = sharing is not None
-                if not retryable or attempt == PUBLICATION_ATTEMPTS or elapsed >= PUBLICATION_SECONDS:
-                    raise PublicationError(dict(first, attempted_operation='replace',
-                        file_role=file_role(path), local_retry_count=attempt - 1,
-                        retry_elapsed_seconds=elapsed, final_exception=error_fields(exc))) from None
-                wait = min(.02 * 2 ** (attempt - 1), .25, PUBLICATION_SECONDS - elapsed)
-                time.sleep(max(0.0, wait))
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_bytes(json.dumps(value, sort_keys=True, indent=2).encode() + b'\n')
+    temporary.replace(path)
 
 
 def require(condition, reason):
@@ -235,43 +124,8 @@ def check_seal(root, reference):
     return record
 
 
-def read_record_bytes(path):
-    # In-process observers participate in the same short publication lock.
-    path = Path(path)
-    with _publication_guard:
-        lock = _publication_locks.setdefault(str(path.resolve()), threading.RLock())
-    with lock:
-        return _read_record_bytes_unlocked(path)
-
-
-def _read_record_bytes_unlocked(path):
-    """Cooperative Windows observers explicitly allow read/write/delete sharing."""
-    path = Path(path)
-    if os.name != 'nt':
-        return path.read_bytes()
-    import ctypes
-    import msvcrt
-    from ctypes import wintypes
-    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
-    create = kernel.CreateFileW
-    create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-                      wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
-    create.restype = wintypes.HANDLE
-    handle = create(str(path.resolve()), 0x80000000, 7, None, 3, 0x80, None)
-    if handle == ctypes.c_void_p(-1).value:
-        raise ctypes.WinError(ctypes.get_last_error())
-    try:
-        fd = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
-    except BaseException:
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        kernel.CloseHandle(handle)
-        raise
-    with os.fdopen(fd, 'rb') as stream:
-        return stream.read()
-
-
 def verified_record(path):
-    try: record=json.loads(read_record_bytes(path))
+    try: record=json.loads(Path(path).read_bytes())
     except (OSError,ValueError): raise RuntimeError('SEALED_RECORD_MISSING_OR_INVALID') from None
     unsigned={k:v for k,v in record.items() if k!='canonical_sha256'}
     require(record.get('canonical_sha256')==hashlib.sha256(canonical(unsigned)).hexdigest(),'SEALED_RECORD_DIGEST_CONFLICT')
@@ -319,113 +173,40 @@ def accepted_objects(root,state,spec,pinned):
     return completed
 
 
-def _unique_json_pairs(pairs):
-    result = {}
-    for key, value in pairs:
-        require(key not in result, 'TRANSPORT_JOURNAL_INVALID')
-        result[key] = value
-    return result
-
-
-def read_transport_journal(root, floor):
-    """Read-only validation. Hash-chain consistency is not an authenticated signature."""
-    keys = {'drive_get_attempts', 'oauth_attempts', 'observed_body_bytes'}
-    require(set(floor) == keys and all(type(v) is int and v >= 0 for v in floor.values()),
-            'TRANSPORT_COUNTER_REWIND')
-    sequence, tail = 0, None
-    counters = dict.fromkeys(keys, 0)
-    events = {}
-    path = Path(root) / 'transport-events.jsonl'
-    if path.exists():
-        with path.open('rb') as stream:
-            for line in stream:
-                require(line.endswith(b'\n'), 'TRANSPORT_JOURNAL_INVALID')
-                try:
-                    event = json.loads(line, object_pairs_hook=_unique_json_pairs)
-                except (ValueError, TypeError):
-                    raise RuntimeError('TRANSPORT_JOURNAL_INVALID') from None
-                require(type(event) is dict and set(event) ==
-                        {'sequence', 'previous_sha256', 'counters', 'canonical_sha256'},
-                        'TRANSPORT_JOURNAL_INVALID')
-                unsigned = {k: v for k, v in event.items() if k != 'canonical_sha256'}
-                require(event['canonical_sha256'] == hashlib.sha256(canonical(unsigned)).hexdigest()
-                        and type(event['sequence']) is int and event['sequence'] == sequence + 1
-                        and event['previous_sha256'] == tail, 'TRANSPORT_JOURNAL_CONFLICT')
-                current = event['counters']
-                require(type(current) is dict and set(current) == keys and
-                        all(type(current[k]) is int and current[k] >= counters[k] for k in keys),
-                        'TRANSPORT_COUNTER_REWIND')
-                sequence, tail, counters = event['sequence'], event['canonical_sha256'], current
-                events[tail] = (sequence, dict(counters))
-    require(all(counters[k] >= floor[k] for k in keys), 'TRANSPORT_COUNTER_REWIND')
-    return {'sequence': sequence, 'tail': tail, 'counters': counters, 'events': events}
-
-
-def validated_transport(root, floor, *, allow_one_event_prefix=False):
-    journal = read_transport_journal(root, floor)
-    if journal['sequence']:
-        mirror = verified_record(Path(root) / 'transport-current.json')
-        require(set(mirror) == {'counters', 'journal_tail_sha256', 'canonical_sha256'},
-                'TRANSPORT_MIRROR_CONFLICT')
-        prefix = journal['events'].get(mirror['journal_tail_sha256'])
-        require(prefix is not None and mirror['counters'] == prefix[1], 'TRANSPORT_MIRROR_CONFLICT')
-        gap = journal['sequence'] - prefix[0]
-        require(gap == 0 or (allow_one_event_prefix and gap == 1), 'TRANSPORT_MIRROR_CONFLICT')
-        journal.update(prefix_sequence=prefix[0], prefix_tail=mirror['journal_tail_sha256'],
-                       published_counters=mirror['counters'], publication_gap_events=gap)
-    else:
-        require(not (Path(root) / 'transport-current.json').exists(), 'TRANSPORT_MIRROR_CONFLICT')
-        journal.update(prefix_sequence=0, prefix_tail=None, publication_gap_events=0)
-    return journal
-
-
 class TransportBudget(dict):
-    """Durable incurred actions; a strict loader never repairs predecessor files."""
-    keys = ('drive_get_attempts', 'oauth_attempts', 'observed_body_bytes')
-    def __init__(self, root, spec, floor):
-        self.root, self.spec = Path(root), spec
-        self.lock = threading.RLock()
-        journal = validated_transport(root, floor)
-        self.sequence, self.tail = journal['sequence'], journal['tail']
-        self.last_published_tail = self.tail
-        super().__init__(journal['counters'])
-    def increment(self, key, amount):
-        with self.lock:
-            require(key in self.keys and type(amount) is int and amount >= 0,
-                    'TRANSPORT_INCREMENT_INVALID')
-            self[key] += amount
-            unsigned = {'sequence': self.sequence + 1, 'previous_sha256': self.tail,
-                        'counters': dict(self)}
-            event = dict(unsigned, canonical_sha256=hashlib.sha256(canonical(unsigned)).hexdigest())
-            operation = 'append_journal'
-            try:
-                with (self.root / 'transport-events.jsonl').open('ab') as stream:
-                    stream.write(canonical(event) + b'\n')
-                    operation = 'flush_journal'
-                    stream.flush()
-                    os.fsync(stream.fileno())
-            except OSError as exc:
-                raise PublicationError(dict(error_fields(exc), attempted_operation=operation,
-                    file_role='transport_journal', local_retry_count=0, retry_elapsed_seconds=0.0,
-                    attempted_journal_sequence=self.sequence + 1,
-                    journal_sequence=self.sequence, journal_tail_sha256=self.tail,
-                    last_published_mirror_tail=self.last_published_tail,
-                    attempted_transport=dict(self),
-                    journal_write_completion='UNVERIFIED_UNTIL_READ_ONLY_VALIDATION')) from None
-            self.sequence += 1
-            self.tail = event['canonical_sha256']
-            try:
-                self.mirror()
-            except PublicationError as exc:
-                exc.first_error.update(journal_sequence=self.sequence,
-                    journal_tail_sha256=self.tail, last_published_mirror_tail=self.last_published_tail,
-                    incurred_transport=dict(self))
-                raise
+    """Durable monotonic attempt/body journal, including failed/in-flight reads."""
+    keys=('drive_get_attempts','oauth_attempts','observed_body_bytes')
+    def __init__(self,root,spec,floor):
+        self.root,self.spec=root,spec
+        self.lock=threading.RLock();self.sequence=0;self.tail=None
+        counters={key:0 for key in self.keys}
+        path=root/'transport-events.jsonl'
+        if path.exists():
+            with path.open('rb') as stream:
+                for line in stream:
+                    try: event=json.loads(line)
+                    except ValueError: raise RuntimeError('TRANSPORT_JOURNAL_INVALID') from None
+                    unsigned={k:v for k,v in event.items() if k!='canonical_sha256'}
+                    require(event.get('canonical_sha256')==hashlib.sha256(canonical(unsigned)).hexdigest() and event.get('sequence')==self.sequence+1 and event.get('previous_sha256')==self.tail,'TRANSPORT_JOURNAL_CONFLICT')
+                    current=event['counters']
+                    require(set(current)==set(self.keys) and all(type(current[k]) is int and current[k]>=counters[k] for k in self.keys),'TRANSPORT_COUNTER_REWIND')
+                    counters=current;self.sequence=event['sequence'];self.tail=event['canonical_sha256']
+        require(all(counters[key]>=floor[key] for key in self.keys),'TRANSPORT_COUNTER_REWIND')
+        super().__init__(counters)
+        if self.sequence:
+            mirror=verified_record(root/'transport-current.json')
+            require(mirror['counters']==counters and mirror['journal_tail_sha256']==self.tail,'TRANSPORT_MIRROR_CONFLICT')
+    def increment(self,key,amount):
+        self[key]+=amount
+        unsigned={'sequence':self.sequence+1,'previous_sha256':self.tail,'counters':dict(self)}
+        event=dict(unsigned,canonical_sha256=hashlib.sha256(canonical(unsigned)).hexdigest())
+        with (self.root/'transport-events.jsonl').open('ab') as stream:
+            stream.write(canonical(event)+b'\n');stream.flush();os.fsync(stream.fileno())
+        self.sequence+=1;self.tail=event['canonical_sha256']
+        self.mirror()
     def mirror(self):
-        unsigned = {'counters': dict(self), 'journal_tail_sha256': self.tail}
-        save(self.root / 'transport-current.json',
-             dict(unsigned, canonical_sha256=hashlib.sha256(canonical(unsigned)).hexdigest()))
-        self.last_published_tail = self.tail
+        unsigned={'counters':dict(self),'journal_tail_sha256':self.tail}
+        save(self.root/'transport-current.json',dict(unsigned,canonical_sha256=hashlib.sha256(canonical(unsigned)).hexdigest()))
 
 
 def guarded_session_factory(spec,meter,allowed_media,authorized_session,auth_state=None):
@@ -845,41 +626,12 @@ def sanitized_reason(exc):
     return 'WORKER_'+type(exc).__name__.upper()+'_FAILED'
 
 
-def retain_worker_failure(root, spec, stage, reason, exc=None):
-    """Retain the first error without depending on successful mirror loading."""
-    report = {'stage': stage, 'reason': reason, 'retry_authorized': False,
-              'snapshot_accepted': (root / 'snapshot-acceptance.json').is_file(),
-              'assessment_report_present': (root / 'local-assessment.json').is_file()}
-    details = getattr(exc, 'first_error', None)
-    if details:
-        report['first_error'] = dict(details, stage=stage)
-    elif exc is not None:
-        report['first_error'] = dict(error_fields(exc), stage=stage,
-            attempted_operation='UNKNOWN_NOT_RECORDED', file_role='UNKNOWN_NOT_RECORDED')
-    try:
-        state = verified_record(root / 'state.json')
-        # Diagnostic ledger count, not authority for future cache reuse.
-        report['accepted_objects'] = sum(len(check_seal(root, ref)['objects'])
-                                        for ref in state['accepted_batches'])
-        journal = read_transport_journal(root, state['transport'])
-        report['transport'] = journal['counters']
-        report['journal_sequence'] = journal['sequence']
-        report['journal_tail_sha256'] = journal['tail']
-        try:
-            mirror = verified_record(root / 'transport-current.json')
-            report['last_published_mirror_tail'] = mirror.get('journal_tail_sha256')
-            report['mirror_matches_journal'] = (mirror.get('counters') == journal['counters']
-                and mirror.get('journal_tail_sha256') == journal['tail'])
-        except Exception:
-            report['last_published_mirror_tail'] = 'UNKNOWN_INVALID_OR_MISSING'
-    except Exception as diagnostic:
-        report['diagnostic_incomplete_reason'] = sanitized_reason(diagnostic)
-    try:
-        seal(root, 'worker-blocked-' + stage + '.json', report)
-    except Exception:
-        # Only sanitized allowlisted fields reach stderr; preserve the first error.
-        print(json.dumps(dict(report, diagnostic_record_retained=False)), file=sys.stderr, flush=True)
-    return report
+def retain_worker_failure(root,spec,stage,reason):
+    state=load_state(root,spec)
+    meter=TransportBudget(root,spec,state['transport'])
+    _,_,pinned=anchor(spec)
+    accepted=accepted_objects(root,state,spec,pinned)
+    seal(root,'worker-blocked-'+stage+'.json',{'stage':stage,'reason':reason,'accepted_objects':len(accepted),'transport':dict(meter),'raw_cache_bytes':disk_bytes(root/'raw'),'total_transferred_media_bytes':'UNKNOWN_IF_INTERRUPTED','snapshot_accepted':(root/'snapshot-acceptance.json').is_file(),'assessment_report_present':(root/'local-assessment.json').is_file(),'retry_authorized':False})
 
 
 def inspect_predecessor(root, original_spec_path, spec, expected=None):
@@ -914,195 +666,6 @@ def inspect_predecessor(root, original_spec_path, spec, expected=None):
     return result
 
 
-def file_register(root):
-    return {str(p.relative_to(root)).replace('\\', '/'):
-            {'bytes': p.stat().st_size, 'sha256': digest(p)}
-            for p in sorted(root.rglob('*')) if p.is_file()}
-
-
-def initiated_slices(root, spec):
-    markers = sorted(root.glob('slice-*-attempt.json'))
-    require(markers, 'RECOVERY_ATTEMPTS_MISSING')
-    for index, path in enumerate(markers, 1):
-        record = verified_record(path)
-        require(path.name == f'slice-{index:02d}-attempt.json'
-                and record['status'] == 'ATTEMPT_STARTED_NO_AUTOMATIC_RETRY',
-                'RECOVERY_ATTEMPT_CHAIN_CONFLICT')
-        require(record.get('source_revision') == spec['source_revision']
-                and record.get('storage_scope_hash') == spec['storage_scope_hash'],
-                'RECOVERY_ATTEMPT_BINDING_CONFLICT')
-    return len(markers)
-
-
-def inspect_linked_predecessor(spec, recovery):
-    """Offline v1 -> v2 verification. Never fix/copy a projection in either root."""
-    require(recovery.get('recovery_generation') == 3, 'RECOVERY_GENERATION_INVALID')
-    require(recovery.get('additional_oauth_allowance') == 0, 'RECOVERY_ALLOWANCE_INVALID')
-    original_path = Path(args.spec)
-    addendum_path = Path(recovery['v2_recovery_spec_path'])
-    require(digest(original_path) == recovery['original_spec_sha256'],
-            'RECOVERY_ORIGINAL_SPEC_CONFLICT')
-    require(digest(addendum_path) == recovery['v2_recovery_spec_sha256'],
-            'RECOVERY_ADDENDUM_CHAIN_CONFLICT')
-    v2 = json.loads(addendum_path.read_bytes())
-    require(v2['original_spec_sha256'] == digest(original_path)
-            and digest(v2['original_driver_path']) == v2['original_driver_sha256']
-            and digest(recovery['v2_driver_path']) == v2['replacement_driver_sha256'],
-            'RECOVERY_DRIVER_CHAIN_CONFLICT')
-    original_root = Path(v2['predecessor_destination'])
-    root = Path(recovery['predecessor_destination'])
-    require(root.resolve() == Path(v2['successor_destination']).resolve()
-            and original_root.resolve() != root.resolve(), 'RECOVERY_ANCESTRY_CONFLICT')
-    history = inspect_predecessor(original_root, original_path, spec, v2['expected_predecessor'])
-    old_block = verified_record(original_root / 'operation-blocked.json')
-    require(math.isclose(v2['historical_elapsed_seconds'], old_block['elapsed_seconds'],
-                         abs_tol=1e-6), 'RECOVERY_ELAPSED_CHAIN_CONFLICT')
-    expected_effective = recovery_policy(spec, history, v2['additional_oauth_allowance'],
-                                         v2['successor_max_slices'])
-    expected_effective.update(destination=v2['successor_destination'], recovery_mode=True,
-        working_disk_predecessor_bytes=sum(item['bytes'] for item in history['files'].values()))
-    for key in ('total_wall_seconds', 'capture_total_wall_seconds'):
-        expected_effective[key] -= v2['historical_elapsed_seconds']
-    effective_path = root / 'effective-spec.json'
-    effective = json.loads(effective_path.read_bytes())
-    require(effective == expected_effective, 'RECOVERY_EFFECTIVE_SPEC_CONFLICT')
-    link = verified_record(root / 'recovery-link.json')
-    require(link['original_operation_id'] == history['original_operation_id']
-            and link['original_state_sha256'] == history['state_sha256']
-            and link['original_journal_sha256'] == history['journal_sha256']
-            and link['original_journal_tail_sha256'] == history['journal_tail_sha256']
-            and link['original_spec_sha256'] == digest(original_path)
-            and link['recovery_spec_sha256'] == digest(addendum_path)
-            and link['original_driver_sha256'] == v2['original_driver_sha256']
-            and link['replacement_driver_sha256'] == v2['replacement_driver_sha256']
-            and link['incurred_transport'] == history['incurred_transport']
-            and link['accepted_reused_objects'] == history['accepted_count']
-            and link['additional_oauth_allowance'] == v2['additional_oauth_allowance']
-            and link['combined_oauth_limit'] == effective['max_oauth_token_attempts']
-            and link['original_files'] == history['files'],
-            'RECOVERY_LINK_BINDING_CONFLICT')
-    # Verify the immutable copied v1 provenance separately from top-level v2 attempts.
-    for name, item in history['files'].items():
-        require(digest(root / 'predecessor-evidence' / name) == item['sha256'],
-                'RECOVERY_PROVENANCE_CONFLICT')
-    state = load_state(root, effective, effective_path)
-    require(state['predecessor_operation_id'] == history['original_operation_id']
-            and state['predecessor_state_sha256'] == history['state_sha256']
-            and state['recovery_addendum_sha256'] == digest(addendum_path),
-            'RECOVERY_STATE_CHAIN_CONFLICT')
-    _, _, pinned = anchor(spec)
-    accepted = accepted_objects(root, state, effective, pinned)  # Each payload hash, not size.
-    journal = validated_transport(root, state['transport'], allow_one_event_prefix=True)
-    # The complete inherited journal is an exact byte prefix, not just a numeric floor.
-    inherited = (original_root / 'transport-events.jsonl').read_bytes()
-    with (root / 'transport-events.jsonl').open('rb') as stream:
-        require(stream.read(len(inherited)) == inherited, 'RECOVERY_JOURNAL_ANCESTRY_CONFLICT')
-    block = verified_record(root / 'operation-blocked.json')
-    require(block['status'] == 'BLOCKED' and block['reason'] == 'WORKER_BLOCKED_NO_RETRY',
-            'RECOVERY_TERMINAL_CONFLICT')
-    first_attempts = initiated_slices(original_root, spec)
-    second_attempts = initiated_slices(root, effective)
-    require(first_attempts == history['attempts_used'], 'RECOVERY_ATTEMPT_CHAIN_CONFLICT')
-    require(second_attempts <= effective['max_slices']
-            and state['next_slice'] == second_attempts, 'RECOVERY_ATTEMPT_CHAIN_CONFLICT')
-    for index in range(1, second_attempts):
-        result = verified_record(root / f'slice-{index:02d}-result.json')
-        require(result['slice'] == index and result['status'] == 'PARTIAL'
-                and result['newly_retained_logical_objects'] > 0
-                and result['terminal_reason'] in {'OBJECT_LIMIT', 'BYTE_LIMIT', 'PROCESSING_DEADLINE'}
-                and result['source_revision'] == spec['source_revision']
-                and result['storage_scope_hash'] == spec['storage_scope_hash'],
-                'RECOVERY_RESULT_CHAIN_CONFLICT')
-    require(not (root / f'slice-{second_attempts:02d}-result.json').exists(),
-            'RECOVERY_TERMINAL_CONFLICT')
-    charged_elapsed = old_block['elapsed_seconds'] + block['elapsed_seconds']
-    require(math.isfinite(charged_elapsed) and charged_elapsed >= 0
-            and math.isclose(charged_elapsed, recovery['historical_elapsed_seconds'],
-                             abs_tol=1e-6), 'RECOVERY_ELAPSED_CHAIN_CONFLICT')
-    files = file_register(root)
-    accepted_hashes = {item['content_sha256'] for item in accepted.values()}
-    orphans = {p.name: p.stat().st_size for p in (root / 'raw').iterdir()
-               if p.is_file() and p.name not in accepted_hashes}
-    # No separate top-level v2 UUID exists: the sealed link digest is its identity.
-    result = dict(original_operation_id=history['original_operation_id'],
-        immediate_predecessor_identity={'kind': 'SEALED_RECOVERY_LINK_SHA256',
-                                       'sha256': digest(root / 'recovery-link.json')},
-        accepted_objects=accepted, accepted_count=len(accepted), unledgered_cache=orphans,
-        incurred_transport=journal['counters'], state_sha256=digest(root / 'state.json'),
-        journal_sha256=digest(root / 'transport-events.jsonl'), journal_tail_sha256=journal['tail'],
-        effective_spec_sha256=digest(effective_path), recovery_link_sha256=digest(root / 'recovery-link.json'),
-        blocked_record_sha256=digest(root / 'operation-blocked.json'),
-        original_spec_sha256=digest(original_path), files=files,
-        file_register_canonical_sha256=hashlib.sha256(canonical(files)).hexdigest(),
-        attempts_used=first_attempts + second_attempts, historical_elapsed_seconds=charged_elapsed,
-        predecessor_disk_bytes=sum(x['bytes'] for x in history['files'].values())
-                               + sum(x['bytes'] for x in files.values()),
-        combined_oauth_limit=effective['max_oauth_token_attempts'], journal_projection=journal,
-        published_mirror_sha256=digest(root / 'transport-current.json'))
-    temporary = root / 'transport-current.json.tmp'
-    if temporary.is_file():
-        result['corroborating_temp_sha256'] = digest(temporary)
-        try:
-            temp = verified_record(temporary)
-            result['temp_matches_journal'] = (temp['counters'] == journal['counters']
-                and temp['journal_tail_sha256'] == journal['tail'])
-        except Exception:
-            result['temp_matches_journal'] = False  # Never authority for reconstruction.
-    expected = recovery.get('expected_predecessor')
-    if expected is not None:
-        for key in ('accepted_count', 'incurred_transport', 'state_sha256', 'journal_sha256',
-                    'journal_tail_sha256', 'effective_spec_sha256', 'recovery_link_sha256',
-                    'blocked_record_sha256', 'file_register_canonical_sha256', 'attempts_used'):
-            require(result[key] == expected[key], 'RECOVERY_PREDECESSOR_IDENTITY_CONFLICT')
-    return result
-
-
-def linked_recovery_policy(original, history, remaining_slices):
-    require(type(remaining_slices) is int
-            and 0 < remaining_slices <= original['max_slices'] - history['attempts_used'],
-            'RECOVERY_SLICE_ALLOWANCE_INVALID')
-    effective = dict(original)
-    effective.update(max_oauth_token_attempts=history['combined_oauth_limit'],
-                     max_slices=remaining_slices, recovery_mode=True,
-                     working_disk_predecessor_bytes=history['predecessor_disk_bytes'])
-    used = history['incurred_transport']
-    require(used['oauth_attempts'] < effective['max_oauth_token_attempts']
-            and used['drive_get_attempts'] < effective['max_drive_get_attempts']
-            and used['observed_body_bytes'] < effective['soft_bytes_total'],
-            'BLOCKED_AUTHORIZATION_EXHAUSTED')
-    for key in ('capture_total_wall_seconds', 'total_wall_seconds'):
-        effective[key] -= history['historical_elapsed_seconds']
-        require(effective[key] > 0, 'RECOVERY_WALL_ALLOWANCE_EXHAUSTED')
-    return effective
-
-
-def supervise_linked_recovery(spec, recovery):
-    begun = time.monotonic()  # Verification/preparation is charged to this invocation.
-    require(recovery.get('expected_predecessor') is not None, 'RECOVERY_EXPECTED_IDENTITY_REQUIRED')
-    history = inspect_linked_predecessor(spec, recovery)
-    effective = linked_recovery_policy(spec, history, recovery['successor_max_slices'])
-    root = Path(recovery['successor_destination']).resolve()
-    expected = Path(os.environ['LOCALAPPDATA']) / 'ParlayPicker' / 'qualification-canonical-snapshot' / spec['source_revision'] / f"acquire-{spec['anchor_run_id']}-recovery-v3"
-    require(root == expected.resolve() and not root.exists(), 'ISOLATED_SUCCESSOR_DESTINATION_CONFLICT')
-    require(shutil.disk_usage(root.anchor).free >= spec['required_initial_free_disk_bytes'],
-            'INITIAL_FREE_DISK_LIMIT')
-    effective['destination'] = str(root)
-    worker_token = secrets.token_hex(32)
-    initialize_successor(effective, recovery, history, worker_token)
-    save(root / 'effective-spec.json', effective)
-    old_spec, old_approved = args.spec, args.approved_spec_sha256
-    try:
-        args.spec = root / 'effective-spec.json'
-        args.approved_spec_sha256 = digest(args.spec)
-        state = verified_record(root / 'state.json')
-        state['spec_sha256'] = args.approved_spec_sha256
-        persist_state(root, state)
-        budget_disk(root, effective, force=True)
-        return run_approved_workers(effective, root, worker_token, begun)
-    finally:
-        args.spec, args.approved_spec_sha256 = old_spec, old_approved
-
-
 def recovery_policy(spec, history, additional_oauth, remaining_slices):
     """Only an explicitly approved addendum can increase exhausted OAuth cap."""
     require(type(additional_oauth) is int and 0<=additional_oauth<=20,'RECOVERY_ALLOWANCE_INVALID')
@@ -1126,38 +689,8 @@ def initialize_successor(spec, recovery, history, worker_token):
     shutil.copytree(prior,provenance)
     for name,item in history['files'].items():
         require(digest(provenance/name)==item['sha256'] and digest(prior/name)==item['sha256'],'RECOVERY_COPY_CHANGED')
-    shutil.copyfile(prior/'transport-events.jsonl',root/'transport-events.jsonl')
-    if 'journal_projection' in history:
-        journal = history['journal_projection']
-        unsigned = {'counters': journal['counters'], 'journal_tail_sha256': journal['tail']}
-        save(root/'transport-current.json',
-             dict(unsigned, canonical_sha256=hashlib.sha256(canonical(unsigned)).hexdigest()))
-        seal(root, 'transport-reconciliation.json', {
-            'immediate_predecessor_identity': history['immediate_predecessor_identity'],
-            'predecessor_state_sha256': history['state_sha256'],
-            'predecessor_effective_spec_sha256': history['effective_spec_sha256'],
-            'predecessor_file_register_sha256': history['file_register_canonical_sha256'],
-            'original_spec_sha256': history['original_spec_sha256'],
-            'approved_addendum_sha256': digest(args.recovery_spec),
-            'tested_driver_sha256': digest(__file__),
-            'journal_sha256': history['journal_sha256'],
-            'journal_tail_sha256': journal['tail'], 'journal_sequence': journal['sequence'],
-            'published_mirror_sha256': history['published_mirror_sha256'],
-            'prefix_tail_sha256': journal['prefix_tail'],
-            'prefix_sequence': journal['prefix_sequence'],
-            'publication_gap_events': journal['publication_gap_events'],
-            'derived_successor_mirror_sha256': digest(root/'transport-current.json'),
-            'corroborating_temp_sha256': history.get('corroborating_temp_sha256'),
-            'temporary_is_authority': False, 'incurred_transport': history['incurred_transport'],
-            'charged_slice_attempts': history['attempts_used'],
-            'charged_elapsed_seconds': history['historical_elapsed_seconds'],
-            'combined_oauth_limit': history['combined_oauth_limit'],
-            'source_revision': spec['source_revision'],
-            'storage_scope_hash': spec['storage_scope_hash'],
-            'canonical_membership_sha256': spec['canonical_membership_sha256'],
-            'hash_chain_is_external_signature': False})
-    else:
-        shutil.copyfile(prior/'transport-current.json',root/'transport-current.json')
+    for name in ('transport-events.jsonl','transport-current.json'):
+        shutil.copyfile(prior/name,root/name)
     # Only accepted evidence is placed into the active cache. Orphans remain in
     # immutable predecessor provenance; the successor deliberately re-downloads
     # their pinned logical objects, then admits them through a new batch ledger.
@@ -1170,19 +703,11 @@ def initialize_successor(spec, recovery, history, worker_token):
     # New slice-1 batches start at 0005, preserving the four predecessor ledgers.
     # Internal successor slice index is 1..7 and is explicitly linked above.
     persist_state(root,{'spec_sha256':digest(args.spec),'worker_token_sha256':hashlib.sha256(worker_token.encode()).hexdigest(),'source_revision':spec['source_revision'],'storage_scope_hash':spec['storage_scope_hash'],'canonical_membership_sha256':spec['canonical_membership_sha256'],'next_slice':1,'accepted_batches':original_state['accepted_batches'],'transport':history['incurred_transport'],'predecessor_operation_id':history['original_operation_id'],'predecessor_state_sha256':history['state_sha256'],'recovery_addendum_sha256':digest(args.recovery_spec)})
-    link = {'original_operation_id':history['original_operation_id'],'original_driver_sha256':recovery['original_driver_sha256'],'replacement_driver_sha256':digest(__file__),'original_spec_sha256':history['original_spec_sha256'],'recovery_spec_sha256':digest(args.recovery_spec),'original_state_sha256':history['state_sha256'],'original_journal_sha256':history['journal_sha256'],'original_journal_tail_sha256':history['journal_tail_sha256'],'incurred_transport':history['incurred_transport'],'additional_oauth_allowance':recovery.get('additional_oauth_allowance',0),'combined_oauth_limit':spec['max_oauth_token_attempts'],'accepted_reused_objects':history['accepted_count'],'unledgered_files_not_admitted':len(history['unledgered_cache']),'original_files':history['files'],'new_source_storage_membership_unchanged':True,'orphan_policy':'PRESERVE_ORIGINAL_REDOWNLOAD_PINNED_OBJECT_THEN_LEDGER'}
-    if 'journal_projection' in history:
-        link.update(recovery_generation=3, recovery_id=uuid.uuid4().hex,
-                    immediate_predecessor_identity=history['immediate_predecessor_identity'],
-                    charged_slice_attempts=history['attempts_used'],
-                    charged_elapsed_seconds=history['historical_elapsed_seconds'])
-    seal(root, 'recovery-link.json', link)
+    seal(root,'recovery-link.json',{'original_operation_id':history['original_operation_id'],'original_driver_sha256':recovery['original_driver_sha256'],'replacement_driver_sha256':digest(__file__),'original_spec_sha256':history['original_spec_sha256'],'recovery_spec_sha256':digest(args.recovery_spec),'original_state_sha256':history['state_sha256'],'original_journal_sha256':history['journal_sha256'],'original_journal_tail_sha256':history['journal_tail_sha256'],'incurred_transport':history['incurred_transport'],'additional_oauth_allowance':recovery['additional_oauth_allowance'],'combined_oauth_limit':spec['max_oauth_token_attempts'],'accepted_reused_objects':history['accepted_count'],'unledgered_files_not_admitted':len(history['unledgered_cache']),'original_files':history['files'],'new_source_storage_membership_unchanged':True,'orphan_policy':'PRESERVE_ORIGINAL_REDOWNLOAD_PINNED_OBJECT_THEN_LEDGER'})
 
 
 def supervise_recovery(spec,recovery):
     """Only entered after exact driver/spec/addendum hashes and explicit flag."""
-    if recovery.get("recovery_generation") == 3:
-        return supervise_linked_recovery(spec, recovery)
     begun=time.monotonic()
     require(digest(recovery['original_driver_path'])==recovery['original_driver_sha256'],'RECOVERY_ORIGINAL_DRIVER_CONFLICT')
     require(digest(args.spec)==recovery['original_spec_sha256'],'RECOVERY_ORIGINAL_SPEC_CONFLICT')
@@ -1242,9 +767,9 @@ if __name__=='__main__':
         except BaseException as exc:
             reason=sanitized_reason(exc)
             try:
-                retain_worker_failure(Path(spec['destination']),spec,args.worker,reason,exc)
+                retain_worker_failure(Path(spec['destination']),spec,args.worker,reason)
             except BaseException:
-                print('FIRST_ERROR_DIAGNOSTIC_INCOMPLETE',file=sys.stderr,flush=True)
+                pass # Never hide the original failure with diagnostics failure.
             print(reason,file=sys.stderr,flush=True)
             sys.exit(1)
     elif args.execute_approved_operation:
