@@ -470,10 +470,11 @@ if __name__=='__main__':
             try:runpy.run_path(argv[0],run_name='__main__')
             finally:write(path.with_name(path.stem+'-child-'+argv[argv.index('--worker')+1]+'.json'),{'actual_oauth_posts':backend.oauth_posts,'actual_drive_gets':sum(c['method']=='GET' for c in backend.calls),'credential_constructions':backend.actual_session_constructions,'real_socket_attempts':REAL_SOCKET_ATTEMPTS,'synthetic_only':True})
     else:
-        parser=argparse.ArgumentParser();parser.add_argument('--run-directory',type=Path,required=True);parser.add_argument('--select');a=parser.parse_args()
+        parser=argparse.ArgumentParser();parser.add_argument('--run-directory',type=Path,required=True);parser.add_argument('--select');parser.add_argument('--exclude');a=parser.parse_args()
         RUN=a.run_directory.resolve();RUN.mkdir(parents=True,exist_ok=False)
         suite=unittest.defaultTestLoader.loadTestsFromTestCase(Tests)
         if a.select:suite=unittest.TestSuite(t for t in suite if a.select in t.id())
+        if a.exclude:suite=unittest.TestSuite(t for t in suite if a.exclude not in t.id())
         result=unittest.TextTestRunner(verbosity=2,resultclass=Recorded).run(suite)
         write(RUN/'test-results.json',{'driver_sha256':sha(DRIVER),'tests_run':result.testsRun,'success':result.wasSuccessful(),'failures':len(result.failures),'errors':len(result.errors),'results':RESULTS,'real_socket_attempts':REAL_SOCKET_ATTEMPTS,'dependency_versions':{n:importlib.metadata.version(n) for n in ('google-auth','requests','cryptography','pytest')},'synthetic_only':True})
         sys.exit(0 if result.wasSuccessful() else 1)

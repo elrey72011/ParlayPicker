@@ -24,7 +24,7 @@ $offlineExitCode = $LASTEXITCODE
 Write-Host "OFFLINE TEST EXIT CODE: $offlineExitCode"
 ```
 
-On Linux, set the same environment variable to the separate checkout and run the same Python command. Collection preserves exactly 82 prior cases (64 functional, 16 actual-auth/recovery and two full-envelope/fault cases), then adds 15 transport-mirror cases: 97 total. The original v2 hash assertion still checks the byte-identical fixture; functional runtime cases use the current repaired driver. Windows executes the process-tree timeout and both actual delete-sharing subprocess cases. Linux honestly skips those three Windows-only cases. All other cases run on both systems. The output must show actual collection, execution, case results, driver/application/tooling identities and zero real socket attempts. A passing count without those records is insufficient.
+On Linux, set the same environment variable to the separate checkout and run the same Python command. Collection preserves exactly 82 prior cases (64 functional, 16 actual-auth/recovery and two full-envelope/fault cases), then adds 15 transport-mirror cases and seven post-2369 review-closure cases plus four scheduling regressions: 108 total. All prior 97 cases remain collected and executed. The original v2 hash assertion still checks the byte-identical fixture; functional runtime cases use the current repaired driver. Windows executes the process-tree timeout and both actual delete-sharing subprocess cases. Linux honestly skips those three Windows-only cases. All other cases run on both systems. The output must show actual collection, execution, case results, driver/application/tooling identities and zero real socket attempts. A passing count without those records is insufficient.
 
 Fixtures use the actual application writer/codec, verified parallel reader and Google Auth credentials/AuthorizedSession lifecycle. Signing keys exist only in synthetic process memory. Fake transport replaces HTTP adapter send; socket connections and DNS are denied in parent and children. Tests never require owner credentials, real Drive data, incident files or a production database. The runner strips inherited Google settings from suite child environments. Synthetic acceptance uses lower test-only slice/disk limits where necessary; the example's real envelope is tested separately without widening it.
 
@@ -99,3 +99,96 @@ After separate execution approval, reconstruction occurs only in the exact absen
 For the reviewed incident, cumulative usage is 15,204 GET attempts, 22 OAuth attempts out of 40, 140,811,321 observed bytes and 3,695.718 charged seconds. One original attempt plus four TOP-LEVEL v2 attempt markers consumes five of eight slices, leaving at most three. Copied ancestral attempt markers are excluded from recounting. No further OAuth increment is proposed: 18 remain. Remaining capture wall is 20,304.282 seconds and whole-operation wall 23,304.282 seconds. These are bookkeeping limits, not completion forecasts.
 
 Verification/preparation time and local retries count against the new invocation's remaining wall. Preserved external v1 and v2 files plus the successor's provenance/cache/database count against the unchanged disk stop. Use the original cumulative limits, never reset or double-charge inherited usage. A fourth initiated v2 slice remains charged even without a result. The next proposal names exact private inputs/destination and all hashes; no invocation is permitted by this repository PR.
+
+
+## Post-2369 review closure
+
+The adapter publishes each charged increment through TransportBudget. Response
+cleanup performs no additional mirror publication: an exhausted local retry
+cycle is never restarted. The response is closed on success and failure. When
+closure also fails, the primary exception and enriched journal fields remain
+authoritative and sanitized secondary_cleanup_error fields are retained. A
+standalone close failure is raised with sanitized operation/role/OS fields,
+rather than swallowed. No request, increment or journal append is replayed.
+
+Generation-three original_driver_sha256 must be a lowercase 64-character SHA256
+and equal the already verified original v1 driver identity in the historical v2
+addendum. Invalid/missing identity fails RECOVERY_ORIGINAL_DRIVER_IDENTITY_INVALID;
+a well-formed conflicting identity fails RECOVERY_ORIGINAL_DRIVER_ANCESTRY_CONFLICT.
+Both checks occur before successor creation/copying and worker/network activity.
+Recalculating an addendum's outer approval hash does not bypass this binding.
+
+The expanded offline runner preserves all prior 97 cases and adds seven
+review-closure regressions. The actual baseline adapter in the immutable v2
+fixture is byte-identical to the merged #2369 adapter (source-segment SHA256
+b5b3cd7e461393388f085940c02da68918f1da1cb7c05fc0fe688f4e272b89ac).
+It is exercised with the current real budget/publication functions and a fake
+HTTP boundary. The lineage fixture uses actual writer bytes and actual fake-HTTP
+capture for v1/v2; valid v3 initialization is tested with workers stopped at that
+boundary. Existing M12 still executes full synthetic capture/import/assessment.
+
+A changed driver requires a new, separately approved private continuation
+proposal. Preserve the prior proposal and operation directories unchanged.
+No new OAuth allowance, counter/time/slice reset or real execution follows
+from this correctness PR. Application source remains separately pinned.
+
+## Necessary CI scheduling correction
+
+The initial final-head Windows job 110560877523/run 36919088647 reached
+the unchanged 50-minute limit: 64 functional cases completed in 354.328
+seconds, then the actual-auth suite was still running when cancelled.
+Its report-retention step was skipped, so this is not a Windows pass.
+The prior verified 97-case artifact measured the 27,580-object actual-auth
+case at 1,980.687 seconds, the largest phase.
+
+The runner now starts that unchanged full-corpus case in one child process
+and all remaining unchanged cases in a second serial lane. Maximum two
+concurrent suite processes, isolated output directories and sanitized child
+environments; no shared synthetic journals or monkeypatch state. The auth
+CLI adds only an exclude selector for the other 15 cases. Collection retains all 104 cases and adds four scheduling regressions (108 total); exact per-suite/test identities are checked for duplicates or omissions.
+All assertions, object counts, real Google Auth lifecycle, eight slice
+boundaries, socket denial and operation/resource limits remain unchanged.
+That scheduling attempt kept 50 minutes per job; the later necessary CI-only timeout exception is recorded below. Final CI must execute
+and retain both partitions before acceptance.
+
+Scheduler regression entrypoint: python -B -X utf8 tests/qualification_ops/runner_scheduling_suite.py --result <new-private-json-file>. The four cases prove actual child overlap, propagated worker failure, rejection of missing/duplicate/substituted case identities, and complete/disjoint CI partitions. These are scheduler tests, not acquisition/model evidence.
+
+## Final Windows CI partition exception
+
+Run 36926712828/job 110585731373 cancelled at 50m22s. Its log proves all
+106 non-heavy cases passed (64 functional, 15 auth, two duration, 15 mirror,
+seven closure, three scheduler); the unmodified full-corpus case was still
+running. Parallel file-heavy tests on one Windows runner did not provide
+enough margin. These cancelled runs are retained as diagnostics, not passes.
+
+The existing qualification-operations workflow now uses two separate Windows
+runners: standard cases and the unchanged 27,580-object full-corpus case.
+Ubuntu executes all 108 cases; Windows executes 107 standard plus one full
+case. The extra fourth scheduler test proves partition coverage/disjointness.
+All case identities must match their selected collection. Ubuntu and Windows
+standard keep 50 minutes; the synthetic Windows full-corpus job is bounded at
+90 minutes, with isolated sanitized output. An aggregate preserves the
+existing offline-operations (windows-latest) check name and requires ALL
+partitions to pass; cancellation/failure/skipping cannot become acceptance.
+Only collection.json/combined.json/combined.xml are retained. The protection
+guard/baseline is unchanged; this offline workflow is not in its protected
+file list. No acquisition, census, driver or specification timeout/budget
+changes. This narrowly scoped CI exception is necessary for final Windows
+coverage and is not a correctness fix or real-run authorization.
+
+## Synthetic full-corpus CI timeout exception
+
+Run 36933179613/job 110607197517 also cancelled at 50m27s when isolated.
+The standard Windows partition passed 107 cases in 16m14s and Linux passed
+105 with three platform skips in 7m59s. The full Windows corpus case did not
+finish or retain its result. The aggregate correctly failed; no cancellation
+is treated as a pass. The code fixes and seven closure regressions passed on
+both platforms independently of this timeout.
+
+A separate CI-only change bounds the unchanged synthetic full-corpus Windows
+job at 90 minutes. Other partitions retain 50 minutes. No test bodies, case
+identities, assertions, network denial or real-operation limits change. A
+longer test timeout is not a correctness fix and grants no acquisition or
+recovery allowance; it permits collecting the required existing regression.
+The real census timeout remains 50 minutes and is untouched. Actual final
+duration and margin must be reported rather than predicted.
