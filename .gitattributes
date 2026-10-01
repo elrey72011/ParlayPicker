@@ -1,0 +1,4 @@
+.github/workflows/qualification-operations.yml text eol=lf
+tools/qualification/** text eol=lf
+tests/qualification_ops/** text eol=lf
+docs/operations/** text eol=lf

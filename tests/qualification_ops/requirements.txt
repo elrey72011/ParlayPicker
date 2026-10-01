@@ -1,0 +1,9 @@
+# Exact tested transport lifecycle dependencies, independent of application pins.
+google-auth==2.59.0
+requests==2.34.2
+cryptography==50.0.1
+pytest==9.1.1
+
+# Imported by the pinned writer/reader; no model-building entrypoint is used.
+numpy==2.2.6
+pandas==2.2.3
