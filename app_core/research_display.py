@@ -18,6 +18,62 @@ ESTIMATE_PROVENANCE_NOT_RECORDED ESTIMATE_IDENTITY_MISMATCH TARGET_MISMATCH MODE
 INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS""".split())
 VALUE_REASONS = frozenset("""RECORDED_PRICE_VALUE VALUE_NOT_RECORDED PRICE_VALUE_MISMATCH
 PUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_UNAVAILABLE""".split())
+# Explicit public-research provenance only; never an arbitrary source-column copy.
+EXPORT_PROVENANCE_COLUMNS = ["quote_id", "prospective_quote_id", "market_period", "period",
+    "settlement_rules", "inference_status", "model_status", "spread_line", "total_line",
+    "market_line_used", "push_probability", "probability_semantics", "research_source_semantics"]
+SEMANTIC_FIELDS = ("probability_semantics", "push_probability", "inference_status", "model_status")
+
+
+def _absent(value):
+    # NaN/inf/booleans are explicit invalid input, not a missing push contract.
+    return value is None or value is pd.NA or value is pd.NaT or (isinstance(value,str) and not value.strip())
+
+
+def preserve_source_semantics(frame):
+    """Keep pre-capture facts for display only, including invalid numeric types.
+
+    Immutable evidence capture legitimately canonicalizes its authority semantics.
+    This additive allowlisted carrier must not turn that derivation into proof that
+    an unsupported original research contract was valid. It is never read by gates.
+    """
+    out=frame.copy()
+    def encode(row):
+        saved=row.get("research_source_semantics")
+        if not _absent(saved):
+            return saved  # Preserve original bytes; a malformed carrier fails closed.
+        values={}
+        for field in SEMANTIC_FIELDS:
+            value=row.get(field)
+            if _absent(value): values[field]={"state":"MISSING"}
+            elif isinstance(value,str): values[field]={"state":"VALUE","value":value}
+            elif isinstance(value,bool) or type(value).__name__=="bool_":
+                values[field]={"state":"VALUE","value":bool(value)}
+            elif _number(value) is not None: values[field]={"state":"VALUE","value":_number(value)}
+            else: values[field]={"state":"INVALID"}
+        return json.dumps({"version":1,"fields":values},sort_keys=True,separators=(",",":"),allow_nan=False)
+    out["research_source_semantics"]=out.apply(encode,axis=1)
+    return out
+
+
+def _source_semantics(source):
+    saved=source.get("research_source_semantics")
+    if _absent(saved): return source
+    try:
+        decoded=json.loads(saved)
+        if set(decoded)!={"version","fields"} or decoded["version"]!=1 or set(decoded["fields"])!=set(SEMANTIC_FIELDS):
+            return None
+        out=dict(source)
+        for field,item in decoded["fields"].items():
+            if item=={"state":"MISSING"}: out[field]=None
+            elif item=={"state":"INVALID"}: out[field]=float("nan")
+            elif set(item)=={"state","value"} and item["state"]=="VALUE" and isinstance(item["value"],(str,bool,int,float)):
+                out[field]=item["value"]
+            else: return None
+        return out
+    except (ValueError,TypeError,AttributeError): return None
+
+
 SOURCE_FIELDS = {"best_available_probability", "calibrated_probability",
                  "production_win_probability", "win_probability"}
 
@@ -73,11 +129,17 @@ def from_export(row, *, source=None, source_field="win_probability"):
     """Capture the actual export estimate before contract authorization replaces it."""
     identity=_identity(row)
     basis=_text(row.get("probability_basis"))
+    direct=source is None
     source=source if source is not None else row
-    status=_text(_text(source.get("inference_status")) or source.get("model_status")).casefold()
-    inference="FAILED" if status in {"failed","error","inference_failed"} else (
-        "UNAVAILABLE" if status in {"missing","unavailable","inference_unavailable"} else
-        "RECORDED" if status in {"ok","success","complete"} else "UNKNOWN")
+    current_statuses=[_text(source.get(field)).casefold() for field in ("inference_status","model_status")]
+    current_push=source.get("push_probability")
+    source=_source_semantics(source)
+    if source is None:
+        return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS")
+    statuses=current_statuses+[_text(source.get(field)).casefold() for field in ("inference_status","model_status")]
+    inference="FAILED" if set(statuses)&{"failed","error","inference_failed"} else (
+        "UNAVAILABLE" if set(statuses)&{"missing","unavailable","inference_unavailable"} else
+        "RECORDED" if set(statuses)&{"ok","success","complete"} else "UNKNOWN")
     result=_empty(identity, source_field, basis, inference=inference)
     if inference in {"FAILED","UNAVAILABLE"}:
         result["availability_reason"]="INFERENCE_"+inference
@@ -89,10 +151,6 @@ def from_export(row, *, source=None, source_field="win_probability"):
         return result
     if target not in allowed:
         result["availability_reason"]="TARGET_MISMATCH"
-        return result
-    source_push=source.get("push_probability")
-    if isinstance(source_push,bool) or type(source_push).__name__=="bool_":
-        result["availability_reason"]="UNSUPPORTED_PROBABILITY_SEMANTICS"
         return result
     raw=source.get(source_field)
     probability=_number(row.get("win_probability"))
@@ -106,27 +164,61 @@ def from_export(row, *, source=None, source_field="win_probability"):
         result["availability_reason"]="INVALID_PROBABILITY"
         return result
     if probability is None:
-        result["availability_reason"]="UNSUPPORTED_PROBABILITY_SEMANTICS" if _text(source.get("probability_semantics")) else "ESTIMATE_NOT_RECORDED"
+        result["availability_reason"]="UNSUPPORTED_PROBABILITY_SEMANTICS"
         return result
+    # Explicit aliases cannot disagree about the exact displayed target or quote.
+    source_line=_number(source.get("total_line" if identity["market"].startswith("total") else "spread_line"))
+    market_line=_number(source.get("market_line_used"))
+    selection_line=re.search(r"(?:^|\s)([+-]?\d+(?:\.\d+)?)$",identity["selection"])
+    conflicts=(identity["line"] is not None and selection_line is not None and float(selection_line.group(1))!=identity["line"])
+    conflicts=conflicts or (source_line is not None and source_line!=identity["line"]) or (market_line is not None and market_line!=identity["line"])
+    for first,second in (("market_period","period"),("quote_id","prospective_quote_id")):
+        if _text(source.get(first)) and _text(source.get(second)) and _text(source[first])!=_text(source[second]): conflicts=True
+    if conflicts:
+        return _empty(identity,source_field,basis,reason="ESTIMATE_IDENTITY_MISMATCH",inference=inference)
     if not _complete(identity) or not basis or basis=="Unavailable":
         result["availability_reason"]="ESTIMATE_PROVENANCE_NOT_RECORDED"
         return result
     if not 0 <= probability <= 1:
         result["availability_reason"]="INVALID_PROBABILITY"
         return result
-    result.update(probability=probability, availability_reason="AVAILABLE",
-                  value_reason="PUSH_PROBABILITY_NOT_RECORDED")
-    push=_number(row.get("push_probability"))
+    # Validate the original source independently of derived export semantics.
+    # Only genuinely absent semantics AND push permit half-point compatibility.
+    source_push=source.get("push_probability")
+    semantics=source.get("probability_semantics")
     line=identity["line"]
     half_point=abs(line*2-round(line*2))<=1e-9 and abs(line-round(line))>1e-9
-    if push is None and half_point:
-        push=0.0  # Same bounded no-push compatibility used by the real exporter.
-    if push is None:
+    push=_number(source_push)
+    raw_probability=_number(raw)
+    semantic_name=_text(semantics)
+    mass=None
+    if _absent(semantics) and _absent(source_push) and half_point:
+        mass={"p_win":raw_probability,"p_push":0.0}
+    elif push is not None and not _absent(semantics):
+        if semantic_name=="win_conditional_on_decision":
+            from core.probability_semantics import unconditional_from_conditional
+            mass=unconditional_from_conditional(raw_probability,push)
+        elif semantic_name in {"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}:
+            mass={"p_win":raw_probability,"p_push":push}
+    if (mass is None or (half_point and mass["p_push"]>1e-9)
+        or (not _absent(current_push) and (_number(current_push) is None
+            or not math.isclose(_number(current_push),mass["p_push"],rel_tol=0,abs_tol=1e-9)))):
         return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
-    priced=price_value(probability,push,decimal_price(identity["odds"]))
-    if priced is None or (half_point and push>1e-9):
+    priced=price_value(mass["p_win"],mass["p_push"],decimal_price(identity["odds"]))
+    exported_push=row.get("push_probability")
+    exported_semantics=row.get("probability_semantics")
+    # A direct legacy export can contain the original conditional estimate.
+    # The per-game exporter must carry the compatible normalized probability.
+    expected=raw_probability if direct and semantic_name=="win_conditional_on_decision" else mass["p_win"]
+    if (priced is None or not math.isclose(probability,expected,rel_tol=0,abs_tol=1e-9)
+        or (not _absent(exported_push) and (_number(exported_push) is None or not math.isclose(_number(exported_push),mass["p_push"],rel_tol=0,abs_tol=1e-9)))
+        or (not _absent(exported_semantics) and _text(exported_semantics) not in
+            ({"win_conditional_on_decision"} if direct and semantic_name=="win_conditional_on_decision" else
+             {"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}))):
         return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
-    result.update(push_probability=push,probability_semantics="win_unconditional_with_push")
+    result.update(probability=mass["p_win"],push_probability=mass["p_push"],
+                  probability_semantics="win_unconditional_with_push",availability_reason="AVAILABLE",
+                  value_reason="VALUE_NOT_RECORDED")
     saved_ev=_number(row.get("ev"))
     ev_field={"production_win_probability":"production_expected_value","calibrated_probability":"expected_value"}.get(source_field)
     raw_ev=source.get(ev_field) if ev_field else None

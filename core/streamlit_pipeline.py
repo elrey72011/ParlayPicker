@@ -621,6 +621,11 @@ _PUBLIC_QUALITY_COLUMNS = ['stats_source', 'stats_resolution_status', 'stats_fal
                            'feature_stats_fallback', 'degraded_feature_subset_flag', 'model_status']
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _PUBLIC_QUALITY_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _PUBLIC_QUALITY_COLUMNS))
+# Carry supplied exact-target facts through the real export projections. These
+# columns are intentionally excluded from weak selected-audit source repair.
+from app_core.research_display import EXPORT_PROVENANCE_COLUMNS, preserve_source_semantics
+BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + EXPORT_PROVENANCE_COLUMNS))
+REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + EXPORT_PROVENANCE_COLUMNS))
 
 # Point-in-time NFL context must survive every selection/export boundary.  These
 # fields make it possible to reconstruct which completed games and injury report
@@ -653,6 +658,13 @@ CANONICAL_BET_COLUMNS = [
     # survives the canonical reindex and reaches the production degraded-run Kelly guard.
     "run_health_warning",
 ]
+
+_CANONICAL_RESEARCH_COLUMNS = ["quote_id", "prospective_quote_id", "market_period", "period",
+    "settlement_rules", "inference_status", "prediction_generated_at", "game_start_utc",
+    "odds_recorded_at", "quote_time", "quote_timestamp", "quote_bookmaker", "provider_quotes",
+    "candidate_id", "export_run_id", "research_source_semantics"]
+CANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + _CANONICAL_RESEARCH_COLUMNS))
+
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
 
@@ -757,6 +769,13 @@ _NULL_TEXT_TOKENS = {"", "none", "null", "nan", "nat", "n/a", "na", "<na>"}
 def _clean_text_placeholders(series: pd.Series) -> pd.Series:
     s = series.astype("string").str.strip()
     return s.where(~s.str.lower().isin(_NULL_TEXT_TOKENS), "")
+
+
+# Normalize only allowlisted retained provenance names; source values are not
+# filled or repaired, and invalid push types survive in the display-only carrier.
+from app_core.research_display import SEMANTIC_FIELDS
+_UPLOAD_COLUMN_ALIASES.update({field.replace("_"," "):field
+    for field in _CANONICAL_RESEARCH_COLUMNS + list(SEMANTIC_FIELDS)})
 
 
 def _normalize_upload_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -2110,6 +2129,7 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
     # if selected_sports:
     #     selected = {str(s).upper() for s in selected_sports}
     #     out = out[_string_series(out, "league").isin(selected)].copy()
+    out = preserve_source_semantics(out)
     for col in CANONICAL_BET_COLUMNS:
         if col not in out.columns:
             out[col] = pd.NA
@@ -3127,6 +3147,7 @@ def build_theover_bet_rows(
         existing_matchup_id.str.len().gt(0), computed_matchup_id
     )
 
+    out = preserve_source_semantics(out)
     for col in CANONICAL_BET_COLUMNS:
         if col not in out.columns:
             out[col] = pd.NA
@@ -4802,6 +4823,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "market_validation_status",
     ]
     candidate_audit_columns.extend(_NFL_CONTEXT_COLUMNS)
+    candidate_audit_columns.extend(c for c in EXPORT_PROVENANCE_COLUMNS if c not in candidate_audit_columns)
+    pool = preserve_source_semantics(pool)
     from app_core.candidate_evidence_schema import authority_projection
     # Verify the exact expanded candidate before private evidence projection.
     from app_core.mlb_spread_total_model import attach_challenger

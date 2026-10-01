@@ -162,6 +162,13 @@ def supported_unavailable_reason(final, candidates, family):
     return 'No exact fresh Novig or supported sportsbook quote in this analysis'
 
 
+def _display_line(source):
+    if source is None:
+        return None
+    line=number(source,'total_line' if text(source,'market_type').startswith('total') else 'spread_line')
+    return line if line is not None else number(source,'market_line_used')
+
+
 def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     if board is None or board.empty: return pd.DataFrame()
@@ -333,7 +340,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         exported={**(total_quality_fields(source) if source is not None else {}), 'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
                      'candidate_id':text(source,'candidate_id') if source is not None else '',
                      'quote_id':text(source,'quote_id','prospective_quote_id') if source is not None else '',
-                     'line':(number(source,'total_line') if source is not None and text(source,'market_type').startswith('total') else number(source,'spread_line') if source is not None else None),
+                     'line':_display_line(source),
                      'matchup_id':text(final,'matchup_id'),'game_date':text(final,'Local Date','game_date'),
                      'start':text(final,'Commence (Local)','game_time_est'),
                      'pick':text(source,'display_pick','best_pick') if source is not None else ('Sportsbook quote unavailable' if allow_fallback else 'Novig quote unavailable' if novig_only else 'No Bet — market unavailable'),

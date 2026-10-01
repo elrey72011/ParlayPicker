@@ -47,7 +47,9 @@ def authority_projection(pool, reporting_columns):
     validation, or synthesize team IDs. Only candidate identity uses the existing
     evidence digest when the producer did not supply an ID.
     """
-    columns = list(dict.fromkeys(list(reporting_columns) + list(PRIVATE_AUTHORITY_FIELDS)))
+    from app_core.research_display import EXPORT_PROVENANCE_COLUMNS, preserve_source_semantics
+    pool = preserve_source_semantics(pool)
+    columns = list(dict.fromkeys(list(reporting_columns) + list(PRIVATE_AUTHORITY_FIELDS) + EXPORT_PROVENANCE_COLUMNS))
     out = pool[[c for c in columns if c in pool.columns]].copy()
     def identity(row):
         if not missing(row.get('candidate_id')):
