@@ -200,3 +200,15 @@ def test_actual_browser_explicit_missing_and_inconsistent_push(monkeypatch,tmp_p
     assert result["initial"]["shown"][0]["probability"]==expected
     assert result["initial"]["current"]==result["initial"]["top"]==0
     assert result["initial"]["saved"]==[dict(probability=None,ev=None,status="PASS",stake=0)]
+
+def test_actual_browser_boolean_recorded_ev_stays_unavailable(monkeypatch,tmp_path):
+    from test_research_probability_display import QUOTE
+    raw=source(best_available_selection_policy="",production_win_probability=1.0,
+        production_expected_value=True,odds_american=100,provider_quotes=json.dumps([
+          dict(book="novig",market_type="spread_home",point=-1.5,price=100,recorded_at=QUOTE)]))
+    raw["wager_contract"]["odds"]=100
+    _,package=package_for(monkeypatch,raw)
+    result=inspect_browser(package,tmp_path/"invalid-ev",NOW)
+    assert result["initial"]["shown"][0]["probability"]==1.0
+    assert result["initial"]["shown"][0]["ev"] is None
+    assert result["initial"]["current"]==0

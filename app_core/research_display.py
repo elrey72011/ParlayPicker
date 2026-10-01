@@ -17,7 +17,7 @@ REASONS = frozenset("""AVAILABLE ESTIMATE_NOT_RECORDED INVALID_PROBABILITY NONFI
 ESTIMATE_PROVENANCE_NOT_RECORDED ESTIMATE_IDENTITY_MISMATCH TARGET_MISMATCH MODEL_TARGET_NOT_RECORDED
 INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS""".split())
 VALUE_REASONS = frozenset("""RECORDED_PRICE_VALUE VALUE_NOT_RECORDED PRICE_VALUE_MISMATCH
-PUSH_PROBABILITY_NOT_RECORDED ESTIMATE_UNAVAILABLE""".split())
+PUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_UNAVAILABLE""".split())
 SOURCE_FIELDS = {"best_available_probability", "calibrated_probability",
                  "production_win_probability", "win_probability"}
 
@@ -122,13 +122,17 @@ def from_export(row, *, source=None, source_field="win_probability"):
     if push is None and half_point:
         push=0.0  # Same bounded no-push compatibility used by the real exporter.
     if push is None:
-        return result
+        return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
     priced=price_value(probability,push,decimal_price(identity["odds"]))
     if priced is None or (half_point and push>1e-9):
         return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
     result.update(push_probability=push,probability_semantics="win_unconditional_with_push")
     saved_ev=_number(row.get("ev"))
-    if saved_ev is None:
+    ev_field={"production_win_probability":"production_expected_value","calibrated_probability":"expected_value"}.get(source_field)
+    raw_ev=source.get(ev_field) if ev_field else None
+    if isinstance(raw_ev,bool) or type(raw_ev).__name__=="bool_":
+        result["value_reason"]="INVALID_RECORDED_EV"
+    elif saved_ev is None:
         result["value_reason"]="VALUE_NOT_RECORDED"
     elif not math.isclose(saved_ev,priced["expected_value"],rel_tol=0,abs_tol=1e-9):
         result["value_reason"]="PRICE_VALUE_MISMATCH"

@@ -302,3 +302,24 @@ def test_validator_rejects_inconsistent_saved_push_without_relaxing_price_math(m
     for push in (True,float("nan"),float("inf"),-.1,1.0):
         broken=deepcopy(package);broken["games"]["overall"][0]["price_push_probability"]=push
         with pytest.raises(ValueError):validate_package(broken)
+
+def test_legacy_integer_without_push_cannot_claim_probability_semantics(monkeypatch):
+    raw=source(best_available_selection_policy="",production_win_probability=.6,
+        production_expected_value=.2,best_pick="Home -2",spread_line=-2.0,odds_american=100,
+        probability_semantics="",push_probability=None,provider_quotes=json.dumps([
+          dict(book="novig",market_type="spread_home",point=-2,price=100,recorded_at=QUOTE)]))
+    raw["wager_contract"].update(selection="Home -2",line=-2.0,odds=100)
+    _,package=package_for(monkeypatch,raw)
+    display=package["games"]["overall"][0]["research_display"]
+    assert display["probability"] is None and display["ev"] is None
+    assert display["availability_reason"]=="UNSUPPORTED_PROBABILITY_SEMANTICS"
+
+def test_boolean_recorded_ev_is_not_a_numeric_producer_estimate(monkeypatch):
+    raw=source(best_available_selection_policy="",production_win_probability=1.0,
+        production_expected_value=True,odds_american=100,provider_quotes=json.dumps([
+          dict(book="novig",market_type="spread_home",point=-1.5,price=100,recorded_at=QUOTE)]))
+    raw["wager_contract"]["odds"]=100
+    _,package=package_for(monkeypatch,raw)
+    display=package["games"]["overall"][0]["research_display"]
+    assert display["probability"]==1.0 and display["ev"] is None
+    assert display["value_reason"]=="INVALID_RECORDED_EV"
