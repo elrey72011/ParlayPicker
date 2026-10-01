@@ -1,0 +1,49 @@
+name: Qualification operations offline
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: qualification-operations-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  offline-operations:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: tooling
+      - name: Check out immutable application dependency
+        uses: actions/checkout@v5
+        with:
+          ref: 7c4fe71c7b9bd1a7ae73f8ba04b5e9a79d720eea
+          path: application
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tooling/tests/qualification_ops/requirements.txt
+      - name: Install test dependencies
+        run: python -m pip install -r tooling/tests/qualification_ops/requirements.txt
+      - name: Execute offline lifecycle and recovery regressions
+        env:
+          PARLAYPICKER_QUALIFICATION_APPLICATION_CHECKOUT: ${{ github.workspace }}/application
+        run: python -B -X utf8 tooling/tests/qualification_ops/run_offline.py --output-directory test-results
+      - name: Retain sanitized results only
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualification-operations-${{ matrix.os }}
+          path: |
+            test-results/collection.json
+            test-results/combined.json
+            test-results/combined.xml
+          if-no-files-found: error
+          retention-days: 14

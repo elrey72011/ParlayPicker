@@ -1,0 +1,87 @@
+{
+  "additional_oauth_allowance": 20,
+  "anchor_artifact_id": 1,
+  "anchor_run_id": 1,
+  "as_of": "2026-09-30T15:25:00.243304+00:00",
+  "authorization_policy": "CUMULATIVE_OAUTH_AMENDMENT_ONLY_OTHER_CHAIN_CAPS_UNCHANGED",
+  "canonical_membership_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "canonical_objects": 27580,
+  "chain_limits": {
+    "assessment_wall_seconds": 900,
+    "batch_objects": 8,
+    "capture_total_wall_seconds": 24000,
+    "materialization_wall_seconds": 900,
+    "max_drive_get_attempts": 90000,
+    "max_media_workers": 4,
+    "max_new_objects_per_slice": 5000,
+    "max_object_bytes": 60000000,
+    "max_snapshot_input_bytes": 2000000000,
+    "max_working_disk_bytes": 12000000000,
+    "required_initial_free_disk_bytes": 14000000000,
+    "slice_processing_seconds": 2700,
+    "slice_wall_seconds": 3000,
+    "soft_bytes_per_slice": 500000000,
+    "soft_bytes_total": 4000000000,
+    "total_wall_seconds": 27000,
+    "transport_observed_body_bytes_stop": 5000000000
+  },
+  "combined_capture_slice_limit": 8,
+  "combined_oauth_limit": 40,
+  "expected_predecessor": {
+    "accepted_count": 32,
+    "file_register_canonical_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "incurred_transport": {
+      "drive_get_attempts": 69,
+      "oauth_attempts": 20,
+      "observed_body_bytes": 9929120
+    },
+    "journal_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "journal_tail_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "original_operation_id": "EXAMPLE_NOT_REAL_OPERATION",
+    "state_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "historical_elapsed_seconds": 54.171,
+  "historical_oauth_attempts": 20,
+  "historical_retained_disk_bytes": 479287,
+  "historical_slice_attempts": 1,
+  "invocations": {
+    "additional_proposed": 1,
+    "automatic_retry": false,
+    "combined": 2,
+    "historical": 1
+  },
+  "original_driver_path": "REPLACE_WITH_PRIVATE_PRESERVED_ORIGINAL_DRIVER",
+  "original_driver_sha256": "6c01b00da684956f4319017c3b7f08b78eafc5133b74de98697d69fad287de67",
+  "original_spec_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "orphan_policy": "Preserve all three original unledgered files privately in predecessor evidence; do not admit them by presence/hash. Redownload their pinned logical objects and accept only via a new fully verified batch ledger.",
+  "owner_surface": "Explicitly approved Windows workstation; owner process-scoped PowerShell only",
+  "permitted_effects_if_separately_approved": [
+    "Pinned canonical Drive reads only",
+    "Private byte/provenance retention in exact successor destination",
+    "Isolated assembly and read-only assessment at anchor as_of"
+  ],
+  "predecessor_destination": "REPLACE_WITH_PRIVATE_PRESERVED_PREDECESSOR",
+  "prohibited_effects": [
+    "Writes to original predecessor",
+    "Remote mutations/provider capture",
+    "Model fitting/registration/plan freezing/activation/publication/billing/wagers"
+  ],
+  "remaining_capture_wall_seconds": 23945.829,
+  "remaining_get_attempts": 89931,
+  "remaining_observed_body_before_next_batch_threshold": 3990070880,
+  "remaining_observed_body_safety_stop": 4990070880,
+  "remaining_whole_operation_wall_seconds": 26945.829,
+  "replacement_driver_sha256": "8d8c629d45626fe64260593ba1a22795d962ba9574ff074043f3b403a240ec93",
+  "retention": "Retain original private destination unchanged; copy complete provenance to separate linked successor, preserve original 32 accepted cache objects; retain all new reports/raw bytes/database locally until owner disposition. No upload or automatic deletion.",
+  "schema": "parlaypicker-linked-recovery-v2",
+  "source_revision": "7c4fe71c7b9bd1a7ae73f8ba04b5e9a79d720eea",
+  "source_tree": "e9d684d0cdf695e3e6207641ab7a1e28eb00e5ea",
+  "status": "PROPOSAL_NOT_AUTHORIZED",
+  "storage_scope_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "successor_destination": "REPLACE_WITH_EXACT_ABSENT_PRIVATE_SUCCESSOR",
+  "successor_max_slices": 7,
+  "unknowns": [
+    "Interrupted fifth-batch transferred media total; observed response bodies remain charged",
+    "Network faults/expiry/401 retries can still exhaust this allowance; no completion guarantee"
+  ]
+}
