@@ -24,7 +24,7 @@ $offlineExitCode = $LASTEXITCODE
 Write-Host "OFFLINE TEST EXIT CODE: $offlineExitCode"
 ```
 
-On Linux, set the same environment variable to the separate checkout and run the same Python command. Collection preserves exactly 82 prior cases (64 functional, 16 actual-auth/recovery and two full-envelope/fault cases), then adds 15 transport-mirror cases: 97 total. The original v2 hash assertion still checks the byte-identical fixture; functional runtime cases use the current repaired driver. Windows executes the process-tree timeout and both actual delete-sharing subprocess cases. Linux honestly skips those three Windows-only cases. All other cases run on both systems. The output must show actual collection, execution, case results, driver/application/tooling identities and zero real socket attempts. A passing count without those records is insufficient.
+On Linux, set the same environment variable to the separate checkout and run the same Python command. Collection preserves exactly 82 prior cases (64 functional, 16 actual-auth/recovery and two full-envelope/fault cases), then adds 15 transport-mirror cases and seven post-2369 review-closure cases: 104 total. All prior 97 cases remain collected and executed. The original v2 hash assertion still checks the byte-identical fixture; functional runtime cases use the current repaired driver. Windows executes the process-tree timeout and both actual delete-sharing subprocess cases. Linux honestly skips those three Windows-only cases. All other cases run on both systems. The output must show actual collection, execution, case results, driver/application/tooling identities and zero real socket attempts. A passing count without those records is insufficient.
 
 Fixtures use the actual application writer/codec, verified parallel reader and Google Auth credentials/AuthorizedSession lifecycle. Signing keys exist only in synthetic process memory. Fake transport replaces HTTP adapter send; socket connections and DNS are denied in parent and children. Tests never require owner credentials, real Drive data, incident files or a production database. The runner strips inherited Google settings from suite child environments. Synthetic acceptance uses lower test-only slice/disk limits where necessary; the example's real envelope is tested separately without widening it.
 
@@ -99,3 +99,35 @@ After separate execution approval, reconstruction occurs only in the exact absen
 For the reviewed incident, cumulative usage is 15,204 GET attempts, 22 OAuth attempts out of 40, 140,811,321 observed bytes and 3,695.718 charged seconds. One original attempt plus four TOP-LEVEL v2 attempt markers consumes five of eight slices, leaving at most three. Copied ancestral attempt markers are excluded from recounting. No further OAuth increment is proposed: 18 remain. Remaining capture wall is 20,304.282 seconds and whole-operation wall 23,304.282 seconds. These are bookkeeping limits, not completion forecasts.
 
 Verification/preparation time and local retries count against the new invocation's remaining wall. Preserved external v1 and v2 files plus the successor's provenance/cache/database count against the unchanged disk stop. Use the original cumulative limits, never reset or double-charge inherited usage. A fourth initiated v2 slice remains charged even without a result. The next proposal names exact private inputs/destination and all hashes; no invocation is permitted by this repository PR.
+
+
+## Post-2369 review closure
+
+The adapter publishes each charged increment through TransportBudget. Response
+cleanup performs no additional mirror publication: an exhausted local retry
+cycle is never restarted. The response is closed on success and failure. When
+closure also fails, the primary exception and enriched journal fields remain
+authoritative and sanitized secondary_cleanup_error fields are retained. A
+standalone close failure is raised with sanitized operation/role/OS fields,
+rather than swallowed. No request, increment or journal append is replayed.
+
+Generation-three original_driver_sha256 must be a lowercase 64-character SHA256
+and equal the already verified original v1 driver identity in the historical v2
+addendum. Invalid/missing identity fails RECOVERY_ORIGINAL_DRIVER_IDENTITY_INVALID;
+a well-formed conflicting identity fails RECOVERY_ORIGINAL_DRIVER_ANCESTRY_CONFLICT.
+Both checks occur before successor creation/copying and worker/network activity.
+Recalculating an addendum's outer approval hash does not bypass this binding.
+
+The expanded offline runner preserves all prior 97 cases and adds seven
+review-closure regressions. The actual baseline adapter in the immutable v2
+fixture is byte-identical to the merged #2369 adapter (source-segment SHA256
+b5b3cd7e461393388f085940c02da68918f1da1cb7c05fc0fe688f4e272b89ac).
+It is exercised with the current real budget/publication functions and a fake
+HTTP boundary. The lineage fixture uses actual writer bytes and actual fake-HTTP
+capture for v1/v2; valid v3 initialization is tested with workers stopped at that
+boundary. Existing M12 still executes full synthetic capture/import/assessment.
+
+A changed driver requires a new, separately approved private continuation
+proposal. Preserve the prior proposal and operation directories unchanged.
+No new OAuth allowance, counter/time/slice reset or real execution follows
+from this correctness PR. Application source remains separately pinned.

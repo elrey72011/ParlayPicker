@@ -1,4 +1,4 @@
-"""Collect the unchanged 82 acceptance cases plus mirror-recovery regressions."""
+"""Collect the prior 97 acceptance cases plus review-closure regressions."""
 import argparse
 import hashlib
 import importlib.util
@@ -30,6 +30,10 @@ def collect():
     module=load('mirror_recovery_suite')
     suite=unittest.defaultTestLoader.loadTestsFromTestCase(module.Tests)
     records.extend({'suite':'mirror_recovery_suite','test':test.id()} for test in suite)
+    assert len(records)==97, ('MIRROR_ACCEPTANCE_COLLECTION_CHANGED',len(records))
+    module=load('review_closure_suite')
+    suite=unittest.defaultTestLoader.loadTestsFromTestCase(module.Tests)
+    records.extend({'suite':'review_closure_suite','test':test.id()} for test in suite)
     return records
 
 def main():
@@ -51,12 +55,12 @@ def main():
     env['PARLAYPICKER_QUALIFICATION_APPLICATION_CHECKOUT']=str(SOURCE)
     env['PYTHONDONTWRITEBYTECODE']='1'
     results=[];commands=[]
-    for name,extra in [('functional_suite',['--run-directory',str(output/'functional')]),('auth_recovery_suite',['--run-directory',str(output/'auth')]),('duration_suite',['--result',str(output/'duration.json')]),('mirror_recovery_suite',['--run-directory',str(output/'mirror')])]:
+    for name,extra in [('functional_suite',['--run-directory',str(output/'functional')]),('auth_recovery_suite',['--run-directory',str(output/'auth')]),('duration_suite',['--result',str(output/'duration.json')]),('mirror_recovery_suite',['--run-directory',str(output/'mirror')]),('review_closure_suite',['--run-directory',str(output/'review')])]:
         command=[sys.executable,'-B','-X','utf8',str(HERE/(name+'.py')),*extra]
         begun=time.monotonic()
         with (output/(name+'.log')).open('wb') as log:
             proc=subprocess.run(command,env=env,stdout=log,stderr=subprocess.STDOUT,check=False)
-        result_path=output/({'functional_suite':'functional/test-results.json','auth_recovery_suite':'auth/test-results.json','duration_suite':'duration.json','mirror_recovery_suite':'mirror/test-results.json'}[name])
+        result_path=output/({'functional_suite':'functional/test-results.json','auth_recovery_suite':'auth/test-results.json','duration_suite':'duration.json','mirror_recovery_suite':'mirror/test-results.json','review_closure_suite':'review/test-results.json'}[name])
         result=json.loads(result_path.read_bytes()) if result_path.is_file() else {'success':False,'tests_run':0,'results':[],'real_socket_attempts':'UNKNOWN'}
         elapsed=time.monotonic()-begun
         commands.append({'suite':name,'command':['python','-B','-X','utf8','tests/qualification_ops/'+name+'.py',*extra[:1],'PRIVATE_TEST_OUTPUT'],'exit_code':proc.returncode,'elapsed_seconds':elapsed})
@@ -72,12 +76,12 @@ def main():
             if item['status']=='SKIP':ET.SubElement(case,'skipped').text=item.get('reason',item.get('fault_or_result','Platform-specific test'))
             elif item['status']!='PASS':ET.SubElement(case,'failure').text=item.get('detail',item.get('fault_or_result','Test failed'))
         summary={k:v for k,v in result.items() if k!='results'};summary['results']=entries
-        if result['suite'] in ('auth_recovery_suite','mirror_recovery_suite'):
-            summary['measurements']={p.parent.name:json.loads(p.read_bytes()) for p in (output/('auth' if result['suite']=='auth_recovery_suite' else 'mirror')).glob('*/measurements.json')}
+        if result['suite'] in ('auth_recovery_suite','mirror_recovery_suite','review_closure_suite'):
+            summary['measurements']={p.parent.name:json.loads(p.read_bytes()) for p in (output/({'auth_recovery_suite':'auth','mirror_recovery_suite':'mirror','review_closure_suite':'review'}[result['suite']])).glob('*/measurements.json')}
         combined['suites'].append(summary)
     assert combined['tests_run']==len(collection), 'ACCEPTANCE_EXECUTION_CHANGED'
     (output/'combined.json').write_text(json.dumps(combined,sort_keys=True,indent=2)+'\n',encoding='utf-8')
     ET.ElementTree(report).write(output/'combined.xml',encoding='utf-8',xml_declaration=True)
-    print('ALL PRIOR 82 + MIRROR CASES:',combined['success'],'REAL SOCKET ATTEMPTS:',combined['real_socket_attempts'],flush=True)
+    print('ALL PRIOR 97 + REVIEW CLOSURE CASES:',combined['success'],'REAL SOCKET ATTEMPTS:',combined['real_socket_attempts'],flush=True)
     return 0 if combined['success'] else 1
 if __name__=='__main__':raise SystemExit(main())

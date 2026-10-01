@@ -458,6 +458,7 @@ def guarded_session_factory(spec,meter,allowed_media,authorized_session,auth_sta
             kwargs['stream']=True
             response=super().send(request,**kwargs)
             chunks=[];size=0
+            primary_error=None
             try:
                 for block in response.iter_content(65536):
                     size+=len(block)
@@ -468,9 +469,26 @@ def guarded_session_factory(spec,meter,allowed_media,authorized_session,auth_sta
                     chunks.append(block)
                 response._content=b''.join(chunks);response._content_consumed=True
                 return response
+            except BaseException as exc:
+                primary_error=exc
+                raise
             finally:
-                response.close()
-                with meter.lock: meter.mirror()
+                # Every incurred increment already publishes its projection.
+                # Cleanup must never restart an exhausted publication cycle.
+                try:
+                    response.close()
+                except Exception as cleanup:
+                    secondary=dict(error_fields(cleanup),
+                        attempted_operation='close_response',file_role='http_response')
+                    if primary_error is None:
+                        cleanup.first_error=secondary
+                        raise
+                    details=getattr(primary_error,'first_error',None)
+                    if details is None:
+                        details=dict(error_fields(primary_error),
+                            attempted_operation='consume_response_body',file_role='http_response')
+                        primary_error.first_error=details
+                    details['secondary_cleanup_error']=secondary
     def factory():
         if auth_state is None:
             session=authorized_session()
@@ -949,6 +967,12 @@ def inspect_linked_predecessor(spec, recovery):
             and digest(v2['original_driver_path']) == v2['original_driver_sha256']
             and digest(recovery['v2_driver_path']) == v2['replacement_driver_sha256'],
             'RECOVERY_DRIVER_CHAIN_CONFLICT')
+    original_driver_identity = recovery.get('original_driver_sha256')
+    require(type(original_driver_identity) is str and len(original_driver_identity) == 64
+            and all(c in '0123456789abcdef' for c in original_driver_identity),
+            'RECOVERY_ORIGINAL_DRIVER_IDENTITY_INVALID')
+    require(original_driver_identity == v2['original_driver_sha256'],
+            'RECOVERY_ORIGINAL_DRIVER_ANCESTRY_CONFLICT')
     original_root = Path(v2['predecessor_destination'])
     root = Path(recovery['predecessor_destination'])
     require(root.resolve() == Path(v2['successor_destination']).resolve()
