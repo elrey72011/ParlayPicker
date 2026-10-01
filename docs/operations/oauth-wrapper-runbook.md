@@ -6,7 +6,7 @@ This utility packages the completed operations-wrapper repair. It does not chang
 
 The TOOLING revision is the selected PR head/commit containing `tools/qualification/snapshot_acquire_and_assess.py`. Its APPLICATION dependency remains the clean separate checkout at `7c4fe71c7b9bd1a7ae73f8ba04b5e9a79d720eea`, tree `e9d684d0cdf695e3e6207641ab7a1e28eb00e5ea`. Never substitute the tooling SHA, update the historical source fields, copy application files into the tooling tree, or bypass the source/tree/clean-state guard.
 
-The tracked driver is byte-identical to tested local v2: 53,084 bytes; SHA-256 `8d8c629d45626fe64260593ba1a22795d962ba9574ff074043f3b403a240ec93`. Scoped Git attributes preserve its exact bytes on Windows and Linux. The original failed driver is retained as an offline baseline fixture, 37,141 bytes; SHA-256 `6c01b00da684956f4319017c3b7f08b78eafc5133b74de98697d69fad287de67`. Never invoke that fixture for a real operation.
+The tracked driver now includes bounded transport publication and explicit generation-three recovery. Its current byte identity is recorded in oauth-wrapper-artifact-hashes.sha256. The prior v2 baseline is preserved byte-identically as tests/qualification_ops/fixtures/previous_oauth_snapshot_acquire.py: 53,084 bytes; SHA-256 8d8c629d45626fe64260593ba1a22795d962ba9574ff074043f3b403a240ec93. The original failed driver remains an offline fixture: 37,141 bytes; SHA-256 6c01b00da684956f4319017c3b7f08b78eafc5133b74de98697d69fad287de67. Neither historical fixture is a real-run command.
 
 Runtime evidence identities remain independent: exact census run/artifact, captured as-of, namespace, membership hash, storage scope, checkpoint/report/archive hashes, blocked-operation ID, state/journal/file-register hashes and accepted ledgers. The example templates intentionally contain unusable placeholders; no authentic private specification, incident state or payload is committed.
 
@@ -24,7 +24,7 @@ $offlineExitCode = $LASTEXITCODE
 Write-Host "OFFLINE TEST EXIT CODE: $offlineExitCode"
 ```
 
-On Linux, set the same environment variable to the separate checkout and run the same Python command. Collection requires exactly 82 cases: 64 functional, 16 actual-auth/recovery and two full-envelope/fault cases. Windows executes the process-tree timeout case; Linux records its explicit platform skip. The output must show actual collection, execution, case results, driver/application/tooling identities and zero real socket attempts. A passing count without those records is insufficient.
+On Linux, set the same environment variable to the separate checkout and run the same Python command. Collection preserves exactly 82 prior cases (64 functional, 16 actual-auth/recovery and two full-envelope/fault cases), then adds 15 transport-mirror cases: 97 total. The original v2 hash assertion still checks the byte-identical fixture; functional runtime cases use the current repaired driver. Windows executes the process-tree timeout and both actual delete-sharing subprocess cases. Linux honestly skips those three Windows-only cases. All other cases run on both systems. The output must show actual collection, execution, case results, driver/application/tooling identities and zero real socket attempts. A passing count without those records is insufficient.
 
 Fixtures use the actual application writer/codec, verified parallel reader and Google Auth credentials/AuthorizedSession lifecycle. Signing keys exist only in synthetic process memory. Fake transport replaces HTTP adapter send; socket connections and DNS are denied in parent and children. Tests never require owner credentials, real Drive data, incident files or a production database. The runner strips inherited Google settings from suite child environments. Synthetic acceptance uses lower test-only slice/disk limits where necessary; the example's real envelope is tested separately without widening it.
 
@@ -42,7 +42,7 @@ One separately approved invocation; at most eight capture slices in the operatio
 
 Batch/request/deadline and periodically sampled disk stops are soft monitored bounds, not reservations or OS quotas. In-flight requests may overshoot thresholds; retain actual counters, timings and overruns. Raw-cache size is not cumulative wire transfer. Never reset durable attempt/body usage to an older accepted-state counter.
 
-## Private linked-recovery preparation (no authorization conferred)
+## Historical v1-to-v2 preparation (not the next continuation command)
 
 1. Preserve the blocked predecessor, original driver/spec, logs, attempt markers, all 51 incident files and incurred usage unchanged. Confirm no matching worker remains; do not delete/reset/overwrite or silently restart.
 2. Independently verify original driver/spec hashes, source SHA/tree/clean-state, census archive/file/canonical digests, namespace/membership/storage binding, every state commit, accepted batch seal/content/cache hash and complete transport journal/mirror. Any missing/conflicting evidence blocks recovery.
@@ -60,7 +60,7 @@ The separately hash-approved command form is:
   --approved-spec-sha256 '<verified original spec SHA256>' `
   --recovery-spec '<separately approved private linked-recovery addendum>' `
   --approved-recovery-sha256 '<verified addendum SHA256>' `
-  --approved-driver-sha256 '8d8c629d45626fe64260593ba1a22795d962ba9574ff074043f3b403a240ec93' `
+  --approved-driver-sha256 '<separately reviewed current driver SHA256>' `
   --execute-approved-operation
 $recoveryExitCode = $LASTEXITCODE
 Write-Host "RECOVERY EXIT CODE: $recoveryExitCode"
@@ -75,3 +75,27 @@ Keep acquisition completion, snapshot acceptance and readiness separate. Exit 0 
 A complete canonical snapshot can legitimately have zero canonical model/calibration/prediction/validation/review rows and produce blocked readiness. Verify standalone database integrity, all pinned re-encoded bytes and input hash before/after read-only assessment. Do not manufacture absent rows or fit/register/freeze models/plans to complete capture. Keep eight unsupported non-football manifest calculations UNKNOWN. Canonical absence describes only the captured corpus; native MLB/NCAAF research and separate receipt inputs are not canonical production registrations.
 
 If exact-target model lineage, compatible calibration or evaluated-plan bindings are absent, return those specific missing identities/cohorts and a separate bounded scientific work order. Do not infer product-to-plan bindings, matured holdouts or launch authority. No activation, staging, publication, sales/billing, reservations or wagers follows automatically from either PR merge or snapshot acceptance.
+
+## Local accounting publication
+
+A journal event is appended, flushed and fsynced once. Its derived mirror is serialized under a per-file lock, written exclusively to a unique same-directory temporary file, flushed/fsynced and closed before replacement. Only replacement is retried: at most 8 attempts, a 1.5-second monotonic deadline and delays of 0.02, 0.04, 0.08, 0.16 and at most 0.25 seconds thereafter. The actual supervisor/slice deadlines still apply; local retry time is charged. No HTTP request, journal append, counter increment or capture batch is replayed.
+
+Windows codes 32/33 are classified sharing/lock contention. Replacement code 5 alone is insufficient to classify a transient fault. For code 5, a non-mutating CreateFileW probe requests DELETE access with all sharing enabled on the target/temp; an observed sharing/lock code 32/33 permits bounded local retry. If the handle has already closed, code 5 permits replacement-only retry only after both non-read-only files prove DELETE access and the parent proves create/rename access. No attributes, ACLs or files are changed by these probes. ACL denial, missing paths, disk errors and unsupported conditions stop; persistent replacement failure still stops within eight attempts. The probe closes its handle and never deletes anything. This synthetic reproduction does not identify the lock owner or syscall in the historical incident.
+
+The wrapper record reader serializes briefly with in-process publication and uses FILE_SHARE_READ|WRITE|DELETE on Windows, transfers handle ownership correctly to a closed Python stream, and never mutates input. Normal observers should read briefly and close their handles. Windows tests also use a separate process holding a real handle without FILE_SHARE_DELETE, plus cooperative readers during concurrent writes. Persistent contention still fails closed within the bound. Written file contents are fsynced; universal directory-entry/power-loss durability is not claimed.
+
+First-error records contain stage, relative file role, attempted local operation, exception class, errno/winerror, confirmed sharing code when available, retry count/time, journal sequence/tail and last published mirror tail. Journal-write completion is explicitly unverified after an append/flush exception. Reporting reads the journal independently of the failed mirror; it never repairs incident state. If writing the diagnostic fails, the existing worker stderr retains sanitized first-error JSON. Raw exception text, paths, credentials, URLs, headers and payloads are omitted.
+
+## Explicit v2-to-v3 continuation (separate approval required)
+
+Use snapshot-recovery-v3.example.json.template only to prepare a private proposal. It is not authorized or executable as supplied. The command form above still requires the exact original specification, a newly approved generation-three addendum and current driver hash. Never rerun the previous v2 addendum, edit either predecessor, or copy a temporary mirror over a published mirror.
+
+The offline verifier checks both original and effective specs, the original OAuth amendment and driver hashes, both ancestry links and copied provenance, all state commits, every accepted batch and each pinned payload hash. The top-level v2 identity is its sealed recovery-link file SHA256; a slice inventory ID is not that identity. The entire inherited journal must be a byte prefix, with exact allowed event schema, unique JSON keys, record hashes, sequence/links, monotonic counters and trusted state/owner-bound floors. These hashes are consistency evidence, not an externally authenticated signature.
+
+The only supported publication gap is zero or ONE complete journal event. A valid published mirror must identify an exact journal event with equal counters. Missing, invalid, ahead, divergent or more distant mirrors; truncated/bad journals; changed payloads/specs/links; and counter rewinds remain blocked. A temporary mirror is corroboration only.
+
+After separate execution approval, reconstruction occurs only in the exact absent acquire-<anchor>-recovery-v3 destination. An immutable transport-reconciliation.json binds original files/specs, the prefix/final journal, inherited usage, resulting projection and newly approved driver/addendum. Full provenance is copied privately; only hash-verified accepted bytes enter the active cache. Unledgered cache/temp files remain evidence and are never promoted automatically. Fresh pinned metadata checks and missing-object retrieval remain read-only and charged.
+
+For the reviewed incident, cumulative usage is 15,204 GET attempts, 22 OAuth attempts out of 40, 140,811,321 observed bytes and 3,695.718 charged seconds. One original attempt plus four TOP-LEVEL v2 attempt markers consumes five of eight slices, leaving at most three. Copied ancestral attempt markers are excluded from recounting. No further OAuth increment is proposed: 18 remain. Remaining capture wall is 20,304.282 seconds and whole-operation wall 23,304.282 seconds. These are bookkeeping limits, not completion forecasts.
+
+Verification/preparation time and local retries count against the new invocation's remaining wall. Preserved external v1 and v2 files plus the successor's provenance/cache/database count against the unchanged disk stop. Use the original cumulative limits, never reset or double-charge inherited usage. A fourth initiated v2 slice remains charged even without a result. The next proposal names exact private inputs/destination and all hashes; no invocation is permitted by this repository PR.

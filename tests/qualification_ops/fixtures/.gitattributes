@@ -1,1 +1,2 @@
 legacy_snapshot_acquire.py -text whitespace=cr-at-eol
+previous_oauth_snapshot_acquire.py -text whitespace=cr-at-eol
