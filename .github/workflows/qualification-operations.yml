@@ -10,10 +10,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   offline-operations:
+    name: ${{ matrix.check_name }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            partition: all
+            check_name: offline-operations (ubuntu-latest)
+            artifact_name: qualification-operations-ubuntu-latest
+          - os: windows-latest
+            partition: standard
+            check_name: offline-operations (windows-latest standard)
+            artifact_name: qualification-operations-windows-standard
+          - os: windows-latest
+            partition: full-corpus
+            check_name: offline-operations (windows-latest full-corpus)
+            artifact_name: qualification-operations-windows-full-corpus
     runs-on: ${{ matrix.os }}
     timeout-minutes: 50
     steps:
@@ -35,15 +48,26 @@ jobs:
       - name: Execute offline lifecycle and recovery regressions
         env:
           PARLAYPICKER_QUALIFICATION_APPLICATION_CHECKOUT: ${{ github.workspace }}/application
-        run: python -B -X utf8 tooling/tests/qualification_ops/run_offline.py --output-directory test-results
+        run: python -B -X utf8 tooling/tests/qualification_ops/run_offline.py --output-directory test-results --partition ${{ matrix.partition }}
       - name: Retain sanitized results only
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: qualification-operations-${{ matrix.os }}
+          name: ${{ matrix.artifact_name }}
           path: |
             test-results/collection.json
             test-results/combined.json
             test-results/combined.xml
           if-no-files-found: error
           retention-days: 14
+
+  windows-complete:
+    name: offline-operations (windows-latest)
+    runs-on: ubuntu-latest
+    needs: offline-operations
+    if: ${{ always() }}
+    steps:
+      - name: Require every offline partition to pass
+        env:
+          PARTITIONS_RESULT: ${{ needs.offline-operations.result }}
+        run: test "$PARTITIONS_RESULT" = success

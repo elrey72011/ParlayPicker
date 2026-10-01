@@ -39,6 +39,16 @@ while not (root/peer).exists():
                 return ['other']
             self.assertEqual(runner.run_in_two_lanes(heavy,other),['heavy','other'])
             self.assertTrue((root/'heavy').exists() and (root/'other').exists())
+    def test_partitions_cover_every_case_once(self):
+        records=[{'suite':'auth_recovery_suite','test':'Tests.'+runner.FULL_CORPUS_TEST},
+                 {'suite':'auth_recovery_suite','test':'Tests.other'},
+                 {'suite':'synthetic','test':'Tests.third'}]
+        full=runner.select_collection(records,'full-corpus')
+        standard=runner.select_collection(records,'standard')
+        self.assertEqual(len(full),1);self.assertEqual(len(standard),2)
+        self.assertEqual(runner.select_collection(records,'all'),records)
+        self.assertEqual(sorted(full+standard,key=lambda x:x['test']),sorted(records,key=lambda x:x['test']))
+        self.assertFalse(any(x in standard for x in full))
     def test_worker_failure_is_not_hidden(self):
         def fail():raise RuntimeError('SYNTHETIC_SCHEDULER_FAILURE')
         with self.assertRaisesRegex(RuntimeError,'^SYNTHETIC_SCHEDULER_FAILURE$'):

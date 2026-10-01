@@ -41,6 +41,13 @@ def collect():
     records.extend({'suite':'runner_scheduling_suite','test':test.id()} for test in suite)
     return records
 
+FULL_CORPUS_TEST='test_A05_27580_objects_virtual_full_duration'
+
+def select_collection(records,partition):
+    if partition=='all':return records
+    def full(item):return item['suite']=='auth_recovery_suite' and item['test'].rsplit('.',1)[-1]==FULL_CORPUS_TEST
+    return [item for item in records if full(item)==(partition=='full-corpus')]
+
 def run_in_two_lanes(full_corpus,other_cases):
     with ThreadPoolExecutor(max_workers=2) as executor:
         full_future=executor.submit(full_corpus)
@@ -56,10 +63,11 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-directory',type=Path,required=True)
     parser.add_argument('--collect-only',action='store_true')
+    parser.add_argument('--partition',choices=('all','standard','full-corpus'),default='all')
     options=parser.parse_args()
     verify_application()
     output=options.output_directory.resolve();output.mkdir(parents=True,exist_ok=False)
-    collection=collect()
+    collection=select_collection(collect(),options.partition)
     (output/'collection.json').write_text(json.dumps(collection,indent=2)+'\n',encoding='utf-8')
     print('COLLECTED:',len(collection),flush=True)
     if options.collect_only:
@@ -72,7 +80,7 @@ def main():
     env['PYTHONDONTWRITEBYTECODE']='1'
     # Start the full 27,580-object lifecycle first; independent suites occupy
     # one other child-process slot. Test bodies and resource limits are unchanged.
-    heavy_selector='test_A05_27580_objects_virtual_full_duration'
+    heavy_selector=FULL_CORPUS_TEST
     def execute(name,extra,result_file,label):
         command=[sys.executable,'-B','-X','utf8',str(HERE/(name+'.py')),*extra]
         begun=time.monotonic()
@@ -95,7 +103,9 @@ def main():
           ('review_closure_suite',['--run-directory',str(output/'review')],'review/test-results.json','review_closure_suite'),
           ('runner_scheduling_suite',['--result',str(output/'runner-scheduling.json')],'runner-scheduling.json','runner_scheduling_suite')]
     def serial_others():return [execute(*job) for job in jobs]
-    partitions=run_in_two_lanes(lambda:execute(*heavy),serial_others)
+    if options.partition=='full-corpus':partitions=[execute(*heavy)]
+    elif options.partition=='standard':partitions=serial_others()
+    else:partitions=run_in_two_lanes(lambda:execute(*heavy),serial_others)
     results=[];commands=[]
     for result,record in partitions:
         commands.append(record)
@@ -110,7 +120,7 @@ def main():
             if isinstance(matching['real_socket_attempts'],int) and isinstance(result['real_socket_attempts'],int):matching['real_socket_attempts']+=result['real_socket_attempts']
             else:matching['real_socket_attempts']='UNKNOWN'
     verify_case_identities(results,collection)
-    combined={'tooling_revision':subprocess.check_output(['git','-C',str(HERE.parents[1]),'rev-parse','HEAD'],text=True).strip(),'application_revision':subprocess.check_output(['git','-C',str(SOURCE),'rev-parse','HEAD'],text=True).strip(),'driver_sha256':hashlib.sha256(DRIVER.read_bytes()).hexdigest(),'synthetic_only':True,'collection_count':len(collection),'tests_run':sum(r['tests_run'] for r in results),'real_socket_attempts':sum(r['real_socket_attempts'] for r in results if isinstance(r['real_socket_attempts'],int)),'success':all(r['success'] and r['exit_code']==0 and r['real_socket_attempts']==0 for r in results),'commands':commands,'suites':[]}
+    combined={'partition':options.partition,'tooling_revision':subprocess.check_output(['git','-C',str(HERE.parents[1]),'rev-parse','HEAD'],text=True).strip(),'application_revision':subprocess.check_output(['git','-C',str(SOURCE),'rev-parse','HEAD'],text=True).strip(),'driver_sha256':hashlib.sha256(DRIVER.read_bytes()).hexdigest(),'synthetic_only':True,'collection_count':len(collection),'tests_run':sum(r['tests_run'] for r in results),'real_socket_attempts':sum(r['real_socket_attempts'] for r in results if isinstance(r['real_socket_attempts'],int)),'success':all(r['success'] and r['exit_code']==0 and r['real_socket_attempts']==0 for r in results),'commands':commands,'suites':[]}
     report=ET.Element('testsuites')
     for result in results:
         entries=result['results']

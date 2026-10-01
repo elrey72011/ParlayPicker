@@ -15,7 +15,7 @@ This is a new closure record. Earlier reports/proposals remain historical.
 Only guarded_session_factory and inspect_linked_predecessor change in the
 operations driver. Publication, journal/prefix, auth/session lifecycle, source
 checks, accepted payload verification, allocation/scientific code and cumulative
-policies remain unchanged. No workflow/ignore/application edit is needed.
+policies remain unchanged. The only workflow exception is the bounded offline Windows CI sharding described below. No ignore/application edit is needed.
 
 ## Executable acceptance mapping
 
@@ -27,7 +27,7 @@ policies remain unchanged. No workflow/ignore/application edit is needed.
 | C04 | Three test_C04 cases: ordinary success, unrelated primary error and standalone close error; no cleanup publication/request/charge replay or batch admission |
 | C05 | test_C05_C06: valid actual-writer v1/v2 ancestry and v3 link; otherwise valid conflicting v3 hash rejected with its recalculated outer approval |
 | C06 | Same test: missing, null, short, nonhex and wrong-type fields rejected explicitly before creation/copy/network |
-| C07 | Runner asserts original 82 and mirror 97 collections, then collects 107; Windows all cases, Linux three existing Windows-only skips |
+| C07 | Runner asserts original 82 and mirror 97 collections, then collects 108; Windows all cases, Linux three existing Windows-only skips |
 | C08 | Final-revision application/subscriber/offline CI metadata and downloaded sanitized artifacts, not expected outcomes |
 | C09 | Original review-thread replies link correction commit, regression lines and final run; resolution requires substantive correction |
 | C10 | Scoped follow-up PR with exact base/head and artifact hash registers |
@@ -77,10 +77,32 @@ The runner now starts that unchanged full-corpus case in one child process
 and all remaining unchanged cases in a second serial lane. Maximum two
 concurrent suite processes, isolated output directories and sanitized child
 environments; no shared synthetic journals or monkeypatch state. The auth
-CLI adds only an exclude selector for the other 15 cases. Collection retains all 104 cases and adds three scheduling regressions (107 total); exact per-suite/test identities are checked for duplicates or omissions.
+CLI adds only an exclude selector for the other 15 cases. Collection retains all 104 cases and adds four scheduling regressions (108 total); exact per-suite/test identities are checked for duplicates or omissions.
 All assertions, object counts, real Google Auth lifecycle, eight slice
 boundaries, socket denial and operation/resource limits remain unchanged.
-The workflow and its 50-minute timeout are unchanged. Final CI must execute
+The per-job 50-minute timeout is unchanged; the necessary Windows-only offline CI sharding exception is recorded below. Final CI must execute
 and retain both partitions before acceptance.
 
-Scheduler regression entrypoint: python -B -X utf8 tests/qualification_ops/runner_scheduling_suite.py --result <new-private-json-file>. The three cases prove actual child overlap, propagated worker failure, and rejection of missing/duplicate/substituted case identities. These are scheduler tests, not acquisition/model evidence.
+Scheduler regression entrypoint: python -B -X utf8 tests/qualification_ops/runner_scheduling_suite.py --result <new-private-json-file>. The four cases prove actual child overlap, propagated worker failure, rejection of missing/duplicate/substituted case identities, and complete/disjoint CI partitions. These are scheduler tests, not acquisition/model evidence.
+
+## Final Windows CI partition exception
+
+Run 36926712828/job 110585731373 cancelled at 50m22s. Its log proves all
+106 non-heavy cases passed (64 functional, 15 auth, two duration, 15 mirror,
+seven closure, three scheduler); the unmodified full-corpus case was still
+running. Parallel file-heavy tests on one Windows runner did not provide
+enough margin. These cancelled runs are retained as diagnostics, not passes.
+
+The existing qualification-operations workflow now uses two separate Windows
+runners: standard cases and the unchanged 27,580-object full-corpus case.
+Ubuntu executes all 108 cases; Windows executes 107 standard plus one full
+case. The extra fourth scheduler test proves partition coverage/disjointness.
+All case identities must match their selected collection. Each job keeps its
+50-minute timeout and isolated sanitized output. An aggregate preserves the
+existing offline-operations (windows-latest) check name and requires ALL
+partitions to pass; cancellation/failure/skipping cannot become acceptance.
+Only collection.json/combined.json/combined.xml are retained. The protection
+guard/baseline is unchanged; this offline workflow is not in its protected
+file list. No acquisition, census, driver or specification timeout/budget
+changes. This narrowly scoped CI exception is necessary for final Windows
+coverage and is not a correctness fix or real-run authorization.
