@@ -80,7 +80,7 @@ environments; no shared synthetic journals or monkeypatch state. The auth
 CLI adds only an exclude selector for the other 15 cases. Collection retains all 104 cases and adds four scheduling regressions (108 total); exact per-suite/test identities are checked for duplicates or omissions.
 All assertions, object counts, real Google Auth lifecycle, eight slice
 boundaries, socket denial and operation/resource limits remain unchanged.
-The per-job 50-minute timeout is unchanged; the necessary Windows-only offline CI sharding exception is recorded below. Final CI must execute
+That scheduling attempt kept 50 minutes per job; the later necessary CI-only timeout exception is recorded below. Final CI must execute
 and retain both partitions before acceptance.
 
 Scheduler regression entrypoint: python -B -X utf8 tests/qualification_ops/runner_scheduling_suite.py --result <new-private-json-file>. The four cases prove actual child overlap, propagated worker failure, rejection of missing/duplicate/substituted case identities, and complete/disjoint CI partitions. These are scheduler tests, not acquisition/model evidence.
@@ -97,8 +97,9 @@ The existing qualification-operations workflow now uses two separate Windows
 runners: standard cases and the unchanged 27,580-object full-corpus case.
 Ubuntu executes all 108 cases; Windows executes 107 standard plus one full
 case. The extra fourth scheduler test proves partition coverage/disjointness.
-All case identities must match their selected collection. Each job keeps its
-50-minute timeout and isolated sanitized output. An aggregate preserves the
+All case identities must match their selected collection. Ubuntu and Windows
+standard keep 50 minutes; the synthetic Windows full-corpus job is bounded at
+90 minutes, with isolated sanitized output. An aggregate preserves the
 existing offline-operations (windows-latest) check name and requires ALL
 partitions to pass; cancellation/failure/skipping cannot become acceptance.
 Only collection.json/combined.json/combined.xml are retained. The protection
@@ -106,3 +107,20 @@ guard/baseline is unchanged; this offline workflow is not in its protected
 file list. No acquisition, census, driver or specification timeout/budget
 changes. This narrowly scoped CI exception is necessary for final Windows
 coverage and is not a correctness fix or real-run authorization.
+
+## Synthetic full-corpus CI timeout exception
+
+Run 36933179613/job 110607197517 also cancelled at 50m27s when isolated.
+The standard Windows partition passed 107 cases in 16m14s and Linux passed
+105 with three platform skips in 7m59s. The full Windows corpus case did not
+finish or retain its result. The aggregate correctly failed; no cancellation
+is treated as a pass. The code fixes and seven closure regressions passed on
+both platforms independently of this timeout.
+
+A separate CI-only change bounds the unchanged synthetic full-corpus Windows
+job at 90 minutes. Other partitions retain 50 minutes. No test bodies, case
+identities, assertions, network denial or real-operation limits change. A
+longer test timeout is not a correctness fix and grants no acquisition or
+recovery allowance; it permits collecting the required existing regression.
+The real census timeout remains 50 minutes and is untouched. Actual final
+duration and margin must be reported rather than predicted.
