@@ -1,5 +1,6 @@
 """Collect the prior 97 acceptance cases plus review-closure regressions."""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import importlib.util
 import json
@@ -34,7 +35,22 @@ def collect():
     module=load('review_closure_suite')
     suite=unittest.defaultTestLoader.loadTestsFromTestCase(module.Tests)
     records.extend({'suite':'review_closure_suite','test':test.id()} for test in suite)
+    assert len(records)==104, ('REVIEW_CLOSURE_COLLECTION_CHANGED',len(records))
+    module=load('runner_scheduling_suite')
+    suite=unittest.defaultTestLoader.loadTestsFromTestCase(module.Tests)
+    records.extend({'suite':'runner_scheduling_suite','test':test.id()} for test in suite)
     return records
+
+def run_in_two_lanes(full_corpus,other_cases):
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        full_future=executor.submit(full_corpus)
+        other_future=executor.submit(other_cases)
+        return [full_future.result(),*other_future.result()]
+
+def verify_case_identities(results,collection):
+    observed=[(r['suite'],item['test'].rsplit('.',1)[-1]) for r in results for item in r['results']]
+    expected=[(item['suite'],item['test'].rsplit('.',1)[-1]) for item in collection]
+    assert len(observed)==len(set(observed)) and set(observed)==set(expected),'ACCEPTANCE_IDENTITIES_CHANGED'
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -54,18 +70,46 @@ def main():
         env.pop(name,None)
     env['PARLAYPICKER_QUALIFICATION_APPLICATION_CHECKOUT']=str(SOURCE)
     env['PYTHONDONTWRITEBYTECODE']='1'
-    results=[];commands=[]
-    for name,extra in [('functional_suite',['--run-directory',str(output/'functional')]),('auth_recovery_suite',['--run-directory',str(output/'auth')]),('duration_suite',['--result',str(output/'duration.json')]),('mirror_recovery_suite',['--run-directory',str(output/'mirror')]),('review_closure_suite',['--run-directory',str(output/'review')])]:
+    # Start the full 27,580-object lifecycle first; independent suites occupy
+    # one other child-process slot. Test bodies and resource limits are unchanged.
+    heavy_selector='test_A05_27580_objects_virtual_full_duration'
+    def execute(name,extra,result_file,label):
         command=[sys.executable,'-B','-X','utf8',str(HERE/(name+'.py')),*extra]
         begun=time.monotonic()
-        with (output/(name+'.log')).open('wb') as log:
+        print('STARTED:',label,flush=True)
+        with (output/(label+'.log')).open('wb') as log:
             proc=subprocess.run(command,env=env,stdout=log,stderr=subprocess.STDOUT,check=False)
-        result_path=output/({'functional_suite':'functional/test-results.json','auth_recovery_suite':'auth/test-results.json','duration_suite':'duration.json','mirror_recovery_suite':'mirror/test-results.json','review_closure_suite':'review/test-results.json'}[name])
+        result_path=output/result_file
         result=json.loads(result_path.read_bytes()) if result_path.is_file() else {'success':False,'tests_run':0,'results':[],'real_socket_attempts':'UNKNOWN'}
         elapsed=time.monotonic()-begun
-        commands.append({'suite':name,'command':['python','-B','-X','utf8','tests/qualification_ops/'+name+'.py',*extra[:1],'PRIVATE_TEST_OUTPUT'],'exit_code':proc.returncode,'elapsed_seconds':elapsed})
-        result['suite']=name;result['exit_code']=proc.returncode;results.append(result)
-        print(name, 'tests=',result['tests_run'],'success=',result['success'],'exit=',proc.returncode,'seconds=',round(elapsed,3),flush=True)
+        sanitized=['python','-B','-X','utf8','tests/qualification_ops/'+name+'.py',extra[0],'PRIVATE_TEST_OUTPUT',*extra[2:]]
+        record={'suite':name,'partition':label,'command':sanitized,'exit_code':proc.returncode,'elapsed_seconds':elapsed}
+        result['suite']=name;result['exit_code']=proc.returncode
+        print(label,'tests=',result['tests_run'],'success=',result['success'],'exit=',proc.returncode,'seconds=',round(elapsed,3),flush=True)
+        return result,record
+    heavy=('auth_recovery_suite',['--run-directory',str(output/'auth-heavy'),'--select',heavy_selector],'auth-heavy/test-results.json','auth-full-corpus')
+    jobs=[('functional_suite',['--run-directory',str(output/'functional')],'functional/test-results.json','functional_suite'),
+          ('auth_recovery_suite',['--run-directory',str(output/'auth'),'--exclude',heavy_selector],'auth/test-results.json','auth-other-cases'),
+          ('duration_suite',['--result',str(output/'duration.json')],'duration.json','duration_suite'),
+          ('mirror_recovery_suite',['--run-directory',str(output/'mirror')],'mirror/test-results.json','mirror_recovery_suite'),
+          ('review_closure_suite',['--run-directory',str(output/'review')],'review/test-results.json','review_closure_suite'),
+          ('runner_scheduling_suite',['--result',str(output/'runner-scheduling.json')],'runner-scheduling.json','runner_scheduling_suite')]
+    def serial_others():return [execute(*job) for job in jobs]
+    partitions=run_in_two_lanes(lambda:execute(*heavy),serial_others)
+    results=[];commands=[]
+    for result,record in partitions:
+        commands.append(record)
+        matching=next((r for r in results if r['suite']==result['suite']),None)
+        if matching is None:results.append(result)
+        else:
+            matching['results']+=result['results'];matching['tests_run']+=result['tests_run']
+            for field in ('failures','errors'):
+                if field in matching and field in result:matching[field]+=result[field]
+            matching['success']=matching['success'] and result['success']
+            matching['exit_code']=matching['exit_code'] or result['exit_code']
+            if isinstance(matching['real_socket_attempts'],int) and isinstance(result['real_socket_attempts'],int):matching['real_socket_attempts']+=result['real_socket_attempts']
+            else:matching['real_socket_attempts']='UNKNOWN'
+    verify_case_identities(results,collection)
     combined={'tooling_revision':subprocess.check_output(['git','-C',str(HERE.parents[1]),'rev-parse','HEAD'],text=True).strip(),'application_revision':subprocess.check_output(['git','-C',str(SOURCE),'rev-parse','HEAD'],text=True).strip(),'driver_sha256':hashlib.sha256(DRIVER.read_bytes()).hexdigest(),'synthetic_only':True,'collection_count':len(collection),'tests_run':sum(r['tests_run'] for r in results),'real_socket_attempts':sum(r['real_socket_attempts'] for r in results if isinstance(r['real_socket_attempts'],int)),'success':all(r['success'] and r['exit_code']==0 and r['real_socket_attempts']==0 for r in results),'commands':commands,'suites':[]}
     report=ET.Element('testsuites')
     for result in results:
@@ -77,7 +121,8 @@ def main():
             elif item['status']!='PASS':ET.SubElement(case,'failure').text=item.get('detail',item.get('fault_or_result','Test failed'))
         summary={k:v for k,v in result.items() if k!='results'};summary['results']=entries
         if result['suite'] in ('auth_recovery_suite','mirror_recovery_suite','review_closure_suite'):
-            summary['measurements']={p.parent.name:json.loads(p.read_bytes()) for p in (output/({'auth_recovery_suite':'auth','mirror_recovery_suite':'mirror','review_closure_suite':'review'}[result['suite']])).glob('*/measurements.json')}
+            folders=('auth','auth-heavy') if result['suite']=='auth_recovery_suite' else ({'mirror_recovery_suite':'mirror','review_closure_suite':'review'}[result['suite']],)
+            summary['measurements']={p.parent.name:json.loads(p.read_bytes()) for folder in folders for p in (output/folder).glob('*/measurements.json')}
         combined['suites'].append(summary)
     assert combined['tests_run']==len(collection), 'ACCEPTANCE_EXECUTION_CHANGED'
     (output/'combined.json').write_text(json.dumps(combined,sort_keys=True,indent=2)+'\n',encoding='utf-8')

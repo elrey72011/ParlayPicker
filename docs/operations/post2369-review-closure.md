@@ -27,7 +27,7 @@ policies remain unchanged. No workflow/ignore/application edit is needed.
 | C04 | Three test_C04 cases: ordinary success, unrelated primary error and standalone close error; no cleanup publication/request/charge replay or batch admission |
 | C05 | test_C05_C06: valid actual-writer v1/v2 ancestry and v3 link; otherwise valid conflicting v3 hash rejected with its recalculated outer approval |
 | C06 | Same test: missing, null, short, nonhex and wrong-type fields rejected explicitly before creation/copy/network |
-| C07 | Runner asserts original 82 and mirror 97 collections, then collects 104; Windows all cases, Linux three existing Windows-only skips |
+| C07 | Runner asserts original 82 and mirror 97 collections, then collects 107; Windows all cases, Linux three existing Windows-only skips |
 | C08 | Final-revision application/subscriber/offline CI metadata and downloaded sanitized artifacts, not expected outcomes |
 | C09 | Original review-thread replies link correction commit, regression lines and final run; resolution requires substantive correction |
 | C10 | Scoped follow-up PR with exact base/head and artifact hash registers |
@@ -63,3 +63,24 @@ from the remaining object count.
 
 No real requests, incident edits, recovery, models, activation, deployment,
 publication, billing, wagers or merge are authorized by this record.
+
+## Necessary CI scheduling correction
+
+The initial final-head Windows job 110560877523/run 36919088647 reached
+the unchanged 50-minute limit: 64 functional cases completed in 354.328
+seconds, then the actual-auth suite was still running when cancelled.
+Its report-retention step was skipped, so this is not a Windows pass.
+The prior verified 97-case artifact measured the 27,580-object actual-auth
+case at 1,980.687 seconds, the largest phase.
+
+The runner now starts that unchanged full-corpus case in one child process
+and all remaining unchanged cases in a second serial lane. Maximum two
+concurrent suite processes, isolated output directories and sanitized child
+environments; no shared synthetic journals or monkeypatch state. The auth
+CLI adds only an exclude selector for the other 15 cases. Collection retains all 104 cases and adds three scheduling regressions (107 total); exact per-suite/test identities are checked for duplicates or omissions.
+All assertions, object counts, real Google Auth lifecycle, eight slice
+boundaries, socket denial and operation/resource limits remain unchanged.
+The workflow and its 50-minute timeout are unchanged. Final CI must execute
+and retain both partitions before acceptance.
+
+Scheduler regression entrypoint: python -B -X utf8 tests/qualification_ops/runner_scheduling_suite.py --result <new-private-json-file>. The three cases prove actual child overlap, propagated worker failure, and rejection of missing/duplicate/substituted case identities. These are scheduler tests, not acquisition/model evidence.

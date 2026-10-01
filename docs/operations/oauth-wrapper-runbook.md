@@ -24,7 +24,7 @@ $offlineExitCode = $LASTEXITCODE
 Write-Host "OFFLINE TEST EXIT CODE: $offlineExitCode"
 ```
 
-On Linux, set the same environment variable to the separate checkout and run the same Python command. Collection preserves exactly 82 prior cases (64 functional, 16 actual-auth/recovery and two full-envelope/fault cases), then adds 15 transport-mirror cases and seven post-2369 review-closure cases: 104 total. All prior 97 cases remain collected and executed. The original v2 hash assertion still checks the byte-identical fixture; functional runtime cases use the current repaired driver. Windows executes the process-tree timeout and both actual delete-sharing subprocess cases. Linux honestly skips those three Windows-only cases. All other cases run on both systems. The output must show actual collection, execution, case results, driver/application/tooling identities and zero real socket attempts. A passing count without those records is insufficient.
+On Linux, set the same environment variable to the separate checkout and run the same Python command. Collection preserves exactly 82 prior cases (64 functional, 16 actual-auth/recovery and two full-envelope/fault cases), then adds 15 transport-mirror cases and seven post-2369 review-closure cases plus three scheduling regressions: 107 total. All prior 97 cases remain collected and executed. The original v2 hash assertion still checks the byte-identical fixture; functional runtime cases use the current repaired driver. Windows executes the process-tree timeout and both actual delete-sharing subprocess cases. Linux honestly skips those three Windows-only cases. All other cases run on both systems. The output must show actual collection, execution, case results, driver/application/tooling identities and zero real socket attempts. A passing count without those records is insufficient.
 
 Fixtures use the actual application writer/codec, verified parallel reader and Google Auth credentials/AuthorizedSession lifecycle. Signing keys exist only in synthetic process memory. Fake transport replaces HTTP adapter send; socket connections and DNS are denied in parent and children. Tests never require owner credentials, real Drive data, incident files or a production database. The runner strips inherited Google settings from suite child environments. Synthetic acceptance uses lower test-only slice/disk limits where necessary; the example's real envelope is tested separately without widening it.
 
@@ -131,3 +131,24 @@ A changed driver requires a new, separately approved private continuation
 proposal. Preserve the prior proposal and operation directories unchanged.
 No new OAuth allowance, counter/time/slice reset or real execution follows
 from this correctness PR. Application source remains separately pinned.
+
+## Necessary CI scheduling correction
+
+The initial final-head Windows job 110560877523/run 36919088647 reached
+the unchanged 50-minute limit: 64 functional cases completed in 354.328
+seconds, then the actual-auth suite was still running when cancelled.
+Its report-retention step was skipped, so this is not a Windows pass.
+The prior verified 97-case artifact measured the 27,580-object actual-auth
+case at 1,980.687 seconds, the largest phase.
+
+The runner now starts that unchanged full-corpus case in one child process
+and all remaining unchanged cases in a second serial lane. Maximum two
+concurrent suite processes, isolated output directories and sanitized child
+environments; no shared synthetic journals or monkeypatch state. The auth
+CLI adds only an exclude selector for the other 15 cases. Collection retains all 104 cases and adds three scheduling regressions (107 total); exact per-suite/test identities are checked for duplicates or omissions.
+All assertions, object counts, real Google Auth lifecycle, eight slice
+boundaries, socket denial and operation/resource limits remain unchanged.
+The workflow and its 50-minute timeout are unchanged. Final CI must execute
+and retain both partitions before acceptance.
+
+Scheduler regression entrypoint: python -B -X utf8 tests/qualification_ops/runner_scheduling_suite.py --result <new-private-json-file>. The three cases prove actual child overlap, propagated worker failure, and rejection of missing/duplicate/substituted case identities. These are scheduler tests, not acquisition/model evidence.
