@@ -98,6 +98,8 @@ def evidence_value(value):
 
 
 def project(frame):
+    from app_core.research_display import preserve_source_semantics
+    frame = preserve_source_semantics(frame)
     out = frame.copy().astype(object).where(pd.notna(frame), None)
     aliases = {'sport':'league', 'game_id':'matchup_id', 'selection':'best_pick',
         'american_odds':'odds_american', 'sportsbook':'quote_bookmaker',

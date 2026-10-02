@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from functools import partial
 import hashlib
 import json
 from pathlib import Path
@@ -230,6 +231,10 @@ def _configure_verifier(monkeypatch, root: Path) -> Path:
     evidence_root = root / "docs" / "paid-launch" / "evidence"
     evidence_root.mkdir(parents=True)
     monkeypatch.setattr(verify_paid_launch, "ROOT", root)
+    monkeypatch.setattr(
+        verify_paid_launch, "validate_evidence",
+        partial(verify_paid_launch.validate_evidence, now=NOW),
+    )
     monkeypatch.setattr(
         verify_paid_launch, "check_scope", lambda: {"status": "PASS", "reason_codes": []}
     )
