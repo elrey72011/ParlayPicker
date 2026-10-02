@@ -244,14 +244,141 @@ def test_known_model_type_cannot_erase_original_failure(monkeypatch, tmp_path):
     assert result["package"]["games"]["overall"][0]["research_display"]["availability_reason"] == "INFERENCE_FAILED"
 
 
-def conditional_source_without_target():
+def conditional_source_without_target(semantics="win_conditional_on_decision"):
     from test_research_probability_display import source, QUOTE
     raw = source(ml_target="", best_pick="Home -2", spread_line=-2.0, odds_american=100,
-        best_available_probability=.575, probability_semantics="win_conditional_on_decision",
+        best_available_probability=.575, probability_semantics=semantics,
         push_probability=.1, provider_quotes=json.dumps([dict(book="novig", market_type="spread_home",
             point=-2, price=100, recorded_at=QUOTE)]))
     raw.pop("wager_contract")
     return carried(raw)
+
+
+@pytest.mark.parametrize("probability,ev,valid", [
+    (.575, .25, True), (.6, .3, False), (.575, .3, False),
+])
+def test_legacy_unconditional_source_mass_and_ev_must_match(monkeypatch, tmp_path, probability, ev, valid):
+    from test_research_probability_display import package_for
+    from app_core.public_board import build_package, validate_package
+    from app_core.public_history import original_estimate
+    raw = conditional_source_without_target("win_unconditional_with_push")
+    frames, _ = package_for(monkeypatch, raw)
+    for frame in frames[:2]:
+        frame["research_source_semantics"] = raw["research_source_semantics"]
+        frame["best_available_probability"] = raw["best_available_probability"]
+        frame["win_probability"] = probability
+        frame["ev"] = ev
+    package = build_package(*frames); validate_package(package)
+    row = package["games"]["overall"][0]
+    if valid:
+        assert row["win_estimate"] == .575 and row["ev"] == .25
+    else:
+        assert row["win_estimate"] is None and row["ev"] is None
+        assert original_estimate(row) == {}
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+@pytest.mark.parametrize("token", [float("nan"), float("inf"), -float("inf")])
+@pytest.mark.parametrize("field", ["probability_semantics", "push_probability", "inference_status", "model_status"])
+def test_nonfinite_carrier_values_survive_current_conflict_as_malformed(
+        monkeypatch, tmp_path, token, field):
+    raw = forecast(quote_bookmaker="novig")
+    decoded = json.loads(carried(raw)["research_source_semantics"])
+    decoded["fields"][field] = {"state": "VALUE", "value": token}
+    saved = json.dumps(decoded, sort_keys=True, separators=(",", ":"))
+    raw["research_source_semantics"] = saved
+    raw["model_status" if field == "inference_status" else "inference_status"] = "FAILED"
+    result = upload_path(monkeypatch, tmp_path, raw)
+    assert result["normalized"].iloc[0].research_source_semantics == saved
+    assert result["captured"].iloc[0].research_source_semantics == saved
+    assert_no_authority(result)
+    row = result["package"]["games"]["overall"][0]
+    assert row["research_display"]["availability_reason"] == "UNSUPPORTED_PROBABILITY_SEMANTICS"
+    from app_core.public_history import original_estimate
+    assert original_estimate(row) == {}
+
+
+@pytest.mark.parametrize("probability_first", [True, False])
+@pytest.mark.parametrize("probability,valid", [(False, False), (True, False), (0.0, True)])
+def test_missing_target_cannot_convert_boolean_source_into_legacy_zero_or_one(
+        monkeypatch, tmp_path, probability_first, probability, valid):
+    from test_research_probability_display import source, package_for
+    from app_core.public_history import original_estimate
+    values = {"ml_target": ""}
+    if probability_first:
+        values["best_available_probability"] = probability
+    else:
+        values.update(best_available_selection_policy="", production_win_probability=probability,
+                      production_expected_value=float(probability)*(1+100/110)-1)
+    raw = source(**values); raw.pop("wager_contract")
+    frames, package = package_for(monkeypatch, raw)
+    row = package["games"]["overall"][0]
+    if valid:
+        assert row["win_estimate"] == 0.0 and row["ev"] == -1.0
+        assert original_estimate(row)["original_win_estimate"] == 0.0
+    else:
+        assert row["research_display"]["availability_reason"] == "INVALID_PROBABILITY"
+        assert row["win_estimate"] is None and row["ev"] is None
+        assert original_estimate(row) == {}
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+@pytest.mark.parametrize("target", ["", "spread_cover"])
+@pytest.mark.parametrize("ev,valid", [(False, False), (True, False), (0.0, True)])
+def test_boolean_producer_ev_cannot_hide_behind_missing_metadata(monkeypatch, tmp_path, target, ev, valid):
+    from test_research_probability_display import source, package_for
+    from app_core.public_history import original_estimate
+    probability = 110/210
+    raw = source(best_available_selection_policy="", ml_target=target,
+        production_win_probability=probability, production_expected_value=ev)
+    raw.pop("wager_contract")
+    frames, package = package_for(monkeypatch, raw)
+    row = package["games"]["overall"][0]
+    if valid:
+        assert row["ev"] == 0.0 if not target else row["research_display"]["ev"] == 0.0
+    else:
+        assert row["research_display"]["value_reason"] == "INVALID_RECORDED_EV"
+        assert row["ev"] is None
+        if not target:
+            assert row["win_estimate"] is None and original_estimate(row) == {}
+        else:
+            assert row["research_display"]["probability"] == pytest.approx(probability)
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+@pytest.mark.parametrize("probability_first", [True, False])
+@pytest.mark.parametrize("value,reason", [
+    (None, "ESTIMATE_NOT_RECORDED"), (float("nan"), "ESTIMATE_NOT_RECORDED"),
+    (float("inf"), "NONFINITE_PROBABILITY"), (-float("inf"), "NONFINITE_PROBABILITY"),
+    ("invalid", "NONFINITE_PROBABILITY"), (-.1, "INVALID_PROBABILITY"), (1.1, "INVALID_PROBABILITY"),
+])
+def test_missing_target_does_not_hide_invalid_probability_or_keep_orphaned_ev(
+        monkeypatch, tmp_path, probability_first, value, reason):
+    from test_research_probability_display import source, package_for
+    from app_core.public_history import original_estimate
+    values = {"ml_target": ""}
+    if probability_first:
+        values["best_available_probability"] = value
+    else:
+        values.update(best_available_selection_policy="", production_win_probability=value,
+                      production_expected_value=0.0)
+    raw = source(**values); raw.pop("wager_contract")
+    frames, package = package_for(monkeypatch, raw)
+    row = package["games"]["overall"][0]
+    assert row["research_display"]["availability_reason"] == reason
+    assert row["win_estimate"] is None and row["ev"] is None
+    assert original_estimate(row) == {}
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
 
 
 @pytest.mark.parametrize("current,valid", [

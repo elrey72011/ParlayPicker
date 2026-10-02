@@ -75,6 +75,22 @@ a declaration carrier alone cannot prove a missing conversion. Actual `.575`
 conditional mass with `.1` push still exports `.5175` and EV `.135`; merely
 relabeling `.575` and impossible half-point push mass reject. Missing source
 proof stays unavailable. No probability calculation or authority rule changes.
+The same missing-target bypass also let Boolean source probabilities become
+numeric zero/one before history read them. Reject the retained Boolean source
+before that return; genuine numeric zero and its negative EV remain unchanged.
+The complete pre-target probability checks now also preserve the existing
+missing/nonfinite/out-of-range reasons instead of hiding them behind missing
+metadata. A missing probability cannot retain an orphaned legacy EV. Boolean
+recorded EV is signaled before that return, while genuine numeric zero EV stays
+unchanged.
+
+Fresh review of `9da3aade` identified the equivalent unconditional-source
+legacy bypass. Every explicitly retained source contract now needs matching
+source/export probability mass and compatible recorded EV, including when
+target metadata is missing. A separate malformed-carrier finding showed that
+Python accepts nonfinite JSON VALUE tokens before strict serialization rejects
+them. Reject those carriers structurally, keeping their original bytes unchanged
+even when a current conflicting status would otherwise reserialize them.
 
 Three unrelated application tests reproduced on unchanged main after their fixed
 September 29 evidence crossed the existing three-day load/pilot expiry. The

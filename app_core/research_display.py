@@ -128,6 +128,8 @@ def _source_semantics(source):
             if item=={"state":"MISSING"}: out[field]=None
             elif item=={"state":"INVALID"}: out[field]=float("nan")
             elif set(item)=={"state","value"} and item["state"]=="VALUE" and isinstance(item["value"],(str,bool,int,float)):
+                if isinstance(item["value"],(int,float)) and not isinstance(item["value"],bool) and _number(item["value"]) is None:
+                    return None  # Python accepts nonfinite JSON tokens; the carrier is malformed.
                 out[field]=item["value"]
             else: return None
         return out
@@ -260,6 +262,23 @@ def from_export(row, *, source=None, source_field="win_probability"):
     if inference in {"FAILED","UNAVAILABLE"}:
         result["availability_reason"]="INFERENCE_"+inference
         return result
+    raw=source.get(source_field)
+    if raw is None or raw is pd.NA or (isinstance(raw,float) and math.isnan(raw)):
+        result["availability_reason"]="ESTIMATE_NOT_RECORDED"
+        return result
+    if isinstance(raw,bool) or type(raw).__name__=="bool_":
+        return _empty(identity,source_field,basis,reason="INVALID_PROBABILITY",inference=inference)
+    if _number(raw) is None:
+        result["availability_reason"]="NONFINITE_PROBABILITY"
+        return result
+    if not 0 <= _number(raw) <= 1:
+        result["availability_reason"]="INVALID_PROBABILITY"
+        return result
+    ev_field={"production_win_probability":"production_expected_value","calibrated_probability":"expected_value"}.get(source_field)
+    raw_ev=source.get(ev_field) if ev_field else None
+    invalid_ev=isinstance(raw_ev,bool) or type(raw_ev).__name__=="bool_"
+    if invalid_ev:
+        result["value_reason"]="INVALID_RECORDED_EV"
     # Check explicit source rejection before missing target/provenance can
     # replace its reason and the export projection drops the original facts.
     source_push=source.get("push_probability")
@@ -280,17 +299,7 @@ def from_export(row, *, source=None, source_field="win_probability"):
     if target not in allowed:
         result["availability_reason"]="TARGET_MISMATCH"
         return result
-    raw=source.get(source_field)
     probability=_number(row.get("win_probability"))
-    if raw is None or raw is pd.NA or (isinstance(raw,float) and math.isnan(raw)):
-        result["availability_reason"]="ESTIMATE_NOT_RECORDED"
-        return result
-    if _number(raw) is None:
-        result["availability_reason"]="NONFINITE_PROBABILITY" if not isinstance(raw,(bool,)) and type(raw).__name__!="bool_" else "INVALID_PROBABILITY"
-        return result
-    if not 0 <= _number(raw) <= 1:
-        result["availability_reason"]="INVALID_PROBABILITY"
-        return result
     if probability is None:
         result["availability_reason"]="UNSUPPORTED_PROBABILITY_SEMANTICS"
         return result
@@ -317,9 +326,7 @@ def from_export(row, *, source=None, source_field="win_probability"):
                   probability_semantics="win_unconditional_with_push",availability_reason="AVAILABLE",
                   value_reason="VALUE_NOT_RECORDED")
     saved_ev=_number(row.get("ev"))
-    ev_field={"production_win_probability":"production_expected_value","calibrated_probability":"expected_value"}.get(source_field)
-    raw_ev=source.get(ev_field) if ev_field else None
-    if isinstance(raw_ev,bool) or type(raw_ev).__name__=="bool_":
+    if invalid_ev:
         result["value_reason"]="INVALID_RECORDED_EV"
     elif saved_ev is None:
         result["value_reason"]="VALUE_NOT_RECORDED"
@@ -374,6 +381,10 @@ def legacy_unrecorded_display(export):
     if saved["availability_reason"] not in {
             "MODEL_TARGET_NOT_RECORDED","ESTIMATE_PROVENANCE_NOT_RECORDED","ESTIMATE_NOT_RECORDED"}:
         return False
+    if saved["value_reason"]=="INVALID_RECORDED_EV":
+        return False  # Missing target/provenance cannot hide a recorded invalid EV type.
+    if _number(export.get("win_probability")) is None:
+        return False  # A missing estimate cannot retain an orphaned legacy EV.
     source=_source_semantics(export)
     if source is None or not _current_semantics_compatible(
             source.get("probability_semantics"),export.get("probability_semantics"),
@@ -395,12 +406,15 @@ def legacy_unrecorded_display(export):
     if (line is not None and not _absent(current_push) and _number(current_push)>1e-9
             and abs(line*2-round(line*2))<=1e-9 and abs(line-round(line))>1e-9):
         return False  # Missing provenance cannot authorize impossible half-point push mass.
-    if (_text(source.get("probability_semantics"))=="win_conditional_on_decision"
-            and not _absent(original_push) and _number(original_push)>1e-9):
+    field=saved["source_field"]
+    retained_source=(not _absent(export.get("research_source_semantics")) or field in source)
+    explicit_contract=(not _absent(source.get("probability_semantics")) or not _absent(original_push))
+    if retained_source and explicit_contract:
         # A carrier records labels, not the original probability. Without a
-        # separately retained source value, it cannot prove mass conversion.
-        field=saved["source_field"]
-        if field=="win_probability" or _number(source.get(field)) is None:
+        # retained raw value, it cannot prove any source/export mass match.
+        if (_number(source.get(field)) is None or (field=="win_probability"
+                and _text(source.get("probability_semantics"))=="win_conditional_on_decision"
+                and not _absent(original_push) and _number(original_push)>1e-9)):
             return False
         mass,priced=_export_price_mass(export,source,field,current_push=current_push)
         if mass is None:
