@@ -1,0 +1,334 @@
+"""Additive, price-bound research display. Never read by wagering consumers."""
+from __future__ import annotations
+from copy import deepcopy
+import math
+import json
+import re
+import pandas as pd
+from core.price_value import price_value
+from core.wager_decisions import decimal_price
+
+VERSION = "research-display-v1"
+FIELDS = frozenset("""version label source_field basis identity probability push_probability
+probability_semantics ev break_even_probability edge availability_reason value_reason inference_status""".split())
+IDENTITY_FIELDS = frozenset("""event_id candidate_id export_run_id sport market selection line period
+rules model_target sportsbook odds quote_id quote_time analysis_time start""".split())
+REASONS = frozenset("""AVAILABLE ESTIMATE_NOT_RECORDED INVALID_PROBABILITY NONFINITE_PROBABILITY
+ESTIMATE_PROVENANCE_NOT_RECORDED ESTIMATE_IDENTITY_MISMATCH TARGET_MISMATCH MODEL_TARGET_NOT_RECORDED
+INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS""".split())
+VALUE_REASONS = frozenset("""RECORDED_PRICE_VALUE VALUE_NOT_RECORDED PRICE_VALUE_MISMATCH
+PUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_UNAVAILABLE""".split())
+# Explicit public-research provenance only; never an arbitrary source-column copy.
+EXPORT_PROVENANCE_COLUMNS = ["quote_id", "prospective_quote_id", "market_period", "period",
+    "settlement_rules", "inference_status", "model_status", "spread_line", "total_line",
+    "market_line_used", "push_probability", "probability_semantics", "research_source_semantics"]
+SEMANTIC_FIELDS = ("probability_semantics", "push_probability", "inference_status", "model_status")
+
+
+def _absent(value):
+    # NaN/inf/booleans are explicit invalid input, not a missing push contract.
+    return value is None or value is pd.NA or value is pd.NaT or (isinstance(value,str) and not value.strip())
+
+
+def preserve_source_semantics(frame):
+    """Keep pre-capture facts for display only, including invalid numeric types.
+
+    Immutable evidence capture legitimately canonicalizes its authority semantics.
+    This additive allowlisted carrier must not turn that derivation into proof that
+    an unsupported original research contract was valid. It is never read by gates.
+    """
+    out=frame.copy()
+    def encode(row):
+        saved=row.get("research_source_semantics")
+        if not _absent(saved):
+            return saved  # Preserve original bytes; a malformed carrier fails closed.
+        values={}
+        for field in SEMANTIC_FIELDS:
+            value=row.get(field)
+            if _absent(value): values[field]={"state":"MISSING"}
+            elif isinstance(value,str): values[field]={"state":"VALUE","value":value}
+            elif isinstance(value,bool) or type(value).__name__=="bool_":
+                values[field]={"state":"VALUE","value":bool(value)}
+            elif _number(value) is not None: values[field]={"state":"VALUE","value":_number(value)}
+            else: values[field]={"state":"INVALID"}
+        return json.dumps({"version":1,"fields":values},sort_keys=True,separators=(",",":"),allow_nan=False)
+    out["research_source_semantics"]=out.apply(encode,axis=1)
+    return out
+
+
+def _source_semantics(source):
+    saved=source.get("research_source_semantics")
+    if _absent(saved): return source
+    try:
+        decoded=json.loads(saved)
+        if set(decoded)!={"version","fields"} or decoded["version"]!=1 or set(decoded["fields"])!=set(SEMANTIC_FIELDS):
+            return None
+        out=dict(source)
+        for field,item in decoded["fields"].items():
+            if item=={"state":"MISSING"}: out[field]=None
+            elif item=={"state":"INVALID"}: out[field]=float("nan")
+            elif set(item)=={"state","value"} and item["state"]=="VALUE" and isinstance(item["value"],(str,bool,int,float)):
+                out[field]=item["value"]
+            else: return None
+        return out
+    except (ValueError,TypeError,AttributeError): return None
+
+
+SOURCE_FIELDS = {"best_available_probability", "calibrated_probability",
+                 "production_win_probability", "win_probability"}
+
+def _text(value):
+    return value.strip() if isinstance(value, str) else ""
+
+def _number(value):
+    # bool and numpy.bool_ are not probabilities, prices or zero estimates.
+    if isinstance(value, (bool,)) or type(value).__name__ == "bool_":
+        return None
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+def _time(value):
+    from app_core.public_board import timestamp
+    try:
+        return timestamp(_text(value))
+    except (ValueError, TypeError):
+        return None
+
+def _identity(row):
+    return dict(event_id=_text(row.get("matchup_id")), candidate_id=_text(row.get("candidate_id")),
+        export_run_id=_text(row.get("export_run_id")), sport=_text(row.get("league")),
+        market=_text(row.get("market_type")), selection=_text(row.get("pick")),
+        line=_number(row.get("line")), period=_text(row.get("market_period")),
+        rules=_text(row.get("settlement_rules")), model_target=_text(row.get("ml_target")).casefold(), sportsbook=_text(row.get("quote_source")),
+        odds=_number(row.get("odds")), quote_id=_text(row.get("quote_id")),
+        quote_time=_time(row.get("quote_time")),
+        analysis_time=_time(_text(row.get("prediction_generated_at")) or row.get("export_run_id")),
+        start=_time(_text(row.get("game_start_utc")) or row.get("start")))
+
+def _empty(identity, field="", basis="", reason="ESTIMATE_NOT_RECORDED", inference="UNKNOWN"):
+    return dict(version=VERSION, label="Research estimate", source_field=field, basis=basis,
+        identity=identity, probability=None, push_probability=None, probability_semantics="",
+        ev=None, break_even_probability=None, edge=None, availability_reason=reason,
+        value_reason="ESTIMATE_UNAVAILABLE", inference_status=inference)
+
+def _complete(identity):
+    # Names alone, a best-pick score, or a price are never sufficient provenance.
+    required=("event_id","candidate_id","export_run_id","sport","market","selection",
+              "sportsbook","quote_id","quote_time","analysis_time","start","period","rules")
+    if not all(identity.get(key) for key in required) or identity["line"] is None:
+        return False
+    match=re.search(r"(?:^|\s)([+-]?\d+(?:\.\d+)?)$", identity["selection"])
+    allowed={identity["market"], "spread_cover" if identity["market"].startswith("spread") else "total"}
+    return bool(identity["model_target"] in allowed and match and float(match.group(1)) == identity["line"]
+                and identity["market"] in {"spread_home","spread_away","total_over","total_under"})
+
+def from_export(row, *, source=None, source_field="win_probability"):
+    """Capture the actual export estimate before contract authorization replaces it."""
+    identity=_identity(row)
+    basis=_text(row.get("probability_basis"))
+    direct=source is None
+    source=source if source is not None else row
+    current_statuses=[_text(source.get(field)).casefold() for field in ("inference_status","model_status")]
+    current_push=source.get("push_probability")
+    source=_source_semantics(source)
+    if source is None:
+        return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS")
+    statuses=current_statuses+[_text(source.get(field)).casefold() for field in ("inference_status","model_status")]
+    inference="FAILED" if set(statuses)&{"failed","error","inference_failed"} else (
+        "UNAVAILABLE" if set(statuses)&{"missing","unavailable","inference_unavailable"} else
+        "RECORDED" if set(statuses)&{"ok","success","complete"} else "UNKNOWN")
+    result=_empty(identity, source_field, basis, inference=inference)
+    if inference in {"FAILED","UNAVAILABLE"}:
+        result["availability_reason"]="INFERENCE_"+inference
+        return result
+    target=_text(source.get("ml_target")).casefold()
+    allowed={identity["market"], "spread_cover" if identity["market"].startswith("spread") else "total"}
+    if not target:
+        result["availability_reason"]="MODEL_TARGET_NOT_RECORDED"
+        return result
+    if target not in allowed:
+        result["availability_reason"]="TARGET_MISMATCH"
+        return result
+    raw=source.get(source_field)
+    probability=_number(row.get("win_probability"))
+    if raw is None or raw is pd.NA or (isinstance(raw,float) and math.isnan(raw)):
+        result["availability_reason"]="ESTIMATE_NOT_RECORDED"
+        return result
+    if _number(raw) is None:
+        result["availability_reason"]="NONFINITE_PROBABILITY" if not isinstance(raw,(bool,)) and type(raw).__name__!="bool_" else "INVALID_PROBABILITY"
+        return result
+    if not 0 <= _number(raw) <= 1:
+        result["availability_reason"]="INVALID_PROBABILITY"
+        return result
+    if probability is None:
+        result["availability_reason"]="UNSUPPORTED_PROBABILITY_SEMANTICS"
+        return result
+    # Explicit aliases cannot disagree about the exact displayed target or quote.
+    source_line=_number(source.get("total_line" if identity["market"].startswith("total") else "spread_line"))
+    market_line=_number(source.get("market_line_used"))
+    selection_line=re.search(r"(?:^|\s)([+-]?\d+(?:\.\d+)?)$",identity["selection"])
+    conflicts=(identity["line"] is not None and selection_line is not None and float(selection_line.group(1))!=identity["line"])
+    conflicts=conflicts or (source_line is not None and source_line!=identity["line"]) or (market_line is not None and market_line!=identity["line"])
+    for first,second in (("market_period","period"),("quote_id","prospective_quote_id")):
+        if _text(source.get(first)) and _text(source.get(second)) and _text(source[first])!=_text(source[second]): conflicts=True
+    if conflicts:
+        return _empty(identity,source_field,basis,reason="ESTIMATE_IDENTITY_MISMATCH",inference=inference)
+    if not _complete(identity) or not basis or basis=="Unavailable":
+        result["availability_reason"]="ESTIMATE_PROVENANCE_NOT_RECORDED"
+        return result
+    if not 0 <= probability <= 1:
+        result["availability_reason"]="INVALID_PROBABILITY"
+        return result
+    # Validate the original source independently of derived export semantics.
+    # Only genuinely absent semantics AND push permit half-point compatibility.
+    source_push=source.get("push_probability")
+    semantics=source.get("probability_semantics")
+    line=identity["line"]
+    half_point=abs(line*2-round(line*2))<=1e-9 and abs(line-round(line))>1e-9
+    push=_number(source_push)
+    raw_probability=_number(raw)
+    semantic_name=_text(semantics)
+    mass=None
+    if _absent(semantics) and _absent(source_push) and half_point:
+        mass={"p_win":raw_probability,"p_push":0.0}
+    elif push is not None and not _absent(semantics):
+        if semantic_name=="win_conditional_on_decision":
+            from core.probability_semantics import unconditional_from_conditional
+            mass=unconditional_from_conditional(raw_probability,push)
+        elif semantic_name in {"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}:
+            mass={"p_win":raw_probability,"p_push":push}
+    if (mass is None or (half_point and mass["p_push"]>1e-9)
+        or (not _absent(current_push) and (_number(current_push) is None
+            or not math.isclose(_number(current_push),mass["p_push"],rel_tol=0,abs_tol=1e-9)))):
+        return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
+    priced=price_value(mass["p_win"],mass["p_push"],decimal_price(identity["odds"]))
+    exported_push=row.get("push_probability")
+    exported_semantics=row.get("probability_semantics")
+    # A direct legacy export can contain the original conditional estimate.
+    # The per-game exporter must carry the compatible normalized probability.
+    expected=raw_probability if direct and semantic_name=="win_conditional_on_decision" else mass["p_win"]
+    if (priced is None or not math.isclose(probability,expected,rel_tol=0,abs_tol=1e-9)
+        or (not _absent(exported_push) and (_number(exported_push) is None or not math.isclose(_number(exported_push),mass["p_push"],rel_tol=0,abs_tol=1e-9)))
+        or (not _absent(exported_semantics) and _text(exported_semantics) not in
+            ({"win_conditional_on_decision"} if direct and semantic_name=="win_conditional_on_decision" else
+             {"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}))):
+        return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
+    result.update(probability=mass["p_win"],push_probability=mass["p_push"],
+                  probability_semantics="win_unconditional_with_push",availability_reason="AVAILABLE",
+                  value_reason="VALUE_NOT_RECORDED")
+    saved_ev=_number(row.get("ev"))
+    ev_field={"production_win_probability":"production_expected_value","calibrated_probability":"expected_value"}.get(source_field)
+    raw_ev=source.get(ev_field) if ev_field else None
+    if isinstance(raw_ev,bool) or type(raw_ev).__name__=="bool_":
+        result["value_reason"]="INVALID_RECORDED_EV"
+    elif saved_ev is None:
+        result["value_reason"]="VALUE_NOT_RECORDED"
+    elif not math.isclose(saved_ev,priced["expected_value"],rel_tol=0,abs_tol=1e-9):
+        result["value_reason"]="PRICE_VALUE_MISMATCH"
+    else:
+        # Preserve recorded EV. Edge and break-even are diagnostic price math
+        # for this same probability/price/push basis, never qualification input.
+        result.update(ev=saved_ev,break_even_probability=priced["break_even"],edge=priced["edge"],
+                      value_reason="RECORDED_PRICE_VALUE")
+    return result
+
+def _matches(display, row):
+    identity=display["identity"]
+    mappings={"sport":"sport","market":"market","selection":"pick","odds":"odds",
+              "sportsbook":"quote_source","quote_time":"quote_time",
+              "analysis_time":"as_of","start":"start"}
+    for key, public in mappings.items():
+        if identity[key] != row.get(public):
+            return False
+    contract=row.get("controlled_trial_contract") or row.get("wager_contract")
+    if isinstance(contract,dict):
+        for key, fields in {
+            "event_id":("game_id","matchup_id"),"sport":("sport",),"market":("market_type",),
+            "selection":("selection",),"line":("line",),"odds":("odds",),
+            "sportsbook":("sportsbook",),"quote_time":("quote_timestamp",),"start":("start",),
+        }.items():
+            for field in fields:
+                value=contract.get(field)
+                if value is None or value=="":
+                    continue
+                if key in {"quote_time","start"}: value=_time(value)
+                if key=="sportsbook":
+                    if str(value).casefold()!=identity[key].casefold(): return False
+                elif value!=identity[key]:
+                    return False
+    return True
+
+def public_display(export, row):
+    saved=export.get("research_display")
+    if isinstance(saved,str):
+        try:
+            saved=json.loads(saved)
+        except ValueError:
+            return _empty(_identity(export),reason="ESTIMATE_PROVENANCE_NOT_RECORDED")
+    if isinstance(saved,dict):
+        result=deepcopy(saved)
+        validate(result)
+        if result["identity"] != _identity(export):
+            return _empty(_identity(export),reason="ESTIMATE_IDENTITY_MISMATCH")
+    else:
+        result=from_export(export)
+    if not _matches(result,row):
+        return _empty(result["identity"],result["source_field"],result["basis"],
+                      reason="ESTIMATE_IDENTITY_MISMATCH",inference=result["inference_status"])
+    return result
+
+def validate(display, row=None):
+    if not isinstance(display,dict) or set(display)!=FIELDS or display["version"]!=VERSION:
+        raise ValueError("Invalid research display schema")
+    identity=display["identity"]
+    if not isinstance(identity,dict) or set(identity)!=IDENTITY_FIELDS:
+        raise ValueError("Invalid research display identity")
+    for key,value in identity.items():
+        if key in {"line","odds"}:
+            if value is not None and (_number(value) is None or isinstance(value,bool)):
+                raise ValueError("Invalid research display identity metric")
+        elif value is not None and not isinstance(value,str):
+            raise ValueError("Invalid research display identity label")
+    if display["label"]!="Research estimate" or display["source_field"] not in SOURCE_FIELDS | {""}:
+        raise ValueError("Invalid research display source")
+    if not isinstance(display["basis"],str) or display["inference_status"] not in {"UNKNOWN","FAILED","UNAVAILABLE","RECORDED"}:
+        raise ValueError("Invalid research display provenance")
+    if display["availability_reason"] not in REASONS or display["value_reason"] not in VALUE_REASONS:
+        raise ValueError("Invalid research display reason")
+    for key in ("probability","push_probability","ev","break_even_probability","edge"):
+        value=display[key]
+        if value is not None and (not isinstance(value,(int,float)) or isinstance(value,bool) or _number(value) is None):
+            raise ValueError("Invalid research display metric")
+    if display["availability_reason"]!="AVAILABLE":
+        if any(display[key] is not None for key in ("probability","push_probability","ev","break_even_probability","edge")) or display["probability_semantics"]!="":
+            raise ValueError("Unavailable research display contains estimates")
+        return
+    if display["inference_status"] in {"FAILED","UNAVAILABLE"}:
+        raise ValueError("Failed inference cannot claim an available research estimate")
+    if not _complete(identity) or display["probability"] is None or not 0<=display["probability"]<=1 or not display["basis"]:
+        raise ValueError("Research estimate requires exact exported provenance")
+    if row is not None and not _matches(display,row):
+        raise ValueError("Research display does not match public selection")
+    push=display["push_probability"]
+    if push is None:
+        if display["probability_semantics"]!="" or display["ev"] is not None:
+            raise ValueError("Unknown push semantics cannot price research value")
+    elif display["probability_semantics"]!="win_unconditional_with_push":
+        raise ValueError("Invalid research display semantics")
+    if push is not None:
+        line=identity["line"]
+        half_point=abs(line*2-round(line*2))<=1e-9 and abs(line-round(line))>1e-9
+        if price_value(display["probability"],push,decimal_price(identity["odds"])) is None or (half_point and push>1e-9):
+            raise ValueError("Invalid research probability/push mass")
+    if (display["value_reason"]=="RECORDED_PRICE_VALUE") != (display["ev"] is not None):
+        raise ValueError("Research value reason must match recorded EV availability")
+    if display["ev"] is not None:
+        priced=price_value(display["probability"],push,decimal_price(identity["odds"]))
+        if priced is None or any(not math.isclose(display[key],priced[other],rel_tol=0,abs_tol=1e-9)
+                                 for key,other in (("ev","expected_value"),("edge","edge"),("break_even_probability","break_even"))):
+            raise ValueError("Research price value does not match displayed basis")
+    elif display["edge"] is not None or display["break_even_probability"] is not None:
+        raise ValueError("Research value unavailable without compatible recorded EV")

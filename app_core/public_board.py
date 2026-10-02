@@ -157,10 +157,15 @@ def pick_record(row, *, prop=False, as_of=None):
         from app_core.total_signal_quality import public_fields
         from app_core.price_value_display import display
         record.update(public_fields(row))
+        push=number(row, "push_probability")
+        if push is not None:
+            record["price_push_probability"]=push
         record.update(display(
             record["win_estimate"], record["odds"], record["ev"],
-            push_probability=number(row, "push_probability"),
+            push_probability=push,
         ))
+        from app_core.research_display import public_display
+        record["research_display"]=public_display(row,record)
     return record
 
 
@@ -259,14 +264,24 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + (' controlled_trial_contract' if 'controlled_trial_contract' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','conservative_ev','espn_event_id','mlb_game_pk','game_number', *PUBLIC_NFL_CONTEXT_FIELDS, *TQ_FIELDS, *VALUE_FIELDS) if k in row))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + (' controlled_trial_contract' if 'controlled_trial_contract' in row else '') + (' research_display' if 'research_display' in row else '') + (' price_push_probability' if 'price_push_probability' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','conservative_ev','espn_event_id','mlb_game_pk','game_number', *PUBLIC_NFL_CONTEXT_FIELDS, *TQ_FIELDS, *VALUE_FIELDS) if k in row))
             if any(k in row for k in TQ_FIELDS):
                 validate_quality({k:row[k] for k in TQ_FIELDS if k in row})
                 if row['sport'] != 'MLB' or row['market'] not in {'total_over','total_under'}:
                     raise ValueError('Totals diagnostics require MLB totals')
             if any(k in row for k in VALUE_FIELDS):
-                if {k:row[k] for k in VALUE_FIELDS if k in row} != display_value(row['win_estimate'],row['odds'],row['ev']):
+                if {k:row[k] for k in VALUE_FIELDS if k in row} != display_value(row['win_estimate'],row['odds'],row['ev'],push_probability=row.get('price_push_probability')):
                     raise ValueError('Price display must match saved estimates')
+            if "price_push_probability" in row:
+                push=row["price_push_probability"]
+                if isinstance(push,bool) or not isinstance(push,(int,float)) or not math.isfinite(push) or not 0<=push<1:
+                    raise ValueError("Invalid saved display push probability")
+            if "research_display" in row:
+                from app_core.research_display import validate as validate_research_display
+                validate_research_display(row["research_display"],row)
+                research_push=row["research_display"]["push_probability"]
+                if research_push is not None and "price_push_probability" in row and research_push!=row["price_push_probability"]:
+                    raise ValueError("Research and saved price display push probability disagree")
             if 'wager_contract' in row:
                 from core.live_wager_contract import PUBLIC_FIELDS, validate_snapshot
                 exact(row['wager_contract'],' '.join(PUBLIC_FIELDS))

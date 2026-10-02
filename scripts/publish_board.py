@@ -21,9 +21,10 @@ def production_source_fingerprint():
     digest = hashlib.sha256()
     for name in ('publishing/board.html', 'publishing/site.css', 'publishing/site.js',
                  'app_core/public_site_shell.py', 'scripts/publish_board.py',
-                 'app_core/public_board.py', 'app_core/board_diagnostics.py',
+                 'app_core/public_board.py', 'app_core/research_display.py', 'app_core/board_diagnostics.py',
                  'app_core/current_wagers_trace.py', 'app_core/release_preflight.py',
-                 'app_core/per_game_boards.py',
+                 'app_core/per_game_boards.py', 'app_core/candidate_evidence_schema.py',
+                 'core/streamlit_pipeline.py',
                  'app_core/public_prop_timing.py', 'app_core/mlb_team_aliases.py',
                  'app_core/true_parlay_public.py',
                  'app_core/controlled_trial.py', 'app_core/controlled_trial_pipeline.py',

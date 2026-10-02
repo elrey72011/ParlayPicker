@@ -162,6 +162,13 @@ def supported_unavailable_reason(final, candidates, family):
     return 'No exact fresh Novig or supported sportsbook quote in this analysis'
 
 
+def _display_line(source):
+    if source is None:
+        return None
+    line=number(source,'total_line' if text(source,'market_type').startswith('total') else 'spread_line')
+    return line if line is not None else number(source,'market_line_used')
+
+
 def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     if board is None or board.empty: return pd.DataFrame()
@@ -236,6 +243,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         research_only_fallback = fallback_selected and league in {'MLB', 'WNBA'}
         approved=not research_only_fallback and not observed_selected and (not fallback_selected or (text(final,'production_eligible').lower() in {'true','1','yes'} and text(final,'wager_approved').lower() in {'true','1','yes'})) and source is not None and final_ticket and text(final,'Bettable').lower() in {'true','1','yes'} and (number(final,'Play_Stake') or 0)>0
         trial=not approved and not observed_selected and not fallback_selected and source is not None and final_ticket and isinstance(trial_contract,dict) and trial_contract.get('trial_eligible') is True and (number(trial_contract,'recommended_bet_amount') or 0)>0 and same
+        probability_field='production_win_probability' if final_ticket else 'calibrated_probability'
         probability=None; basis='Unavailable'; edge=None; ev=None
         priced_push=None; priced_break_even=None; priced_semantics=''
         if source is not None:
@@ -255,6 +263,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
             # New runs expose the same probability that chose the candidate.
             # Production risk adjustments still govern funding independently.
             if not trial and text(source, 'best_available_selection_policy') == 'probability-first-v1':
+                probability_field='best_available_probability'
                 probability=number(source, 'best_available_probability')
                 basis='Candidate win estimate (pair-normalized)' if text(source, 'best_available_probability_source') == 'calibrated_probability_pair_normalized' else 'Candidate win estimate'
                 odds=number(source, 'odds_american')
@@ -328,10 +337,10 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 approved = False
                 approval_reason = quality or 'No verified positive estimated edge at the quoted price'
         from app_core.total_signal_quality import public_fields as total_quality_fields
-        rows.append({**(total_quality_fields(source) if source is not None else {}), 'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
+        exported={**(total_quality_fields(source) if source is not None else {}), 'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
                      'candidate_id':text(source,'candidate_id') if source is not None else '',
                      'quote_id':text(source,'quote_id','prospective_quote_id') if source is not None else '',
-                     'line':(number(source,'total_line') if source is not None and text(source,'market_type').startswith('total') else number(source,'spread_line') if source is not None else None),
+                     'line':_display_line(source),
                      'matchup_id':text(final,'matchup_id'),'game_date':text(final,'Local Date','game_date'),
                      'start':text(final,'Commence (Local)','game_time_est'),
                      'pick':text(source,'display_pick','best_pick') if source is not None else ('Sportsbook quote unavailable' if allow_fallback else 'Novig quote unavailable' if novig_only else 'No Bet — market unavailable'),
@@ -360,5 +369,12 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                          'injury_context_source': text(source, 'injury_context_source'),
                          'injury_context_status': text(source, 'injury_context_status'),
                      } if source is not None and league == 'NFL' else {}),
-                     'export_run_id':text(final,'export_run_id')})
+                     'export_run_id':text(final,'export_run_id'),
+                     'ml_target':text(source,'ml_target') if source is not None else '',
+                     'market_period':text(source,'market_period','period') if source is not None else '',
+                     'settlement_rules':text(source,'settlement_rules') if source is not None else ''}
+        from app_core.research_display import from_export
+        import json
+        exported['research_display']=json.dumps(from_export(exported, source=source, source_field=probability_field), allow_nan=False, sort_keys=True, separators=(',',':'))
+        rows.append(exported)
     return pd.DataFrame(rows)
