@@ -92,6 +92,14 @@ Python accepts nonfinite JSON VALUE tokens before strict serialization rejects
 them. Reject those carriers structurally, keeping their original bytes unchanged
 even when a current conflicting status would otherwise reserialize them.
 
+Fresh review of `a6b90359` identified a copied saved display identity that could
+still preserve unrelated legacy values. The legacy exception now requires the
+saved identity to equal the exact export identity. The pre-target self-review
+also reproduced conflicting quote/period aliases and a selection/line conflict
+hidden by missing metadata; the existing identity checks now run before that
+return. Regression controls cover every saved identity field and retain the
+matching legacy case. These checks do not create missing target evidence.
+
 Three unrelated application tests reproduced on unchanged main after their fixed
 September 29 evidence crossed the existing three-day load/pilot expiry. The
 separately approved test-only correction binds `_configure_verifier` to that

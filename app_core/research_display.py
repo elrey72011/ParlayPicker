@@ -291,6 +291,16 @@ def from_export(row, *, source=None, source_field="win_probability"):
         mass,priced=_export_price_mass(row,source,source_field,direct=direct,current_push=current_push)
         if mass is None:
             return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
+    # Explicit aliases cannot disagree about the exact displayed target or quote.
+    source_line=_number(source.get("total_line" if identity["market"].startswith("total") else "spread_line"))
+    market_line=_number(source.get("market_line_used"))
+    selection_line=re.search(r"(?:^|\s)([+-]?\d+(?:\.\d+)?)$",identity["selection"])
+    conflicts=(identity["line"] is not None and selection_line is not None and float(selection_line.group(1))!=identity["line"])
+    conflicts=conflicts or (source_line is not None and source_line!=identity["line"]) or (market_line is not None and market_line!=identity["line"])
+    for first,second in (("market_period","period"),("quote_id","prospective_quote_id")):
+        if _text(source.get(first)) and _text(source.get(second)) and _text(source[first])!=_text(source[second]): conflicts=True
+    if conflicts:
+        return _empty(identity,source_field,basis,reason="ESTIMATE_IDENTITY_MISMATCH",inference=inference)
     target=_text(source.get("ml_target")).casefold()
     allowed={identity["market"], "spread_cover" if identity["market"].startswith("spread") else "total"}
     if not target:
@@ -303,16 +313,6 @@ def from_export(row, *, source=None, source_field="win_probability"):
     if probability is None:
         result["availability_reason"]="UNSUPPORTED_PROBABILITY_SEMANTICS"
         return result
-    # Explicit aliases cannot disagree about the exact displayed target or quote.
-    source_line=_number(source.get("total_line" if identity["market"].startswith("total") else "spread_line"))
-    market_line=_number(source.get("market_line_used"))
-    selection_line=re.search(r"(?:^|\s)([+-]?\d+(?:\.\d+)?)$",identity["selection"])
-    conflicts=(identity["line"] is not None and selection_line is not None and float(selection_line.group(1))!=identity["line"])
-    conflicts=conflicts or (source_line is not None and source_line!=identity["line"]) or (market_line is not None and market_line!=identity["line"])
-    for first,second in (("market_period","period"),("quote_id","prospective_quote_id")):
-        if _text(source.get(first)) and _text(source.get(second)) and _text(source[first])!=_text(source[second]): conflicts=True
-    if conflicts:
-        return _empty(identity,source_field,basis,reason="ESTIMATE_IDENTITY_MISMATCH",inference=inference)
     if not _complete(identity) or not basis or basis=="Unavailable":
         result["availability_reason"]="ESTIMATE_PROVENANCE_NOT_RECORDED"
         return result
@@ -378,6 +378,8 @@ def legacy_unrecorded_display(export):
         validate(saved)
     except (ValueError,TypeError):
         return False
+    if saved["identity"] != _identity(export):
+        return False  # A copied display cannot authorize another row's legacy values.
     if saved["availability_reason"] not in {
             "MODEL_TARGET_NOT_RECORDED","ESTIMATE_PROVENANCE_NOT_RECORDED","ESTIMATE_NOT_RECORDED"}:
         return False

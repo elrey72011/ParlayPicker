@@ -536,3 +536,58 @@ def test_retained_upload_to_captured_public_browser(monkeypatch, tmp_path, curre
                        package_hash="synthetic-upload-test")
     assert all(row["group"] == "Research" for row in selections([publication]))
     assert raw == original
+
+
+@pytest.mark.parametrize("changes", [
+    {"prospective_quote_id": "different-exact-quote"}, {"period": "first_half"},
+    {"best_pick": "Home -2.5"},
+])
+def test_missing_target_cannot_hide_explicit_identity_conflicts(monkeypatch, tmp_path, changes):
+    from test_research_probability_display import source, package_for
+    from app_core.public_history import original_estimate
+    raw = source(ml_target="", **changes); raw.pop("wager_contract")
+    frames, package = package_for(monkeypatch, raw)
+    row = package["games"]["overall"][0]
+    assert row["research_display"]["availability_reason"] == "ESTIMATE_IDENTITY_MISMATCH"
+    assert row["win_estimate"] is None and row["ev"] is None
+    assert original_estimate(row) == {}
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+@pytest.mark.parametrize("field,value", [
+    ("event_id", "other-event"), ("candidate_id", "other-candidate"),
+    ("export_run_id", "other-export"), ("sport", "NFL"),
+    ("market", "total_over"), ("selection", "Home -2.5"), ("line", -2.5),
+    ("period", "first_half"), ("rules", "other-rules"), ("model_target", "home_win"),
+    ("sportsbook", "other-book"), ("odds", -125.0), ("quote_id", "other-quote"),
+    ("quote_time", "2026-10-01T19:20:00Z"), ("analysis_time", "2026-10-01T19:21:00Z"),
+    ("start", "2026-10-01T23:00:00Z"), (None, None),
+])
+def test_legacy_missing_metadata_cannot_borrow_a_copied_display_identity(
+        monkeypatch, tmp_path, field, value):
+    from test_research_probability_display import source, package_for
+    from app_core.public_board import build_package, validate_package
+    from app_core.public_history import original_estimate
+    raw = source(ml_target=""); raw.pop("wager_contract")
+    frames, _ = package_for(monkeypatch, raw)
+    for frame in frames:
+        for index in frame.index:
+            saved = json.loads(frame.at[index, "research_display"])
+            if field is not None:
+                saved["identity"][field] = value
+            frame.at[index, "research_display"] = json.dumps(saved)
+    package = build_package(*frames); validate_package(package)
+    row = package["games"]["overall"][0]
+    if field is None:
+        assert row["win_estimate"] == pytest.approx(.6)
+        assert row["ev"] == pytest.approx(.6*(1+100/110)-1)
+    else:
+        assert row["research_display"]["availability_reason"] == "ESTIMATE_IDENTITY_MISMATCH"
+        assert row["win_estimate"] is None and row["ev"] is None
+        assert original_estimate(row) == {}
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
