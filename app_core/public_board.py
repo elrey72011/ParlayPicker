@@ -164,13 +164,15 @@ def pick_record(row, *, prop=False, as_of=None):
             record["win_estimate"], record["odds"], record["ev"],
             push_probability=push,
         ))
-        from app_core.research_display import public_display
+        from app_core.research_display import public_display, legacy_unrecorded_display
         record["research_display"]=public_display(row,record)
-        # New research exports have their own provenance-bound display object.
-        # Without the exact final authority contract, do not expose their values
-        # in legacy fields consumed by history or other approval-aware readers.
+        # Keep established research or explicit source rejection out of legacy
+        # authority fields when the exact contract is absent. Older exports
+        # without recorded target/provenance retain their legacy saved values;
+        # the separate research object still reports that missing evidence.
         if (record["status"] == "PASS" and isinstance(row.get("research_display"), (str, dict))
-                and "wager_contract" not in record and "controlled_trial_contract" not in record):
+                and "wager_contract" not in record and "controlled_trial_contract" not in record
+                and not legacy_unrecorded_display(row)):
             record["win_estimate"]=None
             record["ev"]=None
             record.update(display(None, record["odds"], None, push_probability=push))

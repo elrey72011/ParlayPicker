@@ -49,7 +49,7 @@ def _valid_push(value):
     return number is not None and 0<=number<=1
 
 
-def _status(value):
+def _status(value, *, field=None):
     if _absent(value):
         return "UNKNOWN"
     name=_text(value).casefold()
@@ -58,6 +58,10 @@ def _status(value):
     if name in {"ok","success","complete"}:
         return "RECORDED"
     if name=="unknown":
+        return "UNKNOWN"
+    if field=="model_status" and name=="market score model":
+        # The existing producer records its model type here, not run success.
+        # Only a separately recorded inference status can establish success.
         return "UNKNOWN"
     # Explicit missing/unavailable, invalid types and unsupported declarations
     # cannot become a successful retained model run.
@@ -100,9 +104,9 @@ def preserve_source_semantics(frame):
                                              rel_tol=0,abs_tol=1e-9))
                     conflict=_valid_push(current)
                 else:
-                    if _status(previous) in {"FAILED","UNAVAILABLE"}:
+                    if _status(previous,field=field) in {"FAILED","UNAVAILABLE"}:
                         continue
-                    reject=_status(current) in {"FAILED","UNAVAILABLE"}
+                    reject=_status(current,field=field) in {"FAILED","UNAVAILABLE"}
                     conflict=False
                 if reject:
                     decoded["fields"][field]={"state":"INVALID"} if conflict else _fact(current)
@@ -156,6 +160,8 @@ def _time(value):
         return None
 
 def _current_semantics_compatible(original,current,*,push=None):
+    if not _absent(original) and _text(original) not in SEMANTICS:
+        return False  # Missing target metadata cannot excuse explicit rejection.
     if _absent(current):
         return True  # Canonical projection may retain semantics only in the carrier.
     unconditional={"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}
@@ -202,14 +208,14 @@ def from_export(row, *, source=None, source_field="win_probability"):
     basis=_text(row.get("probability_basis"))
     direct=source is None
     source=source if source is not None else row
-    current_statuses=[_status(source.get(field)) for field in ("inference_status","model_status")]
+    current_statuses=[_status(source.get(field),field=field) for field in ("inference_status","model_status")]
     current_push=source.get("push_probability")
     current_semantics=source.get("probability_semantics")
     source=_source_semantics(source)
     if source is None or not _current_semantics_compatible(
             source.get("probability_semantics"),current_semantics,push=source.get("push_probability")):
         return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS")
-    statuses=current_statuses+[_status(source.get(field)) for field in ("inference_status","model_status")]
+    statuses=current_statuses+[_status(source.get(field),field=field) for field in ("inference_status","model_status")]
     inference=next((state for state in ("FAILED","UNAVAILABLE","RECORDED") if state in statuses),"UNKNOWN")
     result=_empty(identity, source_field, basis, inference=inference)
     if inference in {"FAILED","UNAVAILABLE"}:
@@ -331,6 +337,46 @@ def _matches(display, row):
                 elif value!=identity[key]:
                     return False
     return True
+
+def legacy_unrecorded_display(export):
+    """Identify legacy missing evidence without waiving explicit source rejection.
+
+    Public identity checks can replace a saved missing-target reason. Inspect the
+    validated saved reason before that replacement; never fill the separate
+    research object or treat legacy metrics as conservative authorization.
+    """
+    saved=export.get("research_display")
+    try:
+        if isinstance(saved,str): saved=json.loads(saved)
+        validate(saved)
+    except (ValueError,TypeError):
+        return False
+    if saved["availability_reason"] not in {
+            "MODEL_TARGET_NOT_RECORDED","ESTIMATE_PROVENANCE_NOT_RECORDED","ESTIMATE_NOT_RECORDED"}:
+        return False
+    source=_source_semantics(export)
+    if source is None or not _current_semantics_compatible(
+            source.get("probability_semantics"),export.get("probability_semantics"),
+            push=source.get("push_probability")):
+        return False
+    for row in (source,export):
+        if any(_status(row.get(field),field=field) in {"FAILED","UNAVAILABLE"}
+               for field in ("inference_status","model_status")):
+            return False
+        push=row.get("push_probability")
+        if not _absent(push) and not _valid_push(push):
+            return False
+    original_push=source.get("push_probability")
+    current_push=export.get("push_probability")
+    if (not _absent(original_push) and not _absent(current_push)
+            and not math.isclose(_number(original_push),_number(current_push),rel_tol=0,abs_tol=1e-9)):
+        return False
+    line=_number(export.get("line"))
+    if (line is not None and not _absent(current_push) and _number(current_push)>1e-9
+            and abs(line*2-round(line*2))<=1e-9 and abs(line-round(line))>1e-9):
+        return False  # Missing provenance cannot authorize impossible half-point push mass.
+    return True
+
 
 def public_display(export, row):
     saved=export.get("research_display")

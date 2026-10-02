@@ -31,13 +31,33 @@ stage decisions, stakes, normalized probability and recorded EV. Strict
 conservative probability/EV remain null; PASS stake remains zero.
 
 An unresolved final line must not lend its PASS contract to another exact
-selection. When a new research export has its separate provenance-bound display
-object and no matching wager/trial contract, public probability/EV remain null in
-legacy fields. The research object alone carries supported estimates. This also
+selection. When a new research export's separate provenance-bound display
+object establishes research provenance or an explicit source rejection and no
+matching wager/trial contract, public probability/EV remain null in legacy fields.
+The research object alone carries supported estimates. This also
 prevents history's legacy estimate reader from recording unsupported research.
-Existing approved/trial contracts and legacy inputs without the new display
-object retain their behavior. Public authority values are identical in every
+Existing approved/trial contracts and legacy inputs with no recorded target,
+provenance or estimate retain their saved-value behavior; their separate research
+object reports missing evidence. Public authority values are identical in every
 view in the paired full-upload replay.
+
+Two unchanged application expectations caught an overbroad legacy clearing
+guard in the first pushed revision: genuinely absent half-point source semantics
+remain compatible, and total-quality diagnostics must not erase a recorded
+legacy estimate. Both tests pass on actual main `39351a7`, fail on `096413b`,
+and pass after this correction without changing their expectations. Inspect the
+validated saved display reason before public identity checks replace a missing
+target/provenance reason; explicit unsupported semantics, invalid push and
+failed/unavailable inference never qualify for that legacy exception. Missing
+target metadata cannot mask an original unsupported source contract.
+
+The existing producer writes `Market Score Model` into `model_status` to name
+its model type. Treat that exact existing label as neutral type metadata only
+in that field. It must not suppress separately recorded successful inference,
+and must not manufacture success when inference is absent. Failed, conflicting
+and unknown statuses remain rejected; original failures remain sticky. Real-path
+fake-transport controls reproduce the regression on `096413b` and its absence
+on current main, including complete saved contracts and zero-stake PASS outcomes.
 
 The upload fixture supplies its fake exact book before normalization through the
 existing supported `quote_bookmaker` field; no metadata or fixture is inserted

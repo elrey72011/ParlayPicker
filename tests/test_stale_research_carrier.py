@@ -190,6 +190,79 @@ def test_upload_target_alias_preserves_only_supplied_values(monkeypatch, target)
         assert normalized.iloc[0].ml_target == target
 
 
+def test_missing_target_cannot_mask_explicit_unsupported_carrier(monkeypatch, tmp_path):
+    from test_research_probability_display import source, package_for
+    raw = carried(source(ml_target="", probability_semantics="unsupported"))
+    raw.pop("wager_contract")
+    raw["probability_semantics"] = "win_unconditional_with_push"
+    _, package = package_for(monkeypatch, raw)
+    row = package["games"]["overall"][0]
+    assert row["research_display"]["availability_reason"] == "UNSUPPORTED_PROBABILITY_SEMANTICS"
+    assert row["win_estimate"] is None and row["ev"] is None
+    from app_core.public_history import original_estimate
+    assert original_estimate(row) == {}
+
+
+@pytest.mark.parametrize("inference,reason,state", [
+    ("success", "AVAILABLE", "RECORDED"),
+    (None, "AVAILABLE", "UNKNOWN"),
+    ("FAILED", "INFERENCE_FAILED", "FAILED"),
+    ("unrecognized-run-status", "INFERENCE_UNAVAILABLE", "UNAVAILABLE"),
+    ("Market Score Model", "INFERENCE_UNAVAILABLE", "UNAVAILABLE"),
+])
+def test_existing_producer_model_type_is_not_an_inference_verdict(
+        monkeypatch, tmp_path, inference, reason, state):
+    raw = carried(forecast(model_status="Market Score Model", inference_status=inference))
+    result = real_path(monkeypatch, tmp_path, raw)
+    assert_no_authority(result)
+    display = result["package"]["games"]["overall"][0]["research_display"]
+    assert display["availability_reason"] == reason
+    assert display["inference_status"] == state
+    assert (display["probability"] is not None) == (reason == "AVAILABLE")
+    browser = inspect_browser(result["package"], tmp_path / "browser", NOW, rendered_html=result["html"])
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+def test_unknown_model_type_still_rejects_recorded_inference(monkeypatch, tmp_path):
+    result = real_path(monkeypatch, tmp_path, carried(forecast(
+        model_status="unrecognized-model", inference_status="success")))
+    assert_no_authority(result)
+    display = result["package"]["games"]["overall"][0]["research_display"]
+    assert display["availability_reason"] == "INFERENCE_UNAVAILABLE"
+
+
+def test_known_model_type_cannot_erase_original_failure(monkeypatch, tmp_path):
+    raw = carried(forecast(model_status="FAILED", inference_status="success"))
+    raw["model_status"] = "Market Score Model"
+    result = real_path(monkeypatch, tmp_path, raw)
+    assert_no_authority(result)
+    assert result["package"]["games"]["overall"][0]["research_display"]["availability_reason"] == "INFERENCE_FAILED"
+
+
+@pytest.mark.parametrize("changes", [
+    {"probability_semantics": "unsupported"},
+    {"push_probability": True},
+    {"push_probability": float("nan")},
+    {"push_probability": .1},
+    {"inference_status": "FAILED"},
+    {"model_status": "unknown-model"},
+])
+def test_legacy_exception_cannot_mask_explicit_post_export_rejection(monkeypatch, changes):
+    from test_research_probability_display import source, package_for
+    from app_core.public_board import pick_record
+    from app_core.public_history import original_estimate
+    raw = carried(source(ml_target=""))
+    raw.pop("wager_contract")
+    frames, _ = package_for(monkeypatch, raw)
+    row = frames[0].iloc[0].to_dict()
+    assert json.loads(row["research_display"])["availability_reason"] == "MODEL_TARGET_NOT_RECORDED"
+    row.update(changes)
+    public = pick_record(row)
+    assert public["status"] == "PASS"
+    assert public["win_estimate"] is None and public["ev"] is None
+    assert original_estimate(public) == {}
+
+
 def upload_path(monkeypatch, tmp_path, raw):
     def prohibited(*args, **kwargs):
         raise AssertionError("Real transport is prohibited in carrier regression")
