@@ -23,11 +23,45 @@ EXPORT_PROVENANCE_COLUMNS = ["quote_id", "prospective_quote_id", "market_period"
     "settlement_rules", "inference_status", "model_status", "spread_line", "total_line",
     "market_line_used", "push_probability", "probability_semantics", "research_source_semantics"]
 SEMANTIC_FIELDS = ("probability_semantics", "push_probability", "inference_status", "model_status")
+SEMANTICS = frozenset({"win_conditional_on_decision","win_unconditional_with_push",
+                      "unconditional_win_push_loss","unconditional"})
 
 
 def _absent(value):
     # NaN/inf/booleans are explicit invalid input, not a missing push contract.
     return value is None or value is pd.NA or value is pd.NaT or (isinstance(value,str) and not value.strip())
+
+
+def _fact(value):
+    if _absent(value):
+        return {"state":"MISSING"}
+    if isinstance(value,str):
+        return {"state":"VALUE","value":value}
+    if isinstance(value,bool) or type(value).__name__=="bool_":
+        return {"state":"VALUE","value":bool(value)}
+    if _number(value) is not None:
+        return {"state":"VALUE","value":_number(value)}
+    return {"state":"INVALID"}
+
+
+def _valid_push(value):
+    number=_number(value)
+    return number is not None and 0<=number<=1
+
+
+def _status(value):
+    if _absent(value):
+        return "UNKNOWN"
+    name=_text(value).casefold()
+    if name in {"failed","error","inference_failed"}:
+        return "FAILED"
+    if name in {"ok","success","complete"}:
+        return "RECORDED"
+    if name=="unknown":
+        return "UNKNOWN"
+    # Explicit missing/unavailable, invalid types and unsupported declarations
+    # cannot become a successful retained model run.
+    return "UNAVAILABLE"
 
 
 def preserve_source_semantics(frame):
@@ -41,16 +75,40 @@ def preserve_source_semantics(frame):
     def encode(row):
         saved=row.get("research_source_semantics")
         if not _absent(saved):
-            return saved  # Preserve original bytes; a malformed carrier fails closed.
-        values={}
-        for field in SEMANTIC_FIELDS:
-            value=row.get(field)
-            if _absent(value): values[field]={"state":"MISSING"}
-            elif isinstance(value,str): values[field]={"state":"VALUE","value":value}
-            elif isinstance(value,bool) or type(value).__name__=="bool_":
-                values[field]={"state":"VALUE","value":bool(value)}
-            elif _number(value) is not None: values[field]={"state":"VALUE","value":_number(value)}
-            else: values[field]={"state":"INVALID"}
+            original=_source_semantics(row)
+            if original is None:
+                return saved  # Malformed carriers remain invalid and unchanged.
+            decoded=json.loads(saved)
+            changed=False
+            for field in SEMANTIC_FIELDS:
+                previous=original.get(field)
+                current=row.get(field)
+                if _absent(current):
+                    continue  # A projection may retain a fact only in the carrier.
+                # An original invalid/failing fact is sticky; current success cannot
+                # repair it or erase the retained source's recorded rejection.
+                if field=="probability_semantics":
+                    if not _absent(previous) and _text(previous) not in SEMANTICS:
+                        continue
+                    reject=not _current_semantics_compatible(previous,current,push=original.get("push_probability"))
+                    conflict=_text(current) in SEMANTICS
+                elif field=="push_probability":
+                    if not _absent(previous) and not _valid_push(previous):
+                        continue
+                    reject=(not _valid_push(current) or
+                            not math.isclose(_number(current),_number(previous) if not _absent(previous) else 0.0,
+                                             rel_tol=0,abs_tol=1e-9))
+                    conflict=_valid_push(current)
+                else:
+                    if _status(previous) in {"FAILED","UNAVAILABLE"}:
+                        continue
+                    reject=_status(current) in {"FAILED","UNAVAILABLE"}
+                    conflict=False
+                if reject:
+                    decoded["fields"][field]={"state":"INVALID"} if conflict else _fact(current)
+                    changed=True
+            return json.dumps(decoded,sort_keys=True,separators=(",",":"),allow_nan=False) if changed else saved
+        values={field:_fact(row.get(field)) for field in SEMANTIC_FIELDS}
         return json.dumps({"version":1,"fields":values},sort_keys=True,separators=(",",":"),allow_nan=False)
     out["research_source_semantics"]=out.apply(encode,axis=1)
     return out
@@ -61,7 +119,7 @@ def _source_semantics(source):
     if _absent(saved): return source
     try:
         decoded=json.loads(saved)
-        if set(decoded)!={"version","fields"} or decoded["version"]!=1 or set(decoded["fields"])!=set(SEMANTIC_FIELDS):
+        if set(decoded)!={"version","fields"} or type(decoded["version"]) is not int or decoded["version"]!=1 or set(decoded["fields"])!=set(SEMANTIC_FIELDS):
             return None
         out=dict(source)
         for field,item in decoded["fields"].items():
@@ -97,6 +155,19 @@ def _time(value):
     except (ValueError, TypeError):
         return None
 
+def _current_semantics_compatible(original,current,*,push=None):
+    if _absent(current):
+        return True  # Canonical projection may retain semantics only in the carrier.
+    unconditional={"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}
+    current_name=_text(current)
+    if current_name not in unconditional | {"win_conditional_on_decision"}:
+        return False
+    # Capture can express a no-push market conditionally without changing mass.
+    # Nonzero-push reversal cannot reinterpret an unconditional source.
+    return not (_text(original) in unconditional and current_name=="win_conditional_on_decision"
+                and not (_valid_push(push) and math.isclose(_number(push),0.0,rel_tol=0,abs_tol=1e-9)))
+
+
 def _identity(row):
     return dict(event_id=_text(row.get("matchup_id")), candidate_id=_text(row.get("candidate_id")),
         export_run_id=_text(row.get("export_run_id")), sport=_text(row.get("league")),
@@ -131,15 +202,15 @@ def from_export(row, *, source=None, source_field="win_probability"):
     basis=_text(row.get("probability_basis"))
     direct=source is None
     source=source if source is not None else row
-    current_statuses=[_text(source.get(field)).casefold() for field in ("inference_status","model_status")]
+    current_statuses=[_status(source.get(field)) for field in ("inference_status","model_status")]
     current_push=source.get("push_probability")
+    current_semantics=source.get("probability_semantics")
     source=_source_semantics(source)
-    if source is None:
+    if source is None or not _current_semantics_compatible(
+            source.get("probability_semantics"),current_semantics,push=source.get("push_probability")):
         return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS")
-    statuses=current_statuses+[_text(source.get(field)).casefold() for field in ("inference_status","model_status")]
-    inference="FAILED" if set(statuses)&{"failed","error","inference_failed"} else (
-        "UNAVAILABLE" if set(statuses)&{"missing","unavailable","inference_unavailable"} else
-        "RECORDED" if set(statuses)&{"ok","success","complete"} else "UNKNOWN")
+    statuses=current_statuses+[_status(source.get(field)) for field in ("inference_status","model_status")]
+    inference=next((state for state in ("FAILED","UNAVAILABLE","RECORDED") if state in statuses),"UNKNOWN")
     result=_empty(identity, source_field, basis, inference=inference)
     if inference in {"FAILED","UNAVAILABLE"}:
         result["availability_reason"]="INFERENCE_"+inference

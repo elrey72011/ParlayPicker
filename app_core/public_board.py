@@ -166,6 +166,14 @@ def pick_record(row, *, prop=False, as_of=None):
         ))
         from app_core.research_display import public_display
         record["research_display"]=public_display(row,record)
+        # New research exports have their own provenance-bound display object.
+        # Without the exact final authority contract, do not expose their values
+        # in legacy fields consumed by history or other approval-aware readers.
+        if (record["status"] == "PASS" and isinstance(row.get("research_display"), (str, dict))
+                and "wager_contract" not in record and "controlled_trial_contract" not in record):
+            record["win_estimate"]=None
+            record["ev"]=None
+            record.update(display(None, record["odds"], None, push_probability=push))
     return record
 
 

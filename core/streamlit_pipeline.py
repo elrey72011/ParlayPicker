@@ -662,7 +662,8 @@ CANONICAL_BET_COLUMNS = [
 _CANONICAL_RESEARCH_COLUMNS = ["quote_id", "prospective_quote_id", "market_period", "period",
     "settlement_rules", "inference_status", "prediction_generated_at", "game_start_utc",
     "odds_recorded_at", "quote_time", "quote_timestamp", "quote_bookmaker", "provider_quotes",
-    "candidate_id", "export_run_id", "research_source_semantics"]
+    "candidate_id", "export_run_id", "research_source_semantics",
+    "probability_semantics", "push_probability", "model_status"]
 CANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + _CANONICAL_RESEARCH_COLUMNS))
 
 
@@ -776,6 +777,7 @@ def _clean_text_placeholders(series: pd.Series) -> pd.Series:
 from app_core.research_display import SEMANTIC_FIELDS
 _UPLOAD_COLUMN_ALIASES.update({field.replace("_"," "):field
     for field in _CANONICAL_RESEARCH_COLUMNS + list(SEMANTIC_FIELDS)})
+_UPLOAD_COLUMN_ALIASES["ml target"] = "ml_target"
 
 
 def _normalize_upload_columns(df: pd.DataFrame) -> pd.DataFrame:
