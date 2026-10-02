@@ -758,3 +758,109 @@ def test_every_explicit_malformed_source_ev_survives_projection_as_rejection(
     browser = inspect_browser(package, tmp_path / "browser", NOW)
     assert browser["initial"]["shown"][0]["probability"] is None
     assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+def captured_numeric_path(monkeypatch, tmp_path, field, value, *, probability=.6):
+    from test_research_probability_display import source, FrozenDateTime, ANALYSIS
+    from app_core.candidate_evidence_schema import authority_projection, project
+    from app_core import prediction_evidence as evidence
+    from app_core.per_game_boards import per_game_board
+    from app_core.public_board import build_package, validate_package
+    from scripts.publish_board import render, assets_from_html
+    monkeypatch.setattr(socket.socket, "connect", lambda *a, **k:
+        (_ for _ in ()).throw(AssertionError("No real transport in projection/capture regression")))
+    monkeypatch.setattr(evidence, "now_utc", lambda: ANALYSIS)
+    monkeypatch.setattr("app_core.public_board.datetime", FrozenDateTime)
+    raw = source(best_available_selection_policy="", ml_target="", calibrated_probability=probability,
+        production_win_probability=probability, production_expected_value=probability*(1+100/110)-1,
+        probability_semantics=None, push_probability=None, best_available_selected=True,
+        wager_approved=False, game_date="2026-10-01", prediction_generated_at=ANALYSIS)
+    raw.pop("wager_contract")
+    if field == "expected_value":
+        selected = deepcopy(raw)
+        selected.update(best_pick="Away +1.5", market_type="spread_away", spread_line=1.5,
+            best_available_selected=False, best_available_rank=1, best_available_family_rank=1,
+            candidate_id="captured-calibrated-candidate", quote_id="captured-calibrated-quote",
+            expected_value=value, provider_quotes=json.dumps([dict(book="novig", market_type="spread_away",
+                point=1.5, price=-110, recorded_at=raw["quote_time"])]))
+        raw["best_available_rank"] = raw["best_available_family_rank"] = 2
+        pool = pd.DataFrame([raw, selected], dtype=object)
+    else:
+        raw[field] = value
+        pool = pd.DataFrame([raw], dtype=object)
+    authority = authority_projection(pool, list(pool.columns))
+    projected = project(authority)
+    # Schema fields and payload digest retain the original authority values;
+    # the type facts live only in the existing display provenance carrier.
+    root = tmp_path / "empty-root"; root.mkdir()
+    db = tmp_path / "isolated-evidence.sqlite3"
+    context = evidence.begin_run({}, path=db, root=root)
+    final = projected[projected.candidate_id.eq(raw["candidate_id"])].copy()
+    captured, card = evidence.capture_run(context, projected, final, pool,
+        path=db, authoritative_candidates=True)
+    frames = [per_game_board(card, captured, family=f, novig_only=True)
+              for f in ("overall", "sides", "totals")]
+    package = build_package(*frames); validate_package(package)
+    html = render(package)
+    serialized = json.loads(assets_from_html(html)["board-data.json"]); validate_package(serialized)
+    return dict(raw=raw, pool=pool, authority=authority, projected=projected,
+        captured=captured, card=card, frames=frames, package=serialized, html=html)
+
+
+@pytest.mark.parametrize("field", ["production_expected_value", "expected_value"])
+@pytest.mark.parametrize("ev,probability,valid", [
+    (float("nan"), .6, False), (float("inf"), .6, False), (-float("inf"), .6, False),
+    (True, .6, False), (False, .6, False), ("invalid", .6, False),
+    (None, .6, True), (pd.NA, .6, True),
+    (0.0, 110/210, True), (.4*(1+100/110)-1, .4, True),
+])
+def test_invalid_ev_fact_survives_real_authority_projection_and_immutable_capture(
+        monkeypatch, tmp_path, field, ev, probability, valid):
+    from app_core.research_display import legacy_unrecorded_display
+    result = captured_numeric_path(monkeypatch, tmp_path, field, ev, probability=probability)
+    row = result["package"]["games"]["overall"][0]
+    selected = result["projected"].iloc[-1]
+    carrier = json.loads(selected.research_source_semantics)
+    if valid:
+        assert field not in carrier.get("invalid_numeric_fields", {})
+        assert row["research_display"]["value_reason"] != "INVALID_RECORDED_EV"
+    else:
+        assert carrier["invalid_numeric_fields"][field] == "INVALID_RECORDED_EV"
+        assert row["research_display"]["value_reason"] == "INVALID_RECORDED_EV"
+        assert not legacy_unrecorded_display(result["frames"][0].iloc[0].to_dict())
+        assert row["win_estimate"] is None and row["ev"] is None
+    if isinstance(ev, float) and pd.isna(ev):
+        assert selected[field] is None  # Initial project.where erases both NaN aliases.
+    elif isinstance(ev, float) and abs(ev) == float("inf"):
+        assert selected[field] is None if field == "expected_value" else selected[field] == ev
+    assert row["status"] == "PASS" and result["card"].Play_Stake.sum() == 0
+    browser = inspect_browser(result["package"], tmp_path / "browser", NOW, rendered_html=result["html"])
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+def test_projection_empty_and_legacy_carrier_compatibility(monkeypatch):
+    from app_core.candidate_evidence_schema import project
+    from app_core.research_display import from_export
+    assert project(pd.DataFrame()).empty
+    raw = carried(forecast())
+    assert json.loads(raw["research_source_semantics"])["version"] == 1
+    # A valid old carrier remains unchanged; no source facts are invented.
+    saved = raw["research_source_semantics"]
+    assert preserve_source_semantics(pd.DataFrame([raw])).iloc[0].research_source_semantics == saved
+
+
+@pytest.mark.parametrize("field", ["production_win_probability", "calibrated_probability", "best_available_probability", "win_probability"])
+@pytest.mark.parametrize("value,reason", [
+    (True, "INVALID_PROBABILITY"), (False, "INVALID_PROBABILITY"),
+    (float("inf"), "NONFINITE_PROBABILITY"), (-float("inf"), "NONFINITE_PROBABILITY"),
+    (float("nan"), "ESTIMATE_NOT_RECORDED"), ("invalid", "NONFINITE_PROBABILITY"),
+    (-.1, "INVALID_PROBABILITY"), (1.1, "INVALID_PROBABILITY"),
+])
+def test_original_probability_type_rejection_survives_projection(monkeypatch, field, value, reason):
+    from app_core.candidate_evidence_schema import project
+    from app_core.research_display import from_export
+    from test_research_probability_display import source
+    raw = source(ml_target="", **{field:value})
+    projected = project(pd.DataFrame([raw], dtype=object)).iloc[0].to_dict()
+    display = from_export(projected, source=projected, source_field=field)
+    assert display["availability_reason"] == reason and display["probability"] is None

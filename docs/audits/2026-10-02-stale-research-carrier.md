@@ -125,6 +125,25 @@ calibrated probability paths, Boolean/nonfinite/nonnumeric EV, genuine absent
 sentinels, zero, compatible positive and negative EV. No source reinjection,
 new price math, authority or model success is introduced.
 
+Fresh review of `a34eeb32` located an earlier loss boundary: evidence schema
+`project()` replaces NaN with null before display validation. Its canonical
+`expected_value` normalization also replaces infinity; the separate
+`production_expected_value` alias retains infinity at this boundary. Preserve
+only an allowlisted invalid numeric reason before that normalization, through
+the existing display provenance carrier. Version 2 adds negative type facts for
+the four supported probability sources and two EV sources; valid version 1
+carriers remain unchanged. No raw invalid payload, replacement estimate, new
+authority field, capture behavior or probability calculation is introduced.
+The project hook is two lines; evidence schema fields and payload hashing remain
+unchanged. Existing protected immutable capture and transport files are intact.
+
+New frozen regressions start with the original object-typed producer rows,
+then use authority projection, schema projection, immutable capture, Overall,
+Sides and Totals exports, package validation, serialized assets and the actual
+browser. The same tests on exact A34 source fail 14 cases and pass 39 controls;
+the correction passes all 53. This supersedes the earlier direct-export test's
+coverage claim: it did not exercise the pre-display NaN-erasure boundary.
+
 Three unrelated application tests reproduced on unchanged main after their fixed
 September 29 evidence crossed the existing three-day load/pilot expiry. The
 separately approved test-only correction binds `_configure_verifier` to that

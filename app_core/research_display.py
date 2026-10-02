@@ -25,6 +25,28 @@ EXPORT_PROVENANCE_COLUMNS = ["quote_id", "prospective_quote_id", "market_period"
 SEMANTIC_FIELDS = ("probability_semantics", "push_probability", "inference_status", "model_status")
 SEMANTICS = frozenset({"win_conditional_on_decision","win_unconditional_with_push",
                       "unconditional_win_push_loss","unconditional"})
+EV_SOURCE_FIELDS = frozenset({"production_expected_value", "expected_value"})
+
+
+def _numeric_rejections(row):
+    """Keep invalid-type facts only; never copy a private payload or infer a value."""
+    rejected={}
+    for field in EV_SOURCE_FIELDS:
+        value=row.get(field)
+        if not _absent(value) and _number(value) is None:
+            rejected[field]="INVALID_RECORDED_EV"
+    for field in SOURCE_FIELDS:
+        value=row.get(field)
+        if _absent(value): continue
+        if isinstance(value,bool) or type(value).__name__=="bool_":
+            rejected[field]="INVALID_PROBABILITY"
+        elif isinstance(value,float) and math.isnan(value):
+            rejected[field]="ESTIMATE_NOT_RECORDED"  # Existing NaN probability semantics.
+        elif _number(value) is None:
+            rejected[field]="NONFINITE_PROBABILITY"
+        elif not 0<=_number(value)<=1:
+            rejected[field]="INVALID_PROBABILITY"
+    return rejected
 
 
 def _absent(value):
@@ -74,6 +96,8 @@ def preserve_source_semantics(frame):
     an unsupported original research contract was valid. It is never read by gates.
     """
     out=frame.copy()
+    if out.empty:
+        return out
     def encode(row):
         saved=row.get("research_source_semantics")
         if not _absent(saved):
@@ -82,6 +106,11 @@ def preserve_source_semantics(frame):
                 return saved  # Malformed carriers remain invalid and unchanged.
             decoded=json.loads(saved)
             changed=False
+            numeric=decoded.get("invalid_numeric_fields",{})
+            merged={**_numeric_rejections(row),**numeric}  # Original invalid facts remain sticky.
+            if merged!=numeric:
+                decoded.update(version=2,invalid_numeric_fields=merged)
+                changed=True
             for field in SEMANTIC_FIELDS:
                 previous=original.get(field)
                 current=row.get(field)
@@ -111,7 +140,10 @@ def preserve_source_semantics(frame):
                     changed=True
             return json.dumps(decoded,sort_keys=True,separators=(",",":"),allow_nan=False) if changed else saved
         values={field:_fact(row.get(field)) for field in SEMANTIC_FIELDS}
-        return json.dumps({"version":1,"fields":values},sort_keys=True,separators=(",",":"),allow_nan=False)
+        decoded={"version":1,"fields":values}
+        numeric=_numeric_rejections(row)
+        if numeric: decoded.update(version=2,invalid_numeric_fields=numeric)
+        return json.dumps(decoded,sort_keys=True,separators=(",",":"),allow_nan=False)
     out["research_source_semantics"]=out.apply(encode,axis=1)
     return out
 
@@ -121,9 +153,18 @@ def _source_semantics(source):
     if _absent(saved): return source
     try:
         decoded=json.loads(saved)
-        if set(decoded)!={"version","fields"} or type(decoded["version"]) is not int or decoded["version"]!=1 or set(decoded["fields"])!=set(SEMANTIC_FIELDS):
+        version=decoded.get("version")
+        keys={"version","fields"} if version==1 else {"version","fields","invalid_numeric_fields"}
+        if set(decoded)!=keys or type(version) is not int or version not in {1,2} or set(decoded["fields"])!=set(SEMANTIC_FIELDS):
             return None
+        numeric=decoded.get("invalid_numeric_fields",{})
+        if not isinstance(numeric,dict) or (version==2 and not numeric): return None
+        for field,reason in numeric.items():
+            allowed={"INVALID_RECORDED_EV"} if field in EV_SOURCE_FIELDS else (
+                {"INVALID_PROBABILITY","NONFINITE_PROBABILITY","ESTIMATE_NOT_RECORDED"} if field in SOURCE_FIELDS else set())
+            if not isinstance(reason,str) or reason not in allowed: return None
         out=dict(source)
+        out["_research_invalid_numeric_fields"]=numeric
         for field,item in decoded["fields"].items():
             if item=={"state":"MISSING"}: out[field]=None
             elif item=={"state":"INVALID"}: out[field]=float("nan")
@@ -263,6 +304,9 @@ def from_export(row, *, source=None, source_field="win_probability"):
         result["availability_reason"]="INFERENCE_"+inference
         return result
     raw=source.get(source_field)
+    numeric=source.get("_research_invalid_numeric_fields",{})
+    if source_field in numeric:
+        return _empty(identity,source_field,basis,reason=numeric[source_field],inference=inference)
     if raw is None or raw is pd.NA or (isinstance(raw,float) and math.isnan(raw)):
         result["availability_reason"]="ESTIMATE_NOT_RECORDED"
         return result
@@ -276,7 +320,7 @@ def from_export(row, *, source=None, source_field="win_probability"):
         return result
     ev_field={"production_win_probability":"production_expected_value","calibrated_probability":"expected_value"}.get(source_field)
     raw_ev=source.get(ev_field) if ev_field else None
-    invalid_ev=not _absent(raw_ev) and _number(raw_ev) is None
+    invalid_ev=ev_field in numeric or (not _absent(raw_ev) and _number(raw_ev) is None)
     if invalid_ev:
         result["value_reason"]="INVALID_RECORDED_EV"
     # Check explicit source rejection before missing target/provenance can
@@ -417,6 +461,10 @@ def legacy_unrecorded_display(export):
     if source is None or not _current_semantics_compatible(
             source.get("probability_semantics"),export.get("probability_semantics"),
             push=source.get("push_probability")):
+        return False
+    numeric=source.get("_research_invalid_numeric_fields",{})
+    ev_field={"production_win_probability":"production_expected_value","calibrated_probability":"expected_value"}.get(saved["source_field"])
+    if saved["source_field"] in numeric or ev_field in numeric:
         return False
     for row in (source,export):
         if any(_status(row.get(field),field=field) in {"FAILED","UNAVAILABLE"}
