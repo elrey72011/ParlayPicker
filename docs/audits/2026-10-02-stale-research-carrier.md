@@ -59,6 +59,12 @@ and unknown statuses remain rejected; original failures remain sticky. Real-path
 fake-transport controls reproduce the regression on `096413b` and its absence
 on current main, including complete saved contracts and zero-stake PASS outcomes.
 
+Fresh review of `15b822f` also identified that the literal recorded status
+`unknown` must reject research availability. Only genuinely absent status and
+the existing model-type label are neutral. Explicit `unknown` now rejects both
+with and without another recorded success, and remains sticky through repeated
+normalization. Existing authority fields and stakes are unaffected.
+
 The upload fixture supplies its fake exact book before normalization through the
 existing supported `quote_bookmaker` field; no metadata or fixture is inserted
 after the export boundary. Other pre-existing upload omissions (model source,

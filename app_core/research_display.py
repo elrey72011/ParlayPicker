@@ -57,13 +57,11 @@ def _status(value, *, field=None):
         return "FAILED"
     if name in {"ok","success","complete"}:
         return "RECORDED"
-    if name=="unknown":
-        return "UNKNOWN"
     if field=="model_status" and name=="market score model":
         # The existing producer records its model type here, not run success.
         # Only a separately recorded inference status can establish success.
         return "UNKNOWN"
-    # Explicit missing/unavailable, invalid types and unsupported declarations
+    # Explicit unknown/missing/unavailable, invalid types and unsupported declarations
     # cannot become a successful retained model run.
     return "UNAVAILABLE"
 

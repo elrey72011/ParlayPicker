@@ -44,6 +44,8 @@ def assert_no_authority(result):
     ({"model_status": "FAILED"}, "INFERENCE_FAILED"),
     ({"inference_status": "UNAVAILABLE"}, "INFERENCE_UNAVAILABLE"),
     ({"model_status": "missing"}, "INFERENCE_UNAVAILABLE"),
+    ({"inference_status": "unknown"}, "INFERENCE_UNAVAILABLE"),
+    ({"model_status": "unknown"}, "INFERENCE_UNAVAILABLE"),
     ({"inference_status": True}, "INFERENCE_UNAVAILABLE"),
     ({"model_status": float("nan")}, "INFERENCE_UNAVAILABLE"),
 ])
@@ -77,6 +79,8 @@ def test_malformed_carrier_is_not_repaired(monkeypatch, tmp_path, saved):
     ({"probability_semantics": "unsupported"}, "UNSUPPORTED_PROBABILITY_SEMANTICS"),
     ({"push_probability": True}, "UNSUPPORTED_PROBABILITY_SEMANTICS"),
     ({"inference_status": "FAILED"}, "INFERENCE_FAILED"),
+    ({"inference_status": "unknown"}, "INFERENCE_UNAVAILABLE"),
+    ({"model_status": "unknown"}, "INFERENCE_UNAVAILABLE"),
 ])
 def test_original_rejection_stays_sticky_through_repeated_normalization(monkeypatch, tmp_path, changes, reason):
     raw = carried(forecast(**changes))
@@ -208,6 +212,7 @@ def test_missing_target_cannot_mask_explicit_unsupported_carrier(monkeypatch, tm
     (None, "AVAILABLE", "UNKNOWN"),
     ("FAILED", "INFERENCE_FAILED", "FAILED"),
     ("unrecognized-run-status", "INFERENCE_UNAVAILABLE", "UNAVAILABLE"),
+    ("unknown", "INFERENCE_UNAVAILABLE", "UNAVAILABLE"),
     ("Market Score Model", "INFERENCE_UNAVAILABLE", "UNAVAILABLE"),
 ])
 def test_existing_producer_model_type_is_not_an_inference_verdict(
@@ -245,6 +250,8 @@ def test_known_model_type_cannot_erase_original_failure(monkeypatch, tmp_path):
     {"push_probability": float("nan")},
     {"push_probability": .1},
     {"inference_status": "FAILED"},
+    {"inference_status": "unknown"},
+    {"model_status": "unknown"},
     {"model_status": "unknown-model"},
 ])
 def test_legacy_exception_cannot_mask_explicit_post_export_rejection(monkeypatch, changes):
