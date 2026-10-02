@@ -276,7 +276,7 @@ def from_export(row, *, source=None, source_field="win_probability"):
         return result
     ev_field={"production_win_probability":"production_expected_value","calibrated_probability":"expected_value"}.get(source_field)
     raw_ev=source.get(ev_field) if ev_field else None
-    invalid_ev=isinstance(raw_ev,bool) or type(raw_ev).__name__=="bool_"
+    invalid_ev=not _absent(raw_ev) and _number(raw_ev) is None
     if invalid_ev:
         result["value_reason"]="INVALID_RECORDED_EV"
     # Check explicit source rejection before missing target/provenance can

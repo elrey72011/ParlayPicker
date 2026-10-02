@@ -117,6 +117,14 @@ an absent old basis remains unknown rather than being invented. Numeric zero,
 compatible negative EV and genuinely absent EV remain covered. No recorded
 producer evidence or probability math is overwritten.
 
+Fresh review of `6e43c63b` identified explicit malformed producer EV values
+projected to null and mistaken for absent evidence. Before projection, every
+non-absent raw EV that the existing numeric parser rejects now records
+`INVALID_RECORDED_EV`. Actual source/export controls cover both production and
+calibrated probability paths, Boolean/nonfinite/nonnumeric EV, genuine absent
+sentinels, zero, compatible positive and negative EV. No source reinjection,
+new price math, authority or model success is introduced.
+
 Three unrelated application tests reproduced on unchanged main after their fixed
 September 29 evidence crossed the existing three-day load/pilot expiry. The
 separately approved test-only correction binds `_configure_verifier` to that

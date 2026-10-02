@@ -703,3 +703,58 @@ def test_ordinary_export_ev_types_and_declared_basis_do_not_need_a_carrier(
     browser = inspect_browser(package, tmp_path / "browser", NOW)
     assert browser["initial"]["shown"][0]["probability"] is None
     assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+@pytest.mark.parametrize("field", ["production_win_probability", "calibrated_probability"])
+@pytest.mark.parametrize("ev,probability,valid", [
+    (float("nan"), .6, False), (float("inf"), .6, False), (-float("inf"), .6, False),
+    ("invalid", .6, False), (True, .6, False), (False, .6, False),
+    (None, .6, True), (pd.NA, .6, True), ("", .6, True),
+    (0.0, 110/210, True), (.6*(1+100/110)-1, .6, True),
+    (.4*(1+100/110)-1, .4, True),
+])
+def test_every_explicit_malformed_source_ev_survives_projection_as_rejection(
+        monkeypatch, tmp_path, field, ev, probability, valid):
+    from test_research_probability_display import source, package_for
+    from app_core.public_history import original_estimate
+    values = dict(best_available_selection_policy="", ml_target="",
+        probability_semantics="win_unconditional_with_push", push_probability=0.0)
+    if field == "production_win_probability":
+        values.update(production_win_probability=probability, production_expected_value=ev)
+    else:
+        values.update(production_win_probability=None, production_expected_value=None,
+                      calibrated_probability=probability, expected_value=ev)
+    raw = source(**values); raw.pop("wager_contract")
+    assert "research_source_semantics" not in raw
+    if field == "production_win_probability":
+        frames, package = package_for(monkeypatch, raw)
+    else:
+        # Calibrated probability belongs to an alternate ranked candidate;
+        # removing a final probability does not change final-ticket routing.
+        from test_research_probability_display import FrozenDateTime
+        from app_core.per_game_boards import per_game_board
+        from app_core.public_board import build_package, validate_package
+        monkeypatch.setattr("app_core.public_board.datetime", FrozenDateTime)
+        selected = deepcopy(raw)
+        selected.update(best_pick="Away +1.5", market_type="spread_away", spread_line=1.5,
+            best_available_rank=1, best_available_family_rank=1,
+            candidate_id="calibrated-candidate", quote_id="calibrated-quote",
+            provider_quotes=json.dumps([dict(book="novig", market_type="spread_away", point=1.5,
+                price=-110, recorded_at=raw["quote_time"])]))
+        frames = [per_game_board(pd.DataFrame([raw]), pd.DataFrame([selected]), family, novig_only=True)
+                  for family in ("overall", "sides", "totals")]
+        package = build_package(*frames); validate_package(package)
+    row = package["games"]["overall"][0]
+    assert json.loads(frames[0].iloc[0].research_display)["source_field"] == field
+    assert row["research_display"]["availability_reason"] == "MODEL_TARGET_NOT_RECORDED"
+    if valid:
+        assert row["win_estimate"] == pytest.approx(probability)
+        assert row["ev"] is None if ev is None or ev is pd.NA or ev == "" else row["ev"] == pytest.approx(ev)
+    else:
+        assert row["research_display"]["value_reason"] == "INVALID_RECORDED_EV"
+        assert row["win_estimate"] is None and row["ev"] is None
+        assert original_estimate(row) == {}
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
