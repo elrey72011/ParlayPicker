@@ -591,3 +591,115 @@ def test_legacy_missing_metadata_cannot_borrow_a_copied_display_identity(
     browser = inspect_browser(package, tmp_path / "browser", NOW)
     assert browser["initial"]["shown"][0]["probability"] is None
     assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+@pytest.mark.parametrize("conflicting_event", [False, True])
+def test_legacy_unrecorded_start_enrichment_preserves_only_the_same_record(
+        monkeypatch, tmp_path, conflicting_event):
+    from test_research_probability_display import source, package_for, START
+    from app_core.public_board import build_package, validate_package
+    from app_core.public_history import original_estimate
+    raw = source(ml_target="", game_time_est="", game_start_utc="", start="")
+    raw.pop("wager_contract")
+    frames, _ = package_for(monkeypatch, raw)
+    for frame in frames:
+        if not frame.empty:
+            frame["start"] = START
+            if conflicting_event:
+                for index in frame.index:
+                    saved = json.loads(frame.at[index, "research_display"])
+                    saved["identity"]["event_id"] = "different-event"
+                    frame.at[index, "research_display"] = json.dumps(saved)
+    package = build_package(*frames); validate_package(package)
+    row = package["games"]["overall"][0]
+    assert row["research_display"]["availability_reason"] == "ESTIMATE_IDENTITY_MISMATCH"
+    assert row["research_display"]["probability"] is None
+    if conflicting_event:
+        assert row["win_estimate"] is None and row["ev"] is None
+        assert original_estimate(row) == {}
+    else:
+        assert row["win_estimate"] == pytest.approx(.6)
+        assert row["ev"] == pytest.approx(.6*(1+100/110)-1)
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+@pytest.mark.parametrize("probability,ev,valid", [
+    (.6, .8, False), (.6, .6*(1+100/110)-1, True),
+    (.4, .4*(1+100/110)-1, True), (.4, .8, False),
+    (110/210, 0.0, True), (.6, None, True),
+])
+def test_actual_source_ev_basis_checked_before_projection_without_reinjection(
+        monkeypatch, tmp_path, probability, ev, valid):
+    from test_research_probability_display import source, package_for
+    from app_core.public_history import original_estimate
+    raw = source(best_available_selection_policy="", ml_target="",
+        production_win_probability=probability, production_expected_value=ev,
+        probability_semantics="win_unconditional_with_push", push_probability=0.0)
+    raw.pop("wager_contract")
+    assert "research_source_semantics" not in raw
+    original = deepcopy(raw)
+    frames, package = package_for(monkeypatch, raw)
+    # The actual export drops these source facts. Do not inject a carrier, raw
+    # probability, or source declarations after this boundary to make it pass.
+    assert "production_win_probability" not in frames[0].columns
+    assert "research_source_semantics" not in frames[0].columns or frames[0].iloc[0].research_source_semantics is None
+    row = package["games"]["overall"][0]
+    assert row["research_display"]["availability_reason"] == "MODEL_TARGET_NOT_RECORDED"
+    if valid:
+        assert row["win_estimate"] == pytest.approx(probability)
+        assert row["ev"] is None if ev is None else row["ev"] == pytest.approx(ev)
+    else:
+        assert row["research_display"]["value_reason"] == "PRICE_VALUE_MISMATCH"
+        assert row["win_estimate"] is None and row["ev"] is None
+        assert original_estimate(row) == {}
+    assert raw == original
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+@pytest.mark.parametrize("probability,ev,declared,valid,reason", [
+    (.6, True, False, False, "INVALID_RECORDED_EV"),
+    (.6, False, False, False, "INVALID_RECORDED_EV"),
+    (.6, float("nan"), False, False, "INVALID_RECORDED_EV"),
+    (.6, float("inf"), False, False, "INVALID_RECORDED_EV"),
+    (.6, -float("inf"), False, False, "INVALID_RECORDED_EV"),
+    (.6, "invalid", False, False, "INVALID_RECORDED_EV"),
+    (.6, .8, True, False, "PRICE_VALUE_MISMATCH"),
+    (.6, .6*(1+100/110)-1, True, True, None),
+    (.4, .4*(1+100/110)-1, True, True, None),
+    (110/210, 0.0, True, True, None), (.6, None, False, True, None),
+    (.6, .8, False, True, None),
+])
+def test_ordinary_export_ev_types_and_declared_basis_do_not_need_a_carrier(
+        monkeypatch, tmp_path, probability, ev, declared, valid, reason):
+    from test_research_probability_display import source, package_for
+    from app_core.public_board import build_package, validate_package
+    from app_core.public_history import original_estimate
+    raw = source(ml_target="", best_available_probability=probability); raw.pop("wager_contract")
+    frames, _ = package_for(monkeypatch, raw)
+    for frame in frames:
+        frame.drop(columns=[field for field in ["research_source_semantics", "probability_semantics", "push_probability"]
+                            if field in frame.columns], inplace=True)
+        if not frame.empty:
+            frame["ev"] = ev
+            if declared:
+                frame["probability_semantics"] = "win_unconditional_with_push"
+                frame["push_probability"] = 0.0
+    package = build_package(*frames); validate_package(package)
+    row = package["games"]["overall"][0]
+    if valid:
+        assert row["win_estimate"] == pytest.approx(probability)
+        assert row["ev"] is None if ev is None else row["ev"] == pytest.approx(ev)
+    else:
+        assert row["research_display"]["value_reason"] == reason
+        assert row["win_estimate"] is None and row["ev"] is None
+        assert original_estimate(row) == {}
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0

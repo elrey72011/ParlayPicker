@@ -94,11 +94,28 @@ even when a current conflicting status would otherwise reserialize them.
 
 Fresh review of `a6b90359` identified a copied saved display identity that could
 still preserve unrelated legacy values. The legacy exception now requires the
-saved identity to equal the exact export identity. The pre-target self-review
+recorded saved identity facts to equal the export identity. Existing legacy
+adapters may add a start time that was absent in the producer identity; that
+one-way missing-time enrichment preserves historical metrics only. The separate
+research object still rejects the changed identity, and any recorded identity
+conflict rejects the legacy exception. The unchanged quality regression and a
+paired different-event control verify this narrow compatibility. The pre-target self-review
 also reproduced conflicting quote/period aliases and a selection/line conflict
 hidden by missing metadata; the existing identity checks now run before that
 return. Regression controls cover every saved identity field and retain the
 matching legacy case. These checks do not create missing target evidence.
+
+Parent review independently reproduced an EV-order gap through the actual
+non-probability-first source/export path, without reinjecting original fields:
+explicit unconditional probability `.6` with zero push and recorded EV `.8`
+could survive the early missing-target return after source facts were dropped.
+Check known source EV price basis before that return and retain its rejecting
+value reason through projection. Ordinary export Boolean/nonfinite EV types
+also reject without requiring any source carrier. Explicit export semantics
+and push declarations require EV to match the existing price-value calculation;
+an absent old basis remains unknown rather than being invented. Numeric zero,
+compatible negative EV and genuinely absent EV remain covered. No recorded
+producer evidence or probability math is overwritten.
 
 Three unrelated application tests reproduced on unchanged main after their fixed
 September 29 evidence crossed the existing three-day load/pilot expiry. The

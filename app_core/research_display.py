@@ -291,6 +291,11 @@ def from_export(row, *, source=None, source_field="win_probability"):
         mass,priced=_export_price_mass(row,source,source_field,direct=direct,current_push=current_push)
         if mass is None:
             return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
+        explicit_contract=not _absent(source.get("probability_semantics")) or not _absent(source_push)
+        saved_ev=_number(row.get("ev"))
+        if (explicit_contract and not invalid_ev and saved_ev is not None
+                and not math.isclose(saved_ev,priced["expected_value"],rel_tol=0,abs_tol=1e-9)):
+            result["value_reason"]="PRICE_VALUE_MISMATCH"
     # Explicit aliases cannot disagree about the exact displayed target or quote.
     source_line=_number(source.get("total_line" if identity["market"].startswith("total") else "spread_line"))
     market_line=_number(source.get("market_line_used"))
@@ -365,6 +370,21 @@ def _matches(display, row):
                     return False
     return True
 
+def _legacy_value_rejection(export):
+    """Validate recorded export EV types and explicitly declared price basis."""
+    ev=export.get("ev")
+    if _absent(ev):
+        return None
+    if _number(ev) is None:
+        return "INVALID_RECORDED_EV"
+    if _absent(export.get("probability_semantics")) and _absent(export.get("push_probability")):
+        return None  # An old undeclared basis remains unknown; do not invent one.
+    mass,priced=_export_price_mass(export,export,"win_probability",current_push=export.get("push_probability"))
+    if mass is None or not math.isclose(_number(ev),priced["expected_value"],rel_tol=0,abs_tol=1e-9):
+        return "PRICE_VALUE_MISMATCH"
+    return None
+
+
 def legacy_unrecorded_display(export):
     """Identify legacy missing evidence without waiving explicit source rejection.
 
@@ -378,13 +398,19 @@ def legacy_unrecorded_display(export):
         validate(saved)
     except (ValueError,TypeError):
         return False
-    if saved["identity"] != _identity(export):
+    export_identity=_identity(export)
+    if saved["identity"]["start"] is None:
+        # Existing legacy adapters can add an unrecorded schedule after export.
+        # This preserves historical metrics only; public_display still rejects
+        # the changed identity and cannot create provenance or wager authority.
+        export_identity["start"]=None
+    if saved["identity"] != export_identity:
         return False  # A copied display cannot authorize another row's legacy values.
     if saved["availability_reason"] not in {
             "MODEL_TARGET_NOT_RECORDED","ESTIMATE_PROVENANCE_NOT_RECORDED","ESTIMATE_NOT_RECORDED"}:
         return False
-    if saved["value_reason"]=="INVALID_RECORDED_EV":
-        return False  # Missing target/provenance cannot hide a recorded invalid EV type.
+    if saved["value_reason"] in {"INVALID_RECORDED_EV","PRICE_VALUE_MISMATCH"} or _legacy_value_rejection(export):
+        return False  # Missing metadata cannot hide an explicit invalid EV type/basis.
     if _number(export.get("win_probability")) is None:
         return False  # A missing estimate cannot retain an orphaned legacy EV.
     source=_source_semantics(export)
@@ -442,6 +468,11 @@ def public_display(export, row):
             return _empty(_identity(export),reason="ESTIMATE_IDENTITY_MISMATCH")
     else:
         result=from_export(export)
+    if result["availability_reason"] in {
+            "MODEL_TARGET_NOT_RECORDED","ESTIMATE_PROVENANCE_NOT_RECORDED","ESTIMATE_NOT_RECORDED"}:
+        rejection=_legacy_value_rejection(export)
+        if rejection and result["value_reason"] not in {"INVALID_RECORDED_EV","PRICE_VALUE_MISMATCH"}:
+            result["value_reason"]=rejection
     if not _matches(result,row):
         return _empty(result["identity"],result["source_field"],result["basis"],
                       reason="ESTIMATE_IDENTITY_MISMATCH",inference=result["inference_status"])
