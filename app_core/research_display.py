@@ -200,6 +200,47 @@ def _complete(identity):
     return bool(identity["model_target"] in allowed and match and float(match.group(1)) == identity["line"]
                 and identity["market"] in {"spread_home","spread_away","total_over","total_under"})
 
+def _export_price_mass(row,source,source_field,*,direct=False,current_push=None):
+    """Check retained source mass against the export using existing price math."""
+    raw_probability=_number(source.get(source_field))
+    probability=_number(row.get("win_probability"))
+    source_push=source.get("push_probability")
+    semantics=source.get("probability_semantics")
+    line=_number(row.get("line"))
+    half_point=(line is not None and abs(line*2-round(line*2))<=1e-9
+                and abs(line-round(line))>1e-9)
+    push=_number(source_push)
+    semantic_name=_text(semantics)
+    mass=None
+    if raw_probability is None or probability is None:
+        return None,None
+    if _absent(semantics) and _absent(source_push) and half_point:
+        mass={"p_win":raw_probability,"p_push":0.0}
+    elif push is not None and not _absent(semantics):
+        if semantic_name=="win_conditional_on_decision":
+            from core.probability_semantics import unconditional_from_conditional
+            mass=unconditional_from_conditional(raw_probability,push)
+        elif semantic_name in {"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}:
+            mass={"p_win":raw_probability,"p_push":push}
+    if (mass is None or (half_point and mass["p_push"]>1e-9)
+        or (not _absent(current_push) and (_number(current_push) is None
+            or not math.isclose(_number(current_push),mass["p_push"],rel_tol=0,abs_tol=1e-9)))):
+        return None,None
+    priced=price_value(mass["p_win"],mass["p_push"],decimal_price(_number(row.get("odds"))))
+    exported_push=row.get("push_probability")
+    exported_semantics=row.get("probability_semantics")
+    # Direct legacy input can contain conditional mass; a per-game export must
+    # contain the normalized mass, never merely a relabeled source probability.
+    expected=raw_probability if direct and semantic_name=="win_conditional_on_decision" else mass["p_win"]
+    if (priced is None or not math.isclose(probability,expected,rel_tol=0,abs_tol=1e-9)
+        or (not _absent(exported_push) and (_number(exported_push) is None or not math.isclose(_number(exported_push),mass["p_push"],rel_tol=0,abs_tol=1e-9)))
+        or (not _absent(exported_semantics) and _text(exported_semantics) not in
+            ({"win_conditional_on_decision"} if direct and semantic_name=="win_conditional_on_decision" else
+             {"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}))):
+        return None,None
+    return mass,priced
+
+
 def from_export(row, *, source=None, source_field="win_probability"):
     """Capture the actual export estimate before contract authorization replaces it."""
     identity=_identity(row)
@@ -219,6 +260,18 @@ def from_export(row, *, source=None, source_field="win_probability"):
     if inference in {"FAILED","UNAVAILABLE"}:
         result["availability_reason"]="INFERENCE_"+inference
         return result
+    # Check explicit source rejection before missing target/provenance can
+    # replace its reason and the export projection drops the original facts.
+    source_push=source.get("push_probability")
+    if not _absent(source_push) and not _valid_push(source_push):
+        return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
+    raw_probability=_number(source.get(source_field))
+    if (raw_probability is not None and 0<=raw_probability<=1
+            and (identity["line"] is not None or not _absent(source.get("probability_semantics"))
+                 or not _absent(source_push))):
+        mass,priced=_export_price_mass(row,source,source_field,direct=direct,current_push=current_push)
+        if mass is None:
+            return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
     target=_text(source.get("ml_target")).casefold()
     allowed={identity["market"], "spread_cover" if identity["market"].startswith("spread") else "total"}
     if not target:
@@ -257,39 +310,8 @@ def from_export(row, *, source=None, source_field="win_probability"):
     if not 0 <= probability <= 1:
         result["availability_reason"]="INVALID_PROBABILITY"
         return result
-    # Validate the original source independently of derived export semantics.
-    # Only genuinely absent semantics AND push permit half-point compatibility.
-    source_push=source.get("push_probability")
-    semantics=source.get("probability_semantics")
-    line=identity["line"]
-    half_point=abs(line*2-round(line*2))<=1e-9 and abs(line-round(line))>1e-9
-    push=_number(source_push)
-    raw_probability=_number(raw)
-    semantic_name=_text(semantics)
-    mass=None
-    if _absent(semantics) and _absent(source_push) and half_point:
-        mass={"p_win":raw_probability,"p_push":0.0}
-    elif push is not None and not _absent(semantics):
-        if semantic_name=="win_conditional_on_decision":
-            from core.probability_semantics import unconditional_from_conditional
-            mass=unconditional_from_conditional(raw_probability,push)
-        elif semantic_name in {"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}:
-            mass={"p_win":raw_probability,"p_push":push}
-    if (mass is None or (half_point and mass["p_push"]>1e-9)
-        or (not _absent(current_push) and (_number(current_push) is None
-            or not math.isclose(_number(current_push),mass["p_push"],rel_tol=0,abs_tol=1e-9)))):
-        return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
-    priced=price_value(mass["p_win"],mass["p_push"],decimal_price(identity["odds"]))
-    exported_push=row.get("push_probability")
-    exported_semantics=row.get("probability_semantics")
-    # A direct legacy export can contain the original conditional estimate.
-    # The per-game exporter must carry the compatible normalized probability.
-    expected=raw_probability if direct and semantic_name=="win_conditional_on_decision" else mass["p_win"]
-    if (priced is None or not math.isclose(probability,expected,rel_tol=0,abs_tol=1e-9)
-        or (not _absent(exported_push) and (_number(exported_push) is None or not math.isclose(_number(exported_push),mass["p_push"],rel_tol=0,abs_tol=1e-9)))
-        or (not _absent(exported_semantics) and _text(exported_semantics) not in
-            ({"win_conditional_on_decision"} if direct and semantic_name=="win_conditional_on_decision" else
-             {"win_unconditional_with_push","unconditional_win_push_loss","unconditional"}))):
+    mass,priced=_export_price_mass(row,source,source_field,direct=direct,current_push=current_push)
+    if mass is None:
         return _empty(identity,source_field,basis,reason="UNSUPPORTED_PROBABILITY_SEMANTICS",inference=inference)
     result.update(probability=mass["p_win"],push_probability=mass["p_push"],
                   probability_semantics="win_unconditional_with_push",availability_reason="AVAILABLE",
@@ -373,6 +395,20 @@ def legacy_unrecorded_display(export):
     if (line is not None and not _absent(current_push) and _number(current_push)>1e-9
             and abs(line*2-round(line*2))<=1e-9 and abs(line-round(line))>1e-9):
         return False  # Missing provenance cannot authorize impossible half-point push mass.
+    if (_text(source.get("probability_semantics"))=="win_conditional_on_decision"
+            and not _absent(original_push) and _number(original_push)>1e-9):
+        # A carrier records labels, not the original probability. Without a
+        # separately retained source value, it cannot prove mass conversion.
+        field=saved["source_field"]
+        if field=="win_probability" or _number(source.get(field)) is None:
+            return False
+        mass,priced=_export_price_mass(export,source,field,current_push=current_push)
+        if mass is None:
+            return False
+        ev=export.get("ev")
+        if (not _absent(ev) and (_number(ev) is None or not math.isclose(
+                _number(ev),priced["expected_value"],rel_tol=0,abs_tol=1e-9))):
+            return False  # Converted probability cannot retain a differently based EV.
     return True
 
 

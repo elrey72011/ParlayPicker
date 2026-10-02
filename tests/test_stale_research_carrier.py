@@ -244,6 +244,100 @@ def test_known_model_type_cannot_erase_original_failure(monkeypatch, tmp_path):
     assert result["package"]["games"]["overall"][0]["research_display"]["availability_reason"] == "INFERENCE_FAILED"
 
 
+def conditional_source_without_target():
+    from test_research_probability_display import source, QUOTE
+    raw = source(ml_target="", best_pick="Home -2", spread_line=-2.0, odds_american=100,
+        best_available_probability=.575, probability_semantics="win_conditional_on_decision",
+        push_probability=.1, provider_quotes=json.dumps([dict(book="novig", market_type="spread_home",
+            point=-2, price=100, recorded_at=QUOTE)]))
+    raw.pop("wager_contract")
+    return carried(raw)
+
+
+@pytest.mark.parametrize("current,valid", [
+    ("win_conditional_on_decision", True), ("win_unconditional_with_push", False),
+])
+def test_missing_target_preserves_real_conversion_but_rejects_source_relabel(
+        monkeypatch, tmp_path, current, valid):
+    from test_research_probability_display import package_for
+    from app_core.public_history import original_estimate
+    from app_core.release_preflight import evaluate_release
+    raw = conditional_source_without_target()
+    raw["probability_semantics"] = current
+    frames, package = package_for(monkeypatch, raw)
+    row = package["games"]["overall"][0]
+    if valid:
+        assert frames[0].iloc[0].win_probability == pytest.approx(.5175)
+        assert row["win_estimate"] == pytest.approx(.5175)
+        assert row["ev"] == pytest.approx(.135)
+        assert row["research_display"]["availability_reason"] == "MODEL_TARGET_NOT_RECORDED"
+    else:
+        assert row["research_display"]["availability_reason"] == "UNSUPPORTED_PROBABILITY_SEMANTICS"
+        assert row["win_estimate"] is None and row["ev"] is None
+        assert original_estimate(row) == {}
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    # A missing model target still leaves the card unavailable even when the
+    # valid legacy record retains its correctly converted historical values.
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+    assert row["status"] == "PASS" and not frames[0].iloc[0].Bettable
+    assert frames[0].iloc[0].Play_Stake == 0
+    assert evaluate_release(package, at=NOW)["actionable_row_count"] == 0
+
+
+@pytest.mark.parametrize("push", [.1, True, False, float("nan"), float("inf"), -.1, 1.1])
+def test_missing_target_non_probability_first_cannot_drop_invalid_source_push(
+        monkeypatch, tmp_path, push):
+    from test_research_probability_display import source, package_for
+    from app_core.public_history import original_estimate
+    raw = source(best_available_selection_policy="", ml_target="", production_win_probability=.6,
+        production_expected_value=.6*(1+100/110)-1, push_probability=push)
+    raw.pop("wager_contract")
+    frames, package = package_for(monkeypatch, raw)
+    row = package["games"]["overall"][0]
+    assert row["research_display"]["availability_reason"] == "UNSUPPORTED_PROBABILITY_SEMANTICS"
+    assert row["win_estimate"] is None and row["ev"] is None
+    assert original_estimate(row) == {}
+    assert row["status"] == "PASS" and frames[0].iloc[0].Play_Stake == 0
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
+@pytest.mark.parametrize("raw_probability,probability,ev,retained_raw,valid", [
+    (.575, .575, .135, True, False), (.575, .5175, .135, True, True),
+    (.575, .5175, .135, False, False), (.575, .5175, .25, True, False),
+    (.4, .36, -.18, True, True),
+])
+def test_legacy_semantic_conversion_needs_retained_raw_mass(
+        monkeypatch, tmp_path, raw_probability, probability, ev, retained_raw, valid):
+    from test_research_probability_display import package_for
+    from app_core.public_board import build_package, validate_package
+    from app_core.public_history import original_estimate
+    raw = conditional_source_without_target()
+    raw["best_available_probability"] = raw_probability
+    frames, _ = package_for(monkeypatch, raw)
+    # A retained legacy export can include original source facts. A carrier by
+    # itself contains only declarations, and must not invent its missing raw p.
+    for frame in frames[:2]:
+        frame["research_source_semantics"] = raw["research_source_semantics"]
+        if retained_raw:
+            frame["best_available_probability"] = raw["best_available_probability"]
+        frame["win_probability"] = probability
+        frame["ev"] = ev
+    package = build_package(*frames)
+    validate_package(package)
+    row = package["games"]["overall"][0]
+    if valid:
+        assert row["win_estimate"] == pytest.approx(probability) and row["ev"] == pytest.approx(ev)
+    else:
+        assert row["win_estimate"] is None and row["ev"] is None
+        assert original_estimate(row) == {}
+    browser = inspect_browser(package, tmp_path / "browser", NOW)
+    assert browser["initial"]["shown"][0]["probability"] is None
+    assert browser["initial"]["current"] == browser["initial"]["top"] == 0
+
+
 @pytest.mark.parametrize("changes", [
     {"probability_semantics": "unsupported"},
     {"push_probability": True},

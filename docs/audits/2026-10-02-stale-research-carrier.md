@@ -65,6 +65,24 @@ the existing model-type label are neutral. Explicit `unknown` now rejects both
 with and without another recorded success, and remains sticky through repeated
 normalization. Existing authority fields and stakes are unaffected.
 
+Fresh review of `b02fa473` identified a missing-target exception that could hide
+an unconverted conditional relabel. A separately reproduced non-probability-first
+export also dropped invalid source push facts after the same early missing-target
+return. Check source probability/push mass against the exported mass before that
+return, using the same existing conversion and price math. The legacy exception
+checks nonzero-push conversion against a separately retained raw source value;
+a declaration carrier alone cannot prove a missing conversion. Actual `.575`
+conditional mass with `.1` push still exports `.5175` and EV `.135`; merely
+relabeling `.575` and impossible half-point push mass reject. Missing source
+proof stays unavailable. No probability calculation or authority rule changes.
+
+Three unrelated application tests reproduced on unchanged main after their fixed
+September 29 evidence crossed the existing three-day load/pilot expiry. The
+separately approved test-only correction binds `_configure_verifier` to that
+fixture's `NOW` through the existing `validate_evidence(now=...)` parameter.
+Both verifier test modules pass; production freshness policy and every existing
+assertion remain unchanged. No actual evidence is restamped or revalidated.
+
 The upload fixture supplies its fake exact book before normalization through the
 existing supported `quote_bookmaker` field; no metadata or fixture is inserted
 after the export boundary. Other pre-existing upload omissions (model source,
