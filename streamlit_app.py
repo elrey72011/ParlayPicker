@@ -442,13 +442,16 @@ def _analysis_input_signature(controls: dict[str, Any] | None) -> tuple[Any, ...
         float(controls.get("bankroll", 0.0)),
         _upload_fingerprint(controls.get("theover_spreads")),
         _upload_fingerprint(controls.get("theover_totals")),
+        str(controls.get("schedule_start") or ""),
+        str(controls.get("schedule_end") or ""),
     )
 
 
 def _analysis_inputs_stale(state: dict[str, Any], controls: dict[str, Any]) -> bool:
     """Return True when displayed results predate the current analysis inputs."""
     analysis = state.get("analysis_df")
-    has_results = isinstance(analysis, pd.DataFrame) and not analysis.empty
+    has_results = ((isinstance(analysis, pd.DataFrame) and not analysis.empty)
+                   or isinstance(state.get("diagnostics", {}).get("ncaaf_schedule"), dict))
     if not has_results:
         return False
     last_successful = state.get("last_successful_pipeline_signature")
@@ -1029,6 +1032,8 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         use_ml=bool(controls["use_ml"]),
         spreads_df=spreads_df,
         totals_df=totals_df,
+        schedule_start=controls.get("schedule_start"),
+        schedule_end=controls.get("schedule_end"),
     )
 
     timer.start("Market enrichment and candidate selection")
@@ -1773,6 +1778,8 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         diagnostics["prediction_snapshot_error"] = str(exc)
         deferred_warnings.append(f"Prediction evidence was not saved: {exc}")
 
+    from app_core.ncaaf_schedule import refresh_coverage
+    refresh_coverage(diagnostics, diagnostics.get("candidate_audit_df", candidate_pool), best_picks_df)
     timer.finish()
     state_updates = {
         "pipeline_status": "using stored results",
@@ -1906,8 +1913,8 @@ def main() -> None:
 
     if _analysis_inputs_stale(st.session_state, controls):
         st.error(
-            "Analysis inputs changed after the displayed results were generated. "
-            "Click **Run Game Analysis** to apply the current TheOver files. "
+            "Analysis inputs or schedule dates changed after the displayed results were generated. "
+            "Click **Refresh picks** to apply the current inputs. "
             "Stale picks and exports are hidden until the rerun completes."
         )
         return
@@ -2004,6 +2011,10 @@ def main() -> None:
 
         from app.ui.readiness_dashboard import render_readiness_dashboard
         render_readiness_dashboard(diagnostics.get("candidate_authority_df"), best_picks_df, diagnostics)
+
+    with today_tab:
+        from app.ui.ncaaf_inventory import render_inventory
+        render_inventory(diagnostics)
 
     if analysis_df is None or analysis_df.empty:
         # History grading and republication must remain available after a restart,

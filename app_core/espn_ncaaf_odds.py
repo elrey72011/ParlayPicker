@@ -173,18 +173,21 @@ def _canonical_team(value: Any) -> str:
     # The fallback and primary feeds use different school names and mascots.
     # Share the pipeline's exact aliases before comparing event identities so
     # recovery cannot append a second game (or displace the primary quote).
-    normalized = normalize_team_name(str(value or "")).lower()
+    from app_core.ncaaf_identity import normalize_ncaaf_team
+    normalized = normalize_ncaaf_team(value)
     compact = re.sub(r"[^a-z0-9]", "", normalized)
     # Explicit school aliases used by the primary and ESPN college feeds.
     return {"gramblingstate": "grambling", "gramblingstatetigers": "grambling",
             "southernuniversity": "southern", "southernjaguars": "southern"}.get(compact, compact)
 
 
-def _game_key(game: dict[str, Any]) -> tuple[str, str]:
+def _game_key(game: dict[str, Any]) -> tuple[str, str, str]:
     teams = sorted(
         [_canonical_team(game.get("home_team")), _canonical_team(game.get("away_team"))]
     )
-    return teams[0], teams[1]
+    from app_core.ncaaf_schedule import timestamp
+    kickoff = timestamp(game.get("commence_time"))
+    return teams[0], teams[1], kickoff.isoformat() if kickoff else ""
 
 
 def merge_missing_ncaaf_games(
@@ -199,7 +202,19 @@ def merge_missing_ncaaf_games(
         if not isinstance(game, dict):
             continue
         key = _game_key(game)
-        if not all(key) or key in seen:
+        if not all(key):
+            # No usable kickoff: retain the source event, never infer equality.
+            merged.append(game)
+            continue
+        if key in seen:
+            # Different explicit ESPN IDs prove distinct source events even
+            # when schools and kickoff coincide. Preserve that distinction.
+            event_id = str(game.get("id") or "")
+            same_key = [g for g in merged if _game_key(g) == key]
+            if event_id.startswith("espn-") and same_key and all(
+                str(g.get("id") or "").startswith("espn-") and g.get("id") != event_id for g in same_key
+            ):
+                merged.append(game)
             continue
         merged.append(game)
         seen.add(key)

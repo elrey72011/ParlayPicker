@@ -11,12 +11,14 @@ def _key(value):
 
 
 GROUPS = (
+    ("mcneese", "mcneese state", "mcneese cowboys", "mcneese state cowboys"),
+    ("lsu", "lsu tigers", "louisiana state", "louisiana state tigers"),
     ("missouri", "mizzou", "missouri tigers"),
     ("app state", "appalachian state", "appalachian state mountaineers"),
     ("army", "army black knights"),
     ("illinois", "illinois fighting illini"),
     ("vanderbilt", "vanderbilt commodores"),
-    ("gardner webb", "gardner-webb", "gardner-webb runnin bulldogs", "gardner-webb running bulldogs"),
+    ("gardner webb", "gardnerwebb", "gardner-webb", "gardner-webb runnin bulldogs", "gardner-webb running bulldogs"),
     ("bowling green", "bgsu", "bowling green falcons"),
     ("kennesaw state", "kennesaw state owls"),
     ("southern", "southern university", "southern university jaguars"),
