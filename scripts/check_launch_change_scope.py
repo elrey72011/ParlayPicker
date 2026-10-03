@@ -1417,6 +1417,267 @@ def _run_schedule_integrated(manifest_path, base, binding):
     report["status"] = "FAIL" if report["reason_codes"] else "PASS"
     return (1 if report["reason_codes"] else 0), report
 
+COVERAGE_POLICY_PATH = "docs/paid-launch/launch-scope-policy-ncaaf-v2.json"
+COVERAGE_POLICY_VERSION = "paid-launch-ncaaf-coverage-v2"
+COVERAGE_APPROVAL_REFERENCE = "Owner-authorized separate draft for late #2377 revision-fact and unpriced-quote findings at main ab30a6aa74a9fddd23aa207cd0a49baf15e1793f; preserve #2378 unmerged; no deployment or scientific/authority changes"
+COVERAGE_PATHS = (
+    "app_core/ncaaf_schedule.py", "tests/test_ncaaf_coverage_corrections.py",
+    "tests/test_ncaaf_schedule_scope_policy.py", GUARD_PATH,
+    "tests/test_ncaaf_coverage_scope_policy.py", "docs/paid-launch/ncaaf-coverage-corrections.md",
+)
+COVERAGE_UNCHANGED_PATHS = (
+    *PROVIDER_UNCHANGED_PATHS, *SCHEDULE_IMMUTABLE, SCHEDULE_POLICY_PATH, V3_POLICY_PATH,
+    *(p for p in SCHEDULE_PATHS if p not in COVERAGE_PATHS),
+    *(p for p in PROVIDER_PATHS if p != GUARD_PATH),
+    ".github/workflows/ci.yml", ".github/workflows/qualification-operations.yml",
+    "tests/test_ncaaf_schedule_coverage.py", "app_core/prediction_evidence.py",
+    "core/live_wager_contract.py", "core/wager_decisions.py", "core/sport_policy.py",
+    "core/market_policy.py", "core/price_value.py", "core/probability_calibration.py",
+    "data/calibration/effective_prob_calibration.json", "data/calibration/bucket_stats.json",
+    "app_core/draftkings_classic.py", "app/ui/draftkings.py",
+)
+COVERAGE_MODULE_EDITS = [['import json\nimport re\n', 'import json\nimport math\nimport re\n'],
+ ['                if (old["home_team_id"], old["away_team_id"]) != (row["home_team_id"], '
+  'row["away_team_id"]) or len(old["kickoff_revisions"]) > 1 or old["schedule_status"] != '
+  'row["schedule_status"]:\n'
+  '                    old["identity_conflict"] = True\n'
+  '                    issues.append("SCHEDULE_REVISION_CONFLICT")',
+  '                conflict = ((old["home_team_id"], old["away_team_id"]) != (row["home_team_id"], '
+  'row["away_team_id"])\n'
+  '                            or len(old["kickoff_revisions"]) > 1 or old["schedule_status"] != '
+  'row["schedule_status"]\n'
+  '                            or row["identity_conflict"])\n'
+  '                repaired = False\n'
+  '                if not row["identity_conflict"]:\n'
+  '                    for side in ("home", "away"):\n'
+  '                        identity = side + "_team_id"\n'
+  '                        if old[identity] and row[identity] and old[identity] != row[identity]:\n'
+  "                            continue  # Do not attach another school's names to a known ID.\n"
+  '                        for field in (side + "_team", identity):\n'
+  '                            if not old[field] and row[field]:\n'
+  '                                old[field] = row[field]\n'
+  '                                repaired = True\n'
+  '                        aliases = side + "_aliases"\n'
+  '                        if not old[aliases] and row[aliases]:\n'
+  '                            repaired = True\n'
+  '                        old[aliases] = sorted(set(old[aliases] + row[aliases]))\n'
+  '                    if not old["kickoff"] and row["kickoff"]:\n'
+  '                        old["kickoff"] = row["kickoff"]\n'
+  '                        repaired = True\n'
+  '                    if old["schedule_status"] == "UNKNOWN" and row["schedule_status"] != "UNKNOWN":\n'
+  '                        old["schedule_status"] = row["schedule_status"]\n'
+  '                        repaired = True\n'
+  '                # Recovered display facts never silently resolve identity or coverage.\n'
+  '                if conflict or repaired:\n'
+  '                    old["identity_conflict"] = True\n'
+  '                    issues.append("SCHEDULE_REVISION_CONFLICT")'],
+ ['\ndef coverage(inventory, games=(), candidates=(), selections=(), provider_health=None, *, now=None):',
+  '\n'
+  'def _priced_quote(quote):\n'
+  '    """Coverage requires a finite American price; receipts remain untouched."""\n'
+  '    value = quote.get("price")\n'
+  '    if isinstance(value, bool):\n'
+  '        return False\n'
+  '    try:\n'
+  '        price = float(value)\n'
+  '    except (TypeError, ValueError, OverflowError):\n'
+  '        return False\n'
+  '    return math.isfinite(price) and abs(price) >= 100\n'
+  '\n'
+  '\n'
+  'def coverage(inventory, games=(), candidates=(), selections=(), provider_health=None, *, now=None):'],
+ ['        quotes = [q for r in matched + pool for q in _quotes(r)]\n        valid_quotes =',
+  '        # One receipt copied through games/candidates is still one observation.\n'
+  '        receipts = list({json.dumps(q, sort_keys=True, default=str): q\n'
+  '                         for r in matched + pool for q in _quotes(r)}.values())\n'
+  '        quotes = [q for q in receipts if _priced_quote(q)]\n'
+  '        valid_quotes ='],
+ ['for q in quotes})),\n                   provider_failure',
+  'for q in receipts})),\n                   provider_failure'],
+ ['                   quote_count=len({json.dumps(q, sort_keys=True, default=str) for q in quotes}),',
+  '                   quote_count=len(quotes), quote_receipt_count=len(receipts),\n'
+  '                   invalid_price_quote_count=len(receipts) - len(quotes), '
+  'timestamped_quote_count=len(valid_quotes),']]
+
+COVERAGE_V1_TEST_EDITS = [('for p in g.SCHEDULE_PATHS:write(repo,p,(SOURCE/p).read_bytes().replace(b"\\r\\n",b"\\n"))',
+  'for p in g.SCHEDULE_PATHS:write(repo,p,original_schedule_source(p))',
+  3),
+ ('\ndef assess(fx):',
+  '\n'
+  '\n'
+  'def original_schedule_source(path):\n'
+  '    """Exercise the original v1 contract, never rebind it to the correction."""\n'
+  '    source = (SOURCE / path).read_bytes().replace(b"\\r\\n", b"\\n")\n'
+  '    if path == g.GUARD_PATH:\n'
+  '        return source.split(b"\\nCOVERAGE_POLICY_PATH =", 1)[0] + g.COVERAGE_PREVIOUS_CLI\n'
+  '    if path == "app_core/ncaaf_schedule.py":\n'
+  '        text = source.decode()\n'
+  '        for before, after in reversed(g.COVERAGE_MODULE_EDITS):\n'
+  '            assert text.count(after) == 1\n'
+  '            text = text.replace(after, before, 1)\n'
+  '        return text.encode()\n'
+  '    if path == "tests/test_ncaaf_schedule_scope_policy.py":\n'
+  '        text = source.decode()\n'
+  '        for before, after, count in reversed(g.COVERAGE_V1_TEST_EDITS):\n'
+  '            assert text.count(after) == count\n'
+  '            text = text.replace(after, before)\n'
+  '        return text.encode()\n'
+  '    return source\n'
+  '\n'
+  'def assess(fx):',
+  1)]
+
+# Frozen prior CLI is test data for reconstructing the original v1 seal.
+COVERAGE_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+
+COVERAGE_BINDINGS = {'base': 'ab30a6aa74a9fddd23aa207cd0a49baf15e1793f',
+ 'base_tree': 'c7c41cd049702a9ef53975577d844b0e0999d8d4',
+ 'clock_blob': 'e610143aff5611235f9cfb44da13e2d54e1c6b48',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'ff8eefd620de8aad670a6baeb59a2b2f32d41058b6faa3e0343e3f26de3fb70a',
+ 'previous_policy_blob': '0732a3d5f0a044fce57c09d0687afef5892e0a1e',
+ 'reviewed_coverage_blobs': {'app_core/ncaaf_schedule.py': 'c8ad20d279d97da195d4339acf738d07a21db482',
+                             'tests/test_ncaaf_coverage_corrections.py': 'a7db1ff5582e8327220d31d92a8235157db1784a',
+                             'tests/test_ncaaf_schedule_scope_policy.py': '3ad103128d828872216a109683b22308f38bce32'},
+ 'successor_guard_sha256': 'd819a4b52875b54be481cad00857f336799091dda8488e7a08825f62da40a4b1'}
+
+
+def _coverage_blobs(revision: str, paths) -> dict[str, str | None]:
+    """Read exact Git object identities in one process, including absent paths."""
+    ordered = sorted(paths)
+    result = subprocess.run(["git", "cat-file", "--batch-check=%(objectname) %(objecttype)"],
+                            cwd=ROOT, input="".join(f"{revision}:{path}\n" for path in ordered),
+                            text=True, capture_output=True, check=True)
+    lines = result.stdout.splitlines()
+    _require(len(lines) == len(ordered), "BLOB_BATCH_INCOMPLETE")
+    values = {}
+    for path, line in zip(ordered, lines):
+        if line.endswith(" missing"):
+            values[path] = None
+        else:
+            identity, kind = line.split()
+            _require(kind == "blob", "SCOPE_PATH_NOT_BLOB")
+            values[path] = identity
+    return values
+
+
+def _validate_coverage_policy(manifest_path: Path, base: str | None, binding: dict) -> tuple[dict, list[str]]:
+    _require(manifest_path.resolve() == (ROOT / MANIFEST_PATH).resolve(), "BASELINE_PATH_NOT_APPROVED")
+    original_manifest = git_bytes("show", f"{binding['base']}:{MANIFEST_PATH}")
+    manifest = json.loads(original_manifest)
+    _require(base in (None, binding["base"], manifest["base_sha"]), "COMPARISON_BASE_NOT_APPROVED")
+    _require(git("rev-parse", f"{binding['base']}^{{tree}}") == binding["base_tree"], "STARTING_TREE_NOT_APPROVED")
+    _require(hashlib.sha256(original_manifest).hexdigest() == binding["manifest_sha256"], "ORIGINAL_BASELINE_IDENTITY_CHANGED")
+    previous_guard = git_bytes("show", f"{binding['base']}:{GUARD_PATH}")
+    _require(hashlib.sha256(previous_guard).hexdigest() == binding["previous_guard_sha256"], "PREVIOUS_TOOLING_IDENTITY_CHANGED")
+    _require(blob(binding["base"], SCHEDULE_POLICY_PATH) == binding["previous_policy_blob"] and
+             blob(binding["base"], CLOCK_TEST) == binding["clock_blob"], "PREVIOUS_POLICY_IDENTITY_CHANGED")
+    _require(not git("diff", "--name-only") and not git("diff", "--cached", "--name-only"), "LOCAL_TRACKED_CHANGE")
+    raw = git_bytes("show", f"HEAD:{COVERAGE_POLICY_PATH}")
+    _require((ROOT / COVERAGE_POLICY_PATH).read_bytes().replace(b"\r\n", b"\n") == raw, "POLICY_CHECKOUT_CHANGED")
+    policy = json.loads(raw)
+    keys = {"schema_version", "policy_version", "approval_reference", "base_sha", "base_tree",
+            "original_manifest_sha256", "previous_policy_blob", "clock_test_blob", "implementation_commit",
+            "implementation_tree", "implementation_changes", "tooling_sha256", "unchanged_bindings"}
+    _require(set(policy) == keys and policy["schema_version"] == 5 and
+             policy["policy_version"] == COVERAGE_POLICY_VERSION, "SUCCESSOR_POLICY_SCHEMA_INVALID")
+    expected = {"approval_reference": COVERAGE_APPROVAL_REFERENCE, "base_sha": binding["base"],
+                "base_tree": binding["base_tree"], "original_manifest_sha256": binding["manifest_sha256"],
+                "previous_policy_blob": binding["previous_policy_blob"], "clock_test_blob": binding["clock_blob"]}
+    _require(all(policy[key] == value for key, value in expected.items()), "APPROVAL_BINDING_CHANGED")
+    implementation = policy["implementation_commit"]
+    _require(git("show", "-s", "--format=%P", implementation).split() == [binding["base"]], "IMPLEMENTATION_PARENT_NOT_APPROVED")
+    _require(git("rev-parse", f"{implementation}^{{tree}}") == policy["implementation_tree"], "IMPLEMENTATION_TREE_MISMATCH")
+    _require(not exists_at(implementation, COVERAGE_POLICY_PATH), "POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION")
+    _require(set(git("diff", "--name-only", binding["base"], implementation).splitlines()) == set(COVERAGE_PATHS),
+             "IMPLEMENTATION_CHANGE_SET_NOT_APPROVED")
+    before = _coverage_blobs(binding["base"], COVERAGE_PATHS)
+    after = _coverage_blobs(implementation, COVERAGE_PATHS)
+    changes = {path: {"before_blob": before[path], "after_blob": after[path]} for path in COVERAGE_PATHS}
+    _require(policy["implementation_changes"] == changes, "IMPLEMENTATION_BLOB_BINDINGS_CHANGED")
+    for path, reviewed in binding["reviewed_coverage_blobs"].items():
+        _require(after[path] == reviewed, "COVERAGE_REVIEWED_BLOB_CHANGED")
+    expected_module = git_bytes("show", f"{binding['base']}:app_core/ncaaf_schedule.py").decode()
+    for before_edit, after_edit in COVERAGE_MODULE_EDITS:
+        _require(expected_module.count(before_edit) == 1, "COVERAGE_BASE_ANCHOR_CHANGED")
+        expected_module = expected_module.replace(before_edit, after_edit, 1)
+    _require(git_bytes("show", f"{implementation}:app_core/ncaaf_schedule.py").decode() == expected_module,
+             "COVERAGE_DIAGNOSTIC_SCOPE_CHANGED")
+    frozen_prefix = previous_guard.split(b"\ndef main() -> int:", 1)[0]
+    implementation_guard = git_bytes("show", f"{implementation}:{GUARD_PATH}")
+    _require(implementation_guard.split(b"\nCOVERAGE_POLICY_PATH =", 1)[0] == frozen_prefix, "PREVIOUS_GUARD_LOGIC_CHANGED")
+    reviewed_guard = binding["successor_guard_sha256"]
+    _require(implementation_guard.count(reviewed_guard.encode("ascii")) == 1 and
+             hashlib.sha256(implementation_guard.replace(reviewed_guard.encode("ascii"), b"0" * 64)).hexdigest() == reviewed_guard,
+             "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    # Exact implementation/seal change sets preserve every other starting-main
+    # path. Bind the original protected and prior integration evidence explicitly.
+    retained_paths = set(manifest["protected_files"]) | set(COVERAGE_UNCHANGED_PATHS)
+    unchanged = _coverage_blobs(binding["base"], retained_paths)
+    _require(policy["unchanged_bindings"] == unchanged, "IMMUTABLE_BINDINGS_CHANGED")
+    _require(_coverage_blobs("HEAD", retained_paths) == unchanged, "IMMUTABLE_FILE_CHANGED")
+    parents = git("show", "-s", "--format=%P", "HEAD").split()
+    if len(parents) == 2:
+        _require(parents[0] == binding["base"], "CI_BASE_PARENT_NOT_APPROVED")
+        candidate = parents[1]
+        _require(git("rev-parse", "HEAD^{tree}") == git("rev-parse", f"{candidate}^{{tree}}"), "CI_MERGE_TREE_CHANGED")
+    else:
+        candidate = git("rev-parse", "HEAD")
+    _require(git("show", "-s", "--format=%P", candidate).split() == [implementation], "CANDIDATE_NOT_POLICY_SEAL")
+    _require(git("diff", "--name-status", implementation, candidate).splitlines() == [f"A\t{COVERAGE_POLICY_PATH}"],
+             "SEAL_CHANGE_SET_NOT_APPROVED")
+    tooling = {path: hashlib.sha256(git_bytes("show", f"{implementation}:{path}")).hexdigest()
+               for path in manifest["tooling_sha256"]}
+    _require(policy["tooling_sha256"] == tooling, "SUCCESSOR_TOOLING_BINDING_CHANGED")
+    _require(tooling[".github/workflows/paid-launch.yml"] == manifest["tooling_sha256"][".github/workflows/paid-launch.yml"],
+             "WORKFLOW_CHANGE_NOT_APPROVED")
+    conversions = []
+    for path in (*COVERAGE_PATHS, *manifest["tooling_sha256"], *retained_paths):
+        committed = git_bytes("show", f"HEAD:{path}"); checkout = (ROOT / path).read_bytes()
+        _require(checkout.replace(b"\r\n", b"\n") == committed, "UNAUTHORIZED_CHECKOUT_CHANGE")
+        if path in tooling and checkout != committed:
+            conversions.append(path)
+    shadow_paths = retained_paths | set(PROVIDER_PATHS) | set(SCHEDULE_PATHS) | set(COVERAGE_PATHS)
+    for path in shadow_paths:
+        suffix = Path(path).parts
+        for other in ROOT.rglob(Path(path).name):
+            relative = other.relative_to(ROOT)
+            # The original nested entry point is pinned and checkout-verified above.
+            if relative.as_posix() == "parlaypicker/app/streamlit_app.py" and relative.as_posix() in unchanged:
+                continue
+            _require(tuple(relative.parts[-len(suffix):]) != tuple(suffix) or relative.as_posix() == path,
+                     "PROTECTED_RUNTIME_SHADOWING_RISK")
+    _require(not any(p.is_file() and (p.name in {"sitecustomize.py", "usercustomize.py"} or p.suffix == ".pth")
+                     for p in ROOT.rglob("*")), "PROTECTED_RUNTIME_SHADOWING_RISK")
+    return policy, conversions
+
+
+def _run_coverage_integrated(manifest_path: Path, base: str | None, binding: dict) -> tuple[int, dict]:
+    try:
+        policy, conversions = _validate_coverage_policy(manifest_path, base, binding)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as exc:
+        return 1, {"schema_version": 5, "status": "FAIL", "reason_codes": [str(exc)], "policy_valid": False,
+                   "approved_exceptions": [], "approved_integration_changes": [], "new_existing_test_exceptions": []}
+    _, original = run(manifest_path, base)
+    report = copy.deepcopy(original)
+    report.update(schema_version=5, policy_version=policy["policy_version"], policy_valid=True,
+                  original_guard_report=original, checkout_line_ending_conversions=conversions,
+                  approved_integration_changes=policy["implementation_changes"], new_existing_test_exceptions=[],
+                  approved_exceptions=[{"path": CLOCK_TEST, "before_blob": PRODUCTION_BINDINGS["before"],
+                                        "after_blob": binding["clock_blob"], "retained_unchanged": True,
+                                        "approval_reference": APPROVAL_REFERENCE}],
+                  approved_tooling_changes={GUARD_PATH: policy["tooling_sha256"][GUARD_PATH]})
+    report["existing_test_changes"] = [p for p in original["existing_test_changes"] if p != CLOCK_TEST]
+    report["self_protected_changes"] = [p for p in original["self_protected_changes"] if p != GUARD_PATH]
+    report["tooling_hash_mismatches"] = [p for p in original["tooling_hash_mismatches"] if p != GUARD_PATH and p not in conversions]
+    removable = {reason for key, reason in (("existing_test_changes", "EXISTING_TEST_EXPECTATION_CHANGED"),
+                 ("self_protected_changes", "SCOPE_GUARD_OR_BASELINE_CHANGED"),
+                 ("tooling_hash_mismatches", "SCOPE_GUARD_TOOLING_HASH_MISMATCH")) if not report[key]}
+    report["reason_codes"] = [reason for reason in original["reason_codes"] if reason not in removable]
+    report["status"] = "FAIL" if report["reason_codes"] else "PASS"
+    return (1 if report["reason_codes"] else 0), report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -1424,7 +1685,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", SCHEDULE_POLICY_PATH):
+        if exists_at("HEAD", COVERAGE_POLICY_PATH):
+            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)
+        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):
             code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)
         elif exists_at("HEAD", V3_POLICY_PATH):
             code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)

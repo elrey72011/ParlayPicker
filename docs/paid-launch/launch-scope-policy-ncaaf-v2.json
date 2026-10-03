@@ -1,0 +1,89 @@
+{
+  "schema_version": 5,
+  "policy_version": "paid-launch-ncaaf-coverage-v2",
+  "approval_reference": "Owner-authorized separate draft for late #2377 revision-fact and unpriced-quote findings at main ab30a6aa74a9fddd23aa207cd0a49baf15e1793f; preserve #2378 unmerged; no deployment or scientific/authority changes",
+  "base_sha": "ab30a6aa74a9fddd23aa207cd0a49baf15e1793f",
+  "base_tree": "c7c41cd049702a9ef53975577d844b0e0999d8d4",
+  "original_manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "previous_policy_blob": "0732a3d5f0a044fce57c09d0687afef5892e0a1e",
+  "clock_test_blob": "e610143aff5611235f9cfb44da13e2d54e1c6b48",
+  "implementation_commit": "3c24b26e9788062cd40ad5d68080f3980735d985",
+  "implementation_tree": "4622bd7787deebc2f2158296882bb305d5788c41",
+  "implementation_changes": {
+    "app_core/ncaaf_schedule.py": {
+      "before_blob": "5b30f18a8c6f8e3aa8518c65a8ac0db958b0c17f",
+      "after_blob": "c8ad20d279d97da195d4339acf738d07a21db482"
+    },
+    "tests/test_ncaaf_coverage_corrections.py": {
+      "before_blob": null,
+      "after_blob": "a7db1ff5582e8327220d31d92a8235157db1784a"
+    },
+    "tests/test_ncaaf_schedule_scope_policy.py": {
+      "before_blob": "615a885db1bd522cb3d68509783de20f2ec86618",
+      "after_blob": "3ad103128d828872216a109683b22308f38bce32"
+    },
+    "scripts/check_launch_change_scope.py": {
+      "before_blob": "ee54143cf587b2cd89cf434f8fa3e7dbc15dc94f",
+      "after_blob": "a2fa03a701b271f994d3507bec16315087e964c3"
+    },
+    "tests/test_ncaaf_coverage_scope_policy.py": {
+      "before_blob": null,
+      "after_blob": "4d9e0ba92660c5bd59c37143246d1f95eca3eafc"
+    },
+    "docs/paid-launch/ncaaf-coverage-corrections.md": {
+      "before_blob": null,
+      "after_blob": "4a332e7ffe908c12eea252303f22a3b0a360d850"
+    }
+  },
+  "tooling_sha256": {
+    "scripts/check_launch_change_scope.py": "b125915b489a2bfaf182c90e689c65a8409364fbf3b8ab588c5800ecf92e4ddf",
+    ".github/workflows/paid-launch.yml": "fccb75c4d4b9c9e99037e4888b2f7ad283cdc150e69fb0578ffa7b0ebcd9384b"
+  },
+  "unchanged_bindings": {
+    ".github/workflows/ci.yml": "05d6e68a9e866cb2bd988e36db6c401c743c68fc",
+    ".github/workflows/paid-launch.yml": "00dc8a63d26d1b22b66d07b900b3171cbab11919",
+    ".github/workflows/qualification-operations.yml": "16ed6900dcd0eb456dae36fbd4442e32edeec548",
+    "app/ui/draftkings.py": "551cd947e34d8961c1c803d28a42859a619e9146",
+    "app/ui/lock_picks.py": "0cf998d73e3c02d7f05d207fe26014ff57e1432e",
+    "app/ui/ncaaf_inventory.py": "20fba8b98fd013c053da5d15d4eaf10024a16eec",
+    "app/ui/readiness_dashboard.py": "35f21ee302d3bdd15d04c9f366ad47aea471bfee",
+    "app/ui/sidebar_controls.py": "bb3d24af80b4af0e65e120712eff091e142b6ab7",
+    "app_core/draftkings_classic.py": "d276ad56387606b8095ff3de4f31684ab94e96f5",
+    "app_core/espn_ncaaf_odds.py": "d84be786545b316597da0da6788b527c556a3511",
+    "app_core/evidence_drive.py": "34ee9ee097488a42c7d6d27dfab7d36dc2a786a7",
+    "app_core/evidence_remote.py": "935e2afcf5f68ba93e74e3befc17043d3bcf36ab",
+    "app_core/ncaaf_identity.py": "ff1f0e3c450a40a608985e488ba9f0c465788e4e",
+    "app_core/performance_spans.py": "e345a82e6b551a23d55606b7522534a985591471",
+    "app_core/prediction_evidence.py": "8a154fa6643d047b131891418f7e791a20bfd005",
+    "app_core/provider_health.py": "102e3263aeb998e3632c8add70b78da2139f4a0f",
+    "app_core/public_history.py": "10013f41815e67de2953deb8d6dff7660261f675",
+    "app_core/stage_timing.py": "f1eae2e04cb6c05c71f6ea08aa0c55ec94c117b6",
+    "core/live_wager_contract.py": "e521667b1a13a91126ba044dcb35c8f8f2772cb8",
+    "core/market_policy.py": "27243097274ee2d78f5868014031ab05061e15d8",
+    "core/price_value.py": "5b52d2aa5203c67f70445a67e9883b6fc0fcc246",
+    "core/probability_calibration.py": "9b6fcf2c9c8337fe13a8c6d4a3f2c664b1f24dd3",
+    "core/run_readiness.py": "fda7618b3de50e8a7dcb2e7b50631e119c58283e",
+    "core/sport_policy.py": "e47aae40da1a561286ebd09af6f1705cd31af945",
+    "core/streamlit_pipeline.py": "cc382319bbfee0495f61d365a6f466696e2b0504",
+    "core/wager_decisions.py": "8cf2cc19d0e96c2bbf8813817a22f0f50cf9c7ff",
+    "data/calibration/bucket_stats.json": "f52e1c0d372affae323080d8c579137549b44bd6",
+    "data/calibration/effective_prob_calibration.json": "7fcac38ae46a968d28bdba334b6b7a385ec0744c",
+    "docs/paid-launch/launch-baseline-manifest.json": "92bacece033e358ef17061bd65d4abafdaba6874",
+    "docs/paid-launch/launch-scope-policy-ncaaf-v1.json": "0732a3d5f0a044fce57c09d0687afef5892e0a1e",
+    "docs/paid-launch/launch-scope-policy-v2.json": "1decb1ca5462b2393f5816d54637dab18d9ed733",
+    "docs/paid-launch/launch-scope-policy-v3.json": "fd145cd5cc8c8e23b8f891dbf17220e4b2fba4bb",
+    "docs/paid-launch/ncaaf-schedule-coverage.md": "2dad5d1c91e9b88f95cccbb83614c8e442e44ba5",
+    "docs/paid-launch/provider-caller-health-policy.md": "254a069fbd3483998d0016fc4f7d3aafbeb3ecb8",
+    "parlaypicker/app/streamlit_app.py": "82ebbf452e9ca88a601b6d2cfd1ed06ff3d4785e",
+    "scripts/benchmark_refresh_lock_storage.py": "8e383434bb2646f61dff523efc8f7c92a9c97426",
+    "streamlit_app.py": "33f8ebc62526b8633ee127a9d05cbbe9e9f5afd8",
+    "tests/paid_launch/case_isolation_and_scope.py": "07f384d25e5df32d3ff6141765d9bc80d0e23b1e",
+    "tests/test_board_diagnostics.py": "e610143aff5611235f9cfb44da13e2d54e1c6b48",
+    "tests/test_lock_storage_performance.py": "b94f32e8a5f2d49ff6f8727463fcaed7a59b4273",
+    "tests/test_ncaaf_schedule_coverage.py": "91aeebc1a464a9c0ee38ff3ea0101eb111b34aed",
+    "tests/test_prediction_evidence.py": "8289d59b6667db65099dcd4fb0ac606226b44870",
+    "tests/test_provider_caller_health.py": "79792b6f159977173f30a654148313e412564b9b",
+    "tests/test_provider_health_scope_policy.py": "670eab8baa307977de5e29ba39086cefcf723c8c",
+    "tests/test_refresh_lock_performance.py": "68ef650b24c2f3343f0c3ab1eabf65e91894a827"
+  }
+}

@@ -5,6 +5,7 @@ from copy import deepcopy
 from datetime import date, datetime, time, timedelta, timezone
 import hashlib
 import json
+import math
 import re
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -114,7 +115,31 @@ def inventory_from_events(batches, start, end, *, complete=False, reasons=(), ob
                 old = rows[key]
                 for field in ("divisions", "competition_ids", "kickoff_revisions"):
                     old[field] = sorted(set(old[field] + row[field]))
-                if (old["home_team_id"], old["away_team_id"]) != (row["home_team_id"], row["away_team_id"]) or len(old["kickoff_revisions"]) > 1 or old["schedule_status"] != row["schedule_status"]:
+                conflict = ((old["home_team_id"], old["away_team_id"]) != (row["home_team_id"], row["away_team_id"])
+                            or len(old["kickoff_revisions"]) > 1 or old["schedule_status"] != row["schedule_status"]
+                            or row["identity_conflict"])
+                repaired = False
+                if not row["identity_conflict"]:
+                    for side in ("home", "away"):
+                        identity = side + "_team_id"
+                        if old[identity] and row[identity] and old[identity] != row[identity]:
+                            continue  # Do not attach another school's names to a known ID.
+                        for field in (side + "_team", identity):
+                            if not old[field] and row[field]:
+                                old[field] = row[field]
+                                repaired = True
+                        aliases = side + "_aliases"
+                        if not old[aliases] and row[aliases]:
+                            repaired = True
+                        old[aliases] = sorted(set(old[aliases] + row[aliases]))
+                    if not old["kickoff"] and row["kickoff"]:
+                        old["kickoff"] = row["kickoff"]
+                        repaired = True
+                    if old["schedule_status"] == "UNKNOWN" and row["schedule_status"] != "UNKNOWN":
+                        old["schedule_status"] = row["schedule_status"]
+                        repaired = True
+                # Recovered display facts never silently resolve identity or coverage.
+                if conflict or repaired:
                     old["identity_conflict"] = True
                     issues.append("SCHEDULE_REVISION_CONFLICT")
             else:
@@ -368,6 +393,18 @@ def _qualified(row):
     return contract.get("production_eligible") is True and contract.get("quote_fresh") is True
 
 
+def _priced_quote(quote):
+    """Coverage requires a finite American price; receipts remain untouched."""
+    value = quote.get("price")
+    if isinstance(value, bool):
+        return False
+    try:
+        price = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return math.isfinite(price) and abs(price) >= 100
+
+
 def coverage(inventory, games=(), candidates=(), selections=(), provider_health=None, *, now=None):
     """One row per schedule event; projection never manufactures a selection."""
     now = timestamp(now) or datetime.now(timezone.utc)
@@ -395,7 +432,10 @@ def coverage(inventory, games=(), candidates=(), selections=(), provider_health=
     for event in inventory.get("events", []):
         eid = event["schedule_event_id"]
         matched, pool, selected = (stages[s].get(eid, []) for s in ("games", "candidates", "selections"))
-        quotes = [q for r in matched + pool for q in _quotes(r)]
+        # One receipt copied through games/candidates is still one observation.
+        receipts = list({json.dumps(q, sort_keys=True, default=str): q
+                         for r in matched + pool for q in _quotes(r)}.values())
+        quotes = [q for q in receipts if _priced_quote(q)]
         valid_quotes = [q for q in quotes if timestamp(q.get("recorded_at")) and
                         timestamp(q.get("recorded_at")) <= now and timestamp(event["kickoff"]) and
                         timestamp(q.get("recorded_at")) < timestamp(event["kickoff"])]
@@ -424,10 +464,11 @@ def coverage(inventory, games=(), candidates=(), selections=(), provider_health=
                    historical_matchup_ids=json.dumps(sorted({str(r.get("historical_matchup_id") or r.get("matchup_id")) for r in matched + pool})),
                    possible_unresolved_matchup_ids=json.dumps(sorted({r["matchup_id"] for r in unresolved if eid in r["possible_schedule_event_ids"]})),
                    possible_provider_kickoffs=json.dumps(sorted({r["provider_kickoff"] for r in unresolved if eid in r["possible_schedule_event_ids"]})),
-                   provider_identities=json.dumps(sorted({json.dumps({"namespace": q.get("provider_namespace"), "event_id": q.get("provider_event_id")}, sort_keys=True) for q in quotes})),
+                   provider_identities=json.dumps(sorted({json.dumps({"namespace": q.get("provider_namespace"), "event_id": q.get("provider_event_id")}, sort_keys=True) for q in receipts})),
                    provider_failure=failed, provider_outcome=provider.get("outcome", "NOT_RECORDED"),
                    quote_coverage="TIMESTAMPED_EVIDENCE" if valid_quotes else "PROVENANCE_INCOMPLETE" if quotes else "UNAVAILABLE",
-                   quote_count=len({json.dumps(q, sort_keys=True, default=str) for q in quotes}),
+                   quote_count=len(quotes), quote_receipt_count=len(receipts),
+                   invalid_price_quote_count=len(receipts) - len(quotes), timestamped_quote_count=len(valid_quotes),
                    candidate_count=len(pool), ranked_count=len(selected), qualified_count=len(qualified),
                    selection_status="QUALIFIED_SELECTION_AVAILABLE" if qualified else "PASS",
                    research_state="RESEARCH_CANDIDATE_AVAILABLE" if pool else "NO_RESEARCH_CANDIDATE",
