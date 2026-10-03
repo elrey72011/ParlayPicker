@@ -66,12 +66,32 @@ def fx(tmp_path,monkeypatch):
     monkeypatch.setattr(g,"ROOT",repo)
     binding={"base":base,"base_tree":git(repo,"rev-parse",base+"^{tree}"),"manifest_sha256":hashlib.sha256(raw).hexdigest(),
              "previous_guard_sha256":hashlib.sha256(previous).hexdigest(),"clock_blob":g.blob(base,g.CLOCK_TEST)}
-    for p in g.SCHEDULE_PATHS:write(repo,p,(SOURCE/p).read_bytes().replace(b"\r\n",b"\n"))
+    for p in g.SCHEDULE_PATHS:write(repo,p,original_schedule_source(p))
     implementation=commit(repo)
     sealed=policy(repo,binding,implementation)
     write(repo,g.SCHEDULE_POLICY_PATH,json.dumps(sealed).encode());seal=commit(repo)
     return repo,binding,implementation,seal,sealed
 
+
+
+def original_schedule_source(path):
+    """Exercise the original v1 contract, never rebind it to the correction."""
+    source = (SOURCE / path).read_bytes().replace(b"\r\n", b"\n")
+    if path == g.GUARD_PATH:
+        return source.split(b"\nCOVERAGE_POLICY_PATH =", 1)[0] + g.COVERAGE_PREVIOUS_CLI
+    if path == "app_core/ncaaf_schedule.py":
+        text = source.decode()
+        for before, after in reversed(g.COVERAGE_MODULE_EDITS):
+            assert text.count(after) == 1
+            text = text.replace(after, before, 1)
+        return text.encode()
+    if path == "tests/test_ncaaf_schedule_scope_policy.py":
+        text = source.decode()
+        for before, after, count in reversed(g.COVERAGE_V1_TEST_EDITS):
+            assert text.count(after) == count
+            text = text.replace(after, before)
+        return text.encode()
+    return source
 
 def assess(fx):
     repo,binding,*_=fx
@@ -100,7 +120,7 @@ def test_exact_ci_merge_parent_order_and_tree(fx):
 def test_unauthorized_extra_changes_rejected_even_with_rebound_policy(fx,path):
     repo,binding,_,_,_=fx
     git(repo,"checkout","-q",binding["base"])
-    for p in g.SCHEDULE_PATHS:write(repo,p,(SOURCE/p).read_bytes().replace(b"\r\n",b"\n"))
+    for p in g.SCHEDULE_PATHS:write(repo,p,original_schedule_source(p))
     write(repo,path,(repo/path).read_bytes()+b"\nUNAUTHORIZED\n")
     implementation=commit(repo)
     sealed=policy(repo,binding,implementation)
@@ -120,7 +140,7 @@ def test_existing_nested_entrypoint_is_immutable_not_a_path_exemption(fx):
 def test_shared_science_additive_module_and_tooling_reseal_cannot_expand_scope(fx,path):
     repo,binding,_,_,_=fx
     git(repo,"checkout","-q",binding["base"])
-    for p in g.SCHEDULE_PATHS:write(repo,p,(SOURCE/p).read_bytes().replace(b"\r\n",b"\n"))
+    for p in g.SCHEDULE_PATHS:write(repo,p,original_schedule_source(p))
     write(repo,path,(repo/path).read_bytes()+b"\nUNAUTHORIZED_AUTHORITY = True\n")
     implementation=commit(repo)
     sealed=policy(repo,binding,implementation)
