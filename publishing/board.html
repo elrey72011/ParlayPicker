@@ -423,11 +423,12 @@ function selectedBoardReport(board,now=Date.now()){
  return {selectedGames:rows.length,allMarketCandidates:board.board_diagnostics?.all_market_candidate_count??null,primary,overlap};
 }
 function cohortClock(rows,field,now=Date.now()){
- if(!rows.length)return {label:'Not included',expired:0,missing:0};
- let oldest=Infinity,expired=0,missing=0;const limit=(data.stale_after_minutes===15?15:30)*60000;
- for(const row of rows){const at=boardTime(row[field]);if(at===null||at>now){missing++;expired++;continue;}oldest=Math.min(oldest,at);if(now-at>limit)expired++;}
+ if(!rows.length)return {label:'Not included',expired:0,missing:0,invalid:0,future:0,unavailable:0};
+ let oldest=Infinity,expired=0,missing=0,invalid=0,future=0;const limit=(data.stale_after_minutes===15?15:30)*60000;
+ for(const row of rows){const value=row[field],at=boardTime(value);if(at===null){if(value===null||value===undefined||value==='')missing++;else invalid++;continue;}if(at>now){future++;continue;}oldest=Math.min(oldest,at);if(now-at>limit)expired++;}
  const age=oldest===Infinity?'time unavailable':formatShortAge(new Date(oldest).toISOString());
- return {label:age+(expired?' · wager window expired':' · within wager window'),expired,missing};
+ const issues=[];if(expired)issues.push('wager window expired: '+expired);if(missing)issues.push('missing timestamps: '+missing);if(invalid)issues.push('invalid timestamps: '+invalid);if(future)issues.push('future timestamps: '+future);
+ return {label:age+' · '+(issues.length?issues.join(' · '):'within wager window'),expired,missing,invalid,future,unavailable:missing+invalid+future};
 }
 let boardPublicationVersion=null;
 const baseDiagnosticSummary=renderBoardSummary;
@@ -440,7 +441,7 @@ renderBoardSummary=function(){
  for(const [label,value,id] of [['Game analysis age',gameAnalysis.label,'boardGameAnalysisAge'],['Game quote age',gameQuotes.label,'boardQuoteAge'],['Prop analysis age',propAnalysis.label,'boardPropAnalysisAge'],['Publication age',publication,'boardPublicationAge']]){const item=el('div'),dd=el('dd',value);dd.id=id;item.append(el('dt',label),dd);meta.append(item);}
  const counts=el('p','Selected overall game rows: '+report.selectedGames+' · All market candidates: '+(report.allMarketCandidates===null?'not recorded in this public package':report.allMarketCandidates)+'.');
  root.append(counts);
- const stale=el('p','Expired or invalid analysis by cohort: games '+gameAnalysis.expired+'/'+rows.length+', props '+propAnalysis.expired+'/'+(data.props||[]).length+'. Expired or invalid game quotes: '+gameQuotes.expired+'/'+rows.length+'. Counts can overlap.');
+ const stale=el('p','Expired analysis by cohort: games '+gameAnalysis.expired+'/'+rows.length+', props '+propAnalysis.expired+'/'+(data.props||[]).length+'. Expired game quotes: '+gameQuotes.expired+'/'+rows.length+'. Missing, invalid or future timestamps: game analysis '+gameAnalysis.unavailable+'/'+rows.length+', prop analysis '+propAnalysis.unavailable+'/'+(data.props||[]).length+', game quotes '+gameQuotes.unavailable+'/'+rows.length+'. Counts can overlap.');
  root.append(stale);
  const details=el('details');details.dataset.boardDiagnostics='';details.open=previousOpen;
  details.append(el('summary','Why games are not current'));
@@ -467,7 +468,7 @@ qualifiedPick=function(row){const trace=selectedTrace(row);return priorQualified
 const priorCurrentWager=currentWager;
 currentWager=function(row){const trace=selectedTrace(row);return priorCurrentWager(row)&&(!trace||row.status!=='TRIAL'||(trace.trial_gate_status==='PASS'&&trace.trial_blockers.length===0));};
 const priorBoardFreshness=window.parlayPicker.freshness;
-window.parlayPicker.freshness=function(version){boardPublicationVersion=version;renderBoardSummary();const result=priorBoardFreshness(version);if(data.stale_after_minutes===15||data.stale_after_minutes===30){const games=cohortClock(data.games.overall||[],'as_of'),props=cohortClock(data.props||[],'as_of'),expired=games.expired+props.expired;const message=expired?' · wager window expired for '+expired+' selected game/prop '+(expired===1?'row':'rows'):'';return {...result,text:result.primary+message+(result.publication?' · '+result.publication:''),state:expired&&result.state!=='old'?'expired':result.state};}return result;};
+window.parlayPicker.freshness=function(version){boardPublicationVersion=version;renderBoardSummary();const result=priorBoardFreshness(version);if(data.stale_after_minutes===15||data.stale_after_minutes===30){const games=cohortClock(data.games.overall||[],'as_of'),props=cohortClock(data.props||[],'as_of'),expired=games.expired+props.expired,unavailable=games.unavailable+props.unavailable;const message=(expired?' · wager window expired for '+expired+' selected game/prop '+(expired===1?'row':'rows'):'')+(unavailable?' · missing, invalid or future analysis timestamps for '+unavailable+' selected game/prop '+(unavailable===1?'row':'rows'):'');return {...result,text:result.primary+message+(result.publication?' · '+result.publication:''),state:result.state==='old'?'old':expired?'expired':unavailable?'unavailable':result.state};}return result;};
 const baseMatchesResultGroup=matchesResultGroup;
 matchesResultGroup=function(row,group){return group==='Published picks'?['Approved','Controlled trial','Research'].includes(row.group):baseMatchesResultGroup(row,group);};
 const wagerOption=[...document.getElementById('pickView').options].find(option=>option.value==='qualified');
