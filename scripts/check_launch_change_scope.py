@@ -1678,6 +1678,227 @@ def _run_coverage_integrated(manifest_path: Path, base: str | None, binding: dic
     return (1 if report["reason_codes"] else 0), report
 
 
+V4_POLICY_PATH = "docs/paid-launch/launch-scope-policy-v4.json"
+V4_POLICY_VERSION = "paid-launch-dfs-projection-identity-v4-r2"
+V4_APPROVAL_REFERENCE = "Owner-authorized bounded DFS draft continuation after verified #2379 merge b1401f42c12c26823b6fc6d223e6de0231572284; preserve reviewed DFS and both NCAAF corrections, original baseline/policies/clock/workflows/subscriber/scientific authority; no merge, deployment or financial authorization"
+DFS_PATHS = (
+    "app_core/draftkings_classic.py", "app/ui/draftkings.py",
+    "tests/test_dfs_projection_identity.py", GUARD_PATH,
+    "tests/test_dfs_scope_policy.py", "docs/paid-launch/dfs-projection-identity-policy.md",
+    "tests/test_ncaaf_coverage_scope_policy.py",
+)
+DFS_UNCHANGED_PATHS = (
+    *PROVIDER_UNCHANGED_PATHS, *SCHEDULE_IMMUTABLE, SCHEDULE_POLICY_PATH, V3_POLICY_PATH,
+    *(path for path in SCHEDULE_PATHS if path != GUARD_PATH), ".github/workflows/ci.yml",
+    "tests/test_draftkings_classic.py", "tests/test_draftkings_mlb_classic.py",
+    "tests/test_draftkings_panel.py", "core/probability_calibration.py",
+    "data/calibration/effective_prob_calibration.json", "data/calibration/bucket_stats.json",
+    *(path for path in PROVIDER_PATHS if path != GUARD_PATH),
+    *(path for path in COVERAGE_UNCHANGED_PATHS if path not in DFS_PATHS),
+    COVERAGE_POLICY_PATH,
+    *(path for path in COVERAGE_PATHS if path not in DFS_PATHS),
+    '.github/workflows/activation-grading.yml',
+    '.github/workflows/ci.yml',
+    '.github/workflows/football-stage1.yml',
+    '.github/workflows/football-stage2.yml',
+    '.github/workflows/mlb-receipt-reconciliation.yml',
+    '.github/workflows/paid-launch.yml',
+    '.github/workflows/qualification-operations.yml',
+    '.github/workflows/read-only-census.yml',
+    '.github/workflows/research-scheduler.yml',
+    '.github/workflows/subscriber-completion-postgres.yml',
+)
+DFS_BINDINGS = {
+    "base": "b1401f42c12c26823b6fc6d223e6de0231572284",
+    "base_tree": "94d263ab4f00fe6c06151c9a07eec7ac78d9e0d3",
+    "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+    "previous_guard_sha256": "b125915b489a2bfaf182c90e689c65a8409364fbf3b8ab588c5800ecf92e4ddf",
+    "previous_policy_blob": "0b633a8225c725dd56e260de2d5e0b523fb74b04",
+    "clock_blob": "e610143aff5611235f9cfb44da13e2d54e1c6b48",
+    "successor_guard_sha256": "868f2bd881a2aa7f77084834d4b3bf0e1a034a3cb225b8d0c36fa0e46425c681",
+    "reviewed_dfs_blobs": {
+        "tests/test_dfs_scope_policy.py": "a2e737b5457cdb6169800a05b209ff8dcc8ab1be",
+        "tests/test_ncaaf_coverage_scope_policy.py": "76240a38a0f57e0082dc872c7ef19f6cf0155002",
+        "app_core/draftkings_classic.py": "d4d3fb823bebaa3d3a4c4889947d5b981e126c23",
+        "app/ui/draftkings.py": "f17dcc0dc9bf7c880022e4bdf143e99bff0e67d6",
+        "tests/test_dfs_projection_identity.py": "251f09c45c0f4977046c47bbd8bc0cfeecfa5261",
+    },
+}
+
+
+def _dfs_blobs(revision: str, paths) -> dict[str, str | None]:
+    """Read exact Git object identities in one process, including absent paths."""
+    ordered = sorted(paths)
+    result = subprocess.run(["git", "cat-file", "--batch-check=%(objectname) %(objecttype)"],
+                            cwd=ROOT, input="".join(f"{revision}:{path}\n" for path in ordered),
+                            text=True, capture_output=True, check=True)
+    lines = result.stdout.splitlines()
+    _require(len(lines) == len(ordered), "BLOB_BATCH_INCOMPLETE")
+    values = {}
+    for path, line in zip(ordered, lines):
+        if line.endswith(" missing"):
+            values[path] = None
+        else:
+            identity, kind = line.split()
+            _require(kind == "blob", "SCOPE_PATH_NOT_BLOB")
+            values[path] = identity
+    return values
+
+
+def _validate_dfs_policy(manifest_path: Path, base: str | None, binding: dict) -> tuple[dict, list[str]]:
+    _require(manifest_path.resolve() == (ROOT / MANIFEST_PATH).resolve(), "BASELINE_PATH_NOT_APPROVED")
+    original_manifest = git_bytes("show", f"{binding['base']}:{MANIFEST_PATH}")
+    manifest = json.loads(original_manifest)
+    _require(base in (None, binding["base"], manifest["base_sha"]), "COMPARISON_BASE_NOT_APPROVED")
+    _require(git("rev-parse", f"{binding['base']}^{{tree}}") == binding["base_tree"], "STARTING_TREE_NOT_APPROVED")
+    _require(hashlib.sha256(original_manifest).hexdigest() == binding["manifest_sha256"], "ORIGINAL_BASELINE_IDENTITY_CHANGED")
+    previous_guard = git_bytes("show", f"{binding['base']}:{GUARD_PATH}")
+    _require(hashlib.sha256(previous_guard).hexdigest() == binding["previous_guard_sha256"], "PREVIOUS_TOOLING_IDENTITY_CHANGED")
+    _require(blob(binding["base"], COVERAGE_POLICY_PATH) == binding["previous_policy_blob"] and
+             blob(binding["base"], CLOCK_TEST) == binding["clock_blob"], "PREVIOUS_POLICY_IDENTITY_CHANGED")
+    _require(not git("diff", "--name-only") and not git("diff", "--cached", "--name-only"), "LOCAL_TRACKED_CHANGE")
+    raw = git_bytes("show", f"HEAD:{V4_POLICY_PATH}")
+    _require((ROOT / V4_POLICY_PATH).read_bytes().replace(b"\r\n", b"\n") == raw, "POLICY_CHECKOUT_CHANGED")
+    policy = json.loads(raw)
+    keys = {"schema_version", "policy_version", "approval_reference", "base_sha", "base_tree",
+            "original_manifest_sha256", "previous_policy_blob", "clock_test_blob", "implementation_commit",
+            "implementation_tree", "implementation_changes", "tooling_sha256", "unchanged_bindings"}
+    _require(set(policy) == keys and policy["schema_version"] == 4 and
+             policy["policy_version"] == V4_POLICY_VERSION, "SUCCESSOR_POLICY_SCHEMA_INVALID")
+    expected = {"approval_reference": V4_APPROVAL_REFERENCE, "base_sha": binding["base"],
+                "base_tree": binding["base_tree"], "original_manifest_sha256": binding["manifest_sha256"],
+                "previous_policy_blob": binding["previous_policy_blob"], "clock_test_blob": binding["clock_blob"]}
+    _require(all(policy[key] == value for key, value in expected.items()), "APPROVAL_BINDING_CHANGED")
+    implementation = policy["implementation_commit"]
+    _require(git("show", "-s", "--format=%P", implementation).split() == [binding["base"]], "IMPLEMENTATION_PARENT_NOT_APPROVED")
+    _require(git("rev-parse", f"{implementation}^{{tree}}") == policy["implementation_tree"], "IMPLEMENTATION_TREE_MISMATCH")
+    _require(not exists_at(implementation, V4_POLICY_PATH), "POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION")
+    _require(set(git("diff", "--name-only", binding["base"], implementation).splitlines()) == set(DFS_PATHS),
+             "IMPLEMENTATION_CHANGE_SET_NOT_APPROVED")
+    before = _dfs_blobs(binding["base"], DFS_PATHS)
+    after = _dfs_blobs(implementation, DFS_PATHS)
+    changes = {path: {"before_blob": before[path], "after_blob": after[path]} for path in DFS_PATHS}
+    _require(policy["implementation_changes"] == changes, "IMPLEMENTATION_BLOB_BINDINGS_CHANGED")
+    for path, reviewed in binding["reviewed_dfs_blobs"].items():
+        _require(after[path] == reviewed, "DFS_REVIEWED_BLOB_CHANGED")
+    frozen_prefix = previous_guard.split(b"\ndef main() -> int:", 1)[0]
+    implementation_guard = git_bytes("show", f"{implementation}:{GUARD_PATH}")
+    _require(implementation_guard.split(b"\nV4_POLICY_PATH =", 1)[0] == frozen_prefix, "PREVIOUS_GUARD_LOGIC_CHANGED")
+    _require(_dfs_guard_matches(implementation_guard, binding["successor_guard_sha256"]),
+             "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    expected_fixture = git_bytes("show", f"{binding['base']}:tests/test_ncaaf_coverage_scope_policy.py")
+    for before_edit, after_edit in DFS_COVERAGE_FIXTURE_EDITS:
+        _require(expected_fixture.count(before_edit) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        expected_fixture = expected_fixture.replace(before_edit, after_edit, 1)
+    _require(git_bytes("show", f"{implementation}:tests/test_ncaaf_coverage_scope_policy.py") == expected_fixture,
+             "PRIOR_FIXTURE_RECONSTRUCTION_CHANGED")
+    # Exact implementation/seal change sets preserve every other starting-main
+    # path. Bind the original protected and prior integration evidence explicitly.
+    retained_paths = set(manifest["protected_files"]) | set(DFS_UNCHANGED_PATHS)
+    unchanged = _dfs_blobs(binding["base"], retained_paths)
+    _require(policy["unchanged_bindings"] == unchanged, "IMMUTABLE_BINDINGS_CHANGED")
+    _require(_dfs_blobs("HEAD", retained_paths) == unchanged, "IMMUTABLE_FILE_CHANGED")
+    parents = git("show", "-s", "--format=%P", "HEAD").split()
+    if len(parents) == 2:
+        _require(parents[0] == binding["base"], "CI_BASE_PARENT_NOT_APPROVED")
+        candidate = parents[1]
+        _require(git("rev-parse", "HEAD^{tree}") == git("rev-parse", f"{candidate}^{{tree}}"), "CI_MERGE_TREE_CHANGED")
+    else:
+        candidate = git("rev-parse", "HEAD")
+    _require(git("show", "-s", "--format=%P", candidate).split() == [implementation], "CANDIDATE_NOT_POLICY_SEAL")
+    _require(git("diff", "--name-status", implementation, candidate).splitlines() == [f"A\t{V4_POLICY_PATH}"],
+             "SEAL_CHANGE_SET_NOT_APPROVED")
+    tooling = {path: hashlib.sha256(git_bytes("show", f"{implementation}:{path}")).hexdigest()
+               for path in manifest["tooling_sha256"]}
+    _require(policy["tooling_sha256"] == tooling, "SUCCESSOR_TOOLING_BINDING_CHANGED")
+    _require(tooling[".github/workflows/paid-launch.yml"] == manifest["tooling_sha256"][".github/workflows/paid-launch.yml"],
+             "WORKFLOW_CHANGE_NOT_APPROVED")
+    conversions = []
+    for path in (*DFS_PATHS, *manifest["tooling_sha256"], *retained_paths):
+        committed = git_bytes("show", f"HEAD:{path}"); checkout = (ROOT / path).read_bytes()
+        _require(checkout.replace(b"\r\n", b"\n") == committed, "UNAUTHORIZED_CHECKOUT_CHANGE")
+        if path in tooling and checkout != committed:
+            conversions.append(path)
+    shadow_paths = retained_paths | set(PROVIDER_PATHS) | set(SCHEDULE_PATHS) | set(COVERAGE_PATHS) | set(DFS_PATHS)
+    for path in shadow_paths:
+        suffix = Path(path).parts
+        for other in ROOT.rglob(Path(path).name):
+            relative = other.relative_to(ROOT)
+            # This existing entry point is accepted only after exact retained
+            # blob and checkout verification above, including reseal attacks.
+            if relative.as_posix() == "parlaypicker/app/streamlit_app.py" and relative.as_posix() in unchanged:
+                continue
+            _require(tuple(relative.parts[-len(suffix):]) != tuple(suffix) or relative.as_posix() == path,
+                     "PROTECTED_RUNTIME_SHADOWING_RISK")
+    _require(not any(p.is_file() and (p.name in {"sitecustomize.py", "usercustomize.py"} or p.suffix == ".pth")
+                     for p in ROOT.rglob("*")), "PROTECTED_RUNTIME_SHADOWING_RISK")
+    return policy, conversions
+
+
+def _run_dfs_integrated(manifest_path: Path, base: str | None, binding: dict) -> tuple[int, dict]:
+    try:
+        policy, conversions = _validate_dfs_policy(manifest_path, base, binding)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as exc:
+        return 1, {"schema_version": 4, "status": "FAIL", "reason_codes": [str(exc)], "policy_valid": False,
+                   "approved_exceptions": [], "approved_integration_changes": [], "new_existing_test_exceptions": []}
+    _, original = run(manifest_path, base)
+    report = copy.deepcopy(original)
+    report.update(schema_version=4, policy_version=policy["policy_version"], policy_valid=True,
+                  original_guard_report=original, checkout_line_ending_conversions=conversions,
+                  approved_integration_changes=policy["implementation_changes"], new_existing_test_exceptions=[],
+                  approved_exceptions=[{"path": CLOCK_TEST, "before_blob": PRODUCTION_BINDINGS["before"],
+                                        "after_blob": binding["clock_blob"], "retained_unchanged": True,
+                                        "approval_reference": APPROVAL_REFERENCE}],
+                  approved_tooling_changes={GUARD_PATH: policy["tooling_sha256"][GUARD_PATH]})
+    report["approved_fixture_source_reconstructions"] = {
+        "tests/test_ncaaf_coverage_scope_policy.py": policy["implementation_changes"]["tests/test_ncaaf_coverage_scope_policy.py"]}
+    report["existing_test_changes"] = [p for p in original["existing_test_changes"]
+                                       if p not in {CLOCK_TEST, "tests/test_ncaaf_coverage_scope_policy.py"}]
+    report["self_protected_changes"] = [p for p in original["self_protected_changes"] if p != GUARD_PATH]
+    report["tooling_hash_mismatches"] = [p for p in original["tooling_hash_mismatches"] if p != GUARD_PATH and p not in conversions]
+    removable = {reason for key, reason in (("existing_test_changes", "EXISTING_TEST_EXPECTATION_CHANGED"),
+                 ("self_protected_changes", "SCOPE_GUARD_OR_BASELINE_CHANGED"),
+                 ("tooling_hash_mismatches", "SCOPE_GUARD_TOOLING_HASH_MISMATCH")) if not report[key]}
+    report["reason_codes"] = [reason for reason in original["reason_codes"] if reason not in removable]
+    report["status"] = "FAIL" if report["reason_codes"] else "PASS"
+    return (1 if report["reason_codes"] else 0), report
+
+DFS_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+
+DFS_COVERAGE_FIXTURE_EDITS = [(b'def policy_for(repo, binding, implementation):',
+  b'def original_coverage_source(path):\n    """Reconstruct the reviewed prior fixtures without c'
+  b'hanging assertions."""\n    source = (SOURCE / path).read_bytes().replace(b"\\r\\n", b"\\n")'
+  b'\n    if path == guard.GUARD_PATH:\n        return guard._dfs_previous_guard_source(source)\n  '
+  b'  if path == "tests/test_ncaaf_coverage_scope_policy.py":\n        return guard._dfs_restore_'
+  b'coverage_fixture(source)\n    return source\n\n\ndef policy_for(repo, binding, implementatio'
+  b'n):'),
+ (b'    source_guard = (SOURCE / guard.GUARD_PATH).read_bytes().replace(b"\\r\\n", b"\\n")',
+  b'    source_guard = original_coverage_source(guard.GUARD_PATH)'),
+ (b'        write(repo, path, (SOURCE / path).read_bytes().replace(b"\\r\\n", b"\\n"))',
+  b'        write(repo, path, original_coverage_source(path))')]
+
+DFS_PRIOR_COVERAGE_FIXTURE_SHA256 = '044051ee882b64403fdabe84549ab1b322383965b1eb44dd531789e2bcfc8fbd'
+
+
+def _dfs_guard_matches(source: bytes, reviewed: str) -> bool:
+    digest = reviewed.encode("ascii")
+    return (source.count(digest) == 1 and
+            hashlib.sha256(source.replace(digest, b"0" * 64)).hexdigest() == reviewed)
+
+
+def _dfs_previous_guard_source(source: bytes) -> bytes:
+    """Reconstruct the entire reviewed main guard after verifying the successor."""
+    _require(_dfs_guard_matches(source, DFS_BINDINGS["successor_guard_sha256"]),
+             "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nV4_POLICY_PATH =", 1)[0] + DFS_PREVIOUS_CLI
+
+
+def _dfs_restore_coverage_fixture(source: bytes) -> bytes:
+    for before, after in reversed(DFS_COVERAGE_FIXTURE_EDITS):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    return source
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -1685,7 +1906,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", COVERAGE_POLICY_PATH):
+        if exists_at("HEAD", V4_POLICY_PATH):
+            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)
+        elif exists_at("HEAD", COVERAGE_POLICY_PATH):
             code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)
         elif exists_at("HEAD", SCHEDULE_POLICY_PATH):
             code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)
