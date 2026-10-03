@@ -8,6 +8,7 @@ shortlist, and optimizes complete salary-cap-compliant lineups for both sports.
 from __future__ import annotations
 
 import csv
+import math
 import re
 from io import BytesIO, StringIO
 from typing import Any
@@ -129,11 +130,11 @@ def _read_salary_source(source: Any) -> pd.DataFrame:
     if hasattr(source, "getvalue"):
         source = source.getvalue()
     if isinstance(source, bytes):
-        return pd.read_csv(BytesIO(source), encoding="utf-8-sig")
+        return pd.read_csv(BytesIO(source), encoding="utf-8-sig", keep_default_na=False)
     if isinstance(source, str):
         if "\n" in source or "\r" in source:
-            return pd.read_csv(StringIO(source))
-        return pd.read_csv(source, encoding="utf-8-sig")
+            return pd.read_csv(StringIO(source), keep_default_na=False)
+        return pd.read_csv(source, encoding="utf-8-sig", keep_default_na=False)
     raise TypeError("DraftKings salary source must be a CSV, bytes, or DataFrame")
 
 
@@ -196,6 +197,58 @@ def _projection_name(value: object) -> str:
     return re.sub(r"[^a-z0-9]+", "", raw)
 
 
+def _projection_values(values: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """Preserve blank/missing inputs separately from malformed/nonfinite inputs."""
+    missing = values.isna() | values.astype(str).str.strip().eq("")
+    numeric = pd.to_numeric(values, errors="coerce")
+    finite = numeric.map(lambda value: pd.notna(value) and math.isfinite(value))
+    status = pd.Series("invalid", index=values.index)
+    status.loc[missing] = "missing"
+    status.loc[finite & ~missing] = "valid"
+    return numeric.where(finite & ~missing).astype(float), status
+
+
+def _set_salary_projections(out: pd.DataFrame, raw: pd.DataFrame, columns: dict) -> None:
+    average = (raw[columns["average_points"]] if columns["average_points"]
+               else pd.Series(float("nan"), index=raw.index))
+    out["AvgPointsPerGame"], _ = _projection_values(average)
+    supplied = (raw[columns["projection"]] if columns["projection"]
+                else pd.Series(float("nan"), index=raw.index))
+    points, status = _projection_values(supplied)
+    out["ProjectionStatus"] = status
+    out["ProjectedPoints"] = points
+    out["ProjectionSource"] = "unavailable"
+    out.loc[status.eq("valid"), "ProjectionSource"] = "uploaded_projection"
+    fallback = status.eq("missing") & out["AvgPointsPerGame"].notna()
+    out.loc[fallback, "ProjectedPoints"] = out.loc[fallback, "AvgPointsPerGame"]
+    out.loc[fallback, "ProjectionSource"] = "draftkings_average_fppg"
+    out.loc[status.eq("invalid"), "ProjectionSource"] = "invalid_projection"
+
+
+def _player_keys(pool: pd.DataFrame) -> pd.Series:
+    """Canonical identity, independent of CSV row and roster eligibility."""
+    keys = []
+    for _, player in pool.iterrows():
+        identity = _projection_identity(player.get("ID"))
+        embedded = re.search(r"\(([^()]+)\)\s*$", str(player.get("Name + ID", "")))
+        embedded_id = _projection_identity(embedded.group(1)) if embedded else ""
+        if identity and embedded_id and identity != embedded_id:
+            raise ValueError("Conflicting DraftKings ID and Name + ID")
+        identity = identity or embedded_id
+        name = _projection_name(player.get("Name"))
+        if not identity and not name:
+            raise ValueError("DraftKings player is missing identity")
+        keys.append("id:" + identity if identity else "name:" + name)
+    return pd.Series(keys, index=pool.index)
+
+
+def _identity_variables(assignments: list[tuple[int, str]], keys: pd.Series) -> dict:
+    groups: dict[str, list[int]] = {}
+    for variable, (player_index, _) in enumerate(assignments):
+        groups.setdefault(keys.at[player_index], []).append(variable)
+    return groups
+
+
 def attach_draftkings_projections(
     player_pool: pd.DataFrame,
     projection_source: Any,
@@ -203,9 +256,10 @@ def attach_draftkings_projections(
     """Attach a separate forward-projection CSV to a normalized player pool.
 
     DraftKings player ID is the preferred join key; normalized player name is a
-    fallback when IDs are unavailable. Only positive numeric projections are
-    applied, and the match count is retained in ``DataFrame.attrs`` for UI
-    diagnostics.
+    fallback only when either ID is unavailable and the name is unique on both
+    sides. Conflicting identities and duplicate projection IDs fail closed.
+    Finite projections, including zero and negative points, are applied. Missing
+    inputs retain the prior labeled score; invalid inputs make it unavailable.
     """
 
     if player_pool is None or player_pool.empty:
@@ -219,45 +273,61 @@ def attach_draftkings_projections(
     if not id_column and not name_column:
         raise ValueError("Projection CSV must include player ID or player name")
 
-    projection = pd.to_numeric(raw[projection_column], errors="coerce")
-    valid = projection.notna() & projection.gt(0)
-    if not valid.any():
-        raise ValueError("Projection CSV contains no positive numeric projections")
-
-    id_map: dict[str, float] = {}
-    if id_column:
-        for identity, value in zip(raw.loc[valid, id_column], projection.loc[valid]):
-            key = _projection_identity(identity)
-            if key:
-                id_map[key] = float(value)
-    name_map: dict[str, float] = {}
-    if name_column:
-        for name, value in zip(raw.loc[valid, name_column], projection.loc[valid]):
-            key = _projection_name(name)
-            if key:
-                name_map[key] = float(value)
-
-    out = player_pool.copy()
-    matched = pd.Series(float("nan"), index=out.index, dtype=float)
+    raw = raw.reset_index(drop=True)
+    projection, status = _projection_values(raw[projection_column])
+    identities = (raw[id_column].map(_projection_identity) if id_column
+                  else pd.Series("", index=raw.index))
+    names = (raw[name_column].map(_projection_name) if name_column
+             else pd.Series("", index=raw.index))
+    if identities[identities.ne("")].duplicated().any():
+        raise ValueError("Projection CSV contains duplicate player IDs")
+    id_map = {key: index for index, key in identities.items() if key}
+    out = player_pool.copy().reset_index(drop=True)
+    pool_keys = _player_keys(out)
+    pool_names = out["Name"].map(_projection_name)
+    matched = applied = missing = invalid = 0
     for index, player in out.iterrows():
-        identity = _projection_identity(player.get("ID", ""))
-        value = id_map.get(identity) if identity else None
-        if value is None:
-            value = name_map.get(_projection_name(player.get("Name", "")))
-        if value is not None:
-            matched.at[index] = float(value)
-    if not matched.notna().any():
+        key = pool_keys.at[index]
+        identity = key[3:] if key.startswith("id:") else ""
+        name = pool_names.at[index]
+        source_index = id_map.get(identity) if identity else None
+        if source_index is not None:
+            if name and names.at[source_index] and name != names.at[source_index]:
+                raise ValueError("Projection CSV contains conflicting ID/name identity")
+        elif name:
+            candidates = names.index[names.eq(name)]
+            if len(candidates):
+                if len(candidates) != 1 or int(pool_names.eq(name).sum()) != 1:
+                    raise ValueError("Projection CSV has ambiguous player name: " + str(player["Name"]))
+                source_index = candidates[0]
+                if identity and identities.at[source_index] and identity != identities.at[source_index]:
+                    raise ValueError("Projection CSV contains conflicting known player IDs")
+        if source_index is None:
+            continue
+        matched += 1
+        state = status.at[source_index]
+        out.at[index, "ProjectionStatus"] = state
+        if state == "valid":
+            out.at[index, "ProjectedPoints"] = projection.at[source_index]
+            out.at[index, "ProjectionSource"] = "uploaded_projection"
+            applied += 1
+        elif state == "invalid":
+            out.at[index, "ProjectedPoints"] = float("nan")
+            out.at[index, "ProjectionSource"] = "invalid_projection"
+            invalid += 1
+        else:
+            missing += 1
+    if not matched:
         raise ValueError("Projection CSV did not match any DraftKings players")
-
-    out.loc[matched.notna(), "ProjectedPoints"] = matched[matched.notna()]
-    out.loc[matched.notna(), "ProjectionSource"] = "uploaded_projection"
     out["ValuePer1000"] = (
         pd.to_numeric(out["ProjectedPoints"], errors="coerce")
         * 1000.0
         / pd.to_numeric(out["Salary"], errors="coerce")
     ).round(3)
-    out.attrs["projection_match_count"] = int(matched.notna().sum())
-    out.attrs["projection_unmatched_count"] = int(matched.isna().sum())
+    out.attrs["projection_match_count"] = applied
+    out.attrs["projection_unmatched_count"] = len(out) - matched
+    out.attrs["projection_missing_count"] = missing
+    out.attrs["projection_invalid_count"] = invalid
     return out
 
 
@@ -294,7 +364,7 @@ def parse_draftkings_classic_salary_csv(
         else out["Name"]
     )
     out["ID"] = (
-        raw[columns["id"]].fillna("").astype(str).str.strip()
+        raw[columns["id"]].map(_projection_identity)
         if columns["id"]
         else ""
     )
@@ -314,23 +384,7 @@ def parse_draftkings_classic_salary_csv(
         if columns["team"]
         else ""
     )
-    out["AvgPointsPerGame"] = (
-        pd.to_numeric(raw[columns["average_points"]], errors="coerce")
-        if columns["average_points"]
-        else pd.Series(float("nan"), index=index)
-    )
-    supplied_projection = (
-        pd.to_numeric(raw[columns["projection"]], errors="coerce")
-        if columns["projection"]
-        else pd.Series(float("nan"), index=index)
-    )
-    out["ProjectedPoints"] = supplied_projection.fillna(out["AvgPointsPerGame"])
-    out["ProjectionSource"] = "unavailable"
-    out.loc[supplied_projection.notna(), "ProjectionSource"] = "uploaded_projection"
-    out.loc[
-        supplied_projection.isna() & out["AvgPointsPerGame"].notna(),
-        "ProjectionSource",
-    ] = "draftkings_average_fppg"
+    _set_salary_projections(out, raw, columns)
     out["Status"] = (
         raw[columns["status"]].fillna("").astype(str).str.strip().str.upper()
         if columns["status"]
@@ -343,7 +397,7 @@ def parse_draftkings_classic_salary_csv(
     active = ~out["Status"].isin(excluded_statuses)
     valid_position = out["Position"].isin({"QB", "RB", "WR", "TE", "DST"})
     valid_identity = out["Name"].ne("")
-    valid_salary = out["Salary"].notna() & out["Salary"].gt(0)
+    valid_salary = out["Salary"].map(lambda value: pd.notna(value) and math.isfinite(value)) & out["Salary"].gt(0)
     out = out[active & valid_position & valid_identity & valid_salary].copy()
     out["Salary"] = out["Salary"].astype(int)
     out["ValuePer1000"] = (
@@ -381,7 +435,9 @@ def build_draftkings_classic_shortlist(
             eligible = player_pool["Position"].isin(DK_CLASSIC_FLEX_POSITIONS)
         else:
             eligible = player_pool["Position"].eq(bucket)
-        ranked = player_pool[eligible & player_pool["ProjectedPoints"].notna()].copy()
+        ranked = player_pool[eligible & player_pool["ProjectedPoints"].map(
+            lambda value: pd.notna(value) and math.isfinite(value)
+        )].copy()
         ranked["ClassicScore"] = _classic_score(ranked)
         ranked = ranked.sort_values(
             ["ClassicScore", "ProjectedPoints", "ValuePer1000", "Salary", "Name"],
@@ -491,9 +547,9 @@ def build_draftkings_classic_lineups(
         pool["Status"] = pool["Status"].fillna("").astype(str).str.strip().str.upper()
     pool = pool[
         pool["Position"].isin({"QB", "RB", "WR", "TE", "DST"})
-        & pool["Salary"].notna()
+        & np.isfinite(pool["Salary"])
         & pool["Salary"].gt(0)
-        & pool["ProjectedPoints"].notna()
+        & np.isfinite(pool["ProjectedPoints"])
         & pool["Team"].ne("")
     ].reset_index(drop=True)
     if pool.empty:
@@ -528,6 +584,9 @@ def build_draftkings_classic_lineups(
         for player_index in pool.index
     }
 
+    player_keys = _player_keys(pool)
+    identity_variables = _identity_variables(assignments, player_keys)
+
     objective = np.array(
         [
             -float(pool.at[player_index, "ProjectedPoints"])
@@ -540,7 +599,7 @@ def build_draftkings_classic_lineups(
     base_rows: list[tuple[dict[int, float], float, float]] = []
     for indices in slot_variables.values():
         base_rows.append(({index: 1.0 for index in indices}, 1.0, 1.0))
-    for indices in player_variables.values():
+    for indices in identity_variables.values():
         base_rows.append(({index: 1.0 for index in indices}, -np.inf, 1.0))
     base_rows.append(
         (
@@ -606,14 +665,14 @@ def build_draftkings_classic_lineups(
             )
 
     lineup_rows: list[dict[str, object]] = []
-    prior_player_sets: list[frozenset[int]] = []
+    prior_player_sets: list[frozenset[str]] = []
     for lineup_rank in range(1, int(top_n) + 1):
         rows = list(base_rows)
         for prior_players in prior_player_sets:
             no_good_indices = [
                 variable_index
                 for variable_index, (player_index, _) in enumerate(assignments)
-                if player_index in prior_players
+                if player_keys.at[player_index] in prior_players
             ]
             rows.append(
                 (
@@ -654,7 +713,10 @@ def build_draftkings_classic_lineups(
         )
         if len(selected_players) != len(DK_NFL_CLASSIC_ROSTER_SLOTS):
             break
-        prior_player_sets.append(selected_players)
+        selected_keys = frozenset(player_keys.at[index] for index in selected_players)
+        if len(selected_keys) != len(selected_players):
+            break
+        prior_player_sets.append(selected_keys)
 
         selected_by_slot = {
             assignments[variable_index][1]: assignments[variable_index][0]
@@ -687,7 +749,7 @@ def build_draftkings_classic_lineups(
         lineup["Unused Salary"] = int(salary_cap - salaries.sum())
         lineup["Projected Points"] = round(float(projections.sum()), 3)
         lineup["Teams"] = int(pool.loc[ordered_players, "Team"].nunique())
-        lineup["Unique Players"] = len(selected_players)
+        lineup["Unique Players"] = len(selected_keys)
         lineup["QB Stack Team"] = str(pool.at[selected_by_slot["QB"], "Team"])
         roster_alerts = []
         if "Status" in pool.columns:
@@ -701,10 +763,7 @@ def build_draftkings_classic_lineups(
             sorted(pool.loc[ordered_players, "ProjectionSource"].astype(str).unique())
         )
         lineup["Lineup Key"] = "|".join(
-            sorted(
-                str(pool.at[index, "ID"] or pool.at[index, "Name"]).strip()
-                for index in selected_players
-            )
+            sorted(selected_keys)
         )
         lineup_rows.append(lineup)
 
@@ -771,7 +830,7 @@ def parse_draftkings_mlb_classic_salary_csv(source: Any) -> pd.DataFrame:
         else out["Name"]
     )
     out["ID"] = (
-        raw[columns["id"]].fillna("").astype(str).str.strip()
+        raw[columns["id"]].map(_projection_identity)
         if columns["id"]
         else ""
     )
@@ -787,23 +846,7 @@ def parse_draftkings_mlb_classic_salary_csv(source: Any) -> pd.DataFrame:
         if columns["team"]
         else ""
     )
-    out["AvgPointsPerGame"] = (
-        pd.to_numeric(raw[columns["average_points"]], errors="coerce")
-        if columns["average_points"]
-        else pd.Series(float("nan"), index=index)
-    )
-    supplied_projection = (
-        pd.to_numeric(raw[columns["projection"]], errors="coerce")
-        if columns["projection"]
-        else pd.Series(float("nan"), index=index)
-    )
-    out["ProjectedPoints"] = supplied_projection.fillna(out["AvgPointsPerGame"])
-    out["ProjectionSource"] = "unavailable"
-    out.loc[supplied_projection.notna(), "ProjectionSource"] = "uploaded_projection"
-    out.loc[
-        supplied_projection.isna() & out["AvgPointsPerGame"].notna(),
-        "ProjectionSource",
-    ] = "draftkings_average_fppg"
+    _set_salary_projections(out, raw, columns)
     out["Status"] = (
         raw[columns["status"]].fillna("").astype(str).str.strip().str.upper()
         if columns["status"]
@@ -830,7 +873,7 @@ def parse_draftkings_mlb_classic_salary_csv(source: Any) -> pd.DataFrame:
     )
     valid_position = out["EligiblePositions"].ne("")
     valid_identity = out["Name"].ne("")
-    valid_salary = out["Salary"].notna() & out["Salary"].gt(0)
+    valid_salary = out["Salary"].map(lambda value: pd.notna(value) and math.isfinite(value)) & out["Salary"].gt(0)
     out = out[active & valid_position & valid_identity & valid_salary].copy()
     out["Salary"] = out["Salary"].astype(int)
     out["ValuePer1000"] = (
@@ -938,9 +981,9 @@ def build_draftkings_mlb_classic_lineups(
     )
     pool["Team"] = pool["Team"].fillna("").astype(str).str.strip().str.upper()
     pool = pool[
-        pool["Salary"].notna()
+        np.isfinite(pool["Salary"])
         & pool["Salary"].gt(0)
-        & pool["ProjectedPoints"].notna()
+        & np.isfinite(pool["ProjectedPoints"])
         & pool["Team"].ne("")
     ].reset_index(drop=True)
     # The official MLB export includes every reliever, but identifies the
@@ -999,6 +1042,9 @@ def build_draftkings_mlb_classic_lineups(
         for player_index in pool.index
     }
 
+    player_keys = _player_keys(pool)
+    identity_variables = _identity_variables(assignments, player_keys)
+
     objective = np.array(
         [
             -float(pool.at[player_index, "ProjectedPoints"])
@@ -1012,7 +1058,7 @@ def build_draftkings_mlb_classic_lineups(
     base_rows: list[tuple[dict[int, float], float, float]] = []
     for indices in slot_variables.values():
         base_rows.append(({index: 1.0 for index in indices}, 1.0, 1.0))
-    for indices in player_variables.values():
+    for indices in identity_variables.values():
         base_rows.append(({index: 1.0 for index in indices}, -np.inf, 1.0))
     base_rows.append(
         (
@@ -1084,7 +1130,7 @@ def build_draftkings_mlb_classic_lineups(
                 )
 
     lineup_rows: list[dict[str, object]] = []
-    prior_player_sets: list[frozenset[int]] = []
+    prior_player_sets: list[frozenset[str]] = []
 
     for lineup_rank in range(1, int(top_n) + 1):
         rows = list(base_rows)
@@ -1092,7 +1138,7 @@ def build_draftkings_mlb_classic_lineups(
             indices = [
                 variable_index
                 for variable_index, (player_index, _) in enumerate(assignments)
-                if player_index in prior_players
+                if player_keys.at[player_index] in prior_players
             ]
             rows.append(
                 (
@@ -1138,7 +1184,10 @@ def build_draftkings_mlb_classic_lineups(
         )
         if len(selected_players) != len(DK_MLB_CLASSIC_ROSTER_SLOTS):
             break
-        prior_player_sets.append(selected_players)
+        selected_keys = frozenset(player_keys.at[index] for index in selected_players)
+        if len(selected_keys) != len(selected_players):
+            break
+        prior_player_sets.append(selected_keys)
 
         selected_by_position: dict[str, list[int]] = {}
         for variable_index in selected_variables:
@@ -1176,7 +1225,7 @@ def build_draftkings_mlb_classic_lineups(
         lineup["Projected Points"] = round(float(projections.sum()), 3)
         lineup["Teams"] = int(pool.loc[ordered_players, "Team"].nunique())
         lineup["Max Hitters / Team"] = int(team_counts.max()) if not team_counts.empty else 0
-        lineup["Unique Players"] = len(selected_players)
+        lineup["Unique Players"] = len(selected_keys)
         confirmed_hitters = 0
         unconfirmed_hitters: list[str] = []
         if "Starting" in pool.columns:
@@ -1191,10 +1240,7 @@ def build_draftkings_mlb_classic_lineups(
             sorted(pool.loc[ordered_players, "ProjectionSource"].astype(str).unique())
         )
         lineup["Lineup Key"] = "|".join(
-            sorted(
-                str(pool.at[index, "ID"] or pool.at[index, "Name"]).strip()
-                for index in selected_players
-            )
+            sorted(selected_keys)
         )
         lineup_rows.append(lineup)
 
