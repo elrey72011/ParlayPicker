@@ -7399,6 +7399,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
         merge_missing_ncaaf_games,
     )
     from app_core.odds_api import TheOddsAPIClient, filter_games_today_only
+    from app_core.provider_health import failure, health_report, outcome, sanitized_outcome
     import pandas as pd
 
     def _sanitize(name):
@@ -7450,37 +7451,68 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
     game_dict = {}
     mlb_receipt_health = {}
+    provider_outcomes = {}
     for sk in sport_keys:
         games = []
-        try:
-            if client is not None:
+        provider_outcomes[sk] = outcome("NOT_CONFIGURED")
+        if client is not None:
+            try:
                 games = client.get_odds(sk, date=date)
-            if isinstance(games, dict) and "message" in games:
-                logger.error(f"Odds API error for {sk}: {games.get('message')}")
+                if isinstance(games, list):
+                    provider_outcomes[sk] = outcome("SUCCESS" if games else "SUCCESS_EMPTY", len(games))
+                else:
+                    provider_outcomes[sk] = outcome("INVALID_RESPONSE")
+                    games = []
+            except Exception as exc:
+                detail = failure(exc)
+                provider_outcomes[sk] = outcome(detail["outcome"], http_status=detail["http_status"])
                 games = []
-        except Exception as e:
-            logger.error(f"Network/API failure for {sk}: {e}")
-            games = []
+        current_outcome = provider_outcomes[sk]
+        log_outcome = logger.info if current_outcome["outcome"] in {"SUCCESS", "SUCCESS_EMPTY"} else logger.warning
+        log_outcome("Odds provider sport=%s outcome=%s http_status=%s", sk,
+                    current_outcome["outcome"], current_outcome["http_status"])
 
         if sk == "americanfootball_nfl":
             from app_core.nfl_novig import recover_nfl_novig
-            games = recover_nfl_novig(games, api_key)
+            try:
+                games = recover_nfl_novig(games, api_key)
+            except Exception as exc:
+                detail = failure(exc)
+                provider_outcomes[sk]["fallback_errors"]["nfl_novig"] = detail
+                logger.warning("Odds fallback sport=%s source=nfl_novig outcome=%s http_status=%s",
+                               sk, detail["outcome"], detail["http_status"])
 
         if sk == "americanfootball_ncaaf":
             from app_core.college_novig import recover_college_novig
-            games = recover_college_novig(games, api_key)
+            try:
+                games = recover_college_novig(games, api_key)
+            except Exception as exc:
+                detail = failure(exc)
+                provider_outcomes[sk]["fallback_errors"]["college_novig"] = detail
+                logger.warning("Odds fallback sport=%s source=college_novig outcome=%s http_status=%s",
+                               sk, detail["outcome"], detail["http_status"])
             # ESPN's default college-football scoreboard and some paid feeds can
             # omit an FCS-only opening-day slate. Query ESPN group 81 explicitly,
             # append only missing games, and keep the recovered DraftKings prices
             # visibly separate from Novig/the primary source downstream.
             try:
                 fallback_games = fetch_espn_ncaaf_fcs_odds(date)
+                fallback_detail = getattr(fallback_games, "provider_outcome", None)
+                if isinstance(fallback_detail, dict):
+                    detail = sanitized_outcome(fallback_detail)
+                    provider_outcomes[sk]["fallback_outcomes"]["ncaaf_fcs"] = detail
+                    if detail["outcome"] not in {"SUCCESS", "SUCCESS_EMPTY", "NOT_RECORDED"}:
+                        provider_outcomes[sk]["fallback_errors"]["ncaaf_fcs"] = detail
                 games = merge_missing_ncaaf_games(games, fallback_games)
-            except Exception as e:
-                logger.error("NCAAF FCS fallback normalization failed closed: %s", e)
+            except Exception as exc:
+                detail = failure(exc)
+                provider_outcomes[sk]["fallback_errors"]["ncaaf_fcs"] = detail
+                logger.warning("Odds fallback sport=%s source=ncaaf_fcs outcome=%s http_status=%s",
+                               sk, detail["outcome"], detail["http_status"])
 
         try:
             if not games:
+                provider_outcomes[sk]["processing"] = "EMPTY"
                 continue
 
             # Historical/backfill requests must honor the caller's explicit date.
@@ -7492,6 +7524,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 sport_games = collect_football_identity(sport_games, football_sport)
 
             if not sport_games:
+                provider_outcomes[sk]["processing"] = "FILTERED_EMPTY"
                 continue
 
             if sk == "baseball_mlb" and date is None:
@@ -7603,15 +7636,18 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                                 elif _sanitize(o.get('name')) == _sanitize(game.get('away_team')):
                                     row[f'{book_key}_h2h_away_price'] = o.get('price')
 
-        except Exception as e:
-            logger.error(f"Odds normalization failure for {sk}: {e}")
+            provider_outcomes[sk]["processing"] = "SUCCESS"
+        except Exception as exc:
+            detail = failure(exc)
+            provider_outcomes[sk]["processing"] = "FAILED"
+            provider_outcomes[sk]["processing_error"] = detail
+            logger.warning("Odds normalization sport=%s outcome=%s http_status=%s",
+                           sk, detail["outcome"], detail["http_status"])
             continue
 
-    if not game_dict:
-        return pd.DataFrame()
-
-    result = pd.DataFrame(list(game_dict.values()))
+    result = pd.DataFrame(list(game_dict.values())) if game_dict else pd.DataFrame()
     result.attrs["mlb_receipt_health"] = mlb_receipt_health
+    result.attrs["provider_health"] = health_report(provider_outcomes, len(result))
     return result
 
 def _fmt_odds_token(v):
@@ -9388,6 +9424,8 @@ def run_analysis_pipeline(
     # 2. Expand TheOdds API into the Master Slate dynamically using theover_rows
     live_odds_df = fetch_live_odds_dataframe(sports)
     mlb_receipt_health = live_odds_df.attrs.get("mlb_receipt_health", {})
+    from app_core.provider_health import sanitized_health
+    provider_health = sanitized_health(live_odds_df.attrs.get("provider_health"))
 
     if not live_odds_df.empty:
         live_odds_df = _normalize_identity_strings(live_odds_df, ["league", "home_team", "away_team"])
@@ -10654,6 +10692,7 @@ def run_analysis_pipeline(
         finally:
              analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
 
+    diagnostics["provider_health"] = provider_health
     diagnostics["mlb_receipt_health"] = mlb_receipt_health
     diagnostics["loaded_model_identity"] = loaded_model_identity
     return (analysis_df, best_picks_df, diagnostics)

@@ -77,6 +77,8 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
             report["run_warnings"].append(f"{key}: {value}")
     health = diagnostics.get("mlb_receipt_health")
     report["mlb_receipt_health"] = health if isinstance(health, dict) else {}
+    from app_core.provider_health import sanitized_health
+    report["provider_health"] = sanitized_health(diagnostics.get("provider_health"))
     report["mlb_challenger_status_counts"] = dict(Counter(
         text(row.get("mlb_challenger_status")) or "NOT_RECORDED"
         for _, row in audit.iterrows() if text(row.get("league")).upper() == "MLB"))
