@@ -20,7 +20,7 @@ def iso8601_to_est(iso_string: str):
     eastern_tz = gettz("America/New_York")
     return dt_object_utc.astimezone(eastern_tz)
 
-class OddsAPIAuthError(Exception):
+class OddsAPIAuthError(requests.exceptions.HTTPError):
     """Exception raised for authentication errors with The Odds API (e.g., 401, 403 or missing key)."""
     pass
 
@@ -36,6 +36,8 @@ class TheOddsAPIClient:
         self.markets = markets
         self.bookmakers = bookmakers
         self.oddsFormat = oddsFormat
+        # Batch callers can distinguish a failed sport from a successful empty slate.
+        self.last_fetch_errors: Dict[str, Dict] = {}
 
     def get_odds(self, sport_key: str, date: str = None):
         url = f"{self.BASE_URL}/sports/{sport_key}/odds"
@@ -92,27 +94,38 @@ class TheOddsAPIClient:
         while True:
             backoff = 2.0
             for attempt in range(max_retries + 1):
-                resp = requests.get(url, params=params, timeout=15)
-
-                if resp.status_code != 200:
-                    logger.error(f"Odds API Failed [{resp.status_code}]: {resp.text}")
-                    return []
+                try:
+                    resp = requests.get(url, params=params, timeout=15)
+                except requests.exceptions.RequestException as exc:
+                    logger.error("Odds API request failed for %s (%s)", sport_key, type(exc).__name__)
+                    raise
 
                 try:
                     resp.raise_for_status()
+                    if resp.status_code != 200:
+                        raise requests.exceptions.HTTPError(response=resp)
                     break
-                except requests.exceptions.HTTPError as e:
+                except requests.exceptions.HTTPError:
+                    logger.error("Odds API failed for %s [HTTP %s]", sport_key, resp.status_code)
                     if resp.status_code == 429:
                         if attempt < max_retries:
-                            logger.warning(f"The Odds API 429 Too Many Requests. Retrying in {backoff} seconds...")
+                            logger.warning("Odds API rate limit for %s. Retrying in %s seconds...", sport_key, backoff)
                             time.sleep(backoff)
                             backoff *= 2.0
                             continue
                         else:
-                            raise
+                            raise requests.exceptions.HTTPError(
+                                f"Odds API rate limit exhausted for {sport_key} [HTTP 429]", response=resp
+                            ) from None
                     elif resp.status_code in (401, 403):
-                        raise OddsAPIAuthError(f"Invalid or missing API Key")
-                    raise
+                        raise OddsAPIAuthError(
+                            f"Odds API authentication failed for {sport_key} [HTTP {resp.status_code}]",
+                            response=resp,
+                        ) from None
+                    # Do not include response bodies or credential-bearing request URLs.
+                    raise requests.exceptions.HTTPError(
+                        f"Odds API failed for {sport_key} [HTTP {resp.status_code}]", response=resp
+                    ) from None
 
             data = resp.json()
             import json
@@ -184,13 +197,19 @@ class TheOddsAPIClient:
         return filtered_data
 
     def get_odds_for_sports(self, sport_keys: List[str], date: str = None) -> Dict[str, List[Dict]]:
-        """Fetch odds for an explicit list of sports using the same day-bounded UTC window."""
+        """Retain successful sports; failures are also recorded in last_fetch_errors."""
         results: Dict[str, List[Dict]] = {}
+        self.last_fetch_errors = {}
         for sport_key in sport_keys:
             try:
                 results[sport_key] = self.get_odds(sport_key, date=date)
             except Exception as exc:
-                logger.error("Failed to fetch odds for %s: %s", sport_key, exc)
+                response = getattr(exc, "response", None)
+                self.last_fetch_errors[sport_key] = {
+                    "error_type": type(exc).__name__,
+                    "http_status": getattr(response, "status_code", None),
+                }
+                logger.error("Failed to fetch odds for %s (%s)", sport_key, type(exc).__name__)
                 results[sport_key] = []
         return results
 

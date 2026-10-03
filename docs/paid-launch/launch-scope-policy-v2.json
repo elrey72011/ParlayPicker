@@ -1,0 +1,46 @@
+{
+  "approval_reference": "Owner approval of PR #2374 at its exact reviewed head for draft integration preparation",
+  "approved_proposal_head": "051baf59c07060576fbf7a169f8ef7984e7a7672",
+  "base_sha": "d8f580734c28b712f93e0e4a647e9b21ab1f2928",
+  "clock_test_exception": {
+    "after_blob": "e610143aff5611235f9cfb44da13e2d54e1c6b48",
+    "before_blob": "cfa07b6b6c622f083cb7d2d7e3a0713780758013",
+    "path": "tests/test_board_diagnostics.py"
+  },
+  "integration_changes": {
+    "docs/paid-launch/clock-scope-integration.md": {
+      "after_blob": "e681b1a36cc81680e916d294858a01b05399a98e",
+      "before_blob": null
+    },
+    "docs/paid-launch/clock-test-exception-proposal.md": {
+      "after_blob": "025e1378d412a45f31c7e3258f28b4317d4cc921",
+      "before_blob": null
+    },
+    "scripts/check_launch_change_scope.py": {
+      "after_blob": "6c7212c1ce702dde96b3b36d0ca33522d49a4147",
+      "before_blob": "762840f961544b9b1e1aec74baf49318914e6d77"
+    },
+    "tests/test_clock_scope_exception_proposal.py": {
+      "after_blob": "9e9e71c27023cceeddce85da5eb06f39ad89e23c",
+      "before_blob": null
+    },
+    "tests/test_launch_scope_integration.py": {
+      "after_blob": "35ae6f5cc11a6258bf9a5d7ce0aba48b036979e6",
+      "before_blob": null
+    },
+    "tools/review_clock_scope_exception.py": {
+      "after_blob": "8b5fd297c66c52828ecdd53618245ddbe98d3df2",
+      "before_blob": null
+    }
+  },
+  "integration_commit": "17b85c0da812ece84f104125bfa7c983b37fa684",
+  "integration_tree": "b9cab8d5397a104f8d054f90a9c62eb56b6b6191",
+  "original_manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "policy_version": "paid-launch-clock-exception-v2",
+  "schema_version": 2,
+  "shipping_head": "dc211cc9438390c73848ce1a43d512ada00338d8",
+  "tooling_sha256": {
+    ".github/workflows/paid-launch.yml": "fccb75c4d4b9c9e99037e4888b2f7ad283cdc150e69fb0578ffa7b0ebcd9384b",
+    "scripts/check_launch_change_scope.py": "8f25398afa9a8620d661227d2621d1065704955dd4d9b0004161d9a9993619a8"
+  }
+}

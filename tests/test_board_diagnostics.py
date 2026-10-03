@@ -147,8 +147,88 @@ assert.equal(cohortClock(data.props,'as_of').expired,1);
 assert.equal(rows[1].status,'APPROVED'); // Browser assessment does not rewrite saved history.
 const invalid={...base,start:'invalid',as_of:'2026-09-23T20:01:00Z',quote_time:null};
 assert.deepEqual(currentRowBlockers(invalid),['START_TIME_UNAVAILABLE','QUOTE_TIME_UNAVAILABLE','ANALYSIS_TIME_FUTURE']);
-assert.equal(cohortClock([invalid],'as_of').expired,1);
+assert.equal(cohortClock([invalid],'as_of').expired,0);
+assert.equal(cohortClock([invalid],'as_of').future,1);
+assert.equal(cohortClock([invalid],'as_of').unavailable,1);
 """
     target = tmp_path / "board-diagnostics.cjs"
+    target.write_text(script, encoding="utf-8")
+    subprocess.run([node, str(target)], check=True, capture_output=True, text=True)
+
+
+def test_quote_clock_separates_expiry_from_unavailable_times_and_keeps_blockers(tmp_path):
+    node = os.environ.get("NODE_BINARY") or shutil.which("node")
+    if not node:
+        pytest.skip("Node unavailable")
+    html = Path("publishing/board.html").read_text(encoding="utf-8")
+    helpers = html.split("// The saved producer trace is never recomputed in the browser. Current blockers\n", 1)[1].split("let boardPublicationVersion=null;", 1)[0]
+    banner = html.rsplit("window.parlayPicker.freshness=function(version)", 1)[1].split("\n", 1)[0]
+    script = r"""
+const assert=require('node:assert/strict');
+const now=Date.parse('2026-10-02T22:04:42Z');
+Date.now=()=>now;
+const data={stale_after_minutes:30,games:{overall:[]},props:[]};
+const supportedQuote=r=>r.quote_source==='Novig';
+const formatShortAge=iso=>Math.floor((now-Date.parse(iso))/60000)+' min ago';
+const renderBoardSummary=()=>{};
+let boardPublicationVersion=null;
+let priorState='current';
+const priorBoardFreshness=()=>({primary:'Analysis',publication:'Publication',state:priorState});
+const window={parlayPicker:{}};
+""" + helpers + "\nwindow.parlayPicker.freshness=function(version)" + banner + r"""
+const base={sport:'MLB',quote_source:'Novig',status:'APPROVED',ev:.02,
+ start:'2026-10-03T02:30:00Z',as_of:'2026-10-02T21:50:10.731933Z'};
+const withTime=value=>({...base,quote_time:value});
+const fresh='2026-10-02T21:49:07Z';
+assert.deepEqual(currentRowBlockers(withTime(fresh)),[]);
+for(const [value,category,blocker] of [
+ [null,'missing','QUOTE_TIME_UNAVAILABLE'],[undefined,'missing','QUOTE_TIME_UNAVAILABLE'],
+ ['','missing','QUOTE_TIME_UNAVAILABLE'],['malformed','invalid','QUOTE_TIME_UNAVAILABLE'],
+ ['2026-10-02T22:00:00','invalid','QUOTE_TIME_UNAVAILABLE'],[42,'invalid','QUOTE_TIME_UNAVAILABLE'],
+ ['2026-10-02T22:04:43Z','future','QUOTE_TIME_FUTURE']
+]){
+ const clock=cohortClock([withTime(value)],'quote_time');
+ assert.equal(clock.expired,0);assert.equal(clock[category],1);assert.equal(clock.unavailable,1);
+ assert.ok(clock.label.includes(category+' timestamps: 1'));
+ assert.ok(!clock.label.includes('expired'));assert.ok(!clock.label.includes('within wager window'));
+ assert.deepEqual(currentRowBlockers(withTime(value)),[blocker]);
+}
+for(const minutes of [15,30]){
+ data.stale_after_minutes=minutes;
+ const boundary=new Date(now-minutes*60000).toISOString();
+ assert.equal(cohortClock([withTime(boundary)],'quote_time').expired,0);
+ assert.deepEqual(currentRowBlockers(withTime(boundary)),[]);
+ const expired=new Date(now-minutes*60000-1).toISOString();
+ assert.equal(cohortClock([withTime(expired)],'quote_time').expired,1);
+ assert.deepEqual(currentRowBlockers(withTime(expired)),['QUOTE_EXPIRED']);
+}
+data.stale_after_minutes=30;
+// The audit's frozen ten-card reproduction: five NHL, three NCAAF, one WNBA, one missing.
+const rows=[...Array(5).fill(fresh),...Array(3).fill('2026-10-02T21:48:32Z'),
+ '2026-10-02T21:49:10Z',null].map(withTime);
+const saved=JSON.stringify(rows),clock=cohortClock(rows,'quote_time');
+assert.equal(clock.expired,0);assert.equal(clock.missing,1);assert.equal(clock.unavailable,1);
+assert.equal(clock.label,'16 min ago · missing timestamps: 1');
+const later=cohortClock(rows,'quote_time',Date.parse('2026-10-02T23:59:30Z'));
+assert.equal(later.expired,9);assert.equal(later.missing,1);
+assert.equal(later.invalid,0);assert.equal(later.future,0);
+const mixed=cohortClock([withTime(fresh),withTime('2026-10-02T21:00:00Z'),
+ withTime(null),withTime('bad'),withTime('2026-10-02T23:00:00Z')],'quote_time');
+assert.deepEqual([mixed.expired,mixed.missing,mixed.invalid,mixed.future,mixed.unavailable],[1,1,1,1,3]);
+assert.ok(mixed.label.includes('wager window expired: 1'));
+assert.equal(cohortClock([],'quote_time').label,'Not included');
+assert.equal(JSON.stringify(rows),saved); // Clock assessment cannot alter saved decisions.
+data.games.overall=[base];
+assert.equal(window.parlayPicker.freshness({}).state,'current');
+data.games.overall=[{...base,as_of:null}];
+let bannerResult=window.parlayPicker.freshness({});
+assert.equal(bannerResult.state,'unavailable');assert.ok(!bannerResult.text.includes('expired'));
+assert.ok(bannerResult.text.includes('missing, invalid or future analysis timestamps for 1'));
+data.games.overall=[{...base,as_of:'2026-10-02T21:00:00Z'},{...base,as_of:null}];
+bannerResult=window.parlayPicker.freshness({});
+assert.equal(bannerResult.state,'expired');assert.ok(bannerResult.text.includes('expired for 1'));
+priorState='old';assert.equal(window.parlayPicker.freshness({}).state,'old');
+"""
+    target = tmp_path / "quote-clock.cjs"
     target.write_text(script, encoding="utf-8")
     subprocess.run([node, str(target)], check=True, capture_output=True, text=True)
