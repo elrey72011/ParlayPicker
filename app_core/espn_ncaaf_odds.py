@@ -207,7 +207,8 @@ def merge_missing_ncaaf_games(
 
 
 def fetch_espn_ncaaf_fcs_odds(target_date: str | None = None) -> list[dict[str, Any]]:
-    """Return FCS games with complete DraftKings markets from ESPN's scoreboard."""
+    """Return a list-compatible result with a sanitized provider_outcome receipt."""
+    from app_core.provider_health import ProviderGames, failure
 
     date_text = str(target_date or "").strip()[:10]
     try:
@@ -226,11 +227,13 @@ def fetch_espn_ncaaf_fcs_odds(target_date: str | None = None) -> list[dict[str, 
         payload = response.json()
         observed_at = datetime.now(timezone.utc).isoformat()
     except Exception as exc:
-        logger.warning("ESPN NCAAF FCS odds fallback failed closed: %s", exc)
-        return []
+        detail = failure(exc)
+        logger.warning("ESPN NCAAF FCS odds fallback sport=americanfootball_ncaaf outcome=%s http_status=%s",
+                       detail["outcome"], detail["http_status"])
+        return ProviderGames([], detail)
     if not isinstance(payload, dict):
         logger.warning("ESPN NCAAF FCS odds fallback returned a non-object payload")
-        return []
+        return ProviderGames([], {"outcome": "INVALID_RESPONSE", "http_status": getattr(response, "status_code", None)})
 
     games: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -321,4 +324,5 @@ def fetch_espn_ncaaf_fcs_odds(target_date: str | None = None) -> list[dict[str, 
         len(games),
         slate_date,
     )
-    return games
+    return ProviderGames(games, {"outcome": "SUCCESS" if games else "SUCCESS_EMPTY",
+                                "http_status": getattr(response, "status_code", None)})

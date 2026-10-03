@@ -1,0 +1,61 @@
+{
+  "schema_version": 3,
+  "policy_version": "paid-launch-provider-health-v3-r1",
+  "approval_reference": "Owner-authorized draft and PR #2376 review correction: actual-caller provider health, safe diagnostics and structured ESPN FCS outcomes at main 057abaf8214268d99ba9d1d8ba672997a5aef81f; merge requires separate review",
+  "base_sha": "057abaf8214268d99ba9d1d8ba672997a5aef81f",
+  "base_tree": "9bc0b53a2e1055918c399a36d5a4de65094bd540",
+  "original_manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "previous_policy_blob": "1decb1ca5462b2393f5816d54637dab18d9ed733",
+  "clock_test_blob": "e610143aff5611235f9cfb44da13e2d54e1c6b48",
+  "implementation_commit": "02a7621535bc6109e3069fe51c87c113e7da2620",
+  "implementation_tree": "71b92e490b994a5bc7555f1f23dbe505750f93ba",
+  "implementation_changes": {
+    "core/streamlit_pipeline.py": {
+      "before_blob": "26c0dabb0fab01d02a18fa2b33418436f9999f85",
+      "after_blob": "0361eb08ea2ac8d3c86e5f2212e3d8f897cb1dcf"
+    },
+    "core/run_readiness.py": {
+      "before_blob": "d68354f8acd5550de8c279a90ddee67f19700817",
+      "after_blob": "fda7618b3de50e8a7dcb2e7b50631e119c58283e"
+    },
+    "app/ui/readiness_dashboard.py": {
+      "before_blob": "f8f03ebf3cafc2cd416770e2692daff6b5adbcb5",
+      "after_blob": "35f21ee302d3bdd15d04c9f366ad47aea471bfee"
+    },
+    "app_core/provider_health.py": {
+      "before_blob": null,
+      "after_blob": "102e3263aeb998e3632c8add70b78da2139f4a0f"
+    },
+    "app_core/espn_ncaaf_odds.py": {
+      "before_blob": "3bce2b0e3aaf9277cf807cf777de353baaae5524",
+      "after_blob": "c8b01b32caa6b743308b561e899916cf84f1479a"
+    },
+    "scripts/check_launch_change_scope.py": {
+      "before_blob": "6c7212c1ce702dde96b3b36d0ca33522d49a4147",
+      "after_blob": "daa1d063cd9bb69eb7a03999fa30b10ef05cfcf5"
+    },
+    "tests/test_provider_caller_health.py": {
+      "before_blob": null,
+      "after_blob": "79792b6f159977173f30a654148313e412564b9b"
+    },
+    "tests/test_provider_health_scope_policy.py": {
+      "before_blob": null,
+      "after_blob": "670eab8baa307977de5e29ba39086cefcf723c8c"
+    },
+    "docs/paid-launch/provider-caller-health-policy.md": {
+      "before_blob": null,
+      "after_blob": "254a069fbd3483998d0016fc4f7d3aafbeb3ecb8"
+    }
+  },
+  "tooling_sha256": {
+    "scripts/check_launch_change_scope.py": "a93f90db1843d6da334adf17979fcecba20fd3549b47864a374e1cf6535baf37",
+    ".github/workflows/paid-launch.yml": "fccb75c4d4b9c9e99037e4888b2f7ad283cdc150e69fb0578ffa7b0ebcd9384b"
+  },
+  "unchanged_bindings": {
+    "docs/paid-launch/launch-baseline-manifest.json": "92bacece033e358ef17061bd65d4abafdaba6874",
+    "tests/test_board_diagnostics.py": "e610143aff5611235f9cfb44da13e2d54e1c6b48",
+    "docs/paid-launch/launch-scope-policy-v2.json": "1decb1ca5462b2393f5816d54637dab18d9ed733",
+    ".github/workflows/paid-launch.yml": "00dc8a63d26d1b22b66d07b900b3171cbab11919",
+    "tests/paid_launch/case_isolation_and_scope.py": "07f384d25e5df32d3ff6141765d9bc80d0e23b1e"
+  }
+}

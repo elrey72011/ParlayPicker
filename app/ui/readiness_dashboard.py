@@ -7,6 +7,32 @@ import streamlit as st
 from core.run_readiness import build_readiness, game_table, render_readiness
 
 
+def render_provider_health(diagnostics):
+    from app_core.provider_health import sanitized_health
+    health = sanitized_health((diagnostics or {}).get("provider_health"))
+    if not health:
+        return
+    st.caption("Odds provider outcomes: " + health["status"].replace("_", " ").lower())
+    st.caption("These outcomes describe this fetch. Returned games retain their source and still require wager eligibility checks.")
+
+    def fallback_summary(outcomes):
+        return ", ".join(name + ": " + value["outcome"] +
+                         (f" [HTTP {value['http_status']}]" if value["http_status"] is not None else "")
+                         for name, value in outcomes.items())
+
+    rows = []
+    for sport, item in health["sports"].items():
+        rows.append({"Sport": sport, "Provider outcome": item["outcome"],
+                     "HTTP status": item["http_status"], "Games received": item["received_games"],
+                     "Processing": item["processing"],
+                     "Fallback outcomes": fallback_summary(item["fallback_outcomes"]),
+                     "Fallback errors": fallback_summary(item["fallback_errors"])})
+    if rows:
+        st.dataframe(pd.DataFrame(rows), hide_index=True)
+    st.download_button("Download provider outcomes", json.dumps(health, indent=2, allow_nan=False),
+                       file_name="provider-outcomes.json", mime="application/json")
+
+
 def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
     # Release legacy full raw-feed backup objects retained by older sessions.
     st.session_state.pop("mlb_receipt_store_downloads", None)
@@ -116,6 +142,7 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             sid = st.selectbox("Snapshot", list(reversed(by_id)), key="readiness_snapshot")
             audit, final = by_id[sid]
             diagnostics = None  # Current run warnings must not describe an older run.
+        render_provider_health(diagnostics)
         receipt_health = (diagnostics or {}).get("mlb_receipt_health", {})
         if receipt_health:
             st.caption(f"MLB research receipts: {receipt_health.get('receipts_created', 0)} created; {receipt_health.get('receipts_skipped', 0)} skipped. No training or wager activation.")
