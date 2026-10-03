@@ -73,15 +73,16 @@ def render_draftkings_builders(publication_dfs):
                 )
                 if _dk_nfl_projection_matches == 0:
                     st.warning(
-                        "No forward-looking Projected Points column was found. These "
+                        "No usable forward projections are available. Any remaining "
                         "lineups are research-only rankings based on historical DraftKings "
                         "average fantasy points per game."
                     )
                 elif _dk_nfl_projection_matches < len(_dk_classic_pool):
                     st.warning(
                         f"Forward projections matched {_dk_nfl_projection_matches} of "
-                        f"{len(_dk_classic_pool)} eligible players. Unmatched players "
-                        "still use historical DraftKings average fantasy points."
+                        f"{len(_dk_classic_pool)} eligible players. Missing projections may "
+                        "use historical DraftKings average fantasy points; invalid projections "
+                        "are unavailable. Zero projections are retained."
                     )
                 _dk_classic_lineups = build_draftkings_classic_lineups(
                     _dk_classic_pool,
@@ -199,15 +200,16 @@ def render_draftkings_builders(publication_dfs):
                 )
                 if _dk_mlb_projection_matches == 0:
                     st.warning(
-                        "No forward-looking Projected Points column was found. These "
+                        "No usable forward projections are available. Any remaining "
                         "lineups are research-only rankings based on historical DraftKings "
                         "average fantasy points per game."
                     )
                 elif _dk_mlb_projection_matches < len(_dk_mlb_classic_pool):
                     st.warning(
                         f"Forward projections matched {_dk_mlb_projection_matches} of "
-                        f"{len(_dk_mlb_classic_pool)} eligible players. Unmatched players "
-                        "still use historical DraftKings average fantasy points."
+                        f"{len(_dk_mlb_classic_pool)} eligible players. Missing projections may "
+                        "use historical DraftKings average fantasy points; invalid projections "
+                        "are unavailable. Zero projections are retained."
                     )
                 _dk_mlb_classic_lineups = build_draftkings_mlb_classic_lineups(
                     _dk_mlb_classic_pool,
