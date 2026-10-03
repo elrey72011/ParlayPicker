@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "policy_version": "paid-launch-ncaaf-schedule-v1",
+  "approval_reference": "Owner-authorized draft: complete NCAAF schedule inventory, exact identity, quote provenance and coverage at main af7b3dcbc3fe9ca7161b886c65074be3d739bae8; merge requires separate review",
+  "base_sha": "af7b3dcbc3fe9ca7161b886c65074be3d739bae8",
+  "base_tree": "98a117dbc7f6977bafed53624898d95a4e72f334",
+  "original_manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "implementation_commit": "93a7f23605c69b8c68fc359fd8d38e2c664ea65f",
+  "implementation_tree": "dbfb88cc3de4dd8cf856d2b03cbe263893101fb6",
+  "implementation_changes": {
+    "core/streamlit_pipeline.py": {
+      "before_blob": "0361eb08ea2ac8d3c86e5f2212e3d8f897cb1dcf",
+      "after_blob": "cc382319bbfee0495f61d365a6f466696e2b0504"
+    },
+    "streamlit_app.py": {
+      "before_blob": "465949d81532565f81b07fb7471c475d7eb37c0a",
+      "after_blob": "33f8ebc62526b8633ee127a9d05cbbe9e9f5afd8"
+    },
+    "app/ui/sidebar_controls.py": {
+      "before_blob": "f458a5124fbae729975bf85fc204f7c5c0eb2bc2",
+      "after_blob": "bb3d24af80b4af0e65e120712eff091e142b6ab7"
+    },
+    "app_core/ncaaf_identity.py": {
+      "before_blob": "db152ce87930469920e4ae186b67a487f4db7548",
+      "after_blob": "ff1f0e3c450a40a608985e488ba9f0c465788e4e"
+    },
+    "app_core/espn_ncaaf_odds.py": {
+      "before_blob": "c8b01b32caa6b743308b561e899916cf84f1479a",
+      "after_blob": "d84be786545b316597da0da6788b527c556a3511"
+    },
+    "app_core/ncaaf_schedule.py": {
+      "before_blob": null,
+      "after_blob": "5b30f18a8c6f8e3aa8518c65a8ac0db958b0c17f"
+    },
+    "app/ui/ncaaf_inventory.py": {
+      "before_blob": null,
+      "after_blob": "20fba8b98fd013c053da5d15d4eaf10024a16eec"
+    },
+    "tests/test_ncaaf_schedule_coverage.py": {
+      "before_blob": null,
+      "after_blob": "91aeebc1a464a9c0ee38ff3ea0101eb111b34aed"
+    },
+    "tests/test_ncaaf_schedule_scope_policy.py": {
+      "before_blob": null,
+      "after_blob": "615a885db1bd522cb3d68509783de20f2ec86618"
+    },
+    "docs/paid-launch/ncaaf-schedule-coverage.md": {
+      "before_blob": null,
+      "after_blob": "2dad5d1c91e9b88f95cccbb83614c8e442e44ba5"
+    },
+    "scripts/check_launch_change_scope.py": {
+      "before_blob": "daa1d063cd9bb69eb7a03999fa30b10ef05cfcf5",
+      "after_blob": "ee54143cf587b2cd89cf434f8fa3e7dbc15dc94f"
+    }
+  },
+  "tooling_sha256": {
+    "scripts/check_launch_change_scope.py": "ff8eefd620de8aad670a6baeb59a2b2f32d41058b6faa3e0343e3f26de3fb70a",
+    ".github/workflows/paid-launch.yml": "fccb75c4d4b9c9e99037e4888b2f7ad283cdc150e69fb0578ffa7b0ebcd9384b"
+  },
+  "unchanged_bindings": {
+    "docs/paid-launch/launch-baseline-manifest.json": "92bacece033e358ef17061bd65d4abafdaba6874",
+    "docs/paid-launch/launch-scope-policy-v2.json": "1decb1ca5462b2393f5816d54637dab18d9ed733",
+    "docs/paid-launch/launch-scope-policy-v3.json": "fd145cd5cc8c8e23b8f891dbf17220e4b2fba4bb",
+    "tests/test_board_diagnostics.py": "e610143aff5611235f9cfb44da13e2d54e1c6b48",
+    ".github/workflows/paid-launch.yml": "00dc8a63d26d1b22b66d07b900b3171cbab11919",
+    "tests/paid_launch/case_isolation_and_scope.py": "07f384d25e5df32d3ff6141765d9bc80d0e23b1e",
+    "parlaypicker/app/streamlit_app.py": "82ebbf452e9ca88a601b6d2cfd1ed06ff3d4785e"
+  }
+}
