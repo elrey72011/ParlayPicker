@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import copy
 from typing import Any
 
 
@@ -147,6 +148,138 @@ def run(manifest_path: Path, base: str | None) -> tuple[int, dict[str, Any]]:
     return (0 if not findings else 1), report
 
 
+POLICY_PATH = "docs/paid-launch/launch-scope-policy-v2.json"
+GUARD_PATH = "scripts/check_launch_change_scope.py"
+MANIFEST_PATH = "docs/paid-launch/launch-baseline-manifest.json"
+CLOCK_TEST = "tests/test_board_diagnostics.py"
+PROPOSAL_PATHS = (
+    "tools/review_clock_scope_exception.py",
+    "tests/test_clock_scope_exception_proposal.py",
+    "docs/paid-launch/clock-test-exception-proposal.md",
+)
+INTEGRATION_PATHS = (*PROPOSAL_PATHS, GUARD_PATH,
+                     "tests/test_launch_scope_integration.py",
+                     "docs/paid-launch/clock-scope-integration.md")
+APPROVAL_REFERENCE = "Owner approval of PR #2374 at its exact reviewed head for draft integration preparation"
+PRODUCTION_BINDINGS = {
+    "base": "d8f580734c28b712f93e0e4a647e9b21ab1f2928",
+    "shipping": "dc211cc9438390c73848ce1a43d512ada00338d8",
+    "proposal": "051baf59c07060576fbf7a169f8ef7984e7a7672",
+    "before": "cfa07b6b6c622f083cb7d2d7e3a0713780758013",
+    "after": "e610143aff5611235f9cfb44da13e2d54e1c6b48",
+    "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+    "original_guard_sha256": "d9e4b9c3954d7b1803d23527a77b7e7c34ed5d73e5936d7fe07111da3c930ee8",
+}
+
+
+def git_bytes(*args: str) -> bytes:
+    return subprocess.check_output(["git", *args], cwd=ROOT, stderr=subprocess.PIPE)
+
+
+def blob(revision: str, path: str) -> str | None:
+    return git("rev-parse", f"{revision}:{path}") if exists_at(revision, path) else None
+
+
+def _require(condition: bool, reason: str) -> None:
+    if not condition:
+        raise ValueError(reason)
+
+
+def _validate_policy(manifest_path: Path, base: str | None, binding: dict) -> tuple[dict, list[str]]:
+    _require(manifest_path.resolve() == (ROOT / MANIFEST_PATH).resolve(), "BASELINE_PATH_NOT_APPROVED")
+    original_manifest = git_bytes("show", f"{binding['base']}:{MANIFEST_PATH}")
+    _require(hashlib.sha256(original_manifest).hexdigest() == binding["manifest_sha256"], "ORIGINAL_BASELINE_IDENTITY_CHANGED")
+    _require((ROOT / MANIFEST_PATH).read_bytes().replace(b"\r\n", b"\n") == original_manifest,
+             "BASELINE_CHECKOUT_CHANGED")
+    _require(git_bytes("show", f"HEAD:{MANIFEST_PATH}") == original_manifest, "BASELINE_COMMIT_CHANGED")
+    original_guard = git_bytes("show", f"{binding['base']}:{GUARD_PATH}")
+    _require(hashlib.sha256(original_guard).hexdigest() == binding["original_guard_sha256"], "ORIGINAL_GUARD_IDENTITY_CHANGED")
+    manifest = json.loads(original_manifest)
+    _require(base in (None, binding["base"], manifest["base_sha"]), "COMPARISON_BASE_NOT_APPROVED")
+    _require(not git("diff", "--name-only") and not git("diff", "--cached", "--name-only"), "LOCAL_TRACKED_CHANGE")
+    policy_bytes = git_bytes("show", f"HEAD:{POLICY_PATH}")
+    _require((ROOT / POLICY_PATH).read_bytes().replace(b"\r\n", b"\n") == policy_bytes, "POLICY_CHECKOUT_CHANGED")
+    policy = json.loads(policy_bytes)
+    keys = {"schema_version", "policy_version", "approval_reference", "approved_proposal_head",
+            "shipping_head", "base_sha", "original_manifest_sha256", "integration_commit",
+            "integration_tree", "integration_changes", "tooling_sha256", "clock_test_exception"}
+    _require(set(policy) == keys and policy["schema_version"] == 2 and
+             policy["policy_version"] == "paid-launch-clock-exception-v2", "SUCCESSOR_POLICY_SCHEMA_INVALID")
+    expected_clock = {"path": CLOCK_TEST, "before_blob": binding["before"], "after_blob": binding["after"]}
+    _require(policy["approval_reference"] == APPROVAL_REFERENCE and
+             policy["approved_proposal_head"] == binding["proposal"] and
+             policy["shipping_head"] == binding["shipping"] and policy["base_sha"] == binding["base"] and
+             policy["original_manifest_sha256"] == binding["manifest_sha256"] and
+             policy["clock_test_exception"] == expected_clock, "APPROVAL_BINDING_CHANGED")
+    implementation = policy["integration_commit"]
+    _require(git("show", "-s", "--format=%P", implementation).split() == [binding["shipping"]], "INTEGRATION_PARENT_NOT_APPROVED")
+    _require(git("rev-parse", f"{implementation}^{{tree}}") == policy["integration_tree"], "INTEGRATION_TREE_MISMATCH")
+    _require(not exists_at(implementation, POLICY_PATH), "POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION")
+    changed = git("diff", "--name-only", binding["shipping"], implementation).splitlines()
+    _require(set(changed) == set(INTEGRATION_PATHS), "INTEGRATION_CHANGE_SET_NOT_APPROVED")
+    expected_changes = {path: {"before_blob": blob(binding["shipping"], path), "after_blob": blob(implementation, path)}
+                        for path in INTEGRATION_PATHS}
+    _require(policy["integration_changes"] == expected_changes, "INTEGRATION_BLOB_BINDINGS_CHANGED")
+    for path in PROPOSAL_PATHS:
+        _require(blob(implementation, path) == blob(binding["proposal"], path), "REVIEWED_PROPOSAL_CHANGED")
+    _require(blob(binding["base"], CLOCK_TEST) == binding["before"] and
+             blob(binding["shipping"], CLOCK_TEST) == binding["after"] and
+             blob("HEAD", CLOCK_TEST) == binding["after"], "CLOCK_TEST_BLOB_NOT_APPROVED")
+    head = git("rev-parse", "HEAD")
+    parents = git("show", "-s", "--format=%P", head).split()
+    if len(parents) == 2:
+        _require(parents[0] == binding["base"], "CI_BASE_PARENT_NOT_APPROVED")
+        candidate = parents[1]
+        _require(git("rev-parse", f"{head}^{{tree}}") == git("rev-parse", f"{candidate}^{{tree}}"), "CI_MERGE_TREE_CHANGED")
+    else:
+        candidate = head
+    _require(git("show", "-s", "--format=%P", candidate).split() == [implementation], "CANDIDATE_NOT_POLICY_SEAL")
+    _require(git("diff", "--name-status", implementation, candidate).splitlines() == [f"A\t{POLICY_PATH}"], "SEAL_CHANGE_SET_NOT_APPROVED")
+    tooling = {path: hashlib.sha256(git_bytes("show", f"{implementation}:{path}")).hexdigest()
+               for path in manifest["tooling_sha256"]}
+    _require(policy["tooling_sha256"] == tooling, "SUCCESSOR_TOOLING_BINDING_CHANGED")
+    _require(tooling[".github/workflows/paid-launch.yml"] == manifest["tooling_sha256"][".github/workflows/paid-launch.yml"], "WORKFLOW_CHANGE_NOT_APPROVED")
+    conversions = []
+    for path, expected in tooling.items():
+        raw = git_bytes("show", f"HEAD:{path}")
+        checkout = (ROOT / path).read_bytes()
+        _require(hashlib.sha256(raw).hexdigest() == expected and checkout.replace(b"\r\n", b"\n") == raw,
+                 "UNAUTHORIZED_TOOLING_CHANGE")
+        if checkout != raw:
+            conversions.append(path)
+    return policy, conversions
+
+
+def _run_integrated(manifest_path: Path, base: str | None, binding: dict) -> tuple[int, dict]:
+    # The original run() remains unchanged. Its raw result is retained in full.
+    try:
+        policy, conversions = _validate_policy(manifest_path, base, binding)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as exc:
+        return 1, {"schema_version": 2, "status": "FAIL", "reason_codes": [str(exc)],
+                   "approved_exceptions": [], "approved_integration_changes": [],
+                   "protected_changes": [], "existing_test_changes": [], "policy_valid": False}
+    _, original = run(manifest_path, base)
+    report = copy.deepcopy(original)
+    report.update(schema_version=2, policy_version=policy["policy_version"], policy_valid=True,
+                  original_guard_report=original, checkout_line_ending_conversions=conversions,
+                  approved_integration_changes=policy["integration_changes"],
+                  approved_exceptions=[dict(policy["clock_test_exception"], approval_reference=APPROVAL_REFERENCE)])
+    report["existing_test_changes"] = [path for path in original["existing_test_changes"] if path != CLOCK_TEST]
+    report["self_protected_changes"] = [path for path in original["self_protected_changes"] if path != GUARD_PATH]
+    report["tooling_hash_mismatches"] = [path for path in original["tooling_hash_mismatches"]
+                                        if path != GUARD_PATH and path not in conversions]
+    removable = set()
+    if not report["existing_test_changes"]:
+        removable.add("EXISTING_TEST_EXPECTATION_CHANGED")
+    if not report["self_protected_changes"]:
+        removable.add("SCOPE_GUARD_OR_BASELINE_CHANGED")
+    if not report["tooling_hash_mismatches"]:
+        removable.add("SCOPE_GUARD_TOOLING_HASH_MISMATCH")
+    report["reason_codes"] = [reason for reason in original["reason_codes"] if reason not in removable]
+    report["status"] = "FAIL" if report["reason_codes"] else "PASS"
+    return (1 if report["reason_codes"] else 0), report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -154,7 +287,7 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        code, report = run(args.manifest, args.base)
+        code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)
     except Exception as exc:
         report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}
         code = 2
