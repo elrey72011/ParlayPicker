@@ -143,6 +143,8 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     advanced.subheader("Analysis Engines")
 
     use_ml = advanced.checkbox("Enable ML Predictions", True, key="use_ml")
+    from app.ui.ncaaf_inventory import schedule_controls
+    schedule_start, schedule_end = schedule_controls(advanced, sports)
     use_gemini = advanced.checkbox(
         "Require Gemini Review for Bets",
         value=True,
@@ -408,6 +410,8 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         "show_kalshi_diagnostics": show_kalshi_diagnostics,
         "theover_spreads": theover_spreads,
         "theover_totals": theover_totals,
+        "schedule_start": schedule_start,
+        "schedule_end": schedule_end,
         "prop_results_log": active_ledger,
         "run_analysis_counter": run_counter,
         "run_player_props": run_player_props,

@@ -2188,6 +2188,19 @@ def _canonical_matchup_teams_key(df: pd.DataFrame) -> pd.Series:
     return league + "|" + team_a + "|" + team_b
 
 
+def _ncaaf_schedule_keys(df: pd.DataFrame) -> pd.Series:
+    """Use only the additive inventory identity; keep legacy IDs elsewhere."""
+    ids = _string_series(df, "schedule_event_id")
+    valid = (_string_series(df, "league").str.upper().eq("NCAAF")
+             & _string_series(df, "schedule_match_status").eq("MATCHED")
+             & ids.str.fullmatch(r"espn:college-football:\d+", na=False))
+    unresolved = _string_series(df, "schedule_inventory_key")
+    unresolved_ok = (_string_series(df, "league").str.upper().eq("NCAAF")
+                     & _string_series(df, "schedule_match_status").isin(["UNRESOLVED", "AMBIGUOUS", "AMBIGUOUS_PROVIDER_ID", "KICKOFF_OR_IDENTITY_CONFLICT"])
+                     & unresolved.str.startswith("ncaaf:unresolved:", na=False))
+    return ids.where(valid, unresolved.where(unresolved_ok, ""))
+
+
 def _matchup_id(df: pd.DataFrame) -> pd.Series:
     """Canonical matchup id using sorted normalized team names + ET day (direction-independent)."""
     home = _identity_team_series(df, "home_team")
@@ -2198,7 +2211,9 @@ def _matchup_id(df: pd.DataFrame) -> pd.Series:
     team_a = pd.Series(team_a, index=df.index, dtype="string")
     team_b = pd.Series(team_b, index=df.index, dtype="string")
     date_key = _et_day_string(_game_dates(df)).fillna("")
-    return team_a + "|" + team_b + "|" + date_key
+    legacy = team_a + "|" + team_b + "|" + date_key
+    schedule = _ncaaf_schedule_keys(df)
+    return schedule.where(schedule.ne(""), legacy)
 
 
 def _mk_game_key(df: pd.DataFrame) -> pd.Series:
@@ -4182,6 +4197,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         + "|" + pool["home_team"].str.lower().str.replace(r"\s+", " ", regex=True)
         + "|" + pool["away_team"].str.lower().str.replace(r"\s+", " ", regex=True)
     )
+    schedule_keys = _ncaaf_schedule_keys(pool)
+    pool.loc[schedule_keys.ne(""), "matchup_id"] = schedule_keys[schedule_keys.ne("")]
 
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool["expected_value"] = pd.to_numeric(pool["expected_value"], errors="coerce")
@@ -7393,7 +7410,22 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     return final_best_df
 
 
-def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None) -> pd.DataFrame:
+def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None,
+                              *, schedule_start=None, schedule_end=None) -> pd.DataFrame:
+    """Keep independent NCAAF inventory even when no price rows can be built."""
+    inventory = None
+    if schedule_start is not None and (not sports or "NCAAF" in [s.upper() for s in sports]):
+        from app_core.ncaaf_schedule import fetch_schedule
+        inventory = fetch_schedule(schedule_start, schedule_end or schedule_start)
+    result = _fetch_live_odds_dataframe(sports, date, _schedule_inventory=inventory)
+    if inventory is not None:
+        result.attrs["ncaaf_schedule"] = inventory
+        result.attrs["ncaaf_provider_games"] = result.loc[result["league"].eq("NCAAF")].to_dict("records") if "league" in result else []
+    return result
+
+
+def _fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None,
+                               *, _schedule_inventory=None) -> pd.DataFrame:
     from app_core.espn_ncaaf_odds import (
         fetch_espn_ncaaf_fcs_odds,
         merge_missing_ncaaf_games,
@@ -7503,12 +7535,20 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                     provider_outcomes[sk]["fallback_outcomes"]["ncaaf_fcs"] = detail
                     if detail["outcome"] not in {"SUCCESS", "SUCCESS_EMPTY", "NOT_RECORDED"}:
                         provider_outcomes[sk]["fallback_errors"]["ncaaf_fcs"] = detail
-                games = merge_missing_ncaaf_games(games, fallback_games)
+                if _schedule_inventory is not None:
+                    from app_core.ncaaf_schedule import merge_schedule_odds
+                    games = merge_schedule_odds(games, fallback_games, _schedule_inventory)
+                else:
+                    games = merge_missing_ncaaf_games(games, fallback_games)
             except Exception as exc:
                 detail = failure(exc)
                 provider_outcomes[sk]["fallback_errors"]["ncaaf_fcs"] = detail
                 logger.warning("Odds fallback sport=%s source=ncaaf_fcs outcome=%s http_status=%s",
                                sk, detail["outcome"], detail["http_status"])
+
+        if sk == "americanfootball_ncaaf" and _schedule_inventory is not None:
+            from app_core.ncaaf_schedule import merge_schedule_odds
+            games = merge_schedule_odds(games, [], _schedule_inventory)
 
         try:
             if not games:
@@ -7518,10 +7558,21 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
             # Historical/backfill requests must honor the caller's explicit date.
             # The today-only guard is appropriate only for the live slate.
             sport_games = games if date else filter_games_today_only(games)
+            if sk == "americanfootball_ncaaf" and _schedule_inventory is not None:
+                from app_core.ncaaf_schedule import timestamp, window, ET
+                first, last = window(_schedule_inventory["start_date"], _schedule_inventory["end_date"])
+                sport_games = [g for g in games if (kickoff := timestamp(g.get("commence_time"))) and first <= kickoff.astimezone(ET).date() <= last]
             football_sport = {"americanfootball_nfl": "NFL", "americanfootball_ncaaf": "NCAAF"}.get(sk)
             if football_sport:
                 from app_core.football_identity_capture import collect as collect_football_identity
-                sport_games = collect_football_identity(sport_games, football_sport)
+                if football_sport == "NCAAF" and _schedule_inventory is not None:
+                    from app_core.football_identity_capture import attach
+                    sport_games = attach(sport_games, "NCAAF", _schedule_inventory["identity_events"], _schedule_inventory["observed_at"])
+                    for game in sport_games:
+                        if game.get("schedule_match_status") == "AMBIGUOUS_PROVIDER_ID":
+                            game["football_identity_status"] = "CONFLICT"
+                else:
+                    sport_games = collect_football_identity(sport_games, football_sport)
 
             if not sport_games:
                 provider_outcomes[sk]["processing"] = "FILTERED_EMPTY"
@@ -7596,6 +7647,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                     }
 
                 row = game_dict[matchup_id]
+                for field in ("schedule_event_id", "schedule_match_status", "historical_matchup_id", "schedule_inventory_key"):
+                    if field in game:
+                        row[field] = game[field]
                 import json
                 for field in ("home_team_id", "away_team_id", "team_ids", "provider_ids", "football_identity_status", "football_identity_observed_at", "football_identity_source_hash", "mlb_provider_event_id", "mlb_pregame_receipts"):
                     if field in game:
@@ -8304,6 +8358,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     # Required identity columns
     id_cols = [
         "league", "home_team", "away_team", "game_date", "matchup_id",
+        "schedule_event_id", "schedule_match_status", "historical_matchup_id", "schedule_inventory_key",
         "commence_time_raw", "odds_feed_source", "provider_quotes",
         "home_team_id", "away_team_id", "team_ids", "provider_ids", "football_identity_status", "football_identity_observed_at", "football_identity_source_hash", "mlb_provider_event_id", "mlb_pregame_receipts",
     ]
@@ -9372,6 +9427,8 @@ def run_analysis_pipeline(
     use_ml: bool = True,
     spreads_df: pd.DataFrame | None = None,
     totals_df: pd.DataFrame | None = None,
+    schedule_start=None,
+    schedule_end=None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
 
     # 1. Build the enrichment frame (TheOver) BEFORE expanding the Master Slate
@@ -9422,7 +9479,10 @@ def run_analysis_pipeline(
     theover_rows = _dedupe_inverted_matchups(theover_rows)
 
     # 2. Expand TheOdds API into the Master Slate dynamically using theover_rows
-    live_odds_df = fetch_live_odds_dataframe(sports)
+    live_odds_df = (fetch_live_odds_dataframe(sports, schedule_start=schedule_start, schedule_end=schedule_end)
+                    if schedule_start is not None else fetch_live_odds_dataframe(sports))
+    ncaaf_schedule = live_odds_df.attrs.get("ncaaf_schedule")
+    ncaaf_provider_games = live_odds_df.attrs.get("ncaaf_provider_games", [])
     mlb_receipt_health = live_odds_df.attrs.get("mlb_receipt_health", {})
     from app_core.provider_health import sanitized_health
     provider_health = sanitized_health(live_odds_df.attrs.get("provider_health"))
@@ -10694,6 +10754,11 @@ def run_analysis_pipeline(
 
     diagnostics["provider_health"] = provider_health
     diagnostics["mlb_receipt_health"] = mlb_receipt_health
+    if ncaaf_schedule is not None:
+        from app_core.ncaaf_schedule import refresh_coverage
+        diagnostics["ncaaf_schedule"] = ncaaf_schedule
+        diagnostics["ncaaf_provider_games"] = ncaaf_provider_games
+        refresh_coverage(diagnostics, analysis_df)
     diagnostics["loaded_model_identity"] = loaded_model_identity
     return (analysis_df, best_picks_df, diagnostics)
 
