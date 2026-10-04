@@ -663,7 +663,7 @@ _CANONICAL_RESEARCH_COLUMNS = ["quote_id", "prospective_quote_id", "market_perio
     "settlement_rules", "inference_status", "prediction_generated_at", "game_start_utc",
     "odds_recorded_at", "quote_time", "quote_timestamp", "quote_bookmaker", "provider_quotes",
     "candidate_id", "export_run_id", "research_source_semantics",
-    "probability_semantics", "push_probability", "model_status"]
+    "probability_semantics", "push_probability", "model_status", "ml_inference_status", "ml_estimate_metadata"]
 CANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + _CANONICAL_RESEARCH_COLUMNS))
 
 
@@ -10167,6 +10167,10 @@ def run_analysis_pipeline(
                 ]
         if "ml_unavailable_reason" in market_model_predictions:
             merged.loc[market_model_predictions.index, "ml_unavailable_reason"] = market_model_predictions["ml_unavailable_reason"]
+        from app_core.research_estimate_trace import ORIGIN_COLUMNS
+        for column in ORIGIN_COLUMNS:
+            if column in market_model_predictions:
+                merged.loc[market_model_predictions.index,column] = market_model_predictions[column]
         merged.loc[market_available, "model_status"] = "Market Score Model"
         logger.info(
             "MARKET MODEL: generated %s target-specific spread/total probabilities.",

@@ -2286,6 +2286,329 @@ def _run_drive_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+ESTIMATE_POLICY_PATH = "docs/paid-launch/launch-scope-policy-estimate-v1.json"
+ESTIMATE_POLICY_VERSION = "paid-launch-estimate-v1"
+ESTIMATE_APPROVAL_REFERENCE = "Owner-authorized bounded estimate availability draft and qualification route inspection; no merge, deployment, live acquisition, recovery, fitting, activation, authority or financial changes"
+ESTIMATE_PATHS = ('app_core/market_probability_model.py', 'app_core/research_display.py', 'app_core/per_game_boards.py', 'app_core/research_estimate_trace.py', 'core/streamlit_pipeline.py', 'tests/test_estimate_availability.py', 'tests/test_estimate_scope_policy.py', 'tests/test_drive_history_scope_policy.py', 'scripts/estimate_scope.py', 'scripts/check_launch_change_scope.py', 'docs/paid-launch/estimate-availability.md')
+ESTIMATE_BINDINGS = {'base': '2e96b5e336e72f8cfdf5faf3e6b0d6ffe1f8ec8d',
+ 'base_tree': '21f5e5b57a12683e4d770e19a85bf95ff6777f15',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_policy_blob': '9082b039a70609620f94102fb8b278eac28cb5f2',
+ 'previous_guard_sha256': '2116a73036a6243da92120a29c5a4dcf242d21fa735e31beeeceedd0174ef386',
+ 'scope_module_sha256': 'd93ec615dd45a81739719fda47619a14f9eb8563d6054cd59320ca9bb9a251de',
+ 'successor_guard_sha256': '53aad6863d8574042a6f4a75652b51be0ec4dc7c4375aff5d410e55920390701',
+ 'reviewed_blobs': {'app_core/market_probability_model.py': 'a114edc13ca9e7ba3880c365c3559110fc99f2f8',
+                    'app_core/research_display.py': 'd45e9085aabd921e9df452f1136dbfcf9baf8b43',
+                    'app_core/per_game_boards.py': 'd831301d0d12ef00f0c082232ad2442c35ae6851',
+                    'app_core/research_estimate_trace.py': 'f3d02422e8c3c9a8a220a4133f38f4108ad75dd9',
+                    'core/streamlit_pipeline.py': 'a2634611a7919788a365e8305cb8c98c48fca48f',
+                    'tests/test_estimate_availability.py': '0945d3713ac82ecfbd8160845be8970952b69a28',
+                    'tests/test_estimate_scope_policy.py': '4dedb0277e1db860993553c5863e11ed652a2c98',
+                    'tests/test_drive_history_scope_policy.py': '8894eff9a96de25a897639211e92a3f43d1d863b',
+                    'scripts/estimate_scope.py': '3736461db23d240f12e540cf749d7fef90c47235',
+                    'docs/paid-launch/estimate-availability.md': '9b94a1fcf536ddadd93453708d6b9d63aeab4b17'}}
+ESTIMATE_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/market_probability_model.py': {'sha256': 'f719ceb95356acb71082381b14f36b8f5dc80d48f9075d5609f694f2473b6780',
+                                          'edits': [(b'    result["ml_residual_scale"] = pd.Series(np.nan, '
+                                                     b'index=result.index, dtype="float64")\n    result["ml_'
+                                                     b'unavailable_reason"] = pd.Series("", index=result.in'
+                                                     b'dex, dtype="string")\n    result["ml_feature_quality"'
+                                                     b'] = pd.Series("unavailable", index=result.index, dty'
+                                                     b'pe="string")\n\n    if frame is None or frame.empt'
+                                                     b'y:\n        return result\n',
+                                                     b'    result["ml_residual_scale"] = pd.Series(np.nan, '
+                                                     b'index=result.index, dtype="float64")\n    result["ml_'
+                                                     b'unavailable_reason"] = pd.Series("", index=result.in'
+                                                     b'dex, dtype="string")\n    result["ml_feature_quality"'
+                                                     b'] = pd.Series("unavailable", index=result.index, dty'
+                                                     b'pe="string")\n    result["ml_inference_status"] = pd.'
+                                                     b'Series("unavailable", index=result.index, dtype="str'
+                                                     b'ing")\n    result["ml_estimate_metadata"] = pd.Series'
+                                                     b'("", index=result.index, dtype="string")\n\n    if fra'
+                                                     b'me is None or frame.empty:\n        return result\n'),
+                                                    (b'\n        probability = 0.5 + params["reliability"] *'
+                                                     b' (raw_probability - 0.5)\n        probability = float'
+                                                     b'(np.clip(probability, 0.20, 0.80))\n        result.at'
+                                                     b'[idx, "ml_probability"] = probability\n        result'
+                                                     b'.at[idx, "ml_probability_source"] = f"{MODEL_VERSION'
+                                                     b'}:{lg.lower()}"\n        result.at[idx, "ml_target"] '
+                                                     b'= target\n',
+                                                     b'\n        probability = 0.5 + params["reliability"] *'
+                                                     b' (raw_probability - 0.5)\n        probability = float'
+                                                     b'(np.clip(probability, 0.20, 0.80))\n        # Explici'
+                                                     b't outcome at the originating computation, not numeri'
+                                                     b'c inference.\n        result.at[idx, "ml_inference_st'
+                                                     b'atus"] = "success"\n        result.at[idx, "ml_probab'
+                                                     b'ility"] = probability\n        result.at[idx, "ml_pro'
+                                                     b'bability_source"] = f"{MODEL_VERSION}:{lg.lower()}"\n'
+                                                     b'        result.at[idx, "ml_target"] = target\n'),
+                                                    (b'            else "resolved_team_scoring_stats"\n     '
+                                                     b'   )\n\n    return result\n',
+                                                     b'            else "resolved_team_scoring_stats"\n     '
+                                                     b'   )\n\n    from app_core.research_estimate_trace impo'
+                                                     b'rt origin_metadata, generated_time\n    generated = g'
+                                                     b'enerated_time()\n    for idx in frame.index:\n        '
+                                                     b'line = total_line.loc[idx] if str(market_type.loc[id'
+                                                     b'x]).startswith("total") else spread_line.loc[idx]\n  '
+                                                     b'      result.at[idx, "ml_estimate_metadata"] = origi'
+                                                     b'n_metadata(\n            frame.loc[idx], result.loc[i'
+                                                     b'dx], float(line) if np.isfinite(line) else None,\n   '
+                                                     b'         generated_at=generated)\n\n    return res'
+                                                     b'ult\n')]},
+ 'app_core/research_display.py': {'sha256': 'e26121e738f7fb06bf5e095a039de2d385f52bc47c3956fa934043d06bceddf2',
+                                  'edits': [(b'# Explicit public-research provenance only; never an arbitra'
+                                             b'ry source-column copy.\nEXPORT_PROVENANCE_COLUMNS = ["quote_i'
+                                             b'd", "prospective_quote_id", "market_period", "period",\n    "'
+                                             b'settlement_rules", "inference_status", "model_status", "spre'
+                                             b'ad_line", "total_line",\n    "market_line_used", "push_probab'
+                                             b'ility", "probability_semantics", "research_source_semantics"'
+                                             b']\nSEMANTIC_FIELDS = ("probability_semantics", "push_probabil'
+                                             b'ity", "inference_status", "model_status")\nSEMANTICS = frozen'
+                                             b'set({"win_conditional_on_decision","win_unconditional_with_p'
+                                             b'ush",\n                      "unconditional_win_push_loss","u'
+                                             b'nconditional"})\n',
+                                             b'# Explicit public-research provenance only; never an arbitra'
+                                             b'ry source-column copy.\nEXPORT_PROVENANCE_COLUMNS = ["quote_i'
+                                             b'd", "prospective_quote_id", "market_period", "period",\n    "'
+                                             b'settlement_rules", "inference_status", "model_status", "spre'
+                                             b'ad_line", "total_line",\n    "market_line_used", "push_probab'
+                                             b'ility", "probability_semantics", "research_source_semantics"'
+                                             b',\n    "ml_inference_status", "ml_estimate_metadata"]\nSEMANTI'
+                                             b'C_FIELDS = ("probability_semantics", "push_probability", "in'
+                                             b'ference_status", "model_status")\nSEMANTICS = frozenset({"win'
+                                             b'_conditional_on_decision","win_unconditional_with_push",\n   '
+                                             b'                   "unconditional_win_push_loss","unconditio'
+                                             b'nal"})\n'),
+                                            (b'    # Nonzero-push reversal cannot reinterpret an unconditio'
+                                             b'nal source.\n    return not (_text(original) in unconditional'
+                                             b' and current_name=="win_conditional_on_decision"\n           '
+                                             b'     and not (_valid_push(push) and math.isclose(_number(pus'
+                                             b'h),0.0,rel_tol=0,abs_tol=1e-9)))\n\n\ndef _identity(row):\n',
+                                             b'    # Nonzero-push reversal cannot reinterpret an unconditio'
+                                             b'nal source.\n    return not (_text(original) in unconditional'
+                                             b' and current_name=="win_conditional_on_decision"\n           '
+                                             b'     and not (_valid_push(push) and math.isclose(_number(pus'
+                                             b'h),0.0,rel_tol=0,abs_tol=1e-9)))\n\n\ndef captured_legacy_h'
+                                             b'alf_point(source, line):\n    """Display-only compatibility f'
+                                             b"or a captured, originally undeclared row.\n\n    Capture's no-"
+                                             b'push canonical label cannot manufacture a missing integer pu'
+                                             b'sh\n    model. Original declarations and every current contra'
+                                             b'diction still reject.\n    This helper supplies no inference,'
+                                             b' qualification or wager authority.\n    """\n    if (line is N'
+                                             b'one or abs(line*2-round(line*2))>1e-9\n            or abs(lin'
+                                             b'e-round(line))<=1e-9\n            or _absent(source.get("rese'
+                                             b'arch_source_semantics"))):\n        return False\n    original'
+                                             b'=_source_semantics(source)\n    return bool(original is not N'
+                                             b'one\n        and _absent(original.get("probability_semantics"'
+                                             b'))\n        and _absent(original.get("push_probability"))\n   '
+                                             b'     and _text(source.get("probability_semantics"))=="win_co'
+                                             b'nditional_on_decision"\n        and _absent(source.get("push_'
+                                             b'probability")))\n\n\ndef _identity(row):\n')]},
+ 'app_core/per_game_boards.py': {'sha256': 'ca6c6698f6be7a089140acd9e7a7b3277437fc125229a369106f261544dc7ff2',
+                                 'edits': [(b'                        # coerce it to the legacy no-push co'
+                                            b'mpatibility route.\n                        mass=None\n       '
+                                            b"             elif semantics == 'win_conditional_on_decision'"
+                                            b':\n                        mass=unconditional_from_conditiona'
+                                            b"l(probability,push)\n                    elif semantics in {'"
+                                            b"win_unconditional_with_push','unconditional_win_push_loss','"
+                                            b"unconditional'} and push is not None:\n                      "
+                                            b"  mass=({'p_win':probability,'p_push':push}\n                "
+                                            b'              if 0<=push<1 and probability+push<=1 else None'
+                                            b')\n',
+                                            b'                        # coerce it to the legacy no-push co'
+                                            b'mpatibility route.\n                        mass=None\n       '
+                                            b"             elif semantics == 'win_conditional_on_decision'"
+                                            b':\n                        from app_core.research_display imp'
+                                            b'ort captured_legacy_half_point\n                        if ca'
+                                            b'ptured_legacy_half_point(source,line):\n                     '
+                                            b"       mass={'p_win':probability,'p_push':0.0}\n             "
+                                            b'               approved=False\n                        else:\n'
+                                            b'                            mass=unconditional_from_conditio'
+                                            b'nal(probability,push)\n                    elif semantics in '
+                                            b"{'win_unconditional_with_push','unconditional_win_push_loss'"
+                                            b",'unconditional'} and push is not None:\n                    "
+                                            b"    mass=({'p_win':probability,'p_push':push}\n              "
+                                            b'                if 0<=push<1 and probability+push<=1 else No'
+                                            b'ne)\n'),
+                                           (b"                     'ml_target':text(source,'ml_target') if"
+                                            b" source is not None else '',\n                     'market_pe"
+                                            b"riod':text(source,'market_period','period') if source is not"
+                                            b" None else '',\n                     'settlement_rules':text("
+                                            b"source,'settlement_rules') if source is not None else ''}\n  "
+                                            b'      from app_core.research_display import from_export\n    '
+                                            b"    import json\n        exported['research_display']=json.du"
+                                            b'mps(from_export(exported, source=source, source_field=probab'
+                                            b"ility_field), allow_nan=False, sort_keys=True, separators=('"
+                                            b",',':'))\n        rows.append(exported)\n    return pd.DataFra"
+                                            b'me(rows)\n',
+                                            b"                     'ml_target':text(source,'ml_target') if"
+                                            b" source is not None else '',\n                     'market_pe"
+                                            b"riod':text(source,'market_period','period') if source is not"
+                                            b" None else '',\n                     'settlement_rules':text("
+                                            b"source,'settlement_rules') if source is not None else ''}\n  "
+                                            b'      # Preserve supplied producer clocks, including seconds'
+                                            b' and UTC offsets.\n        # A display label or capture run I'
+                                            b'D cannot replace the original facts.\n        if source is no'
+                                            b't None:\n            from datetime import datetime\n          '
+                                            b'  from app_core.candidate_evidence_schema import missing\n   '
+                                            b"         for field in ('prediction_generated_at','game_start"
+                                            b"_utc'):\n                if field in source and not missing(s"
+                                            b'ource[field]):\n                    value=source[field]\n     '
+                                            b'               # One exported start clock: downstream start '
+                                            b'updates and\n                    # existing date/lock checks '
+                                            b"must not be hidden by an alias.\n                    target='"
+                                            b"start' if field=='game_start_utc' else field\n               "
+                                            b'     exported[target]=value.isoformat() if isinstance(value,'
+                                            b'datetime) else value\n        from app_core.research_display '
+                                            b'import from_export\n        from app_core.research_estimate_t'
+                                            b'race import boundary_trace\n        import json\n        displ'
+                                            b'ay=from_export(exported, source=source, source_field=probabi'
+                                            b"lity_field)\n        exported['research_display']=json.dumps("
+                                            b"display, allow_nan=False, sort_keys=True, separators=(',',':"
+                                            b"'))\n        # Owner export only: public_board's allowlist ne"
+                                            b"ver publishes this trace.\n        exported['research_estimat"
+                                            b"e_trace']=boundary_trace(source,exported,display)\n        ro"
+                                            b'ws.append(exported)\n    return pd.DataFrame(rows)\n')]},
+ 'core/streamlit_pipeline.py': {'sha256': '92eafdffcdcb3dcb2efe801688f0130d6ac0fd35e51eeacde72c1c8277eb0be1',
+                                'edits': [(b'    "settlement_rules", "inference_status", "prediction_generate'
+                                           b'd_at", "game_start_utc",\n    "odds_recorded_at", "quote_time'
+                                           b'", "quote_timestamp", "quote_bookmaker", "provider_quotes",\n'
+                                           b'    "candidate_id", "export_run_id", "research_source_semantics"'
+                                           b',\n    "probability_semantics", "push_probability", "model_st'
+                                           b'atus"]\nCANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_'
+                                           b'BET_COLUMNS + _CANONICAL_RESEARCH_COLUMNS))\n\n\n',
+                                           b'    "settlement_rules", "inference_status", "prediction_generate'
+                                           b'd_at", "game_start_utc",\n    "odds_recorded_at", "quote_time'
+                                           b'", "quote_timestamp", "quote_bookmaker", "provider_quotes",\n'
+                                           b'    "candidate_id", "export_run_id", "research_source_semantics"'
+                                           b',\n    "probability_semantics", "push_probability", "model_st'
+                                           b'atus", "ml_inference_status", "ml_estimate_metadata"]\nCANONI'
+                                           b'CAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + _CA'
+                                           b'NONICAL_RESEARCH_COLUMNS))\n\n\n'),
+                                          (b'                ]\n        if "ml_unavailable_reason" in mark'
+                                           b'et_model_predictions:\n            merged.loc[market_model_pr'
+                                           b'edictions.index, "ml_unavailable_reason"] = market_model_predict'
+                                           b'ions["ml_unavailable_reason"]\n        merged.loc[market_avai'
+                                           b'lable, "model_status"] = "Market Score Model"\n        logger'
+                                           b'.info(\n            "MARKET MODEL: generated %s target-specif'
+                                           b'ic spread/total probabilities.",\n',
+                                           b'                ]\n        if "ml_unavailable_reason" in mark'
+                                           b'et_model_predictions:\n            merged.loc[market_model_pr'
+                                           b'edictions.index, "ml_unavailable_reason"] = market_model_predict'
+                                           b'ions["ml_unavailable_reason"]\n        from app_core.research'
+                                           b'_estimate_trace import ORIGIN_COLUMNS\n        for column in '
+                                           b'ORIGIN_COLUMNS:\n            if column in market_model_predic'
+                                           b'tions:\n                merged.loc[market_model_predictions.i'
+                                           b'ndex,column] = market_model_predictions[column]\n        merg'
+                                           b'ed.loc[market_available, "model_status"] = "Market Score Mod'
+                                           b'el"\n        logger.info(\n            "MARKET MODEL: generate'
+                                           b'd %s target-specific spread/total probabilities.",\n')]},
+ 'tests/test_drive_history_scope_policy.py': {'sha256': '79c1498ddcf23d3c6e417cea0fc93ebc1003affe8ccf5ae017f2d43e0cc90689',
+                                              'edits': [(b'        git(repo,"config","user.name","Offline T'
+                                                         b'est")\n        git(repo,"config","user.email","of'
+                                                         b'fline@example.invalid")\n        git(repo,"config'
+                                                         b'","core.autocrlf","false")\n        current_guard'
+                                                         b'=(SOURCE/guard.GUARD_PATH).read_bytes().replace('
+                                                         b'b"\\r\\n",b"\\n")\n        previous=guard._drive'
+                                                         b'_previous_guard_source(current_guard)\n        or'
+                                                         b'iginal=current_guard.split(b"\\nPOLICY_PATH =",1)'
+                                                         b'[0]+b"\\n"\n        write(repo,"README.md",b"offli'
+                                                         b'ne fixture\\n")\n',
+                                                         b'        git(repo,"config","user.name","Offline T'
+                                                         b'est")\n        git(repo,"config","user.email","of'
+                                                         b'fline@example.invalid")\n        git(repo,"config'
+                                                         b'","core.autocrlf","false")\n        current_guard'
+                                                         b'=guard._estimate_previous_main_source(guard.GUAR'
+                                                         b'D_PATH,(SOURCE/guard.GUARD_PATH).read_bytes().re'
+                                                         b'place(b"\\r\\n",b"\\n"))\n        previous=guard'
+                                                         b'._drive_previous_guard_source(current_guard)\n   '
+                                                         b'     original=current_guard.split(b"\\nPOLICY_PAT'
+                                                         b'H =",1)[0]+b"\\n"\n        write(repo,"README.md",'
+                                                         b'b"offline fixture\\n")\n'),
+                                                        (b'            source_path=SOURCE/path\n            '
+                                                         b'if not source_path.exists():\n                con'
+                                                         b'tinue\n            value=source_path.read_bytes()'
+                                                         b'.replace(b"\\r\\n",b"\\n")\n            if path '
+                                                         b'in guard.DRIVE_PATHS:\n                if path in'
+                                                         b' guard.DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS:\n     '
+                                                         b'               value=guard._drive_previous_main_'
+                                                         b'source(path,value)\n',
+                                                         b'            source_path=SOURCE/path\n            '
+                                                         b'if not source_path.exists():\n                con'
+                                                         b'tinue\n            value=guard._estimate_previous'
+                                                         b'_main_source(path,source_path.read_bytes().repla'
+                                                         b'ce(b"\\r\\n",b"\\n"))\n            if path in gu'
+                                                         b'ard.DRIVE_PATHS:\n                if path in guar'
+                                                         b'd.DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS:\n          '
+                                                         b'          value=guard._drive_previous_main_sourc'
+                                                         b'e(path,value)\n'),
+                                                        (b'            previous_guard_sha256=hashlib.sha256'
+                                                         b'(previous).hexdigest(),\n            previous_pol'
+                                                         b'icy_blob=guard.blob(base,guard.V4_POLICY_PATH))\n'
+                                                         b'        for path in guard.DRIVE_PATHS:\n         '
+                                                         b'   write(repo,path,(SOURCE/path).read_bytes().re'
+                                                         b'place(b"\\r\\n",b"\\n"))\n        binding["revie'
+                                                         b'wed_blobs"]={p:git(repo,"hash-object","--",p) fo'
+                                                         b'r p in guard.DRIVE_PATHS if p!=guard.GUARD_PATH}'
+                                                         b'\n        implementation,candidate,policy=seal(re'
+                                                         b'po,binding)\n        guard.ROOT=original_root\n',
+                                                         b'            previous_guard_sha256=hashlib.sha256'
+                                                         b'(previous).hexdigest(),\n            previous_pol'
+                                                         b'icy_blob=guard.blob(base,guard.V4_POLICY_PATH))\n'
+                                                         b'        for path in guard.DRIVE_PATHS:\n         '
+                                                         b'   write(repo,path,guard._estimate_previous_main'
+                                                         b'_source(path,(SOURCE/path).read_bytes().replace('
+                                                         b'b"\\r\\n",b"\\n")))\n        binding["reviewed_b'
+                                                         b'lobs"]={p:git(repo,"hash-object","--",p) for p i'
+                                                         b'n guard.DRIVE_PATHS if p!=guard.GUARD_PATH}\n    '
+                                                         b'    implementation,candidate,policy=seal(repo,bi'
+                                                         b'nding)\n        guard.ROOT=original_root\n')]}}
+
+
+def _estimate_previous_guard_source(source, binding=None):
+    binding = ESTIMATE_BINDINGS if binding is None else binding
+    if b"\nESTIMATE_POLICY_PATH =" not in source:
+        return source
+    _require(_dfs_guard_matches(source,binding["successor_guard_sha256"]),
+             "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nESTIMATE_POLICY_PATH =",1)[0]+ESTIMATE_PREVIOUS_CLI
+
+
+def _estimate_previous_main_source(path,source):
+    if path==GUARD_PATH:
+        return _estimate_previous_guard_source(source)
+    frozen=ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest()==frozen["sha256"]:
+        return source
+    for before,after in reversed(frozen["edits"]):
+        _require(source.count(after)==1,"PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source=source.replace(after,before,1)
+    _require(hashlib.sha256(source).hexdigest()==frozen["sha256"],"PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_estimate_prior_drive_guard = _drive_previous_guard_source
+_estimate_prior_drive_main = _drive_previous_main_source
+
+
+def _drive_previous_guard_source(source,binding=None):
+    return _estimate_prior_drive_guard(_estimate_previous_guard_source(source),binding)
+
+
+def _drive_previous_main_source(path,source):
+    return _estimate_prior_drive_main(path,_estimate_previous_main_source(path,source))
+
+
+def _run_estimate_integrated(manifest_path,base,binding):
+    import importlib.util
+    path=ROOT/"scripts/estimate_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n",b"\n")).hexdigest()==
+             binding["scope_module_sha256"],"SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec=importlib.util.spec_from_file_location("parlaypicker_estimate_scope_policy",path)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -2293,7 +2616,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", DRIVE_POLICY_PATH):
+        if exists_at("HEAD", ESTIMATE_POLICY_PATH):
+            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)
+        elif exists_at("HEAD", DRIVE_POLICY_PATH):
             code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)
         elif exists_at("HEAD", V4_POLICY_PATH):
             code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)
