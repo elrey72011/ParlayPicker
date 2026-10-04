@@ -21,36 +21,52 @@ def history(setting):
     return History(site, folder)
 
 
-def restore_history(setting):
+def display_scope(setting):
+    from app_core.performance_spans import opaque_hash
+    return opaque_hash(*(str(setting(name) or "").strip() for name in (
+        "PARLAYPICKER_DRIVE_FOLDER_ID", "PARLAYPICKER_DRIVE_PREFIX",
+        "PARLAYPICKER_NETLIFY_SITE_ID", "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT")))
+
+
+def restore_history(setting, *, full_verification=False):
     site=str(setting("PARLAYPICKER_NETLIFY_SITE_ID")).strip()
     key="public_results_"+site
     stage = 'opening history storage'
+    scope = display_scope(setting)
     try:
         store=history(setting)
+        stage = 'reading saved publications and results'
+        saved = store.history_phase(full_verification=full_verification)
         stage = 'recovering unconfirmed publications'
-        # Recover known deployments after a Streamlit restart. Only the
-        # site's currently published deployment can be confirmed.
+        # A missing receipt in a complete, verified phase is recoverable.
+        # Integrity errors are never interpreted as an absent confirmation.
         from app_core.netlify_publishing import deployment_status
         token=str(setting('PARLAYPICKER_NETLIFY_TOKEN')).strip()
-        for pending in store.all('deployments'):
+        changed = False
+        for pending in saved['pending_deployments']:
+            status = None
             try:
-                store.read('confirmed/'+pending['deploy_id']+'.json')
-            except Exception:
-                status = None
-                try:
-                    if pending['deploy_id'].startswith('sftp-'):
-                        from app_core import sftp_publishing
-                        status=sftp_publishing.deployment_status(pending['deploy_id'],sftp_publishing.configuration(setting))
-                    elif token:
-                        status=deployment_status(pending['deploy_id'],site,token)
-                except (ValueError,RuntimeError):
-                    st.warning('An unconfirmed hosting publication could not be verified. Continuing to restore confirmed history; the unverified publication will not be counted.')
-                if status and status['state']=='ready':
-                    # Storage/integrity failures must still stop restore.
-                    store.confirm(pending['deploy_id'],pending['package_hash'])
-        stage = 'reading saved publications and results'
-        pubs=store.publications();revisions=store.all('scores');imports=store.all('imports');locks=store.all('locks')
-        st.session_state[key]={'publications':pubs,'revisions':revisions,'imports':imports,'grading_runs':store.all('grading_runs'),'prop_revisions':store.all('prop_stats'),'prop_imports':store.all('prop_imports'),'locks':locks,'rows':report(pubs,revisions,imports,locks)}
+                if pending['deploy_id'].startswith('sftp-'):
+                    from app_core import sftp_publishing
+                    status=sftp_publishing.deployment_status(pending['deploy_id'],sftp_publishing.configuration(setting))
+                elif token:
+                    status=deployment_status(pending['deploy_id'],site,token)
+            except (ValueError,RuntimeError):
+                st.warning('An unconfirmed hosting publication could not be verified. Continuing to restore confirmed history; the unverified publication will not be counted.')
+            if status and status['state']=='ready':
+                store.confirm(pending['deploy_id'],pending['package_hash'])
+                changed = True
+        if changed:
+            stage = 'verifying recovered publications'
+            # Recovery writes change remote membership; never reuse the prior phase.
+            saved = store.history_phase(full_verification=full_verification, coalesce=False)
+        saved.pop('pending_deployments')
+        saved['rows'] = report(saved['publications'],saved['revisions'],saved['imports'],saved['locks'])
+        if display_scope(setting) != scope:
+            from app_core.evidence_config import EvidenceStorageError
+            raise EvidenceStorageError('History storage scope changed during restore; retry in the current scope.')
+        saved['display_scope'] = scope
+        st.session_state[key] = saved
         st.session_state['relock_reset_requested'] = True
         st.success('Public history restored.')
         return True
@@ -61,12 +77,19 @@ def restore_history(setting):
         return False
 
 
-def render_history(setting):
+def render_history(setting, *, lazy=False):
     site=str(setting('PARLAYPICKER_NETLIFY_SITE_ID')).strip()
     key='public_results_'+site
     attempt='history_restore_attempt_'+site
+    scope = display_scope(setting)
+    old = st.session_state.get(key)
+    if old is not None and (old.get('display_scope', scope if not lazy else None) != scope):
+        st.session_state.pop(key, None)
+        st.session_state.pop(attempt, None)
     refresh_requested=st.session_state.pop('history_refresh_requested',False)
-    if refresh_requested or (key not in st.session_state and not st.session_state.get(attempt)):
+    if lazy:
+        refresh_requested = st.button('Load saved history', key='public_history_load')
+    if refresh_requested or (not lazy and key not in st.session_state and not st.session_state.get(attempt)):
         st.session_state[attempt]=True
         with st.spinner('Loading saved picks and results...'):
             restore_history(setting)
@@ -91,14 +114,14 @@ def render_history(setting):
     saved=st.session_state.get(key)
     if not st.checkbox('Show history, imports and individual grading', key='public_history_tools'):
         if saved is None:
-            st.info('History is unavailable. Open history tools to retry restoring it.')
+            st.info('Load saved history to review saved picks and enable publication.')
             return None
         from app_core import public_prop_history as prop_history
         return current_records(saved['rows']+prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[])))
     with st.expander('History, imports and individual grading', expanded=True):
-        st.caption('Saved history loads automatically once per session. Use Update results and publish for outstanding game and MLB prop results. MLB collection uses bounded batches; unresolved entries remain pending or need review. Imports and individual grading are available below.')
+        st.caption('Load saved history when needed. Use Update results and publish for outstanding game and MLB prop results. MLB collection uses bounded batches; unresolved entries remain pending or need review. Imports and individual grading are available below.')
         if st.button('Restore public history from Drive',key='public_history_restore'):
-            restore_history(setting)
+            restore_history(setting, full_verification=True)
         saved=st.session_state.get(key)
         if saved is None:
             st.info('Restore history before publishing so the public tracker includes its existing record.')

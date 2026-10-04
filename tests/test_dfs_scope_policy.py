@@ -66,7 +66,7 @@ def fx(tmp_path, monkeypatch):
     git(repo, "config", "core.autocrlf", "false")
     git(repo, "config", "user.name", "Offline Test")
     git(repo, "config", "user.email", "offline@example.invalid")
-    source_guard = (SOURCE / guard.GUARD_PATH).read_bytes().replace(b"\r\n", b"\n")
+    source_guard = guard._drive_previous_guard_source((SOURCE / guard.GUARD_PATH).read_bytes().replace(b"\r\n", b"\n"))
     previous_guard = source_guard.split(b"\nV4_POLICY_PATH =", 1)[0] + guard.DFS_PREVIOUS_CLI
     original_guard = source_guard.split(b"\nPOLICY_PATH =", 1)[0] + b"\n"
     write(repo, "README.md", b"offline DFS fixture\n")
@@ -100,7 +100,7 @@ def fx(tmp_path, monkeypatch):
                "clock_blob": guard.blob(base, guard.CLOCK_TEST),
                "successor_guard_sha256": guard.DFS_BINDINGS["successor_guard_sha256"]}
     for path in guard.DFS_PATHS:
-        write(repo, path, (SOURCE / path).read_bytes().replace(b"\r\n", b"\n"))
+        write(repo, path, guard._drive_previous_main_source(path, (SOURCE / path).read_bytes().replace(b"\r\n", b"\n")))
     binding["reviewed_dfs_blobs"] = {p: git(repo, "hash-object", "--", p)
                                      for p in guard.DFS_BINDINGS["reviewed_dfs_blobs"]}
     implementation, candidate, policy = seal(repo, binding)
@@ -217,7 +217,7 @@ def test_candidate_ancestry_and_policy_only_shape_are_exact(fx, attack):
 
 
 def test_prior_guard_and_fixture_reconstruct_exact_reviewed_bytes():
-    source = (SOURCE / guard.GUARD_PATH).read_bytes().replace(b"\r\n", b"\n")
+    source = guard._drive_previous_guard_source((SOURCE / guard.GUARD_PATH).read_bytes().replace(b"\r\n", b"\n"))
     previous = guard._dfs_previous_guard_source(source)
     assert hashlib.sha256(previous).hexdigest() == guard.DFS_BINDINGS["previous_guard_sha256"]
     fixture = (SOURCE / "tests/test_ncaaf_coverage_scope_policy.py").read_bytes().replace(b"\r\n", b"\n")

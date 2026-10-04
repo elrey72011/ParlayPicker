@@ -1037,6 +1037,9 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     )
 
     timer.start("Market enrichment and candidate selection")
+    from app_core.market_stage_metrics import measured_call
+    def market_call(name, operation, *args, **kwargs):
+        return measured_call(name, operation, *args, ids=timer.ids, **kwargs)
     diagnostics["stage_seconds"] = timer.timings
     parlay_columns = ["slate_date", "pipeline_build", "export_run_id", "parlay_rank", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "unique_game_count", "one_leg_per_game", "card_unique_games", "card_game_exposure_cap", "card_unique_game_count", "parlay_source", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "production_safety_mode", "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning", "kelly_fraction", "recommended_bet"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
@@ -1067,13 +1070,13 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         if "game_date" not in analysis_df.columns or analysis_df["game_date"].isna().all():
             deferred_warnings.append("game_date missing from analysis_df — Kalshi matching skipped.")
         else:
-            analysis_df, kalshi_err = _enrich_with_kalshi_safe(analysis_df)
+            analysis_df, kalshi_err = market_call("kalshi_enrichment", _enrich_with_kalshi_safe, analysis_df)
             if kalshi_err:
                 deferred_warnings.append(kalshi_err)
 
     if controls.get("use_ml"):
         try:
-            analysis_df = _sync_ml_probabilities(analysis_df, pipeline_best_picks_df)
+            analysis_df = market_call("ml_probability_join", _sync_ml_probabilities, analysis_df, pipeline_best_picks_df)
         except ValueError as exc:
             deferred_errors.append(f"ML Merge Failed: {exc}")
             timer.finish()
@@ -1123,7 +1126,7 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         ml_required = False
 
     try:
-        analysis_df = _recompute_consensus_from_kalshi(
+        analysis_df = market_call("consensus", _recompute_consensus_from_kalshi,
             analysis_df,
             require_ml=ml_required,
         )
@@ -1154,8 +1157,8 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
 
     # We pass the diagnostics dictionary so that selection metrics and preview_df
     # can be injected without relying on pandas DataFrame.attrs serialization.
-    best_picks_df = build_best_picks_df(analysis_df, diagnostics_out=diagnostics)
-    best_picks_df = ensure_best_pick_export_columns(best_picks_df, diagnostics_out=diagnostics)
+    best_picks_df = market_call("candidate_selection", build_best_picks_df, analysis_df, diagnostics_out=diagnostics)
+    best_picks_df = market_call("export_columns", ensure_best_pick_export_columns, best_picks_df, diagnostics_out=diagnostics)
     diagnostics["identity_columns_ready_before_portfolio"] = bool(
         all(c in best_picks_df.columns for c in ["export_run_id", "pick_id", "canonical_pick_key"])
         and best_picks_df["canonical_pick_key"].astype(str).str.strip().ne("").all()
@@ -1165,7 +1168,7 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     # the probability-first display winner for each game.
     trial_now = pd.Timestamp.now(tz="UTC").to_pydatetime()
     from app_core.controlled_trial_pipeline import prepare_review_candidates
-    candidate_pool, trial_candidates = prepare_review_candidates(
+    candidate_pool, trial_candidates = market_call("review_candidate_preparation", prepare_review_candidates,
         diagnostics, now=trial_now
     )
     diagnostics["candidate_authority_df"] = candidate_pool
@@ -1861,7 +1864,6 @@ def main() -> None:
                 game_seconds = sum(state_updates.get("diagnostics", {}).get("stage_seconds", {}).values())
                 game_status.update(label=f"Game analysis finished in {game_seconds:.0f}s", state="complete")
             st.session_state.update(state_updates)
-            st.session_state["history_refresh_requested"] = True
             st.session_state["last_successful_pipeline_signature"] = (
                 _analysis_input_signature(controls)
             )
@@ -1982,14 +1984,10 @@ def main() -> None:
                 st.caption("Run Game Analysis to collect timings.")
         with st.expander("Prediction Evidence Status", expanded=False):
             from app_core.evidence_health import evidence_health
-            from app_core.evidence_remote import restore_once, restore, sync
-            try:
-                restore_once()
-            except RuntimeError as exc:
-                st.error(str(exc))
+            from app_core.evidence_remote import restore, sync
             if st.button("Restore and sync evidence storage", key="sync_remote_evidence"):
                 try:
-                    restore()
+                    restore(full_verification=True)
                     sync()
                 except Exception as exc:
                     from app_core.evidence_config import safe_error
@@ -3481,7 +3479,7 @@ def main() -> None:
 
     with publish_tab:
         from app.ui.publish_panel import render_publish_panel
-        render_publish_panel(publication_games, _publication_candidates(diagnostics), publication_props, publication_dfs)
+        render_publish_panel(publication_games, _publication_candidates(diagnostics), publication_props, publication_dfs, lazy_history=True)
 
     with tab4:
         st.subheader("Best Parlays")

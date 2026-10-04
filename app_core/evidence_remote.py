@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import threading
+from app_core.scoped_reads import singleflight
 
 from app_core.evidence_config import safe_error, EvidenceStorageError
 from app_core.performance_spans import PerformanceSpan, opaque_hash, operation_ids
@@ -48,10 +49,13 @@ def _database_generation(path):
     return opaque_hash(device, inode) if inode else opaque_hash(device, stat.st_ctime_ns)
 
 
-def _scope(path):
+def _scope(path, client=None):
     from app_core.prediction_evidence import database_path
     resolved = Path(path or database_path()).resolve()
-    return (*settings(), str(resolved), _database_generation(resolved))
+    return ((client.storage_scope_hash() if callable(getattr(client, "storage_scope_hash", None)) else id(client)) if client is not None else None,
+            *settings(), opaque_hash(os.environ.get("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", "")),
+            os.environ.get("PARLAYPICKER_NETLIFY_SITE_ID", "").strip(),
+            str(resolved), _database_generation(resolved))
 
 
 def _receipt(table, row):
@@ -156,6 +160,39 @@ def register_bundle(version, frozen, manifest):
 
 
 def restore(path=None, *, client=None, full_verification=False, ids=None):
+    result, shared = singleflight(
+        ("evidence_restore", _scope(path, client), full_verification),
+        lambda: _restore_guarded(path, client=client, full_verification=full_verification, ids=ids))
+    if shared:
+        with PerformanceSpan("evidence_restore_join", ids=ids) as span:
+            span.set(listing_traversals=0, objects_downloaded=0, cache_hits=1,
+                     verification_status="inflight_verified_restore")
+    return result
+
+
+def _restore_guarded(path=None, *, client=None, full_verification=False, ids=None):
+    # Successful explicit restores satisfy initialization too; failed audits
+    # invalidate it so the next required caller retries.
+    with _lock:
+        identity = _scope(path, client)
+        _restored.discard(identity)
+        try:
+            result = _restore(path, client=client, full_verification=full_verification, ids=ids)
+            current = _scope(path, client)
+            if identity[:-1] != current[:-1] or (identity[-1] != "missing" and identity[-1] != current[-1]):
+                raise EvidenceStorageError("Evidence scope or database generation changed during restore; retry initialization.")
+            _restored.add(current)
+            return result
+        except Exception:
+            current = _scope(path, client)
+            _restored.discard(current)
+            for scope in list(_verified):
+                if scope[1:] in (identity[1:], current[1:]):
+                    _verified.pop(scope, None)
+            raise
+
+
+def _restore(path=None, *, client=None, full_verification=False, ids=None):
     from app_core.prediction_evidence import connect, database_path
     if not settings()[0]:
         return 0
@@ -165,7 +202,7 @@ def restore(path=None, *, client=None, full_verification=False, ids=None):
     ids = ids or operation_ids(refresh_run_id=os.urandom(8).hex())
     rows = {table: [] for table in TABLES}
     prefixes = {table: f"{prefix}/{table}/" for table in TABLES}
-    scope_hash = opaque_hash(bucket, prefix)
+    scope_hash = opaque_hash(client.storage_scope_hash() if callable(getattr(client, "storage_scope_hash", None)) else id(client), bucket, prefix, os.environ.get("PARLAYPICKER_NETLIFY_SITE_ID", ""))
     with PerformanceSpan("evidence_restore", ids=ids, database_generation=_database_generation(database),
                          storage_scope_hash=scope_hash) as restore_span:
         optimized = (_shared_inventory_enabled()
@@ -174,10 +211,10 @@ def restore(path=None, *, client=None, full_verification=False, ids=None):
         if optimized:
             _status["operation"] = "restore:discover"
             inventory = client.discover_complete_inventory(
-                operation_id=ids["action_id"], namespace=prefix, ids=ids)
+                operation_id=ids["action_id"], namespace=opaque_hash(prefix, os.environ.get("PARLAYPICKER_NETLIFY_SITE_ID", "")), ids=ids)
             objects_by_prefix = client.read_verified_prefixes(
                 Prefixes=list(prefixes.values()), inventory=inventory,
-                cache_dir=database.with_name(database.name + ".remote-cache") / inventory.scope_hash,
+                cache_dir=database.with_name(database.name + ".remote-cache"),
                 full_verify=full_verification, ids=ids)
             read_report = getattr(client, "last_read_report", None)
             if read_report is not None:
@@ -240,7 +277,7 @@ def restore(path=None, *, client=None, full_verification=False, ids=None):
                        records_returned=sum(len(entries) for entries in rows.values()),
                        verification_status="transaction_committed")
     with _lock:
-        _verified.setdefault(_scope(path), set()).update(
+        _verified.setdefault(_scope(path, client), set()).update(
             _receipt(table, row) for table, entries in rows.items() for row in entries)
     _status.update(status="restored", restored_snapshots=_status.get("restored_snapshots", 0) + imported, error=None)
     return imported
@@ -251,15 +288,24 @@ def restore_once(path=None, *, full_verification=False):
     bucket, prefix = settings()
     if not bucket:
         return
-    identity = _scope(path)
     with _lock:
+        # Compute generation after acquiring the initialization lock: another
+        # caller may have created/replaced the database while we waited.
+        identity = _scope(path)
         if full_verification or identity not in _restored:
+            _restored.discard(identity)
             try:
                 restore(path, full_verification=full_verification)
                 _restored.add(_scope(path))
             except Exception as exc:
                 _status.update(status="error", error=safe_error(exc, "Restore"))
                 raise RuntimeError(_status["error"]) from None
+        else:
+            with PerformanceSpan("evidence_initialize_reuse",
+                    database_generation=_database_generation(Path(path or database_path())),
+                    storage_scope_hash=opaque_hash(*identity)) as span:
+                span.set(listing_traversals=0, objects_downloaded=0, cache_hits=1,
+                         verification_status="initialized_unchanged_generation_and_scope")
 
 
 def sync(path=None, *, client=None, incremental=False):
@@ -267,10 +313,11 @@ def sync(path=None, *, client=None, incremental=False):
     if not settings()[0]:
         return False
     with _lock:
-        scope = _scope(path)
-        verified = _verified.setdefault(scope, set())
+        verified = set()
         try:
             client = client or _client()
+            scope = _scope(path, client)
+            verified = _verified.setdefault(scope, set())
             with closing(connect(path or database_path())) as db:
                 db.execute("BEGIN")
                 records = {table: db.execute(f"SELECT {','.join(columns)} FROM {table}").fetchall() for table, columns in TABLES.items()}
