@@ -148,6 +148,14 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
             )
             saved = {'fingerprint':fingerprint, 'package':package, 'html':html,
                      'private_candidate_trace':private_trace}
+            # Local owner evidence is distinct from publishing and remote sync.
+            import sqlite3
+            from app_core.research_replay import retain_export
+            try:
+                saved['research_replay_receipt'] = retain_export(boards, package, games, candidates)
+            except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
+                saved['research_replay_error'] = str(exc)
+                st.warning('Private research replay evidence was not saved: '+str(exc))
             st.session_state['publication_preview'] = saved
         except (ValueError, TypeError, KeyError) as exc:
             st.session_state.pop('publication_preview',None)
@@ -181,6 +189,25 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
                 'current-wagers-candidate-trace.json', 'application/json',
                 key='download_current_wagers_candidate_trace',
             )
+    replay_receipt = saved.get('research_replay_receipt')
+    if replay_receipt:
+        with st.expander('Private research replay evidence', expanded=False):
+            st.caption('Download the retained source and per-game traces for this preview. Missing original sources remain UNKNOWN.')
+            import sqlite3
+            from app_core.research_replay import download_bundle, digest, encode
+            try:
+                bundle, verified = download_bundle(replay_receipt, expected_package_hash=digest(encode(package)))
+            except (OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
+                st.warning('Private research replay download is unavailable: '+str(exc))
+            else:
+                st.write({key:verified[key] for key in ('export_id','package_hash','source_boundary','source_links')})
+                if verified['source_boundary'] == 'UNKNOWN':
+                    st.warning('Original source evidence is unavailable for one or more snapshot links. The bundle preserves UNKNOWN.')
+                st.download_button(
+                    'Download private research replay bundle', bundle,
+                    'private-research-replay-'+verified['export_id']+'.zip', 'application/zip',
+                    key='download_private_research_replay', on_click='ignore',
+                )
     from app_core.public_parlays import parlay_funnel
     with st.expander('Parlay eligibility funnel', expanded=False):
         if package.get('parlay_policy')=='canonical-v3':

@@ -2609,6 +2609,406 @@ def _run_estimate_integrated(manifest_path,base,binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+NFL_POLICY_PATH = "docs/paid-launch/launch-scope-policy-nfl-provenance-v1.json"
+NFL_POLICY_VERSION = "paid-launch-nfl-provenance-v1"
+NFL_APPROVAL_REFERENCE = "Owner-authorized separate October 4 software provenance/display correction and minimal private local replay retention; no acquisition, fitting, scientific qualification, authority change, activation, merge or deployment; owner-authorized verified replay bundle download"
+NFL_PATHS = ('app/ui/publish_panel.py', 'app_core/prediction_evidence.py', 'app_core/research_display.py', 'app_core/research_estimate_trace.py', 'app_core/research_replay.py', 'tests/test_nfl_research_replay.py', 'tests/test_nfl_provenance_scope.py', 'tests/test_estimate_scope_policy.py', 'scripts/nfl_provenance_scope.py', 'scripts/check_launch_change_scope.py', 'docs/paid-launch/nfl-oct4-provenance.md')
+NFL_UNCHANGED_PATHS = ('.github/workflows/activation-grading.yml', '.github/workflows/ci.yml', '.github/workflows/football-stage1.yml', '.github/workflows/football-stage2.yml', '.github/workflows/mlb-receipt-reconciliation.yml', '.github/workflows/paid-launch.yml', '.github/workflows/qualification-operations.yml', '.github/workflows/read-only-census.yml', '.github/workflows/research-scheduler.yml', '.github/workflows/subscriber-completion-postgres.yml', 'app/ui/draftkings.py', 'app/ui/lock_picks.py', 'app/ui/ncaaf_inventory.py', 'app/ui/public_results.py', 'app/ui/readiness_dashboard.py', 'app/ui/sidebar_controls.py', 'app_core/draftkings_classic.py', 'app_core/espn_ncaaf_odds.py', 'app_core/evidence_drive.py', 'app_core/evidence_remote.py', 'app_core/market_probability_model.py', 'app_core/market_stage_metrics.py', 'app_core/ncaaf_identity.py', 'app_core/ncaaf_schedule.py', 'app_core/per_game_boards.py', 'app_core/performance_spans.py', 'app_core/provider_health.py', 'app_core/public_history.py', 'app_core/scoped_reads.py', 'app_core/stage_timing.py', 'core/live_wager_contract.py', 'core/market_policy.py', 'core/price_value.py', 'core/probability_calibration.py', 'core/run_readiness.py', 'core/sport_policy.py', 'core/streamlit_pipeline.py', 'core/wager_decisions.py', 'data/calibration/bucket_stats.json', 'data/calibration/effective_prob_calibration.json', 'docs/paid-launch/dfs-projection-identity-policy.md', 'docs/paid-launch/drive-history-loading.md', 'docs/paid-launch/estimate-availability.md', 'docs/paid-launch/launch-baseline-manifest.json', 'docs/paid-launch/launch-scope-policy-drive-history-v1.json', 'docs/paid-launch/launch-scope-policy-estimate-v1.json', 'docs/paid-launch/launch-scope-policy-ncaaf-v1.json', 'docs/paid-launch/launch-scope-policy-ncaaf-v2.json', 'docs/paid-launch/launch-scope-policy-v2.json', 'docs/paid-launch/launch-scope-policy-v3.json', 'docs/paid-launch/launch-scope-policy-v4.json', 'docs/paid-launch/ncaaf-coverage-corrections.md', 'docs/paid-launch/ncaaf-schedule-coverage.md', 'docs/paid-launch/provider-caller-health-policy.md', 'parlaypicker/app/streamlit_app.py', 'scripts/benchmark_drive_history_loading.py', 'scripts/benchmark_refresh_lock_storage.py', 'scripts/drive_history_scope.py', 'scripts/estimate_scope.py', 'streamlit_app.py', 'tests/paid_launch/case_isolation_and_scope.py', 'tests/test_board_diagnostics.py', 'tests/test_dfs_projection_identity.py', 'tests/test_dfs_scope_policy.py', 'tests/test_draftkings_classic.py', 'tests/test_draftkings_mlb_classic.py', 'tests/test_draftkings_panel.py', 'tests/test_drive_history_loading.py', 'tests/test_drive_history_scope_policy.py', 'tests/test_estimate_availability.py', 'tests/test_evidence_drive.py', 'tests/test_lock_storage_performance.py', 'tests/test_ncaaf_coverage_corrections.py', 'tests/test_ncaaf_coverage_scope_policy.py', 'tests/test_ncaaf_schedule_coverage.py', 'tests/test_ncaaf_schedule_scope_policy.py', 'tests/test_prediction_evidence.py', 'tests/test_provider_caller_health.py', 'tests/test_provider_health_scope_policy.py', 'tests/test_refresh_lock_performance.py')
+NFL_BINDINGS = {'base': '3e7f1d5d91de7f3b7741172ae2ad630d6f0e0825',
+ 'base_tree': 'f7cd888b55206b00dcd104424f2f64f9d3c5d787',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '5aec2314281757774d59f4976644b8a70e781261ef4b8607590fedbf51f21317',
+ 'previous_policy_blob': '2ae20bc6927735f6b1b99c1b3164a39ac8f46dfd',
+ 'reviewed_blobs': {'app/ui/publish_panel.py': '75524da0c3bd5da6a9c5756b5ca66bbde50c68a7',
+                    'app_core/prediction_evidence.py': 'd2f87ea6bfbeb91d181842635be40e39d7622ed5',
+                    'app_core/research_display.py': '783c127b9d85f2f45ace0f01daa5a310bd9e34c3',
+                    'app_core/research_estimate_trace.py': 'e12869179927d00a4a227bdb32c13f1834abd4bb',
+                    'app_core/research_replay.py': '82c19ce2db85b41350020b01a81d5ccff0f35209',
+                    'docs/paid-launch/nfl-oct4-provenance.md': '0be36582c2da903a7b450558f8993a0eb912d375',
+                    'scripts/nfl_provenance_scope.py': 'd1aa16b6a7ba12ba176f5322b9241f1c201bd769',
+                    'tests/test_estimate_scope_policy.py': '21ce84b32ed1616081ac254c8bcf68959cdfd4d0',
+                    'tests/test_nfl_provenance_scope.py': 'a579bddb98a07a27a4df802271e24515ff51de57',
+                    'tests/test_nfl_research_replay.py': '3df921632778254b1ef6a8636c35c3ca7c3b203d'},
+ 'scope_module_sha256': 'a5c6a79d4361a0a297510d8215d3062ff30f3583887c3cd41e662c39896a574e',
+ 'successor_guard_sha256': 'ee909ddba6d0996f4a4d14b46fa9991c8171ffcea1e17651cb4f936793c09e87'}
+NFL_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+NFL_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'edits': [(b"            )\n            saved = {'fingerprint':fingerprint, 'package':package, 'ht"
+            b"ml':html,\n                     'private_candidate_trace':private_trace}\n        "
+            b"    st.session_state['publication_preview'] = saved\n        except (ValueError, Type"
+            b"Error, KeyError) as exc:\n            st.session_state.pop('publication_preview',None"
+            b')\n',
+            b"            )\n            saved = {'fingerprint':fingerprint, 'package':package, 'ht"
+            b"ml':html,\n                     'private_candidate_trace':private_trace}\n        "
+            b'    # Local owner evidence is distinct from publishing and remote sync.\n            '
+            b'import sqlite3\n            from app_core.research_replay import retain_export\n  '
+            b"          try:\n                saved['research_replay_receipt'] = retain_export(boar"
+            b'ds, package, games, candidates)\n            except (OSError, sqlite3.Error, ValueErr'
+            b"or, TypeError) as exc:\n                saved['research_replay_error'] = str(exc)"
+            b"\n                st.warning('Private research replay evidence was not saved: '+str(e"
+            b"xc))\n            st.session_state['publication_preview'] = saved\n        except "
+            b"(ValueError, TypeError, KeyError) as exc:\n            st.session_state.pop('publicat"
+            b"ion_preview',None)\n"),
+           (b"                'current-wagers-candidate-trace.json', 'application/json',\n         "
+            b"       key='download_current_wagers_candidate_trace',\n            )\n    from app"
+            b"_core.public_parlays import parlay_funnel\n    with st.expander('Parlay eligibility f"
+            b"unnel', expanded=False):\n        if package.get('parlay_policy')=='canonical-v3':\n",
+            b"                'current-wagers-candidate-trace.json', 'application/json',\n         "
+            b"       key='download_current_wagers_candidate_trace',\n            )\n    replay_r"
+            b"eceipt = saved.get('research_replay_receipt')\n    if replay_receipt:\n        wit"
+            b"h st.expander('Private research replay evidence', expanded=False):\n            st.ca"
+            b"ption('Download the retained source and per-game traces for this preview. Missing or"
+            b"iginal sources remain UNKNOWN.')\n            import sqlite3\n            from app"
+            b'_core.research_replay import download_bundle, digest, encode\n            try:\n  '
+            b'              bundle, verified = download_bundle(replay_receipt, expected_package_ha'
+            b'sh=digest(encode(package)))\n            except (OSError, sqlite3.Error, ValueError, '
+            b"TypeError, KeyError) as exc:\n                st.warning('Private research replay dow"
+            b"nload is unavailable: '+str(exc))\n            else:\n                st.write({ke"
+            b"y:verified[key] for key in ('export_id','package_hash','source_boundary','source_lin"
+            b"ks')})\n                if verified['source_boundary'] == 'UNKNOWN':\n            "
+            b"        st.warning('Original source evidence is unavailable for one or more snapshot"
+            b" links. The bundle preserves UNKNOWN.')\n                st.download_button(\n    "
+            b"                'Download private research replay bundle', bundle,\n                 "
+            b"   'private-research-replay-'+verified['export_id']+'.zip', 'application/zip',\n     "
+            b"               key='download_private_research_replay', on_click='ignore',\n          "
+            b'      )\n    from app_core.public_parlays import parlay_funnel\n    with st.expand'
+            b"er('Parlay eligibility funnel', expanded=False):\n        if package.get('parlay_poli"
+            b"cy')=='canonical-v3':\n")],
+ 'sha256': 'fd783d6d0146c57935e45137d3f4dd3dee9fadf442017d5ce61029348747cd2f'},
+ 'app_core/prediction_evidence.py': {'edits': [(b'        for action in ("UPDATE", "DELETE"):\n            '
+                                                b'db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_{tab'
+                                                b'le}_{action} BEFORE {action} ON {table} "\n              '
+                                                b'         "BEGIN SELECT RAISE(ABORT, \'prediction evidence'
+                                                b' is append-only\'); END")\n    return db\n\n\n',
+                                                b'        for action in ("UPDATE", "DELETE"):\n            '
+                                                b'db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_{tab'
+                                                b'le}_{action} BEFORE {action} ON {table} "\n              '
+                                                b'         "BEGIN SELECT RAISE(ABORT, \'prediction evidence'
+                                                b' is append-only\'); END")\n    from app_core.research_repl'
+                                                b'ay import setup\n    setup(db)\n    return db\n\n\n'),
+                                               (b'        raise ValueError("Model/configuration artifacts '
+                                                b'changed during analysis; run analysis again")\n    if aud'
+                                                b'it is None or audit.empty or final is None or final.empt'
+                                                b'y:\n        raise ValueError("Cannot capture an empty can'
+                                                b'didate audit or final card")\n    audit, final = audit.co'
+                                                b'py(), final.copy()\n    # Source facts first; metadata an'
+                                                b'd canonical derivation follow. There is no\n    # post-de'
+                                                b'rivation restoration that could erase facts with project'
+                                                b'ed nulls.\n',
+                                                b'        raise ValueError("Model/configuration artifacts '
+                                                b'changed during analysis; run analysis again")\n    if aud'
+                                                b'it is None or audit.empty or final is None or final.empt'
+                                                b'y:\n        raise ValueError("Cannot capture an empty can'
+                                                b'didate audit or final card")\n    from app_core.research_'
+                                                b'replay import original_frames, retain_source\n    origina'
+                                                b'l = original_frames(audit, final, inputs)\n    audit, fin'
+                                                b'al = audit.copy(), final.copy()\n    # Source facts first'
+                                                b'; metadata and canonical derivation follow. There is no\n'
+                                                b'    # post-derivation restoration that could erase facts'
+                                                b' with projected nulls.\n'),
+                                               (b'        db.execute("INSERT INTO snapshots VALUES (?, ?, '
+                                                b'?, ?, ?, ?, ?)",\n                   (context["snapshot_i'
+                                                b'd"], context["model_version"], generated, *payload, dige'
+                                                b'st))\n        db.execute("INSERT INTO snapshot_runtime VA'
+                                                b'LUES (?, ?)", (context["snapshot_id"], PROCESS_INSTANCE)'
+                                                b')\n    if path is None:\n        from app_core.evidence_re'
+                                                b'mote import sync\n        sync(incremental=True)\n',
+                                                b'        db.execute("INSERT INTO snapshots VALUES (?, ?, '
+                                                b'?, ?, ?, ?, ?)",\n                   (context["snapshot_i'
+                                                b'd"], context["model_version"], generated, *payload, dige'
+                                                b'st))\n        db.execute("INSERT INTO snapshot_runtime VA'
+                                                b'LUES (?, ?)", (context["snapshot_id"], PROCESS_INSTANCE)'
+                                                b')\n        retain_source(db, context["snapshot_id"], run_'
+                                                b'id, digest, original, audit, final)\n    if path is None:'
+                                                b'\n        from app_core.evidence_remote import sync\n     '
+                                                b'   sync(incremental=True)\n')],
+                                     'sha256': '14b2663af599bb46de30eaf188ae429b6eaee93e9307c314f2162009d165873b'},
+ 'app_core/research_display.py': {'edits': [(b'def _time(value):\n    from app_core.public_board import timestamp\n    try:\n     '
+            b'   return timestamp(_text(value))\n    except (ValueError, TypeError):\n        re'
+            b'turn None\n\n',
+            b'def _time(value):\n    from app_core.public_board import timestamp\n    try:\n     '
+            b'   from datetime import datetime\n        return timestamp(value.isoformat() if isins'
+            b'tance(value,datetime) else _text(value))\n    except (ValueError, TypeError):\n   '
+            b'     return None\n\n'),
+           (b'    return mass,priced\n\n\ndef from_export(row, *, source=None, source_field="win_'
+            b'probability"):\n    """Capture the actual export estimate before contract authorizati'
+            b'on replaces it."""\n    identity=_identity(row)\n',
+            b'    return mass,priced\n\n\ndef _source_identity_matches(source, identity):\n    """'
+            b'Every supplied source alias must match the exact exported research ticket."""\n    la'
+            b'bels={"matchup_id":"event_id","candidate_id":"candidate_id","export_run_id":"export_'
+            b'run_id",\n        "league":"sport","market_type":"market","best_pick":"selection","di'
+            b'splay_pick":"selection",\n        "market_period":"period","period":"period","settlem'
+            b'ent_rules":"rules"}\n    for field,key in labels.items():\n        value=source.ge'
+            b't(field)\n        if not _absent(value) and not (isinstance(value,float) and math.isn'
+            b'an(value)):\n            if not _text(value) or _text(value)!=identity[key]: return F'
+            b'alse\n    for field in ("quote_bookmaker","quote_source","sportsbook","book"):\n  '
+            b'      value=source.get(field)\n        if not _absent(value) and not (isinstance(valu'
+            b'e,float) and math.isnan(value)):\n            if not _text(value) or _text(value).cas'
+            b'efold()!=identity["sportsbook"].casefold(): return False\n    for field in ("quote_ti'
+            b'me","odds_recorded_at","quote_timestamp","selected_quote_recorded_at"):\n        valu'
+            b'e=source.get(field)\n        if not _absent(value) and not (isinstance(value,float) a'
+            b'nd math.isnan(value)):\n            if _time(value) is None or _time(value)!=identity'
+            b'["quote_time"]: return False\n    for field,key in (("prediction_generated_at","analy'
+            b'sis_time"),("game_start_utc","start")):\n        value=source.get(field)\n        '
+            b'if not _absent(value) and not (isinstance(value,float) and math.isnan(value)):\n     '
+            b'       if _time(value) is None or _time(value)!=identity[key]: return False\n    for '
+            b'field,key in (("odds_american","odds"),("quote_id","quote_id"),("prospective_quote_i'
+            b'd","quote_id")):\n        value=source.get(field)\n        if not _absent(value) a'
+            b'nd not (isinstance(value,float) and math.isnan(value)):\n            if (_number(valu'
+            b'e) if key=="odds" else _text(value))!=identity[key]: return False\n    return Tru'
+            b'e\n\n\ndef missing_identity_fields(identity):\n    required=("event_id","candidate_i'
+            b'd","export_run_id","sport","market","selection","line",\n              "model_target"'
+            b',"sportsbook","quote_id","quote_time","analysis_time","start","period","rules")\n    '
+            b'return [key for key in required if identity.get(key) is None or identity.get(key)=="'
+            b'"]\n\n\ndef from_export(row, *, source=None, source_field="win_probability"):\n    "'
+            b'""Capture the actual export estimate before contract authorization replaces it."""\n '
+            b'   identity=_identity(row)\n'),
+           (b'    if target not in allowed:\n        result["availability_reason"]="TARGET_MISMATCH'
+            b'"\n        return result\n    probability=_number(row.get("win_probability"))\n    '
+            b'if probability is None:\n        result["availability_reason"]="UNSUPPORTED_PROBABILI'
+            b'TY_SEMANTICS"\n',
+            b'    if target not in allowed:\n        result["availability_reason"]="TARGET_MISMATCH'
+            b'"\n        return result\n    if not direct and not _source_identity_matches(sourc'
+            b'e,identity):\n        return _empty(identity,source_field,basis,reason="ESTIMATE_IDEN'
+            b'TITY_MISMATCH")\n    from app_core.research_estimate_trace import origin_rejectio'
+            b'n\n    rejection=origin_rejection(source)\n    if rejection:\n        return _empty'
+            b'(identity,source_field,basis,reason=rejection)\n    probability=_number(row.get("win_'
+            b'probability"))\n    if probability is None:\n        result["availability_reason"]'
+            b'="UNSUPPORTED_PROBABILITY_SEMANTICS"\n')],
+ 'sha256': '64734dda2a50f399e0158664be81e9af2837a408e7ec11ce1db40d6e35c8b333'},
+ 'app_core/research_estimate_trace.py': {'edits': [(b'EXPORT_FIELDS = """candidate_id matchup_id export_ru'
+                                                    b'n_id league market_type pick line\nodds quote_id quot'
+                                                    b'e_source quote_time market_period settlement_rules\np'
+                                                    b'rediction_generated_at start win_probability probabi'
+                                                    b'lity_basis ev\nprobability_semantics push_probability'
+                                                    b' status Play_Stake""".split()\n\n\ndef fact(value):\n',
+                                                    b'EXPORT_FIELDS = """candidate_id matchup_id export_ru'
+                                                    b'n_id league market_type pick line\nodds quote_id quot'
+                                                    b'e_source quote_time market_period settlement_rules\np'
+                                                    b'rediction_generated_at start win_probability probabi'
+                                                    b'lity_basis ev\nprobability_semantics push_probability'
+                                                    b' status Play_Stake ml_target""".split()\n\n\ndef fact(v'
+                                                    b'alue):\n'),
+                                                   (b'    Raw model and blended research estimates retain '
+                                                    b'separate fields. Provider\n    payloads, features, se'
+                                                    b'crets, review prose and private configuration are om'
+                                                    b'itted.\n    """\n    return encode(dict(version=1,\n   '
+                                                    b'     source={k:fact(source.get(k)) for k in SOURCE_F'
+                                                    b'IELDS} if source is not None else None,\n        expo'
+                                                    b'rt={k:fact(export.get(k)) for k in EXPORT_FIELDS},\n '
+                                                    b'       display={k:display[k] for k in ("source_field'
+                                                    b'","basis","identity","inference_status",\n           '
+                                                    b' "availability_reason","value_reason","probability",'
+                                                    b'"push_probability","ev")}))\n',
+                                                    b'    Raw model and blended research estimates retain '
+                                                    b'separate fields. Provider\n    payloads, features, se'
+                                                    b'crets, review prose and private configuration are om'
+                                                    b'itted.\n    """\n    from app_core.research_display im'
+                                                    b'port missing_identity_fields\n    return encode(dict('
+                                                    b'version=2,\n        missing_identity_fields=missing_i'
+                                                    b'dentity_fields(display["identity"]),\n        source='
+                                                    b'{k:fact(source.get(k)) for k in SOURCE_FIELDS} if so'
+                                                    b'urce is not None else None,\n        export={k:fact(e'
+                                                    b'xport.get(k)) for k in EXPORT_FIELDS},\n        displ'
+                                                    b'ay={k:display[k] for k in ("source_field","basis","i'
+                                                    b'dentity","inference_status",\n            "availabili'
+                                                    b'ty_reason","value_reason","probability","push_probab'
+                                                    b'ility","ev")}))\n\n\nORIGIN_IDENTITY_FIELDS = frozenset'
+                                                    b'("""candidate_id matchup_id export_run_id provider_e'
+                                                    b'vent_id\nprovider_namespace prediction_generated_at g'
+                                                    b'ame_start_utc market_period period settlement_rules"'
+                                                    b'"".split())\n\n\ndef origin_rejection(source):\n    '
+                                                    b'"""Validate supplied producer diagnostics without pr'
+                                                    b'omoting a blend\'s inference."""\n    from app_core.re'
+                                                    b'search_display import _absent, _number, _text, _time'
+                                                    b'\n    raw=source.get("ml_estimate_metadata")\n    stat'
+                                                    b'us=source.get("ml_inference_status")\n    if _absent('
+                                                    b'raw) or (isinstance(raw,float) and math.isnan(raw)):'
+                                                    b'\n        return None if _absent(status) or (isinstan'
+                                                    b'ce(status,float) and math.isnan(status)) else "ESTIM'
+                                                    b'ATE_PROVENANCE_NOT_RECORDED"\n    try:\n        item=j'
+                                                    b'son.loads(raw)\n        keys={"version","generated_at'
+                                                    b'","identity","inference_status","line","market_type"'
+                                                    b',"predictor_id",\n              "probability","probab'
+                                                    b'ility_field","probability_semantics","push_probabili'
+                                                    b'ty","reason","target"}\n        if not isinstance(ite'
+                                                    b'm,dict) or set(item)!=keys or type(item["version"]) '
+                                                    b'is not int or item["version"]!=1:\n            raise '
+                                                    b'ValueError("Invalid origin schema")\n        if item['
+                                                    b'"inference_status"] not in {"success","failed","unav'
+                                                    b'ailable"} or item["inference_status"]!=_text(status)'
+                                                    b':\n            raise ValueError("Contradictory origin'
+                                                    b' outcome")\n        if item["probability_field"]!="ml'
+                                                    b'_probability" or _time(item["generated_at"]) is None'
+                                                    b' or not isinstance(item["reason"],str):\n            '
+                                                    b'raise ValueError("Invalid origin provenance")\n      '
+                                                    b'  if not isinstance(item["identity"],dict) or set(it'
+                                                    b'em["identity"])!=ORIGIN_IDENTITY_FIELDS:\n           '
+                                                    b' raise ValueError("Invalid origin identity")\n       '
+                                                    b' for field in ("line","market_type","predictor_id","'
+                                                    b'probability","target"):\n            value=item[field'
+                                                    b']\n            if value not in ({"state":"MISSING"},{'
+                                                    b'"state":"INVALID"}):\n                if not isinstan'
+                                                    b'ce(value,dict) or set(value)!={"state","value"} or v'
+                                                    b'alue["state"]!="VALUE" or fact(value["value"])!=valu'
+                                                    b'e:\n                    raise ValueError("Invalid ori'
+                                                    b'gin fact")\n        for value in item["identity"].val'
+                                                    b'ues():\n            if value not in ({"state":"MISSIN'
+                                                    b'G"},{"state":"INVALID"}):\n                if not isi'
+                                                    b'nstance(value,dict) or set(value)!={"state","value"}'
+                                                    b' or value["state"]!="VALUE" or not isinstance(value['
+                                                    b'"value"],str):\n                    raise ValueError('
+                                                    b'"Invalid origin identity fact")\n        # Capture as'
+                                                    b'signs a new run ID; it does not change these recorde'
+                                                    b'd\n        # event/target facts. Compare clocks by in'
+                                                    b'stant without overwriting them.\n        def event(va'
+                                                    b'lue):\n            import re\n            from core.te'
+                                                    b'am_mapper import normalize_team_name\n            par'
+                                                    b'ts=value.split("|")\n            if len(parts)!=3: re'
+                                                    b'turn value\n            if re.fullmatch(r"\\d{4}-\\d{2}'
+                                                    b'-\\d{2}",parts[0]): day,home,away=parts\n            e'
+                                                    b'lif re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",parts[2]): hom'
+                                                    b'e,away,day=parts\n            else: return value\n    '
+                                                    b'        return (day,normalize_team_name(home),normal'
+                                                    b'ize_team_name(away))\n        for field in ORIGIN_IDE'
+                                                    b'NTITY_FIELDS-{"export_run_id"}:\n            original'
+                                                    b'=item["identity"][field]\n            if original.get'
+                                                    b'("state")!="VALUE": continue\n            current=sou'
+                                                    b'rce.get(field)\n            if _absent(current) or (i'
+                                                    b'sinstance(current,float) and math.isnan(current)):\n '
+                                                    b'               return "ESTIMATE_PROVENANCE_NOT_RECOR'
+                                                    b'DED"\n            if field in {"prediction_generated_'
+                                                    b'at","game_start_utc"}:\n                if _time(orig'
+                                                    b'inal["value"]) is None or _time(original["value"])!='
+                                                    b'_time(current):\n                    return "ESTIMATE'
+                                                    b'_IDENTITY_MISMATCH"\n            elif field=="matchup'
+                                                    b'_id":\n                if event(original["value"])!=e'
+                                                    b'vent(_text(current)): return "ESTIMATE_IDENTITY_MISM'
+                                                    b'ATCH"\n            elif original["value"]!=_text(curr'
+                                                    b'ent): return "ESTIMATE_IDENTITY_MISMATCH"\n        if'
+                                                    b' item["inference_status"]=="failed": return "INFEREN'
+                                                    b'CE_FAILED"\n        if item["inference_status"]=="una'
+                                                    b'vailable":\n            return "INFERENCE_UNAVAILABLE'
+                                                    b'" if _number(source.get("ml_probability")) is not No'
+                                                    b'ne else None\n        line=_number(source.get("total_'
+                                                    b'line" if _text(source.get("market_type")).startswith'
+                                                    b'("total") else "spread_line"))\n        expected={"pr'
+                                                    b'obability":fact(source.get("ml_probability")),"predi'
+                                                    b'ctor_id":fact(source.get("ml_probability_source")),\n'
+                                                    b'                  "target":fact(source.get("ml_targe'
+                                                    b't")),"market_type":fact(source.get("market_type")),"'
+                                                    b'line":fact(line)}\n        if any(item[k]!=v for k,v '
+                                                    b'in expected.items()): return "ESTIMATE_IDENTITY_MISM'
+                                                    b'ATCH"\n        probability=_number(source.get("ml_pro'
+                                                    b'bability"))\n        if probability is None or not 0<'
+                                                    b'=probability<=1: return "INVALID_PROBABILITY"\n      '
+                                                    b'  half=line is not None and abs(line*2-round(line*2)'
+                                                    b')<=1e-9 and abs(line-round(line))>1e-9\n        if (i'
+                                                    b'tem["probability_semantics"]!=("win_unconditional_wi'
+                                                    b'th_push" if half else "UNDECLARED_PUSH_MODEL")\n     '
+                                                    b'           or item["push_probability"]!=(0.0 if half'
+                                                    b' else None) or isinstance(item["push_probability"],b'
+                                                    b'ool)):\n            return "UNSUPPORTED_PROBABILITY_S'
+                                                    b'EMANTICS"\n        return None\n    except (ValueError'
+                                                    b',TypeError,KeyError,AttributeError):\n        return '
+                                                    b'"ESTIMATE_PROVENANCE_NOT_RECORDED"\n')],
+                                         'sha256': '7a859e0cc630819a6f82a0039738431a73e9f000dc89a4a43362ab520f68f08e'},
+ 'tests/test_estimate_scope_policy.py': {'edits': [(b'        git(repo,"config","user.name","Offline Test"'
+                                                    b')\n        git(repo,"config","user.email","offline@ex'
+                                                    b'ample.invalid")\n        git(repo,"config","core.auto'
+                                                    b'crlf","false")\n        current_guard=(SOURCE/guard.G'
+                                                    b'UARD_PATH).read_bytes().replace(b"\\r\\n",b"\\n")\n '
+                                                    b'       previous=guard._estimate_previous_guard_sourc'
+                                                    b'e(current_guard)\n        original=current_guard.spli'
+                                                    b't(b"\\nPOLICY_PATH =",1)[0]+b"\\n"\n        write(repo,'
+                                                    b'"README.md",b"offline fixture\\n")\n',
+                                                    b'        git(repo,"config","user.name","Offline Test"'
+                                                    b')\n        git(repo,"config","user.email","offline@ex'
+                                                    b'ample.invalid")\n        git(repo,"config","core.auto'
+                                                    b'crlf","false")\n        current_guard=guard._nfl_prev'
+                                                    b'ious_main_source(guard.GUARD_PATH,(SOURCE/guard.GUAR'
+                                                    b'D_PATH).read_bytes().replace(b"\\r\\n",b"\\n"))\n   '
+                                                    b'     previous=guard._estimate_previous_guard_source('
+                                                    b'current_guard)\n        original=current_guard.split('
+                                                    b'b"\\nPOLICY_PATH =",1)[0]+b"\\n"\n        write(repo,"R'
+                                                    b'EADME.md",b"offline fixture\\n")\n'),
+                                                   (b'            source_path=SOURCE/path\n            if n'
+                                                    b'ot source_path.exists():\n                continue\n  '
+                                                    b'          value=source_path.read_bytes().replace(b"\\'
+                                                    b'r\\n",b"\\n")\n            if path in guard.ESTIMATE_PA'
+                                                    b'THS:\n                if path in guard.ESTIMATE_PRIOR'
+                                                    b'_SOURCE_RECONSTRUCTIONS:\n                    value=g'
+                                                    b'uard._estimate_previous_main_source(path,value)\n',
+                                                    b'            source_path=SOURCE/path\n            if n'
+                                                    b'ot source_path.exists():\n                continue\n  '
+                                                    b'          value=guard._nfl_previous_main_source(path'
+                                                    b',source_path.read_bytes().replace(b"\\r\\n",b"\\n")'
+                                                    b')\n            if path in guard.ESTIMATE_PATHS:\n     '
+                                                    b'           if path in guard.ESTIMATE_PRIOR_SOURCE_RE'
+                                                    b'CONSTRUCTIONS:\n                    value=guard._esti'
+                                                    b'mate_previous_main_source(path,value)\n'),
+                                                   (b'            previous_guard_sha256=hashlib.sha256(pre'
+                                                    b'vious).hexdigest(),\n            previous_policy_blob'
+                                                    b'=guard.blob(base,guard.DRIVE_POLICY_PATH))\n        f'
+                                                    b'or path in guard.ESTIMATE_PATHS:\n            write(r'
+                                                    b'epo,path,(SOURCE/path).read_bytes().replace(b"\\r\\n",'
+                                                    b'b"\\n"))\n        binding["reviewed_blobs"]={p:git(rep'
+                                                    b'o,"hash-object","--",p) for p in guard.ESTIMATE_PATH'
+                                                    b'S if p!=guard.GUARD_PATH}\n        implementation,can'
+                                                    b'didate,policy=seal(repo,binding)\n        guard.ROOT='
+                                                    b'original_root\n',
+                                                    b'            previous_guard_sha256=hashlib.sha256(pre'
+                                                    b'vious).hexdigest(),\n            previous_policy_blob'
+                                                    b'=guard.blob(base,guard.DRIVE_POLICY_PATH))\n        f'
+                                                    b'or path in guard.ESTIMATE_PATHS:\n            write(r'
+                                                    b'epo,path,guard._nfl_previous_main_source(path,(SOURC'
+                                                    b'E/path).read_bytes().replace(b"\\r\\n",b"\\n")))\n  '
+                                                    b'      binding["reviewed_blobs"]={p:git(repo,"hash-ob'
+                                                    b'ject","--",p) for p in guard.ESTIMATE_PATHS if p!=gu'
+                                                    b'ard.GUARD_PATH}\n        implementation,candidate,pol'
+                                                    b'icy=seal(repo,binding)\n        guard.ROOT=original_r'
+                                                    b'oot\n')],
+                                         'sha256': 'feb3c8cb5e3b0cf78c0cd3bbefaa2beb6abe8ef8df81f4a8baa5bdc271e4b53f'}}
+
+
+def _nfl_previous_guard_source(source, binding=None):
+    binding = NFL_BINDINGS if binding is None else binding
+    if b"\nNFL_POLICY_PATH =" not in source: return source
+    _require(_dfs_guard_matches(source,binding["successor_guard_sha256"]),"SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNFL_POLICY_PATH =",1)[0]+NFL_PREVIOUS_CLI
+
+
+def _nfl_previous_main_source(path,source):
+    if path==GUARD_PATH: return _nfl_previous_guard_source(source)
+    frozen=NFL_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest()==frozen["sha256"]: return source
+    for before,after in reversed(frozen["edits"]):
+        _require(source.count(after)==1,"PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source=source.replace(after,before,1)
+    _require(hashlib.sha256(source).hexdigest()==frozen["sha256"],"PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_nfl_prior_estimate_guard = _estimate_previous_guard_source
+_nfl_prior_estimate_main = _estimate_previous_main_source
+
+
+def _estimate_previous_guard_source(source,binding=None):
+    return _nfl_prior_estimate_guard(_nfl_previous_guard_source(source),binding)
+
+
+def _estimate_previous_main_source(path,source):
+    return _nfl_prior_estimate_main(path,_nfl_previous_main_source(path,source))
+
+
+def _run_nfl_integrated(manifest_path,base,binding):
+    import importlib.util
+    path=ROOT/"scripts/nfl_provenance_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n",b"\n")).hexdigest()==binding["scope_module_sha256"],"SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec=importlib.util.spec_from_file_location("parlaypicker_nfl_provenance_scope_policy",path)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -2616,7 +3016,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", ESTIMATE_POLICY_PATH):
+        if exists_at("HEAD", NFL_POLICY_PATH):
+            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)
+        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):
             code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)
         elif exists_at("HEAD", DRIVE_POLICY_PATH):
             code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)
