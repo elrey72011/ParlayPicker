@@ -81,6 +81,8 @@ def connect(path=None):
         for action in ("UPDATE", "DELETE"):
             db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_{table}_{action} BEFORE {action} ON {table} "
                        "BEGIN SELECT RAISE(ABORT, 'prediction evidence is append-only'); END")
+    from app_core.research_replay import setup
+    setup(db)
     return db
 
 
@@ -292,6 +294,8 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
         raise ValueError("Model/configuration artifacts changed during analysis; run analysis again")
     if audit is None or audit.empty or final is None or final.empty:
         raise ValueError("Cannot capture an empty candidate audit or final card")
+    from app_core.research_replay import original_frames, retain_source
+    original = original_frames(audit, final, inputs)
     audit, final = audit.copy(), final.copy()
     # Source facts first; metadata and canonical derivation follow. There is no
     # post-derivation restoration that could erase facts with projected nulls.
@@ -418,6 +422,7 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
         db.execute("INSERT INTO snapshots VALUES (?, ?, ?, ?, ?, ?, ?)",
                    (context["snapshot_id"], context["model_version"], generated, *payload, digest))
         db.execute("INSERT INTO snapshot_runtime VALUES (?, ?)", (context["snapshot_id"], PROCESS_INSTANCE))
+        retain_source(db, context["snapshot_id"], run_id, digest, original, audit, final)
     if path is None:
         from app_core.evidence_remote import sync
         sync(incremental=True)

@@ -197,7 +197,8 @@ def _number(value):
 def _time(value):
     from app_core.public_board import timestamp
     try:
-        return timestamp(_text(value))
+        from datetime import datetime
+        return timestamp(value.isoformat() if isinstance(value,datetime) else _text(value))
     except (ValueError, TypeError):
         return None
 
@@ -304,6 +305,40 @@ def _export_price_mass(row,source,source_field,*,direct=False,current_push=None)
     return mass,priced
 
 
+def _source_identity_matches(source, identity):
+    """Every supplied source alias must match the exact exported research ticket."""
+    labels={"matchup_id":"event_id","candidate_id":"candidate_id","export_run_id":"export_run_id",
+        "league":"sport","market_type":"market","best_pick":"selection","display_pick":"selection",
+        "market_period":"period","period":"period","settlement_rules":"rules"}
+    for field,key in labels.items():
+        value=source.get(field)
+        if not _absent(value) and not (isinstance(value,float) and math.isnan(value)):
+            if not _text(value) or _text(value)!=identity[key]: return False
+    for field in ("quote_bookmaker","quote_source","sportsbook","book"):
+        value=source.get(field)
+        if not _absent(value) and not (isinstance(value,float) and math.isnan(value)):
+            if not _text(value) or _text(value).casefold()!=identity["sportsbook"].casefold(): return False
+    for field in ("quote_time","odds_recorded_at","quote_timestamp","selected_quote_recorded_at"):
+        value=source.get(field)
+        if not _absent(value) and not (isinstance(value,float) and math.isnan(value)):
+            if _time(value) is None or _time(value)!=identity["quote_time"]: return False
+    for field,key in (("prediction_generated_at","analysis_time"),("game_start_utc","start")):
+        value=source.get(field)
+        if not _absent(value) and not (isinstance(value,float) and math.isnan(value)):
+            if _time(value) is None or _time(value)!=identity[key]: return False
+    for field,key in (("odds_american","odds"),("quote_id","quote_id"),("prospective_quote_id","quote_id")):
+        value=source.get(field)
+        if not _absent(value) and not (isinstance(value,float) and math.isnan(value)):
+            if (_number(value) if key=="odds" else _text(value))!=identity[key]: return False
+    return True
+
+
+def missing_identity_fields(identity):
+    required=("event_id","candidate_id","export_run_id","sport","market","selection","line",
+              "model_target","sportsbook","quote_id","quote_time","analysis_time","start","period","rules")
+    return [key for key in required if identity.get(key) is None or identity.get(key)==""]
+
+
 def from_export(row, *, source=None, source_field="win_probability"):
     """Capture the actual export estimate before contract authorization replaces it."""
     identity=_identity(row)
@@ -378,6 +413,12 @@ def from_export(row, *, source=None, source_field="win_probability"):
     if target not in allowed:
         result["availability_reason"]="TARGET_MISMATCH"
         return result
+    if not direct and not _source_identity_matches(source,identity):
+        return _empty(identity,source_field,basis,reason="ESTIMATE_IDENTITY_MISMATCH")
+    from app_core.research_estimate_trace import origin_rejection
+    rejection=origin_rejection(source)
+    if rejection:
+        return _empty(identity,source_field,basis,reason=rejection)
     probability=_number(row.get("win_probability"))
     if probability is None:
         result["availability_reason"]="UNSUPPORTED_PROBABILITY_SEMANTICS"

@@ -7,7 +7,7 @@ import shutil
 
 import pytest
 from scripts import check_launch_change_scope as guard
-from scripts import estimate_scope as successor
+from scripts import nfl_provenance_scope as successor
 
 SOURCE=Path(__file__).resolve().parents[1]
 
@@ -35,14 +35,14 @@ def commit(repo,message):
 def seal(repo,binding):
     implementation=commit(repo,"bounded implementation")
     policy=successor.make_policy(guard,binding,implementation)
-    write(repo,guard.ESTIMATE_POLICY_PATH,json.dumps(policy,indent=2).encode()+b"\n")
+    write(repo,guard.NFL_POLICY_PATH,json.dumps(policy,indent=2).encode()+b"\n")
     candidate=commit(repo,"policy only seal")
     return implementation,candidate,policy
 
 
 @pytest.fixture(scope="session")
 def prepared(tmp_path_factory):
-    tmp_path=tmp_path_factory.mktemp("estimate-scope-template")
+    tmp_path=tmp_path_factory.mktemp("nfl-provenance-scope-template")
     original_root=guard.ROOT
     from scripts.benchmark_drive_history_loading import blocked_network
     with blocked_network():
@@ -52,8 +52,8 @@ def prepared(tmp_path_factory):
         git(repo,"config","user.name","Offline Test")
         git(repo,"config","user.email","offline@example.invalid")
         git(repo,"config","core.autocrlf","false")
-        current_guard=guard._nfl_previous_main_source(guard.GUARD_PATH,(SOURCE/guard.GUARD_PATH).read_bytes().replace(b"\r\n",b"\n"))
-        previous=guard._estimate_previous_guard_source(current_guard)
+        current_guard=(SOURCE/guard.GUARD_PATH).read_bytes().replace(b"\r\n",b"\n")
+        previous=guard._nfl_previous_guard_source(current_guard)
         original=current_guard.split(b"\nPOLICY_PATH =",1)[0]+b"\n"
         write(repo,"README.md",b"offline fixture\n")
         write(repo,"core/protected.py",b"FROZEN = True\n")
@@ -67,17 +67,17 @@ def prepared(tmp_path_factory):
             tooling_sha256={p:hashlib.sha256((repo/p).read_bytes()).hexdigest()
                 for p in (guard.GUARD_PATH,".github/workflows/paid-launch.yml")})
         manifest_raw=json.dumps(manifest).encode()+b"\n"
-        retained=set(guard.DFS_UNCHANGED_PATHS)|set(guard.DFS_PATHS)|set(guard.DRIVE_PATHS)|{guard.V4_POLICY_PATH,guard.DRIVE_POLICY_PATH}
-        for path in retained | set(guard.ESTIMATE_PATHS):
+        retained=set(guard.NFL_UNCHANGED_PATHS)
+        for path in retained | set(guard.NFL_PATHS):
             if path==guard.GUARD_PATH or path==guard.MANIFEST_PATH or path==".github/workflows/paid-launch.yml":
                 continue
             source_path=SOURCE/path
             if not source_path.exists():
                 continue
             value=guard._nfl_previous_main_source(path,source_path.read_bytes().replace(b"\r\n",b"\n"))
-            if path in guard.ESTIMATE_PATHS:
-                if path in guard.ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS:
-                    value=guard._estimate_previous_main_source(path,value)
+            if path in guard.NFL_PATHS:
+                if path in guard.NFL_PRIOR_SOURCE_RECONSTRUCTIONS:
+                    value=guard._nfl_previous_main_source(path,value)
                 else:
                     # These application bytes are synthetic predecessor inputs;
                     # exact real-main reconstruction has its own frozen tests.
@@ -87,13 +87,13 @@ def prepared(tmp_path_factory):
         write(repo,guard.GUARD_PATH,previous)
         base=commit(repo,"approved main")
         guard.ROOT=repo
-        binding=dict(guard.ESTIMATE_BINDINGS,base=base,base_tree=git(repo,"rev-parse","HEAD^{tree}"),
+        binding=dict(guard.NFL_BINDINGS,base=base,base_tree=git(repo,"rev-parse","HEAD^{tree}"),
             manifest_sha256=hashlib.sha256(manifest_raw).hexdigest(),
             previous_guard_sha256=hashlib.sha256(previous).hexdigest(),
-            previous_policy_blob=guard.blob(base,guard.DRIVE_POLICY_PATH))
-        for path in guard.ESTIMATE_PATHS:
-            write(repo,path,guard._nfl_previous_main_source(path,(SOURCE/path).read_bytes().replace(b"\r\n",b"\n")))
-        binding["reviewed_blobs"]={p:git(repo,"hash-object","--",p) for p in guard.ESTIMATE_PATHS if p!=guard.GUARD_PATH}
+            previous_policy_blob=guard.blob(base,guard.ESTIMATE_POLICY_PATH))
+        for path in guard.NFL_PATHS:
+            write(repo,path,(SOURCE/path).read_bytes().replace(b"\r\n",b"\n"))
+        binding["reviewed_blobs"]={p:git(repo,"hash-object","--",p) for p in guard.NFL_PATHS if p!=guard.GUARD_PATH}
         implementation,candidate,policy=seal(repo,binding)
         guard.ROOT=original_root
         return repo,binding,implementation,candidate,policy
@@ -112,7 +112,7 @@ def fx(tmp_path,monkeypatch,prepared):
 
 def assess(fx,base=None):
     try:
-        return guard._run_estimate_integrated(fx[0]/guard.MANIFEST_PATH,base,fx[1])
+        return guard._run_nfl_integrated(fx[0]/guard.MANIFEST_PATH,base,fx[1])
     except ValueError as exc:
         return 1,{"reason_codes":[str(exc)]}
 
@@ -125,16 +125,16 @@ def test_exact_candidate_ci_merge_and_prior_reconstruction(fx):
     assert report["protected_changes"]==report["existing_test_changes"]==[]
     assert report["approved_exceptions"][0]["retained_unchanged"] is True
     assert guard.CLOCK_TEST in report["original_guard_report"]["existing_test_changes"]
-    assert guard._estimate_previous_guard_source(raw(repo,"HEAD",guard.GUARD_PATH),binding)==raw(repo,binding["base"],guard.GUARD_PATH)
+    assert guard._nfl_previous_guard_source(raw(repo,"HEAD",guard.GUARD_PATH),binding)==raw(repo,binding["base"],guard.GUARD_PATH)
     merge=git(repo,"commit-tree",git(repo,"rev-parse","HEAD^{tree}"),"-p",binding["base"],"-p",candidate,"-m","offline CI")
     git(repo,"checkout","-q",merge)
     assert assess(fx,binding["base"])[0]==0
 
 
-@pytest.mark.parametrize("path", ["app_core/market_probability_model.py","app_core/per_game_boards.py",
-    "app_core/research_display.py","core/streamlit_pipeline.py","app_core/research_estimate_trace.py",
-    "scripts/estimate_scope.py","scripts/check_launch_change_scope.py",
-    "tests/test_drive_history_scope_policy.py","tests/test_estimate_availability.py",
+@pytest.mark.parametrize("path", ["app/ui/publish_panel.py","app_core/prediction_evidence.py","app_core/research_replay.py",
+    "app_core/research_display.py","app_core/research_estimate_trace.py",
+    "scripts/nfl_provenance_scope.py","scripts/check_launch_change_scope.py",
+    "tests/test_nfl_research_replay.py","tests/test_estimate_scope_policy.py",
     "app_core/draftkings_classic.py","app_core/ncaaf_schedule.py",
     "core/protected.py",guard.MANIFEST_PATH,guard.DRIVE_POLICY_PATH,
     "tests/paid_launch/case_isolation_and_scope.py",".github/workflows/paid-launch.yml"])
@@ -157,7 +157,7 @@ def test_dirty_staged_committed_and_resealed_attacks_fail(fx,path):
 def test_policy_mutations_fail(fx,field,value):
     repo,_,implementation,_,policy=fx
     git(repo,"checkout","-q",implementation)
-    write(repo,guard.ESTIMATE_POLICY_PATH,json.dumps(dict(policy,**{field:value})).encode()+b"\n")
+    write(repo,guard.NFL_POLICY_PATH,json.dumps(dict(policy,**{field:value})).encode()+b"\n")
     commit(repo,"mutated seal")
     assert assess(fx)[0]!=0
 
@@ -169,7 +169,7 @@ def test_exact_ancestry_and_policy_only_shape(fx,attack):
         git(repo,"commit","--allow-empty","-qm","extra")
     elif attack=="extra_seal_path":
         git(repo,"checkout","-q",implementation)
-        write(repo,guard.ESTIMATE_POLICY_PATH,json.dumps(policy).encode()+b"\n")
+        write(repo,guard.NFL_POLICY_PATH,json.dumps(policy).encode()+b"\n")
         write(repo,"README.md",b"unapproved seal content\n")
         commit(repo,"extra seal path")
     else:
@@ -193,13 +193,27 @@ def test_untracked_shadows_and_hooks_fail(fx,path):
 def test_crlf_and_cli_precedence_no_fallback(fx,monkeypatch,capsys):
     repo,binding,_,_,policy=fx
     git(repo,"config","core.autocrlf","true")
-    for path in (guard.GUARD_PATH,guard.MANIFEST_PATH,guard.ESTIMATE_POLICY_PATH,
-                 "scripts/estimate_scope.py",".github/workflows/paid-launch.yml"):
+    for path in (guard.GUARD_PATH,guard.MANIFEST_PATH,guard.NFL_POLICY_PATH,
+                 "scripts/nfl_provenance_scope.py",".github/workflows/paid-launch.yml"):
         write(repo,path,(repo/path).read_bytes().replace(b"\n",b"\r\n"))
     assert assess(fx)[0]==0
-    monkeypatch.setattr(guard,"ESTIMATE_BINDINGS",binding)
-    monkeypatch.setattr(guard,"_run_drive_integrated",lambda *args:pytest.fail("Invalid successor cannot fall back"))
+    monkeypatch.setattr(guard,"NFL_BINDINGS",binding)
+    monkeypatch.setattr(guard,"_run_estimate_integrated",lambda *args:pytest.fail("Invalid successor cannot fall back"))
     monkeypatch.setattr("sys.argv",["guard","--manifest",str(repo/guard.MANIFEST_PATH)])
     assert guard.main()==0
-    write(repo,guard.ESTIMATE_POLICY_PATH,json.dumps(dict(policy,approval_reference="invalid")).encode()+b"\n")
+    write(repo,guard.NFL_POLICY_PATH,json.dumps(dict(policy,approval_reference="invalid")).encode()+b"\n")
     assert guard.main()!=0
+
+
+def test_frozen_actual_main_reconstruction_and_prior_assertions():
+    import ast
+    # Full-suite CI uses a shallow merge checkout. Frozen byte digests verify
+    # actual starting-main source without requiring unavailable parent objects.
+    for path in (*guard.NFL_PRIOR_SOURCE_RECONSTRUCTIONS,guard.GUARD_PATH):
+        current=(SOURCE/path).read_bytes().replace(b"\r\n",b"\n")
+        before=guard._nfl_previous_main_source(path,current)
+        expected=guard.NFL_BINDINGS['previous_guard_sha256'] if path==guard.GUARD_PATH else guard.NFL_PRIOR_SOURCE_RECONSTRUCTIONS[path]['sha256']
+        assert hashlib.sha256(before).hexdigest()==expected
+        if path.startswith('tests/'):
+            assertions=lambda source:[ast.dump(n) for n in ast.walk(ast.parse(source)) if isinstance(n,ast.Assert)]
+            assert assertions(current)==assertions(before)

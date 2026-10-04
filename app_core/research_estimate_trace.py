@@ -16,7 +16,7 @@ selection_probability_source expected_value estimated_expected_value""".split()
 EXPORT_FIELDS = """candidate_id matchup_id export_run_id league market_type pick line
 odds quote_id quote_source quote_time market_period settlement_rules
 prediction_generated_at start win_probability probability_basis ev
-probability_semantics push_probability status Play_Stake""".split()
+probability_semantics push_probability status Play_Stake ml_target""".split()
 
 
 def fact(value):
@@ -72,8 +72,83 @@ def boundary_trace(source, export, display):
     Raw model and blended research estimates retain separate fields. Provider
     payloads, features, secrets, review prose and private configuration are omitted.
     """
-    return encode(dict(version=1,
+    from app_core.research_display import missing_identity_fields
+    return encode(dict(version=2,
+        missing_identity_fields=missing_identity_fields(display["identity"]),
         source={k:fact(source.get(k)) for k in SOURCE_FIELDS} if source is not None else None,
         export={k:fact(export.get(k)) for k in EXPORT_FIELDS},
         display={k:display[k] for k in ("source_field","basis","identity","inference_status",
             "availability_reason","value_reason","probability","push_probability","ev")}))
+
+
+ORIGIN_IDENTITY_FIELDS = frozenset("""candidate_id matchup_id export_run_id provider_event_id
+provider_namespace prediction_generated_at game_start_utc market_period period settlement_rules""".split())
+
+
+def origin_rejection(source):
+    """Validate supplied producer diagnostics without promoting a blend's inference."""
+    from app_core.research_display import _absent, _number, _text, _time
+    raw=source.get("ml_estimate_metadata")
+    status=source.get("ml_inference_status")
+    if _absent(raw) or (isinstance(raw,float) and math.isnan(raw)):
+        return None if _absent(status) or (isinstance(status,float) and math.isnan(status)) else "ESTIMATE_PROVENANCE_NOT_RECORDED"
+    try:
+        item=json.loads(raw)
+        keys={"version","generated_at","identity","inference_status","line","market_type","predictor_id",
+              "probability","probability_field","probability_semantics","push_probability","reason","target"}
+        if not isinstance(item,dict) or set(item)!=keys or type(item["version"]) is not int or item["version"]!=1:
+            raise ValueError("Invalid origin schema")
+        if item["inference_status"] not in {"success","failed","unavailable"} or item["inference_status"]!=_text(status):
+            raise ValueError("Contradictory origin outcome")
+        if item["probability_field"]!="ml_probability" or _time(item["generated_at"]) is None or not isinstance(item["reason"],str):
+            raise ValueError("Invalid origin provenance")
+        if not isinstance(item["identity"],dict) or set(item["identity"])!=ORIGIN_IDENTITY_FIELDS:
+            raise ValueError("Invalid origin identity")
+        for field in ("line","market_type","predictor_id","probability","target"):
+            value=item[field]
+            if value not in ({"state":"MISSING"},{"state":"INVALID"}):
+                if not isinstance(value,dict) or set(value)!={"state","value"} or value["state"]!="VALUE" or fact(value["value"])!=value:
+                    raise ValueError("Invalid origin fact")
+        for value in item["identity"].values():
+            if value not in ({"state":"MISSING"},{"state":"INVALID"}):
+                if not isinstance(value,dict) or set(value)!={"state","value"} or value["state"]!="VALUE" or not isinstance(value["value"],str):
+                    raise ValueError("Invalid origin identity fact")
+        # Capture assigns a new run ID; it does not change these recorded
+        # event/target facts. Compare clocks by instant without overwriting them.
+        def event(value):
+            import re
+            from core.team_mapper import normalize_team_name
+            parts=value.split("|")
+            if len(parts)!=3: return value
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}",parts[0]): day,home,away=parts
+            elif re.fullmatch(r"\d{4}-\d{2}-\d{2}",parts[2]): home,away,day=parts
+            else: return value
+            return (day,normalize_team_name(home),normalize_team_name(away))
+        for field in ORIGIN_IDENTITY_FIELDS-{"export_run_id"}:
+            original=item["identity"][field]
+            if original.get("state")!="VALUE": continue
+            current=source.get(field)
+            if _absent(current) or (isinstance(current,float) and math.isnan(current)):
+                return "ESTIMATE_PROVENANCE_NOT_RECORDED"
+            if field in {"prediction_generated_at","game_start_utc"}:
+                if _time(original["value"]) is None or _time(original["value"])!=_time(current):
+                    return "ESTIMATE_IDENTITY_MISMATCH"
+            elif field=="matchup_id":
+                if event(original["value"])!=event(_text(current)): return "ESTIMATE_IDENTITY_MISMATCH"
+            elif original["value"]!=_text(current): return "ESTIMATE_IDENTITY_MISMATCH"
+        if item["inference_status"]=="failed": return "INFERENCE_FAILED"
+        if item["inference_status"]=="unavailable":
+            return "INFERENCE_UNAVAILABLE" if _number(source.get("ml_probability")) is not None else None
+        line=_number(source.get("total_line" if _text(source.get("market_type")).startswith("total") else "spread_line"))
+        expected={"probability":fact(source.get("ml_probability")),"predictor_id":fact(source.get("ml_probability_source")),
+                  "target":fact(source.get("ml_target")),"market_type":fact(source.get("market_type")),"line":fact(line)}
+        if any(item[k]!=v for k,v in expected.items()): return "ESTIMATE_IDENTITY_MISMATCH"
+        probability=_number(source.get("ml_probability"))
+        if probability is None or not 0<=probability<=1: return "INVALID_PROBABILITY"
+        half=line is not None and abs(line*2-round(line*2))<=1e-9 and abs(line-round(line))>1e-9
+        if (item["probability_semantics"]!=("win_unconditional_with_push" if half else "UNDECLARED_PUSH_MODEL")
+                or item["push_probability"]!=(0.0 if half else None) or isinstance(item["push_probability"],bool)):
+            return "UNSUPPORTED_PROBABILITY_SEMANTICS"
+        return None
+    except (ValueError,TypeError,KeyError,AttributeError):
+        return "ESTIMATE_PROVENANCE_NOT_RECORDED"
