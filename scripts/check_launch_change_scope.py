@@ -3009,6 +3009,103 @@ def _run_nfl_integrated(manifest_path,base,binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+HOME_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-home-runline-v1.json'
+HOME_POLICY_VERSION = 'paid-launch-home-runline-contract-v1'
+HOME_APPROVAL_REFERENCE = 'Owner-authorized bounded exact-home Run Line versioned feature contract and offline harness; no fitting, acquisition, registration, activation, wagering, merge or deployment'
+HOME_PATHS = ('app_core/mlb_home_runline_contract.py', 'tests/test_mlb_home_runline_contract.py', 'scripts/home_runline_scope.py', 'tests/test_home_runline_scope_policy.py', 'scripts/check_launch_change_scope.py', 'tests/test_nfl_provenance_scope.py', 'docs/paid-launch/mlb-home-runline-contract.md')
+HOME_BINDINGS = {'base': 'e24e814b6cb08a8d983de615a499035594893830',
+ 'base_tree': 'a7a8c8d1a831f24d51754fefc35405c58cca6e92',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_policy_blob': 'e202937efde63fb81f7a9e332aafa16aebb689f6',
+ 'previous_guard_sha256': '8995dfacb57fd63c2017e7d35b013fdac4ba4d3b45975802777e73063fa1690a',
+ 'scope_module_sha256': '8fcf20cf79af722d7752f17c6834e0e455db97b0789fd90b0995c74158230f80',
+ 'successor_guard_sha256': '046a9dc9d58e40cc47497d1e281ea2045e84f098211995d93b54a7ec0c8ccf5c',
+ 'reviewed_blobs': {'app_core/mlb_home_runline_contract.py': 'a86ba1a783a9f0b302053d40b81e543590aca806',
+                    'tests/test_mlb_home_runline_contract.py': '6cd50521f8086d8d9b662ec15223b834721bb218',
+                    'scripts/home_runline_scope.py': '73f5df38e41505c05c062e419670862b5fcf5659',
+                    'tests/test_home_runline_scope_policy.py': 'f3b52a32677cdca5841a40b9a710e531b6a062d9',
+                    'tests/test_nfl_provenance_scope.py': 'e8e8b40fc6e2e0eda2249a9bea758c97130e30fd',
+                    'docs/paid-launch/mlb-home-runline-contract.md': 'bdc28800d9c8b826fa9beba00c4826efab6b7544'}}
+HOME_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+HOME_PRIOR_SOURCE_RECONSTRUCTIONS = {'tests/test_nfl_provenance_scope.py': {'sha256': '7bf2ab487f20c8a66e48a853923122f5123877ccb98d088166a7b085de14d28c',
+                                        'edits': [(b'        current_guard=(S'
+                                                   b'OURCE/guard.GUARD_PATH).'
+                                                   b'read_bytes().replace(b"\\'
+                                                   b'r\\n",b"\\n")\n',
+                                                   b'        current_guard=gu'
+                                                   b'ard._home_previous_main_'
+                                                   b'source(guard.GUARD_PATH,'
+                                                   b'(SOURCE/guard.GUARD_PATH'
+                                                   b').read_bytes().replace(b'
+                                                   b'"\\r\\n",b"\\n"))\n'),
+                                                  (b'            value=guard.'
+                                                   b'_nfl_previous_main_sourc'
+                                                   b'e(path,source_path.read_'
+                                                   b'bytes().replace(b"\\r\\n",'
+                                                   b'b"\\n"))\n',
+                                                   b'            value=guard.'
+                                                   b'_nfl_previous_main_sourc'
+                                                   b'e(path,guard._home_previ'
+                                                   b'ous_main_source(path,sou'
+                                                   b'rce_path.read_bytes().re'
+                                                   b'place(b"\\r\\n",b"\\n")'
+                                                   b'))\n'),
+                                                  (b'            write(repo,p'
+                                                   b'ath,(SOURCE/path).read_b'
+                                                   b'ytes().replace(b"\\r\\n",b'
+                                                   b'"\\n"))\n',
+                                                   b'            write(repo,p'
+                                                   b'ath,guard._home_previous'
+                                                   b'_main_source(path,(SOURC'
+                                                   b'E/path).read_bytes().rep'
+                                                   b'lace(b"\\r\\n",b"\\n"))'
+                                                   b')\n')]}}
+
+
+def _home_previous_guard_source(source, binding=None):
+    binding = HOME_BINDINGS if binding is None else binding
+    if b"\nHOME_POLICY_PATH =" not in source:
+        return source
+    _require(_dfs_guard_matches(source,binding["successor_guard_sha256"]),
+             "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nHOME_POLICY_PATH =",1)[0]+HOME_PREVIOUS_CLI
+
+
+def _home_previous_main_source(path,source):
+    if path==GUARD_PATH:
+        return _home_previous_guard_source(source)
+    frozen=HOME_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest()==frozen["sha256"]:
+        return source
+    for before,after in reversed(frozen["edits"]):
+        _require(source.count(after)==1,"PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source=source.replace(after,before,1)
+    _require(hashlib.sha256(source).hexdigest()==frozen["sha256"],"PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_home_prior_nfl_guard = _nfl_previous_guard_source
+_home_prior_nfl_main = _nfl_previous_main_source
+
+
+def _nfl_previous_guard_source(source,binding=None):
+    return _home_prior_nfl_guard(_home_previous_guard_source(source),binding)
+
+
+def _nfl_previous_main_source(path,source):
+    return _home_prior_nfl_main(path,_home_previous_main_source(path,source))
+
+
+def _run_home_integrated(manifest_path,base,binding):
+    import importlib.util
+    path=ROOT/"scripts/home_runline_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n",b"\n")).hexdigest()==
+             binding["scope_module_sha256"],"SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec=importlib.util.spec_from_file_location("parlaypicker_home_runline_scope_policy",path)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -3016,7 +3113,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_POLICY_PATH):
+        if exists_at("HEAD", HOME_POLICY_PATH):
+            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)
+        elif exists_at("HEAD", NFL_POLICY_PATH):
             code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)
         elif exists_at("HEAD", ESTIMATE_POLICY_PATH):
             code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)
