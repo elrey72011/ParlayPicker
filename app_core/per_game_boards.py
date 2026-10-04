@@ -288,7 +288,12 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                         # coerce it to the legacy no-push compatibility route.
                         mass=None
                     elif semantics == 'win_conditional_on_decision':
-                        mass=unconditional_from_conditional(probability,push)
+                        from app_core.research_display import captured_legacy_half_point
+                        if captured_legacy_half_point(source,line):
+                            mass={'p_win':probability,'p_push':0.0}
+                            approved=False
+                        else:
+                            mass=unconditional_from_conditional(probability,push)
                     elif semantics in {'win_unconditional_with_push','unconditional_win_push_loss','unconditional'} and push is not None:
                         mass=({'p_win':probability,'p_push':push}
                               if 0<=push<1 and probability+push<=1 else None)
@@ -373,8 +378,24 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'ml_target':text(source,'ml_target') if source is not None else '',
                      'market_period':text(source,'market_period','period') if source is not None else '',
                      'settlement_rules':text(source,'settlement_rules') if source is not None else ''}
+        # Preserve supplied producer clocks, including seconds and UTC offsets.
+        # A display label or capture run ID cannot replace the original facts.
+        if source is not None:
+            from datetime import datetime
+            from app_core.candidate_evidence_schema import missing
+            for field in ('prediction_generated_at','game_start_utc'):
+                if field in source and not missing(source[field]):
+                    value=source[field]
+                    # One exported start clock: downstream start updates and
+                    # existing date/lock checks must not be hidden by an alias.
+                    target='start' if field=='game_start_utc' else field
+                    exported[target]=value.isoformat() if isinstance(value,datetime) else value
         from app_core.research_display import from_export
+        from app_core.research_estimate_trace import boundary_trace
         import json
-        exported['research_display']=json.dumps(from_export(exported, source=source, source_field=probability_field), allow_nan=False, sort_keys=True, separators=(',',':'))
+        display=from_export(exported, source=source, source_field=probability_field)
+        exported['research_display']=json.dumps(display, allow_nan=False, sort_keys=True, separators=(',',':'))
+        # Owner export only: public_board's allowlist never publishes this trace.
+        exported['research_estimate_trace']=boundary_trace(source,exported,display)
         rows.append(exported)
     return pd.DataFrame(rows)

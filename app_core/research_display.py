@@ -21,7 +21,8 @@ PUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_UNAVAILABLE""".split(
 # Explicit public-research provenance only; never an arbitrary source-column copy.
 EXPORT_PROVENANCE_COLUMNS = ["quote_id", "prospective_quote_id", "market_period", "period",
     "settlement_rules", "inference_status", "model_status", "spread_line", "total_line",
-    "market_line_used", "push_probability", "probability_semantics", "research_source_semantics"]
+    "market_line_used", "push_probability", "probability_semantics", "research_source_semantics",
+    "ml_inference_status", "ml_estimate_metadata"]
 SEMANTIC_FIELDS = ("probability_semantics", "push_probability", "inference_status", "model_status")
 SEMANTICS = frozenset({"win_conditional_on_decision","win_unconditional_with_push",
                       "unconditional_win_push_loss","unconditional"})
@@ -213,6 +214,25 @@ def _current_semantics_compatible(original,current,*,push=None):
     # Nonzero-push reversal cannot reinterpret an unconditional source.
     return not (_text(original) in unconditional and current_name=="win_conditional_on_decision"
                 and not (_valid_push(push) and math.isclose(_number(push),0.0,rel_tol=0,abs_tol=1e-9)))
+
+
+def captured_legacy_half_point(source, line):
+    """Display-only compatibility for a captured, originally undeclared row.
+
+    Capture's no-push canonical label cannot manufacture a missing integer push
+    model. Original declarations and every current contradiction still reject.
+    This helper supplies no inference, qualification or wager authority.
+    """
+    if (line is None or abs(line*2-round(line*2))>1e-9
+            or abs(line-round(line))<=1e-9
+            or _absent(source.get("research_source_semantics"))):
+        return False
+    original=_source_semantics(source)
+    return bool(original is not None
+        and _absent(original.get("probability_semantics"))
+        and _absent(original.get("push_probability"))
+        and _text(source.get("probability_semantics"))=="win_conditional_on_decision"
+        and _absent(source.get("push_probability")))
 
 
 def _identity(row):

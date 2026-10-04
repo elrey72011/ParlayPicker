@@ -100,6 +100,8 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
     result["ml_residual_scale"] = pd.Series(np.nan, index=result.index, dtype="float64")
     result["ml_unavailable_reason"] = pd.Series("", index=result.index, dtype="string")
     result["ml_feature_quality"] = pd.Series("unavailable", index=result.index, dtype="string")
+    result["ml_inference_status"] = pd.Series("unavailable", index=result.index, dtype="string")
+    result["ml_estimate_metadata"] = pd.Series("", index=result.index, dtype="string")
 
     if frame is None or frame.empty:
         return result
@@ -215,6 +217,8 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
 
         probability = 0.5 + params["reliability"] * (raw_probability - 0.5)
         probability = float(np.clip(probability, 0.20, 0.80))
+        # Explicit outcome at the originating computation, not numeric inference.
+        result.at[idx, "ml_inference_status"] = "success"
         result.at[idx, "ml_probability"] = probability
         result.at[idx, "ml_probability_source"] = f"{MODEL_VERSION}:{lg.lower()}"
         result.at[idx, "ml_target"] = target
@@ -225,5 +229,13 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
             if lg == "NFL"
             else "resolved_team_scoring_stats"
         )
+
+    from app_core.research_estimate_trace import origin_metadata, generated_time
+    generated = generated_time()
+    for idx in frame.index:
+        line = total_line.loc[idx] if str(market_type.loc[idx]).startswith("total") else spread_line.loc[idx]
+        result.at[idx, "ml_estimate_metadata"] = origin_metadata(
+            frame.loc[idx], result.loc[idx], float(line) if np.isfinite(line) else None,
+            generated_at=generated)
 
     return result
