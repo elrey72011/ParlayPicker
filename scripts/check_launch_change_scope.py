@@ -1899,6 +1899,393 @@ def _dfs_restore_coverage_fixture(source: bytes) -> bytes:
         source = source.replace(after, before, 1)
     return source
 
+DRIVE_POLICY_PATH = "docs/paid-launch/launch-scope-policy-drive-history-v1.json"
+DRIVE_POLICY_VERSION = "paid-launch-drive-history-v1"
+DRIVE_APPROVAL_REFERENCE = "Owner-authorized bounded Drive history/evidence draft; no merge, deployment, live operations, science, qualification, authority or financial changes"
+DRIVE_PATHS = (
+    "app_core/evidence_drive.py", "app_core/evidence_remote.py", "app_core/public_history.py",
+    "app_core/scoped_reads.py", "app_core/market_stage_metrics.py",
+    "app/ui/public_results.py", "app/ui/publish_panel.py", "streamlit_app.py",
+    "tests/test_evidence_drive.py", "tests/test_dfs_scope_policy.py",
+    "tests/test_ncaaf_schedule_scope_policy.py",
+    "tests/test_drive_history_loading.py", "tests/test_drive_history_scope_policy.py",
+    "scripts/benchmark_drive_history_loading.py", "scripts/drive_history_scope.py",
+    "scripts/check_launch_change_scope.py", "docs/paid-launch/drive-history-loading.md",
+    "tests/test_ncaaf_coverage_scope_policy.py",
+)
+DRIVE_BINDINGS = {'base': 'befe6a09cfcec3e6dbe01f53b92602828c3a0db7',
+ 'base_tree': 'd2aa023d4e5bc1770fbbc6c8f284c21ec4e87e07',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_policy_blob': '240f499c737a6978f6bade6578bc40432a942a14',
+ 'previous_guard_sha256': '661a3d174f768c38f7ef32d2feb843c864ff5e7bc61d9e2b366b57754e22b090',
+ 'scope_module_sha256': 'ab9bebbfbc27fad6da56d905545b810237628d23551aba77e9d7d8b10def0022',
+ 'successor_guard_sha256': '006220e9cd9ff6f1798ba5a1e3b39ca533ad61548ccc31df14e18029faf99d4e',
+ 'reviewed_blobs': {'app_core/evidence_drive.py': '6e83e6616908148c94b8512be5436db225c39fd3',
+                    'app_core/evidence_remote.py': '92fe7ac522d885a0bd61703f42a5f9979c8fb038',
+                    'app_core/public_history.py': '1841415c5bdfd3cffdfeb90adcc8855c188d5f4c',
+                    'app_core/scoped_reads.py': '7418aa87a0c1c23da00dd045ff6d3ddc2c7c3dec',
+                    'app_core/market_stage_metrics.py': '1ee69c297e074d38ee2d04a61e4496e9ccf945f7',
+                    'app/ui/public_results.py': 'eac5f694cd49310829d1a557b2f1d307502ee6a7',
+                    'app/ui/publish_panel.py': '6fc6aef6d3e8e10197f78db347bc0cd0249fed1a',
+                    'streamlit_app.py': '050f4193ec4232a91daa38238e8d3c07e2170959',
+                    'tests/test_evidence_drive.py': '5c3138c3da434b6c8d1991ab80807dbb9d3011e3',
+                    'tests/test_dfs_scope_policy.py': 'a0cdd858b0bb6a0b3d5d92f1f04997d657c1a43a',
+                    'tests/test_ncaaf_schedule_scope_policy.py': '5f3fdb8e05dd51459d134606ec32e90c3729f62c',
+                    'tests/test_drive_history_loading.py': 'c785f1f07d7fddd3c0b957b0e367b463f2bcdfb0',
+                    'tests/test_drive_history_scope_policy.py': '1d0d19d1e3a052305b55349a881893c828b1db4a',
+                    'scripts/benchmark_drive_history_loading.py': '78d950dd915a3dc88ead35c58fe6f6ebb9bf3461',
+                    'scripts/drive_history_scope.py': '9f5e1864a55d9e103f22885e64d9d645812a7174',
+                    'docs/paid-launch/drive-history-loading.md': '8bc16c5d4da49c2054846f477ad9475b3e6dd67a',
+                    'tests/test_ncaaf_coverage_scope_policy.py': 'e4bac80c356e8ec2358a1b627b33b902d5740f69'}}
+DRIVE_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS = {'streamlit_app.py': {'sha256': '7e438d76e8210c96a7b1fd9a549d9a4b68bc5548b6267392a86f9ea5e3c01f19',
+                      'edits': [(b'    )\n\n    timer.start("Market enrichment and candidate sele'
+                                 b'ction")\n    diagnostics["stage_seconds"] = timer.timings\n   '
+                                 b' parlay_columns = ["slate_date", "pipeline_build", "export_run_i'
+                                 b'd", "parlay_rank", "parlay_legs", "combined_probability", "combi'
+                                 b'ned_decimal_odds", "parlay_ev", "legs", "unique_game_count", "on'
+                                 b'e_leg_per_game", "card_unique_games", "card_game_exposure_cap", '
+                                 b'"card_unique_game_count", "parlay_source", "risk_tier", "group_i'
+                                 b'd", "best_payout_book", "Conviction_Score", "min_leg_prob", "has'
+                                 b'_actionable_anchor", "production_safety_mode", "parlay_class", "'
+                                 b'premium_eligible", "sellable_as_premium", "commercial_warning", '
+                                 b'"kelly_fraction", "recommended_bet"]\n    empty_per_leg = {f"'
+                                 b'parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in'
+                                 b' (2, 3)}\n',
+                                 b'    )\n\n    timer.start("Market enrichment and candidate sele'
+                                 b'ction")\n    from app_core.market_stage_metrics import measur'
+                                 b'ed_call\n    def market_call(name, operation, *args, **kwargs'
+                                 b'):\n        return measured_call(name, operation, *args, ids='
+                                 b'timer.ids, **kwargs)\n    diagnostics["stage_seconds"] = time'
+                                 b'r.timings\n    parlay_columns = ["slate_date", "pipeline_buil'
+                                 b'd", "export_run_id", "parlay_rank", "parlay_legs", "combined_pro'
+                                 b'bability", "combined_decimal_odds", "parlay_ev", "legs", "unique'
+                                 b'_game_count", "one_leg_per_game", "card_unique_games", "card_gam'
+                                 b'e_exposure_cap", "card_unique_game_count", "parlay_source", "ris'
+                                 b'k_tier", "group_id", "best_payout_book", "Conviction_Score", "mi'
+                                 b'n_leg_prob", "has_actionable_anchor", "production_safety_mode", '
+                                 b'"parlay_class", "premium_eligible", "sellable_as_premium", "comm'
+                                 b'ercial_warning", "kelly_fraction", "recommended_bet"]\n    em'
+                                 b'pty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_c'
+                                 b'olumns) for lc in (2, 3)}\n'),
+                                (b'        if "game_date" not in analysis_df.columns or analysis_df'
+                                 b'["game_date"].isna().all():\n            deferred_warnings.ap'
+                                 b'pend("game_date missing from analysis_df \xe2\x80\x94 Kalshi '
+                                 b'matching skipped.")\n        else:\n            analysis_df, k'
+                                 b'alshi_err = _enrich_with_kalshi_safe(analysis_df)\n          '
+                                 b'  if kalshi_err:\n                deferred_warnings.append(ka'
+                                 b'lshi_err)\n\n    if controls.get("use_ml"):\n        try:\n     '
+                                 b'       analysis_df = _sync_ml_probabilities(analysis_df, pipelin'
+                                 b'e_best_picks_df)\n        except ValueError as exc:\n         '
+                                 b'   deferred_errors.append(f"ML Merge Failed: {exc}")\n       '
+                                 b'     timer.finish()\n',
+                                 b'        if "game_date" not in analysis_df.columns or analysis_df'
+                                 b'["game_date"].isna().all():\n            deferred_warnings.ap'
+                                 b'pend("game_date missing from analysis_df \xe2\x80\x94 Kalshi '
+                                 b'matching skipped.")\n        else:\n            analysis_df, k'
+                                 b'alshi_err = market_call("kalshi_enrichment", _enrich_with_kalshi'
+                                 b'_safe, analysis_df)\n            if kalshi_err:\n             '
+                                 b'   deferred_warnings.append(kalshi_err)\n\n    if controls.get'
+                                 b'("use_ml"):\n        try:\n            analysis_df = market_ca'
+                                 b'll("ml_probability_join", _sync_ml_probabilities, analysis_df, p'
+                                 b'ipeline_best_picks_df)\n        except ValueError as exc:\n   '
+                                 b'         deferred_errors.append(f"ML Merge Failed: {exc}")\n '
+                                 b'           timer.finish()\n'),
+                                (b'        ml_required = False\n\n    try:\n        analysis_df = '
+                                 b'_recompute_consensus_from_kalshi(\n            analysis_df,\n '
+                                 b'           require_ml=ml_required,\n        )\n',
+                                 b'        ml_required = False\n\n    try:\n        analysis_df = '
+                                 b'market_call("consensus", _recompute_consensus_from_kalshi,\n '
+                                 b'           analysis_df,\n            require_ml=ml_required,\n'
+                                 b'        )\n'),
+                                (b'\n    # We pass the diagnostics dictionary so that selection '
+                                 b'metrics and preview_df\n    # can be injected without relying'
+                                 b' on pandas DataFrame.attrs serialization.\n    best_picks_df '
+                                 b'= build_best_picks_df(analysis_df, diagnostics_out=diagnosti'
+                                 b'cs)\n    best_picks_df = ensure_best_pick_export_columns(best'
+                                 b'_picks_df, diagnostics_out=diagnostics)\n    diagnostics["ide'
+                                 b'ntity_columns_ready_before_portfolio"] = bool(\n        all(c'
+                                 b' in best_picks_df.columns for c in ["export_run_id", "pick_id", '
+                                 b'"canonical_pick_key"])\n        and best_picks_df["canonical_'
+                                 b'pick_key"].astype(str).str.strip().ne("").all()\n',
+                                 b'\n    # We pass the diagnostics dictionary so that selection '
+                                 b'metrics and preview_df\n    # can be injected without relying'
+                                 b' on pandas DataFrame.attrs serialization.\n    best_picks_df '
+                                 b'= market_call("candidate_selection", build_best_picks_df, analys'
+                                 b'is_df, diagnostics_out=diagnostics)\n    best_picks_df = mark'
+                                 b'et_call("export_columns", ensure_best_pick_export_columns, best_'
+                                 b'picks_df, diagnostics_out=diagnostics)\n    diagnostics["iden'
+                                 b'tity_columns_ready_before_portfolio"] = bool(\n        all(c '
+                                 b'in best_picks_df.columns for c in ["export_run_id", "pick_id", "'
+                                 b'canonical_pick_key"])\n        and best_picks_df["canonical_p'
+                                 b'ick_key"].astype(str).str.strip().ne("").all()\n'),
+                                (b'    # the probability-first display winner for each game.\n  '
+                                 b'  trial_now = pd.Timestamp.now(tz="UTC").to_pydatetime()\n   '
+                                 b' from app_core.controlled_trial_pipeline import prepare_review_c'
+                                 b'andidates\n    candidate_pool, trial_candidates = prepare_rev'
+                                 b'iew_candidates(\n        diagnostics, now=trial_now\n    )\n   '
+                                 b' diagnostics["candidate_authority_df"] = candidate_pool\n',
+                                 b'    # the probability-first display winner for each game.\n  '
+                                 b'  trial_now = pd.Timestamp.now(tz="UTC").to_pydatetime()\n   '
+                                 b' from app_core.controlled_trial_pipeline import prepare_review_c'
+                                 b'andidates\n    candidate_pool, trial_candidates = market_call'
+                                 b'("review_candidate_preparation", prepare_review_candidates,\n'
+                                 b'        diagnostics, now=trial_now\n    )\n    diagnostics["ca'
+                                 b'ndidate_authority_df"] = candidate_pool\n'),
+                                (b'                game_seconds = sum(state_updates.get("diagnostic'
+                                 b's", {}).get("stage_seconds", {}).values())\n                g'
+                                 b'ame_status.update(label=f"Game analysis finished in {game_second'
+                                 b's:.0f}s", state="complete")\n            st.session_state.upd'
+                                 b'ate(state_updates)\n            st.session_state["history_ref'
+                                 b'resh_requested"] = True\n            st.session_state["last_s'
+                                 b'uccessful_pipeline_signature"] = (\n                _analysis'
+                                 b'_input_signature(controls)\n            )\n',
+                                 b'                game_seconds = sum(state_updates.get("diagnostic'
+                                 b's", {}).get("stage_seconds", {}).values())\n                g'
+                                 b'ame_status.update(label=f"Game analysis finished in {game_second'
+                                 b's:.0f}s", state="complete")\n            st.session_state.upd'
+                                 b'ate(state_updates)\n            st.session_state["last_succes'
+                                 b'sful_pipeline_signature"] = (\n                _analysis_inpu'
+                                 b't_signature(controls)\n            )\n'),
+                                (b'                st.caption("Run Game Analysis to collect timings'
+                                 b'.")\n        with st.expander("Prediction Evidence Status", e'
+                                 b'xpanded=False):\n            from app_core.evidence_health im'
+                                 b'port evidence_health\n            from app_core.evidence_remo'
+                                 b'te import restore_once, restore, sync\n            try:\n     '
+                                 b'           restore_once()\n            except RuntimeError as'
+                                 b' exc:\n                st.error(str(exc))\n            if st.b'
+                                 b'utton("Restore and sync evidence storage", key="sync_remote_evid'
+                                 b'ence"):\n                try:\n                    restore()\n '
+                                 b'                   sync()\n                except Exception a'
+                                 b's exc:\n                    from app_core.evidence_config imp'
+                                 b'ort safe_error\n',
+                                 b'                st.caption("Run Game Analysis to collect timings'
+                                 b'.")\n        with st.expander("Prediction Evidence Status", e'
+                                 b'xpanded=False):\n            from app_core.evidence_health im'
+                                 b'port evidence_health\n            from app_core.evidence_remo'
+                                 b'te import restore, sync\n            if st.button("Restore an'
+                                 b'd sync evidence storage", key="sync_remote_evidence"):\n     '
+                                 b'           try:\n                    restore(full_verificatio'
+                                 b'n=True)\n                    sync()\n                except Ex'
+                                 b'ception as exc:\n                    from app_core.evidence_c'
+                                 b'onfig import safe_error\n'),
+                                (b'\n    with publish_tab:\n        from app.ui.publish_panel imp'
+                                 b'ort render_publish_panel\n        render_publish_panel(public'
+                                 b'ation_games, _publication_candidates(diagnostics), publication_p'
+                                 b'rops, publication_dfs)\n\n    with tab4:\n        st.subheader('
+                                 b'"Best Parlays")\n',
+                                 b'\n    with publish_tab:\n        from app.ui.publish_panel imp'
+                                 b'ort render_publish_panel\n        render_publish_panel(public'
+                                 b'ation_games, _publication_candidates(diagnostics), publication_p'
+                                 b'rops, publication_dfs, lazy_history=True)\n\n    with tab4:\n  '
+                                 b'      st.subheader("Best Parlays")\n')]},
+ 'tests/test_evidence_drive.py': {'sha256': '5714de5251327a3f8d4cd482c36d57a424cf7f23cb8e580937a4ffe317f604ad',
+                                  'edits': [(b"    assert store.read_cached_objects(Prefix='receipt"
+                                             b"/', cache_dir=tmp_path)==[('receipt/key',raw)]\n "
+                                             b"   assert store.read_cached_objects(Prefix='receipt/"
+                                             b"', cache_dir=tmp_path)==[('receipt/key',raw)]\n  "
+                                             b"  assert len(listings)==2 and reads==['one']\n   "
+                                             b" (tmp_path/sha).write_bytes(b'corrupt')\n    stor"
+                                             b"e.read_cached_objects(Prefix='receipt/', cache_dir=t"
+                                             b"mp_path)\n    assert reads==['one','one']\n    fil"
+                                             b'es.clear()\n',
+                                             b"    assert store.read_cached_objects(Prefix='receipt"
+                                             b"/', cache_dir=tmp_path)==[('receipt/key',raw)]\n "
+                                             b"   assert store.read_cached_objects(Prefix='receipt/"
+                                             b"', cache_dir=tmp_path)==[('receipt/key',raw)]\n  "
+                                             b"  assert len(listings)==2 and reads==['one']\n   "
+                                             b" (store.verified_cache_root(tmp_path, 'receipt/')/sh"
+                                             b"a).write_bytes(b'corrupt')\n    store.read_cached"
+                                             b"_objects(Prefix='receipt/', cache_dir=tmp_path)\n"
+                                             b"    assert reads==['one','one']\n    files.clear("
+                                             b')\n')]},
+ 'tests/test_dfs_scope_policy.py': {'sha256': '2da033d78d07592a796d3669c90854c84257ec4497abc3e13f95cd94717bc360',
+                                    'edits': [(b'    git(repo, "config", "core.autocrlf", "false"'
+                                               b')\n    git(repo, "config", "user.name", "Offline '
+                                               b'Test")\n    git(repo, "config", "user.email", "of'
+                                               b'fline@example.invalid")\n    source_guard = (SOUR'
+                                               b'CE / guard.GUARD_PATH).read_bytes().replace(b"\\r'
+                                               b'\\n", b"\\n")\n    previous_guard = source_guar'
+                                               b'd.split(b"\\nV4_POLICY_PATH =", 1)[0] + guard.DFS'
+                                               b'_PREVIOUS_CLI\n    original_guard = source_guard.'
+                                               b'split(b"\\nPOLICY_PATH =", 1)[0] + b"\\n"\n    '
+                                               b'write(repo, "README.md", b"offline DFS fixture\\n'
+                                               b'")\n',
+                                               b'    git(repo, "config", "core.autocrlf", "false"'
+                                               b')\n    git(repo, "config", "user.name", "Offline '
+                                               b'Test")\n    git(repo, "config", "user.email", "of'
+                                               b'fline@example.invalid")\n    source_guard = guard'
+                                               b'._drive_previous_guard_source((SOURCE / guard.GU'
+                                               b'ARD_PATH).read_bytes().replace(b"\\r\\n", b"\\n'
+                                               b'"))\n    previous_guard = source_guard.split(b"\\n'
+                                               b'V4_POLICY_PATH =", 1)[0] + guard.DFS_PREVIOUS_CL'
+                                               b'I\n    original_guard = source_guard.split(b"\\nPO'
+                                               b'LICY_PATH =", 1)[0] + b"\\n"\n    write(repo, "REA'
+                                               b'DME.md", b"offline DFS fixture\\n")\n'),
+                                              (b'               "clock_blob": guard.blob(base, gu'
+                                               b'ard.CLOCK_TEST),\n               "successor_guard'
+                                               b'_sha256": guard.DFS_BINDINGS["successor_guard_sh'
+                                               b'a256"]}\n    for path in guard.DFS_PATHS:\n       '
+                                               b' write(repo, path, (SOURCE / path).read_bytes().'
+                                               b'replace(b"\\r\\n", b"\\n"))\n    binding["review'
+                                               b'ed_dfs_blobs"] = {p: git(repo, "hash-object", "-'
+                                               b'-", p)\n                                     for '
+                                               b'p in guard.DFS_BINDINGS["reviewed_dfs_blobs"]}\n '
+                                               b'   implementation, candidate, policy = seal(repo'
+                                               b', binding)\n',
+                                               b'               "clock_blob": guard.blob(base, gu'
+                                               b'ard.CLOCK_TEST),\n               "successor_guard'
+                                               b'_sha256": guard.DFS_BINDINGS["successor_guard_sh'
+                                               b'a256"]}\n    for path in guard.DFS_PATHS:\n       '
+                                               b' write(repo, path, guard._drive_previous_main_so'
+                                               b'urce(path, (SOURCE / path).read_bytes().replace('
+                                               b'b"\\r\\n", b"\\n")))\n    binding["reviewed_dfs_'
+                                               b'blobs"] = {p: git(repo, "hash-object", "--", p)\n'
+                                               b'                                     for p in gu'
+                                               b'ard.DFS_BINDINGS["reviewed_dfs_blobs"]}\n    impl'
+                                               b'ementation, candidate, policy = seal(repo, bindi'
+                                               b'ng)\n'),
+                                              (b'\n\ndef test_prior_guard_and_fixture_reconstruct_e'
+                                               b'xact_reviewed_bytes():\n    source = (SOURCE / gu'
+                                               b'ard.GUARD_PATH).read_bytes().replace(b"\\r\\n", b"'
+                                               b'\\n")\n    previous = guard._dfs_previous_guard_so'
+                                               b'urce(source)\n    assert hashlib.sha256(previous)'
+                                               b'.hexdigest() == guard.DFS_BINDINGS["previous_gua'
+                                               b'rd_sha256"]\n    fixture = (SOURCE / "tests/test_'
+                                               b'ncaaf_coverage_scope_policy.py").read_bytes().re'
+                                               b'place(b"\\r\\n", b"\\n")\n',
+                                               b'\n\ndef test_prior_guard_and_fixture_reconstruct_e'
+                                               b'xact_reviewed_bytes():\n    source = guard._drive'
+                                               b'_previous_guard_source((SOURCE / guard.GUARD_PAT'
+                                               b'H).read_bytes().replace(b"\\r\\n", b"\\n"))\n   '
+                                               b' previous = guard._dfs_previous_guard_source(sou'
+                                               b'rce)\n    assert hashlib.sha256(previous).hexdige'
+                                               b'st() == guard.DFS_BINDINGS["previous_guard_sha25'
+                                               b'6"]\n    fixture = (SOURCE / "tests/test_ncaaf_co'
+                                               b'verage_scope_policy.py").read_bytes().replace(b"'
+                                               b'\\r\\n", b"\\n")\n')]},
+ 'tests/test_ncaaf_schedule_scope_policy.py': {'sha256': '81d20cf7facf63c6f469dc0af52f7f5d740260a86be86128d41d206119ac1407',
+                                               'edits': [(b'    previous=(SOURCE/g.GUARD_PATH).r'
+                                                          b'ead_bytes().replace(b"\\r\\n",b"\\n").s'
+                                                          b'plit(b"\\nSCHEDULE_POLICY_PATH =",1)['
+                                                          b'0]+b"\\ndef main() -> int:\\n    pass\\'
+                                                          b'n"\n    write(repo,g.GUARD_PATH,previ'
+                                                          b'ous)\n    for p,edits in g.SCHEDULE_S'
+                                                          b'HARED_EDITS.items():\n        value=('
+                                                          b'SOURCE/p).read_bytes().replace(b"\\r\\'
+                                                          b'n",b"\\n").decode()\n        for befor'
+                                                          b'e,after in reversed(edits):\n        '
+                                                          b'    assert value.count(after)==1\n   '
+                                                          b'         value=value.replace(after,b'
+                                                          b'efore,1)\n',
+                                                          b'    previous=(SOURCE/g.GUARD_PATH).r'
+                                                          b'ead_bytes().replace(b"\\r\\n",b"\\n").s'
+                                                          b'plit(b"\\nSCHEDULE_POLICY_PATH =",1)['
+                                                          b'0]+b"\\ndef main() -> int:\\n    pass\\'
+                                                          b'n"\n    write(repo,g.GUARD_PATH,previ'
+                                                          b'ous)\n    for p,edits in g.SCHEDULE_S'
+                                                          b'HARED_EDITS.items():\n        value=g'
+                                                          b'._drive_previous_main_source(p,(SOUR'
+                                                          b'CE/p).read_bytes().replace(b"\\r\\n",b'
+                                                          b'"\\n")).decode()\n        for before,a'
+                                                          b'fter in reversed(edits):\n           '
+                                                          b' assert value.count(after)==1\n      '
+                                                          b'      value=value.replace(after,befo'
+                                                          b're,1)\n'),
+                                                         (b'\ndef original_schedule_source(path):'
+                                                          b'\n    """Exercise the original v1 con'
+                                                          b'tract, never rebind it to the correc'
+                                                          b'tion."""\n    source = (SOURCE / path'
+                                                          b').read_bytes().replace(b"\\r\\n", b"\\n'
+                                                          b'")\n    if path == g.GUARD_PATH:\n    '
+                                                          b'    return source.split(b"\\nCOVERAGE'
+                                                          b'_POLICY_PATH =", 1)[0] + g.COVERAGE_'
+                                                          b'PREVIOUS_CLI\n    if path == "app_cor'
+                                                          b'e/ncaaf_schedule.py":\n',
+                                                          b'\ndef original_schedule_source(path):'
+                                                          b'\n    """Exercise the original v1 con'
+                                                          b'tract, never rebind it to the correc'
+                                                          b'tion."""\n    source = g._drive_previ'
+                                                          b'ous_main_source(path, (SOURCE / path'
+                                                          b').read_bytes().replace(b"\\r\\n", b"\\n'
+                                                          b'"))\n    if path == g.GUARD_PATH:\n   '
+                                                          b'     return source.split(b"\\nCOVERAG'
+                                                          b'E_POLICY_PATH =", 1)[0] + g.COVERAGE'
+                                                          b'_PREVIOUS_CLI\n    if path == "app_co'
+                                                          b're/ncaaf_schedule.py":\n')]},
+ 'tests/test_ncaaf_coverage_scope_policy.py': {'sha256': 'ff5f4b9bb934536724d6e6273c75cd2ef769e82f0f36fc07cc9ea29c3eaf344b',
+                                               'edits': [(b'\ndef original_coverage_source(path):'
+                                                          b'\n    """Reconstruct the reviewed pri'
+                                                          b'or fixtures without changing asserti'
+                                                          b'ons."""\n    source = (SOURCE / path)'
+                                                          b'.read_bytes().replace(b"\\r\\n", b"\\n"'
+                                                          b')\n    if path == guard.GUARD_PATH:\n '
+                                                          b'       return guard._dfs_previous_gu'
+                                                          b'ard_source(source)\n    if path == "t'
+                                                          b'ests/test_ncaaf_coverage_scope_polic'
+                                                          b'y.py":\n',
+                                                          b'\ndef original_coverage_source(path):'
+                                                          b'\n    """Reconstruct the reviewed pri'
+                                                          b'or fixtures without changing asserti'
+                                                          b'ons."""\n    source = guard._drive_pr'
+                                                          b'evious_main_source(path, (SOURCE / p'
+                                                          b'ath).read_bytes().replace(b"\\r\\n", b'
+                                                          b'"\\n"))\n    if path == guard.GUARD_PA'
+                                                          b'TH:\n        return guard._dfs_previo'
+                                                          b'us_guard_source(source)\n    if path '
+                                                          b'== "tests/test_ncaaf_coverage_scope_'
+                                                          b'policy.py":\n')]}}
+
+
+def _drive_previous_main_source(path, source):
+    """Reconstruct reviewed predecessor fixture inputs, never their assertions."""
+    if path == GUARD_PATH:
+        return _drive_previous_guard_source(source)
+    frozen = DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+
+def _drive_previous_guard_source(source, binding=None):
+    binding = DRIVE_BINDINGS if binding is None else binding
+    if b"\nDRIVE_POLICY_PATH =" not in source:
+        return source
+    _require(_dfs_guard_matches(source, binding["successor_guard_sha256"]),
+             "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nDRIVE_POLICY_PATH =", 1)[0] + DRIVE_PREVIOUS_CLI
+
+
+_drive_prior_dfs_source = _dfs_previous_guard_source
+
+
+def _dfs_previous_guard_source(source):
+    return _drive_prior_dfs_source(_drive_previous_guard_source(source))
+
+
+_drive_prior_coverage_fixture = _dfs_restore_coverage_fixture
+
+
+def _dfs_restore_coverage_fixture(source):
+    return _drive_prior_coverage_fixture(_drive_previous_main_source(
+        "tests/test_ncaaf_coverage_scope_policy.py", source))
+
+
+def _run_drive_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/drive_history_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() ==
+             binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_drive_scope_policy", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -1906,7 +2293,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", V4_POLICY_PATH):
+        if exists_at("HEAD", DRIVE_POLICY_PATH):
+            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)
+        elif exists_at("HEAD", V4_POLICY_PATH):
             code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)
         elif exists_at("HEAD", COVERAGE_POLICY_PATH):
             code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)

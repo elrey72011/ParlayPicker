@@ -33,7 +33,7 @@ def commit(repo, message):
 
 def original_coverage_source(path):
     """Reconstruct the reviewed prior fixtures without changing assertions."""
-    source = (SOURCE / path).read_bytes().replace(b"\r\n", b"\n")
+    source = guard._drive_previous_main_source(path, (SOURCE / path).read_bytes().replace(b"\r\n", b"\n"))
     if path == guard.GUARD_PATH:
         return guard._dfs_previous_guard_source(source)
     if path == "tests/test_ncaaf_coverage_scope_policy.py":

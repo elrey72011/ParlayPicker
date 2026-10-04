@@ -1,0 +1,149 @@
+{
+  "schema_version": 5,
+  "policy_version": "paid-launch-drive-history-v1",
+  "approval_reference": "Owner-authorized bounded Drive history/evidence draft; no merge, deployment, live operations, science, qualification, authority or financial changes",
+  "base_sha": "befe6a09cfcec3e6dbe01f53b92602828c3a0db7",
+  "base_tree": "d2aa023d4e5bc1770fbbc6c8f284c21ec4e87e07",
+  "original_manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "previous_policy_blob": "240f499c737a6978f6bade6578bc40432a942a14",
+  "implementation_commit": "e3b4b841adbbf79b3eae07d1fc4cb3591c6882ea",
+  "implementation_tree": "59c4def450144b42ad041617cbff6ec77c87b85c",
+  "implementation_changes": {
+    "app_core/evidence_drive.py": {
+      "before_blob": "34ee9ee097488a42c7d6d27dfab7d36dc2a786a7",
+      "after_blob": "6e83e6616908148c94b8512be5436db225c39fd3"
+    },
+    "app_core/evidence_remote.py": {
+      "before_blob": "935e2afcf5f68ba93e74e3befc17043d3bcf36ab",
+      "after_blob": "92fe7ac522d885a0bd61703f42a5f9979c8fb038"
+    },
+    "app_core/public_history.py": {
+      "before_blob": "10013f41815e67de2953deb8d6dff7660261f675",
+      "after_blob": "1841415c5bdfd3cffdfeb90adcc8855c188d5f4c"
+    },
+    "app_core/scoped_reads.py": {
+      "before_blob": null,
+      "after_blob": "7418aa87a0c1c23da00dd045ff6d3ddc2c7c3dec"
+    },
+    "app_core/market_stage_metrics.py": {
+      "before_blob": null,
+      "after_blob": "1ee69c297e074d38ee2d04a61e4496e9ccf945f7"
+    },
+    "app/ui/public_results.py": {
+      "before_blob": "f555babb5279bb7e683c0ac6ef6b96de1e994ecd",
+      "after_blob": "eac5f694cd49310829d1a557b2f1d307502ee6a7"
+    },
+    "app/ui/publish_panel.py": {
+      "before_blob": "2c36f4198794dd9619e5f6286e0ed7bf7f0f245c",
+      "after_blob": "6fc6aef6d3e8e10197f78db347bc0cd0249fed1a"
+    },
+    "streamlit_app.py": {
+      "before_blob": "33f8ebc62526b8633ee127a9d05cbbe9e9f5afd8",
+      "after_blob": "050f4193ec4232a91daa38238e8d3c07e2170959"
+    },
+    "tests/test_evidence_drive.py": {
+      "before_blob": "1aa46c04e83cb7f2713199838dee523e8a441179",
+      "after_blob": "5c3138c3da434b6c8d1991ab80807dbb9d3011e3"
+    },
+    "tests/test_dfs_scope_policy.py": {
+      "before_blob": "a2e737b5457cdb6169800a05b209ff8dcc8ab1be",
+      "after_blob": "a0cdd858b0bb6a0b3d5d92f1f04997d657c1a43a"
+    },
+    "tests/test_ncaaf_schedule_scope_policy.py": {
+      "before_blob": "3ad103128d828872216a109683b22308f38bce32",
+      "after_blob": "5f3fdb8e05dd51459d134606ec32e90c3729f62c"
+    },
+    "tests/test_drive_history_loading.py": {
+      "before_blob": null,
+      "after_blob": "c785f1f07d7fddd3c0b957b0e367b463f2bcdfb0"
+    },
+    "tests/test_drive_history_scope_policy.py": {
+      "before_blob": null,
+      "after_blob": "1d0d19d1e3a052305b55349a881893c828b1db4a"
+    },
+    "scripts/benchmark_drive_history_loading.py": {
+      "before_blob": null,
+      "after_blob": "78d950dd915a3dc88ead35c58fe6f6ebb9bf3461"
+    },
+    "scripts/drive_history_scope.py": {
+      "before_blob": null,
+      "after_blob": "9f5e1864a55d9e103f22885e64d9d645812a7174"
+    },
+    "scripts/check_launch_change_scope.py": {
+      "before_blob": "1f6c42aa0a3988e70b9b47768c13729312803441",
+      "after_blob": "30d04ccf7764a9f07bf9b8c98d3dd8a6556976b4"
+    },
+    "docs/paid-launch/drive-history-loading.md": {
+      "before_blob": null,
+      "after_blob": "8bc16c5d4da49c2054846f477ad9475b3e6dd67a"
+    },
+    "tests/test_ncaaf_coverage_scope_policy.py": {
+      "before_blob": "76240a38a0f57e0082dc872c7ef19f6cf0155002",
+      "after_blob": "e4bac80c356e8ec2358a1b627b33b902d5740f69"
+    }
+  },
+  "tooling_sha256": {
+    "scripts/check_launch_change_scope.py": "2116a73036a6243da92120a29c5a4dcf242d21fa735e31beeeceedd0174ef386",
+    ".github/workflows/paid-launch.yml": "fccb75c4d4b9c9e99037e4888b2f7ad283cdc150e69fb0578ffa7b0ebcd9384b"
+  },
+  "unchanged_bindings": {
+    ".github/workflows/activation-grading.yml": "1ff2749ca31be53f329b1fb1fe2b890ac008216d",
+    ".github/workflows/ci.yml": "05d6e68a9e866cb2bd988e36db6c401c743c68fc",
+    ".github/workflows/football-stage1.yml": "05f30b8d23d727aedefe7716118840f13c376e27",
+    ".github/workflows/football-stage2.yml": "e7c7455bbaa45c537cd8128dcc3b856b5713a45b",
+    ".github/workflows/mlb-receipt-reconciliation.yml": "7836b5d57af84bcad796f7aacf5b4efcc61c09ef",
+    ".github/workflows/paid-launch.yml": "00dc8a63d26d1b22b66d07b900b3171cbab11919",
+    ".github/workflows/qualification-operations.yml": "16ed6900dcd0eb456dae36fbd4442e32edeec548",
+    ".github/workflows/read-only-census.yml": "a75416570b3a1931eaff2cf6642502f7e3ffa891",
+    ".github/workflows/research-scheduler.yml": "380c837a792df275b32d7aeace8f5cd124d7834b",
+    ".github/workflows/subscriber-completion-postgres.yml": "c75cbe6787b17ceb94fe54d8ba22e160af0942c4",
+    "app/ui/draftkings.py": "f17dcc0dc9bf7c880022e4bdf143e99bff0e67d6",
+    "app/ui/lock_picks.py": "0cf998d73e3c02d7f05d207fe26014ff57e1432e",
+    "app/ui/ncaaf_inventory.py": "20fba8b98fd013c053da5d15d4eaf10024a16eec",
+    "app/ui/readiness_dashboard.py": "35f21ee302d3bdd15d04c9f366ad47aea471bfee",
+    "app/ui/sidebar_controls.py": "bb3d24af80b4af0e65e120712eff091e142b6ab7",
+    "app_core/draftkings_classic.py": "d4d3fb823bebaa3d3a4c4889947d5b981e126c23",
+    "app_core/espn_ncaaf_odds.py": "d84be786545b316597da0da6788b527c556a3511",
+    "app_core/ncaaf_identity.py": "ff1f0e3c450a40a608985e488ba9f0c465788e4e",
+    "app_core/ncaaf_schedule.py": "c8ad20d279d97da195d4339acf738d07a21db482",
+    "app_core/performance_spans.py": "e345a82e6b551a23d55606b7522534a985591471",
+    "app_core/prediction_evidence.py": "8a154fa6643d047b131891418f7e791a20bfd005",
+    "app_core/provider_health.py": "102e3263aeb998e3632c8add70b78da2139f4a0f",
+    "app_core/stage_timing.py": "f1eae2e04cb6c05c71f6ea08aa0c55ec94c117b6",
+    "core/live_wager_contract.py": "e521667b1a13a91126ba044dcb35c8f8f2772cb8",
+    "core/market_policy.py": "27243097274ee2d78f5868014031ab05061e15d8",
+    "core/price_value.py": "5b52d2aa5203c67f70445a67e9883b6fc0fcc246",
+    "core/probability_calibration.py": "9b6fcf2c9c8337fe13a8c6d4a3f2c664b1f24dd3",
+    "core/run_readiness.py": "fda7618b3de50e8a7dcb2e7b50631e119c58283e",
+    "core/sport_policy.py": "e47aae40da1a561286ebd09af6f1705cd31af945",
+    "core/streamlit_pipeline.py": "cc382319bbfee0495f61d365a6f466696e2b0504",
+    "core/wager_decisions.py": "8cf2cc19d0e96c2bbf8813817a22f0f50cf9c7ff",
+    "data/calibration/bucket_stats.json": "f52e1c0d372affae323080d8c579137549b44bd6",
+    "data/calibration/effective_prob_calibration.json": "7fcac38ae46a968d28bdba334b6b7a385ec0744c",
+    "docs/paid-launch/dfs-projection-identity-policy.md": "f584f5c48bd04c1242c7f36f42132635f8a7b1f0",
+    "docs/paid-launch/launch-baseline-manifest.json": "92bacece033e358ef17061bd65d4abafdaba6874",
+    "docs/paid-launch/launch-scope-policy-ncaaf-v1.json": "0732a3d5f0a044fce57c09d0687afef5892e0a1e",
+    "docs/paid-launch/launch-scope-policy-ncaaf-v2.json": "0b633a8225c725dd56e260de2d5e0b523fb74b04",
+    "docs/paid-launch/launch-scope-policy-v2.json": "1decb1ca5462b2393f5816d54637dab18d9ed733",
+    "docs/paid-launch/launch-scope-policy-v3.json": "fd145cd5cc8c8e23b8f891dbf17220e4b2fba4bb",
+    "docs/paid-launch/launch-scope-policy-v4.json": "240f499c737a6978f6bade6578bc40432a942a14",
+    "docs/paid-launch/ncaaf-coverage-corrections.md": "4a332e7ffe908c12eea252303f22a3b0a360d850",
+    "docs/paid-launch/ncaaf-schedule-coverage.md": "2dad5d1c91e9b88f95cccbb83614c8e442e44ba5",
+    "docs/paid-launch/provider-caller-health-policy.md": "254a069fbd3483998d0016fc4f7d3aafbeb3ecb8",
+    "parlaypicker/app/streamlit_app.py": "82ebbf452e9ca88a601b6d2cfd1ed06ff3d4785e",
+    "scripts/benchmark_refresh_lock_storage.py": "8e383434bb2646f61dff523efc8f7c92a9c97426",
+    "tests/paid_launch/case_isolation_and_scope.py": "07f384d25e5df32d3ff6141765d9bc80d0e23b1e",
+    "tests/test_board_diagnostics.py": "e610143aff5611235f9cfb44da13e2d54e1c6b48",
+    "tests/test_dfs_projection_identity.py": "251f09c45c0f4977046c47bbd8bc0cfeecfa5261",
+    "tests/test_draftkings_classic.py": "5ca072a20bd90eac013d994c686d0b76831ab413",
+    "tests/test_draftkings_mlb_classic.py": "59ee3992aeb43d9e4d8105c0ad557bc73fb9c031",
+    "tests/test_draftkings_panel.py": "633300eb892352b2f01fdfa761d8af31cccc2751",
+    "tests/test_lock_storage_performance.py": "b94f32e8a5f2d49ff6f8727463fcaed7a59b4273",
+    "tests/test_ncaaf_coverage_corrections.py": "a7db1ff5582e8327220d31d92a8235157db1784a",
+    "tests/test_ncaaf_schedule_coverage.py": "91aeebc1a464a9c0ee38ff3ea0101eb111b34aed",
+    "tests/test_prediction_evidence.py": "8289d59b6667db65099dcd4fb0ac606226b44870",
+    "tests/test_provider_caller_health.py": "79792b6f159977173f30a654148313e412564b9b",
+    "tests/test_provider_health_scope_policy.py": "670eab8baa307977de5e29ba39086cefcf723c8c",
+    "tests/test_refresh_lock_performance.py": "68ef650b24c2f3343f0c3ab1eabf65e91894a827"
+  }
+}

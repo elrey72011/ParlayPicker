@@ -188,7 +188,7 @@ def test_receipt_cache_requires_fresh_remote_sha_and_checks_duplicates(tmp_path)
     assert store.read_cached_objects(Prefix='receipt/', cache_dir=tmp_path)==[('receipt/key',raw)]
     assert store.read_cached_objects(Prefix='receipt/', cache_dir=tmp_path)==[('receipt/key',raw)]
     assert len(listings)==2 and reads==['one']
-    (tmp_path/sha).write_bytes(b'corrupt')
+    (store.verified_cache_root(tmp_path, 'receipt/')/sha).write_bytes(b'corrupt')
     store.read_cached_objects(Prefix='receipt/', cache_dir=tmp_path)
     assert reads==['one','one']
     files.clear()

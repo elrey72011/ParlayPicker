@@ -2,6 +2,8 @@
 from app_core.public_quote_policy import supported_quote
 from app_core.quote_freshness import QUOTE_MAX_AGE_MINUTES, package_age_minutes
 from contextlib import contextmanager
+from copy import deepcopy
+from app_core.scoped_reads import singleflight
 from dataclasses import dataclass
 from time import perf_counter
 import logging
@@ -88,9 +90,7 @@ class History:
         self.client = client or DriveStore(folder)
         self.prefix = 'parlaypicker/public-history-v1/' + identifier(site) + '/'
         root = Path(os.environ.get('PARLAYPICKER_EVIDENCE_DIR', 'data/prediction_evidence'))
-        client_scope = (self.client.storage_scope_hash()
-                        if callable(getattr(self.client, 'storage_scope_hash', None)) else type(self.client).__name__)
-        self.cache_dir = root / 'remote-cache' / 'public-history' / opaque_hash(self.prefix, client_scope)
+        self.cache_dir = root / 'remote-cache' / 'public-history'
         self.last_write_receipts = ()
 
     def read(self, key, *, client=None):
@@ -149,7 +149,26 @@ class History:
                 values.append(self.read(item['Key'][len(self.prefix):]))
         return values
 
-    def _read_kinds(self, kinds, *, operation_id=None, full_verification=False, ids=None):
+    def _read_kinds(self, kinds, *, operation_id=None, full_verification=False, ids=None,
+                    include_names=False, coalesce=True):
+        kinds = tuple(dict.fromkeys(kinds))
+        if not coalesce:
+            return self._read_kinds_phase(kinds, operation_id=operation_id,
+                full_verification=full_verification, ids=ids, include_names=include_names, coalesce=False)
+        scope = (self.client.storage_scope_hash() if hasattr(self.client, "storage_scope_hash")
+                 else id(self.client))
+        result, shared = singleflight(
+            ("history", scope, self.prefix, tuple(sorted(kinds)), full_verification, include_names),
+            lambda: self._read_kinds_phase(kinds, operation_id=operation_id,
+                full_verification=full_verification, ids=ids, include_names=include_names))
+        if shared:
+            with PerformanceSpan("history_read_join", ids=ids) as span:
+                span.set(listing_traversals=0, objects_downloaded=0, cache_hits=1,
+                         verification_status="inflight_verified_read")
+        return deepcopy(result)
+
+    def _read_kinds_phase(self, kinds, *, operation_id=None, full_verification=False,
+                          ids=None, include_names=False, coalesce=True):
         kinds = tuple(dict.fromkeys(kinds))
         ids = ids or operation_ids(action_id=operation_id)
         operation_id = operation_id or ids['action_id']
@@ -157,18 +176,54 @@ class History:
                      and callable(getattr(self.client, 'discover_complete_inventory', None))
                      and callable(getattr(self.client, 'read_verified_prefixes', None)))
         if not optimized:
+            if include_names:
+                values = {}
+                for kind in kinds:
+                    prefix = self.prefix + kind + "/"
+                    if hasattr(self.client, "read_objects"):
+                        objects = self.client.read_objects(Prefix=prefix)
+                        values[kind] = [(name[len(prefix):], json.loads(raw)) for name, raw in objects]
+                    else:
+                        values[kind] = [(item["Key"][len(prefix):], self.read(item["Key"][len(self.prefix):]))
+                            for page in self.client.get_paginator("list_objects_v2").paginate(Prefix=prefix)
+                            for item in page.get("Contents", [])]
+                return values, None
             return {kind: self._all_legacy(kind) for kind in kinds}, None
         prefixes = {kind: self.prefix + kind + '/' for kind in kinds}
         inventory = self.client.discover_complete_inventory(
-            operation_id=operation_id, namespace=self.prefix, ids=ids)
+            operation_id=operation_id, namespace=self.prefix, ids=ids, coalesce=coalesce)
         objects = self.client.read_verified_prefixes(
             Prefixes=list(prefixes.values()), inventory=inventory, cache_dir=self.cache_dir,
             full_verify=full_verification, ids=ids)
         values = {
-            kind: [json.loads(raw) for _, raw in objects[prefix]]
+            kind: [(name[len(prefix):], json.loads(raw)) if include_names else json.loads(raw)
+                   for name, raw in objects[prefix]]
             for kind, prefix in prefixes.items()
         }
         return values, inventory
+
+    def history_phase(self, *, full_verification=False, coalesce=True):
+        """All display/recovery categories from one complete verified read phase."""
+        kinds = ("deployments", "confirmed", "packages", "scores", "imports", "locks",
+                 "lock_removals", "grading_runs", "prop_stats", "prop_imports")
+        values, inventory = self._read_kinds(kinds, include_names=True,
+            full_verification=full_verification, coalesce=coalesce)
+        confirmed = dict(values["confirmed"])
+        packages = dict(values["packages"])
+        publications = []
+        for receipt in confirmed.values():
+            package = packages.get(receipt["package_hash"] + ".json")
+            if package is None or digest(package) != receipt["package_hash"]:
+                raise ValueError("Public history hash mismatch or missing package")
+            publications.append({**receipt, "package": package})
+        records = {kind: [value for _, value in entries] for kind, entries in values.items()}
+        removed = {row["lock_hash"] for row in records["lock_removals"]}
+        active = [row for row in records["locks"] if digest(row) not in removed]
+        return dict(publications=publications, revisions=records["scores"], imports=records["imports"],
+            locks=active, lock_removals=records["lock_removals"], grading_runs=records["grading_runs"],
+            prop_revisions=records["prop_stats"], prop_imports=records["prop_imports"],
+            pending_deployments=[row for row in records["deployments"]
+                                 if row["deploy_id"] + ".json" not in confirmed])
 
     def active_lock_snapshot(self, *, operation_id=None, full_verification=False, ids=None):
         ids = ids or operation_ids(lock_operation_id=operation_id or uuid.uuid4().hex)
@@ -176,7 +231,7 @@ class History:
         with lock_stage('active_lock_snapshot', ids=ids, table_or_kind='locks+lock_removals') as span:
             values, inventory = self._read_kinds(
                 ('locks', 'lock_removals'), operation_id=operation_id,
-                full_verification=full_verification, ids=ids)
+                full_verification=full_verification, ids=ids, coalesce=False)
             originals = values['locks']
             removals = values['lock_removals']
             removed = {row['lock_hash'] for row in removals}

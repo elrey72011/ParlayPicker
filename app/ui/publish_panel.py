@@ -49,9 +49,9 @@ def render_dfs_lock_picker():
     return start
 
 
-def render_publish_panel(games, candidates, props=None, dfs=None):
+def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_history=False):
     st.subheader('Publish board')
-    st.caption('History and previews load automatically. Lock selected picks to save and publish them, or review the board below and publish it. Player props and DraftKings options are included as selected.')
+    st.caption('Load saved history when needed. Previews load automatically. Lock selected picks to save and publish them, or review the board below and publish it. Player props and DraftKings options are included as selected.')
     token = str(setting('PARLAYPICKER_PUBLISH_TOKEN'))
     if len(token) < 16:
         st.info('Publishing is locked. Configure PARLAYPICKER_PUBLISH_TOKEN with at least 16 characters in Streamlit secrets or the local environment. Never put it in the repository.')
@@ -63,7 +63,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     from app.ui.activation_panel import render as render_activation
     render_activation(games)
     from app.ui.public_results import render_history
-    public_results = render_history(setting)
+    public_results = render_history(setting, lazy=True) if lazy_history else render_history(setting)
     publish_results_requested = st.session_state.pop('publish_results_requested', False)
     if st.session_state.pop('lock_saved_notice', False):
         st.success('Picks locked in Drive. Earlier locks keep their original selections and odds.')

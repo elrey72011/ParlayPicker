@@ -57,7 +57,7 @@ def fx(tmp_path,monkeypatch):
     previous=(SOURCE/g.GUARD_PATH).read_bytes().replace(b"\r\n",b"\n").split(b"\nSCHEDULE_POLICY_PATH =",1)[0]+b"\ndef main() -> int:\n    pass\n"
     write(repo,g.GUARD_PATH,previous)
     for p,edits in g.SCHEDULE_SHARED_EDITS.items():
-        value=(SOURCE/p).read_bytes().replace(b"\r\n",b"\n").decode()
+        value=g._drive_previous_main_source(p,(SOURCE/p).read_bytes().replace(b"\r\n",b"\n")).decode()
         for before,after in reversed(edits):
             assert value.count(after)==1
             value=value.replace(after,before,1)
@@ -76,7 +76,7 @@ def fx(tmp_path,monkeypatch):
 
 def original_schedule_source(path):
     """Exercise the original v1 contract, never rebind it to the correction."""
-    source = (SOURCE / path).read_bytes().replace(b"\r\n", b"\n")
+    source = g._drive_previous_main_source(path, (SOURCE / path).read_bytes().replace(b"\r\n", b"\n"))
     if path == g.GUARD_PATH:
         return source.split(b"\nCOVERAGE_POLICY_PATH =", 1)[0] + g.COVERAGE_PREVIOUS_CLI
     if path == "app_core/ncaaf_schedule.py":
