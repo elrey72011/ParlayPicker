@@ -131,6 +131,7 @@ def begin_run(controls, *, path=None, root=ROOT):
 
 def provider_quotes(game):
     """Keep provider update times and explicitly separate ESPN observation times."""
+    from app_core.producer_provenance import quote_facts
     quotes = []
     for book in game.get("bookmakers", []):
         name = str(book.get("key", "")).lower()
@@ -153,6 +154,7 @@ def provider_quotes(game):
                     continue
                 quotes.append({"provider_namespace": "odds_api" if game.get("odds_feed_source", "the_odds_api") == "the_odds_api" else game.get("odds_feed_source"), "provider_event_id": game.get("id"), "book": name, "market_type": kind, "point": outcome.get("point"),
                                "price": outcome.get("price"), "recorded_at": market.get("last_update") or book.get("last_update"),
+                               **quote_facts(game, book, market, outcome),
                                **({"observed_at": book["observed_at"], "observation_source": "espn_ncaaf_fcs_scoreboard"}
                                   if name == "draftkings" and game.get("odds_feed_source") == "espn_ncaaf_fcs_scoreboard"
                                   and book.get("observation_source") == "espn_ncaaf_fcs_scoreboard" and book.get("observed_at") else {})})

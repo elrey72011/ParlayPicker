@@ -3,7 +3,16 @@ from datetime import datetime, timezone
 import json
 import math
 
-ORIGIN_COLUMNS = ("ml_inference_status", "ml_estimate_metadata")
+from app_core.producer_provenance import TRANSFER_FIELDS
+ORIGIN_COLUMNS = ("ml_inference_status", "ml_estimate_metadata") + TRANSFER_FIELDS
+
+
+def carry_origin_columns(frame, predictions):
+    """Copy supplied producer facts; absent rows never erase older facts."""
+    for column in ORIGIN_COLUMNS:
+        if column in predictions:
+            supplied = predictions[column].notna()
+            frame.loc[predictions.index[supplied], column] = predictions.loc[supplied, column]
 SOURCE_FIELDS = """snapshot_id candidate_id matchup_id export_run_id league market_type
 best_pick display_pick spread_line total_line market_line_used provider_event_id
 provider_namespace quote_id prospective_quote_id quote_bookmaker quote_source
@@ -73,19 +82,30 @@ def boundary_trace(source, export, display):
     payloads, features, secrets, review prose and private configuration are omitted.
     """
     from app_core.research_display import missing_identity_fields
-    return encode(dict(version=2,
+    trace = dict(version=2,
         missing_identity_fields=missing_identity_fields(display["identity"]),
         source={k:fact(source.get(k)) for k in SOURCE_FIELDS} if source is not None else None,
         export={k:fact(export.get(k)) for k in EXPORT_FIELDS},
         display={k:display[k] for k in ("source_field","basis","identity","inference_status",
-            "availability_reason","value_reason","probability","push_probability","ev")}))
+            "availability_reason","value_reason","probability","push_probability","ev")})
+    try:
+        origin = json.loads(source.get("ml_estimate_metadata", "")) if source is not None else {}
+        if origin.get("version") == 2:
+            from app_core.producer_provenance import diagnose
+            trace.update(version=3, origin=diagnose(source, origin), first_rejection_stage=(
+                None if display["availability_reason"] == "AVAILABLE" else
+                "producer.inference" if origin.get("inference_status") != "success" else
+                "per_game_export.research_display"))
+    except (ValueError, TypeError, AttributeError):
+        pass
+    return encode(trace)
 
 
 ORIGIN_IDENTITY_FIELDS = frozenset("""candidate_id matchup_id export_run_id provider_event_id
 provider_namespace prediction_generated_at game_start_utc market_period period settlement_rules""".split())
 
 
-def origin_rejection(source):
+def _legacy_origin_rejection(source):
     """Validate supplied producer diagnostics without promoting a blend's inference."""
     from app_core.research_display import _absent, _number, _text, _time
     raw=source.get("ml_estimate_metadata")
@@ -152,3 +172,22 @@ def origin_rejection(source):
         return None
     except (ValueError,TypeError,KeyError,AttributeError):
         return "ESTIMATE_PROVENANCE_NOT_RECORDED"
+
+
+def origin_rejection(source):
+    """V1 stays frozen; V2 proves orientation using independently named facts."""
+    try:
+        item = json.loads(source.get("ml_estimate_metadata", ""))
+        if isinstance(item, dict) and item.get("version") == 2:
+            from app_core.producer_provenance import diagnose
+            diagnostic = diagnose(source, item)
+            if diagnostic["reason"]:
+                return diagnostic["reason"]
+            legacy = dict(item)
+            legacy.pop("producer_contract")
+            legacy["version"] = 1
+            legacy["identity"] = dict(item["identity"], matchup_id={"state":"MISSING"})
+            return _legacy_origin_rejection(dict(source, ml_estimate_metadata=encode(legacy)))
+    except (ValueError, TypeError, KeyError):
+        pass
+    return _legacy_origin_rejection(source)
