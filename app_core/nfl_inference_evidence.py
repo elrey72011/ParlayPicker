@@ -249,7 +249,7 @@ def _observation_binding(observed, packet, item, errors, unknown):
             errors.append("features.observation_value:" + name)
 
 
-def _dependency_scope(dependency, at, packet, name, errors, unknown):
+def _dependency_scope(dependency, at, packet, name, errors, unknown, original=None):
     """Original bytes must carry applicable feature/event/availability facts."""
     scope = dependency.get("scope")
     if scope is None:
@@ -262,6 +262,11 @@ def _dependency_scope(dependency, at, packet, name, errors, unknown):
         unknown.append("features.original_scope:" + name)
     elif encode(at(dependency["scope_path"])) != encode(scope):
         errors.append("features.original_scope_conflict:" + name)
+    from app_core import nfl_native_provenance as native
+    if scope.get("contract") == native.SCOPE:
+        event = packet["event_offer"]["event"] if packet["event_offer"] else None
+        native.validate(dependency, original, event, name, packet["features"][name], errors, unknown)
+        return
     for key, expected in (("contract", FEATURE_SCOPE), ("feature", name)):
         if key not in scope:
             unknown.append("features.dependency_scope_" + key + ":" + name)
@@ -355,7 +360,7 @@ def diagnose(source, item=None):
                         return value
                     if fact(at(dependency["value_path"]))!=p["features"][k]:errors.append("features.original_source_value:"+k)
                     if at(dependency["event_path"])!=dependency["provider_event_id"]:errors.append("features.original_source_event:"+k)
-                    _dependency_scope(dependency, at, p, k, errors, unknown)
+                    _dependency_scope(dependency, at, p, k, errors, unknown, original=original)
                 av,ob,inf=clock(dependency.get("available_at")),clock(dependency.get("observed_at")),clock(p["inference_time"])
                 if (dependency.get("available_at") and av is None) or (dependency.get("observed_at") and ob is None):errors.append("features.invalid_clock:"+k)
                 elif av is None or ob is None:unknown.append("features.availability:"+k)
