@@ -50,6 +50,7 @@ def _approved_source(**changes):
         "qualification_reason": "Passed final wager checks with a positive approved stake",
         "wager_contract": contract,
         "spread_line": contract["line"],
+        "line": contract["line"], "quote_id": "quote-eligible",
     }
     row.update(changes)
     return row

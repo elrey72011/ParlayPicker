@@ -5129,6 +5129,583 @@ def _run_nfl_native_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+PICK_BOARD_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-pick-board-origin-v1.json'
+PICK_BOARD_POLICY_VERSION = 'paid-launch-pick-board-origin-v1'
+PICK_BOARD_APPROVAL_REFERENCE = 'Owner request for bounded October 5 diagnostic originating-run corrections, unavailable reasons, separate source verification and offline draft review; no acquisition, historical backfill, model fitting, science or wagering authority'
+PICK_BOARD_PATHS = ('scripts/check_launch_change_scope.py', 'scripts/pick_board_scope.py', 'tests/test_pick_board_scope.py', 'app_core/current_wagers_trace.py', 'app_core/source_contract.py', 'app_core/research_display.py', 'publishing/board.html', 'tests/test_current_wagers_trace_and_release.py', 'tests/test_post2362_trace_probability_closure.py', 'tests/test_pick_board_origin.py', 'docs/paid-launch/pick-board-origin.md')
+PICK_BOARD_FROZEN_PATHS = ('app_core/football_feature_capture.py', 'app_core/feature_processing.py', 'app_core/nfl_native_provenance.py', 'app_core/nfl_inference_evidence.py', 'app_core/market_probability_model.py', 'app_core/weights_config.py', 'core/streamlit_pipeline.py', 'app_core/producer_provenance.py', 'app_core/per_game_boards.py', 'app_core/public_board.py', 'app_core/research_replay.py', 'app_core/football_validation_v2.py', 'app_core/prospective_validation_plans.py', 'docs/audits/2026-09-23-prospective-validation-plans.md', 'docs/football-stage2.md', 'docs/football-validation-v2.md')
+PICK_BOARD_BINDINGS = {'base': '6ff45478ae230dfb2d3b34456e13b56ff772246b',
+ 'base_tree': '19c5ddcb8f1c3c45cea1bbf6912bc10cc17bcd69',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'a81e3134e6a2b0fe97d7bebaabf8972d9a36a2ec3e6f60f960c5479f2d77e58a',
+ 'previous_policy_blob': '920b5cbe8daf781cc3d00361b0a565161c221508',
+ 'reviewed_blobs': {'scripts/pick_board_scope.py': 'a30f15c5313f56aee6e8f338123734eccdeef8aa',
+                    'tests/test_pick_board_scope.py': '7bc1add2f80c0f48c0f592af9ed5c779b16a2031',
+                    'app_core/current_wagers_trace.py': '3a62f6bcf00fedb05e25b272d55cf8967ec2a7fb',
+                    'app_core/source_contract.py': 'e1b40ed9f779d68dcfdce015761b78e470e4d9af',
+                    'app_core/research_display.py': '2d6636dd3816731aa5a94143f85591eb564d13c9',
+                    'publishing/board.html': 'c30e749f6a87b739a52c2786afe823038c760b3f',
+                    'tests/test_current_wagers_trace_and_release.py': '7aff13efabd8f2adcf018f0a367ee75f3abf7d55',
+                    'tests/test_post2362_trace_probability_closure.py': '9de975144cf71fd2947768f1b498940df10b7827',
+                    'tests/test_pick_board_origin.py': 'fc3e338c4feddea374c947305881bae306ce665b',
+                    'docs/paid-launch/pick-board-origin.md': 'e7b095ccb98baba2fba79f39d167b1fa5c9ff3c9'},
+ 'scope_module_sha256': '29b2de630bc6a6b5b95acd8c460cbc32a71315b1a5f7b5c1597fe026e675b15c',
+ 'successor_guard_sha256': 'f1b59e4cb584110791245c244c038b21c857aa2ece5740efdf57d7bae65c091d'}
+PICK_BOARD_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/current_wagers_trace.py': {'sha256': '1e4bb370fd0078ed39f4e2ff6502736f2dc4790e830cd06bf0147b0ab9fe956e',
+                                      'edits': [(b'def _selected_output_records(package: dict) -> list[dict'
+                                                 b']:\n    outputs = package.get("games", {}).get("overall",'
+                                                 b' [])\n    traces = (package.get("board_diagnostics") or {'
+                                                 b'}).get("traces") or []\n    records = []\n    for position'
+                                                 b', output in enumerate(outputs):\n        trace = traces[p'
+                                                 b'osition] if position < len(traces) and isinstance(traces'
+                                                 b'[position], dict) else {}\n        contract = output.get('
+                                                 b'"wager_contract")\n        if not isinstance(contract, di'
+                                                 b'ct):\n            contract = output.get("controlled_trial'
+                                                 b'_contract")\n        contract = contract if isinstance(co'
+                                                 b'ntract, dict) else {}\n        records.append({\n         '
+                                                 b'   "section": "overall",\n            "position": positio'
+                                                 b'n,\n            "status": output.get("status"),\n         '
+                                                 b'   "source_candidate_id": str(trace.get("source_candidat'
+                                                 b'e_id") or ""),\n            "event_id": str(trace.get("ga'
+                                                 b'me_id") or contract.get("matchup_id") or\n               '
+                                                 b'             contract.get("game_id") or ""),\n           '
+                                                 b' "run_id": str(output.get("as_of") or ""),\n            "'
+                                                 b'sport": str(trace.get("sport") or output.get("sport") or'
+                                                 b' contract.get("sport") or ""),\n            "market": str'
+                                                 b'(trace.get("market_type") or output.get("market") or\n   '
+                                                 b'                       contract.get("market_type") or ""'
+                                                 b'),\n            "selection": str(trace.get("selection") o'
+                                                 b'r output.get("pick") or\n                             con'
+                                                 b'tract.get("selection") or ""),\n            "line": (_num'
+                                                 b'ber(trace, "line") if _number(trace, "line") is not None'
+                                                 b'\n                     else _number(contract, "line")),\n '
+                                                 b'           "sportsbook": str(trace.get("sportsbook") or '
+                                                 b'output.get("quote_source") or\n                          '
+                                                 b'    contract.get("sportsbook") or ""),\n            "quot'
+                                                 b'e_id": str(trace.get("quote_id") or contract.get("quote_'
+                                                 b'id") or ""),\n            "odds_american": (_number(trace'
+                                                 b', "odds") if _number(trace, "odds") is not None\n        '
+                                                 b'                      else _number(output, "odds")),\n   '
+                                                 b'         "quote_timestamp": str(trace.get("quote_timesta'
+                                                 b'mp") or output.get("quote_time") or\n                    '
+                                                 b'               contract.get("quote_timestamp") or ""),\n '
+                                                 b'       })\n    return records\n\n',
+                                                 b'def _output_origin_binding(output: Mapping, trace: Mappi'
+                                                 b'ng, contract: Mapping) -> tuple[dict, list[str]]:\n    ""'
+                                                 b'"Read the saved originating identity; inference clocks n'
+                                                 b'ever identify runs.\n\n    An unavailable estimate can sti'
+                                                 b'll record exact identity. Its schema alone\n    is insuff'
+                                                 b'icient: every supplied output/diagnostic/contract fact m'
+                                                 b'ust agree.\n    This diagnostic reader grants no estimate'
+                                                 b', qualification or wager authority.\n    """\n    from app'
+                                                 b'_core.research_display import validate, _matches\n    dis'
+                                                 b'play = output.get("research_display")\n    errors = []\n  '
+                                                 b'  identity = {}\n    try:\n        validate(display)\n '
+                                                 b'       identity = dict(display["identity"])\n        if n'
+                                                 b'ot _matches(display, output):\n            errors.append('
+                                                 b'"SAVED_DISPLAY_OUTPUT_IDENTITY_CONFLICT")\n        if dis'
+                                                 b'play["availability_reason"] == "ESTIMATE_IDENTITY_MISMAT'
+                                                 b'CH":\n            errors.append("SAVED_DISPLAY_IDENTITY_R'
+                                                 b'EJECTED")\n    except (ValueError, TypeError, KeyError, A'
+                                                 b'ttributeError):\n        errors.append("ORIGINATING_IDENT'
+                                                 b'ITY_NOT_RECORDED")\n    for source, fields in ((trace, {\n'
+                                                 b'            "source_candidate_id":"candidate_id", "game_'
+                                                 b'id":"event_id", "sport":"sport",\n            "market_typ'
+                                                 b'e":"market", "selection":"selection", "line":"line",\n   '
+                                                 b'         "sportsbook":"sportsbook", "odds":"odds", "quot'
+                                                 b'e_id":"quote_id",\n            "quote_timestamp":"quote_t'
+                                                 b'ime", "analysis_timestamp":"analysis_time"}),\n          '
+                                                 b'  (contract, {"candidate_id":"candidate_id", "game_id":"'
+                                                 b'event_id", "matchup_id":"event_id",\n            "sport":'
+                                                 b'"sport", "market_type":"market", "selection":"selection"'
+                                                 b', "line":"line",\n            "sportsbook":"sportsbook", '
+                                                 b'"odds":"odds", "quote_id":"quote_id",\n            "quote'
+                                                 b'_timestamp":"quote_time", "analysis_timestamp":"analysis'
+                                                 b'_time"})):\n        for field, key in fields.items():\n   '
+                                                 b'         value = source.get(field)\n            if value '
+                                                 b'is None or value == "":\n                continue\n       '
+                                                 b'     saved = identity.get(key)\n            # Missing opt'
+                                                 b'ional saved facts can be supplied by exact diagnostics,\n'
+                                                 b'            # but never manufacture an originating run f'
+                                                 b'rom their clocks.\n            if saved is None or saved '
+                                                 b'== "":\n                continue\n            if key in {"'
+                                                 b'quote_time", "analysis_time"}:\n                equal = _'
+                                                 b'time(value) is not None and _time(saved) is not None and'
+                                                 b' _same_time(value, saved)\n            elif key in {"line'
+                                                 b'", "odds"}:\n                equal = _number({"value":val'
+                                                 b'ue}, "value") == saved\n            else:\n               '
+                                                 b' equal = _same_text(value, saved, folded=key in {"sport"'
+                                                 b', "market", "sportsbook"})\n            if not equal:\n   '
+                                                 b'             errors.append("OUTPUT_BINDING_CONFLICT:" + '
+                                                 b'key)\n    for source in (output, trace, contract):\n      '
+                                                 b'  for field in ("export_run_id", "run_id"):\n            '
+                                                 b'value = source.get(field)\n            if value is not No'
+                                                 b'ne and value != "" and value != identity.get("export_run'
+                                                 b'_id"):\n                errors.append("OUTPUT_BINDING_CON'
+                                                 b'FLICT:run_id")\n    run = identity.get("export_run_id")\n '
+                                                 b'   if not isinstance(run, str) or not run or run.strip()'
+                                                 b' != run:\n        errors.append("ORIGINATING_RUN_BINDING_'
+                                                 b'NOT_RECORDED")\n    return identity, sorted(set(errors))\n'
+                                                 b'\n\ndef _selected_output_records(package: dict) -> list[di'
+                                                 b'ct]:\n    outputs = package.get("games", {}).get("overall'
+                                                 b'", [])\n    traces = (package.get("board_diagnostics") or'
+                                                 b' {}).get("traces") or []\n    records = []\n    for positi'
+                                                 b'on, output in enumerate(outputs):\n        trace = traces'
+                                                 b'[position] if position < len(traces) and isinstance(trac'
+                                                 b'es[position], dict) else {}\n        contract = output.ge'
+                                                 b't("wager_contract")\n        if not isinstance(contract, '
+                                                 b'dict):\n            contract = output.get("controlled_tri'
+                                                 b'al_contract")\n        contract = contract if isinstance('
+                                                 b'contract, dict) else {}\n        bound, errors = _output_'
+                                                 b'origin_binding(output, trace, contract)\n        records.'
+                                                 b'append({\n            "section": "overall", "position": p'
+                                                 b'osition, "status": output.get("status"),\n            "so'
+                                                 b'urce_candidate_id": bound.get("candidate_id") or str(tra'
+                                                 b'ce.get("source_candidate_id") or ""),\n            "event'
+                                                 b'_id": bound.get("event_id") or str(trace.get("game_id") '
+                                                 b'or contract.get("matchup_id") or contract.get("game_id")'
+                                                 b' or ""),\n            "run_id": bound.get("export_run_id"'
+                                                 b') or "",\n            "inference_timestamp": output.get("'
+                                                 b'as_of") or "",\n            "sport": bound.get("sport") o'
+                                                 b'r str(trace.get("sport") or output.get("sport") or ""),\n'
+                                                 b'            "market": bound.get("market") or str(trace.g'
+                                                 b'et("market_type") or output.get("market") or ""),\n      '
+                                                 b'      "selection": bound.get("selection") or str(trace.g'
+                                                 b'et("selection") or output.get("pick") or ""),\n          '
+                                                 b'  "line": bound.get("line") if bound.get("line") is not '
+                                                 b'None else _number(trace, "line"),\n            "sportsboo'
+                                                 b'k": bound.get("sportsbook") or str(trace.get("sportsbook'
+                                                 b'") or output.get("quote_source") or ""),\n            "qu'
+                                                 b'ote_id": bound.get("quote_id") or str(trace.get("quote_i'
+                                                 b'd") or contract.get("quote_id") or ""),\n            "odd'
+                                                 b's_american": bound.get("odds") if bound.get("odds") is n'
+                                                 b'ot None else _number(output, "odds"),\n            "quote'
+                                                 b'_timestamp": bound.get("quote_time") or str(trace.get("q'
+                                                 b'uote_timestamp") or output.get("quote_time") or ""),\n   '
+                                                 b'         "_binding_errors": errors,\n            "_candid'
+                                                 b'ate_ids": {value for value in (bound.get("candidate_id")'
+                                                 b', trace.get("source_candidate_id")) if isinstance(value,'
+                                                 b' str) and value},\n        })\n    return records\n\n'),
+                                                (b'        if left is not None and right is not None and no'
+                                                 b't math.isclose(\n                float(left), float(right'
+                                                 b'), rel_tol=0.0, abs_tol=1e-9):\n',
+                                                 b'        if left is not None and right is not None and fl'
+                                                 b'oat(left) != float(right):\n'),
+                                                (b'        if left not in {None, ""} and right not in {None'
+                                                 b', ""} and not _same_time(left, right):\n',
+                                                 b'        equal = left == right if field == "run_id" else '
+                                                 b'_same_time(left, right)\n        if left not in {None, ""'
+                                                 b'} and right not in {None, ""} and not equal:\n'),
+                                                (b'            "quote_timestamp",\n        )}\n',
+                                                 b'            "quote_timestamp", "inference_timestamp",\n  '
+                                                 b'      )}\n'),
+                                                (b'def _output_match(row: Mapping, package: dict) -> dict:\n'
+                                                 b'    """Bind a candidate to one exact selected diagnostic'
+                                                 b' position.\n\n    Explicit candidate IDs are authoritative'
+                                                 b': a conflict or an unselected ID\n    never falls back to'
+                                                 b' display text. ID-less legacy rows require complete\n    '
+                                                 b'event/run/quote evidence, and ambiguity remains unresolv'
+                                                 b'ed.\n    """\n\n    _, candidate = _candidate_identity('
+                                                 b'row)\n    records = _selected_output_records(package)\n   '
+                                                 b' source_id = candidate["source_candidate_id"]\n    if sou'
+                                                 b'rce_id:\n        selected = [record for record in records'
+                                                 b'\n                    if record["source_candidate_id"] =='
+                                                 b' source_id]\n        if not selected:\n            return '
+                                                 b'_match_result("UNRESOLVED", "EXPLICIT_CANDIDATE_ID_NOT_S'
+                                                 b'ELECTED")\n        if len(selected) != 1:\n            ret'
+                                                 b'urn _match_result("UNRESOLVED", "DUPLICATE_SELECTED_CAND'
+                                                 b'IDATE_ID")\n        conflicts = _identity_conflicts(candi'
+                                                 b'date, selected[0])\n        if conflicts:\n            ret'
+                                                 b'urn _match_result(\n                "UNRESOLVED", "EXPLIC'
+                                                 b'IT_IDENTITY_CONFLICT:" + ",".join(conflicts)\n           '
+                                                 b' )\n        return _match_result("MATCHED", "EXACT_SELECT'
+                                                 b'ED_CANDIDATE_ID", selected[0])\n\n    required = (\n   '
+                                                 b'     "event_id", "run_id", "sport", "market", "selection'
+                                                 b'", "line",\n        "sportsbook", "odds_american", "quote'
+                                                 b'_timestamp",\n    )\n    missing = [field for field in req'
+                                                 b'uired if candidate.get(field) in {None, ""}]\n    if miss'
+                                                 b'ing:\n        return _match_result(\n            "UNRESOLV'
+                                                 b'ED", "LEGACY_CANDIDATE_IDENTITY_INCOMPLETE:" + ",".join('
+                                                 b'missing)\n        )\n    complete_records = [record for re'
+                                                 b'cord in records\n                        if all(record.ge'
+                                                 b't(field) not in {None, ""} for field in required)]\n    m'
+                                                 b'atches = [record for record in complete_records\n        '
+                                                 b'       if not _identity_conflicts(candidate, record)]\n  '
+                                                 b'  if len(matches) == 1:\n        return _match_result("MA'
+                                                 b'TCHED", "EXACT_LEGACY_EVENT_QUOTE_IDENTITY", matches[0])'
+                                                 b'\n    if len(matches) > 1:\n        return _match_result("'
+                                                 b'UNRESOLVED", "AMBIGUOUS_LEGACY_OUTPUT_IDENTITY")\n    if '
+                                                 b'len(complete_records) != len(records):\n        return _m'
+                                                 b'atch_result("UNRESOLVED", "SELECTED_OUTPUT_IDENTITY_INCO'
+                                                 b'MPLETE")\n    return _match_result("NOT_PRESENT", "NO_EXA'
+                                                 b'CT_OUTPUT_IDENTITY_MATCH")\n\n',
+                                                 b'def _output_match(row: Mapping, package: dict) -> dict:\n'
+                                                 b'    """Strict originating-run/selected-offer diagnostic '
+                                                 b'join, never authorization."""\n    _, candidate = _candid'
+                                                 b'ate_identity(row)\n    records = _selected_output_records'
+                                                 b'(package)\n    source_id = candidate["source_candidate_id'
+                                                 b'"]\n    required = ("source_candidate_id", "event_id", "r'
+                                                 b'un_id", "sport", "market", "selection",\n                '
+                                                 b'"line", "sportsbook", "quote_id", "odds_american", "quot'
+                                                 b'e_timestamp")\n    missing = [field for field in required'
+                                                 b' if candidate.get(field) in {None, ""}]\n    if missing:\n'
+                                                 b'        return _match_result("UNRESOLVED", "CANDIDATE_OR'
+                                                 b'IGINATING_IDENTITY_INCOMPLETE:" + ",".join(missing))\n   '
+                                                 b' # Supplied run aliases cannot be ignored, and run IDs a'
+                                                 b're opaque strings.\n    for field in ("export_run_id", "r'
+                                                 b'un_id"):\n        value = row.get(field)\n        if value'
+                                                 b' is not None and value != "" and (\n                not i'
+                                                 b'sinstance(value, str) or value != candidate["run_id"]):\n'
+                                                 b'            return _match_result("UNRESOLVED", "EXPLICIT'
+                                                 b'_IDENTITY_CONFLICT:run_id")\n    if _time(candidate["quot'
+                                                 b'e_timestamp"]) is None:\n        return _match_result("UN'
+                                                 b'RESOLVED", "CANDIDATE_QUOTE_CLOCK_UNVERIFIED")\n    selec'
+                                                 b'ted = [record for record in records if source_id in reco'
+                                                 b'rd["_candidate_ids"]]\n    if not selected:\n        retur'
+                                                 b'n _match_result("NOT_PRESENT", "EXPLICIT_CANDIDATE_ID_NO'
+                                                 b'T_SELECTED")\n    if len(selected) != 1:\n        return _'
+                                                 b'match_result("UNRESOLVED", "DUPLICATE_SELECTED_CANDIDATE'
+                                                 b'_ID")\n    record = selected[0]\n    if record["_binding_e'
+                                                 b'rrors"]:\n        return _match_result("UNRESOLVED", ",".'
+                                                 b'join(record["_binding_errors"]))\n    absent = [field for'
+                                                 b' field in required if record.get(field) in {None, ""}]\n '
+                                                 b'   if absent:\n        return _match_result("UNRESOLVED",'
+                                                 b' "SELECTED_OUTPUT_IDENTITY_INCOMPLETE:" + ",".join(absen'
+                                                 b't))\n    if _time(record["quote_timestamp"]) is None or _'
+                                                 b'time(record["inference_timestamp"]) is None:\n        ret'
+                                                 b'urn _match_result("UNRESOLVED", "SELECTED_OUTPUT_CLOCK_U'
+                                                 b'NVERIFIED")\n    conflicts = _identity_conflicts(candidat'
+                                                 b'e, record)\n    if conflicts:\n        return _match_resul'
+                                                 b't("UNRESOLVED", "EXPLICIT_IDENTITY_CONFLICT:" + ",".join'
+                                                 b'(conflicts))\n    return _match_result("MATCHED", "EXACT_'
+                                                 b'SELECTED_CANDIDATE_ID", record)\n\n'),
+                                                (b'def _output_match(row: Mapping, package: dict) -> dict:\n',
+                                                 b'def _candidate_alias_conflicts(row: Mapping, candidate: '
+                                                 b'Mapping) -> list[str]:\n    """Sticky canonical selected-'
+                                                 b'offer aliases, excluding contextual forecasts."""\n    al'
+                                                 b'iases = {\n        "event_id": ("canonical_event_id", "ma'
+                                                 b'tchup_id", "game_id"),\n        "selection": ("selection"'
+                                                 b', "best_pick", "display_pick"),\n        "sportsbook": ("'
+                                                 b'quote_bookmaker", "book", "opposing_odds_source"),\n     '
+                                                 b'   "quote_id": ("quote_id", "prospective_quote_id"),\n   '
+                                                 b'     "line": ("line", "market_line_used", "selected_line'
+                                                 b'",\n                 "total_line" if str(candidate["marke'
+                                                 b't"]).startswith("total") else "spread_line"),\n        "o'
+                                                 b'dds_american": ("odds_american", "american_odds", "odds"'
+                                                 b'),\n    }\n    conflicts = []\n    for field, names in '
+                                                 b'aliases.items():\n        for name in names:\n            '
+                                                 b'value = row.get(name)\n            if value is None or va'
+                                                 b'lue is pd.NA or (isinstance(value, float) and math.isnan'
+                                                 b'(value)) or value == "":\n                continue\n      '
+                                                 b'      if field in {"line", "odds_american"}:\n           '
+                                                 b'     equal = _number({"value": value}, "value") == candi'
+                                                 b'date[field]\n            else:\n                equal = _s'
+                                                 b'ame_text(value, candidate[field], folded=field == "sport'
+                                                 b'sbook")\n            if not equal:\n                confli'
+                                                 b'cts.append(field)\n    return sorted(set(conflicts))\n'
+                                                 b'\n\ndef _output_match(row: Mapping, package: dict) -> dict'
+                                                 b':\n'),
+                                                (b'    # Supplied run aliases cannot be ignored, and run ID'
+                                                 b's are opaque strings.\n',
+                                                 b'    contradictions = _candidate_alias_conflicts(row, can'
+                                                 b'didate)\n    if contradictions:\n        return _match_res'
+                                                 b'ult("UNRESOLVED", "EXPLICIT_IDENTITY_CONFLICT:" + ",".jo'
+                                                 b'in(contradictions))\n    # Supplied run aliases cannot be'
+                                                 b' ignored, and run IDs are opaque strings.\n'),
+                                                (b'        if left not in {None, ""} and right not in {None'
+                                                 b', ""} and not _same_text(\n                left, right, f'
+                                                 b'olded=folded):\n',
+                                                 b'        equal = _same_text(left, right, folded=True) if '
+                                                 b'folded else left == right\n        if left not in {None, '
+                                                 b'""} and right not in {None, ""} and not equal:\n'),
+                                                (b'                equal = _same_text(value, candidate[fiel'
+                                                 b'd], folded=field == "sportsbook")\n',
+                                                 b'                equal = (_same_text(value, candidate[fie'
+                                                 b'ld], folded=True)\n                         if field == "'
+                                                 b'sportsbook" else value == candidate[field])\n'),
+                                                (b'                equal = _same_text(value, saved, folded='
+                                                 b'key in {"sport", "market", "sportsbook"})\n',
+                                                 b'                equal = (_same_text(value, saved, folded'
+                                                 b'=True)\n                         if key in {"sport", "mar'
+                                                 b'ket", "sportsbook"} else value == saved)\n'),
+                                                (b'        if value is not None and value != "" and (\n     '
+                                                 b'           not isinstance(value, str) or value != candid'
+                                                 b'ate["run_id"]):\n',
+                                                 b'        if value is None or value is pd.NA or (isinstanc'
+                                                 b'e(value, float) and math.isnan(value)) or value == "":\n '
+                                                 b'           continue\n        if not isinstance(value, str'
+                                                 b') or value != candidate["run_id"]:\n'),
+                                                (b'    aliases = {\n        "event_id": ("canonical_event_id'
+                                                 b'", "matchup_id", "game_id"),\n',
+                                                 b'    aliases = {\n        "source_candidate_id": ("candida'
+                                                 b'te_id",),\n        "event_id": ("canonical_event_id", "ma'
+                                                 b'tchup_id", "game_id"),\n'),
+                                                (b'return _match_result("NOT_PRESENT", "EXPLICIT_CANDIDATE_'
+                                                 b'ID_NOT_SELECTED")',
+                                                 b'return _match_result("UNRESOLVED", "EXPLICIT_CANDIDATE_I'
+                                                 b'D_NOT_SELECTED")')]},
+ 'tests/test_current_wagers_trace_and_release.py': {'sha256': 'ceb17f2cf073710ee5cd75e6bb03efa63e37caba31e2cd92fc0f6fae71caa2fa',
+                                                    'edits': [(b'        "spread_line": contract["line"],'
+                                                               b'\n    }\n',
+                                                               b'        "spread_line": contract["line"],'
+                                                               b'\n        "line": contract["line"], "quot'
+                                                               b'e_id": "quote-eligible",\n    }\n')]},
+ 'publishing/board.html': {'sha256': '96166ea9700e90006ee909214a42cd82537496df9104eacdde3e67c9139d7e49',
+                           'edits': [(b"function estimateLabel(r){if(cardEstimate(r).research)return 'Resear"
+                                      b"ch estimate';if(r.status==='TRIAL')return 'Controlled-trial estimate"
+                                      b"';if(r.status==='APPROVED'&&r.wager_contract)return 'Validated estim"
+                                      b"ate';if((r.probability_basis||'').startsWith('Market-implied'))retur"
+                                      b"n 'Market estimate';if(r.sport==='NFL'&&r.probability_basis)return '"
+                                      b"Context estimate';return 'Model estimate';} function cardEstimate(r)"
+                                      b"{const d=r.research_display;if(r.status==='PASS'&&d?.version==='rese"
+                                      b"arch-display-v1'&&d.availability_reason==='AVAILABLE'&&typeof d.prob"
+                                      b"ability==='number'&&Number.isFinite(d.probability)&&d.probability>=0"
+                                      b'&&d.probability<=1)return {probability:d.probability,ev:d.ev,edge:d.'
+                                      b'edge,breakEven:d.break_even_probability,research:true};if(r.status=='
+                                      b"='PASS'&&d?.version==='research-display-v1')return {probability:null"
+                                      b',ev:null,edge:null,breakEven:r.break_even_probability??null,research'
+                                      b':false};return {probability:r.win_estimate,ev:r.ev,edge:r.estimated_'
+                                      b'price_edge??null,breakEven:r.break_even_probability??null,research:f'
+                                      b"alse};} function estimateAvailability(r){if(r.status==='APPROVED'&&N"
+                                      b"umber.isFinite(r.win_estimate))return 'Saved approved estimate avail"
+                                      b"able';if(r.status==='TRIAL'&&Number.isFinite(r.win_estimate))return "
+                                      b"'Saved controlled-trial estimate available';const d=r.research_displ"
+                                      b"ay;if(!d)return Number.isFinite(r.win_estimate)?'Saved estimate avai"
+                                      b"lable; provenance details not recorded':'Estimate and provenance not"
+                                      b" recorded in this legacy package';const reasons={AVAILABLE:'Saved re"
+                                      b"search estimate available',ESTIMATE_NOT_RECORDED:'Research probabili"
+                                      b"ty not recorded',INVALID_PROBABILITY:'Invalid research probability',"
+                                      b"NONFINITE_PROBABILITY:'Nonfinite research probability',ESTIMATE_PROV"
+                                      b"ENANCE_NOT_RECORDED:'Exact estimate provenance not recorded',ESTIMAT"
+                                      b"E_IDENTITY_MISMATCH:'Estimate does not match this event, selection o"
+                                      b"r quote',TARGET_MISMATCH:'Model target does not match this selection"
+                                      b"',MODEL_TARGET_NOT_RECORDED:'Exact model target not recorded',INFERE"
+                                      b"NCE_FAILED:'Saved inference failed',INFERENCE_UNAVAILABLE:'Saved inf"
+                                      b"erence unavailable',UNSUPPORTED_PROBABILITY_SEMANTICS:'Probability o"
+                                      b"r push semantics unsupported'};return reasons[d.availability_reason]"
+                                      b"||'Estimate availability not recorded';}\n",
+                                      b"function estimateLabel(r){if(cardEstimate(r).research)return 'Resear"
+                                      b"ch estimate';if(r.status==='TRIAL')return 'Controlled-trial estimate"
+                                      b"';if(r.status==='APPROVED'&&r.wager_contract)return 'Validated estim"
+                                      b"ate';if((r.probability_basis||'').startsWith('Market-implied'))retur"
+                                      b"n 'Market estimate';if(r.sport==='NFL'&&r.probability_basis)return '"
+                                      b"Context estimate';return 'Model estimate';} function cardEstimate(r)"
+                                      b"{const d=r.research_display;if(r.status==='PASS'&&d?.version==='rese"
+                                      b"arch-display-v1'&&d.availability_reason==='AVAILABLE'&&typeof d.prob"
+                                      b"ability==='number'&&Number.isFinite(d.probability)&&d.probability>=0"
+                                      b'&&d.probability<=1)return {probability:d.probability,ev:d.ev,edge:d.'
+                                      b'edge,breakEven:d.break_even_probability,research:true};if(r.status=='
+                                      b"='PASS'&&d?.version==='research-display-v1')return {probability:null"
+                                      b',ev:null,edge:null,breakEven:null,research:false};return {probabilit'
+                                      b'y:r.win_estimate,ev:r.ev,edge:r.estimated_price_edge??null,breakEven'
+                                      b':r.break_even_probability??null,research:false};} function estimateA'
+                                      b"vailability(r){if(r.status==='APPROVED'&&Number.isFinite(r.win_estim"
+                                      b"ate))return 'Saved approved estimate available';if(r.status==='TRIAL"
+                                      b"'&&Number.isFinite(r.win_estimate))return 'Saved controlled-trial es"
+                                      b"timate available';const d=r.research_display;if(!d)return Number.isF"
+                                      b"inite(r.win_estimate)?'Saved estimate available; provenance details "
+                                      b"not recorded':'Estimate and provenance not recorded in this legacy p"
+                                      b"ackage';if(d.availability_reason==='INFERENCE_UNAVAILABLE'&&r.sport="
+                                      b"=='NHL'&&/^(spread_|total_)/.test(r.market||''))return 'No NHL sprea"
+                                      b"d/total model configured';if(d.availability_reason==='ESTIMATE_PROVE"
+                                      b"NANCE_NOT_RECORDED'){const identity=d.identity||{},missing=[];for(co"
+                                      b"nst [field,label] of [['period','Market period not verified'],['rule"
+                                      b"s','Settlement rules not verified'],['quote_id','Quote identity not "
+                                      b"recorded'],['event_id','Event identity not recorded'],['candidate_id"
+                                      b"','Candidate identity not recorded'],['export_run_id','Originating r"
+                                      b"un identity not recorded'],['quote_time','Original quote time not re"
+                                      b"corded'],['analysis_time','Original inference time not recorded'],['"
+                                      b"start','Event start time not recorded']]){if(identity[field]===null|"
+                                      b"|identity[field]===undefined||identity[field]==='')missing.push(labe"
+                                      b"l);}if(missing.length)return missing.join('; ');}const reasons={AVAI"
+                                      b"LABLE:'Saved research estimate available',ESTIMATE_NOT_RECORDED:'Res"
+                                      b"earch probability not recorded',INVALID_PROBABILITY:'Invalid researc"
+                                      b"h probability',NONFINITE_PROBABILITY:'Nonfinite research probability"
+                                      b"',ESTIMATE_PROVENANCE_NOT_RECORDED:'Exact estimate provenance not re"
+                                      b"corded',ESTIMATE_IDENTITY_MISMATCH:'Estimate does not match this eve"
+                                      b"nt, selection or quote',TARGET_MISMATCH:'Model target does not match"
+                                      b" this selection',MODEL_TARGET_NOT_RECORDED:'Exact model target not r"
+                                      b"ecorded',INFERENCE_FAILED:'Saved inference failed',INFERENCE_UNAVAIL"
+                                      b"ABLE:'Saved inference unavailable',UNSUPPORTED_PROBABILITY_SEMANTICS"
+                                      b":'Probability or push semantics unsupported'};return reasons[d.avail"
+                                      b"ability_reason]||'Estimate availability not recorded';}\n"),
+                                     (b'Break-even is the saved price\xe2\x80\x99s no-push equivalent; push-a'
+                                      b'ware EV remains the producer estimate.',
+                                      b'Break-even, edge and EV require a supported saved price and settleme'
+                                      b'nt basis. Rejected estimates do not expose legacy values; FVS-compat'
+                                      b'ible value remains unavailable without a compatible payoff model.'),
+                                     (b"ESTIMATE_PROVENANCE_NOT_RECORDED:'Exact estimate provenance not reco"
+                                      b"rded',",
+                                      b"ESTIMATE_PROVENANCE_NOT_RECORDED:'Exact estimate provenance not reco"
+                                      b"rded',SOURCE_CONTRACT_NOT_VERIFIED:'Market period and settlement-rul"
+                                      b"e applicability not verified',"),
+                                     (b"if(d.availability_reason==='ESTIMATE_PROVENANCE_NOT_RECORDED'){",
+                                      b"if(['ESTIMATE_PROVENANCE_NOT_RECORDED','SOURCE_CONTRACT_NOT_VERIFIED"
+                                      b"'].includes(d.availability_reason)){"),
+                                     (b"'Price value: '+(cardEstimate(r).research?",
+                                      b"'Price value: '+(r.status==='PASS'&&r.research_display?.version==='r"
+                                      b"esearch-display-v1'&&r.research_display.availability_reason!=='AVAIL"
+                                      b"ABLE'?'Research value unavailable: '+estimateAvailability(r):cardEst"
+                                      b'imate(r).research?')]},
+ 'app_core/source_contract.py': {'sha256': 'f84c2b8ffbc70f7681b5ac02ee0d5d410e0112acb56b30994c515a56b0c51525',
+                                 'edits': [(b'ACCEPTED_LISTINGS = {}\n',
+                                            b'ACCEPTED_LISTINGS = {}\n\n# Public templates prove document co'
+                                            b'ntent, not exact listing applicability.\n# These negative ass'
+                                            b'essments reuse the existing private retention carrier and\n# '
+                                            b'cannot accept a receipt, supply period/rules or authorize nu'
+                                            b'meric value.\nUNVERIFIED_MARKETS = {\n    ("baseball_mlb", "sp'
+                                            b'reads"): ("odds-api-novig-mlb-spread-unverified-v1",\n       '
+                                            b' "book_mlb_001", "fbc1d024c6aff0f63678eb5a3ab519bf9e1fdd6a70'
+                                            b'a6f81cd74dcf87a9a63ffe"),\n    ("americanfootball_nfl", "tota'
+                                            b'ls"): ("odds-api-novig-nfl-total-unverified-v1",\n        "bo'
+                                            b'ok_nfl_003", "93b92ee90e07b50ce5fff0ea2f7520e9eaa6c6509bb148'
+                                            b'9e320556192dda769f"),\n}\n\n\ndef unverified_assessment(scop'
+                                            b'e, offer, reference):\n    version, document, sha = UNVERIFIE'
+                                            b'D_MARKETS[scope]\n    documents = {k:v for k,v in DOCUMENTS.i'
+                                            b'tems() if k != "book_nfl_001"}\n    documents[document] = sha'
+                                            b'\n    errors = ["SOURCE_MARKET_LISTING_BINDING_NOT_VERIFIED"]'
+                                            b'\n    rejected = reference in ACCEPTED_LISTINGS if isinstance'
+                                            b'(reference, str) else False\n    if rejected or (offer.get("s'
+                                            b'port"), offer.get("market")) != scope:\n        errors.append'
+                                            b'("SOURCE_SCOPE_UNSUPPORTED")\n        rejected = True\n    ret'
+                                            b'urn dict(version=version, reference=reference if isinstance('
+                                            b'reference,str) else "",\n        documents=documents, status='
+                                            b'"REJECTED" if rejected else "UNKNOWN",\n        diagnostics=s'
+                                            b'orted(errors), receipt=None)\n'),
+                                           (b'    requested = "source_contract_ref" in market or "source_c'
+                                            b'ontract_ref" in outcome\n',
+                                            b'    scope = (game.get("sport_key"), market.get("key"))\n    i'
+                                            b'f scope in UNVERIFIED_MARKETS and str(book.get("key", "")).s'
+                                            b'tartswith("novig"):\n        offer = identity(game, book, mar'
+                                            b'ket, outcome)\n        assessment = unverified_assessment(sco'
+                                            b'pe, offer,\n            outcome.get("source_contract_ref", ma'
+                                            b'rket.get("source_contract_ref")))\n        return dict(source'
+                                            b'_contract=dict(assessment, identity=offer))\n    requested = '
+                                            b'"source_contract_ref" in market or "source_contract_ref" in '
+                                            b'outcome\n'),
+                                           (b'    expected = verify(contract.get("reference"), contract.ge'
+                                            b't("identity", {}), inference_time=inference_time)\n',
+                                            b'    unverified = next((scope for scope, values in UNVERIFIED'
+                                            b'_MARKETS.items()\n                       if values[0] == cont'
+                                            b'ract.get("version")), None)\n    if unverified is not None:\n '
+                                            b'       expected = unverified_assessment(unverified, contract'
+                                            b'.get("identity", {}), contract.get("reference"))\n    else:\n '
+                                            b'       expected = verify(contract.get("reference"), contract'
+                                            b'.get("identity", {}), inference_time=inference_time)\n'),
+                                           (b'    """Only prospective explicitly identified NFL transports'
+                                            b' enter this adapter."""\n',
+                                            b'    """Retain prospective assessments; only the accepted NFL'
+                                            b' spread scope can verify."""\n')]},
+ 'app_core/research_display.py': {'sha256': 'c4db3039929b0be78474ef4179efc68f80dd767ade6f35193c1ef2d3e1a31445',
+                                  'edits': [(b'INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILI'
+                                             b'TY_SEMANTICS',
+                                             b'INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILI'
+                                             b'TY_SEMANTICS SOURCE_CONTRACT_NOT_VERIFIED'),
+                                            (b'    result = _from_export(row, source=source, source_field=s'
+                                             b'ource_field)\n    from app_core.source_contract import RULES,'
+                                             b' replay\n',
+                                             b'    result = _from_export(row, source=source, source_field=s'
+                                             b'ource_field)\n    from app_core.source_contract import RULES,'
+                                             b' replay, UNVERIFIED_MARKETS\n    if result["availability_reas'
+                                             b'on"] == "ESTIMATE_PROVENANCE_NOT_RECORDED":\n        try:\n   '
+                                             b'         origin = json.loads((source if source is not None e'
+                                             b'lse row).get("ml_estimate_metadata", ""))\n            bound '
+                                             b'= origin["producer_contract"]["source_contract"]\n           '
+                                             b' if bound.get("version") in {v[0] for v in UNVERIFIED_MARKET'
+                                             b'S.values()} and bound.get("status") != "VERIFIED":\n         '
+                                             b'       result["availability_reason"] = "SOURCE_CONTRACT_NOT_'
+                                             b'VERIFIED"\n        except (ValueError, TypeError, KeyError, A'
+                                             b'ttributeError):\n            pass\n')]},
+ 'tests/test_post2362_trace_probability_closure.py': {'sha256': '0f95f13a3a736af968ed015c71df69075e1e6fb451debd07dc4207f1955345de',
+                                                      'edits': [(b'            "odds_american": -190,\n     '
+                                                                 b'   })',
+                                                                 b'            "odds_american": -190,\n     '
+                                                                 b'       "quote_id": f"quote-{row[\'matchup'
+                                                                 b'_id\']}",\n        })'),
+                                                                (b'def test_b04_idless_legacy_requires_comp'
+                                                                 b'lete_event_and_quote_evidence(monkeypatc'
+                                                                 b'h):',
+                                                                 b'def test_b04_idless_legacy_remains_unres'
+                                                                 b'olved_with_event_and_quote_evidence(monk'
+                                                                 b'eypatch):'),
+                                                                (b'    matched = _trace([exact], package)["'
+                                                                 b'candidates"][0]',
+                                                                 b'    idless = _trace([exact], package)["c'
+                                                                 b'andidates"][0]'),
+                                                                (b'    assert matched["output_resolution"]['
+                                                                 b'"status"] == "MATCHED"\n    assert matche'
+                                                                 b'd["output_resolution"]["reason"] == "EXA'
+                                                                 b'CT_LEGACY_EVENT_QUOTE_IDENTITY"',
+                                                                 b'    assert idless["output"] is None\n    '
+                                                                 b'assert idless["output_resolution"]["stat'
+                                                                 b'us"] == "UNRESOLVED"\n    assert "source_'
+                                                                 b'candidate_id" in idless["output_resoluti'
+                                                                 b'on"]["reason"]')]}}
+
+
+def _pick_board_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _pick_board_previous_guard_source(source, binding=None):
+    binding = PICK_BOARD_BINDINGS if binding is None else binding
+    if b"\nPICK_BOARD_POLICY_PATH =" not in source:
+        return source
+    _require(_pick_board_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nPICK_BOARD_POLICY_PATH =", 1)[0] + PICK_BOARD_PREVIOUS_CLI
+
+
+def _pick_board_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _pick_board_previous_guard_source(source)
+    frozen = PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_pick_board_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nPICK_BOARD_POLICY_PATH =" in source:
+        if reviewed == PICK_BOARD_BINDINGS["successor_guard_sha256"]:
+            return _pick_board_raw_guard_matches(source, reviewed)
+        if not _pick_board_raw_guard_matches(source, PICK_BOARD_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nPICK_BOARD_POLICY_PATH =", 1)[0] + PICK_BOARD_PREVIOUS_CLI
+    return _pick_board_prior_guard_matches(source, reviewed)
+
+
+_pick_board_prior_native_main = _nfl_native_previous_main_source
+
+
+def _nfl_native_previous_main_source(path, source):
+    return _pick_board_prior_native_main(path, _pick_board_previous_main_source(path, source))
+
+
+def _run_pick_board_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/pick_board_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_pick_board_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -5136,7 +5713,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_NATIVE_POLICY_PATH):
+        if exists_at("HEAD", PICK_BOARD_POLICY_PATH):
+            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)
+        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):
             code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)
         elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):
             code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)

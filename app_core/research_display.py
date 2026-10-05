@@ -15,7 +15,7 @@ IDENTITY_FIELDS = frozenset("""event_id candidate_id export_run_id sport market 
 rules model_target sportsbook odds quote_id quote_time analysis_time start""".split())
 REASONS = frozenset("""AVAILABLE ESTIMATE_NOT_RECORDED INVALID_PROBABILITY NONFINITE_PROBABILITY
 ESTIMATE_PROVENANCE_NOT_RECORDED ESTIMATE_IDENTITY_MISMATCH TARGET_MISMATCH MODEL_TARGET_NOT_RECORDED
-INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS""".split())
+INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS SOURCE_CONTRACT_NOT_VERIFIED""".split())
 VALUE_REASONS = frozenset("""RECORDED_PRICE_VALUE VALUE_NOT_RECORDED PRICE_VALUE_MISMATCH
 PUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_UNAVAILABLE SETTLEMENT_VALUE_UNSUPPORTED""".split())
 # Explicit public-research provenance only; never an arbitrary source-column copy.
@@ -565,7 +565,15 @@ def legacy_unrecorded_display(export):
 
 def from_export(row, *, source=None, source_field="win_probability"):
     result = _from_export(row, source=source, source_field=source_field)
-    from app_core.source_contract import RULES, replay
+    from app_core.source_contract import RULES, replay, UNVERIFIED_MARKETS
+    if result["availability_reason"] == "ESTIMATE_PROVENANCE_NOT_RECORDED":
+        try:
+            origin = json.loads((source if source is not None else row).get("ml_estimate_metadata", ""))
+            bound = origin["producer_contract"]["source_contract"]
+            if bound.get("version") in {v[0] for v in UNVERIFIED_MARKETS.values()} and bound.get("status") != "VERIFIED":
+                result["availability_reason"] = "SOURCE_CONTRACT_NOT_VERIFIED"
+        except (ValueError, TypeError, KeyError, AttributeError):
+            pass
     if result["availability_reason"] == "AVAILABLE" and result["identity"]["rules"] == RULES:
         try:
             origin = json.loads((source if source is not None else row).get("ml_estimate_metadata", ""))

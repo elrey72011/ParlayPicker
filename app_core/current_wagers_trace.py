@@ -189,6 +189,64 @@ def _same_text(left: object, right: object, *, folded: bool = False) -> bool:
     return (left_text.casefold() == right_text.casefold()) if folded else left_text == right_text
 
 
+def _output_origin_binding(output: Mapping, trace: Mapping, contract: Mapping) -> tuple[dict, list[str]]:
+    """Read the saved originating identity; inference clocks never identify runs.
+
+    An unavailable estimate can still record exact identity. Its schema alone
+    is insufficient: every supplied output/diagnostic/contract fact must agree.
+    This diagnostic reader grants no estimate, qualification or wager authority.
+    """
+    from app_core.research_display import validate, _matches
+    display = output.get("research_display")
+    errors = []
+    identity = {}
+    try:
+        validate(display)
+        identity = dict(display["identity"])
+        if not _matches(display, output):
+            errors.append("SAVED_DISPLAY_OUTPUT_IDENTITY_CONFLICT")
+        if display["availability_reason"] == "ESTIMATE_IDENTITY_MISMATCH":
+            errors.append("SAVED_DISPLAY_IDENTITY_REJECTED")
+    except (ValueError, TypeError, KeyError, AttributeError):
+        errors.append("ORIGINATING_IDENTITY_NOT_RECORDED")
+    for source, fields in ((trace, {
+            "source_candidate_id":"candidate_id", "game_id":"event_id", "sport":"sport",
+            "market_type":"market", "selection":"selection", "line":"line",
+            "sportsbook":"sportsbook", "odds":"odds", "quote_id":"quote_id",
+            "quote_timestamp":"quote_time", "analysis_timestamp":"analysis_time"}),
+            (contract, {"candidate_id":"candidate_id", "game_id":"event_id", "matchup_id":"event_id",
+            "sport":"sport", "market_type":"market", "selection":"selection", "line":"line",
+            "sportsbook":"sportsbook", "odds":"odds", "quote_id":"quote_id",
+            "quote_timestamp":"quote_time", "analysis_timestamp":"analysis_time"})):
+        for field, key in fields.items():
+            value = source.get(field)
+            if value is None or value == "":
+                continue
+            saved = identity.get(key)
+            # Missing optional saved facts can be supplied by exact diagnostics,
+            # but never manufacture an originating run from their clocks.
+            if saved is None or saved == "":
+                continue
+            if key in {"quote_time", "analysis_time"}:
+                equal = _time(value) is not None and _time(saved) is not None and _same_time(value, saved)
+            elif key in {"line", "odds"}:
+                equal = _number({"value":value}, "value") == saved
+            else:
+                equal = (_same_text(value, saved, folded=True)
+                         if key in {"sport", "market", "sportsbook"} else value == saved)
+            if not equal:
+                errors.append("OUTPUT_BINDING_CONFLICT:" + key)
+    for source in (output, trace, contract):
+        for field in ("export_run_id", "run_id"):
+            value = source.get(field)
+            if value is not None and value != "" and value != identity.get("export_run_id"):
+                errors.append("OUTPUT_BINDING_CONFLICT:run_id")
+    run = identity.get("export_run_id")
+    if not isinstance(run, str) or not run or run.strip() != run:
+        errors.append("ORIGINATING_RUN_BINDING_NOT_RECORDED")
+    return identity, sorted(set(errors))
+
+
 def _selected_output_records(package: dict) -> list[dict]:
     outputs = package.get("games", {}).get("overall", [])
     traces = (package.get("board_diagnostics") or {}).get("traces") or []
@@ -199,28 +257,23 @@ def _selected_output_records(package: dict) -> list[dict]:
         if not isinstance(contract, dict):
             contract = output.get("controlled_trial_contract")
         contract = contract if isinstance(contract, dict) else {}
+        bound, errors = _output_origin_binding(output, trace, contract)
         records.append({
-            "section": "overall",
-            "position": position,
-            "status": output.get("status"),
-            "source_candidate_id": str(trace.get("source_candidate_id") or ""),
-            "event_id": str(trace.get("game_id") or contract.get("matchup_id") or
-                            contract.get("game_id") or ""),
-            "run_id": str(output.get("as_of") or ""),
-            "sport": str(trace.get("sport") or output.get("sport") or contract.get("sport") or ""),
-            "market": str(trace.get("market_type") or output.get("market") or
-                          contract.get("market_type") or ""),
-            "selection": str(trace.get("selection") or output.get("pick") or
-                             contract.get("selection") or ""),
-            "line": (_number(trace, "line") if _number(trace, "line") is not None
-                     else _number(contract, "line")),
-            "sportsbook": str(trace.get("sportsbook") or output.get("quote_source") or
-                              contract.get("sportsbook") or ""),
-            "quote_id": str(trace.get("quote_id") or contract.get("quote_id") or ""),
-            "odds_american": (_number(trace, "odds") if _number(trace, "odds") is not None
-                              else _number(output, "odds")),
-            "quote_timestamp": str(trace.get("quote_timestamp") or output.get("quote_time") or
-                                   contract.get("quote_timestamp") or ""),
+            "section": "overall", "position": position, "status": output.get("status"),
+            "source_candidate_id": bound.get("candidate_id") or str(trace.get("source_candidate_id") or ""),
+            "event_id": bound.get("event_id") or str(trace.get("game_id") or contract.get("matchup_id") or contract.get("game_id") or ""),
+            "run_id": bound.get("export_run_id") or "",
+            "inference_timestamp": output.get("as_of") or "",
+            "sport": bound.get("sport") or str(trace.get("sport") or output.get("sport") or ""),
+            "market": bound.get("market") or str(trace.get("market_type") or output.get("market") or ""),
+            "selection": bound.get("selection") or str(trace.get("selection") or output.get("pick") or ""),
+            "line": bound.get("line") if bound.get("line") is not None else _number(trace, "line"),
+            "sportsbook": bound.get("sportsbook") or str(trace.get("sportsbook") or output.get("quote_source") or ""),
+            "quote_id": bound.get("quote_id") or str(trace.get("quote_id") or contract.get("quote_id") or ""),
+            "odds_american": bound.get("odds") if bound.get("odds") is not None else _number(output, "odds"),
+            "quote_timestamp": bound.get("quote_time") or str(trace.get("quote_timestamp") or output.get("quote_time") or ""),
+            "_binding_errors": errors,
+            "_candidate_ids": {value for value in (bound.get("candidate_id"), trace.get("source_candidate_id")) if isinstance(value, str) and value},
         })
     return records
 
@@ -232,17 +285,17 @@ def _identity_conflicts(candidate: Mapping, selected: Mapping) -> list[str]:
         ("selection", False), ("sportsbook", True), ("quote_id", False),
     ):
         left, right = candidate.get(field), selected.get(field)
-        if left not in {None, ""} and right not in {None, ""} and not _same_text(
-                left, right, folded=folded):
+        equal = _same_text(left, right, folded=True) if folded else left == right
+        if left not in {None, ""} and right not in {None, ""} and not equal:
             conflicts.append(field)
     for field in ("line", "odds_american"):
         left, right = candidate.get(field), selected.get(field)
-        if left is not None and right is not None and not math.isclose(
-                float(left), float(right), rel_tol=0.0, abs_tol=1e-9):
+        if left is not None and right is not None and float(left) != float(right):
             conflicts.append(field)
     for field in ("run_id", "quote_timestamp"):
         left, right = candidate.get(field), selected.get(field)
-        if left not in {None, ""} and right not in {None, ""} and not _same_time(left, right):
+        equal = left == right if field == "run_id" else _same_time(left, right)
+        if left not in {None, ""} and right not in {None, ""} and not equal:
             conflicts.append(field)
     return conflicts
 
@@ -255,7 +308,7 @@ def _match_result(status: str, reason: str, record: Mapping | None = None) -> di
         selected_identity = {key: record.get(key) for key in (
             "source_candidate_id", "event_id", "run_id", "sport", "market",
             "selection", "line", "sportsbook", "quote_id", "odds_american",
-            "quote_timestamp",
+            "quote_timestamp", "inference_timestamp",
         )}
     return {
         "status": status,
@@ -265,51 +318,73 @@ def _match_result(status: str, reason: str, record: Mapping | None = None) -> di
     }
 
 
+def _candidate_alias_conflicts(row: Mapping, candidate: Mapping) -> list[str]:
+    """Sticky canonical selected-offer aliases, excluding contextual forecasts."""
+    aliases = {
+        "source_candidate_id": ("candidate_id",),
+        "event_id": ("canonical_event_id", "matchup_id", "game_id"),
+        "selection": ("selection", "best_pick", "display_pick"),
+        "sportsbook": ("quote_bookmaker", "book", "opposing_odds_source"),
+        "quote_id": ("quote_id", "prospective_quote_id"),
+        "line": ("line", "market_line_used", "selected_line",
+                 "total_line" if str(candidate["market"]).startswith("total") else "spread_line"),
+        "odds_american": ("odds_american", "american_odds", "odds"),
+    }
+    conflicts = []
+    for field, names in aliases.items():
+        for name in names:
+            value = row.get(name)
+            if value is None or value is pd.NA or (isinstance(value, float) and math.isnan(value)) or value == "":
+                continue
+            if field in {"line", "odds_american"}:
+                equal = _number({"value": value}, "value") == candidate[field]
+            else:
+                equal = (_same_text(value, candidate[field], folded=True)
+                         if field == "sportsbook" else value == candidate[field])
+            if not equal:
+                conflicts.append(field)
+    return sorted(set(conflicts))
+
+
 def _output_match(row: Mapping, package: dict) -> dict:
-    """Bind a candidate to one exact selected diagnostic position.
-
-    Explicit candidate IDs are authoritative: a conflict or an unselected ID
-    never falls back to display text. ID-less legacy rows require complete
-    event/run/quote evidence, and ambiguity remains unresolved.
-    """
-
+    """Strict originating-run/selected-offer diagnostic join, never authorization."""
     _, candidate = _candidate_identity(row)
     records = _selected_output_records(package)
     source_id = candidate["source_candidate_id"]
-    if source_id:
-        selected = [record for record in records
-                    if record["source_candidate_id"] == source_id]
-        if not selected:
-            return _match_result("UNRESOLVED", "EXPLICIT_CANDIDATE_ID_NOT_SELECTED")
-        if len(selected) != 1:
-            return _match_result("UNRESOLVED", "DUPLICATE_SELECTED_CANDIDATE_ID")
-        conflicts = _identity_conflicts(candidate, selected[0])
-        if conflicts:
-            return _match_result(
-                "UNRESOLVED", "EXPLICIT_IDENTITY_CONFLICT:" + ",".join(conflicts)
-            )
-        return _match_result("MATCHED", "EXACT_SELECTED_CANDIDATE_ID", selected[0])
-
-    required = (
-        "event_id", "run_id", "sport", "market", "selection", "line",
-        "sportsbook", "odds_american", "quote_timestamp",
-    )
+    required = ("source_candidate_id", "event_id", "run_id", "sport", "market", "selection",
+                "line", "sportsbook", "quote_id", "odds_american", "quote_timestamp")
     missing = [field for field in required if candidate.get(field) in {None, ""}]
     if missing:
-        return _match_result(
-            "UNRESOLVED", "LEGACY_CANDIDATE_IDENTITY_INCOMPLETE:" + ",".join(missing)
-        )
-    complete_records = [record for record in records
-                        if all(record.get(field) not in {None, ""} for field in required)]
-    matches = [record for record in complete_records
-               if not _identity_conflicts(candidate, record)]
-    if len(matches) == 1:
-        return _match_result("MATCHED", "EXACT_LEGACY_EVENT_QUOTE_IDENTITY", matches[0])
-    if len(matches) > 1:
-        return _match_result("UNRESOLVED", "AMBIGUOUS_LEGACY_OUTPUT_IDENTITY")
-    if len(complete_records) != len(records):
-        return _match_result("UNRESOLVED", "SELECTED_OUTPUT_IDENTITY_INCOMPLETE")
-    return _match_result("NOT_PRESENT", "NO_EXACT_OUTPUT_IDENTITY_MATCH")
+        return _match_result("UNRESOLVED", "CANDIDATE_ORIGINATING_IDENTITY_INCOMPLETE:" + ",".join(missing))
+    contradictions = _candidate_alias_conflicts(row, candidate)
+    if contradictions:
+        return _match_result("UNRESOLVED", "EXPLICIT_IDENTITY_CONFLICT:" + ",".join(contradictions))
+    # Supplied run aliases cannot be ignored, and run IDs are opaque strings.
+    for field in ("export_run_id", "run_id"):
+        value = row.get(field)
+        if value is None or value is pd.NA or (isinstance(value, float) and math.isnan(value)) or value == "":
+            continue
+        if not isinstance(value, str) or value != candidate["run_id"]:
+            return _match_result("UNRESOLVED", "EXPLICIT_IDENTITY_CONFLICT:run_id")
+    if _time(candidate["quote_timestamp"]) is None:
+        return _match_result("UNRESOLVED", "CANDIDATE_QUOTE_CLOCK_UNVERIFIED")
+    selected = [record for record in records if source_id in record["_candidate_ids"]]
+    if not selected:
+        return _match_result("UNRESOLVED", "EXPLICIT_CANDIDATE_ID_NOT_SELECTED")
+    if len(selected) != 1:
+        return _match_result("UNRESOLVED", "DUPLICATE_SELECTED_CANDIDATE_ID")
+    record = selected[0]
+    if record["_binding_errors"]:
+        return _match_result("UNRESOLVED", ",".join(record["_binding_errors"]))
+    absent = [field for field in required if record.get(field) in {None, ""}]
+    if absent:
+        return _match_result("UNRESOLVED", "SELECTED_OUTPUT_IDENTITY_INCOMPLETE:" + ",".join(absent))
+    if _time(record["quote_timestamp"]) is None or _time(record["inference_timestamp"]) is None:
+        return _match_result("UNRESOLVED", "SELECTED_OUTPUT_CLOCK_UNVERIFIED")
+    conflicts = _identity_conflicts(candidate, record)
+    if conflicts:
+        return _match_result("UNRESOLVED", "EXPLICIT_IDENTITY_CONFLICT:" + ",".join(conflicts))
+    return _match_result("MATCHED", "EXACT_SELECTED_CANDIDATE_ID", record)
 
 
 def _quote_stage(row: Mapping, at: datetime, options: Mapping, minutes: int) -> tuple[dict, dict]:

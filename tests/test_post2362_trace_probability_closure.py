@@ -33,6 +33,7 @@ def _collision_sources():
             "line": 1.5,
             "odds": -190,
             "odds_american": -190,
+            "quote_id": f"quote-{row['matchup_id']}",
         })
     return rows
 
@@ -134,17 +135,18 @@ def test_b03_explicit_identity_conflicts_never_use_display_fallback(
     assert field in record["output_resolution"]["reason"]
 
 
-def test_b04_idless_legacy_requires_complete_event_and_quote_evidence(monkeypatch):
+def test_b04_idless_legacy_remains_unresolved_with_event_and_quote_evidence(monkeypatch):
     source = _collision_sources()[0]
     package = _package(monkeypatch, [source])
     exact = _trace_candidate(source, candidate_id="")
     incomplete = dict(exact, canonical_event_id="", matchup_id="")
 
-    matched = _trace([exact], package)["candidates"][0]
+    idless = _trace([exact], package)["candidates"][0]
     unresolved = _trace([incomplete], package)["candidates"][0]
 
-    assert matched["output_resolution"]["status"] == "MATCHED"
-    assert matched["output_resolution"]["reason"] == "EXACT_LEGACY_EVENT_QUOTE_IDENTITY"
+    assert idless["output"] is None
+    assert idless["output_resolution"]["status"] == "UNRESOLVED"
+    assert "source_candidate_id" in idless["output_resolution"]["reason"]
     assert unresolved["output"] is None
     assert unresolved["output_resolution"]["status"] == "UNRESOLVED"
     assert "event_id" in unresolved["output_resolution"]["reason"]
