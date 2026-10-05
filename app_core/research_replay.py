@@ -11,7 +11,8 @@ import numpy as np
 import pandas as pd
 from app_core.research_estimate_trace import SOURCE_FIELDS, EXPORT_FIELDS
 
-REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + """provider_quotes
+REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + """ml_feature_eligible stats_resolution_status football_feature_receipt
+provider_quotes
 home_team away_team game_date game_time_est Home Away Local Date Commence (Local)
 quote_timestamp sportsbook book opposing_odds_source quote_binding_verified
 best_available_rank best_available_family_rank best_available_selected

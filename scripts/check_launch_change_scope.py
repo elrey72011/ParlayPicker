@@ -4666,6 +4666,316 @@ def _run_nfl_inputs_integrated(manifest_path,base,binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+NFL_ADMISSION_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-admission-v1.json'
+NFL_ADMISSION_POLICY_VERSION = 'paid-launch-nfl-admission-v1'
+NFL_ADMISSION_APPROVAL_REFERENCE = 'Owner request to correct only the two reproduced #2386 admission defects; offline software integrity and draft review, no native adapter/science/authority execution'
+NFL_ADMISSION_PATHS = ('scripts/check_launch_change_scope.py', 'scripts/nfl_admission_scope.py', 'tests/test_nfl_admission_scope.py', 'app_core/nfl_inference_evidence.py', 'app_core/candidate_evidence_schema.py', 'app_core/research_replay.py', 'tests/test_nfl_inference_evidence.py', 'tests/test_nfl_admission_bindings.py', 'docs/paid-launch/nfl-admission-bindings.md')
+NFL_ADMISSION_FROZEN_PATHS = ('app_core/feature_processing.py', 'app_core/football_feature_capture.py', 'app_core/market_probability_model.py', 'app_core/weights_config.py', 'app_core/football_validation_v2.py', 'app_core/prospective_validation_plans.py', 'docs/audits/2026-09-23-prospective-validation-plans.md', 'docs/football-stage2.md', 'docs/football-validation-v2.md')
+NFL_ADMISSION_BINDINGS = {'base': '5481f31350b416b17e3dd9fefb4c38ed3617d5aa',
+ 'base_tree': '14d3f9045a92105bdf0d0e5dcdfb4016085d9d81',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '3dbbb134f2ae452fc66ce145c04b5b82b1f31b47bb7ba52573788080f9bd129b',
+ 'previous_policy_blob': '68a4eb73c075d66fdf82d344d19574fd19934feb',
+ 'scope_module_sha256': 'e62d35bb4a3bf13fc1464e0ea439765f61ec447a76180275c39719e394626b75',
+ 'reviewed_blobs': {'scripts/nfl_admission_scope.py': 'be7adeda34890ec1e21d3efbfd12cce864b05c4d',
+                    'tests/test_nfl_admission_scope.py': '2d51d95b728862e1c8c32bbac81252f0e8d0cae9',
+                    'app_core/nfl_inference_evidence.py': '70bdddd73d52a4bf665496e739ce83341d890557',
+                    'app_core/candidate_evidence_schema.py': 'c0cf9fb9868d95304a39d9fe86262d34470d6934',
+                    'app_core/research_replay.py': 'a3a45c18f0a27e98fda461bda255c3a321862212',
+                    'tests/test_nfl_inference_evidence.py': '9a9507a699fcb0232114f5756796570d38663cd9',
+                    'tests/test_nfl_admission_bindings.py': '77b92fae79f9b94eb6fa0d51e3e6f26403249675',
+                    'docs/paid-launch/nfl-admission-bindings.md': '6bac8a519a19b02588bfd8bbcf1b47809276253a'},
+ 'successor_guard_sha256': 'b6794dcba3f0ae1d29a312a18ffa9fc6b9a0d0f656bf6c02ad35841cbe82bf4a'}
+NFL_ADMISSION_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/nfl_inference_evidence.py': {'sha256': '827a90bc16ab551ee13228e7684f25f87ce1a4c1ea19cfa97159e60b4797e45e',
+                                        'edits': [(b'\n\ndef diagnose(source, item=None):',
+                                                   b'\n\nELIGIBILITY = ("ml_feature_eligible", "stats_resolutio'
+                                                   b'n_status")\nFEATURE_SCOPE = "nfl-score-feature-scope-v1"\n'
+                                                   b'\n\ndef _eligibility_binding(source, packet, errors, unkno'
+                                                   b'wn):\n    """Compare original consumed cells, not truthy '
+                                                   b'replacements or defaults."""\n    from app_core.research_'
+                                                   b'replay import cell, value\n    retained = packet["eligibi'
+                                                   b'lity"]\n    present = packet["eligibility_present"]\n    i'
+                                                   b'f set(retained) != set(ELIGIBILITY) or len(present) != l'
+                                                   b'en(set(present)):\n        errors.append("eligibility.sch'
+                                                   b'ema")\n        return\n    for name in ELIGIBILITY:\n  '
+                                                   b'      original = retained[name]\n        if name not in p'
+                                                   b'resent or fact(value(original))["state"] != "VALUE":\n   '
+                                                   b'         unknown.append("eligibility.original:" + name)\n'
+                                                   b'        current = cell(source.get(name))\n        if name'
+                                                   b' not in source or fact(source.get(name))["state"] != "VA'
+                                                   b'LUE":\n            unknown.append("eligibility.current:" '
+                                                   b'+ name)\n        elif name not in present or encode(origi'
+                                                   b'nal) != encode(current):\n            errors.append("elig'
+                                                   b'ibility.source_conflict:" + name)\n    if packet["inferen'
+                                                   b'ce_status"] == "success":\n        # The existing scoring'
+                                                   b" gate's exact normalization; no prediction change.\n     "
+                                                   b'   frame = pd.DataFrame([{k: value(retained[k]) for k in'
+                                                   b' present}])\n        if "ml_feature_eligible" in frame an'
+                                                   b'd not frame["ml_feature_eligible"].astype("string").str.'
+                                                   b'lower().str.strip().isin({"true", "1"}).iloc[0]:\n       '
+                                                   b'     errors.append("eligibility.success_conflict:ml_feat'
+                                                   b'ure_eligible")\n        if "stats_resolution_status" in f'
+                                                   b'rame:\n            from app_core.market_probability_model'
+                                                   b' import _text\n            if not _text(frame, "stats_res'
+                                                   b'olution_status").str.lower().isin({"resolved", "live", "'
+                                                   b'cached"}).iloc[0]:\n                errors.append("eligib'
+                                                   b'ility.success_conflict:stats_resolution_status")\n\n\nd'
+                                                   b'ef _event_binding(event, expected, prefix, errors, unkno'
+                                                   b'wn):\n    """Named orientation and namespace are facts; u'
+                                                   b'nordered keys are opaque."""\n    from app_core.producer_'
+                                                   b'provenance import team\n    if not isinstance(event, dict'
+                                                   b'):\n        unknown.append(prefix)\n        return\n   '
+                                                   b' for key in ("provider_namespace", "provider_event_id", '
+                                                   b'"sport", "home", "away", "start"):\n        supplied = ev'
+                                                   b'ent.get(key)\n        if not supplied:\n            unknow'
+                                                   b'n.append(prefix + ":" + key)\n            continue\n      '
+                                                   b'  actual = clock(supplied) if key == "start" else team(s'
+                                                   b'upplied, "NFL") if key in {"home", "away"} else supplied'
+                                                   b'\n        if expected is None or not expected.get(key):\n '
+                                                   b'           unknown.append(prefix + ":expected_" + key)\n '
+                                                   b'       elif actual != expected[key]:\n            errors.'
+                                                   b'append(prefix + ":" + key)\n\n\ndef _observation_bindin'
+                                                   b'g(observed, packet, item, errors, unknown):\n    payload '
+                                                   b'= observed["payload"]\n    if payload.get("schema") != "f'
+                                                   b'ootball-feature-observation-v1":\n        errors.append("'
+                                                   b'features.observation_schema")\n    contract = packet["eve'
+                                                   b'nt_offer"]\n    expected = contract["event"] if contract '
+                                                   b'else None\n    event = {"sport": payload.get("sport"), "h'
+                                                   b'ome": payload.get("home_team"),\n             "away": pay'
+                                                   b'load.get("away_team"), "start": payload.get("game_start_'
+                                                   b'utc")}\n    # This existing receipt predates provider IDs'
+                                                   b'; bind its named event fields to\n    # the original quot'
+                                                   b'e event, without pretending it recorded a provider ID.\n '
+                                                   b'   _event_binding(event, expected, "features.observation'
+                                                   b'_event", errors, unknown)\n    for key in ("provider_name'
+                                                   b'space", "provider_event_id"):\n        unknown[:] = [x fo'
+                                                   b'r x in unknown if x != "features.observation_event:" + k'
+                                                   b'ey]\n    matchup = item.get("identity", {}).get("matchup_'
+                                                   b'id", {})\n    if matchup.get("state") != "VALUE" or not p'
+                                                   b'ayload.get("matchup_id"):\n        unknown.append("featur'
+                                                   b'es.observation_matchup")\n    elif payload["matchup_id"] '
+                                                   b'!= matchup["value"]:\n        errors.append("features.obs'
+                                                   b'ervation_matchup")\n    resolution = packet["eligibility"'
+                                                   b']["stats_resolution_status"]\n    from app_core.research_'
+                                                   b'replay import value\n    if not payload.get("stats_resolu'
+                                                   b'tion_status"):\n        unknown.append("features.observat'
+                                                   b'ion_resolution")\n    elif fact(value(resolution))["state'
+                                                   b'"] == "VALUE" and payload["stats_resolution_status"] != '
+                                                   b'value(resolution):\n        errors.append("features.obser'
+                                                   b'vation_resolution")\n    values = payload.get("features")'
+                                                   b'\n    if not isinstance(values, dict):\n        unknown.ap'
+                                                   b'pend("features.observation_feature_set")\n        return\n'
+                                                   b'    for name, consumed in packet["features"].items():\n  '
+                                                   b'      if consumed.get("state") != "VALUE":\n            c'
+                                                   b'ontinue\n        if name not in values:\n            unkno'
+                                                   b'wn.append("features.observation_missing:" + name)\n      '
+                                                   b'  elif fact(values[name]) != consumed:\n            error'
+                                                   b's.append("features.observation_value:" + name)\n\n\ndef'
+                                                   b' _dependency_scope(dependency, original, at, packet, nam'
+                                                   b'e, errors, unknown):\n    """Original bytes must carry ap'
+                                                   b'plicable feature/event/availability facts."""\n    scope '
+                                                   b'= dependency.get("scope")\n    if scope is None:\n        '
+                                                   b'unknown.append("features.dependency_scope:" + name)\n    '
+                                                   b'    return\n    if not isinstance(scope, dict):\n        e'
+                                                   b'rrors.append("features.dependency_scope_schema:" + name)'
+                                                   b'\n        return\n    if "scope_path" not in dependenc'
+                                                   b'y:\n        unknown.append("features.original_scope:" + n'
+                                                   b'ame)\n    elif encode(at(dependency["scope_path"])) != en'
+                                                   b'code(scope):\n        errors.append("features.original_sc'
+                                                   b'ope_conflict:" + name)\n    for key, expected in (("contr'
+                                                   b'act", FEATURE_SCOPE), ("feature", name)):\n        if key'
+                                                   b' not in scope:\n            unknown.append("features.depe'
+                                                   b'ndency_scope_" + key + ":" + name)\n        elif scope[ke'
+                                                   b'y] != expected:\n            errors.append("features.depe'
+                                                   b'ndency_scope_" + key + ":" + name)\n    event = packet["e'
+                                                   b'vent_offer"]["event"] if packet["event_offer"] else None'
+                                                   b'\n    _event_binding(scope.get("event"), event, "features'
+                                                   b'.dependency_scope_event:" + name, errors, unknown)\n    f'
+                                                   b'or key in ("available_at", "observed_at"):\n        if ke'
+                                                   b'y not in scope:\n            unknown.append("features.dep'
+                                                   b'endency_scope_" + key + ":" + name)\n        elif clock(s'
+                                                   b'cope[key]) is None or clock(scope[key]) != clock(depende'
+                                                   b'ncy.get(key)):\n            errors.append("features.depen'
+                                                   b'dency_scope_" + key + ":" + name)\n\n\ndef diagnose(sou'
+                                                   b'rce, item=None):'),
+                                                  (b'        if not isinstance(p.get("predictor_callables"),d'
+                                                   b'ict)',
+                                                   b'        _eligibility_binding(source, p, errors, unknown)'
+                                                   b'\n        if not isinstance(p.get("predictor_callables"),'
+                                                   b'dict)'),
+                                                  (b'            for name,v in p["features"].items():\n       '
+                                                   b'         if v.get("state")=="VALUE" and name in observed'
+                                                   b'["payload"].get("features",{}) and fact(observed["payloa'
+                                                   b'd"]["features"][name])!=v:errors.append("features.observ'
+                                                   b'ation_value:"+name)',
+                                                   b'            _observation_binding(observed, p, item, erro'
+                                                   b'rs, unknown)'),
+                                                  (b'                    if at(dependency["event_path"])!=dep'
+                                                   b'endency["provider_event_id"]:errors.append("features.ori'
+                                                   b'ginal_source_event:"+k)',
+                                                   b'                    if at(dependency["event_path"])!=dep'
+                                                   b'endency["provider_event_id"]:errors.append("features.ori'
+                                                   b'ginal_source_event:"+k)\n                    _dependency_'
+                                                   b'scope(dependency, original, at, p, k, errors, unknown)'),
+                                                  (b'                elif inf is None or not av<=ob<=inf:erro'
+                                                   b'rs.append("features.availability_clock:"+k)',
+                                                   b'                elif inf is None or not av<=ob<=inf:erro'
+                                                   b'rs.append("features.availability_clock:"+k)\n            '
+                                                   b'    elif p["observation_receipt"]:\n                    o'
+                                                   b'bservation = clock(json.loads(p["observation_receipt"])['
+                                                   b'"payload"].get("observed_at"))\n                    if ob'
+                                                   b'servation is None or not ob <= observation <= inf:\n     '
+                                                   b'                   errors.append("features.dependency_ob'
+                                                   b'servation_window:" + k)'),
+                                                  (b'def _event_binding(event, expected, prefix, errors, unkn'
+                                                   b'own):',
+                                                   b'def _event_binding(event, expected, prefix, errors, unkn'
+                                                   b'own, fields=("provider_namespace", "provider_event_id", '
+                                                   b'"sport", "home", "away", "start")):'),
+                                                  (b'    for key in ("provider_namespace", "provider_event_id'
+                                                   b'", "sport", "home", "away", "start"):',
+                                                   b'    for key in fields:'),
+                                                  (b'    _event_binding(event, expected, "features.observatio'
+                                                   b'n_event", errors, unknown)\n    for key in ("provider_nam'
+                                                   b'espace", "provider_event_id"):\n        unknown[:] = [x f'
+                                                   b'or x in unknown if x != "features.observation_event:" + '
+                                                   b'key]',
+                                                   b'    _event_binding(event, expected, "features.observatio'
+                                                   b'n_event", errors, unknown,\n                   fields=("s'
+                                                   b'port", "home", "away", "start"))'),
+                                                  (b'def _dependency_scope(dependency, original, at, packet, '
+                                                   b'name, errors, unknown):',
+                                                   b'def _dependency_scope(dependency, at, packet, name, erro'
+                                                   b'rs, unknown):'),
+                                                  (b'_dependency_scope(dependency, original, at, p, k, errors'
+                                                   b', unknown)',
+                                                   b'_dependency_scope(dependency, at, p, k, errors, unknown)'),
+                                                  (b'        elif clock(scope[key]) is None or clock(scope[ke'
+                                                   b'y]) != clock(dependency.get(key)):',
+                                                   b'        elif not scope[key]:\n            unknown.append('
+                                                   b'"features.dependency_scope_" + key + ":" + name)\n       '
+                                                   b' elif clock(scope[key]) is None or clock(scope[key]) != '
+                                                   b'clock(dependency.get(key)):'),
+                                                  (b'        if p["observation_receipt"] is None:unknown.appe'
+                                                   b'nd("features.observation_receipt")',
+                                                   b'        current_receipt = source.get("football_feature_r'
+                                                   b'eceipt")\n        if not current_receipt:\n            unk'
+                                                   b'nown.append("features.current_observation_receipt")\n    '
+                                                   b'    elif current_receipt != p["observation_receipt"]:\n  '
+                                                   b'          errors.append("features.observation_source_con'
+                                                   b'flict")\n        if p["observation_receipt"] is None:unkn'
+                                                   b'own.append("features.observation_receipt")'),
+                                                  (b'        if not current_receipt:\n',
+                                                   b'        if fact(current_receipt)["state"] != "VALUE":\n'),
+                                                  (b'    if packet["inference_status"] == "success":\n',
+                                                   b'    status = packet.get("inference_status")\n    if fact('
+                                                   b'status)["state"] != "VALUE" or status == "unknown":\n    '
+                                                   b'    unknown.append("origin.inference_status")\n    elif s'
+                                                   b'tatus != "success" and packet["raw_probability"].get("st'
+                                                   b'ate") == "VALUE":\n        errors.append("origin.non_succ'
+                                                   b'ess_numeric_output")\n    if status == "success":\n')]},
+ 'app_core/candidate_evidence_schema.py': {'sha256': '6fabea411f2efbebeef850313d0d3c8e75f160f5faa6b0c1d0aa52e63ab50259',
+                                           'edits': [(b'FIELDS += ["football_feature_receipt",',
+                                                      b'FIELDS += ["ml_feature_eligible", "stats_resolution_'
+                                                      b'status", "football_feature_receipt",')]},
+ 'app_core/research_replay.py': {'sha256': '02213a1521608768e403e57683f92e17f8d77a351cab929aa70859399181783d',
+                                 'edits': [(b'REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + """pr'
+                                            b'ovider_quotes',
+                                            b'REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + """ml'
+                                            b'_feature_eligible stats_resolution_status football_feature_recei'
+                                            b'pt\nprovider_quotes')]},
+ 'tests/test_nfl_inference_evidence.py': {'sha256': 'b1f9fac09baf41fc86e5401d2884a6a59ba72b67050ee9de85a4e5a89bf0a4f2',
+                                          'edits': [(b'                raw=json.dumps(dict(event_id=game["id"],'
+                                                     b'value=d["payload"]["value"])).encode()\n             '
+                                                     b'   d["payload"].update(source_artifact=dict(bytes_base64'
+                                                     b'=base64.b64encode(raw).decode(),sha256=hashlib.sha256(ra'
+                                                     b'w).hexdigest()),value_path=["value"],event_path=["event_'
+                                                     b'id"])',
+                                                     b'                from app_core.producer_provenance import'
+                                                     b' team\n                scope = dict(contract="nfl-sco'
+                                                     b're-feature-scope-v1", feature=d["payload"]["feature"'
+                                                     b'],\n                    event=dict(provider_namespace'
+                                                     b'="the_odds_api", provider_event_id=game["id"], sport="NF'
+                                                     b'L",\n                        home=team(game["home_tea'
+                                                     b'm"],"NFL"), away=team(game["away_team"],"NFL"), start=pd'
+                                                     b'.Timestamp(START).isoformat()),\n                    '
+                                                     b'available_at=d["payload"]["available_at"], observed_at=d'
+                                                     b'["payload"]["observed_at"])\n                raw=json'
+                                                     b'.dumps(dict(event_id=game["id"],value=d["payload"]["valu'
+                                                     b'e"],scope=scope)).encode()\n                d["payloa'
+                                                     b'd"].update(scope=scope,scope_path=["scope"],source_artif'
+                                                     b'act=dict(bytes_base64=base64.b64encode(raw).decode(),sha'
+                                                     b'256=hashlib.sha256(raw).hexdigest()),value_path=["value"'
+                                                     b'],event_path=["event_id"])'),
+                                                    (b'provider_namespace="the_odds_api", provider_event_id=gam'
+                                                     b'e["id"]',
+                                                     b'provider_namespace=game["odds_feed_source"], provider_ev'
+                                                     b'ent_id=game["id"]'),
+                                                    (b'provider_namespace=game["odds_feed_source"], provider_ev'
+                                                     b'ent_id=game["id"]',
+                                                     b'provider_namespace="odds_api", provider_event_id=game["i'
+                                                     b'd"]')]}}
+
+
+def _nfl_admission_previous_guard_source(source, binding=None):
+    binding = NFL_ADMISSION_BINDINGS if binding is None else binding
+    if b"\nNFL_ADMISSION_POLICY_PATH =" not in source:
+        return source
+    _require(_dfs_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNFL_ADMISSION_POLICY_PATH =", 1)[0] + NFL_ADMISSION_PREVIOUS_CLI
+
+
+def _nfl_admission_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _nfl_admission_previous_guard_source(source)
+    frozen = NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS, HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS, ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_nfl_admission_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    # Only the exact reviewed successor may reconstruct the exact predecessor.
+    # An old hash is never a blanket approval for new or self-rehashed bytes.
+    if b"\nNFL_ADMISSION_POLICY_PATH =" in source and reviewed == NFL_INPUTS_BINDINGS["successor_guard_sha256"]:
+        if not _nfl_admission_prior_guard_matches(source, NFL_ADMISSION_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nNFL_ADMISSION_POLICY_PATH =", 1)[0] + NFL_ADMISSION_PREVIOUS_CLI
+    return _nfl_admission_prior_guard_matches(source, reviewed)
+
+
+_nfl_admission_prior_nfl_inputs_guard = _nfl_inputs_previous_guard_source
+_nfl_admission_prior_nfl_inputs_main = _nfl_inputs_previous_main_source
+
+
+def _nfl_inputs_previous_guard_source(source, binding=None):
+    return _nfl_admission_prior_nfl_inputs_guard(_nfl_admission_previous_guard_source(source), binding)
+
+
+def _nfl_inputs_previous_main_source(path, source):
+    return _nfl_admission_prior_nfl_inputs_main(path, _nfl_admission_previous_main_source(path, source))
+
+
+def _run_nfl_admission_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/nfl_admission_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_nfl_admission_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -4673,7 +4983,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_INPUTS_POLICY_PATH):
+        if exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):
+            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)
+        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):
             code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)
         elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):
             code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)

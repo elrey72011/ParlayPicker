@@ -158,6 +158,126 @@ def finish(frame):
     return frame
 
 
+ELIGIBILITY = ("ml_feature_eligible", "stats_resolution_status")
+FEATURE_SCOPE = "nfl-score-feature-scope-v1"
+
+
+def _eligibility_binding(source, packet, errors, unknown):
+    """Compare original consumed cells, not truthy replacements or defaults."""
+    from app_core.research_replay import cell, value
+    retained = packet["eligibility"]
+    present = packet["eligibility_present"]
+    if set(retained) != set(ELIGIBILITY) or len(present) != len(set(present)):
+        errors.append("eligibility.schema")
+        return
+    for name in ELIGIBILITY:
+        original = retained[name]
+        if name not in present or fact(value(original))["state"] != "VALUE":
+            unknown.append("eligibility.original:" + name)
+        current = cell(source.get(name))
+        if name not in source or fact(source.get(name))["state"] != "VALUE":
+            unknown.append("eligibility.current:" + name)
+        elif name not in present or encode(original) != encode(current):
+            errors.append("eligibility.source_conflict:" + name)
+    status = packet.get("inference_status")
+    if fact(status)["state"] != "VALUE" or status == "unknown":
+        unknown.append("origin.inference_status")
+    elif status != "success" and packet["raw_probability"].get("state") == "VALUE":
+        errors.append("origin.non_success_numeric_output")
+    if status == "success":
+        # The existing scoring gate's exact normalization; no prediction change.
+        frame = pd.DataFrame([{k: value(retained[k]) for k in present}])
+        if "ml_feature_eligible" in frame and not frame["ml_feature_eligible"].astype("string").str.lower().str.strip().isin({"true", "1"}).iloc[0]:
+            errors.append("eligibility.success_conflict:ml_feature_eligible")
+        if "stats_resolution_status" in frame:
+            from app_core.market_probability_model import _text
+            if not _text(frame, "stats_resolution_status").str.lower().isin({"resolved", "live", "cached"}).iloc[0]:
+                errors.append("eligibility.success_conflict:stats_resolution_status")
+
+
+def _event_binding(event, expected, prefix, errors, unknown, fields=("provider_namespace", "provider_event_id", "sport", "home", "away", "start")):
+    """Named orientation and namespace are facts; unordered keys are opaque."""
+    from app_core.producer_provenance import team
+    if not isinstance(event, dict):
+        unknown.append(prefix)
+        return
+    for key in fields:
+        supplied = event.get(key)
+        if not supplied:
+            unknown.append(prefix + ":" + key)
+            continue
+        actual = clock(supplied) if key == "start" else team(supplied, "NFL") if key in {"home", "away"} else supplied
+        if expected is None or not expected.get(key):
+            unknown.append(prefix + ":expected_" + key)
+        elif actual != expected[key]:
+            errors.append(prefix + ":" + key)
+
+
+def _observation_binding(observed, packet, item, errors, unknown):
+    payload = observed["payload"]
+    if payload.get("schema") != "football-feature-observation-v1":
+        errors.append("features.observation_schema")
+    contract = packet["event_offer"]
+    expected = contract["event"] if contract else None
+    event = {"sport": payload.get("sport"), "home": payload.get("home_team"),
+             "away": payload.get("away_team"), "start": payload.get("game_start_utc")}
+    # This existing receipt predates provider IDs; bind its named event fields to
+    # the original quote event, without pretending it recorded a provider ID.
+    _event_binding(event, expected, "features.observation_event", errors, unknown,
+                   fields=("sport", "home", "away", "start"))
+    matchup = item.get("identity", {}).get("matchup_id", {})
+    if matchup.get("state") != "VALUE" or not payload.get("matchup_id"):
+        unknown.append("features.observation_matchup")
+    elif payload["matchup_id"] != matchup["value"]:
+        errors.append("features.observation_matchup")
+    resolution = packet["eligibility"]["stats_resolution_status"]
+    from app_core.research_replay import value
+    if not payload.get("stats_resolution_status"):
+        unknown.append("features.observation_resolution")
+    elif fact(value(resolution))["state"] == "VALUE" and payload["stats_resolution_status"] != value(resolution):
+        errors.append("features.observation_resolution")
+    values = payload.get("features")
+    if not isinstance(values, dict):
+        unknown.append("features.observation_feature_set")
+        return
+    for name, consumed in packet["features"].items():
+        if consumed.get("state") != "VALUE":
+            continue
+        if name not in values:
+            unknown.append("features.observation_missing:" + name)
+        elif fact(values[name]) != consumed:
+            errors.append("features.observation_value:" + name)
+
+
+def _dependency_scope(dependency, at, packet, name, errors, unknown):
+    """Original bytes must carry applicable feature/event/availability facts."""
+    scope = dependency.get("scope")
+    if scope is None:
+        unknown.append("features.dependency_scope:" + name)
+        return
+    if not isinstance(scope, dict):
+        errors.append("features.dependency_scope_schema:" + name)
+        return
+    if "scope_path" not in dependency:
+        unknown.append("features.original_scope:" + name)
+    elif encode(at(dependency["scope_path"])) != encode(scope):
+        errors.append("features.original_scope_conflict:" + name)
+    for key, expected in (("contract", FEATURE_SCOPE), ("feature", name)):
+        if key not in scope:
+            unknown.append("features.dependency_scope_" + key + ":" + name)
+        elif scope[key] != expected:
+            errors.append("features.dependency_scope_" + key + ":" + name)
+    event = packet["event_offer"]["event"] if packet["event_offer"] else None
+    _event_binding(scope.get("event"), event, "features.dependency_scope_event:" + name, errors, unknown)
+    for key in ("available_at", "observed_at"):
+        if key not in scope:
+            unknown.append("features.dependency_scope_" + key + ":" + name)
+        elif not scope[key]:
+            unknown.append("features.dependency_scope_" + key + ":" + name)
+        elif clock(scope[key]) is None or clock(scope[key]) != clock(dependency.get(key)):
+            errors.append("features.dependency_scope_" + key + ":" + name)
+
+
 def diagnose(source, item=None):
     """Fail closed for false/missing consumed facts; separate unknown upstream bindings."""
     errors,unknown=[],[]
@@ -174,6 +294,7 @@ def diagnose(source, item=None):
             if p["features"][k].get("state")!="VALUE" or not isinstance(p["features"][k].get("value"),(float,int)) or isinstance(p["features"][k].get("value"),bool) or p["features"][k]["value"]<=0:errors.append("features."+k)
         if not isinstance(p.get("configuration"),dict) or set(p["configuration"])!={"score_parameters","blend_weights"}:errors.append("configuration.missing")
         if not isinstance(p.get("eligibility_present"),list) or set(p["eligibility_present"])-set(p["eligibility"]):errors.append("eligibility.schema")
+        _eligibility_binding(source, p, errors, unknown)
         if not isinstance(p.get("predictor_callables"),dict) or set(p["predictor_callables"])!=set(predictor_callables()):errors.append("predictor.callables_missing")
         if p["scientific_acceptance"] is not False or p["wagering_authority"] is not False:errors.append("packet.authority_forbidden")
         for k,expected in {"inference_time":item["generated_at"],"inference_status":item["inference_status"],"raw_probability":item["probability"],"raw_semantics":item["probability_semantics"],"push_probability":item["push_probability"]}.items():
@@ -196,14 +317,18 @@ def diagnose(source, item=None):
             if hashlib.sha256(raw).hexdigest()!=a["sha256"]:errors.append("artifact.integrity:"+name)
         if set(p["artifacts"])!=set(ARTIFACTS):errors.append("artifacts.contract")
         if any(not isinstance(p["runtime"].get(k),str) or not p["runtime"][k] for k in runtime()):errors.append("runtime.missing")
+        current_receipt = source.get("football_feature_receipt")
+        if fact(current_receipt)["state"] != "VALUE":
+            unknown.append("features.current_observation_receipt")
+        elif current_receipt != p["observation_receipt"]:
+            errors.append("features.observation_source_conflict")
         if p["observation_receipt"] is None:unknown.append("features.observation_receipt")
         else:
             observed=json.loads(p["observation_receipt"])
             if digest(observed["payload"])!=observed["sha256"]:errors.append("features.observation_integrity")
             observed_time=clock(observed["payload"].get("observed_at"));inf=clock(p["inference_time"])
             if observed_time is None or inf is None or observed_time>inf:errors.append("features.observation_clock")
-            for name,v in p["features"].items():
-                if v.get("state")=="VALUE" and name in observed["payload"].get("features",{}) and fact(observed["payload"]["features"][name])!=v:errors.append("features.observation_value:"+name)
+            _observation_binding(observed, p, item, errors, unknown)
         deps=p["source_dependencies"]
         if deps is None:unknown.append("features.source_dependencies_and_availability")
         elif not isinstance(deps,dict):errors.append("features.dependencies.schema")
@@ -230,10 +355,15 @@ def diagnose(source, item=None):
                         return value
                     if fact(at(dependency["value_path"]))!=p["features"][k]:errors.append("features.original_source_value:"+k)
                     if at(dependency["event_path"])!=dependency["provider_event_id"]:errors.append("features.original_source_event:"+k)
+                    _dependency_scope(dependency, at, p, k, errors, unknown)
                 av,ob,inf=clock(dependency.get("available_at")),clock(dependency.get("observed_at")),clock(p["inference_time"])
                 if (dependency.get("available_at") and av is None) or (dependency.get("observed_at") and ob is None):errors.append("features.invalid_clock:"+k)
                 elif av is None or ob is None:unknown.append("features.availability:"+k)
                 elif inf is None or not av<=ob<=inf:errors.append("features.availability_clock:"+k)
+                elif p["observation_receipt"]:
+                    observation = clock(json.loads(p["observation_receipt"])["payload"].get("observed_at"))
+                    if observation is None or not ob <= observation <= inf:
+                        errors.append("features.dependency_observation_window:" + k)
         if p["blend"] is None or p["blend"]["probability"] is None:unknown.append("blend.original_output")
         else:
             if p["blend"]["probability"]!=fact(source.get("calibrated_probability")) or p["blend"]["estimated_ev"]!=fact(source.get("expected_value")):errors.append("blend.original_output_conflict")
