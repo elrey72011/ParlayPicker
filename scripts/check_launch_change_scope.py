@@ -3106,6 +3106,525 @@ def _run_home_integrated(manifest_path,base,binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+PROVENANCE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-producer-provenance-v1.json'
+PROVENANCE_POLICY_VERSION = 'paid-launch-producer-provenance-v1'
+PROVENANCE_APPROVAL_REFERENCE = 'Owner request for bounded versioned producer provenance correction; offline implementation and draft review only'
+PROVENANCE_PATHS = ('scripts/check_launch_change_scope.py', 'scripts/producer_provenance_scope.py', 'tests/test_producer_provenance_scope.py', 'tests/test_home_runline_scope_policy.py', 'app_core/producer_provenance.py', 'app_core/market_probability_model.py', 'app_core/research_estimate_trace.py', 'app_core/prediction_evidence.py', 'core/streamlit_pipeline.py', 'tests/test_producer_provenance.py', 'docs/paid-launch/producer-provenance-v2.md')
+PROVENANCE_BINDINGS = {'base': '6cd25951548f0dfc8298770d761b44929856d27a',
+ 'base_tree': '9dde947e000cdb1e1d47936acb792157d6f3bbf8',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_policy_blob': 'c3059257fea061027565dc3bee9bc3c3a2b96bfa',
+ 'previous_guard_sha256': '2e40b13696dedde71e759281031df7693dba5317e2684b106c304c634a6f7ef6',
+ 'reviewed_blobs': {'scripts/producer_provenance_scope.py': '45b83121a640a1148bb766759bc4d61a9ab9c948',
+                    'tests/test_producer_provenance_scope.py': 'caa249b3b2f2c80a26f90373cbbf59482d627dbe',
+                    'tests/test_home_runline_scope_policy.py': '288ba5c4c80d2a3ac281c38329956a9e0a856af1',
+                    'app_core/producer_provenance.py': '9dcff308ed1724f21ed9bf49c794bdfc1de412a7',
+                    'app_core/market_probability_model.py': 'aa39cd8244e6a592b3320a0593b8c651649e9f94',
+                    'app_core/research_estimate_trace.py': '4058905ad7e26e1ded871940eff31cf28a702ac5',
+                    'app_core/prediction_evidence.py': 'ed2f579e83aa5f79d6ecb316d6fb73448632d525',
+                    'core/streamlit_pipeline.py': 'c4812767bf92fcbe191b7869dbab5652115a4894',
+                    'tests/test_producer_provenance.py': 'f63cc1698d55c26f31be7b8da328631ae59c4f62',
+                    'docs/paid-launch/producer-provenance-v2.md': '1729658e197a4b3935f71a0bd05c0288be6fe254'},
+ 'scope_module_sha256': '8e7f0881a2fb0d57574a54ed044dbe4962493bb4897900dda4a2e3e0782aaaea',
+ 'successor_guard_sha256': '1839b1fa0e10d6ee412e94517206b5d91eaaf0de9c0f3bedaf7258442b05ea14'}
+PROVENANCE_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS = {'tests/test_home_runline_scope_policy.py': {'sha256': '22a2d29f7a904dca3e9ddca454c44b78cc0771f202f19a21e5e852e4f2626bca',
+                                             'edits': [(b'        current_guar'
+                                                        b'd=(SOURCE/guard.GUAR'
+                                                        b'D_PATH).read_bytes()'
+                                                        b'.replace(b"\\r\\n"'
+                                                        b',b"\\n")\n',
+                                                        b'        current_guar'
+                                                        b'd=guard._producer_pr'
+                                                        b'evious_main_source(g'
+                                                        b'uard.GUARD_PATH,(SOU'
+                                                        b'RCE/guard.GUARD_PATH'
+                                                        b').read_bytes().repla'
+                                                        b'ce(b"\\r\\n",b"\\n"'
+                                                        b'))\n'),
+                                                       (b'            value=so'
+                                                        b'urce_path.read_bytes'
+                                                        b'().replace(b"\\r\\'
+                                                        b'n",b"\\n")\n',
+                                                        b'            value=gu'
+                                                        b'ard._producer_previo'
+                                                        b'us_main_source(path,'
+                                                        b'source_path.read_byt'
+                                                        b'es().replace(b"\\'
+                                                        b'r\\n",b"\\n"))\n'),
+                                                       (b'            write(re'
+                                                        b'po,path,(SOURCE/path'
+                                                        b').read_bytes().repla'
+                                                        b'ce(b"\\r\\n",b"\\n"'
+                                                        b'))\n',
+                                                        b'            write(re'
+                                                        b'po,path,guard._produ'
+                                                        b'cer_previous_main_so'
+                                                        b'urce(path,(SOURCE/pa'
+                                                        b'th).read_bytes().rep'
+                                                        b'lace(b"\\r\\n",b"\\'
+                                                        b'n")))\n')]},
+ 'app_core/market_probability_model.py': {'sha256': 'e2e499162097b16b5353bbf38c664d8ad36c3ae3d5795f0fc71549cd48b4a2fc',
+                                          'edits': [(b'        result.at[idx, "'
+                                                     b'ml_estimate_metadata"] ='
+                                                     b' origin_metadata(\n  '
+                                                     b'          frame.loc[idx]'
+                                                     b', result.loc[idx], float'
+                                                     b'(line) if np.isfinite(li'
+                                                     b'ne) else None,\n     '
+                                                     b'       generated_at=gene'
+                                                     b'rated)\n\n    return r'
+                                                     b'esult\n',
+                                                     b'        result.at[idx, "'
+                                                     b'ml_estimate_metadata"] ='
+                                                     b' origin_metadata(\n  '
+                                                     b'          frame.loc[idx]'
+                                                     b', result.loc[idx], float'
+                                                     b'(line) if np.isfinite(li'
+                                                     b'ne) else None,\n     '
+                                                     b'       generated_at=gene'
+                                                     b'rated)\n        from '
+                                                     b'app_core.producer_proven'
+                                                     b'ance import record\n '
+                                                     b'       metadata, fields '
+                                                     b'= record(frame.loc[idx],'
+                                                     b' result.loc[idx], result'
+                                                     b'.at[idx, "ml_estimate_me'
+                                                     b'tadata"], generated)'
+                                                     b'\n        result.at[i'
+                                                     b'dx, "ml_estimate_metadat'
+                                                     b'a"] = metadata\n     '
+                                                     b'   for field, value in f'
+                                                     b'ields.items():\n     '
+                                                     b'       if field not in r'
+                                                     b'esult:\n             '
+                                                     b'   result[field] = pd.Se'
+                                                     b'ries(pd.NA, index=result'
+                                                     b'.index, dtype=object'
+                                                     b')\n            result'
+                                                     b'.at[idx, field] = va'
+                                                     b'lue\n\n    return resu'
+                                                     b'lt\n')]},
+ 'app_core/prediction_evidence.py': {'sha256': '07304003c0014ac56110f2dc2b97d725029bf88c10a351fb0098f6d0b8f0e214',
+                                     'edits': [(b'\ndef provider_quotes(gam'
+                                                b'e):\n    """Keep provider upd'
+                                                b'ate times and explicitly sep'
+                                                b'arate ESPN observation times'
+                                                b'."""\n    quotes = []\n   '
+                                                b' for book in game.get("bookm'
+                                                b'akers", []):\n        name = '
+                                                b'str(book.get("key", "")).low'
+                                                b'er()\n',
+                                                b'\ndef provider_quotes(gam'
+                                                b'e):\n    """Keep provider upd'
+                                                b'ate times and explicitly sep'
+                                                b'arate ESPN observation times'
+                                                b'."""\n    from app_core.produ'
+                                                b'cer_provenance import quote_'
+                                                b'facts\n    quotes = []\n  '
+                                                b'  for book in game.get("book'
+                                                b'makers", []):\n        name ='
+                                                b' str(book.get("key", "")).lo'
+                                                b'wer()\n'),
+                                               (b'                    continue'
+                                                b'\n                quotes.appe'
+                                                b'nd({"provider_namespace": "o'
+                                                b'dds_api" if game.get("odds_f'
+                                                b'eed_source", "the_odds_api")'
+                                                b' == "the_odds_api" else game'
+                                                b'.get("odds_feed_source"), "p'
+                                                b'rovider_event_id": game.get('
+                                                b'"id"), "book": name, "market'
+                                                b'_type": kind, "point": outco'
+                                                b'me.get("point"),\n           '
+                                                b'                    "price":'
+                                                b' outcome.get("price"), "reco'
+                                                b'rded_at": market.get("last_u'
+                                                b'pdate") or book.get("last_up'
+                                                b'date"),\n                    '
+                                                b'           **({"observed_at"'
+                                                b': book["observed_at"], "obse'
+                                                b'rvation_source": "espn_ncaaf'
+                                                b'_fcs_scoreboard"}\n          '
+                                                b'                        if n'
+                                                b'ame == "draftkings" and game'
+                                                b'.get("odds_feed_source") == '
+                                                b'"espn_ncaaf_fcs_scoreboard"\n'
+                                                b'                            '
+                                                b'      and book.get("observat'
+                                                b'ion_source") == "espn_ncaaf_'
+                                                b'fcs_scoreboard" and book.get'
+                                                b'("observed_at") else {})})\n',
+                                                b'                    continue'
+                                                b'\n                quotes.appe'
+                                                b'nd({"provider_namespace": "o'
+                                                b'dds_api" if game.get("odds_f'
+                                                b'eed_source", "the_odds_api")'
+                                                b' == "the_odds_api" else game'
+                                                b'.get("odds_feed_source"), "p'
+                                                b'rovider_event_id": game.get('
+                                                b'"id"), "book": name, "market'
+                                                b'_type": kind, "point": outco'
+                                                b'me.get("point"),\n           '
+                                                b'                    "price":'
+                                                b' outcome.get("price"), "reco'
+                                                b'rded_at": market.get("last_u'
+                                                b'pdate") or book.get("last_up'
+                                                b'date"),\n                    '
+                                                b'           **quote_facts(gam'
+                                                b'e, book, market, outcome),\n '
+                                                b'                            '
+                                                b'  **({"observed_at": book["o'
+                                                b'bserved_at"], "observation_s'
+                                                b'ource": "espn_ncaaf_fcs_scor'
+                                                b'eboard"}\n                   '
+                                                b'               if name == "d'
+                                                b'raftkings" and game.get("odd'
+                                                b's_feed_source") == "espn_nca'
+                                                b'af_fcs_scoreboard"\n         '
+                                                b'                         and'
+                                                b' book.get("observation_sourc'
+                                                b'e") == "espn_ncaaf_fcs_score'
+                                                b'board" and book.get("observe'
+                                                b'd_at") else {})})\n')]},
+ 'app_core/research_estimate_trace.py': {'sha256': 'c4073dc0bf9b2dc3e078c32410c963d3a028a3d87c0d6735b6c1a2f6ac68c9b6',
+                                         'edits': [(b'import json\nimport m'
+                                                    b'ath\n\nORIGIN_COLUMNS '
+                                                    b'= ("ml_inference_status"'
+                                                    b', "ml_estimate_metadata"'
+                                                    b')\nSOURCE_FIELDS = """sna'
+                                                    b'pshot_id candidate_id ma'
+                                                    b'tchup_id export_run_id l'
+                                                    b'eague market_type\nbest_p'
+                                                    b'ick display_pick spread_'
+                                                    b'line total_line market_l'
+                                                    b'ine_used provider_event_'
+                                                    b'id\nprovider_namespace qu'
+                                                    b'ote_id prospective_quote'
+                                                    b'_id quote_bookmaker quot'
+                                                    b'e_source\n',
+                                                    b'import json\nimport m'
+                                                    b'ath\n\nfrom app_core.p'
+                                                    b'roducer_provenance impor'
+                                                    b't TRANSFER_FIELDS\nORIGIN'
+                                                    b'_COLUMNS = ("ml_inferenc'
+                                                    b'e_status", "ml_estimate_'
+                                                    b'metadata") + TRANSFER_FI'
+                                                    b'ELDS\n\n\ndef carry_ori'
+                                                    b'gin_columns(frame, predi'
+                                                    b'ctions):\n    """Copy sup'
+                                                    b'plied producer facts; ab'
+                                                    b'sent rows never erase ol'
+                                                    b'der facts."""\n    for co'
+                                                    b'lumn in ORIGIN_COLUMNS:\n'
+                                                    b'        if column in pre'
+                                                    b'dictions:\n            su'
+                                                    b'pplied = predictions[col'
+                                                    b'umn].notna()\n           '
+                                                    b' frame.loc[predictions.i'
+                                                    b'ndex[supplied], column] '
+                                                    b'= predictions.loc[suppli'
+                                                    b'ed, column]\nSOURCE_FIELD'
+                                                    b'S = """snapshot_id candi'
+                                                    b'date_id matchup_id expor'
+                                                    b't_run_id league market_t'
+                                                    b'ype\nbest_pick display_pi'
+                                                    b'ck spread_line total_lin'
+                                                    b'e market_line_used provi'
+                                                    b'der_event_id\nprovider_na'
+                                                    b'mespace quote_id prospec'
+                                                    b'tive_quote_id quote_book'
+                                                    b'maker quote_source\n'),
+                                                   (b'    payloads, features, '
+                                                    b'secrets, review prose an'
+                                                    b'd private configuration '
+                                                    b'are omitted.\n    """'
+                                                    b'\n    from app_core.resea'
+                                                    b'rch_display import missi'
+                                                    b'ng_identity_fields\n    r'
+                                                    b'eturn encode(dict(versio'
+                                                    b'n=2,\n        missing_ide'
+                                                    b'ntity_fields=missing_ide'
+                                                    b'ntity_fields(display["id'
+                                                    b'entity"]),\n        sourc'
+                                                    b'e={k:fact(source.get(k))'
+                                                    b' for k in SOURCE_FIELDS}'
+                                                    b' if source is not None e'
+                                                    b'lse None,\n        export'
+                                                    b'={k:fact(export.get(k)) '
+                                                    b'for k in EXPORT_FIELDS},'
+                                                    b'\n        display={k:disp'
+                                                    b'lay[k] for k in ("source'
+                                                    b'_field","basis","identit'
+                                                    b'y","inference_status",\n '
+                                                    b'           "availability'
+                                                    b'_reason","value_reason",'
+                                                    b'"probability","push_prob'
+                                                    b'ability","ev")}))\n\n\n'
+                                                    b'ORIGIN_IDENTITY_FIELDS ='
+                                                    b' frozenset("""candidate_'
+                                                    b'id matchup_id export_run'
+                                                    b'_id provider_event_id\npr'
+                                                    b'ovider_namespace predict'
+                                                    b'ion_generated_at game_st'
+                                                    b'art_utc market_period pe'
+                                                    b'riod settlement_rules"""'
+                                                    b'.split())\n\n\ndef orig'
+                                                    b'in_rejection(source):\n  '
+                                                    b'  """Validate supplied p'
+                                                    b'roducer diagnostics with'
+                                                    b"out promoting a blend's "
+                                                    b'inference."""\n    from a'
+                                                    b'pp_core.research_display'
+                                                    b' import _absent, _number'
+                                                    b', _text, _time\n    raw=s'
+                                                    b'ource.get("ml_estimate_m'
+                                                    b'etadata")\n',
+                                                    b'    payloads, features, '
+                                                    b'secrets, review prose an'
+                                                    b'd private configuration '
+                                                    b'are omitted.\n    """'
+                                                    b'\n    from app_core.resea'
+                                                    b'rch_display import missi'
+                                                    b'ng_identity_fields\n    t'
+                                                    b'race = dict(version=2,\n '
+                                                    b'       missing_identity_'
+                                                    b'fields=missing_identity_'
+                                                    b'fields(display["identity'
+                                                    b'"]),\n        source={k:f'
+                                                    b'act(source.get(k)) for k'
+                                                    b' in SOURCE_FIELDS} if so'
+                                                    b'urce is not None else No'
+                                                    b'ne,\n        export={k:fa'
+                                                    b'ct(export.get(k)) for k '
+                                                    b'in EXPORT_FIELDS},\n     '
+                                                    b'   display={k:display[k]'
+                                                    b' for k in ("source_field'
+                                                    b'","basis","identity","in'
+                                                    b'ference_status",\n       '
+                                                    b'     "availability_reaso'
+                                                    b'n","value_reason","proba'
+                                                    b'bility","push_probabilit'
+                                                    b'y","ev")})\n    try:\n'
+                                                    b'        origin = json.lo'
+                                                    b'ads(source.get("ml_estim'
+                                                    b'ate_metadata", "")) if s'
+                                                    b'ource is not None else {'
+                                                    b'}\n        if origin.get('
+                                                    b'"version") == 2:\n       '
+                                                    b'     from app_core.produ'
+                                                    b'cer_provenance import di'
+                                                    b'agnose\n            trace'
+                                                    b'.update(version=3, origi'
+                                                    b'n=diagnose(source, origi'
+                                                    b'n), first_rejection_stag'
+                                                    b'e=(\n                None'
+                                                    b' if display["availabilit'
+                                                    b'y_reason"] == "AVAILABLE'
+                                                    b'" else\n                "'
+                                                    b'producer.inference" if o'
+                                                    b'rigin.get("inference_sta'
+                                                    b'tus") != "success" else\n'
+                                                    b'                "per_gam'
+                                                    b'e_export.research_displa'
+                                                    b'y"))\n    except (ValueEr'
+                                                    b'ror, TypeError, Attribut'
+                                                    b'eError):\n        pas'
+                                                    b's\n    return encode(trac'
+                                                    b'e)\n\n\nORIGIN_IDENTITY'
+                                                    b'_FIELDS = frozenset("""c'
+                                                    b'andidate_id matchup_id e'
+                                                    b'xport_run_id provider_ev'
+                                                    b'ent_id\nprovider_namespac'
+                                                    b'e prediction_generated_a'
+                                                    b't game_start_utc market_'
+                                                    b'period period settlement'
+                                                    b'_rules""".split())\n\n'
+                                                    b'\ndef _legacy_origin_reje'
+                                                    b'ction(source):\n    """Va'
+                                                    b'lidate supplied producer'
+                                                    b' diagnostics without pro'
+                                                    b"moting a blend's inferen"
+                                                    b'ce."""\n    from app_core'
+                                                    b'.research_display import'
+                                                    b' _absent, _number, _text'
+                                                    b', _time\n    raw=source.g'
+                                                    b'et("ml_estimate_metadata'
+                                                    b'")\n'),
+                                                   (b'        return None\n    '
+                                                    b'except (ValueError,TypeE'
+                                                    b'rror,KeyError,AttributeE'
+                                                    b'rror):\n        return "E'
+                                                    b'STIMATE_PROVENANCE_NOT_R'
+                                                    b'ECORDED"\n',
+                                                    b'        return None\n    '
+                                                    b'except (ValueError,TypeE'
+                                                    b'rror,KeyError,AttributeE'
+                                                    b'rror):\n        return "E'
+                                                    b'STIMATE_PROVENANCE_NOT_R'
+                                                    b'ECORDED"\n\n\ndef origi'
+                                                    b'n_rejection(source):\n   '
+                                                    b' """V1 stays frozen; V2 '
+                                                    b'proves orientation using'
+                                                    b' independently named fac'
+                                                    b'ts."""\n    try:\n    '
+                                                    b'    item = json.loads(so'
+                                                    b'urce.get("ml_estimate_me'
+                                                    b'tadata", ""))\n        if'
+                                                    b' isinstance(item, dict) '
+                                                    b'and item.get("version") '
+                                                    b'== 2:\n            from a'
+                                                    b'pp_core.producer_provena'
+                                                    b'nce import diagnose\n    '
+                                                    b'        diagnostic = dia'
+                                                    b'gnose(source, item)\n    '
+                                                    b'        if diagnostic["r'
+                                                    b'eason"]:\n               '
+                                                    b' return diagnostic["reas'
+                                                    b'on"]\n            legacy '
+                                                    b'= dict(item)\n           '
+                                                    b' legacy.pop("producer_co'
+                                                    b'ntract")\n            leg'
+                                                    b'acy["version"] = 1\n     '
+                                                    b'       legacy["identity"'
+                                                    b'] = dict(item["identity"'
+                                                    b'], matchup_id={"state":"'
+                                                    b'MISSING"})\n            r'
+                                                    b'eturn _legacy_origin_rej'
+                                                    b'ection(dict(source, ml_e'
+                                                    b'stimate_metadata=encode('
+                                                    b'legacy)))\n    except (Va'
+                                                    b'lueError, TypeError, Key'
+                                                    b'Error):\n        pass'
+                                                    b'\n    return _legacy_orig'
+                                                    b'in_rejection(source)'
+                                                    b'\n')]},
+ 'core/streamlit_pipeline.py': {'sha256': '01a1b2a660301da5c94a9c31a239b5e083468687a89df037212b3eb5653b9780',
+                                'edits': [(b'_CANONICAL_RESEARCH_COLUMNS = ["'
+                                           b'quote_id", "prospective_quote_id'
+                                           b'", "market_period", "period",\n  '
+                                           b'  "settlement_rules", "inference'
+                                           b'_status", "prediction_generated_'
+                                           b'at", "game_start_utc",\n    "odds'
+                                           b'_recorded_at", "quote_time", "qu'
+                                           b'ote_timestamp", "quote_bookmaker'
+                                           b'", "provider_quotes",\n    "candi'
+                                           b'date_id", "export_run_id", "rese'
+                                           b'arch_source_semantics",\n    "pro'
+                                           b'bability_semantics", "push_proba'
+                                           b'bility", "model_status", "ml_inf'
+                                           b'erence_status", "ml_estimate_met'
+                                           b'adata"]\nCANONICAL_BET_COLUMNS = '
+                                           b'list(dict.fromkeys(CANONICAL_BET'
+                                           b'_COLUMNS + _CANONICAL_RESEARCH_C'
+                                           b'OLUMNS))\n\n',
+                                           b'_CANONICAL_RESEARCH_COLUMNS = ["'
+                                           b'quote_id", "prospective_quote_id'
+                                           b'", "market_period", "period",\n  '
+                                           b'  "settlement_rules", "inference'
+                                           b'_status", "prediction_generated_'
+                                           b'at", "game_start_utc",\n    "odds'
+                                           b'_recorded_at", "quote_time", "qu'
+                                           b'ote_timestamp", "quote_bookmaker'
+                                           b'", "provider_quotes",\n    "candi'
+                                           b'date_id", "export_run_id", "rese'
+                                           b'arch_source_semantics", "provide'
+                                           b'r_namespace", "provider_event_id'
+                                           b'",\n    "probability_semantics", '
+                                           b'"push_probability", "model_statu'
+                                           b's", "ml_inference_status", "ml_e'
+                                           b'stimate_metadata"]\nCANONICAL_BET'
+                                           b'_COLUMNS = list(dict.fromkeys(CA'
+                                           b'NONICAL_BET_COLUMNS + _CANONICAL'
+                                           b'_RESEARCH_COLUMNS))\n\n'),
+                                          (b'                ]\n        if "ml'
+                                           b'_unavailable_reason" in market_m'
+                                           b'odel_predictions:\n            me'
+                                           b'rged.loc[market_model_prediction'
+                                           b's.index, "ml_unavailable_reason"'
+                                           b'] = market_model_predictions["ml'
+                                           b'_unavailable_reason"]\n        fr'
+                                           b'om app_core.research_estimate_tr'
+                                           b'ace import ORIGIN_COLUMNS\n      '
+                                           b'  for column in ORIGIN_COLUMNS:\n'
+                                           b'            if column in market_'
+                                           b'model_predictions:\n             '
+                                           b'   merged.loc[market_model_predi'
+                                           b'ctions.index,column] = market_mo'
+                                           b'del_predictions[column]\n        '
+                                           b'merged.loc[market_available, "mo'
+                                           b'del_status"] = "Market Score Mod'
+                                           b'el"\n        logger.info(\n       '
+                                           b'     "MARKET MODEL: generated %s'
+                                           b' target-specific spread/total pr'
+                                           b'obabilities.",\n',
+                                           b'                ]\n        if "ml'
+                                           b'_unavailable_reason" in market_m'
+                                           b'odel_predictions:\n            me'
+                                           b'rged.loc[market_model_prediction'
+                                           b's.index, "ml_unavailable_reason"'
+                                           b'] = market_model_predictions["ml'
+                                           b'_unavailable_reason"]\n        fr'
+                                           b'om app_core.research_estimate_tr'
+                                           b'ace import carry_origin_columns\n'
+                                           b'        carry_origin_columns(mer'
+                                           b'ged, market_model_predictions)\n '
+                                           b'       merged.loc[market_availab'
+                                           b'le, "model_status"] = "Market Sc'
+                                           b'ore Model"\n        logger.info(\n'
+                                           b'            "MARKET MODEL: gener'
+                                           b'ated %s target-specific spread/t'
+                                           b'otal probabilities.",\n')]}}
+
+
+def _producer_previous_guard_source(source, binding=None):
+    binding = PROVENANCE_BINDINGS if binding is None else binding
+    if b"\nPROVENANCE_POLICY_PATH =" not in source:
+        return source
+    _require(_dfs_guard_matches(source,binding["successor_guard_sha256"]),
+             "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nPROVENANCE_POLICY_PATH =",1)[0]+PROVENANCE_PREVIOUS_CLI
+
+
+def _producer_previous_main_source(path,source):
+    if path==GUARD_PATH:
+        return _producer_previous_guard_source(source)
+    frozen=PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    previous_hashes={entry[path]["sha256"] for entry in
+                     (HOME_PRIOR_SOURCE_RECONSTRUCTIONS,NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+                      ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS,DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS)
+                     if path in entry}
+    if frozen is None or hashlib.sha256(source).hexdigest() in previous_hashes | {frozen["sha256"]}:
+        return source
+    for before,after in reversed(frozen["edits"]):
+        _require(source.count(after)==1,"PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source=source.replace(after,before,1)
+    _require(hashlib.sha256(source).hexdigest()==frozen["sha256"],"PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_producer_prior_home_guard = _home_previous_guard_source
+_producer_prior_home_main = _home_previous_main_source
+
+
+def _home_previous_guard_source(source,binding=None):
+    return _producer_prior_home_guard(_producer_previous_guard_source(source),binding)
+
+
+def _home_previous_main_source(path,source):
+    return _producer_prior_home_main(path,_producer_previous_main_source(path,source))
+
+
+def _run_producer_integrated(manifest_path,base,binding):
+    import importlib.util
+    path=ROOT/"scripts/producer_provenance_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n",b"\n")).hexdigest()==
+             binding["scope_module_sha256"],"SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec=importlib.util.spec_from_file_location("parlaypicker_producer_provenance_scope",path)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -3113,7 +3632,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", HOME_POLICY_PATH):
+        if exists_at("HEAD", PROVENANCE_POLICY_PATH):
+            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)
+        elif exists_at("HEAD", HOME_POLICY_PATH):
             code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)
         elif exists_at("HEAD", NFL_POLICY_PATH):
             code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)

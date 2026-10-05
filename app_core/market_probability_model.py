@@ -237,5 +237,12 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
         result.at[idx, "ml_estimate_metadata"] = origin_metadata(
             frame.loc[idx], result.loc[idx], float(line) if np.isfinite(line) else None,
             generated_at=generated)
+        from app_core.producer_provenance import record
+        metadata, fields = record(frame.loc[idx], result.loc[idx], result.at[idx, "ml_estimate_metadata"], generated)
+        result.at[idx, "ml_estimate_metadata"] = metadata
+        for field, value in fields.items():
+            if field not in result:
+                result[field] = pd.Series(pd.NA, index=result.index, dtype=object)
+            result.at[idx, field] = value
 
     return result
