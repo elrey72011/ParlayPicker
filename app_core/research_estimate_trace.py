@@ -90,6 +90,12 @@ def boundary_trace(source, export, display):
             "availability_reason","value_reason","probability","push_probability","ev")})
     try:
         origin = json.loads(source.get("ml_estimate_metadata", "")) if source is not None else {}
+        if "nfl_inputs" in origin:
+            from app_core.nfl_inference_evidence import diagnose as diagnose_nfl
+            assessment = diagnose_nfl(source, origin)
+            trace["nfl_evidence"] = assessment
+            if assessment["status"] == "REJECTED":
+                trace["first_rejection_stage"] = "producer.nfl_inputs"
         if origin.get("version") == 2:
             from app_core.producer_provenance import diagnose
             diagnostic = diagnose(source, origin)
@@ -101,6 +107,8 @@ def boundary_trace(source, export, display):
                 trace["first_rejection_stage"] = diagnostic["first_source_rejection_stage"]
     except (ValueError, TypeError, AttributeError):
         pass
+    if trace.get("nfl_evidence", {}).get("status") == "REJECTED":
+        trace["first_rejection_stage"] = "producer.nfl_inputs"
     return encode(trace)
 
 
@@ -181,6 +189,15 @@ def origin_rejection(source):
     """V1 stays frozen; V2 proves orientation using independently named facts."""
     try:
         item = json.loads(source.get("ml_estimate_metadata", ""))
+        if isinstance(item, dict) and "nfl_inputs" in item:
+            from app_core.nfl_inference_evidence import diagnose as diagnose_nfl
+            if diagnose_nfl(source, item)["status"] == "REJECTED":
+                original = dict(item)
+                original.pop("nfl_inputs")
+                return origin_rejection(dict(source, ml_estimate_metadata=encode(original))) or "ESTIMATE_PROVENANCE_NOT_RECORDED"
+            item = dict(item)
+            item.pop("nfl_inputs")
+            source = dict(source, ml_estimate_metadata=encode(item))
         if isinstance(item, dict) and item.get("version") == 2:
             from app_core.producer_provenance import diagnose
             diagnostic = diagnose(source, item)

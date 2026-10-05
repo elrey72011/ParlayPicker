@@ -239,7 +239,8 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
             generated_at=generated)
         from app_core.producer_provenance import record
         metadata, fields = record(frame.loc[idx], result.loc[idx], result.at[idx, "ml_estimate_metadata"], generated)
-        result.at[idx, "ml_estimate_metadata"] = metadata
+        from app_core.nfl_inference_evidence import begin
+        result.at[idx, "ml_estimate_metadata"] = begin(frame.loc[idx], result.loc[idx], metadata)
         for field, value in fields.items():
             if field not in result:
                 result[field] = pd.Series(pd.NA, index=result.index, dtype=object)
