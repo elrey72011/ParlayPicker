@@ -92,10 +92,13 @@ def boundary_trace(source, export, display):
         origin = json.loads(source.get("ml_estimate_metadata", "")) if source is not None else {}
         if origin.get("version") == 2:
             from app_core.producer_provenance import diagnose
-            trace.update(version=3, origin=diagnose(source, origin), first_rejection_stage=(
+            diagnostic = diagnose(source, origin)
+            trace.update(version=3, origin=diagnostic, first_rejection_stage=(
                 None if display["availability_reason"] == "AVAILABLE" else
                 "producer.inference" if origin.get("inference_status") != "success" else
                 "per_game_export.research_display"))
+            if diagnostic.get("first_source_rejection_stage"):
+                trace["first_rejection_stage"] = diagnostic["first_source_rejection_stage"]
     except (ValueError, TypeError, AttributeError):
         pass
     return encode(trace)
