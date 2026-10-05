@@ -4396,6 +4396,276 @@ def _run_source_contract_integrated(manifest_path,base,binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+NFL_INPUTS_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-inputs-v1.json'
+NFL_INPUTS_POLICY_VERSION = 'paid-launch-nfl-inputs-v1'
+NFL_INPUTS_APPROVAL_REFERENCE = 'Owner request for bounded prospective NFL evidence capture and offline replay; draft software review and unregistered research proposal only'
+NFL_INPUTS_PATHS = ('scripts/check_launch_change_scope.py', 'scripts/nfl_inputs_scope.py', 'tests/test_nfl_inputs_scope.py', 'app_core/nfl_inference_evidence.py', 'app_core/market_probability_model.py', 'app_core/research_estimate_trace.py', 'core/streamlit_pipeline.py', 'tests/test_nfl_inference_evidence.py', 'tests/test_source_contract_pipeline.py', 'tests/test_source_contract_scope.py', 'docs/paid-launch/nfl-prospective-capture.md', 'docs/paid-launch/nfl-prospective-research-plan.md')
+NFL_INPUTS_BINDINGS = {'base': '78687cfe3667587ff6fc3446e1ce0e12996f7b60',
+ 'base_tree': 'acc28a26340a95a30d0cc70eace979299f4b7238',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_policy_blob': 'd2e80fdc77abc5fd295a521cd7b634d5f89820a4',
+ 'previous_guard_sha256': '6b9c551c7e1b7db9ad1734e88aca59c9c73f4c0fbf516358c3b037e61d660dde',
+ 'reviewed_blobs': {'scripts/nfl_inputs_scope.py': '646f8e2a6c73dc578a1160a882563690580439bf',
+                    'tests/test_nfl_inputs_scope.py': 'c31d24f6489bbe5c28fbe0b9e6175b5766031628',
+                    'app_core/nfl_inference_evidence.py': '846afdc4574f087f3ae931dfe593327b377a2d55',
+                    'app_core/market_probability_model.py': '852b7d611bbcf46a8f6aae710b986658d10b4c11',
+                    'app_core/research_estimate_trace.py': '71304bced1b680ada76e72d3bb20d9ef8b81ca33',
+                    'core/streamlit_pipeline.py': '557ae8f5b490afdb51474fe510f39039fb5bd951',
+                    'tests/test_nfl_inference_evidence.py': 'ee66b2b6a91cda5e85c19c4c48161b49a24429bd',
+                    'tests/test_source_contract_pipeline.py': '3936764f736c1be3afe534542ca9abae41704c79',
+                    'tests/test_source_contract_scope.py': '52d61c2570b31f0df07dd77d539b7dc820d3b5f5',
+                    'docs/paid-launch/nfl-prospective-capture.md': 'ef8f39786eee258b0a04c8249ef0fd5d150299fb',
+                    'docs/paid-launch/nfl-prospective-research-plan.md': '836acb67599c6d372785f08acdd13564710e458a'},
+ 'scope_module_sha256': '99f1b8ba3ae43b3c8ebddccaf7ab443c7586fdfbdecec8645f3f86317090fd67',
+ 'successor_guard_sha256': '1619eb7dc3d7bc1df024ab47bed024c326c0a64db6d7dd252b16607bc915686e'}
+NFL_INPUTS_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/market_probability_model.py': {'sha256': 'b0c6621af4e240cd2e962f2750cbaad5c025cb9c7dd810c24b3f26aab6450581',
+                                          'edits': [(b'        metadata, fields'
+                                                     b' = record(frame.loc[idx]'
+                                                     b', result.loc[idx], resul'
+                                                     b't.at[idx, "ml_estimate_m'
+                                                     b'etadata"], generated'
+                                                     b')\n        result.at['
+                                                     b'idx, "ml_estimate_metada'
+                                                     b'ta"] = metadata\n    '
+                                                     b'    for field, value in '
+                                                     b'fields.items():\n',
+                                                     b'        metadata, fields'
+                                                     b' = record(frame.loc[idx]'
+                                                     b', result.loc[idx], resul'
+                                                     b't.at[idx, "ml_estimate_m'
+                                                     b'etadata"], generated'
+                                                     b')\n        from app_c'
+                                                     b'ore.nfl_inference_eviden'
+                                                     b'ce import begin\n    '
+                                                     b'    result.at[idx, "ml_e'
+                                                     b'stimate_metadata"] = beg'
+                                                     b'in(frame.loc[idx], resul'
+                                                     b't.loc[idx], metadata'
+                                                     b')\n        for field,'
+                                                     b' value in fields.items()'
+                                                     b':\n')]},
+ 'app_core/research_estimate_trace.py': {'sha256': '430b62fa461716ce11d444a186c2977d472a245b3016d5bc0b9c17924e65c865',
+                                         'edits': [(b'        origin = json.lo'
+                                                    b'ads(source.get("ml_estim'
+                                                    b'ate_metadata", "")) if s'
+                                                    b'ource is not None else {'
+                                                    b'}\n        if origin.get('
+                                                    b'"version") == 2:\n',
+                                                    b'        origin = json.lo'
+                                                    b'ads(source.get("ml_estim'
+                                                    b'ate_metadata", "")) if s'
+                                                    b'ource is not None else {'
+                                                    b'}\n        if "nfl_inputs'
+                                                    b'" in origin:\n           '
+                                                    b' from app_core.nfl_infer'
+                                                    b'ence_evidence import dia'
+                                                    b'gnose as diagnose_nfl\n  '
+                                                    b'          assessment = d'
+                                                    b'iagnose_nfl(source, orig'
+                                                    b'in)\n            trace["n'
+                                                    b'fl_evidence"] = assessme'
+                                                    b'nt\n            if assess'
+                                                    b'ment["status"] == "REJEC'
+                                                    b'TED":\n                tr'
+                                                    b'ace["first_rejection_sta'
+                                                    b'ge"] = "producer.nfl_inp'
+                                                    b'uts"\n        if origin.g'
+                                                    b'et("version") == 2:\n'),
+                                                   (b'        pass\n    return '
+                                                    b'encode(trace)\n',
+                                                    b'        pass\n    if trac'
+                                                    b'e.get("nfl_evidence", {}'
+                                                    b').get("status") == "REJE'
+                                                    b'CTED":\n        trace["fi'
+                                                    b'rst_rejection_stage"] = '
+                                                    b'"producer.nfl_inputs"\n  '
+                                                    b'  return encode(trac'
+                                                    b'e)\n'),
+                                                   (b'        item = json.load'
+                                                    b's(source.get("ml_estimat'
+                                                    b'e_metadata", ""))\n      '
+                                                    b'  if isinstance(item, di'
+                                                    b'ct) and item.get("versio'
+                                                    b'n") == 2:\n',
+                                                    b'        item = json.load'
+                                                    b's(source.get("ml_estimat'
+                                                    b'e_metadata", ""))\n      '
+                                                    b'  if isinstance(item, di'
+                                                    b'ct) and "nfl_inputs" in '
+                                                    b'item:\n            from a'
+                                                    b'pp_core.nfl_inference_ev'
+                                                    b'idence import diagnose a'
+                                                    b's diagnose_nfl\n         '
+                                                    b'   if diagnose_nfl(sourc'
+                                                    b'e, item)["status"] == "R'
+                                                    b'EJECTED":\n              '
+                                                    b'  original = dict(item)\n'
+                                                    b'                original'
+                                                    b'.pop("nfl_inputs")\n     '
+                                                    b'           return origin'
+                                                    b'_rejection(dict(source, '
+                                                    b'ml_estimate_metadata=enc'
+                                                    b'ode(original))) or "ESTI'
+                                                    b'MATE_PROVENANCE_NOT_RECO'
+                                                    b'RDED"\n            item ='
+                                                    b' dict(item)\n            '
+                                                    b'item.pop("nfl_inputs")\n '
+                                                    b'           source = dict'
+                                                    b'(source, ml_estimate_met'
+                                                    b'adata=encode(item))\n    '
+                                                    b'    if isinstance(item, '
+                                                    b'dict) and item.get("vers'
+                                                    b'ion") == 2:\n')]},
+ 'core/streamlit_pipeline.py': {'sha256': 'b204256c5a647dad77fd246444ab6f2437ac94d0c3a99b9c3c4baa822f6e560c',
+                                'edits': [(b'    sentiment_prob = (0.5 + _raw'
+                                           b'_sentiment * 0.5).clip(0.0, 1.0)'
+                                           b'\n    calibrated_probability = co'
+                                           b'mpute_blended_probability(\n',
+                                           b'    sentiment_prob = (0.5 + _raw'
+                                           b'_sentiment * 0.5).clip(0.0, 1.0)'
+                                           b'\n    from app_core.nfl_inference'
+                                           b'_evidence import blend_inputs as'
+                                           b' retain_nfl_blend_inputs\n    ret'
+                                           b'ain_nfl_blend_inputs(merged, dic'
+                                           b't(p_market=merged["market_probab'
+                                           b'ility"], p_kalshi=kalshi_probabi'
+                                           b'lity,\n        p_ml=model_probabi'
+                                           b'lity, p_theover=theover_blend_in'
+                                           b'put, p_sentiment=sentiment_prob)'
+                                           b')\n    calibrated_probability = c'
+                                           b'ompute_blended_probability(\n'),
+                                          (b'    diagnostics["loaded_model_id'
+                                           b'entity"] = loaded_model_identity'
+                                           b'\n    return (analysis_df, best_p'
+                                           b'icks_df, diagnostics)\n',
+                                           b'    diagnostics["loaded_model_id'
+                                           b'entity"] = loaded_model_identity'
+                                           b'\n    from app_core.nfl_inference'
+                                           b'_evidence import finish as finis'
+                                           b'h_nfl_evidence\n    finish_nfl_ev'
+                                           b'idence(analysis_df)\n    return ('
+                                           b'analysis_df, best_picks_df, diag'
+                                           b'nostics)\n')]},
+ 'tests/test_source_contract_pipeline.py': {'sha256': 'cc1fd9b3f480e68077781840c3638fb68ad8209f3540cd95f5b646961b09f935',
+                                            'edits': [(b'        predict_batc'
+                                                       b'h=lambda f:[.8]*len('
+                                                       b'f)))\n    monkeypatch'
+                                                       b'.setattr("app_core.r'
+                                                       b'esearch_estimate_tra'
+                                                       b'ce.generated_time", '
+                                                       b'lambda:INFERENCE)\n',
+                                                       b'        predict_batc'
+                                                       b'h=lambda f:[.8]*len('
+                                                       b'f)))\n    class Featu'
+                                                       b'reClock(FrozenDateTi'
+                                                       b'me):\n        @classm'
+                                                       b'ethod\n        def no'
+                                                       b'w(cls,tz=None):\n    '
+                                                       b'        return (pd.T'
+                                                       b'imestamp(INFERENCE)-'
+                                                       b'pd.Timedelta(seconds'
+                                                       b'=1)).to_pydatetime()'
+                                                       b'\n    monkeypatch.set'
+                                                       b'attr("app_core.footb'
+                                                       b'all_feature_capture.'
+                                                       b'datetime",FeatureClo'
+                                                       b'ck)\n    monkeypatch.'
+                                                       b'setattr("app_core.re'
+                                                       b'search_estimate_trac'
+                                                       b'e.generated_time", l'
+                                                       b'ambda:INFERENCE)\n')]},
+ 'tests/test_source_contract_scope.py': {'sha256': '703da24c0475ece92e7e325025c4e449eccb25983cba8150c2b59dc8635be7f5',
+                                         'edits': [(b'        git(repo,"config'
+                                                    b'","core.autocrlf","false'
+                                                    b'")\n        current_guard'
+                                                    b'=(SOURCE/guard.GUARD_PAT'
+                                                    b'H).read_bytes().replace('
+                                                    b'b"\\r\\n",b"\\n")\n     '
+                                                    b'   previous=guard._sourc'
+                                                    b'e_contract_previous_guar'
+                                                    b'd_source(current_guard)\n',
+                                                    b'        git(repo,"config'
+                                                    b'","core.autocrlf","false'
+                                                    b'")\n        current_guard'
+                                                    b'=guard._nfl_inputs_previ'
+                                                    b'ous_guard_source((SOURCE'
+                                                    b'/guard.GUARD_PATH).read_'
+                                                    b'bytes().replace(b"\\r'
+                                                    b'\\n",b"\\n"))\n        '
+                                                    b'previous=guard._source_c'
+                                                    b'ontract_previous_guard_s'
+                                                    b'ource(current_guard)\n'),
+                                                   (b'        for path in guar'
+                                                    b'd.SOURCE_CONTRACT_PATHS:'
+                                                    b'\n            write(repo,'
+                                                    b'path,(SOURCE/path).read_'
+                                                    b'bytes().replace(b"\\r'
+                                                    b'\\n",b"\\n"))\n        '
+                                                    b'binding["reviewed_blobs"'
+                                                    b']={p:git(repo,"hash-obje'
+                                                    b'ct","--",p) for p in gua'
+                                                    b'rd.SOURCE_CONTRACT_PATHS'
+                                                    b' if p!=guard.GUARD_PATH}'
+                                                    b'\n',
+                                                    b'        for path in guar'
+                                                    b'd.SOURCE_CONTRACT_PATHS:'
+                                                    b'\n            write(repo,'
+                                                    b'path,guard._nfl_inputs_p'
+                                                    b'revious_main_source(path'
+                                                    b',(SOURCE/path).read_byte'
+                                                    b's().replace(b"\\r\\n",'
+                                                    b'b"\\n")))\n        bin'
+                                                    b'ding["reviewed_blobs"]={'
+                                                    b'p:git(repo,"hash-object"'
+                                                    b',"--",p) for p in guard.'
+                                                    b'SOURCE_CONTRACT_PATHS if'
+                                                    b' p!=guard.GUARD_PATH'
+                                                    b'}\n')]}}
+
+
+def _nfl_inputs_previous_guard_source(source, binding=None):
+    binding = NFL_INPUTS_BINDINGS if binding is None else binding
+    if b"\nNFL_INPUTS_POLICY_PATH =" not in source:
+        return source
+    _require(_dfs_guard_matches(source,binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNFL_INPUTS_POLICY_PATH =",1)[0]+NFL_INPUTS_PREVIOUS_CLI
+
+
+def _nfl_inputs_previous_main_source(path,source):
+    if path==GUARD_PATH:return _nfl_inputs_previous_guard_source(source)
+    frozen=NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest()==frozen["sha256"]:return source
+    older={entry[path]["sha256"] for entry in (SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS,PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,HOME_PRIOR_SOURCE_RECONSTRUCTIONS,NFL_PRIOR_SOURCE_RECONSTRUCTIONS,ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS,DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:return source
+    for before,after in reversed(frozen["edits"]):
+        _require(source.count(after)==1,"PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source=source.replace(after,before,1)
+    _require(hashlib.sha256(source).hexdigest()==frozen["sha256"],"PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_nfl_inputs_prior_source_contract_guard = _source_contract_previous_guard_source
+_nfl_inputs_prior_source_contract_main = _source_contract_previous_main_source
+
+
+def _source_contract_previous_guard_source(source,binding=None):
+    return _nfl_inputs_prior_source_contract_guard(_nfl_inputs_previous_guard_source(source),binding)
+
+
+def _source_contract_previous_main_source(path,source):
+    return _nfl_inputs_prior_source_contract_main(path,_nfl_inputs_previous_main_source(path,source))
+
+
+def _run_nfl_inputs_integrated(manifest_path,base,binding):
+    import importlib.util
+    path=ROOT/"scripts/nfl_inputs_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n",b"\n")).hexdigest()==binding["scope_module_sha256"],"SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec=importlib.util.spec_from_file_location("parlaypicker_nfl_inputs_scope",path)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -4403,7 +4673,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):
+        if exists_at("HEAD", NFL_INPUTS_POLICY_PATH):
+            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)
+        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):
             code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)
         elif exists_at("HEAD", PROVENANCE_POLICY_PATH):
             code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)

@@ -10344,6 +10344,9 @@ def run_analysis_pipeline(
     kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
     _raw_sentiment = _numeric_series(merged, "sentiment_diff", 0.0) if "sentiment_diff" in merged.columns else pd.Series([0.0]*len(merged), index=merged.index)
     sentiment_prob = (0.5 + _raw_sentiment * 0.5).clip(0.0, 1.0)
+    from app_core.nfl_inference_evidence import blend_inputs as retain_nfl_blend_inputs
+    retain_nfl_blend_inputs(merged, dict(p_market=merged["market_probability"], p_kalshi=kalshi_probability,
+        p_ml=model_probability, p_theover=theover_blend_input, p_sentiment=sentiment_prob))
     calibrated_probability = compute_blended_probability(
         p_market=merged["market_probability"],
         p_kalshi=kalshi_probability,
@@ -10765,6 +10768,8 @@ def run_analysis_pipeline(
         diagnostics["ncaaf_provider_games"] = ncaaf_provider_games
         refresh_coverage(diagnostics, analysis_df)
     diagnostics["loaded_model_identity"] = loaded_model_identity
+    from app_core.nfl_inference_evidence import finish as finish_nfl_evidence
+    finish_nfl_evidence(analysis_df)
     return (analysis_df, best_picks_df, diagnostics)
 
 

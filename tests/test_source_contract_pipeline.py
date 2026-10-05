@@ -93,6 +93,11 @@ def pipeline(monkeypatch, game, *, expected_predictions=2):
     monkeypatch.setattr(sp, "PredictionEngine", object)
     monkeypatch.setattr(sp, "get_cached_prediction_engine", lambda:SimpleNamespace(use_fallback=False,
         predict_batch=lambda f:[.8]*len(f)))
+    class FeatureClock(FrozenDateTime):
+        @classmethod
+        def now(cls,tz=None):
+            return (pd.Timestamp(INFERENCE)-pd.Timedelta(seconds=1)).to_pydatetime()
+    monkeypatch.setattr("app_core.football_feature_capture.datetime",FeatureClock)
     monkeypatch.setattr("app_core.research_estimate_trace.generated_time", lambda:INFERENCE)
     monkeypatch.setattr("app_core.candidate_chronology.now_utc", lambda:pd.Timestamp(NOW))
     monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda:{})
