@@ -43,8 +43,13 @@ def actual(monkeypatch, *, changes=None, dependencies=True, game_changes=None):
             deps={k:{"payload":dict(feature=k,value=v,source_id="synthetic:scoring-source",provider_event_id=game["id"],
                   available_at="2026-10-06T18:00:00Z",observed_at="2026-10-06T19:00:00Z")} for k,v in VALUES.items()}
             for d in deps.values():
-                raw=json.dumps(dict(event_id=game["id"],value=d["payload"]["value"])).encode()
-                d["payload"].update(source_artifact=dict(bytes_base64=base64.b64encode(raw).decode(),sha256=hashlib.sha256(raw).hexdigest()),value_path=["value"],event_path=["event_id"])
+                from app_core.producer_provenance import team
+                scope = dict(contract="nfl-score-feature-scope-v1", feature=d["payload"]["feature"],
+                    event=dict(provider_namespace="odds_api", provider_event_id=game["id"], sport="NFL",
+                        home=team(game["home_team"],"NFL"), away=team(game["away_team"],"NFL"), start=pd.Timestamp(START).isoformat()),
+                    available_at=d["payload"]["available_at"], observed_at=d["payload"]["observed_at"])
+                raw=json.dumps(dict(event_id=game["id"],value=d["payload"]["value"],scope=scope)).encode()
+                d["payload"].update(scope=scope,scope_path=["scope"],source_artifact=dict(bytes_base64=base64.b64encode(raw).decode(),sha256=hashlib.sha256(raw).hexdigest()),value_path=["value"],event_path=["event_id"])
                 d["sha256"]=packet.digest(d["payload"])
             out["nfl_feature_dependencies"]=json.dumps(deps)
         return out
