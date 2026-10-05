@@ -40,12 +40,15 @@ def quote_facts(game, book, market, outcome):
     A provider event ID is never used as a provider quote ID. Standard market
     names alone do not establish period or a bookmaker's settlement rules.
     """
-    return dict(provenance_version=QUOTE_VERSION, event_home_team=game.get("home_team"),
+    from app_core.source_contract import adapt
+    facts = dict(provenance_version=QUOTE_VERSION, event_home_team=game.get("home_team"),
         event_away_team=game.get("away_team"), event_start_utc=game.get("commence_time"),
         provider_quote_id=outcome.get("quote_id"),
         period=market.get("period"), period_source="market.period" if text(market.get("period")) else "",
         rules=market.get("settlement_rules"),
         rules_source="market.settlement_rules" if text(market.get("settlement_rules")) else "")
+    facts.update(adapt(game, book, market, outcome))
+    return facts
 
 
 def _quotes(source):
@@ -86,7 +89,8 @@ def _offer(source, generated_at):
         quote_namespace=event["provider_namespace"] if provider_id else DERIVED_NAMESPACE,
         quote_kind="provider_issued" if provider_id else "locally_derived")
     return dict(version=VERSION, event=event, offer=offer, inference_time=generated_at, target_period="full_game",
-        matchup_key_semantics="unordered_team_pair_et_day", matched_offer_count=len(matches))
+        matchup_key_semantics="unordered_team_pair_et_day", matched_offer_count=len(matches),
+        **({"source_contract": q["source_contract"]} if "source_contract" in q else {}))
 
 
 def record(source, result, metadata, generated_at):
@@ -117,7 +121,7 @@ def diagnose(source, item):
     missing, conflicts = [], []
     contract = item.get("producer_contract")
     try:
-        if (not isinstance(contract, dict) or set(contract) != {"version", "event", "offer", "inference_time", "target_period", "matchup_key_semantics", "matched_offer_count"}
+        if (not isinstance(contract, dict) or set(contract) - {"source_contract"} != {"version", "event", "offer", "inference_time", "target_period", "matchup_key_semantics", "matched_offer_count"}
             or contract["version"] != VERSION or contract["matchup_key_semantics"] != "unordered_team_pair_et_day"):
             raise ValueError("producer_contract.schema")
         event, offer = contract["event"], contract["offer"]
@@ -161,7 +165,7 @@ def diagnose(source, item):
             current = text(source.get(field))
             if current and current != expected: conflicts.append(field)
             elif field != "period" and not current: missing.append(field)
-        for field, expected in {"game_start_utc":event["start"], "odds_recorded_at":offer["source_time"],
+        for field, expected in {"game_start_utc":event["start"], "commence_time_raw":event["start"], "odds_recorded_at":offer["source_time"],
                                 "quote_time":offer["source_time"], "selected_quote_recorded_at":offer["source_time"]}.items():
             if expected and text(source.get(field)) and clock(source[field]) != expected: conflicts.append(field)
         for field in ("quote_bookmaker", "opposing_odds_source", "sportsbook"):
@@ -192,4 +196,19 @@ def diagnose(source, item):
     except (ValueError, TypeError, KeyError, AttributeError) as exc:
         conflicts.append(str(exc) if str(exc).startswith("producer_contract") else "producer_contract.schema")
     reason = ("TARGET_MISMATCH" if conflicts == ["offer.period_target"] else "ESTIMATE_IDENTITY_MISMATCH") if conflicts else "ESTIMATE_PROVENANCE_NOT_RECORDED" if missing else None
-    return dict(stage="producer_contract", reason=reason, missing_fields=sorted(set(missing)), conflicting_fields=sorted(set(conflicts)))
+    diagnostics = []
+    first_source_failure = False
+    if isinstance(contract, dict) and "source_contract" in contract:
+        from app_core.source_contract import replay
+        bound = contract["source_contract"]
+        if isinstance(bound, dict):
+            retained = bound.get("diagnostics", [])
+            first_source_failure = bound.get("status") != "VERIFIED" or bool(retained)
+            diagnostics = sorted(set(retained + replay(bound, contract.get("inference_time")))) if (isinstance(retained, list) and all(isinstance(d, str) for d in retained)) else ["SOURCE_RECEIPT_SCHEMA_UNSUPPORTED"]
+        else:
+            diagnostics = ["SOURCE_RECEIPT_SCHEMA_UNSUPPORTED"]
+        if diagnostics:
+            reason = reason or "ESTIMATE_PROVENANCE_NOT_RECORDED"
+    return dict(stage="producer_contract", reason=reason, missing_fields=sorted(set(missing)),
+        conflicting_fields=sorted(set(conflicts)), **({"source_contract_diagnostics":diagnostics} if diagnostics else {}),
+        **({"first_source_rejection_stage":"quote.source_contract"} if first_source_failure else {}))

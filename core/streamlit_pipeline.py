@@ -7641,6 +7641,9 @@ def _fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None
                         'game_date': game_date,
                         'game_time_est': game_time_est,
                         'matchup_id': matchup_id,
+                        **({"provider_event_id": game.get("id"), "game_start_utc": commence_time,
+                            "provider_namespace": "odds_api" if game.get("odds_feed_source", "the_odds_api") == "the_odds_api" else game.get("odds_feed_source")}
+                           if raw_sport_key == "americanfootball_nfl" else {}),
                         'odds_feed_source': str(
                             game.get('odds_feed_source') or 'the_odds_api'
                         ),
@@ -8359,7 +8362,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     id_cols = [
         "league", "home_team", "away_team", "game_date", "matchup_id",
         "schedule_event_id", "schedule_match_status", "historical_matchup_id", "schedule_inventory_key",
-        "commence_time_raw", "odds_feed_source", "provider_quotes",
+        "commence_time_raw", "odds_feed_source", "provider_quotes", "provider_event_id", "provider_namespace", "game_start_utc",
         "home_team_id", "away_team_id", "team_ids", "provider_ids", "football_identity_status", "football_identity_observed_at", "football_identity_source_hash", "mlb_provider_event_id", "mlb_pregame_receipts",
     ]
     # Check for game_time_est if exists

@@ -17,7 +17,7 @@ REASONS = frozenset("""AVAILABLE ESTIMATE_NOT_RECORDED INVALID_PROBABILITY NONFI
 ESTIMATE_PROVENANCE_NOT_RECORDED ESTIMATE_IDENTITY_MISMATCH TARGET_MISMATCH MODEL_TARGET_NOT_RECORDED
 INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS""".split())
 VALUE_REASONS = frozenset("""RECORDED_PRICE_VALUE VALUE_NOT_RECORDED PRICE_VALUE_MISMATCH
-PUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_UNAVAILABLE""".split())
+PUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_UNAVAILABLE SETTLEMENT_VALUE_UNSUPPORTED""".split())
 # Explicit public-research provenance only; never an arbitrary source-column copy.
 EXPORT_PROVENANCE_COLUMNS = ["quote_id", "prospective_quote_id", "market_period", "period",
     "settlement_rules", "inference_status", "model_status", "spread_line", "total_line",
@@ -339,7 +339,7 @@ def missing_identity_fields(identity):
     return [key for key in required if identity.get(key) is None or identity.get(key)==""]
 
 
-def from_export(row, *, source=None, source_field="win_probability"):
+def _from_export(row, *, source=None, source_field="win_probability"):
     """Capture the actual export estimate before contract authorization replaces it."""
     identity=_identity(row)
     basis=_text(row.get("probability_basis"))
@@ -563,6 +563,27 @@ def legacy_unrecorded_display(export):
     return True
 
 
+def from_export(row, *, source=None, source_field="win_probability"):
+    result = _from_export(row, source=source, source_field=source_field)
+    from app_core.source_contract import RULES, replay
+    if result["availability_reason"] == "AVAILABLE" and result["identity"]["rules"] == RULES:
+        try:
+            origin = json.loads((source if source is not None else row).get("ml_estimate_metadata", ""))
+            contract = origin["producer_contract"]
+            bound = contract["source_contract"]
+            if bound["status"] != "VERIFIED" or replay(bound, contract["inference_time"]):
+                raise ValueError("Unverified source contract")
+        except (ValueError, TypeError, KeyError, AttributeError):
+            return _empty(result["identity"],source_field,result["basis"],reason="ESTIMATE_PROVENANCE_NOT_RECORDED")
+        # FVS is not a zero-profit refund. Preserve the producer's values privately,
+        # but do not price it with binary EV or manufacture void probability/value.
+        result.update(ev=None, edge=None, break_even_probability=None,
+            probability_semantics="win_conditional_on_decision",
+            value_reason="SETTLEMENT_VALUE_UNSUPPORTED",
+            basis=result["basis"] + "; decided-game probability only; FVS value unavailable")
+    return result
+
+
 def public_display(export, row):
     saved=export.get("research_display")
     if isinstance(saved,str):
@@ -620,9 +641,19 @@ def validate(display, row=None):
     if row is not None and not _matches(display,row):
         raise ValueError("Research display does not match public selection")
     push=display["push_probability"]
+    from app_core.source_contract import RULES
+    if identity["rules"] == RULES and (display["probability_semantics"] != "win_conditional_on_decision"
+            or display["ev"] is not None or display["value_reason"] != "SETTLEMENT_VALUE_UNSUPPORTED"):
+        raise ValueError("FVS cannot expose binary settlement value")
     if push is None:
         if display["probability_semantics"]!="" or display["ev"] is not None:
             raise ValueError("Unknown push semantics cannot price research value")
+    elif display["probability_semantics"]=="win_conditional_on_decision":
+        from app_core.source_contract import RULES
+        if (identity["rules"] != RULES or push != 0 or display["ev"] is not None
+                or display["value_reason"] != "SETTLEMENT_VALUE_UNSUPPORTED"
+                or "decided-game probability only; FVS value unavailable" not in display["basis"]):
+            raise ValueError("Unsupported conditional settlement display")
     elif display["probability_semantics"]!="win_unconditional_with_push":
         raise ValueError("Invalid research display semantics")
     if push is not None:
