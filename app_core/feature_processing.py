@@ -1803,6 +1803,11 @@ def fetch_nfl_stats(season_year: int, as_of_date: str | None = None) -> List[Dic
         from core.nfl_teams import nfl_stats_identity
 
         df = nfl.import_schedules([season_year]).copy()
+        from app_core.nfl_native_provenance import observe, retain_stats
+        try:
+            native_observation = observe(df, nfl)
+        except (OSError, ValueError, TypeError, AttributeError):
+            native_observation = None  # Retention failure cannot change model inputs.
         date_column = next(
             (column for column in ("gameday", "game_date", "date") if column in df.columns),
             None,
@@ -1922,6 +1927,8 @@ def fetch_nfl_stats(season_year: int, as_of_date: str | None = None) -> List[Dic
                 missing_completed,
             )
         logger.info("Successfully fetched point-in-time NFL stats for %s teams.", len(stats))
+        if native_observation is not None:
+            retain_stats(stats, native_observation, season_year, as_of_date)
         return stats
     except Exception as e:
         logger.error(f"Failed to fetch NFL stats via nfl_data_py: {e}", exc_info=True)
@@ -3698,6 +3705,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         df = df.drop(columns=cols_to_drop)
 
     result = pd.concat([df, features_df], axis=1)
+    if league_keys.eq("NFL").any():
+        from app_core.nfl_native_provenance import bind
+        result = bind(result, home_matched_names, away_matched_names, league_keys, global_stats_lookup)
     return result
 
 def run_roi_pipeline_validation(df: pd.DataFrame):

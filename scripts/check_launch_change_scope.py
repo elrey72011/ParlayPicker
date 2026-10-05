@@ -4976,6 +4976,159 @@ def _run_nfl_admission_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+NFL_NATIVE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-native-v1.json'
+NFL_NATIVE_POLICY_VERSION = 'paid-launch-nfl-native-v1'
+NFL_NATIVE_APPROVAL_REFERENCE = 'Owner request for bounded native NFL spread feature provenance, offline acceptance and draft review; no acquisition, protocol execution, fitting, science or wagering authority'
+NFL_NATIVE_PATHS = ('scripts/check_launch_change_scope.py', 'scripts/nfl_native_scope.py', 'tests/test_nfl_native_scope.py', 'app_core/feature_processing.py', 'app_core/nfl_native_provenance.py', 'app_core/nfl_inference_evidence.py', 'tests/test_nfl_native_provenance.py', 'docs/paid-launch/nfl-native-feature-provenance.md')
+NFL_NATIVE_FROZEN_PATHS = ('app_core/football_feature_capture.py', 'app_core/market_probability_model.py', 'app_core/weights_config.py', 'core/streamlit_pipeline.py', 'app_core/football_validation_v2.py', 'app_core/prospective_validation_plans.py', 'docs/audits/2026-09-23-prospective-validation-plans.md', 'docs/football-stage2.md', 'docs/football-validation-v2.md')
+NFL_NATIVE_BINDINGS = {'base': '0c61ed196eb996d021ea6103e47180b716a5d288',
+ 'base_tree': '7c5904a7974998a012ff79f806a6f591be9205fb',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'f9d1c40e2eb557fd391f64381d22b261b913d80135728a96325e252093b699a3',
+ 'previous_policy_blob': 'd41dacf8e20c019be969d00a296fea47d37a4d9e',
+ 'scope_module_sha256': 'c115eaad5d83eec8c6f25ee1cc29cb6e409648cb548ab1722adac20c2c6f365e',
+ 'reviewed_blobs': {'scripts/nfl_native_scope.py': 'de661c83e4961ad8f3b14b5db6e0718b803d52cb',
+                    'tests/test_nfl_native_scope.py': '2659d04b996d9cb1bc50db9857718bf6558fd86e',
+                    'app_core/feature_processing.py': '9eac8c435355674ed10f1beec4f0a338860f7848',
+                    'app_core/nfl_native_provenance.py': '185425fe059d3715cca81e2da193d7201c23a020',
+                    'app_core/nfl_inference_evidence.py': 'f0d061cb69ac52cee70de3ef2aa9697f8475ca7d',
+                    'tests/test_nfl_native_provenance.py': '72b84e839d38cced342d048b55010a6b8dc19bbc',
+                    'docs/paid-launch/nfl-native-feature-provenance.md': '0c8a9af2db58a846ce4acef96c819d3a7f1c46d5'},
+ 'successor_guard_sha256': 'fd8cccb046bb65fa7acf2ffbc64559914e511d8b2720008b6022fb342d459552'}
+NFL_NATIVE_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/feature_processing.py': {'sha256': 'c1d3b9a3b8a0ce2d2a1296ef38dfb0b87e798f7a92eb444b90e6c5252bcb4a79',
+                                    'edits': [(b'        df = nfl.import_sche'
+                                               b'dules([season_year]).copy()\n',
+                                               b'        df = nfl.import_sche'
+                                               b'dules([season_year]).copy()\n'
+                                               b'        from app_core.nfl_na'
+                                               b'tive_provenance import obser'
+                                               b've, retain_stats\n        try'
+                                               b':\n            native_observa'
+                                               b'tion = observe(df, nfl)\n    '
+                                               b'    except (OSError, ValueEr'
+                                               b'ror, TypeError, AttributeErr'
+                                               b'or):\n            native_obse'
+                                               b'rvation = None  # Retention '
+                                               b'failure cannot change model '
+                                               b'inputs.\n'),
+                                              (b'        logger.info("Success'
+                                               b'fully fetched point-in-time '
+                                               b'NFL stats for %s teams.", le'
+                                               b'n(stats))\n        return sta'
+                                               b'ts\n',
+                                               b'        logger.info("Success'
+                                               b'fully fetched point-in-time '
+                                               b'NFL stats for %s teams.", le'
+                                               b'n(stats))\n        if native_'
+                                               b'observation is not None:\n   '
+                                               b'         retain_stats(stats,'
+                                               b' native_observation, season_'
+                                               b'year, as_of_date)\n        re'
+                                               b'turn stats\n'),
+                                              (b'    result = pd.concat([df, '
+                                               b'features_df], axis=1)\n    re'
+                                               b'turn result\n',
+                                               b'    result = pd.concat([df, '
+                                               b'features_df], axis=1)\n    if'
+                                               b' league_keys.eq("NFL").any()'
+                                               b':\n        from app_core.nfl_'
+                                               b'native_provenance import bin'
+                                               b'd\n        result = bind(resu'
+                                               b'lt, home_matched_names, away'
+                                               b'_matched_names, league_keys,'
+                                               b' global_stats_lookup)\n    re'
+                                               b'turn result\n')]},
+ 'app_core/nfl_inference_evidence.py': {'sha256': 'ed97f3dbfe0a7da59e5b4174b232a53463c215cc24d23c33daf405575ac261dc',
+                                        'edits': [(b'def _dependency_scope(de'
+                                                   b'pendency, at, packet, na'
+                                                   b'me, errors, unknown):',
+                                                   b'def _dependency_scope(de'
+                                                   b'pendency, at, packet, na'
+                                                   b'me, errors, unknown, ori'
+                                                   b'ginal=None):'),
+                                                  (b'    for key, expected in'
+                                                   b' (("contract", FEATURE_S'
+                                                   b'COPE), ("feature", name)'
+                                                   b'):\n',
+                                                   b'    from app_core import'
+                                                   b' nfl_native_provenance a'
+                                                   b's native\n    if scope.ge'
+                                                   b't("contract") == native.'
+                                                   b'SCOPE:\n        event = p'
+                                                   b'acket["event_offer"]["ev'
+                                                   b'ent"] if packet["event_o'
+                                                   b'ffer"] else None\n       '
+                                                   b' native.validate(depende'
+                                                   b'ncy, original, event, na'
+                                                   b'me, packet["features"][n'
+                                                   b'ame], errors, unknown)\n '
+                                                   b'       return\n    for ke'
+                                                   b'y, expected in (("contra'
+                                                   b'ct", FEATURE_SCOPE), ("f'
+                                                   b'eature", name)):\n'),
+                                                  (b'                    _dep'
+                                                   b'endency_scope(dependency'
+                                                   b', at, p, k, errors, unkn'
+                                                   b'own)\n',
+                                                   b'                    _dep'
+                                                   b'endency_scope(dependency'
+                                                   b', at, p, k, errors, unkn'
+                                                   b'own, original=original)\n')]}}
+
+
+def _nfl_native_previous_guard_source(source, binding=None):
+    binding = NFL_NATIVE_BINDINGS if binding is None else binding
+    if b"\nNFL_NATIVE_POLICY_PATH =" not in source:
+        return source
+    _require(_dfs_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNFL_NATIVE_POLICY_PATH =", 1)[0] + NFL_NATIVE_PREVIOUS_CLI
+
+
+def _nfl_native_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _nfl_native_previous_guard_source(source)
+    frozen = NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS, HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS, ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_nfl_native_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    # Reconstruct a predecessor only from the exact reviewed successor bytes.
+    if b"\nNFL_NATIVE_POLICY_PATH =" in source and reviewed != NFL_NATIVE_BINDINGS["successor_guard_sha256"]:
+        if not _nfl_native_prior_guard_matches(source, NFL_NATIVE_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nNFL_NATIVE_POLICY_PATH =", 1)[0] + NFL_NATIVE_PREVIOUS_CLI
+    return _nfl_native_prior_guard_matches(source, reviewed)
+
+
+_nfl_native_prior_admission_main = _nfl_admission_previous_main_source
+
+
+def _nfl_admission_previous_main_source(path, source):
+    return _nfl_native_prior_admission_main(path, _nfl_native_previous_main_source(path, source))
+
+
+def _run_nfl_native_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/nfl_native_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_nfl_native_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -4983,7 +5136,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):
+        if exists_at("HEAD", NFL_NATIVE_POLICY_PATH):
+            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)
+        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):
             code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)
         elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):
             code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)
