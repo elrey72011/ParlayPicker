@@ -18,7 +18,8 @@ DOCUMENTS = {
     "book_rulebook": "8b2be1a5bd292058c40e22bec08d85c569303ccd369204706a41b2e3095f605b",
     "book_nfl_001": "e15d5e0237c3496c8486b4878e71dba86c209780fbb1a2f8bf15d0e8d91fdd73",
 }
-# id -> {sha256, receipt}. No ingestion, registration or acquisition code.
+# id -> legacy receipt or independently accepted exact packet/review hashes.
+# Intake never adds entries; real-listing registration remains separate.
 ACCEPTED_LISTINGS = {}
 
 # Public templates prove document content, not exact listing applicability.
@@ -127,6 +128,18 @@ def verify(ref, offer, *, inference_time=None):
 
 def adapt(game, book, market, outcome):
     """Retain prospective assessments; only the accepted NFL spread scope can verify."""
+    from app_core.source_evidence_intake import for_offer
+    offer = identity(game, book, market, outcome)
+    intake = for_offer(offer, reference=outcome.get("source_evidence_ref", market.get("source_evidence_ref")),
+                       quote_clock_field="market.last_update" if market.get("last_update") else "bookmaker.last_update")
+    if intake is not None:
+        facts = dict(source_contract=dict(intake, identity=offer))
+        if intake["status"] == "VERIFIED":
+            if market.get("period") not in (None, "", "full_game") or market.get("settlement_rules") not in (None, "", RULES):
+                facts["source_contract"].update(status="REJECTED", diagnostics=["SOURCE_TRANSPORT_RULE_PERIOD_CONFLICT"])
+            else:
+                facts.update(period="full_game", period_source=intake["version"], rules=RULES, rules_source=intake["version"])
+        return facts
     scope = (game.get("sport_key"), market.get("key"))
     if scope in UNVERIFIED_MARKETS and str(book.get("key", "")).startswith("novig"):
         offer = identity(game, book, market, outcome)
@@ -151,6 +164,9 @@ def adapt(game, book, market, outcome):
 
 
 def replay(contract, inference_time):
+    from app_core.source_evidence_intake import VERSION as intake_version, replay as replay_intake
+    if contract.get("version") == intake_version:
+        return replay_intake(contract, inference_time)
     unverified = next((scope for scope, values in UNVERIFIED_MARKETS.items()
                        if values[0] == contract.get("version")), None)
     if unverified is not None:

@@ -191,12 +191,18 @@ def origin_rejection(source):
         item = json.loads(source.get("ml_estimate_metadata", ""))
         if isinstance(item, dict) and "nfl_inputs" in item:
             from app_core.nfl_inference_evidence import diagnose as diagnose_nfl
-            if diagnose_nfl(source, item)["status"] == "REJECTED":
+            assessment = diagnose_nfl(source, item)
+            if assessment["status"] == "REJECTED":
                 original = dict(item)
                 original.pop("nfl_inputs")
                 return origin_rejection(dict(source, ml_estimate_metadata=encode(original))) or "ESTIMATE_PROVENANCE_NOT_RECORDED"
             item = dict(item)
             item.pop("nfl_inputs")
+            if assessment["status"] == "COMPLETE":
+                # The validated additive refresh is private, not a V1 field.
+                # Keep both original stages in retention; remove it only from
+                # the temporary legacy-reader projection after full validation.
+                item.pop("nfl_ui_reblends", None)
             source = dict(source, ml_estimate_metadata=encode(item))
         if isinstance(item, dict) and item.get("version") == 2:
             from app_core.producer_provenance import diagnose

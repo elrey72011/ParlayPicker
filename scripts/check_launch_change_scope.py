@@ -5992,6 +5992,222 @@ _nfl_ui_prior_pick_board_guard = _pick_board_previous_guard_source
 def _pick_board_previous_guard_source(source, binding=None):
     return _nfl_ui_prior_pick_board_guard(_nfl_ui_previous_guard_source(source), binding)
 
+SOURCE_INTAKE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-source-evidence-intake-v1.json'
+SOURCE_INTAKE_POLICY_VERSION = 'paid-launch-source-evidence-intake-v1'
+SOURCE_INTAKE_APPROVAL_REFERENCE = 'Owner authorization for bounded offline exact-offer source intake, actual pipeline/replay and validated UI projection correction; no real source registration, acquisition, formulas, scientific requirements, authority or historical backfill'
+SOURCE_INTAKE_PATHS = ('scripts/check_launch_change_scope.py', 'scripts/source_intake_scope.py', 'tests/test_source_intake_scope.py', 'app_core/source_evidence_intake.py', 'app/ui/source_evidence_panel.py', 'app_core/source_contract.py', 'app_core/research_replay.py', 'app/ui/publish_panel.py', 'streamlit_app.py', 'app_core/research_display.py', 'app_core/research_estimate_trace.py', 'publishing/board.html', 'tests/test_source_evidence_intake.py', 'docs/paid-launch/source-evidence-intake.md')
+SOURCE_INTAKE_FROZEN_PATHS = ('app_core/nfl_inference_evidence.py', 'app_core/nfl_native_provenance.py', 'app_core/feature_processing.py', 'app_core/football_feature_capture.py', 'app_core/market_probability_model.py', 'app_core/weights_config.py', 'core/streamlit_pipeline.py', 'app_core/producer_provenance.py', 'app_core/per_game_boards.py', 'app_core/public_board.py', 'app_core/current_wagers_trace.py', 'app_core/football_validation_v2.py', 'app_core/prospective_validation_plans.py', 'docs/audits/2026-09-23-prospective-validation-plans.md', 'docs/football-stage2.md', 'docs/football-validation-v2.md', 'tests/test_nfl_ui_reblend.py', 'tests/test_nfl_native_provenance.py', 'tests/test_nfl_admission_bindings.py', 'tests/test_source_contract_pipeline.py')
+SOURCE_INTAKE_BINDINGS = {'base': 'ad0abb3c5bbb24c40d4e71b6501bd19866e568a5',
+ 'base_tree': '86e668e603bb9ce976b93b1a7247657add204910',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '29e283d08db532a1d180399fea740ef033810a00bf52fba69c38df6eee0a1bee',
+ 'previous_policy_blob': 'de54181402fec50409ea2efac605a1fc8159d867',
+ 'reviewed_blobs': {'scripts/source_intake_scope.py': 'b88ef498b232b785e794799de5bfcec050fdb95c',
+                    'tests/test_source_intake_scope.py': '92f5898c3be0c6806a8bd6979f1f1e5d31148cf9',
+                    'app_core/source_evidence_intake.py': 'bffce81df2bbdbd944b228676a45ba98e9461627',
+                    'app/ui/source_evidence_panel.py': '282c36a1773005e159b9fc1d6f80acc746d34a96',
+                    'app_core/source_contract.py': '4b83b16cbbf7b843815369fb3853e3632fef0ce6',
+                    'app_core/research_replay.py': 'dd3d62af5934c5035ac5004fa34cded8fd2515dd',
+                    'app/ui/publish_panel.py': 'd94f500dcde7a867668cf3e2278dab792558769f',
+                    'streamlit_app.py': '071855624a4859ade399df9b072708ff3011d1a7',
+                    'app_core/research_display.py': '163193fc5278d3c289e1053825340605e33a2d52',
+                    'app_core/research_estimate_trace.py': '7906501816226582d9896827b1d0a25b23b84137',
+                    'publishing/board.html': '525a4ef2335410ed369e4f52f54479d94b72ce7b',
+                    'tests/test_source_evidence_intake.py': '3aee29ecbf5f27f0b6d96765c5dbfec49cd3a965',
+                    'docs/paid-launch/source-evidence-intake.md': 'b7364cc50dd40520ead5019ffd7350c327b36943'},
+ 'scope_module_sha256': 'c5b6e6e07e9a48cbb5c0031cb2b36d9369f21bc4d3165f97f97663971381db5d',
+ 'successor_guard_sha256': '6218cc91beb3454fcd13653391b5ff6703c01fb7b9c738a5c8a9b44defabbcef'}
+SOURCE_INTAKE_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/source_contract.py': {'sha256': 'df519e0d009cc8efddb35c7717ba352a2148056ed08a2d786f7b9c9788073651',
+                                 'edits': [(b'    scope = (game.get("sport_key"), market.get("key"))\n',
+                                            b'    from app_core.source_evidence_intake import for_offer\n  '
+                                            b'  offer = identity(game, book, market, outcome)\n    intake ='
+                                            b' for_offer(offer, reference=outcome.get("source_evidence_ref'
+                                            b'", market.get("source_evidence_ref")),\n                     '
+                                            b'  quote_clock_field="market.last_update" if market.get("last'
+                                            b'_update") else "bookmaker.last_update")\n    if intake is not'
+                                            b' None:\n        facts = dict(source_contract=dict(intake, ide'
+                                            b'ntity=offer))\n        if intake["status"] == "VERIFIED":\n   '
+                                            b'         if market.get("period") not in (None, "", "full_gam'
+                                            b'e") or market.get("settlement_rules") not in (None, "", RULE'
+                                            b'S):\n                facts["source_contract"].update(status="'
+                                            b'REJECTED", diagnostics=["SOURCE_TRANSPORT_RULE_PERIOD_CONFLI'
+                                            b'CT"])\n            else:\n                facts.update(period='
+                                            b'"full_game", period_source=intake["version"], rules=RULES, r'
+                                            b'ules_source=intake["version"])\n        return facts\n    scop'
+                                            b'e = (game.get("sport_key"), market.get("key"))\n'),
+                                           (b'def replay(contract, inference_time):\n',
+                                            b'def replay(contract, inference_time):\n    from app_core.sour'
+                                            b'ce_evidence_intake import VERSION as intake_version, replay '
+                                            b'as replay_intake\n    if contract.get("version") == intake_ve'
+                                            b'rsion:\n        return replay_intake(contract, inference_time'
+                                            b')\n'),
+                                           (b'# id -> {sha256, receipt}. No ingestion, registration or acq'
+                                            b'uisition code.',
+                                            b'# id -> legacy receipt or independently accepted exact packe'
+                                            b't/review hashes.\n# Intake never adds entries; real-listing r'
+                                            b'egistration remains separate.')]},
+ 'app_core/research_replay.py': {'sha256': '0e58c6d7ca28a5704cc130119127d2bc82bc3303b0be0a96fb44a002f487187f',
+                                 'edits': [(b'    for table in ("research_replay_sources","research_replay'
+                                            b'_exports"):',
+                                            b'    db.execute("CREATE TABLE IF NOT EXISTS research_source_i'
+                                            b'ntakes (reference TEXT PRIMARY KEY, payload TEXT NOT NULL, p'
+                                            b'ayload_hash TEXT NOT NULL)")\n    for table in ("research_rep'
+                                            b'lay_sources","research_replay_exports","research_source_inta'
+                                            b'kes"):')]},
+ 'app/ui/publish_panel.py': {'sha256': 'f6f4462eeacb937a4bc44827d3d9d3f8809c84e6a6b4017158f3496fa9e12ea1',
+                             'edits': [(b'    from app.ui.activation_panel import render as render_activat'
+                                        b'ion\n',
+                                        b'    from app.ui.source_evidence_panel import render as render_so'
+                                        b'urce_evidence\n    render_source_evidence()\n    from app.ui.activ'
+                                        b'ation_panel import render as render_activation\n')]},
+ 'streamlit_app.py': {'sha256': '2a18fa7a7768b3a3cf11557cf798e243082e504815b5b45578260000e2300076',
+                      'edits': [(b'    analysis_df, pipeline_best_picks_df, diagnostics = run_analysis_pipe'
+                                 b'line(\n        sports=controls["sports"],\n        max_rows=10_000,\n  '
+                                 b'      use_ml=bool(controls["use_ml"]),\n        spreads_df=spreads_df,\n  '
+                                 b'      totals_df=totals_df,\n        schedule_start=controls.get("schedule'
+                                 b'_start"),\n        schedule_end=controls.get("schedule_end"),\n    )',
+                                 b'    from app_core.source_evidence_intake import selected as selected_sou'
+                                 b'rce_evidence\n    with selected_source_evidence(controls.get("source_evid'
+                                 b'ence_refs", ())):\n        analysis_df, pipeline_best_picks_df, diagnosti'
+                                 b'cs = run_analysis_pipeline(\n            sports=controls["sports"],\n     '
+                                 b'       max_rows=10_000,\n            use_ml=bool(controls["use_ml"]),\n   '
+                                 b'         spreads_df=spreads_df,\n            totals_df=totals_df,\n       '
+                                 b'     schedule_start=controls.get("schedule_start"),\n            schedule'
+                                 b'_end=controls.get("schedule_end"),\n        )'),
+                                (b'    controls = render_sidebar()\n',
+                                 b'    controls = render_sidebar()\n    controls["source_evidence_refs"] = l'
+                                 b'ist(st.session_state.get("source_evidence_refs", ()))\n'),
+                                (b'        str(controls.get("schedule_end") or ""),\n    )',
+                                 b'        str(controls.get("schedule_end") or ""),\n        tuple(sorted(st'
+                                 b'r(r) for r in controls.get("source_evidence_refs", ()))),\n    )')]},
+ 'app_core/research_display.py': {'sha256': '374d217ca923c9f3f132799bb1c96dc6d763556c20104ed2780cf18a33a31f8f',
+                                  'edits': [(b'UNSUPPORTED_PROBABILITY_SEMANTICS SOURCE_CONTRACT_NOT_VERIFI'
+                                             b'ED',
+                                             b'UNSUPPORTED_PROBABILITY_SEMANTICS SOURCE_CONTRACT_NOT_VERIFI'
+                                             b'ED SOURCE_EVIDENCE_INCOMPLETE SOURCE_EVIDENCE_CONFLICT SOURC'
+                                             b'E_RIGHTS_NOT_VERIFIED SOURCE_ADMISSIBILITY_REVIEW_NOT_ACCEPT'
+                                             b'ED'),
+                                            (b'    from app_core.source_contract import RULES, replay, UNVE'
+                                             b'RIFIED_MARKETS\n',
+                                             b'    from app_core.source_contract import RULES, replay, UNVE'
+                                             b'RIFIED_MARKETS\n    from app_core.source_evidence_intake impo'
+                                             b'rt VERSION as intake_version\n    try:\n        origin = json.'
+                                             b'loads((source if source is not None else row).get("ml_estima'
+                                             b'te_metadata", ""))\n        producer = origin["producer_contr'
+                                             b'act"]\n        bound = producer["source_contract"]\n        if'
+                                             b' bound.get("version") == intake_version:\n            diagnos'
+                                             b'tics = sorted(set(bound.get("diagnostics", []) + replay(boun'
+                                             b'd, producer["inference_time"])))\n            if bound.get("s'
+                                             b'tatus") != "VERIFIED" or diagnostics:\n                confli'
+                                             b'ct = bound.get("status") == "REJECTED" or any("CONFLICT" in '
+                                             b'd or "INTEGRITY" in d or "STALE" in d or "UNSUPPORTED" in d '
+                                             b'or "INVALID" in d for d in diagnostics)\n                reas'
+                                             b'on = ("SOURCE_EVIDENCE_CONFLICT" if conflict else\n          '
+                                             b'                "SOURCE_RIGHTS_NOT_VERIFIED" if any(d.starts'
+                                             b'with(("SOURCE_MISSING_RIGHTS", "SOURCE_RIGHTS_")) for d in d'
+                                             b'iagnostics) else\n                          "SOURCE_ADMISSIBI'
+                                             b'LITY_REVIEW_NOT_ACCEPTED" if any("REVIEW" in d for d in diag'
+                                             b'nostics) else\n                          "SOURCE_EVIDENCE_INC'
+                                             b'OMPLETE")\n                return _empty(result["identity"], '
+                                             b'source_field, result["basis"], reason=reason)\n    except (Va'
+                                             b'lueError, TypeError, KeyError, AttributeError):\n        pass'
+                                             b'\n')]},
+ 'publishing/board.html': {'sha256': 'a240c5025c7c304d70d94c9a6f4c7efa97d69042958948f00502b119838811a7',
+                           'edits': [(b"SOURCE_CONTRACT_NOT_VERIFIED:'Market period and settlement-rule appl"
+                                      b"icability not verified',",
+                                      b"SOURCE_CONTRACT_NOT_VERIFIED:'Market period and settlement-rule appl"
+                                      b"icability not verified',SOURCE_EVIDENCE_INCOMPLETE:'Exact-offer sour"
+                                      b"ce evidence incomplete',SOURCE_EVIDENCE_CONFLICT:'Exact-offer source"
+                                      b" evidence conflicts with this estimate',SOURCE_RIGHTS_NOT_VERIFIED:'"
+                                      b"Source-use rights not verified',SOURCE_ADMISSIBILITY_REVIEW_NOT_ACCE"
+                                      b"PTED:'Source-admissibility review not accepted',")]},
+ 'app_core/research_estimate_trace.py': {'sha256': '8d5639f20af0fd7e6ec6dfead1a24e0e3fd51a46e5f7ef436299e55611086bdb',
+                                         'edits': [(b'            if diagnose_nfl(source, item)["status"] '
+                                                    b'== "REJECTED":',
+                                                    b'            assessment = diagnose_nfl(source, item)\n'
+                                                    b'            if assessment["status"] == "REJECTED":'),
+                                                   (b'            item.pop("nfl_inputs")\n            sourc'
+                                                    b'e = dict(source, ml_estimate_metadata=encode(item))',
+                                                    b'            item.pop("nfl_inputs")\n            if as'
+                                                    b'sessment["status"] == "COMPLETE":\n                # '
+                                                    b'The validated additive refresh is private, not a V1 '
+                                                    b'field.\n                # Keep both original stages i'
+                                                    b'n retention; remove it only from\n                # t'
+                                                    b'he temporary legacy-reader projection after full val'
+                                                    b'idation.\n                item.pop("nfl_ui_reblends",'
+                                                    b' None)\n            source = dict(source, ml_estimate'
+                                                    b'_metadata=encode(item))')]}}
+
+def _source_intake_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _source_intake_previous_guard_source(source, binding=None):
+    binding = SOURCE_INTAKE_BINDINGS if binding is None else binding
+    if b"\nSOURCE_INTAKE_POLICY_PATH =" not in source:
+        return source
+    _require(_source_intake_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nSOURCE_INTAKE_POLICY_PATH =", 1)[0] + SOURCE_INTAKE_PREVIOUS_CLI
+
+
+def _source_intake_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _source_intake_previous_guard_source(source)
+    frozen = SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (NFL_UI_PRIOR_SOURCE_RECONSTRUCTIONS, PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_source_intake_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nSOURCE_INTAKE_POLICY_PATH =" in source:
+        if reviewed == SOURCE_INTAKE_BINDINGS["successor_guard_sha256"]:
+            return _source_intake_raw_guard_matches(source, reviewed)
+        if not _source_intake_raw_guard_matches(source, SOURCE_INTAKE_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nSOURCE_INTAKE_POLICY_PATH =", 1)[0] + SOURCE_INTAKE_PREVIOUS_CLI
+    return _source_intake_prior_guard_matches(source, reviewed)
+
+
+_source_intake_prior_nfl_ui_main = _nfl_ui_previous_main_source
+
+
+def _nfl_ui_previous_main_source(path, source):
+    return _source_intake_prior_nfl_ui_main(path, _source_intake_previous_main_source(path, source))
+
+
+def _run_source_intake_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/source_intake_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_source_intake_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_source_intake_prior_nfl_ui_guard = _nfl_ui_previous_guard_source
+
+
+def _nfl_ui_previous_guard_source(source, binding=None):
+    return _source_intake_prior_nfl_ui_guard(_source_intake_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -5999,7 +6215,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_UI_POLICY_PATH):
+        if exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):
+            code, report = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)
+        elif exists_at("HEAD", NFL_UI_POLICY_PATH):
             code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)
         elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):
             code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)

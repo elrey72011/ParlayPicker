@@ -444,6 +444,7 @@ def _analysis_input_signature(controls: dict[str, Any] | None) -> tuple[Any, ...
         _upload_fingerprint(controls.get("theover_totals")),
         str(controls.get("schedule_start") or ""),
         str(controls.get("schedule_end") or ""),
+        tuple(sorted(str(r) for r in controls.get("source_evidence_refs", ()))),
     )
 
 
@@ -1031,15 +1032,17 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
                 upload_df[team_col] = upload_df[team_col].apply(normalize_team)
 
     timer.start("Fetch odds, team statistics and model predictions")
-    analysis_df, pipeline_best_picks_df, diagnostics = run_analysis_pipeline(
-        sports=controls["sports"],
-        max_rows=10_000,
-        use_ml=bool(controls["use_ml"]),
-        spreads_df=spreads_df,
-        totals_df=totals_df,
-        schedule_start=controls.get("schedule_start"),
-        schedule_end=controls.get("schedule_end"),
-    )
+    from app_core.source_evidence_intake import selected as selected_source_evidence
+    with selected_source_evidence(controls.get("source_evidence_refs", ())):
+        analysis_df, pipeline_best_picks_df, diagnostics = run_analysis_pipeline(
+            sports=controls["sports"],
+            max_rows=10_000,
+            use_ml=bool(controls["use_ml"]),
+            spreads_df=spreads_df,
+            totals_df=totals_df,
+            schedule_start=controls.get("schedule_start"),
+            schedule_end=controls.get("schedule_end"),
+        )
 
     timer.start("Market enrichment and candidate selection")
     from app_core.market_stage_metrics import measured_call
@@ -1852,6 +1855,7 @@ def main() -> None:
         st.session_state.setdefault(f"parlays_{leg_count}_df", pd.DataFrame())
 
     controls = render_sidebar()
+    controls["source_evidence_refs"] = list(st.session_state.get("source_evidence_refs", ()))
 
     run_counter = int(controls.get("run_analysis_counter", 0))
     should_run = _should_run_pipeline(st.session_state, run_counter, controls)
