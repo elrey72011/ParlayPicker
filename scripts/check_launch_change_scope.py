@@ -5706,6 +5706,292 @@ def _run_pick_board_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+NFL_UI_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-ui-reblend-v1.json'
+NFL_UI_POLICY_VERSION = 'paid-launch-nfl-ui-reblend-v1'
+NFL_UI_APPROVAL_REFERENCE = 'Owner authorization for bounded post-2389 offline evidence/source work and draft correction of demonstrated UI reblend retention; no numerical/formula/scientific/authority changes, acquisition or historical backfill'
+NFL_UI_PATHS = ('scripts/check_launch_change_scope.py', 'scripts/nfl_ui_scope.py', 'tests/test_nfl_ui_scope.py', 'app_core/nfl_inference_evidence.py', 'streamlit_app.py', 'tests/test_nfl_ui_reblend.py', 'docs/paid-launch/nfl-ui-reblend-retention.md')
+NFL_UI_FROZEN_PATHS = ('app_core/current_wagers_trace.py', 'app_core/football_feature_capture.py', 'app_core/feature_processing.py', 'app_core/nfl_native_provenance.py', 'app_core/market_probability_model.py', 'app_core/weights_config.py', 'core/streamlit_pipeline.py', 'app_core/producer_provenance.py', 'app_core/per_game_boards.py', 'app_core/public_board.py', 'app_core/research_replay.py', 'app_core/source_contract.py', 'app_core/research_display.py', 'publishing/board.html', 'app_core/football_validation_v2.py', 'app_core/prospective_validation_plans.py', 'docs/audits/2026-09-23-prospective-validation-plans.md', 'docs/football-stage2.md', 'docs/football-validation-v2.md')
+NFL_UI_BINDINGS = {'base': '8f6f8d5a82ab1eb3e2b0f8b66111dff920bd2e79',
+ 'base_tree': 'fddd2c2357d4e5628eb16c450826524de57c520a',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'dc72fbfe903a8b31a8711a90fbb886e3aa321b49c78771ca07d94e25781f13a7',
+ 'previous_policy_blob': '24c34e87862b1bba5ad6f64c411dea50e48326a4',
+ 'reviewed_blobs': {'scripts/nfl_ui_scope.py': '481495accab4edea34c2205c9f3b0b76966e194d',
+                    'tests/test_nfl_ui_scope.py': '4be8b9c4dc9975a92c06523ba423633c0aaaf773',
+                    'app_core/nfl_inference_evidence.py': 'c0a170d22e42a0d22ec3611f2df0079215e9ba87',
+                    'streamlit_app.py': '37030b06390f7e57ebc57b266cdc103f0ccc28e1',
+                    'tests/test_nfl_ui_reblend.py': '04b0aec11f61d51445e90c43c86dbd4a68541e45',
+                    'docs/paid-launch/nfl-ui-reblend-retention.md': '57c75c162127c13e4a9cdbea90c08c1a7d11f01f'},
+ 'scope_module_sha256': 'ff99c2f94683ec0d9d2e63cea69699144381c431d26d543c3db3cb9b1ad5a84e',
+ 'successor_guard_sha256': '41a4203263a7534e0a7bad6de8068399a5df0e1738e81c9121d6a8ff9d0ecb29'}
+NFL_UI_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+NFL_UI_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/nfl_inference_evidence.py': {'sha256': 'f5de3032e2d262795ed5b0505a50e8be55882511150733ae32274f1f0a41b69b',
+                                        'edits': [(b'            if p["blend"]["probability"]!=fact(source.ge'
+                                                   b't("calibrated_probability")) or p["blend"]["estimated_ev'
+                                                   b'"]!=fact(source.get("expected_value")):errors.append("bl'
+                                                   b'end.original_output_conflict")',
+                                                   b'            probability, estimated_ev = _ui_reblend_bind'
+                                                   b'ing(source, item, errors, unknown)\n            if pr'
+                                                   b'obability!=fact(source.get("calibrated_probability")) or'
+                                                   b' estimated_ev!=fact(source.get("expected_value")):errors'
+                                                   b'.append("blend.original_output_conflict")'),
+                                                  (b'    return dict(raw_probability=result.ml_probability, b'
+                                                   b'lended_probability=blend,\n        estimated_ev=p["bl'
+                                                   b'end"]["estimated_ev"].get("value"), scientific_acceptanc'
+                                                   b'e=False,wagering_authority=False)',
+                                                   b'    latest = item.get("nfl_ui_reblends", [])\n    out'
+                                                   b'put = latest[-1]["payload"] if latest else p["blend"'
+                                                   b']\n    return dict(raw_probability=result.ml_probabil'
+                                                   b'ity, blended_probability=output["probability"].get("valu'
+                                                   b'e"),\n        estimated_ev=output["estimated_ev"].get'
+                                                   b'("value"), scientific_acceptance=False,wagering_authorit'
+                                                   b'y=False)'),
+                                                  (b'    except (ValueError,TypeError,KeyError,IndexError,Att'
+                                                   b'ributeError,OverflowError):errors.append("packet.schema"'
+                                                   b')',
+                                                   b'    except (ValueError,TypeError,KeyError,IndexError,Att'
+                                                   b'ributeError,OverflowError,OSError):errors.append("packet'
+                                                   b'.schema")'),
+                                                  (b'\n',
+                                                   b'\n\n\nUI_REBLEND_VERSION = "nfl-ui-reblend-v1"\nUI_REBLE'
+                                                   b'ND_FIELDS = ("p_market", "p_kalshi", "p_ml", "p_theover"'
+                                                   b', "p_sentiment")\n\n\ndef ui_reblend_time():\n    from d'
+                                                   b'atetime import datetime, timezone\n    return datetim'
+                                                   b'e.now(timezone.utc).isoformat()\n\n\ndef _ui_artifact()'
+                                                   b':\n    raw = (ROOT / "streamlit_app.py").read_bytes()'
+                                                   b'.replace(b"\\r\\n", b"\\n")\n    return dict(sha256=hash'
+                                                   b'lib.sha256(raw).hexdigest(), bytes_base64=base64.b64enco'
+                                                   b'de(raw).decode())\n\n\ndef retain_ui_reblend(before, af'
+                                                   b'ter, inputs):\n    """Append actual UI blend inputs/o'
+                                                   b'utputs; retain the original inference packet."""\n   '
+                                                   b' artifact = None\n    for index, row in after.iterrow'
+                                                   b's():\n        try:\n            item = json.loads(row.'
+                                                   b'get("ml_estimate_metadata", ""))\n        except (Val'
+                                                   b'ueError, TypeError):\n            continue\n        if'
+                                                   b' not isinstance(item,dict) or "nfl_inputs" not in it'
+                                                   b'em:\n            continue\n        stages = item.get("'
+                                                   b'nfl_ui_reblends", [])\n        if not isinstance(stag'
+                                                   b'es,list):\n            continue  # Preserve an invali'
+                                                   b'd original carrier; never repair it.\n        try:\n  '
+                                                   b'          original = before.loc[index]\n            p'
+                                                   b'rior_item = json.loads(original["ml_estimate_metadata"])'
+                                                   b'\n            packet = item["nfl_inputs"]\n           '
+                                                   b' if prior_item != item:\n                raise ValueE'
+                                                   b'rror("original_metadata_changed")\n            if art'
+                                                   b'ifact is None:\n                artifact = _ui_artifa'
+                                                   b'ct()\n            previous = stages[-1]["sha256"] if '
+                                                   b'stages else packet["sha256"]\n            payload = d'
+                                                   b'ict(version=UI_REBLEND_VERSION, previous_sha256=previous'
+                                                   b',\n                original_packet_sha256=packet["sha'
+                                                   b'256"], event_offer=packet["payload"]["event_offer"],'
+                                                   b'\n                generated_at=ui_reblend_time(), con'
+                                                   b'sumed=consumed_blend(), artifact=artifact,\n         '
+                                                   b'       inputs={k:fact(inputs[k].loc[index]) for k in UI_'
+                                                   b'REBLEND_FIELDS},\n                input_probability=f'
+                                                   b'act(original.get("calibrated_probability")),\n       '
+                                                   b'         input_ev=fact(original.get("expected_value"'
+                                                   b')),\n                probability=fact(row.get("calibr'
+                                                   b'ated_probability")),\n                estimated_ev=fa'
+                                                   b'ct(row.get("expected_value")),\n                proba'
+                                                   b'bility_semantics="market_context_research_blend_not_scop'
+                                                   b'ed_calibration",\n                ev_semantics="recor'
+                                                   b'ded_binary_price_estimate_not_certified_operator_payoff"'
+                                                   b',\n                scientific_acceptance=False, wager'
+                                                   b'ing_authority=False)\n        except (OSError, ValueE'
+                                                   b'rror, TypeError, KeyError, IndexError, AttributeError) a'
+                                                   b's exc:\n            payload = dict(version=UI_REBLEND'
+                                                   b'_VERSION, capture_status="FAILED",\n                 '
+                                                   b'          capture_errors=["ui_reblend.capture:"+type(exc'
+                                                   b').__name__])\n        stages.append(dict(payload=payl'
+                                                   b'oad, sha256=digest(payload)))\n        item["nfl_ui_r'
+                                                   b'eblends"] = stages\n        after.at[index,"ml_estima'
+                                                   b'te_metadata"] = encode(item)\n    return after\n\n\ndef '
+                                                   b'_ui_reblend_binding(source, item, errors, unknown):\n'
+                                                   b'    """Validate every recorded transition; hashes do not'
+                                                   b' establish applicability."""\n    packet = item["nfl_'
+                                                   b'inputs"]\n    p = packet["payload"]\n    previous = pa'
+                                                   b'cket["sha256"]\n    probability, ev = p["blend"]["pro'
+                                                   b'bability"], p["blend"]["estimated_ev"]\n    last_time'
+                                                   b' = clock(p["inference_time"])\n    stages = item.get('
+                                                   b'"nfl_ui_reblends", [])\n    if not isinstance(stages,'
+                                                   b'list) or ("nfl_ui_reblends" in item and not stages):'
+                                                   b'\n        errors.append("ui_reblend.schema")\n        '
+                                                   b'return probability, ev\n    for index, retained in en'
+                                                   b'umerate(stages):\n        prefix = "ui_reblend." + st'
+                                                   b'r(index) + "."\n        q = retained["payload"]\n     '
+                                                   b'   if q.get("capture_status") == "FAILED":\n         '
+                                                   b'   errors.append(prefix+"capture_failed")\n          '
+                                                   b'  continue\n        if set(retained) != {"payload","s'
+                                                   b'ha256"} or digest(q) != retained["sha256"]:\n        '
+                                                   b'    errors.append(prefix+"integrity")\n        expect'
+                                                   b'ed_fields = {"version","previous_sha256","original_packe'
+                                                   b't_sha256","event_offer",\n            "generated_at",'
+                                                   b'"consumed","artifact","inputs","input_probability","inpu'
+                                                   b't_ev",\n            "probability","estimated_ev","pro'
+                                                   b'bability_semantics","ev_semantics",\n            "sci'
+                                                   b'entific_acceptance","wagering_authority"}\n        mi'
+                                                   b'ssing = expected_fields-set(q)\n        if missing:\n '
+                                                   b'           unknown.extend(prefix+"missing:"+k for k in s'
+                                                   b'orted(missing))\n            probability, ev = q.get('
+                                                   b'"probability",probability), q.get("estimated_ev",ev)'
+                                                   b'\n            previous = retained["sha256"]\n         '
+                                                   b'   last_time = None\n            continue\n        if '
+                                                   b'set(q)-expected_fields or q["version"] != UI_REBLEND_VER'
+                                                   b'SION:\n            errors.append(prefix+"contract")\n '
+                                                   b'       if q["previous_sha256"] != previous or q["origina'
+                                                   b'l_packet_sha256"] != packet["sha256"]:\n            e'
+                                                   b'rrors.append(prefix+"original_binding")\n        if q'
+                                                   b'["event_offer"] != p["event_offer"]:\n            err'
+                                                   b'ors.append(prefix+"event_offer")\n        if q["input'
+                                                   b'_probability"] != probability or q["input_ev"] != ev'
+                                                   b':\n            errors.append(prefix+"previous_output"'
+                                                   b')\n        raw = base64.b64decode(q["artifact"]["byte'
+                                                   b's_base64"],validate=True)\n        if hashlib.sha256('
+                                                   b'raw).hexdigest() != q["artifact"]["sha256"]:\n       '
+                                                   b'     errors.append(prefix+"artifact_integrity")\n    '
+                                                   b'    if q["artifact"] != _ui_artifact() or q["consumed"] '
+                                                   b'!= consumed_blend():\n            errors.append(prefi'
+                                                   b'x+"consumed_code_configuration")\n        if set(q["i'
+                                                   b'nputs"]) != set(UI_REBLEND_FIELDS):\n            erro'
+                                                   b'rs.append(prefix+"inputs")\n        for key, value in'
+                                                   b' q["inputs"].items():\n            if value.get("stat'
+                                                   b'e")=="VALUE":\n                v=value.get("value")\n '
+                                                   b'               valid=isinstance(v,(int,float)) and not i'
+                                                   b'sinstance(v,bool) and np.isfinite(v) and value==fact'
+                                                   b'(v)\n            else:\n                valid=value in'
+                                                   b' ({"state":"MISSING"},{"state":"INVALID"})\n         '
+                                                   b'   if not valid:errors.append(prefix+"input_fact:"+k'
+                                                   b'ey)\n        if q["inputs"]["p_ml"] != p["raw_probabi'
+                                                   b'lity"]:\n            errors.append(prefix+"raw_predic'
+                                                   b'tor")\n        if q["inputs"]["p_market"] != p["blend'
+                                                   b'"]["inputs"]["p_market"]:\n            unknown.append'
+                                                   b'(prefix+"changed_market_source_not_bound")\n        f'
+                                                   b'or key in ("p_kalshi", "p_theover", "p_sentiment"):\n'
+                                                   b'            v=q["inputs"][key]\n            if v.get('
+                                                   b'"state")=="VALUE" and (key!="p_sentiment" or v.get("valu'
+                                                   b'e")!=.5):\n                # Numeric external inputs '
+                                                   b'alone do not establish their upstream evidence.\n    '
+                                                   b'            unknown.append(prefix+"external_source:"+key'
+                                                   b')\n        if (q["probability_semantics"] != "market_'
+                                                   b'context_research_blend_not_scoped_calibration"\n     '
+                                                   b'       or q["ev_semantics"] != "recorded_binary_price_es'
+                                                   b'timate_not_certified_operator_payoff"\n            or'
+                                                   b' q["scientific_acceptance"] is not False or q["wagering_'
+                                                   b'authority"] is not False):\n            errors.append'
+                                                   b'(prefix+"semantics_authority")\n        at = clock(q['
+                                                   b'"generated_at"])\n        start = clock((p["event_off'
+                                                   b'er"] or {}).get("event",{}).get("start"))\n        if'
+                                                   b' q["generated_at"] in (None,"") or last_time is None or '
+                                                   b'start is None:\n            unknown.append(prefix+"cl'
+                                                   b'ock")\n        elif at is None or not last_time<=at<s'
+                                                   b'tart:\n            errors.append(prefix+"clock")\n    '
+                                                   b'    last_time = at\n        # Deterministically check'
+                                                   b' the recorded NFL refresh, without executing saved bytes'
+                                                   b'.\n        from core.streamlit_pipeline import comput'
+                                                   b'e_blended_probability, american_to_decimal\n        m'
+                                                   b't = (p["event_offer"] or {}).get("offer",{}).get("market'
+                                                   b'")\n        if mt not in {"spread_home", "spread_away'
+                                                   b'"}:\n            errors.append(prefix+"target")\n     '
+                                                   b'   inputs={k:pd.Series([v.get("value")],dtype="float64")'
+                                                   b' for k,v in q["inputs"].items()}\n        blend = com'
+                                                   b'pute_blended_probability(**inputs,league=pd.Series(["NFL'
+                                                   b'"]),market_type=pd.Series([mt])).iloc[0]\n        pri'
+                                                   b'ce=(p["event_offer"] or {}).get("offer",{}).get("price")'
+                                                   b'\n        decimal=american_to_decimal(price)\n        '
+                                                   b'binary_ev=blend*(decimal-1)-(1-blend)\n        if fac'
+                                                   b't(blend)!=q["probability"] or fact(binary_ev)!=q["estima'
+                                                   b'ted_ev"]:\n            errors.append(prefix+"recorded'
+                                                   b'_output")\n        previous = retained["sha256"]\n    '
+                                                   b'    probability, ev = q["probability"], q["estimated_ev"'
+                                                   b']\n    return probability, ev\n')]},
+ 'streamlit_app.py': {'sha256': 'eda40f47f3f9066080015ced73bdcfefd47e16b22b221a08a42e7b4f6e5fa939',
+                      'edits': [(b'    blended = compute_blended_probability(\n        p_market=market_prob,'
+                                 b'\n        p_kalshi=kalshi_prob,\n        p_ml=ml_valid,\n        p_theo'
+                                 b'ver=theover_prob_blend,\n        p_sentiment=sentiment_prob,',
+                                 b'    # Retain the actual refresh arguments separately from original infer'
+                                 b'ence.\n    nfl_ui_inputs = {k:v.copy() for k,v in dict(p_market=market_pr'
+                                 b'ob, p_kalshi=kalshi_prob,\n        p_ml=ml_valid, p_theover=theover_prob_'
+                                 b'blend, p_sentiment=sentiment_prob).items()}\n    blended = compute_blende'
+                                 b'd_probability(\n        p_market=market_prob,\n        p_kalshi=kalshi_pro'
+                                 b'b,\n        p_ml=ml_valid,\n        p_theover=theover_prob_blend,\n    '
+                                 b'    p_sentiment=sentiment_prob,'),
+                                (b'    # We leave the strict edge/EV filtering strictly for best_picks_df c'
+                                 b'onstruction.\n\n    return out\n',
+                                 b'    # We leave the strict edge/EV filtering strictly for best_picks_df c'
+                                 b'onstruction.\n\n    from app_core.nfl_inference_evidence import retain_ui_'
+                                 b'reblend\n    retain_ui_reblend(df, out, nfl_ui_inputs)\n    return out'
+                                 b'\n')]}}
+
+
+def _nfl_ui_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _nfl_ui_previous_guard_source(source, binding=None):
+    binding = NFL_UI_BINDINGS if binding is None else binding
+    if b"\nNFL_UI_POLICY_PATH =" not in source:
+        return source
+    _require(_nfl_ui_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNFL_UI_POLICY_PATH =", 1)[0] + NFL_UI_PREVIOUS_CLI
+
+
+def _nfl_ui_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _nfl_ui_previous_guard_source(source)
+    frozen = NFL_UI_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_nfl_ui_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nNFL_UI_POLICY_PATH =" in source:
+        if reviewed == NFL_UI_BINDINGS["successor_guard_sha256"]:
+            return _nfl_ui_raw_guard_matches(source, reviewed)
+        if not _nfl_ui_raw_guard_matches(source, NFL_UI_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nNFL_UI_POLICY_PATH =", 1)[0] + NFL_UI_PREVIOUS_CLI
+    return _nfl_ui_prior_guard_matches(source, reviewed)
+
+
+_nfl_ui_prior_pick_board_main = _pick_board_previous_main_source
+
+
+def _pick_board_previous_main_source(path, source):
+    return _nfl_ui_prior_pick_board_main(path, _nfl_ui_previous_main_source(path, source))
+
+
+def _run_nfl_ui_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/nfl_ui_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_nfl_ui_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_nfl_ui_prior_pick_board_guard = _pick_board_previous_guard_source
+
+
+def _pick_board_previous_guard_source(source, binding=None):
+    return _nfl_ui_prior_pick_board_guard(_nfl_ui_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -5713,7 +5999,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", PICK_BOARD_POLICY_PATH):
+        if exists_at("HEAD", NFL_UI_POLICY_PATH):
+            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)
+        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):
             code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)
         elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):
             code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)

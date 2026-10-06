@@ -610,6 +610,9 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
         theover_prob.index,
     )
 
+    # Retain the actual refresh arguments separately from original inference.
+    nfl_ui_inputs = {k:v.copy() for k,v in dict(p_market=market_prob, p_kalshi=kalshi_prob,
+        p_ml=ml_valid, p_theover=theover_prob_blend, p_sentiment=sentiment_prob).items()}
     blended = compute_blended_probability(
         p_market=market_prob,
         p_kalshi=kalshi_prob,
@@ -717,6 +720,8 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     # The frontend grids must display the entire master schedule.
     # We leave the strict edge/EV filtering strictly for best_picks_df construction.
 
+    from app_core.nfl_inference_evidence import retain_ui_reblend
+    retain_ui_reblend(df, out, nfl_ui_inputs)
     return out
 
 def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.DataFrame) -> pd.DataFrame:
