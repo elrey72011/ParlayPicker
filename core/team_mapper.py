@@ -119,8 +119,8 @@ NHL_EXACT_MAP = {
     "montreal canadiens": "Montreal",
     "nashville predators": "Nashville",
     "new jersey devils": "New Jersey",
-    "new york islanders": "New York",
-    "new york rangers": "New York",
+    "new york islanders": "New York Islanders",
+    "new york rangers": "New York Rangers",
     "ottawa senators": "Ottawa",
     "philadelphia flyers": "Philadelphia",
     "pittsburgh penguins": "Pittsburgh",
@@ -956,6 +956,13 @@ def normalize_team_name(name: str) -> str:
 
     # 1. Apply strip and lower immediately to the incoming parameter
     name = name.strip().lower()
+
+    # Shared-city NHL franchises must survive repeated normalization. A bare
+    # "New York" remains ambiguous; it cannot identify either franchise.
+    nhl_named = {"new york islanders": "New York Islanders", "ny islanders": "New York Islanders",
+                 "new york rangers": "New York Rangers", "ny rangers": "New York Rangers"}
+    if name in nhl_named:
+        return nhl_named[name]
 
     # 2. Intercept hardcoded overrides BEFORE any string replacement or matching
     if name in KALSHI_NCAAB_OVERRIDES:

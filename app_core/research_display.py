@@ -505,6 +505,16 @@ def legacy_unrecorded_display(export):
         validate(saved)
     except (ValueError,TypeError):
         return False
+    if _text(export.get("league")).upper() == "MLB" and not _absent(export.get("ml_estimate_metadata")):
+        # A recorded MLB producer contract with missing terms is not a legacy
+        # unrecorded estimate. Never retain public binary EV/probability aliases
+        # when that exact contract failed, including Novig settlement unknowns.
+        try:
+            origin = json.loads(export["ml_estimate_metadata"])
+        except (ValueError, TypeError):
+            return False
+        if not isinstance(origin, dict) or "producer_contract" in origin:
+            return False
     export_identity=_identity(export)
     if saved["identity"]["start"] is None:
         # Existing legacy adapters can add an unrecorded schedule after export.

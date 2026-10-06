@@ -6791,6 +6791,181 @@ _football_catalog_prior_nhl_puck_line_guard = _nhl_puck_line_previous_guard_sour
 def _nhl_puck_line_previous_guard_source(source, binding=None):
     return _football_catalog_prior_nhl_puck_line_guard(_football_catalog_previous_guard_source(source), binding)
 
+MLB_NHL_RESEARCH_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-mlb-nhl-research-v1.json'
+MLB_NHL_RESEARCH_POLICY_VERSION = 'mlb-nhl-research-v1'
+MLB_NHL_RESEARCH_APPROVAL_REFERENCE = ('Owner-authorized MLB-first then NHL bounded offline corrections: reject inconsistent public MLB legacy fields, '
+ 'preserve totals diagnostics in private replay, and retain named Rangers/Islanders orientation. Preserve frozen '
+ 'version 10, original evidence, existing NFL/NHL work, governing requirements, predecessor protections and workflows. '
+ 'No merge, deployment, acquisition, fitting, source registration, activation or financial actions.')
+MLB_NHL_RESEARCH_PATHS = ('scripts/check_launch_change_scope.py',
+ 'scripts/mlb_nhl_research_scope.py',
+ 'tests/test_mlb_nhl_research_scope.py',
+ 'app_core/source_contract.py',
+ 'app_core/research_display.py',
+ 'app_core/research_replay.py',
+ 'core/team_mapper.py',
+ 'tests/test_mlb_nhl_research_bindings.py',
+ 'docs/paid-launch/mlb-nhl-research-bindings.md')
+MLB_NHL_RESEARCH_FROZEN_PATHS = ()
+MLB_NHL_RESEARCH_BINDINGS = {'base': '1823a8941c854725e9f908e86108f4dd9e3c6f4f',
+ 'base_tree': '23ced68f1a0926b478a22dd477bd9b34f45c60a9',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'ae84a037bebd85f509f2f04b0da2ba3aeb2981c8cb18ba52f745e3af821ab9aa',
+ 'previous_policy_blob': '696299f7bd10bf2a0915f41249361396b11dce5f',
+ 'reviewed_blobs': {'scripts/mlb_nhl_research_scope.py': 'c9b3ef62581ff6ea319e4bcb119e875701bfed6b',
+                    'tests/test_mlb_nhl_research_scope.py': '5bd7ff57e5a12c0bf92284f8c504b6c2c020a1a2',
+                    'app_core/source_contract.py': 'ec431f1def655c5240f5cff13fd8c19418b81d7b',
+                    'app_core/research_display.py': '60646268eab099004b534ca0307d63fc3ade81de',
+                    'app_core/research_replay.py': '1d6bb96421697842d2800766d88534e0295e97a7',
+                    'core/team_mapper.py': '8bd848c1950a5783c5f45536af150fdd5236a449',
+                    'tests/test_mlb_nhl_research_bindings.py': '5b8d3a94b1f9fde9383389a40114c29659cd732d',
+                    'docs/paid-launch/mlb-nhl-research-bindings.md': '05f6f6690c0708c6338cc2b3912169c0c2320127'},
+ 'scope_module_sha256': 'eb68f29204ab28570f958bfb3aca28826ad7b84483e0d8969bcc00638edd3e11',
+ 'successor_guard_sha256': '29fd075d47a3acac027f1fd0fa5915e29c63a43169ee3199c5f612d832373a3f'}
+MLB_NHL_RESEARCH_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, defa'
+ b'ult=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    '
+ b'args = parser.parse_args()\n    try:\n        if exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code'
+ b', report = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        elif ex'
+ b'ists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n            code, report = _run_nhl_puck_line_integrated(args.manife'
+ b'st, args.base, NHL_PUCK_LINE_BINDINGS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            '
+ b'code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif '
+ b'exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_intake_integrated(args.mani'
+ b'fest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code, r'
+ b'eport = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BO'
+ b'ARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BIN'
+ b'DINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integr'
+ b'ated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n '
+ b'           code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n      '
+ b'  elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.man'
+ b'ifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            '
+ b'code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif '
+ b'exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, ar'
+ b'gs.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_'
+ b'home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n      '
+ b'      code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", '
+ b'ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BI'
+ b'NDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args'
+ b'.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report ='
+ b' _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH'
+ b'):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif'
+ b' exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, arg'
+ b's.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provi'
+ b'der_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integr'
+ b'ated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_versi'
+ b'on": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    re'
+ b'ndered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.m'
+ b'kdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    pri'
+ b'nt(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n')
+MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/source_contract.py': {'sha256': '3373d3914b22d4115391d3c380d131523c274f9b6d149e17a60249e9979c338c',
+                                 'edits': [(b'        "book_nfl_003", "93b92ee90e07b50ce5fff0ea2f7520e9eaa6c6509bb1489'
+                                            b'e320556192dda769f"),\n',
+                                            b'        "book_nfl_003", "93b92ee90e07b50ce5fff0ea2f7520e9eaa6c6509bb1489'
+                                            b'e320556192dda769f"),\n    ("baseball_mlb", "totals"): ("odds-api-novig-ml'
+                                            b'b-total-unverified-v1",\n        "book_rulebook", DOCUMENTS["book_ruleboo'
+                                            b'k"]),\n')]},
+ 'app_core/research_display.py': {'sha256': '4194098cf92f522e6524213b627ca660d544a52821bac793dbff9fb75c3a4f05',
+                                  'edits': [(b'        return False\n',
+                                             b'        return False\n    if _text(export.get("league")).upper() == "'
+                                             b'MLB" and not _absent(export.get("ml_estimate_metadata")):\n        # '
+                                             b'A recorded MLB producer contract with missing terms is not a legacy\n'
+                                             b'        # unrecorded estimate. Never retain public binary EV/probability'
+                                             b' aliases\n        # when that exact contract failed, including Novig '
+                                             b'settlement unknowns.\n        try:\n            origin = json.loads(ex'
+                                             b'port["ml_estimate_metadata"])\n        except (ValueError, TypeError)'
+                                             b':\n            return False\n        if not isinstance(origin, dict) o'
+                                             b'r "producer_contract" in origin:\n            return False\n')]},
+ 'app_core/research_replay.py': {'sha256': 'c2ba91d6726f5b9bec76f9f3ea30f139a9206ee1e5bad366d168a814025ce5f6',
+                                 'edits': [(b'from app_core.research_estimate_trace import SOURCE_FIELDS, EXPORT_FIELD'
+                                            b'S\n',
+                                            b'from app_core.research_estimate_trace import SOURCE_FIELDS, EXPORT_FIELD'
+                                            b'S\nfrom app_core.total_signal_quality import FIELDS as TOTAL_QUALITY_FIEL'
+                                            b'DS\n'),
+                                           (b'injury_away_summary injury_context_source injury_context_status""".split'
+                                            b'()) | {"Local Date","Commence (Local)"}\n',
+                                            b'injury_away_summary injury_context_source injury_context_status""".split'
+                                            b'()) | {"Local Date","Commence (Local)"} | frozenset(TOTAL_QUALITY_FIELDS'
+                                            b')\n')]},
+ 'core/team_mapper.py': {'sha256': '8f2dfaaeab7b0344fb54cbba7a6448a8d04b3c4c4f877b64590b1812b6c84341',
+                         'edits': [(b'    "new york islanders": "New York",\n    "new york rangers": "New York",\n',
+                                    b'    "new york islanders": "New York Islanders",\n    "new york rangers": "New Yor'
+                                    b'k Rangers",\n'),
+                                   (b'\n',
+                                    b'\n    # Shared-city NHL franchises must survive repeated normalization. A bar'
+                                    b'e\n    # "New York" remains ambiguous; it cannot identify either franchise.\n '
+                                    b'   nhl_named = {"new york islanders": "New York Islanders", "ny islanders": "New'
+                                    b' York Islanders",\n                 "new york rangers": "New York Rangers", "ny r'
+                                    b'angers": "New York Rangers"}\n    if name in nhl_named:\n        return nhl_na'
+                                    b'med[name]\n\n')]}}
+
+def _mlb_nhl_research_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _mlb_nhl_research_previous_guard_source(source, binding=None):
+    binding = MLB_NHL_RESEARCH_BINDINGS if binding is None else binding
+    if b"\nMLB_NHL_RESEARCH_POLICY_PATH =" not in source:
+        return source
+    _require(_mlb_nhl_research_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nMLB_NHL_RESEARCH_POLICY_PATH =", 1)[0] + MLB_NHL_RESEARCH_PREVIOUS_CLI
+
+
+def _mlb_nhl_research_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _mlb_nhl_research_previous_guard_source(source)
+    frozen = MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS, NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS, PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_mlb_nhl_research_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nMLB_NHL_RESEARCH_POLICY_PATH =" in source:
+        if reviewed == MLB_NHL_RESEARCH_BINDINGS["successor_guard_sha256"]:
+            return _mlb_nhl_research_raw_guard_matches(source, reviewed)
+        if not _mlb_nhl_research_raw_guard_matches(source, MLB_NHL_RESEARCH_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nMLB_NHL_RESEARCH_POLICY_PATH =", 1)[0] + MLB_NHL_RESEARCH_PREVIOUS_CLI
+    return _mlb_nhl_research_prior_guard_matches(source, reviewed)
+
+
+_mlb_nhl_research_prior_football_catalog_main = _football_catalog_previous_main_source
+
+
+def _football_catalog_previous_main_source(path, source):
+    return _mlb_nhl_research_prior_football_catalog_main(path, _mlb_nhl_research_previous_main_source(path, source))
+
+
+def _run_mlb_nhl_research_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/mlb_nhl_research_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_mlb_nhl_research_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_mlb_nhl_research_prior_football_catalog_guard = _football_catalog_previous_guard_source
+
+
+def _football_catalog_previous_guard_source(source, binding=None):
+    return _mlb_nhl_research_prior_football_catalog_guard(_mlb_nhl_research_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -6798,7 +6973,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):
+        if exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):
+            code, report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)
+        elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):
             code, report = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)
         elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):
             code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)
