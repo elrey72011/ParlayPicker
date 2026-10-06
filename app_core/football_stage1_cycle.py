@@ -100,8 +100,15 @@ def _ncaaf_schedule(now, token, *, get, ledger):
     alias_owners = {}
     for team_id, team in team_catalog.items():
         names = [team.get("school"), team.get("alt_name")]
-        if team.get("school") and team.get("mascot"):
-            names.append(str(team["school"]) + " " + str(team["mascot"]))
+        # Current CFBD catalogs carry explicit alternateNames, not alt_name.
+        # Use only string members of the provider's array; never guess aliases.
+        alternate = team.get("alternateNames")
+        if isinstance(alternate, list):
+            names.extend(name for name in alternate if isinstance(name, str) and name.strip())
+        mascot = team.get("mascot")
+        if isinstance(mascot, str) and mascot.strip():
+            names += [name + " " + mascot for name in names
+                      if isinstance(name, str) and name.strip()]
         for name in names:
             if isinstance(name, str) and name.strip():
                 alias_owners.setdefault(foundation._name("NCAAF", name), set()).add(team_id)

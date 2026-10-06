@@ -6650,6 +6650,147 @@ _nhl_puck_line_prior_nfl_calibration_guard = _nfl_calibration_previous_guard_sou
 def _nfl_calibration_previous_guard_source(source, binding=None):
     return _nhl_puck_line_prior_nfl_calibration_guard(_nhl_puck_line_previous_guard_source(source), binding)
 
+FOOTBALL_CATALOG_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-catalog-v1.json'
+FOOTBALL_CATALOG_POLICY_VERSION = 'football-catalog-v1'
+FOOTBALL_CATALOG_APPROVAL_REFERENCE = ('Owner-authorized bounded offline correction of retained-evidence CFBD catalog parsing and draft PR. Preserve '
+ 'original baseline, frozen version 10, all NFL/NHL and predecessor safeguards/workflows/scientific requirements. No '
+ 'acquisition, fitting, source registration, activation, wagering, deployment or merge.')
+FOOTBALL_CATALOG_PATHS = ('scripts/check_launch_change_scope.py',
+ 'scripts/football_catalog_scope.py',
+ 'tests/test_football_catalog_scope.py',
+ 'app_core/football_stage1_cycle.py',
+ 'tests/test_football_catalog_aliases.py',
+ 'tests/fixtures/football/cfbd-alternate-names-retained.json',
+ 'docs/paid-launch/football-catalog-reconciliation.md')
+FOOTBALL_CATALOG_FROZEN_PATHS = ()
+FOOTBALL_CATALOG_BINDINGS = {'base': '76bc58990e8a467be06b5a3349ca5dea241d38fd',
+ 'base_tree': 'db8dc1e9016914ebf1af03c8108764275a3dcf65',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '58c108521b55aceea7aba8eee33acd7d72f98c08f2c6f8f295c19fe9a722db6e',
+ 'previous_policy_blob': '553be64a9d9fee5f194b256d7e6f3145a83c6296',
+ 'reviewed_blobs': {'scripts/football_catalog_scope.py': 'fba371100c2553f438bfcd06ace86bbe386b573f',
+                    'tests/test_football_catalog_scope.py': 'cd00c2f305ea8fe23b8fd6a58db94c231116e296',
+                    'app_core/football_stage1_cycle.py': 'd3b2399d4b6587a6929dcf97a863bb8ef0b40797',
+                    'tests/test_football_catalog_aliases.py': 'bae4e1f8b06a2847155298c5d54fd03738ea59b0',
+                    'tests/fixtures/football/cfbd-alternate-names-retained.json': 'c312212f35547720a4ff998a32e2d4e5c3e2d348',
+                    'docs/paid-launch/football-catalog-reconciliation.md': '31de9366ec013729b12af8be150aea1da1b7a9a3'},
+ 'scope_module_sha256': '68fcc0e2da7c73307bff958d6b5dff27ead6e3832593ef8cadc50018cee26909',
+ 'successor_guard_sha256': '9ff5fd890e7b83a975eeed47fa3cee3c0e89d973c4b0e0bf39200d774cd388ed'}
+FOOTBALL_CATALOG_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, defa'
+ b'ult=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    '
+ b'args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n            code, r'
+ b'eport = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)\n        elif exists_at("'
+ b'HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code, report = _run_nfl_calibration_integrated(args.manifest, a'
+ b'rgs.base, NFL_CALIBRATION_BINDINGS)\n        elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code,'
+ b' report = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at'
+ b'("HEAD", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI'
+ b'_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_in'
+ b'tegrated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n'
+ b'            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        eli'
+ b'f exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.ma'
+ b'nifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            c'
+ b'ode, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("'
+ b'HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, a'
+ b'rgs.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, re'
+ b'port = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HO'
+ b'ME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n      '
+ b'  elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.ba'
+ b'se, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate'
+ b'_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n    '
+ b'        code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("H'
+ b'EAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n  '
+ b'      elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.man'
+ b'ifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, rep'
+ b'ort = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_PO'
+ b'LICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n   '
+ b'     else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except '
+ b'Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ER'
+ b'ROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if ar'
+ b'gs.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.writ'
+ b'e_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n '
+ b'   raise SystemExit(main())\n')
+FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/football_stage1_cycle.py': {'sha256': '943182cf2a9586d3c7c9035566cd4d323ea2de57000e1ad97f9d3c581c9f408d',
+                                       'edits': [(b'        if team.get("school") and team.get("mascot"):\n          '
+                                                  b'  names.append(str(team["school"]) + " " + str(team["mascot"]))\n',
+                                                  b'        # Current CFBD catalogs carry explicit alternateNames, n'
+                                                  b"ot alt_name.\n        # Use only string members of the provider's"
+                                                  b' array; never guess aliases.\n        alternate = team.get("alter'
+                                                  b'nateNames")\n        if isinstance(alternate, list):\n            '
+                                                  b'names.extend(name for name in alternate if isinstance(name, str)'
+                                                  b' and name.strip())\n        mascot = team.get("mascot")\n        i'
+                                                  b'f isinstance(mascot, str) and mascot.strip():\n            names '
+                                                  b'+= [name + " " + mascot for name in names\n                      '
+                                                  b'if isinstance(name, str) and name.strip()]\n')]}}
+
+def _football_catalog_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _football_catalog_previous_guard_source(source, binding=None):
+    binding = FOOTBALL_CATALOG_BINDINGS if binding is None else binding
+    if b"\nFOOTBALL_CATALOG_POLICY_PATH =" not in source:
+        return source
+    _require(_football_catalog_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nFOOTBALL_CATALOG_POLICY_PATH =", 1)[0] + FOOTBALL_CATALOG_PREVIOUS_CLI
+
+
+def _football_catalog_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _football_catalog_previous_guard_source(source)
+    frozen = FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS, PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_football_catalog_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nFOOTBALL_CATALOG_POLICY_PATH =" in source:
+        if reviewed == FOOTBALL_CATALOG_BINDINGS["successor_guard_sha256"]:
+            return _football_catalog_raw_guard_matches(source, reviewed)
+        if not _football_catalog_raw_guard_matches(source, FOOTBALL_CATALOG_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nFOOTBALL_CATALOG_POLICY_PATH =", 1)[0] + FOOTBALL_CATALOG_PREVIOUS_CLI
+    return _football_catalog_prior_guard_matches(source, reviewed)
+
+
+_football_catalog_prior_nhl_puck_line_main = _nhl_puck_line_previous_main_source
+
+
+def _nhl_puck_line_previous_main_source(path, source):
+    return _football_catalog_prior_nhl_puck_line_main(path, _football_catalog_previous_main_source(path, source))
+
+
+def _run_football_catalog_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/football_catalog_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_football_catalog_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_football_catalog_prior_nhl_puck_line_guard = _nhl_puck_line_previous_guard_source
+
+
+def _nhl_puck_line_previous_guard_source(source, binding=None):
+    return _football_catalog_prior_nhl_puck_line_guard(_football_catalog_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -6657,7 +6798,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):
+        if exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):
+            code, report = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)
+        elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):
             code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)
         elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):
             code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)
