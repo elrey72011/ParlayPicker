@@ -1,0 +1,63 @@
+{
+  "scope": "Authenticated retained catalog field projection, not a new provider response. Quote prices used in tests are synthetic.",
+  "teams": {
+    "113": {
+      "source_sha256": "ee0885de6d07f81fac05f4bb5e636630a6e285bb90587e503876cb5dd43bda58",
+      "record_sha256": "17ec3feed351e68355753467fbb46cc52830e9b7075868d81e4e7a68b926cc7d",
+      "original_verified_at": "2026-09-24T23:32:28.886266+00:00",
+      "catalog_projection": {
+        "id": 113,
+        "school": "Massachusetts",
+        "mascot": "Minutemen",
+        "alternateNames": [
+          "UMass",
+          "MASS",
+          "UMass"
+        ]
+      }
+    },
+    "62": {
+      "source_sha256": "0f054f0517b9669fcbdc68140bc4b969348d9730f282d600af8bafc714087706",
+      "record_sha256": "78f008c6b233b09c6ebaab9cd10955ad110d9eac758914c1a158245a05e73b2c",
+      "original_verified_at": "2026-09-24T23:32:28.886266+00:00",
+      "catalog_projection": {
+        "id": 62,
+        "school": "Hawai'i",
+        "mascot": "Rainbow Warriors",
+        "alternateNames": [
+          "HAW",
+          "Hawai'i"
+        ]
+      }
+    },
+    "193": {
+      "source_sha256": "a497cc762f13fbf403bef995510dbae0e6ccdbaa3f59785ffeff6dc010d40fd7",
+      "record_sha256": "ea21dcd72c34e3305c2d995514515e585800da1761e44f20b9cd0e12e396564a",
+      "original_verified_at": "2026-09-24T23:32:28.886266+00:00",
+      "catalog_projection": {
+        "id": 193,
+        "school": "Miami (OH)",
+        "mascot": "RedHawks",
+        "alternateNames": [
+          "M-OH",
+          "Miami OH"
+        ]
+      }
+    },
+    "2390": {
+      "source_sha256": "6867678d0187d76f7a29ba217652f641ab6ead0c07286df661f46b90e30e7a38",
+      "record_sha256": "f7512da6e033e7e84e0e2f545193cf67fd29dac942f82020fe1cdb9d4bf400e7",
+      "original_verified_at": "2026-09-24T23:32:28.886266+00:00",
+      "catalog_projection": {
+        "id": 2390,
+        "school": "Miami",
+        "mascot": "Hurricanes",
+        "alternateNames": [
+          "Miami (FL)",
+          "MIA",
+          "Miami"
+        ]
+      }
+    }
+  }
+}
