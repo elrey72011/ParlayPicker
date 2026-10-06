@@ -10,6 +10,7 @@ import math
 import numpy as np
 import pandas as pd
 from app_core.research_estimate_trace import SOURCE_FIELDS, EXPORT_FIELDS
+from app_core.total_signal_quality import FIELDS as TOTAL_QUALITY_FIELDS
 
 REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + """ml_feature_eligible stats_resolution_status football_feature_receipt
 provider_quotes
@@ -26,7 +27,7 @@ espn_event_id mlb_game_pk game_number gemini_review_status gemini_reviewed_at
 gemini_review_model gemini_review_input_hash gemini_verified_context
 gemini_supporting_evidence gemini_missing_information nfl_context_status
 feature_home_last_game_summary feature_away_last_game_summary injury_home_summary
-injury_away_summary injury_context_source injury_context_status""".split()) | {"Local Date","Commence (Local)"}
+injury_away_summary injury_context_source injury_context_status""".split()) | {"Local Date","Commence (Local)"} | frozenset(TOTAL_QUALITY_FIELDS)
 
 
 def encode(value):

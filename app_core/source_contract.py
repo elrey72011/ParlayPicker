@@ -30,6 +30,8 @@ UNVERIFIED_MARKETS = {
         "book_mlb_001", "fbc1d024c6aff0f63678eb5a3ab519bf9e1fdd6a70a6f81cd74dcf87a9a63ffe"),
     ("americanfootball_nfl", "totals"): ("odds-api-novig-nfl-total-unverified-v1",
         "book_nfl_003", "93b92ee90e07b50ce5fff0ea2f7520e9eaa6c6509bb1489e320556192dda769f"),
+    ("baseball_mlb", "totals"): ("odds-api-novig-mlb-total-unverified-v1",
+        "book_rulebook", DOCUMENTS["book_rulebook"]),
 }
 
 
