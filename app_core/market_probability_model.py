@@ -106,6 +106,8 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
     if frame is None or frame.empty:
         return result
 
+    from app_core.nhl_puck_line_evidence import selection_requested
+    nhl_research_selected = selection_requested()
     league = _text(frame, "League").str.upper().str.strip()
     league = league.where(league.ne(""), _text(frame, "league").str.upper().str.strip())
     market_type = _text(frame, "market_type").str.lower().str.strip()
@@ -132,6 +134,13 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
     for idx in frame.index:
         lg = str(league.loc[idx])
         mt = str(market_type.loc[idx])
+        if lg == "NHL" and nhl_research_selected:
+            from app_core.nhl_puck_line_evidence import predict
+            for field, value in predict(frame.loc[idx]).items():
+                if field not in result:
+                    result[field] = pd.Series(pd.NA, index=result.index, dtype=object)
+                result.at[idx, field] = value
+            continue
         params = _LEAGUE_PARAMS.get(lg)
         if params is None:
             result.at[idx, "ml_unavailable_reason"] = f"No market-specific model configured for {lg or 'unknown league'}"
@@ -233,6 +242,8 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
     from app_core.research_estimate_trace import origin_metadata, generated_time
     generated = generated_time()
     for idx in frame.index:
+        if str(league.loc[idx]) == "NHL" and nhl_research_selected:
+            continue  # Original NHL clocks and private artifact packet were captured above.
         line = total_line.loc[idx] if str(market_type.loc[idx]).startswith("total") else spread_line.loc[idx]
         result.at[idx, "ml_estimate_metadata"] = origin_metadata(
             frame.loc[idx], result.loc[idx], float(line) if np.isfinite(line) else None,

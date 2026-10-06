@@ -7147,6 +7147,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     identity_columns = [c for c in ("candidate_id", "game_id")
                         if c in best and c not in BEST_PICK_COLUMNS + evidence_columns]
     final_best_df = best[BEST_PICK_COLUMNS + evidence_columns + identity_columns].copy()
+    # Preserve supplied NHL event aliases through the reporting projection.
+    # Missing identities remain missing; no other sport's transport is changed.
+    nhl_identity = _string_series(best, "league").str.upper().eq("NHL")
+    if nhl_identity.any():
+        for field in ("provider_event_id", "provider_namespace"):
+            if field in best:
+                if field not in final_best_df:
+                    final_best_df[field] = pd.Series(pd.NA, index=best.index, dtype=object)
+                final_best_df.loc[nhl_identity, field] = best.loc[nhl_identity, field]
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
     # Neutralize any lone research-only fallback before diagnostics and synchronize
     # the selected audit row to the exact line/pick/value that will be exported.
@@ -7643,7 +7652,7 @@ def _fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None
                         'matchup_id': matchup_id,
                         **({"provider_event_id": game.get("id"), "game_start_utc": commence_time,
                             "provider_namespace": "odds_api" if game.get("odds_feed_source", "the_odds_api") == "the_odds_api" else game.get("odds_feed_source")}
-                           if raw_sport_key == "americanfootball_nfl" else {}),
+                           if raw_sport_key in {"americanfootball_nfl", "icehockey_nhl"} else {}),
                         'odds_feed_source': str(
                             game.get('odds_feed_source') or 'the_odds_api'
                         ),
@@ -10347,6 +10356,9 @@ def run_analysis_pipeline(
     from app_core.nfl_inference_evidence import blend_inputs as retain_nfl_blend_inputs
     retain_nfl_blend_inputs(merged, dict(p_market=merged["market_probability"], p_kalshi=kalshi_probability,
         p_ml=model_probability, p_theover=theover_blend_input, p_sentiment=sentiment_prob))
+    from app_core.nhl_puck_line_evidence import blend_inputs as retain_nhl_blend_inputs
+    retain_nhl_blend_inputs(merged, dict(p_market=merged["market_probability"], p_kalshi=kalshi_probability,
+        p_ml=model_probability, p_theover=theover_blend_input, p_sentiment=sentiment_prob))
     calibrated_probability = compute_blended_probability(
         p_market=merged["market_probability"],
         p_kalshi=kalshi_probability,
@@ -10770,6 +10782,8 @@ def run_analysis_pipeline(
     diagnostics["loaded_model_identity"] = loaded_model_identity
     from app_core.nfl_inference_evidence import finish as finish_nfl_evidence
     finish_nfl_evidence(analysis_df)
+    from app_core.nhl_puck_line_evidence import finish as finish_nhl_evidence
+    finish_nhl_evidence(analysis_df)
     return (analysis_df, best_picks_df, diagnostics)
 
 

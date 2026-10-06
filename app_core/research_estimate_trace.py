@@ -189,6 +189,15 @@ def origin_rejection(source):
     """V1 stays frozen; V2 proves orientation using independently named facts."""
     try:
         item = json.loads(source.get("ml_estimate_metadata", ""))
+        if isinstance(item, dict) and "nhl_inputs" in item:
+            from app_core.nhl_puck_line_evidence import diagnose as diagnose_nhl
+            assessment = diagnose_nhl(source, item)
+            if assessment["status"] != "COMPLETE":
+                from app_core.nhl_puck_line_evidence import PUBLIC_REASONS
+                return assessment["reason"] if assessment["reason"] in PUBLIC_REASONS else "ESTIMATE_PROVENANCE_NOT_RECORDED"
+            item = dict(item)
+            item.pop("nhl_inputs")
+            source = dict(source, ml_estimate_metadata=encode(item))
         if isinstance(item, dict) and "nfl_inputs" in item:
             from app_core.nfl_inference_evidence import diagnose as diagnose_nfl
             assessment = diagnose_nfl(source, item)
