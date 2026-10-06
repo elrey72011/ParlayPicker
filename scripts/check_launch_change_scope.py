@@ -7099,6 +7099,149 @@ _ncaaf_research_prior_mlb_nhl_research_guard = _mlb_nhl_research_previous_guard_
 def _mlb_nhl_research_previous_guard_source(source, binding=None):
     return _ncaaf_research_prior_mlb_nhl_research_guard(_ncaaf_research_previous_guard_source(source), binding)
 
+CANONICAL_DOWNLOAD_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-canonical-download-v1.json'
+CANONICAL_DOWNLOAD_POLICY_VERSION = 'owner-canonical-download-v1'
+CANONICAL_DOWNLOAD_APPROVAL_REFERENCE = ('Owner-authorized bounded authenticated canonical SQLite backup/download after verified owner merge of #2396. '
+ 'Preserve original record bytes, committed WAL, source immutability, private/public separation, frozen version 10, '
+ 'predecessor protections, scientific requirements and workflows. No analysis, restore, acquisition, fitting, source '
+ 'registration, activation, merge, deployment, publication or financial actions. Authentic packet inspection remains '
+ 'static; regression execution uses synthetic stores with network blocked.')
+CANONICAL_DOWNLOAD_PATHS = ('scripts/check_launch_change_scope.py',
+ 'scripts/canonical_download_scope.py',
+ 'tests/test_canonical_download_scope.py',
+ 'app_core/canonical_download.py',
+ 'app/ui/canonical_evidence_download.py',
+ 'app/ui/publish_panel.py',
+ 'tests/test_canonical_download.py',
+ 'docs/paid-launch/private-canonical-download.md')
+CANONICAL_DOWNLOAD_FROZEN_PATHS = ()
+CANONICAL_DOWNLOAD_BINDINGS = {'base': '9fd724acd492ccc4300393a50a577d146268e0d3',
+ 'base_tree': '0eab40b62b3445dac5e1c9747490c30b24dc5712',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'dd3fb274641d0c712909f893cededaf4abb6c91a43824d2ae80c35950e84a5e6',
+ 'previous_policy_blob': '04ba44c27790f1b12a0f78a042af0676406ab456',
+ 'reviewed_blobs': {'scripts/canonical_download_scope.py': '9366753bb073c972df7eac80465a3cfa88d8e919',
+                    'tests/test_canonical_download_scope.py': '3c799a94bfbc8dcf498b1e2001dd7f7783681c9a',
+                    'app_core/canonical_download.py': '645994511af864c4a5aded4e0399a486de43c3e5',
+                    'app/ui/canonical_evidence_download.py': '42587227d27b8071f69a5299c88f68b1f58921ba',
+                    'app/ui/publish_panel.py': '7ad6f78ba494abd0b213a427ed9009f4441345e8',
+                    'tests/test_canonical_download.py': '29b472eddd996b31e0d285ec67dc2857aaff2dc2',
+                    'docs/paid-launch/private-canonical-download.md': '18fa6bd22fc8510230ba3b7240083eac43b17392'},
+ 'scope_module_sha256': '8850412e9215a9177773aeb3fdd5c79b59856ca70766a25cae9613114427b1b7',
+ 'successor_guard_sha256': 'eb9c79107ffbe2e387d93779ebf19afcb784139b677e87762cc514dd8661c7bd'}
+CANONICAL_DOWNLOAD_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, defa'
+ b'ult=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    '
+ b'args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):\n            code, '
+ b'report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_BINDINGS)\n        elif exists_a'
+ b't("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n            code, report = _run_mlb_nhl_research_integrated(args.manife'
+ b'st, args.base, MLB_NHL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n        '
+ b'    code, report = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n       '
+ b' elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n            code, report = _run_nhl_puck_line_integrated(arg'
+ b's.manifest, args.base, NHL_PUCK_LINE_BINDINGS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n    '
+ b'        code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n     '
+ b'   elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_intake_integrated(a'
+ b'rgs.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n           '
+ b' code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD",'
+ b' PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_B'
+ b'OARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_nativ'
+ b'e_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_'
+ b'PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS'
+ b')\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated('
+ b'args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n    '
+ b'        code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n     '
+ b'   elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.mani'
+ b'fest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report'
+ b' = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH)'
+ b':\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at('
+ b'"HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, EST'
+ b'IMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integra'
+ b'ted(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, '
+ b'report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POL'
+ b'ICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n    '
+ b'    elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manif'
+ b'est, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _r'
+ b'un_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _ru'
+ b'n_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"sche'
+ b'ma_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = '
+ b'2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.'
+ b'parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")'
+ b'\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n')
+CANONICAL_DOWNLOAD_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'sha256': '2a63f67cb3293e0fac4683e44732d007a1251fb2bef4db38cdba49ab6ccf8fa9',
+                             'edits': [(b'    from app.ui.source_evidence_panel import render as render_source_evidenc'
+                                        b'e\n',
+                                        b'    from app.ui.canonical_evidence_download import render as render_canonica'
+                                        b'l_download\n    render_canonical_download(setting)\n    from app.ui.source'
+                                        b'_evidence_panel import render as render_source_evidence\n')]}}
+
+def _canonical_download_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _canonical_download_previous_guard_source(source, binding=None):
+    binding = CANONICAL_DOWNLOAD_BINDINGS if binding is None else binding
+    if b"\nCANONICAL_DOWNLOAD_POLICY_PATH =" not in source:
+        return source
+    _require(_canonical_download_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nCANONICAL_DOWNLOAD_POLICY_PATH =", 1)[0] + CANONICAL_DOWNLOAD_PREVIOUS_CLI
+
+
+def _canonical_download_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _canonical_download_previous_guard_source(source)
+    frozen = CANONICAL_DOWNLOAD_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS, MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS, FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS, NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS, PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_canonical_download_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nCANONICAL_DOWNLOAD_POLICY_PATH =" in source:
+        if reviewed == CANONICAL_DOWNLOAD_BINDINGS["successor_guard_sha256"]:
+            return _canonical_download_raw_guard_matches(source, reviewed)
+        if not _canonical_download_raw_guard_matches(source, CANONICAL_DOWNLOAD_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nCANONICAL_DOWNLOAD_POLICY_PATH =", 1)[0] + CANONICAL_DOWNLOAD_PREVIOUS_CLI
+    return _canonical_download_prior_guard_matches(source, reviewed)
+
+
+_canonical_download_prior_ncaaf_research_main = _ncaaf_research_previous_main_source
+
+
+def _ncaaf_research_previous_main_source(path, source):
+    return _canonical_download_prior_ncaaf_research_main(path, _canonical_download_previous_main_source(path, source))
+
+
+def _run_canonical_download_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/canonical_download_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_canonical_download_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_canonical_download_prior_ncaaf_research_guard = _ncaaf_research_previous_guard_source
+
+
+def _ncaaf_research_previous_guard_source(source, binding=None):
+    return _canonical_download_prior_ncaaf_research_guard(_canonical_download_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -7106,7 +7249,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):
+        if exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):
+            code, report = _run_canonical_download_integrated(args.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)
+        elif exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):
             code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_BINDINGS)
         elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):
             code, report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)
