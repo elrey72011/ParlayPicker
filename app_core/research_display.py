@@ -15,7 +15,7 @@ IDENTITY_FIELDS = frozenset("""event_id candidate_id export_run_id sport market 
 rules model_target sportsbook odds quote_id quote_time analysis_time start""".split())
 REASONS = frozenset("""AVAILABLE ESTIMATE_NOT_RECORDED INVALID_PROBABILITY NONFINITE_PROBABILITY
 ESTIMATE_PROVENANCE_NOT_RECORDED ESTIMATE_IDENTITY_MISMATCH TARGET_MISMATCH MODEL_TARGET_NOT_RECORDED
-INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS SOURCE_CONTRACT_NOT_VERIFIED""".split())
+INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS SOURCE_CONTRACT_NOT_VERIFIED SOURCE_EVIDENCE_INCOMPLETE SOURCE_EVIDENCE_CONFLICT SOURCE_RIGHTS_NOT_VERIFIED SOURCE_ADMISSIBILITY_REVIEW_NOT_ACCEPTED""".split())
 VALUE_REASONS = frozenset("""RECORDED_PRICE_VALUE VALUE_NOT_RECORDED PRICE_VALUE_MISMATCH
 PUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_UNAVAILABLE SETTLEMENT_VALUE_UNSUPPORTED""".split())
 # Explicit public-research provenance only; never an arbitrary source-column copy.
@@ -566,6 +566,22 @@ def legacy_unrecorded_display(export):
 def from_export(row, *, source=None, source_field="win_probability"):
     result = _from_export(row, source=source, source_field=source_field)
     from app_core.source_contract import RULES, replay, UNVERIFIED_MARKETS
+    from app_core.source_evidence_intake import VERSION as intake_version
+    try:
+        origin = json.loads((source if source is not None else row).get("ml_estimate_metadata", ""))
+        producer = origin["producer_contract"]
+        bound = producer["source_contract"]
+        if bound.get("version") == intake_version:
+            diagnostics = sorted(set(bound.get("diagnostics", []) + replay(bound, producer["inference_time"])))
+            if bound.get("status") != "VERIFIED" or diagnostics:
+                conflict = bound.get("status") == "REJECTED" or any("CONFLICT" in d or "INTEGRITY" in d or "STALE" in d or "UNSUPPORTED" in d or "INVALID" in d for d in diagnostics)
+                reason = ("SOURCE_EVIDENCE_CONFLICT" if conflict else
+                          "SOURCE_RIGHTS_NOT_VERIFIED" if any(d.startswith(("SOURCE_MISSING_RIGHTS", "SOURCE_RIGHTS_")) for d in diagnostics) else
+                          "SOURCE_ADMISSIBILITY_REVIEW_NOT_ACCEPTED" if any("REVIEW" in d for d in diagnostics) else
+                          "SOURCE_EVIDENCE_INCOMPLETE")
+                return _empty(result["identity"], source_field, result["basis"], reason=reason)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        pass
     if result["availability_reason"] == "ESTIMATE_PROVENANCE_NOT_RECORDED":
         try:
             origin = json.loads((source if source is not None else row).get("ml_estimate_metadata", ""))

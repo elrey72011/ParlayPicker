@@ -84,7 +84,8 @@ def frame_from_payload(payload):
 def setup(db):
     db.execute("CREATE TABLE IF NOT EXISTS research_replay_sources (snapshot_id TEXT PRIMARY KEY REFERENCES snapshots(snapshot_id), export_run_id TEXT NOT NULL, snapshot_payload_hash TEXT NOT NULL, payload TEXT NOT NULL, payload_hash TEXT NOT NULL)")
     db.execute("CREATE TABLE IF NOT EXISTS research_replay_exports (export_id TEXT PRIMARY KEY, package_hash TEXT NOT NULL, payload TEXT NOT NULL)")
-    for table in ("research_replay_sources","research_replay_exports"):
+    db.execute("CREATE TABLE IF NOT EXISTS research_source_intakes (reference TEXT PRIMARY KEY, payload TEXT NOT NULL, payload_hash TEXT NOT NULL)")
+    for table in ("research_replay_sources","research_replay_exports","research_source_intakes"):
         for action in ("UPDATE","DELETE"):
             db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_{table}_{action} BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT, 'research replay is append-only'); END")
 
