@@ -6966,6 +6966,139 @@ _mlb_nhl_research_prior_football_catalog_guard = _football_catalog_previous_guar
 def _football_catalog_previous_guard_source(source, binding=None):
     return _mlb_nhl_research_prior_football_catalog_guard(_mlb_nhl_research_previous_guard_source(source), binding)
 
+NCAAF_RESEARCH_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ncaaf-research-v1.json'
+NCAAF_RESEARCH_POLICY_VERSION = 'ncaaf-private-research-v1'
+NCAAF_RESEARCH_APPROVAL_REFERENCE = ('Owner-authorized bounded private NCAAF selected-side spread/full-game total target contract and synthetic actual '
+ 'prospective capture/export/replay harness after verified merged MLB/NHL work. Preserve owner work, original packets, '
+ 'frozen version 10, scientific requirements, predecessor protections and workflows. No merge, deployment, analysis '
+ 'run, restore, acquisition, fitting, source registration, activation or financial actions; authentic packet '
+ 'inspection remains static.')
+NCAAF_RESEARCH_PATHS = ('scripts/check_launch_change_scope.py',
+ 'scripts/ncaaf_research_scope.py',
+ 'tests/test_ncaaf_research_scope.py',
+ 'app_core/ncaaf_research_contract.py',
+ 'tests/test_ncaaf_research_contract.py',
+ 'docs/paid-launch/ncaaf-private-target-replay.md')
+NCAAF_RESEARCH_FROZEN_PATHS = ()
+NCAAF_RESEARCH_BINDINGS = {'base': 'b355fb257f58b0e4f7428510799a027c8c1cb4c9',
+ 'base_tree': '2e045325e78407cb4d657564fd5a97bfcf0a1721',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '3f73908e181ca2b40b4f39e4b0fa1514a3200c6f757130f053709935995c05f1',
+ 'previous_policy_blob': '83280113216d29e6d315baac5e2272b8aa9af666',
+ 'reviewed_blobs': {'scripts/ncaaf_research_scope.py': '9a7868510cd23e1da714facd184ef5bc100a8f08',
+                    'tests/test_ncaaf_research_scope.py': '4727872f579c211d456d2a07a17915ddc5bb21dd',
+                    'app_core/ncaaf_research_contract.py': 'b3b26dfec546014aaf00fcff138224ff42af719d',
+                    'tests/test_ncaaf_research_contract.py': 'd20e56c4b22ee2522596a711eea7b14fc72066d9',
+                    'docs/paid-launch/ncaaf-private-target-replay.md': 'd5f9ee18e58cda81b21b12529a8f386e455b0904'},
+ 'scope_module_sha256': '3d56db3c3714a02d0c1a04087c0faffa9914250606e75a79a71e32ab824f4186',
+ 'successor_guard_sha256': '622bb1e656510b869f00714e3e2ba3583dd75bb940ece9051198e11921858771'}
+NCAAF_RESEARCH_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, defa'
+ b'ult=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    '
+ b'args = parser.parse_args()\n    try:\n        if exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n            code'
+ b', report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)\n        elif ex'
+ b'ists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, report = _run_football_catalog_integrated(args.'
+ b'manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n     '
+ b'       code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)\n        el'
+ b'if exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code, report = _run_nfl_calibration_integrated(ar'
+ b'gs.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n   '
+ b'         code, report = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        '
+ b'elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, arg'
+ b's.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run'
+ b'_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_'
+ b'POLICY_PATH):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDING'
+ b'S)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_inte'
+ b'grated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):'
+ b'\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        el'
+ b'if exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(ar'
+ b'gs.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n      '
+ b'      code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists'
+ b'_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BI'
+ b'NDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.man'
+ b'ifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report ='
+ b' _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLI'
+ b'CY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        eli'
+ b'f exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DF'
+ b'S_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integ'
+ b'rated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n       '
+ b'     code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at'
+ b'("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER'
+ b'_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDING'
+ b'S)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUAR'
+ b'D_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=T'
+ b'rue)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.js'
+ b'on_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ =='
+ b' "__main__":\n    raise SystemExit(main())\n')
+NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {}
+
+def _ncaaf_research_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _ncaaf_research_previous_guard_source(source, binding=None):
+    binding = NCAAF_RESEARCH_BINDINGS if binding is None else binding
+    if b"\nNCAAF_RESEARCH_POLICY_PATH =" not in source:
+        return source
+    _require(_ncaaf_research_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNCAAF_RESEARCH_POLICY_PATH =", 1)[0] + NCAAF_RESEARCH_PREVIOUS_CLI
+
+
+def _ncaaf_research_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _ncaaf_research_previous_guard_source(source)
+    frozen = NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS, FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS, NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS, PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_ncaaf_research_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nNCAAF_RESEARCH_POLICY_PATH =" in source:
+        if reviewed == NCAAF_RESEARCH_BINDINGS["successor_guard_sha256"]:
+            return _ncaaf_research_raw_guard_matches(source, reviewed)
+        if not _ncaaf_research_raw_guard_matches(source, NCAAF_RESEARCH_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nNCAAF_RESEARCH_POLICY_PATH =", 1)[0] + NCAAF_RESEARCH_PREVIOUS_CLI
+    return _ncaaf_research_prior_guard_matches(source, reviewed)
+
+
+_ncaaf_research_prior_mlb_nhl_research_main = _mlb_nhl_research_previous_main_source
+
+
+def _mlb_nhl_research_previous_main_source(path, source):
+    return _ncaaf_research_prior_mlb_nhl_research_main(path, _ncaaf_research_previous_main_source(path, source))
+
+
+def _run_ncaaf_research_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/ncaaf_research_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_ncaaf_research_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_ncaaf_research_prior_mlb_nhl_research_guard = _mlb_nhl_research_previous_guard_source
+
+
+def _mlb_nhl_research_previous_guard_source(source, binding=None):
+    return _ncaaf_research_prior_mlb_nhl_research_guard(_ncaaf_research_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -6973,7 +7106,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):
+        if exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):
+            code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_BINDINGS)
+        elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):
             code, report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)
         elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):
             code, report = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)
