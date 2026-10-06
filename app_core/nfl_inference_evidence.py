@@ -371,9 +371,10 @@ def diagnose(source, item=None):
                         errors.append("features.dependency_observation_window:" + k)
         if p["blend"] is None or p["blend"]["probability"] is None:unknown.append("blend.original_output")
         else:
-            if p["blend"]["probability"]!=fact(source.get("calibrated_probability")) or p["blend"]["estimated_ev"]!=fact(source.get("expected_value")):errors.append("blend.original_output_conflict")
+            probability, estimated_ev = _ui_reblend_binding(source, item, errors, unknown)
+            if probability!=fact(source.get("calibrated_probability")) or estimated_ev!=fact(source.get("expected_value")):errors.append("blend.original_output_conflict")
             if p["blend"]["probability_semantics"]!="market_context_research_blend_not_scoped_calibration" or p["blend"]["ev_semantics"]!="recorded_binary_price_estimate_not_certified_operator_payoff":errors.append("blend.semantics")
-    except (ValueError,TypeError,KeyError,IndexError,AttributeError,OverflowError):errors.append("packet.schema")
+    except (ValueError,TypeError,KeyError,IndexError,AttributeError,OverflowError,OSError):errors.append("packet.schema")
     return dict(status="REJECTED" if errors else "INCOMPLETE" if unknown else "COMPLETE",errors=sorted(set(errors)),unknown=sorted(set(unknown)))
 
 
@@ -399,5 +400,152 @@ def replay(source):
     blend = compute_blended_probability(**{k:pd.Series([v.get("value")],dtype="float64") for k,v in p["blend"]["inputs"].items()},
         league=pd.Series(["NFL"]),market_type=pd.Series([row["market_type"]])).iloc[0]
     if fact(blend)!=p["blend"]["probability"]:raise ValueError("Replay blended probability mismatch")
-    return dict(raw_probability=result.ml_probability, blended_probability=blend,
-        estimated_ev=p["blend"]["estimated_ev"].get("value"), scientific_acceptance=False,wagering_authority=False)
+    latest = item.get("nfl_ui_reblends", [])
+    output = latest[-1]["payload"] if latest else p["blend"]
+    return dict(raw_probability=result.ml_probability, blended_probability=output["probability"].get("value"),
+        estimated_ev=output["estimated_ev"].get("value"), scientific_acceptance=False,wagering_authority=False)
+
+
+UI_REBLEND_VERSION = "nfl-ui-reblend-v1"
+UI_REBLEND_FIELDS = ("p_market", "p_kalshi", "p_ml", "p_theover", "p_sentiment")
+
+
+def ui_reblend_time():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _ui_artifact():
+    raw = (ROOT / "streamlit_app.py").read_bytes().replace(b"\r\n", b"\n")
+    return dict(sha256=hashlib.sha256(raw).hexdigest(), bytes_base64=base64.b64encode(raw).decode())
+
+
+def retain_ui_reblend(before, after, inputs):
+    """Append actual UI blend inputs/outputs; retain the original inference packet."""
+    artifact = None
+    for index, row in after.iterrows():
+        try:
+            item = json.loads(row.get("ml_estimate_metadata", ""))
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(item,dict) or "nfl_inputs" not in item:
+            continue
+        stages = item.get("nfl_ui_reblends", [])
+        if not isinstance(stages,list):
+            continue  # Preserve an invalid original carrier; never repair it.
+        try:
+            original = before.loc[index]
+            prior_item = json.loads(original["ml_estimate_metadata"])
+            packet = item["nfl_inputs"]
+            if prior_item != item:
+                raise ValueError("original_metadata_changed")
+            if artifact is None:
+                artifact = _ui_artifact()
+            previous = stages[-1]["sha256"] if stages else packet["sha256"]
+            payload = dict(version=UI_REBLEND_VERSION, previous_sha256=previous,
+                original_packet_sha256=packet["sha256"], event_offer=packet["payload"]["event_offer"],
+                generated_at=ui_reblend_time(), consumed=consumed_blend(), artifact=artifact,
+                inputs={k:fact(inputs[k].loc[index]) for k in UI_REBLEND_FIELDS},
+                input_probability=fact(original.get("calibrated_probability")),
+                input_ev=fact(original.get("expected_value")),
+                probability=fact(row.get("calibrated_probability")),
+                estimated_ev=fact(row.get("expected_value")),
+                probability_semantics="market_context_research_blend_not_scoped_calibration",
+                ev_semantics="recorded_binary_price_estimate_not_certified_operator_payoff",
+                scientific_acceptance=False, wagering_authority=False)
+        except (OSError, ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
+            payload = dict(version=UI_REBLEND_VERSION, capture_status="FAILED",
+                           capture_errors=["ui_reblend.capture:"+type(exc).__name__])
+        stages.append(dict(payload=payload, sha256=digest(payload)))
+        item["nfl_ui_reblends"] = stages
+        after.at[index,"ml_estimate_metadata"] = encode(item)
+    return after
+
+
+def _ui_reblend_binding(source, item, errors, unknown):
+    """Validate every recorded transition; hashes do not establish applicability."""
+    packet = item["nfl_inputs"]
+    p = packet["payload"]
+    previous = packet["sha256"]
+    probability, ev = p["blend"]["probability"], p["blend"]["estimated_ev"]
+    last_time = clock(p["inference_time"])
+    stages = item.get("nfl_ui_reblends", [])
+    if not isinstance(stages,list) or ("nfl_ui_reblends" in item and not stages):
+        errors.append("ui_reblend.schema")
+        return probability, ev
+    for index, retained in enumerate(stages):
+        prefix = "ui_reblend." + str(index) + "."
+        q = retained["payload"]
+        if q.get("capture_status") == "FAILED":
+            errors.append(prefix+"capture_failed")
+            continue
+        if set(retained) != {"payload","sha256"} or digest(q) != retained["sha256"]:
+            errors.append(prefix+"integrity")
+        expected_fields = {"version","previous_sha256","original_packet_sha256","event_offer",
+            "generated_at","consumed","artifact","inputs","input_probability","input_ev",
+            "probability","estimated_ev","probability_semantics","ev_semantics",
+            "scientific_acceptance","wagering_authority"}
+        missing = expected_fields-set(q)
+        if missing:
+            unknown.extend(prefix+"missing:"+k for k in sorted(missing))
+            probability, ev = q.get("probability",probability), q.get("estimated_ev",ev)
+            previous = retained["sha256"]
+            last_time = None
+            continue
+        if set(q)-expected_fields or q["version"] != UI_REBLEND_VERSION:
+            errors.append(prefix+"contract")
+        if q["previous_sha256"] != previous or q["original_packet_sha256"] != packet["sha256"]:
+            errors.append(prefix+"original_binding")
+        if q["event_offer"] != p["event_offer"]:
+            errors.append(prefix+"event_offer")
+        if q["input_probability"] != probability or q["input_ev"] != ev:
+            errors.append(prefix+"previous_output")
+        raw = base64.b64decode(q["artifact"]["bytes_base64"],validate=True)
+        if hashlib.sha256(raw).hexdigest() != q["artifact"]["sha256"]:
+            errors.append(prefix+"artifact_integrity")
+        if q["artifact"] != _ui_artifact() or q["consumed"] != consumed_blend():
+            errors.append(prefix+"consumed_code_configuration")
+        if set(q["inputs"]) != set(UI_REBLEND_FIELDS):
+            errors.append(prefix+"inputs")
+        for key, value in q["inputs"].items():
+            if value.get("state")=="VALUE":
+                v=value.get("value")
+                valid=isinstance(v,(int,float)) and not isinstance(v,bool) and np.isfinite(v) and value==fact(v)
+            else:
+                valid=value in ({"state":"MISSING"},{"state":"INVALID"})
+            if not valid:errors.append(prefix+"input_fact:"+key)
+        if q["inputs"]["p_ml"] != p["raw_probability"]:
+            errors.append(prefix+"raw_predictor")
+        if q["inputs"]["p_market"] != p["blend"]["inputs"]["p_market"]:
+            unknown.append(prefix+"changed_market_source_not_bound")
+        for key in ("p_kalshi", "p_theover", "p_sentiment"):
+            v=q["inputs"][key]
+            if v.get("state")=="VALUE" and (key!="p_sentiment" or v.get("value")!=.5):
+                # Numeric external inputs alone do not establish their upstream evidence.
+                unknown.append(prefix+"external_source:"+key)
+        if (q["probability_semantics"] != "market_context_research_blend_not_scoped_calibration"
+            or q["ev_semantics"] != "recorded_binary_price_estimate_not_certified_operator_payoff"
+            or q["scientific_acceptance"] is not False or q["wagering_authority"] is not False):
+            errors.append(prefix+"semantics_authority")
+        at = clock(q["generated_at"])
+        start = clock((p["event_offer"] or {}).get("event",{}).get("start"))
+        if q["generated_at"] in (None,"") or last_time is None or start is None:
+            unknown.append(prefix+"clock")
+        elif at is None or not last_time<=at<start:
+            errors.append(prefix+"clock")
+        last_time = at
+        # Deterministically check the recorded NFL refresh, without executing saved bytes.
+        from core.streamlit_pipeline import compute_blended_probability, american_to_decimal
+        mt = (p["event_offer"] or {}).get("offer",{}).get("market")
+        if mt not in {"spread_home", "spread_away"}:
+            errors.append(prefix+"target")
+        inputs={k:pd.Series([v.get("value")],dtype="float64") for k,v in q["inputs"].items()}
+        blend = compute_blended_probability(**inputs,league=pd.Series(["NFL"]),market_type=pd.Series([mt])).iloc[0]
+        price=(p["event_offer"] or {}).get("offer",{}).get("price")
+        decimal=american_to_decimal(price)
+        binary_ev=blend*(decimal-1)-(1-blend)
+        if fact(blend)!=q["probability"] or fact(binary_ev)!=q["estimated_ev"]:
+            errors.append(prefix+"recorded_output")
+        previous = retained["sha256"]
+        probability, ev = q["probability"], q["estimated_ev"]
+    return probability, ev
