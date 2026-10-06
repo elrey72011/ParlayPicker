@@ -6208,6 +6208,132 @@ _source_intake_prior_nfl_ui_guard = _nfl_ui_previous_guard_source
 def _nfl_ui_previous_guard_source(source, binding=None):
     return _source_intake_prior_nfl_ui_guard(_source_intake_previous_guard_source(source), binding)
 
+NFL_CALIBRATION_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-calibration-v1.json'
+NFL_CALIBRATION_POLICY_VERSION = 'nfl-calibration-v1'
+NFL_CALIBRATION_APPROVAL_REFERENCE = ('Owner-authorized bounded offline implementation and draft PR; no acquisition, real fitting, source registration, '
+ 'activation, wagering, deployment or merge. Preserve scientific and predecessor requirements.')
+NFL_CALIBRATION_PATHS = ('scripts/check_launch_change_scope.py',
+ 'scripts/nfl_calibration_scope.py',
+ 'tests/test_nfl_calibration_scope.py',
+ 'app_core/nfl_calibration_evidence.py',
+ 'scripts/prepare_nfl_calibration_evidence.py',
+ 'tests/test_nfl_calibration_evidence.py',
+ 'docs/paid-launch/nfl-calibration-evidence.md')
+NFL_CALIBRATION_FROZEN_PATHS = ()
+NFL_CALIBRATION_BINDINGS = {'base': '963eeb91c05b4ba2bd873dd200dc158babc21239',
+ 'base_tree': 'f7cc7be25f7d5a1c09a384faa38fc800d06c2bef',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'aace9c5ae01a8f83ecbcb1c9948e5ccf71d1dc4f444e871b448dffe2544eb4e1',
+ 'previous_policy_blob': '65b2a41188ee77827ac60eefa59e3a4e240ee3fe',
+ 'reviewed_blobs': {'scripts/nfl_calibration_scope.py': '3df90eaa611197be6c639e3138de0094b6292bd9',
+                    'tests/test_nfl_calibration_scope.py': 'deb643afaa56776bc27b2d06cdb2f65cb20c490f',
+                    'app_core/nfl_calibration_evidence.py': 'c3a5e4cfb0d01cbf5bf20d76d35bf96a1baf5eb1',
+                    'scripts/prepare_nfl_calibration_evidence.py': '7458e95fce363ef84634f6b2bbd6a7fb705a608b',
+                    'tests/test_nfl_calibration_evidence.py': '8fd1fbdf9958c13b0a6eb63f77079ef98c4849cd',
+                    'docs/paid-launch/nfl-calibration-evidence.md': '27c5e04da20096b7e859fae2f34a23cf65e42cb2'},
+ 'scope_module_sha256': 'ce6079153795d083db044d9b626a5d5e4e551493d95817267833779124ef7f0c',
+ 'successor_guard_sha256': '58e2a57fd47c09fc8ded3ebdbd245e1e7b06acba3d64f05ecab8cea7f8c1bfd9'}
+NFL_CALIBRATION_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, defa'
+ b'ult=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    '
+ b'args = parser.parse_args()\n    try:\n        if exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, r'
+ b'eport = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("'
+ b'HEAD", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_B'
+ b'INDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_inte'
+ b'grated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n  '
+ b'          code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif '
+ b'exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.mani'
+ b'fest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            cod'
+ b'e, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HE'
+ b'AD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, arg'
+ b's.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, repo'
+ b'rt = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME'
+ b'_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        '
+ b'elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base'
+ b', NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_i'
+ b'ntegrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n      '
+ b'      code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEA'
+ b'D", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n    '
+ b'    elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manif'
+ b'est, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, repor'
+ b't = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLI'
+ b'CY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n     '
+ b'   else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Ex'
+ b'ception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERRO'
+ b'R"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args'
+ b'.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_'
+ b'text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n   '
+ b' raise SystemExit(main())\n')
+NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS = {}
+
+def _nfl_calibration_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _nfl_calibration_previous_guard_source(source, binding=None):
+    binding = NFL_CALIBRATION_BINDINGS if binding is None else binding
+    if b"\nNFL_CALIBRATION_POLICY_PATH =" not in source:
+        return source
+    _require(_nfl_calibration_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNFL_CALIBRATION_POLICY_PATH =", 1)[0] + NFL_CALIBRATION_PREVIOUS_CLI
+
+
+def _nfl_calibration_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _nfl_calibration_previous_guard_source(source)
+    frozen = NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS, PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_nfl_calibration_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nNFL_CALIBRATION_POLICY_PATH =" in source:
+        if reviewed == NFL_CALIBRATION_BINDINGS["successor_guard_sha256"]:
+            return _nfl_calibration_raw_guard_matches(source, reviewed)
+        if not _nfl_calibration_raw_guard_matches(source, NFL_CALIBRATION_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nNFL_CALIBRATION_POLICY_PATH =", 1)[0] + NFL_CALIBRATION_PREVIOUS_CLI
+    return _nfl_calibration_prior_guard_matches(source, reviewed)
+
+
+_nfl_calibration_prior_source_intake_main = _source_intake_previous_main_source
+
+
+def _source_intake_previous_main_source(path, source):
+    return _nfl_calibration_prior_source_intake_main(path, _nfl_calibration_previous_main_source(path, source))
+
+
+def _run_nfl_calibration_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/nfl_calibration_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_nfl_calibration_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_nfl_calibration_prior_source_intake_guard = _source_intake_previous_guard_source
+
+
+def _source_intake_previous_guard_source(source, binding=None):
+    return _nfl_calibration_prior_source_intake_guard(_nfl_calibration_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -6215,7 +6341,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):
+        if exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):
+            code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)
+        elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):
             code, report = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)
         elif exists_at("HEAD", NFL_UI_POLICY_PATH):
             code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)
