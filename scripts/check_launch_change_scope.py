@@ -6334,6 +6334,322 @@ _nfl_calibration_prior_source_intake_guard = _source_intake_previous_guard_sourc
 def _source_intake_previous_guard_source(source, binding=None):
     return _nfl_calibration_prior_source_intake_guard(_nfl_calibration_previous_guard_source(source), binding)
 
+NHL_PUCK_LINE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nhl-puck-line-v1.json'
+NHL_PUCK_LINE_POLICY_VERSION = 'nhl-puck-line-v1'
+NHL_PUCK_LINE_APPROVAL_REFERENCE = ('Owner-authorized bounded offline NHL implementation and draft PR, reconciled against actual merged NFL calibration '
+ 'main; no acquisition, real fitting, source registration, activation, wagering, deployment or merge. Preserve '
+ 'scientific, original baseline and all predecessor requirements.')
+NHL_PUCK_LINE_PATHS = ('scripts/check_launch_change_scope.py',
+ 'scripts/nhl_puck_line_scope.py',
+ 'tests/test_nhl_puck_line_scope.py',
+ 'app_core/nhl_puck_line_evidence.py',
+ 'app_core/market_probability_model.py',
+ 'core/streamlit_pipeline.py',
+ 'app_core/research_estimate_trace.py',
+ 'app_core/research_display.py',
+ 'publishing/board.html',
+ 'tests/test_nhl_puck_line_evidence.py',
+ 'docs/paid-launch/nhl-puck-line-evidence.md')
+NHL_PUCK_LINE_FROZEN_PATHS = ()
+NHL_PUCK_LINE_BINDINGS = {'base': 'd2b8db24a5d92cb6023151112921eb00d61b131f',
+ 'base_tree': '21860121333b5f55de8cdff5bdbc792b5c674d95',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '4af5c26449b87feaa2294dbac0477bb81629f8af29720ad382eedd9a69867376',
+ 'previous_policy_blob': '012e56596647b56110bc4d396697364f9b642eb8',
+ 'reviewed_blobs': {'scripts/nhl_puck_line_scope.py': 'e6affd5136a14d01b1924009bf7fca7935c710f6',
+                    'tests/test_nhl_puck_line_scope.py': '04aea2838c24ae369eaf1041dfafd1b9a4038b72',
+                    'app_core/nhl_puck_line_evidence.py': 'ad77b5c5f0fc61e9174c246513918cc7526a9598',
+                    'app_core/market_probability_model.py': 'd6affc997c3a10d1603ffe267cc566fedf6a8c4d',
+                    'core/streamlit_pipeline.py': '4b5651f9b2b250820316870e83d84c59ef957fe2',
+                    'app_core/research_estimate_trace.py': '3b488aff9795bfc1e63fe541b5bf68e8b92786cb',
+                    'app_core/research_display.py': '67034e54d6ac7eb4d68c74f83e225080678bdbf4',
+                    'publishing/board.html': 'a0c6e4ada4dbf688d447c5f906444bb0fc399629',
+                    'tests/test_nhl_puck_line_evidence.py': '81271dca2d250c6a0a49763a2563406653690068',
+                    'docs/paid-launch/nhl-puck-line-evidence.md': '562c20a7ae58a3b0170bb5d190ed6975bae8b6ca'},
+ 'scope_module_sha256': '40b7ac6cff277231d18c7a25ea2ab3892cb9f6fa2fc2424347ec82c720efa212',
+ 'successor_guard_sha256': '6a52eddf7ddaa5bbc446ab8e5a9e69158876e152d6abe22afc278b59e097eb3f'}
+NHL_PUCK_LINE_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, defa'
+ b'ult=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    '
+ b'args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code,'
+ b' report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif exist'
+ b's_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_intake_integrated(args.manifest,'
+ b' args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code, report'
+ b' = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_P'
+ b'OLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS'
+ b')\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integrated('
+ b'args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n      '
+ b'      code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        eli'
+ b'f exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest'
+ b', args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code,'
+ b' report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exist'
+ b's_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.ba'
+ b'se, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_'
+ b'integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n           '
+ b' code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIM'
+ b'ATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDING'
+ b'S)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.mani'
+ b'fest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run'
+ b'_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n  '
+ b'          code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exis'
+ b'ts_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.bas'
+ b'e, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_i'
+ b'ntegrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated('
+ b'args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": '
+ b'1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendere'
+ b'd = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir('
+ b'parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(re'
+ b'ndered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n')
+NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/market_probability_model.py': {'sha256': '102742a3d8b581cd70f4c01eff9055bf1a47f1685186f2da0b3b988276133fea',
+                                          'edits': [(b'\n',
+                                                     b'\n    from app_core.nhl_puck_line_evidence import selection_r'
+                                                     b'equested\n    nhl_research_selected = selection_requested()\n'),
+                                                    (b'        mt = str(market_type.loc[idx])\n',
+                                                     b'        mt = str(market_type.loc[idx])\n        if lg == "NHL'
+                                                     b'" and nhl_research_selected:\n            from app_core.nhl_p'
+                                                     b'uck_line_evidence import predict\n            for field, valu'
+                                                     b'e in predict(frame.loc[idx]).items():\n                if fie'
+                                                     b'ld not in result:\n                    result[field] = pd.Ser'
+                                                     b'ies(pd.NA, index=result.index, dtype=object)\n               '
+                                                     b' result.at[idx, field] = value\n            continue\n'),
+                                                    (b'    for idx in frame.index:\n',
+                                                     b'    for idx in frame.index:\n        if str(league.loc[idx]) '
+                                                     b'== "NHL" and nhl_research_selected:\n            continue  # '
+                                                     b'Original NHL clocks and private artifact packet were captured ab'
+                                                     b'ove.\n')]},
+ 'core/streamlit_pipeline.py': {'sha256': '0c44ecb9e83c1bfd2029ed83cfe791deed6cbfc7a287ef8d25e1a2d5d3303305',
+                                'edits': [(b'    final_best_df = best[BEST_PICK_COLUMNS + evidence_columns + identity'
+                                           b'_columns].copy()\n',
+                                           b'    final_best_df = best[BEST_PICK_COLUMNS + evidence_columns + identity'
+                                           b'_columns].copy()\n    # Preserve supplied NHL event aliases through the r'
+                                           b'eporting projection.\n    # Missing identities remain missing; no other s'
+                                           b'port\'s transport is changed.\n    nhl_identity = _string_series(best, "le'
+                                           b'ague").str.upper().eq("NHL")\n    if nhl_identity.any():\n        for fiel'
+                                           b'd in ("provider_event_id", "provider_namespace"):\n            if field i'
+                                           b'n best:\n                if field not in final_best_df:\n                 '
+                                           b'   final_best_df[field] = pd.Series(pd.NA, index=best.index, dtype=objec'
+                                           b't)\n                final_best_df.loc[nhl_identity, field] = best.loc[nhl'
+                                           b'_identity, field]\n'),
+                                          (b'                           if raw_sport_key == "americanfootball_nfl" el'
+                                           b'se {}),\n',
+                                           b'                           if raw_sport_key in {"americanfootball_nfl", '
+                                           b'"icehockey_nhl"} else {}),\n'),
+                                          (b'        p_ml=model_probability, p_theover=theover_blend_input, p_sentime'
+                                           b'nt=sentiment_prob))\n',
+                                           b'        p_ml=model_probability, p_theover=theover_blend_input, p_sentime'
+                                           b'nt=sentiment_prob))\n    from app_core.nhl_puck_line_evidence import blen'
+                                           b'd_inputs as retain_nhl_blend_inputs\n    retain_nhl_blend_inputs(merged, '
+                                           b'dict(p_market=merged["market_probability"], p_kalshi=kalshi_probability,'
+                                           b'\n        p_ml=model_probability, p_theover=theover_blend_input, p_sentim'
+                                           b'ent=sentiment_prob))\n'),
+                                          (b'    finish_nfl_evidence(analysis_df)\n',
+                                           b'    finish_nfl_evidence(analysis_df)\n    from app_core.nhl_puck_line_evi'
+                                           b'dence import finish as finish_nhl_evidence\n    finish_nhl_evidence(analy'
+                                           b'sis_df)\n')]},
+ 'app_core/research_estimate_trace.py': {'sha256': '8ee8726aa85740b9573e39740fb6a6f46ffcda33990fba177a6dba40cf04dd12',
+                                         'edits': [(b'        item = json.loads(source.get("ml_estimate_metadata", "")'
+                                                    b')\n',
+                                                    b'        item = json.loads(source.get("ml_estimate_metadata", "")'
+                                                    b')\n        if isinstance(item, dict) and "nhl_inputs" in item'
+                                                    b':\n            from app_core.nhl_puck_line_evidence import diagno'
+                                                    b'se as diagnose_nhl\n            assessment = diagnose_nhl(source,'
+                                                    b' item)\n            if assessment["status"] != "COMPLETE":\n  '
+                                                    b'              from app_core.nhl_puck_line_evidence import PUBLIC'
+                                                    b'_REASONS\n                return assessment["reason"] if assessme'
+                                                    b'nt["reason"] in PUBLIC_REASONS else "ESTIMATE_PROVENANCE_NOT_REC'
+                                                    b'ORDED"\n            item = dict(item)\n            item.pop("n'
+                                                    b'hl_inputs")\n            source = dict(source, ml_estimate_metada'
+                                                    b'ta=encode(item))\n')]},
+ 'app_core/research_display.py': {'sha256': '361fd3f6dcbeecc68950753eea98f0bd99dbc56ad88aa5bb142dae440fd3c511',
+                                  'edits': [(b'INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS'
+                                             b' SOURCE_CONTRACT_NOT_VERIFIED SOURCE_EVIDENCE_INCOMPLETE SOURCE_EVIDENCE'
+                                             b'_CONFLICT SOURCE_RIGHTS_NOT_VERIFIED SOURCE_ADMISSIBILITY_REVIEW_NOT_ACC'
+                                             b'EPTED""".split())\n',
+                                             b'INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS'
+                                             b' SOURCE_CONTRACT_NOT_VERIFIED SOURCE_EVIDENCE_INCOMPLETE SOURCE_EVIDENCE'
+                                             b'_CONFLICT SOURCE_RIGHTS_NOT_VERIFIED SOURCE_ADMISSIBILITY_REVIEW_NOT_ACC'
+                                             b'EPTED""".split())\nfrom app_core.nhl_puck_line_evidence import PUBLIC'
+                                             b'_REASONS as NHL_REASONS\nREASONS = REASONS | NHL_REASONS\n'),
+                                            (b'    result = _from_export(row, source=source, source_field=source_field)'
+                                             b'\n',
+                                             b'    result = _from_export(row, source=source, source_field=source_field)'
+                                             b'\n    try:\n        nhl_origin = json.loads((source if source is not N'
+                                             b'one else row).get("ml_estimate_metadata", ""))\n        if "nhl_input'
+                                             b's" in nhl_origin:\n            from app_core.nhl_puck_line_evidence i'
+                                             b'mport diagnose as diagnose_nhl\n            nhl_status = diagnose_nhl'
+                                             b'(source if source is not None else row, nhl_origin)\n            if n'
+                                             b'hl_status["status"] != "COMPLETE":\n                reason = nhl_stat'
+                                             b'us["reason"] if nhl_status["reason"] in NHL_REASONS else "ESTIMATE_PROVE'
+                                             b'NANCE_NOT_RECORDED"\n                return _empty(result["identity"]'
+                                             b',source_field,result["basis"],reason=reason)\n            if result["'
+                                             b'availability_reason"] == "AVAILABLE":\n                result.update('
+                                             b'ev=None,edge=None,break_even_probability=None,value_reason="SETTLEMENT_V'
+                                             b'ALUE_UNSUPPORTED")\n    except (ValueError,TypeError,KeyError,Attribu'
+                                             b'teError):\n        pass\n')]},
+ 'publishing/board.html': {'sha256': '094c39efebd930e20b2d057f70f3224d2e5afb99280737ae8731eab7670dfab9',
+                           'edits': [(b"function estimateLabel(r){if(cardEstimate(r).research)return 'Research estim"
+                                      b"ate';if(r.status==='TRIAL')return 'Controlled-trial estimate';if(r.status==="
+                                      b"'APPROVED'&&r.wager_contract)return 'Validated estimate';if((r.probability_b"
+                                      b"asis||'').startsWith('Market-implied'))return 'Market estimate';if(r.sport=="
+                                      b"='NFL'&&r.probability_basis)return 'Context estimate';return 'Model estimate"
+                                      b"';} function cardEstimate(r){const d=r.research_display;if(r.status==='PASS'"
+                                      b"&&d?.version==='research-display-v1'&&d.availability_reason==='AVAILABLE'&&t"
+                                      b"ypeof d.probability==='number'&&Number.isFinite(d.probability)&&d.probabilit"
+                                      b'y>=0&&d.probability<=1)return {probability:d.probability,ev:d.ev,edge:d.edge'
+                                      b",breakEven:d.break_even_probability,research:true};if(r.status==='PASS'&&d?."
+                                      b"version==='research-display-v1')return {probability:null,ev:null,edge:null,b"
+                                      b'reakEven:null,research:false};return {probability:r.win_estimate,ev:r.ev,edg'
+                                      b'e:r.estimated_price_edge??null,breakEven:r.break_even_probability??null,rese'
+                                      b"arch:false};} function estimateAvailability(r){if(r.status==='APPROVED'&&Num"
+                                      b"ber.isFinite(r.win_estimate))return 'Saved approved estimate available';if(r"
+                                      b".status==='TRIAL'&&Number.isFinite(r.win_estimate))return 'Saved controlled-"
+                                      b"trial estimate available';const d=r.research_display;if(!d)return Number.isF"
+                                      b"inite(r.win_estimate)?'Saved estimate available; provenance details not reco"
+                                      b"rded':'Estimate and provenance not recorded in this legacy package';if(d.ava"
+                                      b"ilability_reason==='INFERENCE_UNAVAILABLE'&&r.sport==='NHL'&&/^(spread_|tota"
+                                      b"l_)/.test(r.market||''))return 'No NHL spread/total model configured';if(['E"
+                                      b"STIMATE_PROVENANCE_NOT_RECORDED','SOURCE_CONTRACT_NOT_VERIFIED'].includes(d."
+                                      b'availability_reason)){const identity=d.identity||{},missing=[];for(const [fi'
+                                      b"eld,label] of [['period','Market period not verified'],['rules','Settlement "
+                                      b"rules not verified'],['quote_id','Quote identity not recorded'],['event_id',"
+                                      b"'Event identity not recorded'],['candidate_id','Candidate identity not recor"
+                                      b"ded'],['export_run_id','Originating run identity not recorded'],['quote_time"
+                                      b"','Original quote time not recorded'],['analysis_time','Original inference t"
+                                      b"ime not recorded'],['start','Event start time not recorded']]){if(identity[f"
+                                      b"ield]===null||identity[field]===undefined||identity[field]==='')missing.push"
+                                      b"(label);}if(missing.length)return missing.join('; ');}const reasons={AVAILAB"
+                                      b"LE:'Saved research estimate available',ESTIMATE_NOT_RECORDED:'Research proba"
+                                      b"bility not recorded',INVALID_PROBABILITY:'Invalid research probability',NONF"
+                                      b"INITE_PROBABILITY:'Nonfinite research probability',ESTIMATE_PROVENANCE_NOT_R"
+                                      b"ECORDED:'Exact estimate provenance not recorded',SOURCE_CONTRACT_NOT_VERIFIE"
+                                      b"D:'Market period and settlement-rule applicability not verified',SOURCE_EVID"
+                                      b"ENCE_INCOMPLETE:'Exact-offer source evidence incomplete',SOURCE_EVIDENCE_CON"
+                                      b"FLICT:'Exact-offer source evidence conflicts with this estimate',SOURCE_RIGH"
+                                      b"TS_NOT_VERIFIED:'Source-use rights not verified',SOURCE_ADMISSIBILITY_REVIEW"
+                                      b"_NOT_ACCEPTED:'Source-admissibility review not accepted',ESTIMATE_IDENTITY_M"
+                                      b"ISMATCH:'Estimate does not match this event, selection or quote',TARGET_MISM"
+                                      b"ATCH:'Model target does not match this selection',MODEL_TARGET_NOT_RECORDED:"
+                                      b"'Exact model target not recorded',INFERENCE_FAILED:'Saved inference failed',"
+                                      b"INFERENCE_UNAVAILABLE:'Saved inference unavailable',UNSUPPORTED_PROBABILITY_"
+                                      b"SEMANTICS:'Probability or push semantics unsupported'};return reasons[d.avai"
+                                      b"lability_reason]||'Estimate availability not recorded';}\n",
+                                      b"function estimateLabel(r){if(cardEstimate(r).research)return 'Research estim"
+                                      b"ate';if(r.status==='TRIAL')return 'Controlled-trial estimate';if(r.status==="
+                                      b"'APPROVED'&&r.wager_contract)return 'Validated estimate';if((r.probability_b"
+                                      b"asis||'').startsWith('Market-implied'))return 'Market estimate';if(r.sport=="
+                                      b"='NFL'&&r.probability_basis)return 'Context estimate';return 'Model estimate"
+                                      b"';} function cardEstimate(r){const d=r.research_display;if(r.status==='PASS'"
+                                      b"&&d?.version==='research-display-v1'&&d.availability_reason==='AVAILABLE'&&t"
+                                      b"ypeof d.probability==='number'&&Number.isFinite(d.probability)&&d.probabilit"
+                                      b'y>=0&&d.probability<=1)return {probability:d.probability,ev:d.ev,edge:d.edge'
+                                      b",breakEven:d.break_even_probability,research:true};if(r.status==='PASS'&&d?."
+                                      b"version==='research-display-v1')return {probability:null,ev:null,edge:null,b"
+                                      b'reakEven:null,research:false};return {probability:r.win_estimate,ev:r.ev,edg'
+                                      b'e:r.estimated_price_edge??null,breakEven:r.break_even_probability??null,rese'
+                                      b"arch:false};} function estimateAvailability(r){if(r.status==='APPROVED'&&Num"
+                                      b"ber.isFinite(r.win_estimate))return 'Saved approved estimate available';if(r"
+                                      b".status==='TRIAL'&&Number.isFinite(r.win_estimate))return 'Saved controlled-"
+                                      b"trial estimate available';const d=r.research_display;if(!d)return Number.isF"
+                                      b"inite(r.win_estimate)?'Saved estimate available; provenance details not reco"
+                                      b"rded':'Estimate and provenance not recorded in this legacy package';if(d.ava"
+                                      b"ilability_reason==='INFERENCE_UNAVAILABLE'&&r.sport==='NHL'&&/^(spread_|tota"
+                                      b"l_)/.test(r.market||''))return 'No NHL spread/total model configured';if(['E"
+                                      b"STIMATE_PROVENANCE_NOT_RECORDED','SOURCE_CONTRACT_NOT_VERIFIED'].includes(d."
+                                      b'availability_reason)){const identity=d.identity||{},missing=[];for(const [fi'
+                                      b"eld,label] of [['period','Market period not verified'],['rules','Settlement "
+                                      b"rules not verified'],['quote_id','Quote identity not recorded'],['event_id',"
+                                      b"'Event identity not recorded'],['candidate_id','Candidate identity not recor"
+                                      b"ded'],['export_run_id','Originating run identity not recorded'],['quote_time"
+                                      b"','Original quote time not recorded'],['analysis_time','Original inference t"
+                                      b"ime not recorded'],['start','Event start time not recorded']]){if(identity[f"
+                                      b"ield]===null||identity[field]===undefined||identity[field]==='')missing.push"
+                                      b"(label);}if(missing.length)return missing.join('; ');}const reasons={AVAILAB"
+                                      b"LE:'Saved research estimate available',ESTIMATE_NOT_RECORDED:'Research proba"
+                                      b"bility not recorded',INVALID_PROBABILITY:'Invalid research probability',NONF"
+                                      b"INITE_PROBABILITY:'Nonfinite research probability',ESTIMATE_PROVENANCE_NOT_R"
+                                      b"ECORDED:'Exact estimate provenance not recorded',SOURCE_CONTRACT_NOT_VERIFIE"
+                                      b"D:'Market period and settlement-rule applicability not verified',SOURCE_EVID"
+                                      b"ENCE_INCOMPLETE:'Exact-offer source evidence incomplete',SOURCE_EVIDENCE_CON"
+                                      b"FLICT:'Exact-offer source evidence conflicts with this estimate',SOURCE_RIGH"
+                                      b"TS_NOT_VERIFIED:'Source-use rights not verified',SOURCE_ADMISSIBILITY_REVIEW"
+                                      b"_NOT_ACCEPTED:'Source-admissibility review not accepted',ESTIMATE_IDENTITY_M"
+                                      b"ISMATCH:'Estimate does not match this event, selection or quote',TARGET_MISM"
+                                      b"ATCH:'Model target does not match this selection',MODEL_TARGET_NOT_RECORDED:"
+                                      b"'Exact model target not recorded',INFERENCE_FAILED:'Saved inference failed',"
+                                      b"INFERENCE_UNAVAILABLE:'Saved inference unavailable',UNSUPPORTED_PROBABILITY_"
+                                      b"SEMANTICS:'Probability or push semantics unsupported'};if(d.availability_rea"
+                                      b"son?.startsWith('NHL_'))return 'NHL research unavailable: '+d.availability_r"
+                                      b"eason.slice(4).toLowerCase().replaceAll('_',' ');return reasons[d.availabili"
+                                      b"ty_reason]||'Estimate availability not recorded';}\n")]}}
+
+def _nhl_puck_line_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _nhl_puck_line_previous_guard_source(source, binding=None):
+    binding = NHL_PUCK_LINE_BINDINGS if binding is None else binding
+    if b"\nNHL_PUCK_LINE_POLICY_PATH =" not in source:
+        return source
+    _require(_nhl_puck_line_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNHL_PUCK_LINE_POLICY_PATH =", 1)[0] + NHL_PUCK_LINE_PREVIOUS_CLI
+
+
+def _nhl_puck_line_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _nhl_puck_line_previous_guard_source(source)
+    frozen = NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS, PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_nhl_puck_line_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nNHL_PUCK_LINE_POLICY_PATH =" in source:
+        if reviewed == NHL_PUCK_LINE_BINDINGS["successor_guard_sha256"]:
+            return _nhl_puck_line_raw_guard_matches(source, reviewed)
+        if not _nhl_puck_line_raw_guard_matches(source, NHL_PUCK_LINE_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nNHL_PUCK_LINE_POLICY_PATH =", 1)[0] + NHL_PUCK_LINE_PREVIOUS_CLI
+    return _nhl_puck_line_prior_guard_matches(source, reviewed)
+
+
+_nhl_puck_line_prior_nfl_calibration_main = _nfl_calibration_previous_main_source
+
+
+def _nfl_calibration_previous_main_source(path, source):
+    return _nhl_puck_line_prior_nfl_calibration_main(path, _nhl_puck_line_previous_main_source(path, source))
+
+
+def _run_nhl_puck_line_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/nhl_puck_line_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_nhl_puck_line_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_nhl_puck_line_prior_nfl_calibration_guard = _nfl_calibration_previous_guard_source
+
+
+def _nfl_calibration_previous_guard_source(source, binding=None):
+    return _nhl_puck_line_prior_nfl_calibration_guard(_nhl_puck_line_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -6341,7 +6657,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):
+        if exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):
+            code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)
+        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):
             code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)
         elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):
             code, report = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)
