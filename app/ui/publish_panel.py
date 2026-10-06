@@ -60,6 +60,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
     if not hmac.compare_digest(supplied.encode(), token.encode()):
         st.info('Enter the publishing token to preview or publish.')
         return
+    from app.ui.canonical_evidence_download import render as render_canonical_download
+    render_canonical_download(setting)
     from app.ui.source_evidence_panel import render as render_source_evidence
     render_source_evidence()
     from app.ui.activation_panel import render as render_activation
