@@ -21,6 +21,30 @@ DOCUMENTS = {
 # id -> {sha256, receipt}. No ingestion, registration or acquisition code.
 ACCEPTED_LISTINGS = {}
 
+# Public templates prove document content, not exact listing applicability.
+# These negative assessments reuse the existing private retention carrier and
+# cannot accept a receipt, supply period/rules or authorize numeric value.
+UNVERIFIED_MARKETS = {
+    ("baseball_mlb", "spreads"): ("odds-api-novig-mlb-spread-unverified-v1",
+        "book_mlb_001", "fbc1d024c6aff0f63678eb5a3ab519bf9e1fdd6a70a6f81cd74dcf87a9a63ffe"),
+    ("americanfootball_nfl", "totals"): ("odds-api-novig-nfl-total-unverified-v1",
+        "book_nfl_003", "93b92ee90e07b50ce5fff0ea2f7520e9eaa6c6509bb1489e320556192dda769f"),
+}
+
+
+def unverified_assessment(scope, offer, reference):
+    version, document, sha = UNVERIFIED_MARKETS[scope]
+    documents = {k:v for k,v in DOCUMENTS.items() if k != "book_nfl_001"}
+    documents[document] = sha
+    errors = ["SOURCE_MARKET_LISTING_BINDING_NOT_VERIFIED"]
+    rejected = reference in ACCEPTED_LISTINGS if isinstance(reference, str) else False
+    if rejected or (offer.get("sport"), offer.get("market")) != scope:
+        errors.append("SOURCE_SCOPE_UNSUPPORTED")
+        rejected = True
+    return dict(version=version, reference=reference if isinstance(reference,str) else "",
+        documents=documents, status="REJECTED" if rejected else "UNKNOWN",
+        diagnostics=sorted(errors), receipt=None)
+
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
@@ -102,7 +126,13 @@ def verify(ref, offer, *, inference_time=None):
 
 
 def adapt(game, book, market, outcome):
-    """Only prospective explicitly identified NFL transports enter this adapter."""
+    """Retain prospective assessments; only the accepted NFL spread scope can verify."""
+    scope = (game.get("sport_key"), market.get("key"))
+    if scope in UNVERIFIED_MARKETS and str(book.get("key", "")).startswith("novig"):
+        offer = identity(game, book, market, outcome)
+        assessment = unverified_assessment(scope, offer,
+            outcome.get("source_contract_ref", market.get("source_contract_ref")))
+        return dict(source_contract=dict(assessment, identity=offer))
     requested = "source_contract_ref" in market or "source_contract_ref" in outcome
     eligible = (game.get("sport_key") == "americanfootball_nfl" and str(book.get("key", "")).startswith("novig")
                 and market.get("key") == "spreads")
@@ -121,7 +151,12 @@ def adapt(game, book, market, outcome):
 
 
 def replay(contract, inference_time):
-    expected = verify(contract.get("reference"), contract.get("identity", {}), inference_time=inference_time)
+    unverified = next((scope for scope, values in UNVERIFIED_MARKETS.items()
+                       if values[0] == contract.get("version")), None)
+    if unverified is not None:
+        expected = unverified_assessment(unverified, contract.get("identity", {}), contract.get("reference"))
+    else:
+        expected = verify(contract.get("reference"), contract.get("identity", {}), inference_time=inference_time)
     retained = {k:v for k,v in contract.items() if k != "identity"}
     if retained != expected:
         return sorted(set(["SOURCE_CAPTURE_BINDING_CONFLICT"] + expected["diagnostics"]))
