@@ -7396,6 +7396,160 @@ _remote_canonical_prior_canonical_download_guard = _canonical_download_previous_
 def _canonical_download_previous_guard_source(source, binding=None):
     return _remote_canonical_prior_canonical_download_guard(_remote_canonical_previous_guard_source(source), binding)
 
+REMOTE_CONTINUATION_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-remote-continuation-v1.json'
+REMOTE_CONTINUATION_POLICY_VERSION = 'owner-remote-canonical-table-continuation-v1'
+REMOTE_CONTINUATION_APPROVAL_REFERENCE = ('Owner-authorized bounded offline correction of remote canonical export retrieval starvation after verified #2398 '
+ 'merge and static inspection of the supplied capped archive. Add an owner-only canonical table selector and explicit '
+ 'verified-path continuation under unchanged hard limits, credential exclusion, original-byte/identity/hash '
+ 'verification and full-folder inventory. Scoped/range completion must not assert entire canonical-store completeness '
+ 'or establish missing remote dependencies. Preserve local SQLite exporter, original artifacts, frozen version 10, '
+ 'predecessor assertions, scientific requirements, workflows and wagering protections. No SQLite hydration, analysis, '
+ 'provider acquisition, remote mutation, historical probability execution, fitting, registration, activation, merge, '
+ 'deployment, publication, messaging or financial execution. Synthetic actual-path regressions run network blocked; '
+ 'NFL remains deferred.')
+REMOTE_CONTINUATION_PATHS = ('scripts/check_launch_change_scope.py',
+ 'scripts/remote_continuation_scope.py',
+ 'tests/test_remote_continuation_scope.py',
+ 'app_core/remote_canonical_download.py',
+ 'app/ui/remote_canonical_download.py',
+ 'tests/test_remote_canonical_continuation.py',
+ 'docs/paid-launch/private-remote-canonical-download.md')
+REMOTE_CONTINUATION_FROZEN_PATHS = ('app_core/evidence_drive.py',
+ 'app_core/prospective_remote.py',
+ 'app_core/canonical_schema.py',
+ 'app_core/canonical_remote_contract.py',
+ 'app/ui/publish_panel.py',
+ 'app_core/canonical_download.py',
+ 'app/ui/canonical_evidence_download.py',
+ 'tests/test_canonical_download.py',
+ 'tests/test_remote_canonical_download.py',
+ 'tests/test_remote_canonical_scope.py',
+ 'scripts/remote_canonical_scope.py')
+REMOTE_CONTINUATION_BINDINGS = {'base': 'cfb009d7a1d6e1de3c60fc5b91ca51529a8802a1',
+ 'base_tree': 'f8ef8fa781e347d097d474fdd2c5db8337760738',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'dba8be3348e559433b5cb0b6123cc2117e3813507f7698d7a5d2025dd2b443b9',
+ 'previous_policy_blob': 'd40f9acee5234cc264380948fb8e32a4564c4239',
+ 'reviewed_blobs': {'scripts/remote_continuation_scope.py': 'a0d7881520b194ac04405cb80c77dd9355b90e11',
+                    'tests/test_remote_continuation_scope.py': '1db8333a2fb0be591d3da789b7280dace4a12a37',
+                    'app_core/remote_canonical_download.py': '94ef30d4ee6a8a12453eb922241729191737f720',
+                    'app/ui/remote_canonical_download.py': 'a5e517217e5fa288db83b465eb428933e9d18379',
+                    'tests/test_remote_canonical_continuation.py': 'bbdf6df58511e23bc53e7b1cd4b5197bcda0c29b',
+                    'docs/paid-launch/private-remote-canonical-download.md': '09c7d2aaa6a1260b485ccb0e4f1ef35d707d0793'},
+ 'scope_module_sha256': '801d1e17d04b436078553d981ccbcc0750efeda1709206b1e179c3c9668fb4c1',
+ 'successor_guard_sha256': '21931fda95ec7f088344c82c39d408037aa81690b567d4657aa639bbc42aadcf'}
+REMOTE_CONTINUATION_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, defa'
+ b'ult=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    '
+ b'args = parser.parse_args()\n    try:\n        if exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):\n            code'
+ b', report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)\n        elif ex'
+ b'ists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):\n            code, report = _run_canonical_download_integrated(a'
+ b'rgs.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)\n        elif exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH)'
+ b':\n            code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_BINDINGS)\n '
+ b'       elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n            code, report = _run_mlb_nhl_research_in'
+ b'tegrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_CATALOG_PO'
+ b'LICY_PATH):\n            code, report = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATAL'
+ b'OG_BINDINGS)\n        elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n            code, report = _run_nhl_puck'
+ b'_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)\n        elif exists_at("HEAD", NFL_CALIBRATIO'
+ b'N_POLICY_PATH):\n            code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRA'
+ b'TION_BINDINGS)\n        elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source'
+ b'_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLIC'
+ b'Y_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        el'
+ b'if exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifes'
+ b't, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, rep'
+ b'ort = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", N'
+ b'FL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NF'
+ b'L_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nf'
+ b'l_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRAC'
+ b'T_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONT'
+ b'RACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_'
+ b'integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n    '
+ b'        code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEA'
+ b'D", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n   '
+ b'     elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.mani'
+ b'fest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report '
+ b'= _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH)'
+ b':\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at('
+ b'"HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COV'
+ b'ERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_i'
+ b'ntegrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n         '
+ b'   code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n          '
+ b'  code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n   '
+ b'     report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}'
+ b'\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        a'
+ b'rgs.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", e'
+ b'ncoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main('
+ b'))\n')
+REMOTE_CONTINUATION_PRIOR_SOURCE_RECONSTRUCTIONS = {}
+
+def _remote_continuation_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _remote_continuation_previous_guard_source(source, binding=None):
+    binding = REMOTE_CONTINUATION_BINDINGS if binding is None else binding
+    if b"\nREMOTE_CONTINUATION_POLICY_PATH =" not in source:
+        return source
+    _require(_remote_continuation_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nREMOTE_CONTINUATION_POLICY_PATH =", 1)[0] + REMOTE_CONTINUATION_PREVIOUS_CLI
+
+
+def _remote_continuation_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _remote_continuation_previous_guard_source(source)
+    frozen = REMOTE_CONTINUATION_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (REMOTE_CANONICAL_PRIOR_SOURCE_RECONSTRUCTIONS, NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS, MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS, FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS, NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS, PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_remote_continuation_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nREMOTE_CONTINUATION_POLICY_PATH =" in source:
+        if reviewed == REMOTE_CONTINUATION_BINDINGS["successor_guard_sha256"]:
+            return _remote_continuation_raw_guard_matches(source, reviewed)
+        if not _remote_continuation_raw_guard_matches(source, REMOTE_CONTINUATION_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nREMOTE_CONTINUATION_POLICY_PATH =", 1)[0] + REMOTE_CONTINUATION_PREVIOUS_CLI
+    return _remote_continuation_prior_guard_matches(source, reviewed)
+
+
+_remote_continuation_prior_remote_canonical_main = _remote_canonical_previous_main_source
+
+
+def _remote_canonical_previous_main_source(path, source):
+    return _remote_continuation_prior_remote_canonical_main(path, _remote_continuation_previous_main_source(path, source))
+
+
+def _run_remote_continuation_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/remote_continuation_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_remote_continuation_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_remote_continuation_prior_remote_canonical_guard = _remote_canonical_previous_guard_source
+
+
+def _remote_canonical_previous_guard_source(source, binding=None):
+    return _remote_continuation_prior_remote_canonical_guard(_remote_continuation_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -7403,7 +7557,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):
+        if exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):
+            code, report = _run_remote_continuation_integrated(args.manifest, args.base, REMOTE_CONTINUATION_BINDINGS)
+        elif exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):
             code, report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)
         elif exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):
             code, report = _run_canonical_download_integrated(args.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)

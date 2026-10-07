@@ -170,7 +170,8 @@ def _dependencies(rows, export_complete):
                 scientific_chain_completeness="NOT_ESTABLISHED")
 
 
-def build_download(folder, *, forbidden_values=(), limits=None, store_factory=None):
+def build_download(folder, *, forbidden_values=(), limits=None, store_factory=None,
+                   table=None, start_after=None):
     """Return original-object ZIP and truthful manifest; retrieval only.
 
     Listing interruption and resource caps can return a labelled partial export.
@@ -180,6 +181,17 @@ def build_download(folder, *, forbidden_values=(), limits=None, store_factory=No
     limits = limits or Limits()
     if not re.fullmatch(r"[A-Za-z0-9_-]+", folder or ""):
         raise ExportUnavailable("REMOTE_FOLDER_NOT_CONFIGURED")
+    # Scope is an explicit local filter over the same full-folder inventory.
+    # Never use an indexed search to infer that a canonical object is absent.
+    if table is not None and (not isinstance(table, str) or table not in SCHEMA):
+        raise ExportUnavailable("INVALID_CANONICAL_EXPORT_TABLE")
+    selected_table = table
+    if start_after is not None:
+        if not isinstance(start_after, str):
+            raise ExportUnavailable("INVALID_CANONICAL_EXPORT_CURSOR")
+        match = re.fullmatch(re.escape(PREFIX)+r"(prospective_\w+)/[a-f0-9]{64}\.json", start_after)
+        if not match or match[1] not in SCHEMA or (table is not None and match[1] != table):
+            raise ExportUnavailable("INVALID_CANONICAL_EXPORT_CURSOR")
     budget = _Budget(limits)
     prepared = datetime.now(timezone.utc).isoformat()
     secrets = [str(value).encode() for value in forbidden_values if value]
@@ -231,10 +243,17 @@ def build_download(folder, *, forbidden_values=(), limits=None, store_factory=No
         groups = {}
         for item in inventory.files:
             groups.setdefault(item["name"], {})[item["id"]] = item
+        by_table = {}
+        for key in groups:
+            name = key[len(PREFIX):].split("/", 1)[0]
+            by_table[name] = by_table.get(name, 0) + 1
+        requested = sorted(key for key in groups
+            if (selected_table is None or key.startswith(PREFIX+selected_table+"/"))
+            and (start_after is None or key > start_after))
         output = io.BytesIO()
         entries, rows, counts, stop = [], [], {}, None
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            for key in sorted(groups):
+            for key in requested:
                 if len(entries) >= limits.max_objects:
                     stop = "OBJECT_LIMIT"
                     break
@@ -278,7 +297,11 @@ def build_download(folder, *, forbidden_values=(), limits=None, store_factory=No
                 counts[table] = counts.get(table, 0) + 1
             if time.monotonic()-budget.started >= limits.max_seconds:
                 stop = stop or "TIME_LIMIT"
-            complete = inventory.complete and stop is None
+            selection_complete = inventory.complete and stop is None
+            # A complete requested table/range is not a complete canonical store.
+            complete = selection_complete and selected_table is None and start_after is None
+            remaining = len(requested) - len(entries)
+            cursor = entries[-1]["path"] if inventory.complete and entries and remaining else None
             events, games = set(), set()
             for table, row in rows:
                 values = dict(zip(SCHEMA[table][0], row))
@@ -294,9 +317,19 @@ def build_download(folder, *, forbidden_values=(), limits=None, store_factory=No
                     listing_pages=inventory.listing_pages, metadata_items_seen=inventory.metadata_items_seen,
                     canonical_remote_files_listed=len({item["id"] for item in files}),
                     canonical_paths_listed=len(groups), complete=inventory.complete,
+                    canonical_paths_by_table=by_table,
                     incomplete_reason=listing_reason, traversal="ENTIRE_CONFIGURED_FOLDER; canonical prefix filtered locally",
                     point_in_time_consistency="PAGINATED_LISTING_NOT_AN_ATOMIC_REMOTE_SNAPSHOT"),
                 export_complete=complete, stop_reason=stop, limits=asdict(limits),
+                selection_complete=selection_complete,
+                request_scope=dict(table=selected_table, start_after=start_after,
+                    paths_in_requested_range=len(requested),
+                    listed_paths_outside_requested_range=len(groups)-len(requested)),
+                continuation=dict(next_start_after=cursor,
+                    unread_paths_in_listed_requested_range=remaining,
+                    remote_reinventory_required=True,
+                    cross_download_consistency="NOT_AN_ATOMIC_REMOTE_SNAPSHOT",
+                    omitted_objects="NOT_RETRIEVED_REMOTE_CONTENTS_UNKNOWN"),
                 resources=dict(requests=budget.requests, media_bytes_received=budget.received,
                     maximum_detection_chunk_overrun_bytes=65536),
                 objects=entries, counts=dict(exported_paths=len(entries),

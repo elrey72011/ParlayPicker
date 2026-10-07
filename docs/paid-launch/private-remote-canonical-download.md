@@ -14,6 +14,30 @@ Once this revision is separately merged and deployed by the owner:
 4. Read its complete/partial status and click **Download private remote canonical
    JSON ZIP**.
 
+For the next authentic-input inspection, select **prospective_reconciled_source**
+in **Canonical table to download**, leave **Continue after verified canonical path
+(optional)** blank, then prepare and download. This retrieves original reconciled
+source records rather than restarting alphabetically at football coverage. Their
+original source table, source record ID, raw bytes and hash identify retained
+captures/model/feature dependencies; their existence does not establish a complete
+prediction chain. NFL development remains deferred.
+
+If the requested range is capped, copy `continuation.next_start_after` from its
+manifest (also shown in the private panel) into the continuation field and prepare
+the next download with the same table. Original ZIPs remain separate evidence;
+no downloaded objects are hydrated or silently combined. A fresh full-folder
+listing runs for each request. No cursor is offered after an incomplete listing
+or before an object is verified. New remotely added objects before a cursor are
+outside that explicitly requested range; cross-download atomic consistency is
+not asserted. The original all-table/no-cursor download remains available.
+
+`inventory.canonical_paths_by_table` records counts from the traversed metadata;
+`request_scope` records the exact table/range, selected and excluded path counts;
+`selection_complete` describes only that request. `export_complete` remains false
+for any scoped or continued download. Omitted FK targets remain
+`NOT_INCLUDED_REMOTE_UNKNOWN`, even after a requested table is fully retrieved.
+Selection changes invalidate prepared ZIPs under the existing owner gate.
+
 No refresh, provider request, upload, database initialization or restoration occurs.
 Original remote media bytes remain unchanged at their logical paths in the ZIP;
 `manifest.json` records the configured folder, opaque authenticated inventory
