@@ -18,13 +18,16 @@ ESTIMATE_PROVENANCE_NOT_RECORDED ESTIMATE_IDENTITY_MISMATCH TARGET_MISMATCH MODE
 INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILITY_SEMANTICS SOURCE_CONTRACT_NOT_VERIFIED SOURCE_EVIDENCE_INCOMPLETE SOURCE_EVIDENCE_CONFLICT SOURCE_RIGHTS_NOT_VERIFIED SOURCE_ADMISSIBILITY_REVIEW_NOT_ACCEPTED""".split())
 from app_core.nhl_puck_line_evidence import PUBLIC_REASONS as NHL_REASONS
 REASONS = REASONS | NHL_REASONS
+from app_core.ncaaf_pipeline_evidence import PUBLIC_REASONS as NCAAF_REASONS
+REASONS = REASONS | NCAAF_REASONS
 VALUE_REASONS = frozenset("""RECORDED_PRICE_VALUE VALUE_NOT_RECORDED PRICE_VALUE_MISMATCH
 PUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_UNAVAILABLE SETTLEMENT_VALUE_UNSUPPORTED""".split())
 # Explicit public-research provenance only; never an arbitrary source-column copy.
 EXPORT_PROVENANCE_COLUMNS = ["quote_id", "prospective_quote_id", "market_period", "period",
     "settlement_rules", "inference_status", "model_status", "spread_line", "total_line",
     "market_line_used", "push_probability", "probability_semantics", "research_source_semantics",
-    "ml_inference_status", "ml_estimate_metadata"]
+    "ml_inference_status", "ml_estimate_metadata", "schedule_event_id",
+    "schedule_inventory_key", "schedule_match_status", "historical_matchup_id"]
 SEMANTIC_FIELDS = ("probability_semantics", "push_probability", "inference_status", "model_status")
 SEMANTICS = frozenset({"win_conditional_on_decision","win_unconditional_with_push",
                       "unconditional_win_push_loss","unconditional"})
@@ -181,7 +184,7 @@ def _source_semantics(source):
 
 
 SOURCE_FIELDS = {"best_available_probability", "calibrated_probability",
-                 "production_win_probability", "win_probability"}
+                 "production_win_probability", "win_probability", "ml_probability"}
 
 def _text(value):
     return value.strip() if isinstance(value, str) else ""
@@ -576,6 +579,28 @@ def legacy_unrecorded_display(export):
 
 
 def from_export(row, *, source=None, source_field="win_probability"):
+    actual_source = source if source is not None else row
+    try:
+        ncaaf_origin = json.loads(actual_source.get("ml_estimate_metadata", ""))
+        if "ncaaf_inputs" in ncaaf_origin:
+            from app_core.ncaaf_pipeline_evidence import diagnose as diagnose_ncaaf
+            assessment = diagnose_ncaaf(actual_source, ncaaf_origin)
+            identity = _identity(row)
+            result = _empty(identity, "ml_probability", "Frozen native NCAAF model; uncalibrated research probability", reason=assessment["reason"])
+            if assessment["status"] != "COMPLETE":
+                return result
+            if not _complete(identity) or not _source_identity_matches(actual_source, identity):
+                result["availability_reason"] = "NCAAF_EVENT_OFFER_CONFLICT"
+                return result
+            retained = ncaaf_origin["ncaaf_inputs"]["payload"]
+            if retained["original_packet"]["payload"]["evidence_label"] == "SYNTHETIC":
+                result["basis"] += "; SYNTHETIC software fixture"
+            result.update(probability=retained["raw_probability"]["value"], push_probability=0.0,
+                probability_semantics="win_unconditional_with_push", availability_reason="AVAILABLE",
+                value_reason="VALUE_NOT_RECORDED", inference_status="RECORDED")
+            return result
+    except (ValueError, TypeError, KeyError):
+        pass
     result = _from_export(row, source=source, source_field=source_field)
     try:
         nhl_origin = json.loads((source if source is not None else row).get("ml_estimate_metadata", ""))
@@ -670,6 +695,8 @@ def validate(display, row=None):
             raise ValueError("Invalid research display identity label")
     if display["label"]!="Research estimate" or display["source_field"] not in SOURCE_FIELDS | {""}:
         raise ValueError("Invalid research display source")
+    if display["source_field"] == "ml_probability" and identity["sport"] != "NCAAF":
+        raise ValueError("Native model display source requires the NCAAF target contract")
     if not isinstance(display["basis"],str) or display["inference_status"] not in {"UNKNOWN","FAILED","UNAVAILABLE","RECORDED"}:
         raise ValueError("Invalid research display provenance")
     if display["availability_reason"] not in REASONS or display["value_reason"] not in VALUE_REASONS:

@@ -7550,6 +7550,683 @@ _remote_continuation_prior_remote_canonical_guard = _remote_canonical_previous_g
 def _remote_canonical_previous_guard_source(source, binding=None):
     return _remote_continuation_prior_remote_canonical_guard(_remote_continuation_previous_guard_source(source), binding)
 
+FOOTBALL_RESEARCH_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-research-v1.json'
+FOOTBALL_RESEARCH_POLICY_VERSION = 'explicit-normal-football-research-v1'
+FOOTBALL_RESEARCH_APPROVAL_REFERENCE = ('Owner-authorized NCAAF normal research integration and resumed NFL inspection/regressions on verified '
+ 'current main. Explicit accepted fresh native half-point margin/total packets only; retain original '
+ 'clock missingness, named orientation, neutral site, three-game minimum and strict seven-day lag, '
+ 'independent FBS/FCS inventory and frozen Stage 1 cohort. Source, listing, settlement and public '
+ 'derived-output rights remain exact independently accepted bindings; no registration in this change. '
+ 'Keep raw native, original blend and UI-refresh stages separate. Owner selection cannot accept a '
+ 'source, stale historical packets cannot trigger numerical rebuilding, and default NCAAF inference '
+ 'stays unavailable. Preserve all predecessor assertions, native artifacts, frozen version 10, '
+ 'workflows and qualification/wagering protections. MLB is paused; NHL follows. No real analysis, '
+ 'acquisition, restoration, fitting, activation, merge, deployment, publication, messaging or financial '
+ 'execution. Numerical acceptance fixtures are explicitly synthetic and run network blocked.')
+FOOTBALL_RESEARCH_PATHS = ('scripts/check_launch_change_scope.py',
+ 'scripts/football_research_scope.py',
+ 'tests/test_football_research_scope.py',
+ 'app_core/ncaaf_pipeline_evidence.py',
+ 'app/ui/ncaaf_pipeline_research.py',
+ 'app/ui/publish_panel.py',
+ 'app_core/market_probability_model.py',
+ 'app_core/producer_provenance.py',
+ 'app_core/research_estimate_trace.py',
+ 'app_core/research_display.py',
+ 'core/streamlit_pipeline.py',
+ 'streamlit_app.py',
+ 'tests/test_ncaaf_normal_pipeline.py',
+ 'docs/paid-launch/normal-football-research.md')
+FOOTBALL_RESEARCH_FROZEN_PATHS = ('app_core/ncaaf_prospective.py',
+ 'app_core/ncaaf_history.py',
+ 'app_core/ncaaf_research.py',
+ 'app_core/ncaaf_identity.py',
+ 'core/team_mapper.py',
+ 'app_core/ncaaf_research_contract.py',
+ 'app_core/ncaaf_schedule.py',
+ 'app_core/ncaaf_prospective_store.py',
+ 'app_core/nfl_inference_evidence.py',
+ 'app_core/nfl_native_provenance.py',
+ 'app_core/nfl_calibration_evidence.py',
+ 'app_core/weights_config.py',
+ 'app_core/nhl_puck_line_evidence.py',
+ 'app_core/source_evidence_intake.py',
+ 'app_core/source_contract.py',
+ 'core/live_wager_contract.py',
+ 'tests/test_ncaaf_research_contract.py',
+ 'tests/test_nfl_inference_evidence.py',
+ 'tests/test_nfl_native_provenance.py',
+ 'tests/test_nfl_ui_reblend.py',
+ 'tests/test_producer_provenance.py',
+ 'tests/test_remote_continuation_scope.py',
+ 'scripts/remote_continuation_scope.py',
+ 'app_core/canonical_download.py',
+ 'app_core/remote_canonical_download.py')
+FOOTBALL_RESEARCH_BINDINGS = {'base': '13cb72786d5b2e46987fd779b5318be0ffe55b52',
+ 'base_tree': '0788127d45bbedbb01ade42fa85d58594a09d306',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'eb57be5c9b0bf67b23fa0326c1dbf03b95e104f70dda85a8e3b5bdc2785f3a4b',
+ 'previous_policy_blob': '3765aca07d97899115217e1a9a0efcab1eef7e07',
+ 'reviewed_blobs': {'app/ui/ncaaf_pipeline_research.py': '81b06c03cb18ca7f9ec1191dfa5dd4889bcaaad6',
+                    'app/ui/publish_panel.py': '44ca31553682bed7712f599467ea87386ad1973b',
+                    'app_core/market_probability_model.py': '8922250dcc28bcd3beb28fe9ba288a70c995b17b',
+                    'app_core/ncaaf_pipeline_evidence.py': '178a969592a8d996f046e1c8cd3f50a32352a781',
+                    'app_core/producer_provenance.py': 'b8c43eb2fb695d3a31fd61c15c76be027d1e1fb6',
+                    'app_core/research_display.py': '40cf3c38c07be38bdbc003bc0e57b368a9e30045',
+                    'app_core/research_estimate_trace.py': '24986f82c3305883c38255c216b8ee44c95173e7',
+                    'core/streamlit_pipeline.py': 'c5c71c7ddbedf780fd449c3d7150586acab6bc83',
+                    'docs/paid-launch/normal-football-research.md': '4265550cc0e48de5fef7c7e5248d26f381dac927',
+                    'scripts/football_research_scope.py': '87a40bcb70f4daf778165e245fceb811989afc77',
+                    'streamlit_app.py': 'e28482192b397692c15d696489555fc7985c5917',
+                    'tests/test_football_research_scope.py': '8feb0d09dfc9b65d404baa35f5b12130684f8495',
+                    'tests/test_ncaaf_normal_pipeline.py': 'c15eb678bffd42c1df59e4b67db45ef618321ac1'},
+ 'scope_module_sha256': 'a6335a898698456078bf71ff6e97fa709d1660bec6207b2c69170152aefc9a1e',
+ 'successor_guard_sha256': '7829ced0c2c6e3831dabfacc7fa3549a99e12642a736c7f9530487139dc31aa4'}
+FOOTBALL_RESEARCH_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", typ'
+ b'e=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-outp'
+ b'ut", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", REMOTE_CONTINUA'
+ b'TION_POLICY_PATH):\n            code, report = _run_remote_continuation_integrated(args.manifest, args.ba'
+ b'se, REMOTE_CONTINUATION_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):\n        '
+ b'    code, report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)'
+ b'\n        elif exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):\n            code, report = _run_canonic'
+ b'al_download_integrated(args.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)\n        elif exists_at("HE'
+ b'AD", NCAAF_RESEARCH_POLICY_PATH):\n            code, report = _run_ncaaf_research_integrated(args.manifes'
+ b't, args.base, NCAAF_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n   '
+ b'         code, report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BIND'
+ b'INGS)\n        elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, report = _run_foot'
+ b'ball_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        elif exists_at("HEA'
+ b'D", NHL_PUCK_LINE_POLICY_PATH):\n            code, report = _run_nhl_puck_line_integrated(args.manifest, '
+ b'args.base, NHL_PUCK_LINE_BINDINGS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n        '
+ b'    code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n '
+ b'       elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_intake_'
+ b'integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLIC'
+ b'Y_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n  '
+ b'      elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integra'
+ b'ted(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH'
+ b'):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n'
+ b'        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission'
+ b'_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_'
+ b'POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS'
+ b'_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_'
+ b'source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("H'
+ b'EAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.b'
+ b'ase, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _'
+ b'run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_P'
+ b'ATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        eli'
+ b'f exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.mani'
+ b'fest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code,'
+ b' report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD",'
+ b' V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)'
+ b'\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrat'
+ b'ed(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n  '
+ b'          code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        e'
+ b'lif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest'
+ b', args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, '
+ b'args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "sta'
+ b'tus": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    render'
+ b'ed = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.pare'
+ b'nt.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf'
+ b'-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main('
+ b'))\n')
+FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'after_sha256': '34789c758e75ea3a23637a2725d33777023c93484f0ba6af52fb79347506d4b7',
+                             'edits': [(b'    render_remote_canonical_download(setting)\n    from app.ui.so'
+                                        b'urce_evidence_panel import render as render_source_evidence\n    '
+                                        b'render_source_evidence()\n    from app.ui.activation_panel import'
+                                        b' render as render_activation\n    render_activation(games)\n    fr'
+                                        b'om app.ui.public_results import render_history\n',
+                                        b'    render_remote_canonical_download(setting)\n    from app.ui.so'
+                                        b'urce_evidence_panel import render as render_source_evidence\n    '
+                                        b'render_source_evidence()\n    from app.ui.ncaaf_pipeline_research'
+                                        b' import render as render_ncaaf_pipeline_research\n    render_ncaa'
+                                        b'f_pipeline_research()\n    from app.ui.activation_panel import re'
+                                        b'nder as render_activation\n    render_activation(games)\n    from '
+                                        b'app.ui.public_results import render_history\n')],
+                             'sha256': '459e4dd960b2cb904543fcf213ad26f4b7a910c14a4fcad67d1737c0234bb0c5'},
+ 'app_core/market_probability_model.py': {'after_sha256': '00cf094ef50a559d87fc9ce1fd426e4e9c454b5607db495dfb6ed4ca4517217a',
+                                          'edits': [(b'\n    from app_core.nhl_puck_line_evidence import sel'
+                                                     b'ection_requested\n    nhl_research_selected = selecti'
+                                                     b'on_requested()\n    league = _text(frame, "League").s'
+                                                     b'tr.upper().str.strip()\n    league = league.where(lea'
+                                                     b'gue.ne(""), _text(frame, "league").str.upper().str.s'
+                                                     b'trip())\n    market_type = _text(frame, "market_type"'
+                                                     b').str.lower().str.strip()\n',
+                                                     b'\n    from app_core.nhl_puck_line_evidence import sel'
+                                                     b'ection_requested\n    nhl_research_selected = selecti'
+                                                     b'on_requested()\n    from app_core.ncaaf_pipeline_evid'
+                                                     b'ence import selection_requested as ncaaf_selection_r'
+                                                     b'equested\n    ncaaf_research_selected = ncaaf_selecti'
+                                                     b'on_requested()\n    league = _text(frame, "League").s'
+                                                     b'tr.upper().str.strip()\n    league = league.where(lea'
+                                                     b'gue.ne(""), _text(frame, "league").str.upper().str.s'
+                                                     b'trip())\n    market_type = _text(frame, "market_type"'
+                                                     b').str.lower().str.strip()\n'),
+                                                    (b'    for idx in frame.index:\n        lg = str(league.'
+                                                     b'loc[idx])\n        mt = str(market_type.loc[idx])\n   '
+                                                     b'     if lg == "NHL" and nhl_research_selected:\n     '
+                                                     b'       from app_core.nhl_puck_line_evidence import p'
+                                                     b'redict\n            for field, value in predict(frame'
+                                                     b'.loc[idx]).items():\n',
+                                                     b'    for idx in frame.index:\n        lg = str(league.'
+                                                     b'loc[idx])\n        mt = str(market_type.loc[idx])\n   '
+                                                     b'     if lg == "NCAAF" and ncaaf_research_selected:\n '
+                                                     b'           from app_core.ncaaf_pipeline_evidence imp'
+                                                     b'ort predict as predict_ncaaf\n            for field, '
+                                                     b'value in predict_ncaaf(frame.loc[idx], inventory=fra'
+                                                     b'me.attrs.get("ncaaf_schedule")).items():\n           '
+                                                     b'     if field not in result:\n                    res'
+                                                     b'ult[field] = pd.Series(pd.NA, index=result.index, dt'
+                                                     b'ype=object)\n                result.at[idx, field] = '
+                                                     b'value\n            continue\n        if lg == "NHL" an'
+                                                     b'd nhl_research_selected:\n            from app_core.n'
+                                                     b'hl_puck_line_evidence import predict\n            for'
+                                                     b' field, value in predict(frame.loc[idx]).items():\n'),
+                                                    (b'    from app_core.research_estimate_trace import ori'
+                                                     b'gin_metadata, generated_time\n    generated = generat'
+                                                     b'ed_time()\n    for idx in frame.index:\n        if str'
+                                                     b'(league.loc[idx]) == "NHL" and nhl_research_selected'
+                                                     b':\n            continue  # Original NHL clocks and pr'
+                                                     b'ivate artifact packet were captured above.\n        l'
+                                                     b'ine = total_line.loc[idx] if str(market_type.loc[idx'
+                                                     b']).startswith("total") else spread_line.loc[idx]\n',
+                                                     b'    from app_core.research_estimate_trace import ori'
+                                                     b'gin_metadata, generated_time\n    generated = generat'
+                                                     b'ed_time()\n    for idx in frame.index:\n        if str'
+                                                     b'(league.loc[idx]) == "NCAAF" and ncaaf_research_sele'
+                                                     b'cted:\n            continue  # The selected native ta'
+                                                     b'rget retains its own inference clock and packet.\n   '
+                                                     b'     if str(league.loc[idx]) == "NHL" and nhl_resear'
+                                                     b'ch_selected:\n            continue  # Original NHL cl'
+                                                     b'ocks and private artifact packet were captured above'
+                                                     b'.\n        line = total_line.loc[idx] if str(market_t'
+                                                     b'ype.loc[idx]).startswith("total") else spread_line.l'
+                                                     b'oc[idx]\n')],
+                                          'sha256': '881e9c407dfb89147453b7f94bbdacb11c24050818458d41e3c700a84bb1a64e'},
+ 'app_core/producer_provenance.py': {'after_sha256': '6272fc842bf339382e5fc454da0200160aaaa0ce0e8b7de50db535b00bb0d0fe',
+                                     'edits': [(b'    return [q for q in matching_quotes(source) if q.get('
+                                                b'"provenance_version") == QUOTE_VERSION]\n\n\ndef _offer(sou'
+                                                b'rce, generated_at):\n    league = text(source.get("league'
+                                                b'") or source.get("League")).upper()\n    matches = _match'
+                                                b'es(source)\n    q = matches[0] if len(matches) == 1 else '
+                                                b'{}\n',
+                                                b'    return [q for q in matching_quotes(source) if q.get('
+                                                b'"provenance_version") == QUOTE_VERSION]\n\n\ndef _offer(sou'
+                                                b'rce, generated_at, *, ncaaf_schedule=False):\n    league '
+                                                b'= text(source.get("league") or source.get("League")).upp'
+                                                b'er()\n    matches = _matches(source)\n    q = matches[0] i'
+                                                b'f len(matches) == 1 else {}\n'),
+                                               (b'        DERIVED_NAMESPACE + ":" + hashlib.sha256(raw.enc'
+                                                b'ode()).hexdigest() if identified else ""),\n        quote'
+                                                b'_namespace=event["provider_namespace"] if provider_id el'
+                                                b'se DERIVED_NAMESPACE,\n        quote_kind="provider_issue'
+                                                b'd" if provider_id else "locally_derived")\n    return dic'
+                                                b't(version=VERSION, event=event, offer=offer, inference_t'
+                                                b'ime=generated_at, target_period="full_game",\n        mat'
+                                                b'chup_key_semantics="unordered_team_pair_et_day", matched'
+                                                b'_offer_count=len(matches),\n        **({"source_contract"'
+                                                b': q["source_contract"]} if "source_contract" in q else {'
+                                                b'}))\n\n\ndef record(source, result, metadata, generated_at)'
+                                                b':\n    """Used at the inference boundary, only for explic'
+                                                b'itly versioned transport.\n\n    Legacy inputs retain thei'
+                                                b'r original metadata/interpretation. Supplied aliases\n',
+                                                b'        DERIVED_NAMESPACE + ":" + hashlib.sha256(raw.enc'
+                                                b'ode()).hexdigest() if identified else ""),\n        quote'
+                                                b'_namespace=event["provider_namespace"] if provider_id el'
+                                                b'se DERIVED_NAMESPACE,\n        quote_kind="provider_issue'
+                                                b'd" if provider_id else "locally_derived")\n    contract ='
+                                                b' dict(version=VERSION, event=event, offer=offer, inferen'
+                                                b'ce_time=generated_at, target_period="full_game",\n       '
+                                                b' matchup_key_semantics="unordered_team_pair_et_day", mat'
+                                                b'ched_offer_count=len(matches),\n        **({"source_contr'
+                                                b'act": q["source_contract"]} if "source_contract" in q el'
+                                                b'se {}))\n    if ncaaf_schedule and league == "NCAAF":\n   '
+                                                b'     contract["matchup_key_semantics"] = "ncaaf_schedule'
+                                                b'_event"\n        contract["schedule_binding"] = {k:text(s'
+                                                b'ource.get(k)) for k in\n            ("matchup_id", "sched'
+                                                b'ule_event_id", "schedule_inventory_key", "schedule_match'
+                                                b'_status", "historical_matchup_id")}\n    return contract\n'
+                                                b'\n\ndef record(source, result, metadata, generated_at, *, '
+                                                b'ncaaf_schedule=False):\n    """Used at the inference boun'
+                                                b'dary, only for explicitly versioned transport.\n\n    Lega'
+                                                b'cy inputs retain their original metadata/interpretation.'
+                                                b' Supplied aliases\n'),
+                                               (b'    if not any(isinstance(q, dict) and q.get("provenance'
+                                                b'_version") == QUOTE_VERSION for q in _quotes(source)):\n '
+                                                b'       return metadata, {}\n    item = json.loads(metadat'
+                                                b'a)\n    contract = _offer(source, generated_at)\n    event'
+                                                b', offer = contract["event"], contract["offer"]\n    suppl'
+                                                b'ied = dict(quote_id=offer["quote_id"], market_period=off'
+                                                b'er["period"], settlement_rules=offer["rules"],\n        p'
+                                                b'rediction_generated_at=generated_at, game_start_utc=even'
+                                                b't["start"],\n',
+                                                b'    if not any(isinstance(q, dict) and q.get("provenance'
+                                                b'_version") == QUOTE_VERSION for q in _quotes(source)):\n '
+                                                b'       return metadata, {}\n    item = json.loads(metadat'
+                                                b'a)\n    contract = _offer(source, generated_at, ncaaf_sch'
+                                                b'edule=ncaaf_schedule)\n    event, offer = contract["event'
+                                                b'"], contract["offer"]\n    supplied = dict(quote_id=offer'
+                                                b'["quote_id"], market_period=offer["period"], settlement_'
+                                                b'rules=offer["rules"],\n        prediction_generated_at=ge'
+                                                b'nerated_at, game_start_utc=event["start"],\n'),
+                                               (b'    missing, conflicts = [], []\n    contract = item.get('
+                                                b'"producer_contract")\n    try:\n        if (not isinstance'
+                                                b'(contract, dict) or set(contract) - {"source_contract"} '
+                                                b'!= {"version", "event", "offer", "inference_time", "targ'
+                                                b'et_period", "matchup_key_semantics", "matched_offer_coun'
+                                                b't"}\n            or contract["version"] != VERSION or con'
+                                                b'tract["matchup_key_semantics"] != "unordered_team_pair_e'
+                                                b't_day"):\n            raise ValueError("producer_contract'
+                                                b'.schema")\n        event, offer = contract["event"], cont'
+                                                b'ract["offer"]\n        if contract["target_period"] != "f'
+                                                b'ull_game" or (offer["period"] and offer["period"] != con'
+                                                b'tract["target_period"]):\n',
+                                                b'    missing, conflicts = [], []\n    contract = item.get('
+                                                b'"producer_contract")\n    try:\n        scheduled = isinst'
+                                                b'ance(contract,dict) and contract.get("matchup_key_semant'
+                                                b'ics") == "ncaaf_schedule_event"\n        optional = {"sou'
+                                                b'rce_contract", "schedule_binding"} if scheduled else {"s'
+                                                b'ource_contract"}\n        if (not isinstance(contract, di'
+                                                b'ct) or set(contract) - optional != {"version", "event", '
+                                                b'"offer", "inference_time", "target_period", "matchup_key'
+                                                b'_semantics", "matched_offer_count"}\n            or contr'
+                                                b'act["version"] != VERSION or contract["matchup_key_seman'
+                                                b'tics"] not in {"unordered_team_pair_et_day", "ncaaf_sche'
+                                                b'dule_event"}):\n            raise ValueError("producer_co'
+                                                b'ntract.schema")\n        event, offer = contract["event"]'
+                                                b', contract["offer"]\n        if contract["target_period"]'
+                                                b' != "full_game" or (offer["period"] and offer["period"] '
+                                                b'!= contract["target_period"]):\n'),
+                                               (b'        if set(event) != {"provider_namespace", "provide'
+                                                b'r_event_id", "home", "away", "start", "sport"} or set(of'
+                                                b'fer) != {\n            "book", "market", "side", "line", '
+                                                b'"price", "source_time", "period", "rules", "period_sourc'
+                                                b'e", "rules_source", "quote_id", "quote_namespace", "quot'
+                                                b'e_kind"}:\n            raise ValueError("producer_contrac'
+                                                b't.schema")\n        if _offer(source, contract["inference'
+                                                b'_time"]) != contract:\n            conflicts.append("prov'
+                                                b'ider_quotes.exact_offer")\n        if type(contract["matc'
+                                                b'hed_offer_count"]) is not int or contract["matched_offer'
+                                                b'_count"] != 1:\n            conflicts.append("producer_co'
+                                                b'ntract.matched_offer_count")\n',
+                                                b'        if set(event) != {"provider_namespace", "provide'
+                                                b'r_event_id", "home", "away", "start", "sport"} or set(of'
+                                                b'fer) != {\n            "book", "market", "side", "line", '
+                                                b'"price", "source_time", "period", "rules", "period_sourc'
+                                                b'e", "rules_source", "quote_id", "quote_namespace", "quot'
+                                                b'e_kind"}:\n            raise ValueError("producer_contrac'
+                                                b't.schema")\n        if _offer(source, contract["inference'
+                                                b'_time"], ncaaf_schedule=scheduled) != contract:\n        '
+                                                b'    conflicts.append("provider_quotes.exact_offer")\n    '
+                                                b'    if type(contract["matched_offer_count"]) is not int '
+                                                b'or contract["matched_offer_count"] != 1:\n            con'
+                                                b'flicts.append("producer_contract.matched_offer_count")\n'),
+                                               (b'                                "quote_time":offer["sour'
+                                                b'ce_time"], "selected_quote_recorded_at":offer["source_ti'
+                                                b'me"]}.items():\n            if expected and text(source.g'
+                                                b'et(field)) and clock(source[field]) != expected: conflic'
+                                                b'ts.append(field)\n        for field in ("quote_bookmaker"'
+                                                b', "opposing_odds_source", "sportsbook"):\n            if '
+                                                b'text(source.get(field)) and text(source[field]).lower() '
+                                                b'!= offer["book"].lower(): conflicts.append(field)\n      '
+                                                b'  if not clock(event["start"]) or not clock(offer["sourc'
+                                                b'e_time"]) or not clock(contract["inference_time"]):\n    '
+                                                b'        missing.append("valid_original_clocks")\n',
+                                                b'                                "quote_time":offer["sour'
+                                                b'ce_time"], "selected_quote_recorded_at":offer["source_ti'
+                                                b'me"]}.items():\n            if expected and text(source.g'
+                                                b'et(field)) and clock(source[field]) != expected: conflic'
+                                                b'ts.append(field)\n        for field in ("quote_bookmaker"'
+                                                b', "opposing_odds_source", "sportsbook"):\n            if '
+                                                b'scheduled and field == "opposing_odds_source" and text(s'
+                                                b'ource.get(field)) == "missing" and number(source.get("op'
+                                                b'posing_odds_american")) is None:\n                continu'
+                                                b'e  # Explicit missing opposite price supplies no value e'
+                                                b'stimate.\n            if text(source.get(field)) and text'
+                                                b'(source[field]).lower() != offer["book"].lower(): confli'
+                                                b'cts.append(field)\n        if not clock(event["start"]) o'
+                                                b'r not clock(offer["source_time"]) or not clock(contract['
+                                                b'"inference_time"]):\n            missing.append("valid_or'
+                                                b'iginal_clocks")\n'),
+                                               (b'            conflicts.append("offer.provider_namespace")'
+                                                b'\n        # Validate an event label only as a pair/day, n'
+                                                b'ever as ordered home/away.\n        key = text(source.get'
+                                                b'("matchup_id"))\n        parts = key.split("|")\n        i'
+                                                b'f len(parts) != 3:\n            conflicts.append("matchup'
+                                                b'_id")\n',
+                                                b'            conflicts.append("offer.provider_namespace")'
+                                                b'\n        # Validate an event label only as a pair/day, n'
+                                                b'ever as ordered home/away.\n        key = text(source.get'
+                                                b'("matchup_id"))\n        if scheduled:\n            bindin'
+                                                b'g = contract.get("schedule_binding", {})\n            sid'
+                                                b' = binding.get("schedule_event_id", "")\n            if ('
+                                                b'event["sport"] != "NCAAF" or not re.fullmatch(r"espn:col'
+                                                b'lege-football:[A-Za-z0-9_-]+", sid)\n                or b'
+                                                b'inding.get("schedule_match_status") != "MATCHED"\n       '
+                                                b'         or key != sid or binding.get("schedule_inventor'
+                                                b'y_key") != sid):\n                conflicts.append("sched'
+                                                b'ule_binding")\n            # The independently named exac'
+                                                b't quote still supplies orientation.\n            # Preser'
+                                                b've the ESPN inventory identity separately from pair labe'
+                                                b'ls.\n            key = binding.get("historical_matchup_id'
+                                                b'", "")\n            if not key or key == sid:\n           '
+                                                b'     from pandas import Timestamp\n                key = '
+                                                b'"|".join((event["home"], event["away"],\n                '
+                                                b'    Timestamp(event["start"]).tz_convert("America/New_Yo'
+                                                b'rk").date().isoformat()))\n        parts = key.split("|")'
+                                                b'\n        if len(parts) != 3:\n            conflicts.appen'
+                                                b'd("matchup_id")\n')],
+                                     'sha256': '22f45e011c91d6f747bbc722389c23c5bc9fc939fba96f5f1c829fe718227e59'},
+ 'app_core/research_display.py': {'after_sha256': 'c47dcba27cf3f956cc5383d121a98481f529da4062e6b665cc0550313049d9a9',
+                                  'edits': [(b'INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILI'
+                                             b'TY_SEMANTICS SOURCE_CONTRACT_NOT_VERIFIED SOURCE_EVIDENCE_IN'
+                                             b'COMPLETE SOURCE_EVIDENCE_CONFLICT SOURCE_RIGHTS_NOT_VERIFIED'
+                                             b' SOURCE_ADMISSIBILITY_REVIEW_NOT_ACCEPTED""".split())\nfrom a'
+                                             b'pp_core.nhl_puck_line_evidence import PUBLIC_REASONS as NHL_'
+                                             b'REASONS\nREASONS = REASONS | NHL_REASONS\nVALUE_REASONS = froz'
+                                             b'enset("""RECORDED_PRICE_VALUE VALUE_NOT_RECORDED PRICE_VALUE'
+                                             b'_MISMATCH\nPUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV '
+                                             b'ESTIMATE_UNAVAILABLE SETTLEMENT_VALUE_UNSUPPORTED""".split()'
+                                             b')\n# Explicit public-research provenance only; never an arbit'
+                                             b'rary source-column copy.\nEXPORT_PROVENANCE_COLUMNS = ["quote'
+                                             b'_id", "prospective_quote_id", "market_period", "period",\n   '
+                                             b' "settlement_rules", "inference_status", "model_status", "sp'
+                                             b'read_line", "total_line",\n    "market_line_used", "push_prob'
+                                             b'ability", "probability_semantics", "research_source_semantic'
+                                             b's",\n    "ml_inference_status", "ml_estimate_metadata"]\nSEMAN'
+                                             b'TIC_FIELDS = ("probability_semantics", "push_probability", "'
+                                             b'inference_status", "model_status")\nSEMANTICS = frozenset({"w'
+                                             b'in_conditional_on_decision","win_unconditional_with_push",\n '
+                                             b'                     "unconditional_win_push_loss","uncondit'
+                                             b'ional"})\n',
+                                             b'INFERENCE_FAILED INFERENCE_UNAVAILABLE UNSUPPORTED_PROBABILI'
+                                             b'TY_SEMANTICS SOURCE_CONTRACT_NOT_VERIFIED SOURCE_EVIDENCE_IN'
+                                             b'COMPLETE SOURCE_EVIDENCE_CONFLICT SOURCE_RIGHTS_NOT_VERIFIED'
+                                             b' SOURCE_ADMISSIBILITY_REVIEW_NOT_ACCEPTED""".split())\nfrom a'
+                                             b'pp_core.nhl_puck_line_evidence import PUBLIC_REASONS as NHL_'
+                                             b'REASONS\nREASONS = REASONS | NHL_REASONS\nfrom app_core.ncaaf_'
+                                             b'pipeline_evidence import PUBLIC_REASONS as NCAAF_REASONS\nREA'
+                                             b'SONS = REASONS | NCAAF_REASONS\nVALUE_REASONS = frozenset("""'
+                                             b'RECORDED_PRICE_VALUE VALUE_NOT_RECORDED PRICE_VALUE_MISMATCH'
+                                             b'\nPUSH_PROBABILITY_NOT_RECORDED INVALID_RECORDED_EV ESTIMATE_'
+                                             b'UNAVAILABLE SETTLEMENT_VALUE_UNSUPPORTED""".split())\n# Expli'
+                                             b'cit public-research provenance only; never an arbitrary sour'
+                                             b'ce-column copy.\nEXPORT_PROVENANCE_COLUMNS = ["quote_id", "pr'
+                                             b'ospective_quote_id", "market_period", "period",\n    "settlem'
+                                             b'ent_rules", "inference_status", "model_status", "spread_line'
+                                             b'", "total_line",\n    "market_line_used", "push_probability",'
+                                             b' "probability_semantics", "research_source_semantics",\n    "'
+                                             b'ml_inference_status", "ml_estimate_metadata", "schedule_even'
+                                             b't_id",\n    "schedule_inventory_key", "schedule_match_status"'
+                                             b', "historical_matchup_id"]\nSEMANTIC_FIELDS = ("probability_s'
+                                             b'emantics", "push_probability", "inference_status", "model_st'
+                                             b'atus")\nSEMANTICS = frozenset({"win_conditional_on_decision",'
+                                             b'"win_unconditional_with_push",\n                      "uncond'
+                                             b'itional_win_push_loss","unconditional"})\n'),
+                                            (b'\n\nSOURCE_FIELDS = {"best_available_probability", "calibrated'
+                                             b'_probability",\n                 "production_win_probability"'
+                                             b', "win_probability"}\n\ndef _text(value):\n    return value'
+                                             b'.strip() if isinstance(value, str) else ""\n',
+                                             b'\n\nSOURCE_FIELDS = {"best_available_probability", "calibrated'
+                                             b'_probability",\n                 "production_win_probability"'
+                                             b', "win_probability", "ml_probability"}\n\ndef _text(value)'
+                                             b':\n    return value.strip() if isinstance(value, str) else ""'
+                                             b'\n'),
+                                            (b'\n\ndef from_export(row, *, source=None, source_field="win_pro'
+                                             b'bability"):\n    result = _from_export(row, source=source, so'
+                                             b'urce_field=source_field)\n    try:\n        nhl_origin = json.'
+                                             b'loads((source if source is not None else row).get("ml_estima'
+                                             b'te_metadata", ""))\n',
+                                             b'\n\ndef from_export(row, *, source=None, source_field="win_pro'
+                                             b'bability"):\n    actual_source = source if source is not None'
+                                             b' else row\n    try:\n        ncaaf_origin = json.loads(actual_'
+                                             b'source.get("ml_estimate_metadata", ""))\n        if "ncaaf_in'
+                                             b'puts" in ncaaf_origin:\n            from app_core.ncaaf_pipel'
+                                             b'ine_evidence import diagnose as diagnose_ncaaf\n            a'
+                                             b'ssessment = diagnose_ncaaf(actual_source, ncaaf_origin)\n    '
+                                             b'        identity = _identity(row)\n            result = _empt'
+                                             b'y(identity, "ml_probability", "Frozen native NCAAF model; un'
+                                             b'calibrated research probability", reason=assessment["reason"'
+                                             b'])\n            if assessment["status"] != "COMPLETE":\n      '
+                                             b'          return result\n            if not _complete(identit'
+                                             b'y) or not _source_identity_matches(actual_source, identity):'
+                                             b'\n                result["availability_reason"] = "NCAAF_EVEN'
+                                             b'T_OFFER_CONFLICT"\n                return result\n            '
+                                             b'retained = ncaaf_origin["ncaaf_inputs"]["payload"]\n         '
+                                             b'   if retained["original_packet"]["payload"]["evidence_label'
+                                             b'"] == "SYNTHETIC":\n                result["basis"] += "; SYN'
+                                             b'THETIC software fixture"\n            result.update(probabili'
+                                             b'ty=retained["raw_probability"]["value"], push_probability=0.'
+                                             b'0,\n                probability_semantics="win_unconditional_'
+                                             b'with_push", availability_reason="AVAILABLE",\n               '
+                                             b' value_reason="VALUE_NOT_RECORDED", inference_status="RECORD'
+                                             b'ED")\n            return result\n    except (ValueError, TypeE'
+                                             b'rror, KeyError):\n        pass\n    result = _from_export(row,'
+                                             b' source=source, source_field=source_field)\n    try:\n        '
+                                             b'nhl_origin = json.loads((source if source is not None else r'
+                                             b'ow).get("ml_estimate_metadata", ""))\n'),
+                                            (b'            raise ValueError("Invalid research display ident'
+                                             b'ity label")\n    if display["label"]!="Research estimate" or '
+                                             b'display["source_field"] not in SOURCE_FIELDS | {""}:\n       '
+                                             b' raise ValueError("Invalid research display source")\n    if '
+                                             b'not isinstance(display["basis"],str) or display["inference_s'
+                                             b'tatus"] not in {"UNKNOWN","FAILED","UNAVAILABLE","RECORDED"}'
+                                             b':\n        raise ValueError("Invalid research display provena'
+                                             b'nce")\n    if display["availability_reason"] not in REASONS o'
+                                             b'r display["value_reason"] not in VALUE_REASONS:\n',
+                                             b'            raise ValueError("Invalid research display ident'
+                                             b'ity label")\n    if display["label"]!="Research estimate" or '
+                                             b'display["source_field"] not in SOURCE_FIELDS | {""}:\n       '
+                                             b' raise ValueError("Invalid research display source")\n    if '
+                                             b'display["source_field"] == "ml_probability" and identity["sp'
+                                             b'ort"] != "NCAAF":\n        raise ValueError("Native model dis'
+                                             b'play source requires the NCAAF target contract")\n    if not '
+                                             b'isinstance(display["basis"],str) or display["inference_statu'
+                                             b's"] not in {"UNKNOWN","FAILED","UNAVAILABLE","RECORDED"}:\n  '
+                                             b'      raise ValueError("Invalid research display provenance"'
+                                             b')\n    if display["availability_reason"] not in REASONS or di'
+                                             b'splay["value_reason"] not in VALUE_REASONS:\n')],
+                                  'sha256': '5c93f3a1eace1a3853a683a74211298e3c42fa6be556e7324725a8f0e5bc277a'},
+ 'app_core/research_estimate_trace.py': {'after_sha256': '2e51d4dc48d88194d4a88b09548f12fbd26de3b7af407f72f1565e8878523682',
+                                         'edits': [(b'    """V1 stays frozen; V2 proves orientation using '
+                                                    b'independently named facts."""\n    try:\n        item '
+                                                    b'= json.loads(source.get("ml_estimate_metadata", ""))'
+                                                    b'\n        if isinstance(item, dict) and "nhl_inputs" '
+                                                    b'in item:\n            from app_core.nhl_puck_line_evi'
+                                                    b'dence import diagnose as diagnose_nhl\n            as'
+                                                    b'sessment = diagnose_nhl(source, item)\n',
+                                                    b'    """V1 stays frozen; V2 proves orientation using '
+                                                    b'independently named facts."""\n    try:\n        item '
+                                                    b'= json.loads(source.get("ml_estimate_metadata", ""))'
+                                                    b'\n        if isinstance(item, dict) and "ncaaf_inputs'
+                                                    b'" in item:\n            from app_core.ncaaf_pipeline_'
+                                                    b'evidence import diagnose as diagnose_ncaaf\n         '
+                                                    b'   assessment = diagnose_ncaaf(source, item)\n       '
+                                                    b'     if assessment["status"] != "COMPLETE":\n        '
+                                                    b'        return assessment["reason"]\n            item'
+                                                    b' = dict(item)\n            item.pop("ncaaf_inputs")\n '
+                                                    b'           source = dict(source, ml_estimate_metadat'
+                                                    b'a=encode(item))\n        if isinstance(item, dict) an'
+                                                    b'd "nhl_inputs" in item:\n            from app_core.nh'
+                                                    b'l_puck_line_evidence import diagnose as diagnose_nhl'
+                                                    b'\n            assessment = diagnose_nhl(source, item)'
+                                                    b'\n')],
+                                         'sha256': '0f8b634ab27da8e8556ec0d4c9e75560dbe7835cdb7b26b53864ee862a6bf0ca'},
+ 'core/streamlit_pipeline.py': {'after_sha256': '10ea5cdbcaee524223c92a0774a83687f316b1a18b3c6ef4295566fcdf9d718f',
+                                'edits': [(b'                try:\n                    from app_core.marke'
+                                           b't_probability_model import predict_market_probabilities\n\n   '
+                                           b'                 market_model_predictions = predict_market_proba'
+                                           b'bilities(enriched_for_prediction)\n                except Exc'
+                                           b'eption as market_model_exc:\n                    market_model'
+                                           b'_predictions = None\n',
+                                           b'                try:\n                    from app_core.marke'
+                                           b't_probability_model import predict_market_probabilities\n\n   '
+                                           b'                 enriched_for_prediction.attrs["ncaaf_schedule"]'
+                                           b' = ncaaf_schedule\n                    market_model_predictio'
+                                           b'ns = predict_market_probabilities(enriched_for_prediction)\n '
+                                           b'               except Exception as market_model_exc:\n       '
+                                           b'             market_model_predictions = None\n'),
+                                          (b'    # the exact market being evaluated.  Missing/unresolved stat'
+                                           b's stay blank;\n    # no market or TheOver value is relabeled '
+                                           b'as an ML prediction.\n    market_ml_count = 0\n    if use_ml a'
+                                           b'nd market_model_predictions is not None and not market_model_pre'
+                                           b'dictions.empty:\n        market_probability = pd.to_numeric(\n'
+                                           b'            market_model_predictions.get("ml_probability"), erro'
+                                           b'rs="coerce"\n',
+                                           b'    # the exact market being evaluated.  Missing/unresolved stat'
+                                           b's stay blank;\n    # no market or TheOver value is relabeled '
+                                           b'as an ML prediction.\n    market_ml_count = 0\n    # Explicit '
+                                           b'native NCAAF packets carry their own seven ordered features.'
+                                           b'\n    # The parallel home-win feature eligibility gate must n'
+                                           b'ot suppress this\n    # independently validated path. Do not '
+                                           b'infer a second time if it ran above.\n    from app_core.ncaaf'
+                                           b'_pipeline_evidence import selection_requested as ncaaf_selection'
+                                           b'_requested\n    if use_ml and ncaaf_selection_requested():\n  '
+                                           b'      ncaaf_rows = merged.index[_string_series(merged, "league")'
+                                           b'.str.upper().eq("NCAAF")]\n        if market_model_prediction'
+                                           b's is not None:\n            original = market_model_predictio'
+                                           b'ns.get("ml_estimate_metadata", pd.Series("", index=market_model_'
+                                           b'predictions.index)).astype("string")\n            ncaaf_rows '
+                                           b'= ncaaf_rows.difference(original.index[original.str.contains'
+                                           b'(\'"ncaaf_inputs"\', regex=False, na=False)])\n        if len(n'
+                                           b'caaf_rows):\n            from app_core.market_probability_mod'
+                                           b'el import predict_market_probabilities\n            native_fr'
+                                           b'ame = merged.loc[ncaaf_rows].copy()\n            native_frame'
+                                           b'.attrs["ncaaf_schedule"] = ncaaf_schedule\n            native'
+                                           b'_ncaaf = predict_market_probabilities(native_frame)\n        '
+                                           b'    if market_model_predictions is None:\n                mar'
+                                           b'ket_model_predictions = native_ncaaf\n            else:\n     '
+                                           b'           for column in native_ncaaf:\n                    i'
+                                           b'f column not in market_model_predictions:\n                  '
+                                           b'      market_model_predictions[column] = pd.NA\n             '
+                                           b'       market_model_predictions.loc[ncaaf_rows, column] = native'
+                                           b'_ncaaf[column]\n    if use_ml and market_model_predictions is'
+                                           b' not None and not market_model_predictions.empty:\n        ma'
+                                           b'rket_probability = pd.to_numeric(\n            market_model_p'
+                                           b'redictions.get("ml_probability"), errors="coerce"\n'),
+                                          (b'    diagnostics["loaded_model_identity"] = loaded_model_identity'
+                                           b'\n    from app_core.nfl_inference_evidence import finish as f'
+                                           b'inish_nfl_evidence\n    finish_nfl_evidence(analysis_df)\n    '
+                                           b'from app_core.nhl_puck_line_evidence import finish as finish_nhl'
+                                           b'_evidence\n    finish_nhl_evidence(analysis_df)\n    return (a'
+                                           b'nalysis_df, best_picks_df, diagnostics)\n',
+                                           b'    diagnostics["loaded_model_identity"] = loaded_model_identity'
+                                           b'\n    from app_core.nfl_inference_evidence import finish as f'
+                                           b'inish_nfl_evidence\n    finish_nfl_evidence(analysis_df)\n    '
+                                           b'from app_core.ncaaf_pipeline_evidence import finish as finish_nc'
+                                           b'aaf_evidence\n    finish_ncaaf_evidence(analysis_df)\n    from'
+                                           b' app_core.nhl_puck_line_evidence import finish as finish_nhl_evi'
+                                           b'dence\n    finish_nhl_evidence(analysis_df)\n    return (analy'
+                                           b'sis_df, best_picks_df, diagnostics)\n')],
+                                'sha256': 'ea3bfa6a0d640b675f7a76240708090155f3252b9312f5f03ac588ecd65ecb43'},
+ 'streamlit_app.py': {'after_sha256': 'aa7c6581ae18e8f9989e7f1231718b70e082450c9d0f5e94e4081b992360c9d3',
+                      'edits': [(b'        str(controls.get("schedule_start") or ""),\n        str(controls.'
+                                 b'get("schedule_end") or ""),\n        tuple(sorted(str(r) for r in control'
+                                 b's.get("source_evidence_refs", ()))),\n    )\n\n\n',
+                                 b'        str(controls.get("schedule_start") or ""),\n        str(controls.'
+                                 b'get("schedule_end") or ""),\n        tuple(sorted(str(r) for r in control'
+                                 b's.get("source_evidence_refs", ()))),\n        tuple(sorted(str(p.get("sha'
+                                 b'256", "")) for p in controls.get("ncaaf_research_packets", ()))),\n    )\n'
+                                 b'\n\n'),
+                                (b'\n    timer.start("Fetch odds, team statistics and model predictions")\n  '
+                                 b'  from app_core.source_evidence_intake import selected as selected_sourc'
+                                 b'e_evidence\n    with selected_source_evidence(controls.get("source_eviden'
+                                 b'ce_refs", ())):\n        analysis_df, pipeline_best_picks_df, diagnostics'
+                                 b' = run_analysis_pipeline(\n            sports=controls["sports"],\n       '
+                                 b'     max_rows=10_000,\n',
+                                 b'\n    timer.start("Fetch odds, team statistics and model predictions")\n  '
+                                 b'  from app_core.source_evidence_intake import selected as selected_sourc'
+                                 b'e_evidence\n    from app_core.ncaaf_pipeline_evidence import selected as '
+                                 b'selected_ncaaf_research\n    with selected_source_evidence(controls.get("'
+                                 b'source_evidence_refs", ())), selected_ncaaf_research(controls.get("ncaaf'
+                                 b'_research_packets", ())):\n        analysis_df, pipeline_best_picks_df, d'
+                                 b'iagnostics = run_analysis_pipeline(\n            sports=controls["sports"'
+                                 b'],\n            max_rows=10_000,\n'),
+                                (b'\n    controls = render_sidebar()\n    controls["source_evidence_refs"] = '
+                                 b'list(st.session_state.get("source_evidence_refs", ()))\n\n    run_counter '
+                                 b'= int(controls.get("run_analysis_counter", 0))\n    should_run = _should_'
+                                 b'run_pipeline(st.session_state, run_counter, controls)\n',
+                                 b'\n    controls = render_sidebar()\n    controls["source_evidence_refs"] = '
+                                 b'list(st.session_state.get("source_evidence_refs", ()))\n    controls["nca'
+                                 b'af_research_packets"] = list(st.session_state.get("ncaaf_research_packet'
+                                 b's", ()))\n\n    run_counter = int(controls.get("run_analysis_counter", 0))'
+                                 b'\n    should_run = _should_run_pipeline(st.session_state, run_counter, co'
+                                 b'ntrols)\n')],
+                      'sha256': 'e08d723c302d870de0bd7be0e285013e9fef4b0af0962ab3471284d7c405deaa'}}
+
+def _football_research_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _football_research_previous_guard_source(source, binding=None):
+    binding = FOOTBALL_RESEARCH_BINDINGS if binding is None else binding
+    if b"\nFOOTBALL_RESEARCH_POLICY_PATH =" not in source:
+        return source
+    _require(_football_research_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nFOOTBALL_RESEARCH_POLICY_PATH =", 1)[0] + FOOTBALL_RESEARCH_PREVIOUS_CLI
+
+
+def _football_research_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _football_research_previous_guard_source(source)
+    frozen = FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (REMOTE_CONTINUATION_PRIOR_SOURCE_RECONSTRUCTIONS,
+        REMOTE_CANONICAL_PRIOR_SOURCE_RECONSTRUCTIONS, CANONICAL_DOWNLOAD_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS,
+        MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS, FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_UI_PRIOR_SOURCE_RECONSTRUCTIONS,
+        PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS,
+        PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS, HOME_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_PRIOR_SOURCE_RECONSTRUCTIONS, ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    _require(hashlib.sha256(source).hexdigest() == frozen["after_sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_football_research_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nFOOTBALL_RESEARCH_POLICY_PATH =" in source:
+        if reviewed == FOOTBALL_RESEARCH_BINDINGS["successor_guard_sha256"]:
+            return _football_research_raw_guard_matches(source, reviewed)
+        if not _football_research_raw_guard_matches(source, FOOTBALL_RESEARCH_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = _football_research_previous_guard_source(source)
+    return _football_research_prior_guard_matches(source, reviewed)
+
+
+_football_research_prior_continuation_guard = _remote_continuation_previous_guard_source
+_football_research_prior_continuation_main = _remote_continuation_previous_main_source
+
+
+def _remote_continuation_previous_guard_source(source, binding=None):
+    return _football_research_prior_continuation_guard(_football_research_previous_guard_source(source), binding)
+
+
+def _remote_continuation_previous_main_source(path, source):
+    return _football_research_prior_continuation_main(path, _football_research_previous_main_source(path, source))
+
+
+def _run_football_research_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/football_research_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_football_research_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -7557,7 +8234,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):
+        if exists_at("HEAD", FOOTBALL_RESEARCH_POLICY_PATH):
+            code, report = _run_football_research_integrated(args.manifest, args.base, FOOTBALL_RESEARCH_BINDINGS)
+        elif exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):
             code, report = _run_remote_continuation_integrated(args.manifest, args.base, REMOTE_CONTINUATION_BINDINGS)
         elif exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):
             code, report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)
