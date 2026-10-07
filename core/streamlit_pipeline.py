@@ -10025,6 +10025,7 @@ def run_analysis_pipeline(
                 try:
                     from app_core.market_probability_model import predict_market_probabilities
 
+                    enriched_for_prediction.attrs["ncaaf_schedule"] = ncaaf_schedule
                     market_model_predictions = predict_market_probabilities(enriched_for_prediction)
                 except Exception as market_model_exc:
                     market_model_predictions = None
@@ -10157,6 +10158,27 @@ def run_analysis_pipeline(
     # the exact market being evaluated.  Missing/unresolved stats stay blank;
     # no market or TheOver value is relabeled as an ML prediction.
     market_ml_count = 0
+    # Explicit native NCAAF packets carry their own seven ordered features.
+    # The parallel home-win feature eligibility gate must not suppress this
+    # independently validated path. Do not infer a second time if it ran above.
+    from app_core.ncaaf_pipeline_evidence import selection_requested as ncaaf_selection_requested
+    if use_ml and ncaaf_selection_requested():
+        ncaaf_rows = merged.index[_string_series(merged, "league").str.upper().eq("NCAAF")]
+        if market_model_predictions is not None:
+            original = market_model_predictions.get("ml_estimate_metadata", pd.Series("", index=market_model_predictions.index)).astype("string")
+            ncaaf_rows = ncaaf_rows.difference(original.index[original.str.contains('"ncaaf_inputs"', regex=False, na=False)])
+        if len(ncaaf_rows):
+            from app_core.market_probability_model import predict_market_probabilities
+            native_frame = merged.loc[ncaaf_rows].copy()
+            native_frame.attrs["ncaaf_schedule"] = ncaaf_schedule
+            native_ncaaf = predict_market_probabilities(native_frame)
+            if market_model_predictions is None:
+                market_model_predictions = native_ncaaf
+            else:
+                for column in native_ncaaf:
+                    if column not in market_model_predictions:
+                        market_model_predictions[column] = pd.NA
+                    market_model_predictions.loc[ncaaf_rows, column] = native_ncaaf[column]
     if use_ml and market_model_predictions is not None and not market_model_predictions.empty:
         market_probability = pd.to_numeric(
             market_model_predictions.get("ml_probability"), errors="coerce"
@@ -10782,6 +10804,8 @@ def run_analysis_pipeline(
     diagnostics["loaded_model_identity"] = loaded_model_identity
     from app_core.nfl_inference_evidence import finish as finish_nfl_evidence
     finish_nfl_evidence(analysis_df)
+    from app_core.ncaaf_pipeline_evidence import finish as finish_ncaaf_evidence
+    finish_ncaaf_evidence(analysis_df)
     from app_core.nhl_puck_line_evidence import finish as finish_nhl_evidence
     finish_nhl_evidence(analysis_df)
     return (analysis_df, best_picks_df, diagnostics)

@@ -68,7 +68,7 @@ def _matches(source):
     return [q for q in matching_quotes(source) if q.get("provenance_version") == QUOTE_VERSION]
 
 
-def _offer(source, generated_at):
+def _offer(source, generated_at, *, ncaaf_schedule=False):
     league = text(source.get("league") or source.get("League")).upper()
     matches = _matches(source)
     q = matches[0] if len(matches) == 1 else {}
@@ -88,12 +88,17 @@ def _offer(source, generated_at):
         DERIVED_NAMESPACE + ":" + hashlib.sha256(raw.encode()).hexdigest() if identified else ""),
         quote_namespace=event["provider_namespace"] if provider_id else DERIVED_NAMESPACE,
         quote_kind="provider_issued" if provider_id else "locally_derived")
-    return dict(version=VERSION, event=event, offer=offer, inference_time=generated_at, target_period="full_game",
+    contract = dict(version=VERSION, event=event, offer=offer, inference_time=generated_at, target_period="full_game",
         matchup_key_semantics="unordered_team_pair_et_day", matched_offer_count=len(matches),
         **({"source_contract": q["source_contract"]} if "source_contract" in q else {}))
+    if ncaaf_schedule and league == "NCAAF":
+        contract["matchup_key_semantics"] = "ncaaf_schedule_event"
+        contract["schedule_binding"] = {k:text(source.get(k)) for k in
+            ("matchup_id", "schedule_event_id", "schedule_inventory_key", "schedule_match_status", "historical_matchup_id")}
+    return contract
 
 
-def record(source, result, metadata, generated_at):
+def record(source, result, metadata, generated_at, *, ncaaf_schedule=False):
     """Used at the inference boundary, only for explicitly versioned transport.
 
     Legacy inputs retain their original metadata/interpretation. Supplied aliases
@@ -102,7 +107,7 @@ def record(source, result, metadata, generated_at):
     if not any(isinstance(q, dict) and q.get("provenance_version") == QUOTE_VERSION for q in _quotes(source)):
         return metadata, {}
     item = json.loads(metadata)
-    contract = _offer(source, generated_at)
+    contract = _offer(source, generated_at, ncaaf_schedule=ncaaf_schedule)
     event, offer = contract["event"], contract["offer"]
     supplied = dict(quote_id=offer["quote_id"], market_period=offer["period"], settlement_rules=offer["rules"],
         prediction_generated_at=generated_at, game_start_utc=event["start"],
@@ -121,8 +126,10 @@ def diagnose(source, item):
     missing, conflicts = [], []
     contract = item.get("producer_contract")
     try:
-        if (not isinstance(contract, dict) or set(contract) - {"source_contract"} != {"version", "event", "offer", "inference_time", "target_period", "matchup_key_semantics", "matched_offer_count"}
-            or contract["version"] != VERSION or contract["matchup_key_semantics"] != "unordered_team_pair_et_day"):
+        scheduled = isinstance(contract,dict) and contract.get("matchup_key_semantics") == "ncaaf_schedule_event"
+        optional = {"source_contract", "schedule_binding"} if scheduled else {"source_contract"}
+        if (not isinstance(contract, dict) or set(contract) - optional != {"version", "event", "offer", "inference_time", "target_period", "matchup_key_semantics", "matched_offer_count"}
+            or contract["version"] != VERSION or contract["matchup_key_semantics"] not in {"unordered_team_pair_et_day", "ncaaf_schedule_event"}):
             raise ValueError("producer_contract.schema")
         event, offer = contract["event"], contract["offer"]
         if contract["target_period"] != "full_game" or (offer["period"] and offer["period"] != contract["target_period"]):
@@ -130,7 +137,7 @@ def diagnose(source, item):
         if set(event) != {"provider_namespace", "provider_event_id", "home", "away", "start", "sport"} or set(offer) != {
             "book", "market", "side", "line", "price", "source_time", "period", "rules", "period_source", "rules_source", "quote_id", "quote_namespace", "quote_kind"}:
             raise ValueError("producer_contract.schema")
-        if _offer(source, contract["inference_time"]) != contract:
+        if _offer(source, contract["inference_time"], ncaaf_schedule=scheduled) != contract:
             conflicts.append("provider_quotes.exact_offer")
         if type(contract["matched_offer_count"]) is not int or contract["matched_offer_count"] != 1:
             conflicts.append("producer_contract.matched_offer_count")
@@ -169,6 +176,8 @@ def diagnose(source, item):
                                 "quote_time":offer["source_time"], "selected_quote_recorded_at":offer["source_time"]}.items():
             if expected and text(source.get(field)) and clock(source[field]) != expected: conflicts.append(field)
         for field in ("quote_bookmaker", "opposing_odds_source", "sportsbook"):
+            if scheduled and field == "opposing_odds_source" and text(source.get(field)) == "missing" and number(source.get("opposing_odds_american")) is None:
+                continue  # Explicit missing opposite price supplies no value estimate.
             if text(source.get(field)) and text(source[field]).lower() != offer["book"].lower(): conflicts.append(field)
         if not clock(event["start"]) or not clock(offer["source_time"]) or not clock(contract["inference_time"]):
             missing.append("valid_original_clocks")
@@ -183,6 +192,20 @@ def diagnose(source, item):
             conflicts.append("offer.provider_namespace")
         # Validate an event label only as a pair/day, never as ordered home/away.
         key = text(source.get("matchup_id"))
+        if scheduled:
+            binding = contract.get("schedule_binding", {})
+            sid = binding.get("schedule_event_id", "")
+            if (event["sport"] != "NCAAF" or not re.fullmatch(r"espn:college-football:[A-Za-z0-9_-]+", sid)
+                or binding.get("schedule_match_status") != "MATCHED"
+                or key != sid or binding.get("schedule_inventory_key") != sid):
+                conflicts.append("schedule_binding")
+            # The independently named exact quote still supplies orientation.
+            # Preserve the ESPN inventory identity separately from pair labels.
+            key = binding.get("historical_matchup_id", "")
+            if not key or key == sid:
+                from pandas import Timestamp
+                key = "|".join((event["home"], event["away"],
+                    Timestamp(event["start"]).tz_convert("America/New_York").date().isoformat()))
         parts = key.split("|")
         if len(parts) != 3:
             conflicts.append("matchup_id")
