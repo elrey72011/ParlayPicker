@@ -7242,6 +7242,160 @@ _canonical_download_prior_ncaaf_research_guard = _ncaaf_research_previous_guard_
 def _ncaaf_research_previous_guard_source(source, binding=None):
     return _canonical_download_prior_ncaaf_research_guard(_canonical_download_previous_guard_source(source), binding)
 
+REMOTE_CANONICAL_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-remote-canonical-v1.json'
+REMOTE_CANONICAL_POLICY_VERSION = 'owner-remote-canonical-json-download-v1'
+REMOTE_CANONICAL_APPROVAL_REFERENCE = ('Owner-authorized bounded owner-only read-only download of existing canonical-prospective-v1 JSON objects from the '
+ 'configured Shared Drive after verified #2397 merge. Preserve original bytes, remote identities, clocks, local SQLite '
+ 'exporter, frozen version 10, predecessor assertions, scientific requirements, workflows and wagering protections. '
+ 'Truthful bounded/partial inventory and explicit dependency gaps; fail closed on corruption, identity conflicts and '
+ 'credentials. No SQLite creation/hydration, analysis, provider acquisition, remote writes, probability '
+ 'reconstruction, fitting, registration, activation, merge, deployment, publication, messaging or financial execution. '
+ 'Synthetic actual-path regressions run network blocked; NFL remains deferred.')
+REMOTE_CANONICAL_PATHS = ('scripts/check_launch_change_scope.py',
+ 'scripts/remote_canonical_scope.py',
+ 'tests/test_remote_canonical_scope.py',
+ 'app_core/remote_canonical_download.py',
+ 'app_core/canonical_remote_contract.py',
+ 'app/ui/remote_canonical_download.py',
+ 'app/ui/publish_panel.py',
+ 'tests/test_remote_canonical_download.py',
+ 'docs/paid-launch/private-remote-canonical-download.md')
+REMOTE_CANONICAL_FROZEN_PATHS = ('app_core/evidence_drive.py',
+ 'app_core/prospective_remote.py',
+ 'app_core/canonical_schema.py',
+ 'app_core/canonical_download.py',
+ 'app/ui/canonical_evidence_download.py',
+ 'tests/test_canonical_download.py',
+ 'docs/paid-launch/private-canonical-download.md')
+REMOTE_CANONICAL_BINDINGS = {'base': '5fed46ac0a57263042c65659967eb52d27bd480b',
+ 'base_tree': 'd0a1c1464c48cd255e056000c801ef0f81a71e4b',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': 'd84e0323d11ec4dc8f0a6050ccdef9b29ac937886eaf97b838fd58e4a2e7d9c4',
+ 'previous_policy_blob': '2a3b61c95ad2fc33af602cf030ee778aff0c48b3',
+ 'reviewed_blobs': {'scripts/remote_canonical_scope.py': '4f4b32630bd4f9118a94fa7eae781db788098569',
+                    'tests/test_remote_canonical_scope.py': 'cd7c629f321c04a522bac46a48ce96fcd83261e0',
+                    'app_core/remote_canonical_download.py': '792154622bc74947ffcf1e6c9f6cf230e6eb54fb',
+                    'app_core/canonical_remote_contract.py': '3168bb881ff63ef4534c1cdc6538ec7a64542b7c',
+                    'app/ui/remote_canonical_download.py': 'd395e28b9e7e88c2bacade54b1d395faf203f96e',
+                    'app/ui/publish_panel.py': '1d89d1a93db6ac2a4ed57dd4b4f48db2e1f1165b',
+                    'tests/test_remote_canonical_download.py': '9d6decb62c30b4fd9e95e780f0afa61cb2fd93de',
+                    'docs/paid-launch/private-remote-canonical-download.md': '9af915317db4bbd4bab84f4593d39eaac5029435'},
+ 'scope_module_sha256': 'ed04c0f12c4cddc21b25051a7ac2fe9e0b7dd3ab640bcb05c4f15887b5dc95c4',
+ 'successor_guard_sha256': '58b7eae3417cbee44af6f18532817a7bf100db6f40b148b1f08a6f715a5dd434'}
+REMOTE_CANONICAL_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, defa'
+ b'ult=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    '
+ b'args = parser.parse_args()\n    try:\n        if exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):\n            co'
+ b'de, report = _run_canonical_download_integrated(args.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)\n        e'
+ b'lif exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):\n            code, report = _run_ncaaf_research_integrated(arg'
+ b's.manifest, args.base, NCAAF_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n  '
+ b'          code, report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)\n '
+ b'       elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, report = _run_football_catalog_in'
+ b'tegrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        elif exists_at("HEAD", NHL_PUCK_LINE_POLIC'
+ b'Y_PATH):\n            code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDIN'
+ b'GS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code, report = _run_nfl_calibration'
+ b'_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif exists_at("HEAD", SOURCE_INTAKE_POL'
+ b'ICY_PATH):\n            code, report = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BIND'
+ b'INGS)\n        elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args'
+ b'.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code,'
+ b' report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD'
+ b'", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_'
+ b'NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_'
+ b'admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS'
+ b'_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDIN'
+ b'GS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract'
+ b'_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY'
+ b'_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n     '
+ b'   elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args'
+ b'.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integ'
+ b'rated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            '
+ b'code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEA'
+ b'D", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDING'
+ b'S)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest,'
+ b' args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_'
+ b'coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_'
+ b'PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        '
+ b'elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.'
+ b'base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PROD'
+ b'UCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_'
+ b'codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent='
+ b'2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n '
+ b'       args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\n'
+ b'if __name__ == "__main__":\n    raise SystemExit(main())\n')
+REMOTE_CANONICAL_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'sha256': '8b10cf405a721588a810c1aacc8ce860c0efe902aa429774833782e85b36659a',
+                             'edits': [(b'    render_canonical_download(setting)\n',
+                                        b'    render_canonical_download(setting)\n    from app.ui.remote_canonical_down'
+                                        b'load import render as render_remote_canonical_download\n    render_remote_can'
+                                        b'onical_download(setting)\n')]}}
+
+def _remote_canonical_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _remote_canonical_previous_guard_source(source, binding=None):
+    binding = REMOTE_CANONICAL_BINDINGS if binding is None else binding
+    if b"\nREMOTE_CANONICAL_POLICY_PATH =" not in source:
+        return source
+    _require(_remote_canonical_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nREMOTE_CANONICAL_POLICY_PATH =", 1)[0] + REMOTE_CANONICAL_PREVIOUS_CLI
+
+
+def _remote_canonical_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _remote_canonical_previous_guard_source(source)
+    frozen = REMOTE_CANONICAL_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    older = {entry[path]["sha256"] for entry in (CANONICAL_DOWNLOAD_PRIOR_SOURCE_RECONSTRUCTIONS, NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS, MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS, FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS, NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS, SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS, PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS,
+        SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS, PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS,
+        HOME_PRIOR_SOURCE_RECONSTRUCTIONS, NFL_PRIOR_SOURCE_RECONSTRUCTIONS,
+        ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS, DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS) if path in entry}
+    if hashlib.sha256(source).hexdigest() in older:
+        return source
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+_remote_canonical_prior_guard_matches = _dfs_guard_matches
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nREMOTE_CANONICAL_POLICY_PATH =" in source:
+        if reviewed == REMOTE_CANONICAL_BINDINGS["successor_guard_sha256"]:
+            return _remote_canonical_raw_guard_matches(source, reviewed)
+        if not _remote_canonical_raw_guard_matches(source, REMOTE_CANONICAL_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = source.split(b"\nREMOTE_CANONICAL_POLICY_PATH =", 1)[0] + REMOTE_CANONICAL_PREVIOUS_CLI
+    return _remote_canonical_prior_guard_matches(source, reviewed)
+
+
+_remote_canonical_prior_canonical_download_main = _canonical_download_previous_main_source
+
+
+def _canonical_download_previous_main_source(path, source):
+    return _remote_canonical_prior_canonical_download_main(path, _remote_canonical_previous_main_source(path, source))
+
+
+def _run_remote_canonical_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/remote_canonical_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_remote_canonical_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
+
+_remote_canonical_prior_canonical_download_guard = _canonical_download_previous_guard_source
+
+
+def _canonical_download_previous_guard_source(source, binding=None):
+    return _remote_canonical_prior_canonical_download_guard(_remote_canonical_previous_guard_source(source), binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -7249,7 +7403,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):
+        if exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):
+            code, report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)
+        elif exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):
             code, report = _run_canonical_download_integrated(args.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)
         elif exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):
             code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_BINDINGS)
