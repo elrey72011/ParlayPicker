@@ -11,7 +11,13 @@ def render(setting):
         folder = str(setting("PARLAYPICKER_DRIVE_FOLDER_ID")).strip()
         account = str(setting("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT"))
         owner = str(setting("PARLAYPICKER_PUBLISH_TOKEN"))
-        binding = hashlib.sha256((folder+"\0"+account+"\0"+owner).encode()).hexdigest()
+        choice = st.selectbox("Canonical table to download", ["All canonical tables"]+sorted(remote.SCHEMA),
+                              key="remote_canonical_table")
+        table = None if choice == "All canonical tables" else choice
+        cursor = st.text_input("Continue after verified canonical path (optional)",
+                               key="remote_canonical_cursor").strip() or None
+        st.caption("For retained research inputs, begin with prospective_reconciled_source. Table and continuation downloads cover only their stated scope. Use the previous manifest's next_start_after path to continue; a new inventory is read each time.")
+        binding = hashlib.sha256((folder+"\0"+account+"\0"+owner+"\0"+str(table)+"\0"+str(cursor)).encode()).hexdigest()
         key = "private_remote_canonical_download"
         previous = st.session_state.get(key)
         if previous and previous["binding"] != binding:
@@ -28,17 +34,24 @@ def render(setting):
                 folder = str(setting("PARLAYPICKER_DRIVE_FOLDER_ID")).strip()
                 account = str(setting("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT"))
                 owner = str(setting("PARLAYPICKER_PUBLISH_TOKEN"))
-                binding = hashlib.sha256((folder+"\0"+account+"\0"+owner).encode()).hexdigest()
+                binding = hashlib.sha256((folder+"\0"+account+"\0"+owner+"\0"+str(table)+"\0"+str(cursor)).encode()).hexdigest()
                 with st.spinner("Reading existing remote canonical objects within export limits…"):
-                    raw, manifest = remote.build_download(folder, forbidden_values=forbidden)
+                    raw, manifest = remote.build_download(folder, forbidden_values=forbidden,
+                                                          table=table, start_after=cursor)
                 st.session_state[key] = dict(binding=binding, raw=raw, manifest=manifest)
             except remote.ExportUnavailable as exc:
                 st.error("Remote canonical JSON download unavailable: "+str(exc)+". No store was initialized or restored.")
         prepared = st.session_state.get(key)
         if prepared:
             manifest = prepared["manifest"]
-            if not manifest["export_complete"]:
+            if not manifest.get("selection_complete", manifest["export_complete"]):
                 st.warning("PARTIAL remote export: "+str(manifest["inventory"]["incomplete_reason"] or manifest["stop_reason"])+". Unlisted or unread objects and their dependencies remain UNKNOWN.")
+            elif not manifest["export_complete"]:
+                st.info("Requested table/range retrieved. This is a scoped download, not a complete canonical store; omitted dependencies remain UNKNOWN.")
+            continuation = manifest.get("continuation", {})
+            if continuation.get("next_start_after"):
+                st.caption("Continue after this verified path:")
+                st.code(continuation["next_start_after"], language=None)
             counts = manifest["counts"]
             st.caption(str(counts["exported_paths"])+" verified canonical paths; "+
                        str(counts["exported_remote_files"])+" remote file identities. Counts do not establish an authentic complete research chain or wagering authority.")
