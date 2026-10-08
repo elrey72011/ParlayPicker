@@ -9574,6 +9574,234 @@ def _run_ci_scheduling_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+NCAAF_COMPAT_POLICY_PATH = "docs/paid-launch/launch-scope-policy-ncaaf-compatibility-v1.json"
+NCAAF_COMPAT_POLICY_VERSION = "ncaaf-recovered-compatibility-v1"
+NCAAF_COMPAT_APPROVAL_REFERENCE = 'Owner authorizes reconciliation of #2402 against actual merged #2403 main. Preserve the exact reviewed recovered NCAAF readers, original model 881833a03169d8ff3cfdc7cfb6000a174ccb545b1d087657169fe06d5f8a1153 and predecessor 6d7291fd464a9a367ba060ccf7bd526708bdba7b5809657930e1616f026173c0, model envelope, formulas and original assertions. Preserve all merged CI scheduling, coverage, workflow, timing profile, complete-partition and wagering protections; original baseline and frozen version 10 unchanged. Fresh exact bindings and subsequent policy-only seal, bounded synthetic predecessor fixture reconciliation, authorized existing draft PR push/update and complete fresh CI only. No normal-application integration, source acceptance, historical inference/rebuilding, authentic clock changes, provider acquisition, Drive, restoration, analysis, fitting, registration, activation, publication, merge, deployment, billing or financial execution. All unqualified wagers remain PASS at zero stake.'
+NCAAF_COMPAT_PATHS = ('app_core/ncaaf_model_compatibility.py',
+ 'app_core/ncaaf_compatible_observation.py',
+ 'docs/paid-launch/ncaaf-compatibility-binding-v1.json',
+ 'docs/paid-launch/ncaaf-recovered-compatibility.md',
+ 'tests/test_ncaaf_model_compatibility.py',
+ 'scripts/check_launch_change_scope.py',
+ 'scripts/ncaaf_compatibility_scope.py',
+ 'tests/test_ncaaf_compatibility_scope.py')
+NCAAF_COMPAT_FROZEN_PATHS = ('.github/workflows/ci.yml',
+ '.github/workflows/paid-launch.yml',
+ 'app/ui/daily_dashboard.py',
+ 'app/ui/lock_picks.py',
+ 'app/ui/publish_panel.py',
+ 'app/ui/sidebar_controls.py',
+ 'app/ui/slate_coverage.py',
+ 'app_core/canonical_download.py',
+ 'app_core/evidence_drive.py',
+ 'app_core/evidence_remote.py',
+ 'app_core/football_identity_capture.py',
+ 'app_core/game_coverage.py',
+ 'app_core/ncaaf_history.py',
+ 'app_core/ncaaf_identity.py',
+ 'app_core/ncaaf_pipeline_evidence.py',
+ 'app_core/ncaaf_prospective.py',
+ 'app_core/ncaaf_prospective_store.py',
+ 'app_core/ncaaf_research.py',
+ 'app_core/ncaaf_research_contract.py',
+ 'app_core/ncaaf_schedule.py',
+ 'app_core/nfl_calibration_evidence.py',
+ 'app_core/nfl_inference_evidence.py',
+ 'app_core/nfl_native_provenance.py',
+ 'app_core/nhl_puck_line_evidence.py',
+ 'app_core/per_game_boards.py',
+ 'app_core/performance_spans.py',
+ 'app_core/prediction_evidence.py',
+ 'app_core/public_board.py',
+ 'app_core/public_history.py',
+ 'app_core/remote_canonical_download.py',
+ 'app_core/research_model_recovery.py',
+ 'app_core/slate_coverage.py',
+ 'app_core/source_contract.py',
+ 'app_core/source_evidence_intake.py',
+ 'app_core/stage_timing.py',
+ 'app_core/team_name_mapping.py',
+ 'app_core/weights_config.py',
+ 'core/live_wager_contract.py',
+ 'core/run_readiness.py',
+ 'core/streamlit_pipeline.py',
+ 'core/team_mapper.py',
+ 'docs/ci-test-execution.md',
+ 'docs/examples/slate-coverage-synthetic.json',
+ 'docs/paid-launch/launch-scope-policy-ci-scheduling-v1.json',
+ 'docs/paid-launch/launch-scope-policy-slate-audit-v1.json',
+ 'docs/slate-coverage.md',
+ 'publishing/board.html',
+ 'scripts/benchmark_drive_history_loading.py',
+ 'scripts/ci_scheduling_scope.py',
+ 'scripts/ci_test_file_costs_v1.json',
+ 'scripts/football_research_scope.py',
+ 'scripts/reconcile_slate.py',
+ 'scripts/remote_continuation_scope.py',
+ 'scripts/run_ci_tests.py',
+ 'scripts/slate_audit_scope.py',
+ 'streamlit_app.py',
+ 'tests/conftest.py',
+ 'tests/paid_launch/case_isolation_and_scope.py',
+ 'tests/test_ci_offline_transports.py',
+ 'tests/test_ci_scheduling_scope.py',
+ 'tests/test_ci_test_shards.py',
+ 'tests/test_daily_dashboard.py',
+ 'tests/test_evidence_drive.py',
+ 'tests/test_evidence_remote.py',
+ 'tests/test_football_research_scope.py',
+ 'tests/test_game_coverage.py',
+ 'tests/test_live_wager_contract.py',
+ 'tests/test_locked_picks.py',
+ 'tests/test_ncaaf_prospective.py',
+ 'tests/test_ncaaf_research.py',
+ 'tests/test_ncaaf_research_contract.py',
+ 'tests/test_nfl_inference_evidence.py',
+ 'tests/test_nfl_native_provenance.py',
+ 'tests/test_nfl_ui_reblend.py',
+ 'tests/test_per_game_boards.py',
+ 'tests/test_prediction_evidence.py',
+ 'tests/test_producer_provenance.py',
+ 'tests/test_public_board.py',
+ 'tests/test_public_history.py',
+ 'tests/test_publish_panel.py',
+ 'tests/test_remote_continuation_scope.py',
+ 'tests/test_slate_audit_scope.py',
+ 'tests/test_slate_coverage.py')
+NCAAF_COMPAT_BINDINGS = {'base': 'f99df8f5df17c7157bd0e534ce7941ff694aaab3',
+ 'base_tree': 'f8713389f4e3e451d49411ac59a9e146d089b12a',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '50867905878c73a124ff3e4f05fb6680c07c6bef13f7ddeaa6a569333dbb139e',
+ 'previous_policy_blob': 'a210ee733bd00073028d79fe7d624157b0d734ab',
+ 'previous_ci_policy_blob': 'f803a4405199ba3a2686cfb8e2948270a17268b4',
+ 'reviewed_blobs': {'app_core/ncaaf_model_compatibility.py': '8cad419deb730d6d56274f27a34dccecfe78be39',
+                    'app_core/ncaaf_compatible_observation.py': 'e853e913897a62af15eb5cd68253d6787435afad',
+                    'docs/paid-launch/ncaaf-compatibility-binding-v1.json': '42fe6a27f271590bae1e44d74dc3e2be0ab66cc1',
+                    'docs/paid-launch/ncaaf-recovered-compatibility.md': '2d9800ae2022f149c8bd2a50cda2efc7612853b6',
+                    'tests/test_ncaaf_model_compatibility.py': '2f75df769ff68a03ed2e6c2d3fcda55f271d9e1b',
+                    'scripts/ncaaf_compatibility_scope.py': '0a4ca827e6c45cbf31a56848196bafb2b1987337',
+                    'tests/test_ncaaf_compatibility_scope.py': '3003f6c306f27bea4140631019f02db459d7c029'},
+ 'scope_module_sha256': 'b774a07d1bf0f1ad2adee8bd4929848415d891e6a82a5d493caf5fb84a162ccc',
+ 'successor_guard_sha256': 'a6e37e7df17691c635c8b6e24474feb82cb4ad70b57a7418fdafc7d4ae785f56'}
+NCAAF_COMPAT_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", CI_SCHEDULING_POLICY_PATH):\n            code, report = _run_ci_scheduling_integrated(args.manifest, args.base, CI_SCHEDULING_BINDINGS)\n        elif exists_at("HEAD", SLATE_AUDIT_POLICY_PATH):\n            code, report = _run_slate_audit_integrated(args.manifest, args.base, SLATE_AUDIT_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_RESEARCH_POLICY_PATH):\n            code, report = _run_football_research_integrated(args.manifest, args.base, FOOTBALL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):\n            code, report = _run_remote_continuation_integrated(args.manifest, args.base, REMOTE_CONTINUATION_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):\n            code, report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)\n        elif exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):\n            code, report = _run_canonical_download_integrated(args.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)\n        elif exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):\n            code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n            code, report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, report = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n            code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS = {}
+
+
+def _ncaaf_compatibility_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _ncaaf_compatibility_previous_guard_source(source, binding=None):
+    binding = NCAAF_COMPAT_BINDINGS if binding is None else binding
+    if b"\nNCAAF_COMPAT_POLICY_PATH =" not in source:
+        return source
+    _require(_ncaaf_compatibility_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNCAAF_COMPAT_POLICY_PATH =", 1)[0] + NCAAF_COMPAT_PREVIOUS_CLI
+
+
+def _ncaaf_compatibility_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _ncaaf_compatibility_previous_guard_source(source)
+    frozen = NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    earlier = {entry[path]["sha256"] for name, entry in globals().items()
+               if name.endswith("_PRIOR_SOURCE_RECONSTRUCTIONS") and name != "NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS"
+               and path in entry}
+    if hashlib.sha256(source).hexdigest() in earlier:
+        return source
+    _require(hashlib.sha256(source).hexdigest() == frozen["after_sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+# Reuse the exact immutable predecessor for historical fixture semantics.
+# New bytes are peeled only by their exact reviewed hashes and edit receipts.
+_ncaaf_compatibility_frozen_module = None
+def _ncaaf_compatibility_predecessor():
+    global _ncaaf_compatibility_frozen_module
+    if _ncaaf_compatibility_frozen_module is None:
+        import types
+        source = Path(__file__).read_bytes().replace(b"\r\n", b"\n")
+        previous = _ncaaf_compatibility_previous_guard_source(source)
+        _require(hashlib.sha256(previous).hexdigest() == NCAAF_COMPAT_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        frozen = types.ModuleType("exact_ncaaf_compatibility_predecessor")
+        frozen.__file__ = __file__
+        exec(previous, frozen.__dict__)
+        # Each lazy reader consumes its exact verified predecessor bytes.
+        # Seeding prevents it from reading the newer combined source file.
+        ci_previous = frozen._ci_scheduling_previous_guard_source(previous)
+        _require(hashlib.sha256(ci_previous).hexdigest() ==
+                 frozen.CI_SCHEDULING_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        ci_frozen = types.ModuleType("exact_compatibility_preci_predecessor")
+        ci_frozen.__file__ = __file__
+        exec(ci_previous, ci_frozen.__dict__)
+        coverage_previous = ci_frozen._slate_audit_previous_guard_source(ci_previous)
+        _require(hashlib.sha256(coverage_previous).hexdigest() ==
+                 ci_frozen.SLATE_AUDIT_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        coverage_frozen = types.ModuleType("exact_compatibility_precoverage_predecessor")
+        coverage_frozen.__file__ = __file__
+        exec(coverage_previous, coverage_frozen.__dict__)
+        ci_frozen._slate_frozen_module = coverage_frozen
+        frozen._ci_scheduling_frozen_module = ci_frozen
+        _ncaaf_compatibility_frozen_module = frozen
+    _ncaaf_compatibility_frozen_module.ROOT = ROOT
+    return _ncaaf_compatibility_frozen_module
+
+
+def _ncaaf_compatibility_wrap_previous(name):
+    def wrapped(*args, **kwargs):
+        method = getattr(_ncaaf_compatibility_predecessor(), name)
+        if name.endswith("_previous_main_source"):
+            path, source = args
+            return method(path, _ncaaf_compatibility_previous_main_source(path, source), **kwargs)
+        source, *rest = args
+        return method(_ncaaf_compatibility_previous_guard_source(source), *rest, **kwargs)
+    return wrapped
+
+
+for _ncaaf_compatibility_name, _ncaaf_compatibility_method in list(globals().items()):
+    if callable(_ncaaf_compatibility_method) and (_ncaaf_compatibility_name.endswith("_previous_guard_source") or _ncaaf_compatibility_name.endswith("_previous_main_source")) and not _ncaaf_compatibility_name.startswith("_ncaaf_compatibility_"):
+        globals()[_ncaaf_compatibility_name] = _ncaaf_compatibility_wrap_previous(_ncaaf_compatibility_name)
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nNCAAF_COMPAT_POLICY_PATH =" in source:
+        if reviewed == NCAAF_COMPAT_BINDINGS["successor_guard_sha256"]:
+            return _ncaaf_compatibility_raw_guard_matches(source, reviewed)
+        if not _ncaaf_compatibility_raw_guard_matches(source, NCAAF_COMPAT_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = _ncaaf_compatibility_previous_guard_source(source)
+    return _ncaaf_compatibility_predecessor()._dfs_guard_matches(source, reviewed)
+
+
+# Keep the predecessor's assertions meaningful for the newly reviewed source:
+# compose exact reverse edits; no assertion is removed or relaxed.
+for _ncaaf_compatibility_group in ("SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS", "FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS"):
+    _ncaaf_compatibility_map = {p: dict(v) for p,v in globals()[_ncaaf_compatibility_group].items()}
+    globals()[_ncaaf_compatibility_group] = _ncaaf_compatibility_map
+    for _ncaaf_compatibility_path, _ncaaf_compatibility_receipt in NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS.items():
+        if _ncaaf_compatibility_path in _ncaaf_compatibility_map:
+            _ncaaf_compatibility_prior = _ncaaf_compatibility_map[_ncaaf_compatibility_path]
+            _require(_ncaaf_compatibility_prior["after_sha256"] == _ncaaf_compatibility_receipt["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+            _ncaaf_compatibility_prior["after_sha256"] = _ncaaf_compatibility_receipt["after_sha256"]
+            _ncaaf_compatibility_prior["edits"] = _ncaaf_compatibility_prior["edits"] + _ncaaf_compatibility_receipt["edits"]
+
+
+
+def _run_ncaaf_compatibility_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/ncaaf_compatibility_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_ncaaf_compatibility_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -9581,7 +9809,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", CI_SCHEDULING_POLICY_PATH):
+        if exists_at("HEAD", NCAAF_COMPAT_POLICY_PATH):
+            code, report = _run_ncaaf_compatibility_integrated(args.manifest, args.base, NCAAF_COMPAT_BINDINGS)
+        elif exists_at("HEAD", CI_SCHEDULING_POLICY_PATH):
             code, report = _run_ci_scheduling_integrated(args.manifest, args.base, CI_SCHEDULING_BINDINGS)
         elif exists_at("HEAD", SLATE_AUDIT_POLICY_PATH):
             code, report = _run_slate_audit_integrated(args.manifest, args.base, SLATE_AUDIT_BINDINGS)
