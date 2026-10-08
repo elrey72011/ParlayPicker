@@ -199,6 +199,10 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
             row,deployment,owner,config.get('exposure'),now,
             allow_test_only=config.get('_test_only') is True,
             evidence_path=config.get('prospective_evidence_path'))
+        # Informational observations in actual call order; never authority.
+        coverage_trace = ([dict(gate='market_authority', status='FAIL', code=code)
+                           for code in market_blockers] or
+                          [dict(gate='market_authority', status='PASS', code=None)])
         if authority_policy is not None:
             policy=authority_policy
             row.update(market_family=family,validation_id=deployment['validation_id'],
@@ -247,15 +251,28 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
             if row.get('critical_feature_error') is False:
                 row['validated_evidence_family'] = validation.get('market_family')
             row=assign(row,policy,runtime.get('maturity_rules',{}),now)
+        recorded_market_codes = {g['code'] for g in coverage_trace if g['status'] == 'FAIL'}
+        coverage_trace.extend(dict(gate='maturity_authority', status='FAIL', code=code)
+                              for code in market_blockers if code not in recorded_market_codes)
         decision = candidate_decision(row, policy, now,
                                       outage_policy=runtime.get('gemini_outage',config.get('gemini_outage')),
                                       canonical_quote_verified=canonical_book_verified)
+        coverage_trace.extend([dict(gate='candidate_contract', status='FAIL', code=code)
+                               for code in decision['reason_for_pass']] or
+                              [dict(gate='candidate_contract', status='PASS', code=None)])
+        decision['coverage_gate_trace'] = coverage_trace
+        decision['coverage_evaluated_at'] = now.isoformat()
+        decision['coverage_run_id'] = _value(raw, 'export_run_id', 'run_id')
         if market_blockers:
             reasons=list(dict.fromkeys(decision['reason_for_pass']+market_blockers))
             decision.update(production_eligible=False,recommended_fraction=0.0,
                             strategic_action='PASS',reason_for_pass=reasons,
                             production_gate_reason='; '.join(reasons))
-        if _invalid_selection_facts(row):
+        invalid_selection = _invalid_selection_facts(row)
+        coverage_trace.append(dict(gate='selection_identity_safety',
+            status='FAIL' if invalid_selection else 'PASS',
+            code='invalid_quote_chronology_or_model_authority' if invalid_selection else None))
+        if invalid_selection:
             decision.update(production_eligible=False,recommended_fraction=0.0,
                             strategic_action='PASS',
                             production_gate_reason='invalid_quote_chronology_or_model_authority')
@@ -319,7 +336,7 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
         result['canonical_pick_key']=_build_canonical_pick_key(pd.Series(result))
         result['wager_contract']=contract
         output.append(result)
-    return enforce_frame(pd.DataFrame(output)), [dict(snapshot(r,now),**{k:r.get(k) for k in ('maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state','validated_evidence_family','candidate_id')}) for pool in grouped.values() for r in pool]
+    return enforce_frame(pd.DataFrame(output)), [dict(snapshot(r,now),**{k:r.get(k) for k in ('maturity_reason','maturity_policy_version','maturity_inputs_hash','deployment_state','validated_evidence_family','candidate_id','coverage_gate_trace','coverage_evaluated_at','coverage_run_id')}) for pool in grouped.values() for r in pool]
 
 
 def enforce_frame(frame):

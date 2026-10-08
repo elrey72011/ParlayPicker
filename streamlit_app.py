@@ -1710,6 +1710,11 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         {"reviews": wager_reviews}
         if "reviews" in signature(finalize_live_wagers).parameters else {}
     )
+    # Retain the original terminal run separately from the later capture/export
+    # clock; no inference/quote clock or protected capture reader is changed.
+    candidate_pool = candidate_pool.copy()
+    if 'export_run_id' in candidate_pool:
+        candidate_pool['finalization_run_id'] = candidate_pool['export_run_id']
     best_picks_df, contract_audit = finalize_live_wagers(
         candidate_pool,
         best_picks_df,
@@ -1793,6 +1798,24 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
 
     from app_core.ncaaf_schedule import refresh_coverage
     refresh_coverage(diagnostics, diagnostics.get("candidate_audit_df", candidate_pool), best_picks_df)
+    # Coverage is read-only and distinct from the terminal wagering contract.
+    from app_core.slate_coverage import refresh as refresh_slate_coverage
+    coverage_at = pd.Timestamp.now(tz='UTC').isoformat()
+    diagnostics['coverage_leagues'] = [s for s in controls['sports'] if s in {'NCAAF', 'NFL'}]
+    coverage_candidates = diagnostics.get('candidate_authority_df', diagnostics.get('candidate_audit_df', candidate_pool))
+    coverage_run = (str(coverage_candidates['export_run_id'].iloc[0])
+                    if isinstance(coverage_candidates, pd.DataFrame) and not coverage_candidates.empty and 'export_run_id' in coverage_candidates
+                    else str(best_picks_df['export_run_id'].iloc[0]) if not best_picks_df.empty and 'export_run_id' in best_picks_df
+                    else 'coverage:' + str(evidence_context['snapshot_id']) if isinstance(evidence_context, dict)
+                    else 'coverage:' + coverage_at)
+    if coverage_run:
+        try:
+            refresh_slate_coverage(diagnostics, coverage_candidates, best_picks_df,
+                selected_date=controls.get('coverage_date') or pd.Timestamp(coverage_at).tz_convert('America/New_York').date().isoformat(),
+                as_of=coverage_at, run_id=coverage_run)
+        except ValueError as exc:
+            diagnostics['slate_coverage_error'] = str(exc)
+            deferred_errors.append('Slate coverage reconciliation failed: ' + str(exc))
     timer.finish()
     state_updates = {
         "pipeline_status": "using stored results",
@@ -2718,6 +2741,26 @@ def main() -> None:
             else:
                 st.info("No recap files uploaded yet.")
 
+        # Reconcile retained inputs for the selected date without analysis or I/O.
+        retained_coverage = diagnostics.get('slate_coverage')
+        if isinstance(diagnostics, dict):
+            from app_core.slate_coverage import refresh as refresh_retained_coverage
+            coverage_at = pd.Timestamp.now(tz='UTC').isoformat()
+            retained_candidates = diagnostics.get('candidate_authority_df', diagnostics.get('candidate_audit_df', pd.DataFrame()))
+            retained_run = (retained_coverage['run_id'] if isinstance(retained_coverage, dict)
+                else str(retained_candidates['export_run_id'].iloc[0]) if isinstance(retained_candidates, pd.DataFrame) and not retained_candidates.empty and 'export_run_id' in retained_candidates
+                else str(best_picks_df['export_run_id'].iloc[0]) if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty and 'export_run_id' in best_picks_df
+                else 'coverage:' + coverage_at)
+            diagnostics['coverage_leagues'] = [s for s in controls['sports'] if s in {'NCAAF', 'NFL'}]
+            try:
+                refresh_retained_coverage(diagnostics, retained_candidates,
+                    best_picks_df, selected_date=controls.get('coverage_date') or pd.Timestamp(coverage_at).tz_convert('America/New_York').date().isoformat(),
+                    as_of=coverage_at, run_id=retained_run)
+                diagnostics.pop('slate_coverage_error', None)
+            except (ValueError, TypeError, KeyError) as exc:
+                diagnostics.pop('slate_coverage', None)
+                diagnostics['slate_coverage_error'] = str(exc)
+                st.error('Retained slate reconciliation failed: ' + str(exc))
         display_df = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame(columns=["league", "pick", "edge"])
         if not display_df.empty and "parlay_rank" in display_df.columns:
             display_df["parlay_rank"] = range(1, len(display_df) + 1)
@@ -2764,8 +2807,9 @@ def main() -> None:
             from app_core.game_coverage import publication_games as with_game_coverage
             try:
                 publication_games, coverage_games = with_game_coverage(
-                    pd.DataFrame(), _publication_candidates(diagnostics)
+                    pd.DataFrame(), _publication_candidates(diagnostics), slate_report=diagnostics.get('slate_coverage')
                 )
+                render_daily_dashboard(today_content, details_content, publication_games, diagnostics.get('candidate_audit_df'))
                 if not coverage_games.empty:
                     st.caption(f"{len(coverage_games)} audited schedule game(s) have no verified current pick.")
                     st.dataframe(
@@ -2993,12 +3037,12 @@ def main() -> None:
             from app_core.game_coverage import publication_games as with_game_coverage
             try:
                 publication_games, coverage_games = with_game_coverage(
-                    best_picks_export, _publication_candidates(diagnostics)
+                    best_picks_export, _publication_candidates(diagnostics), slate_report=diagnostics.get('slate_coverage')
                 )
             except ValueError as exc:
-                publication_games = best_picks_export.copy()
+                publication_games = pd.DataFrame()
                 st.error(f"Audited game coverage could not be prepared: {exc}")
-            render_daily_dashboard(today_content, details_content, best_picks_export, diagnostics.get("candidate_audit_df"))
+            render_daily_dashboard(today_content, details_content, publication_games, diagnostics.get("candidate_audit_df"))
             precision_game_export = precision_shortlist(best_picks_export)
 
             if "Home" in best_picks_export.columns and not best_picks_export.empty:

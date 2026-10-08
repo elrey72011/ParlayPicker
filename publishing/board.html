@@ -395,7 +395,7 @@ const baseTable=table;
 table=function(rows,props=false,ranked=false){const wrap=baseTable(rows,props,ranked);if(!props)[...wrap.querySelectorAll('.pp-pick-card')].forEach((card,index)=>{const row=rows[index];if(!row||state(row)!=='TRIAL')return;const contract=row.controlled_trial_contract||{},badge=card.querySelector('.pp-status'),footer=card.querySelector('.pp-card-footer');if(badge){badge.className='pp-status pp-status-trial';badge.textContent='CONTROLLED TRIAL';}const old=[...card.querySelectorAll('p')].find(node=>node.textContent==='Not a current approved wager.');if(old)old.textContent='Owner-authorized unvalidated trial — manual placement only.';if(footer){const stake=el('p','Recommended trial stake: $'+Number(contract.recommended_bet_amount||0).toFixed(2)+' · hard cap 0.25% bankroll / $5');stake.className='small pp-trial-stake';footer.after(stake);}});return wrap;};
 currentResearchRows=function(){const league=document.getElementById('gameLeague').value,current=document.getElementById('pickView').value==='qualified';return probabilityOrder((data.games[activeBoardView]||[]).filter(row=>(!league||row.sport===league)&&(!current||currentWager(row))));};
 renderApprovedPicks=function(){const root=document.getElementById('approvedPicks'),rows=probabilityOrder(data.games.overall.filter(currentWager));root.replaceChildren();if(rows.length)root.append(table(rows,false,true));};
-renderBoardSummary=function(){const root=document.getElementById('boardSummary');root.replaceChildren();const rows=data.games.overall,approved=rows.filter(qualifiedPick).length,trials=rows.filter(row=>state(row)==='TRIAL'&&currentWager(row)).length,current=approved+trials;root.dataset.approved=String(current);const heading=el('div'),eyebrow=el('span',"Today's board"),title=el('h1',approved&&trials?approved+' approved '+(approved===1?'play':'plays')+' · '+trials+' controlled '+(trials===1?'trial':'trials'):approved?approved+' approved '+(approved===1?'play':'plays'):trials?trials+' controlled trial '+(trials===1?'wager':'wagers'):'No current wagers right now');eyebrow.className='pp-eyebrow';title.id='board-title';heading.append(eyebrow,title);if(!current)heading.append(el('p',rows.length+(rows.length===1?' game analyzed. Research':' games analyzed. Research')+' and pass selections remain available below.'));const meta=el('dl');meta.className='pp-board-meta';[['Games reviewed',rows.length],['Validated',approved],['Controlled trial',trials],['Analysis',analysisFreshness(data).primary]].forEach(([label,value])=>{const item=el('div'),dd=el('dd',String(value));if(label==='Analysis')dd.id='boardAnalysisAge';item.append(el('dt',label),dd);meta.append(item)});root.append(heading,meta);};
+renderBoardSummary=function(){const root=document.getElementById('boardSummary');root.replaceChildren();const rows=data.games.overall,approved=rows.filter(qualifiedPick).length,trials=rows.filter(row=>state(row)==='TRIAL'&&currentWager(row)).length,current=approved+trials;root.dataset.approved=String(current);const heading=el('div'),eyebrow=el('span',"Today's board"),title=el('h1',approved&&trials?approved+' approved '+(approved===1?'play':'plays')+' · '+trials+' controlled '+(trials===1?'trial':'trials'):approved?approved+' approved '+(approved===1?'play':'plays'):trials?trials+' controlled trial '+(trials===1?'wager':'wagers'):'No current wagers right now');eyebrow.className='pp-eyebrow';title.id='board-title';heading.append(eyebrow,title);if(!current)heading.append(el('p',rows.length+(data.slate_coverage?(rows.length===1?' game row retained. Research':' game rows retained. Research'):(rows.length===1?' game analyzed. Research':' games analyzed. Research'))+' and pass selections remain available below.'));const meta=el('dl');meta.className='pp-board-meta';[[data.slate_coverage?'Game rows retained':'Games reviewed',rows.length],['Validated',approved],['Controlled trial',trials],['Analysis',analysisFreshness(data).primary]].forEach(([label,value])=>{const item=el('div'),dd=el('dd',String(value));if(label==='Analysis')dd.id='boardAnalysisAge';item.append(el('dt',label),dd);meta.append(item)});root.append(heading,meta);};
 // The saved producer trace is never recomputed in the browser. Current blockers
 // are evaluated on each render so an expired approval still shows its saved reason.
 function boardTime(value){return typeof value==='string'&&/(?:Z|[+-]\d\d:\d\d)$/.test(value)&&Number.isFinite(Date.parse(value))?Date.parse(value):null;}
@@ -469,6 +469,36 @@ const priorCurrentWager=currentWager;
 currentWager=function(row){const trace=selectedTrace(row);return priorCurrentWager(row)&&(!trace||row.status!=='TRIAL'||(trace.trial_gate_status==='PASS'&&trace.trial_blockers.length===0));};
 const priorBoardFreshness=window.parlayPicker.freshness;
 window.parlayPicker.freshness=function(version){boardPublicationVersion=version;renderBoardSummary();const result=priorBoardFreshness(version);if(data.stale_after_minutes===15||data.stale_after_minutes===30){const games=cohortClock(data.games.overall||[],'as_of'),props=cohortClock(data.props||[],'as_of'),expired=games.expired+props.expired,unavailable=games.unavailable+props.unavailable;const message=(expired?' · wager window expired for '+expired+' selected game/prop '+(expired===1?'row':'rows'):'')+(unavailable?' · missing, invalid or future analysis timestamps for '+unavailable+' selected game/prop '+(unavailable===1?'row':'rows'):'');return {...result,text:result.primary+message+(result.publication?' · '+result.publication:''),state:result.state==='old'?'old':expired?'expired':unavailable?'unavailable':result.state};}return result;};
+// Informational independent-slate state; existing wagering predicates stay authoritative.
+const coverageBeforeTable=table;
+function coverageStateNow(decision){
+ if(decision.coverage_decision_state!=='APPROVED')return decision.coverage_decision_state;
+ const selected=(data.games.overall||[]).find(row=>row.coverage_decision?.canonical_event_id===decision.canonical_event_id);
+ return selected&&currentWager(selected)?'APPROVED':'UNVERIFIED';
+}
+table=function(rows,props=false,ranked=false){
+ const wrap=coverageBeforeTable(rows,props,ranked);
+ if(!props)[...wrap.querySelectorAll('.pp-pick-card')].forEach((card,index)=>{
+  const decision=rows[index]?.coverage_decision;if(!decision)return;
+  const current=coverageStateNow(decision),badge=el('p','Coverage: '+current);
+  badge.className='small pp-coverage-'+current.toLowerCase();
+  badge.dataset.coverageState=current;
+  card.append(badge,el('p',current!==decision.coverage_decision_state?'Saved coverage approval is no longer current.':decision.explanation),
+    el('p','Coverage checked '+decision.as_of+' · '+decision.selected_date+' Eastern. Wager status is separate.'));
+ });
+ return wrap;
+};
+const coverageBeforeSummary=renderBoardSummary;
+renderBoardSummary=function(){
+ coverageBeforeSummary();const coverage=data.slate_coverage;if(!coverage)return;
+ const section=el('section'),title=el('h2','Independent slate coverage');section.id='slateCoverage';
+ section.append(title,el('p',coverage.selected_date+' · America/New_York · checked '+coverage.as_of),
+  el('p','Inventory '+coverage.inventory_status+' · '+coverage.counts.scheduled_events+' scheduled events · '+coverage.counts.decision_rows+' decision rows.'),
+  el('p','Recorded decisions: APPROVED '+coverage.counts.states.APPROVED+' · PASS '+coverage.counts.states.PASS+' · UNVERIFIED '+coverage.counts.states.UNVERIFIED+'.'),
+  el('p',coverage.fully_reconciled?'Retained inventory reconciled. Evaluation and wagering authority remain separate.':'Full schedule coverage is unverified. Equal internal sets do not establish completeness.'),
+  el('p',coverage.orphan_events.length+' unmatched stage records are outside the scheduled denominator.'));
+ document.getElementById('boardSummary').append(section);
+};
 const baseMatchesResultGroup=matchesResultGroup;
 matchesResultGroup=function(row,group){return group==='Published picks'?['Approved','Controlled trial','Research'].includes(row.group):baseMatchesResultGroup(row,group);};
 const wagerOption=[...document.getElementById('pickView').options].find(option=>option.value==='qualified');

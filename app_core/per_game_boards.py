@@ -171,7 +171,11 @@ def _display_line(source):
 
 def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
-    if board is None or board.empty: return pd.DataFrame()
+    if board is None or board.empty:
+        result = pd.DataFrame()
+        if isinstance(board, pd.DataFrame):
+            result.attrs.update(board.attrs)
+        return result
     candidates=candidates if isinstance(candidates,pd.DataFrame) else pd.DataFrame()
     from core.market_policy import production_market
     candidate_rows = [row for _, row in candidates.iterrows() if production_market(text(row, 'market_type'))]
@@ -397,5 +401,16 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         exported['research_display']=json.dumps(display, allow_nan=False, sort_keys=True, separators=(',',':'))
         # Owner export only: public_board's allowlist never publishes this trace.
         exported['research_estimate_trace']=boundary_trace(source,exported,display)
+        coverage = final.get('coverage_decision')
+        if isinstance(coverage, str):
+            exported['coverage_decision'] = json.loads(coverage)
+            exported['coverage_decision_state'] = exported['coverage_decision']['coverage_decision_state']
+            exported['coverage_explanation'] = exported['coverage_decision']['explanation']
+            if final.get('coverage_only') is True:
+                exported['coverage_only'] = True
+                exported['pick'] = ''
         rows.append(exported)
-    return pd.DataFrame(rows)
+    result = pd.DataFrame(rows)
+    if 'slate_coverage' in board.attrs:
+        result.attrs['slate_coverage'] = board.attrs['slate_coverage']
+    return result

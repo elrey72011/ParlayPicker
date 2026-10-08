@@ -71,6 +71,9 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
     report = {"version": 1, "quote_warning_minutes": quote_warning_minutes,
               "production_changes": False, "games": [], "candidates": [], "run_warnings": []}
     diagnostics = diagnostics or {}
+    if diagnostics.get('slate_coverage') is not None:
+        from app_core.slate_coverage import validate_report
+        report['slate_coverage'] = validate_report(diagnostics['slate_coverage'])
     for key in ("stale_base_schedule", "prediction_snapshot_error", "run_health_warning"):
         value = diagnostics.get(key)
         if isinstance(value, (str, bool)) and value:
@@ -242,6 +245,12 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=QUOTE_MAX_AGE_MI
 
 
 def game_table(report):
+    if 'slate_coverage' in report:
+        rows = []
+        for decision in report['slate_coverage']['decisions']:
+            rows.append({k:json.dumps(v, sort_keys=True) if isinstance(v, (dict, list)) else v
+                         for k,v in decision.items()})
+        return pd.DataFrame(rows)
     rows = []
     for row in report["games"]:
         item = dict(row)
@@ -269,4 +278,10 @@ def render_readiness(report):
               "MLB receipt collection: " + json.dumps(report.get("mlb_receipt_health", {}), sort_keys=True)]
     lines += ["", "## Run warnings", ""] + ["- " + escape(v) for v in report["run_warnings"]]
     lines += ["", "Candidate-level issues, source coverage and evaluation-day eligibility are included in the JSON download."]
+    if 'slate_coverage' in report:
+        coverage = report['slate_coverage']
+        lines += ['', '## Independent slate coverage', '',
+            f"Eastern date: {coverage['selected_date']}; as of {coverage['as_of']}; inventory: {coverage['inventory_status']}.",
+            'Internal equality does not establish external schedule completeness.',
+            json.dumps(coverage['counts'], sort_keys=True)]
     return "\n".join(lines) + "\n"

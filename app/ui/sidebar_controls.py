@@ -1,5 +1,6 @@
 from typing import MutableMapping
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
@@ -145,6 +146,9 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     use_ml = advanced.checkbox("Enable ML Predictions", True, key="use_ml")
     from app.ui.ncaaf_inventory import schedule_controls
     schedule_start, schedule_end = schedule_controls(advanced, sports)
+    coverage_date = advanced.date_input('Coverage Eastern date',
+        value=datetime.now(ZoneInfo('America/New_York')).date(), key='coverage_eastern_date',
+        help='Reconcile retained schedules for this date. This control does not fetch a schedule or run analysis.')
     use_gemini = advanced.checkbox(
         "Require Gemini Review for Bets",
         value=True,
@@ -412,6 +416,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         "theover_totals": theover_totals,
         "schedule_start": schedule_start,
         "schedule_end": schedule_end,
+        "coverage_date": coverage_date.isoformat(),
         "prop_results_log": active_ledger,
         "run_analysis_counter": run_counter,
         "run_player_props": run_player_props,

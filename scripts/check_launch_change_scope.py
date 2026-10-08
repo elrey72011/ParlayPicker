@@ -8227,6 +8227,1235 @@ def _run_football_research_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+SLATE_AUDIT_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-slate-audit-v1.json'
+SLATE_AUDIT_POLICY_VERSION = 'independent-slate-coverage-v1'
+SLATE_AUDIT_APPROVAL_REFERENCE = ('Owner-authorized local auditable independent slate coverage, prioritizing NCAAF and NFL. Informational '
+ 'APPROVED/PASS/UNVERIFIED never grants authority; exact current finalized wagering gates stay unchanged. '
+ 'Retained source/window completeness is separate from internal reconciliation; missing, duplicate or extra '
+ 'canonical decisions fail explicitly. Keep orphan events separate, selected Eastern date and aware as-of '
+ 'clocks, original identities, features and probabilities. Preserve frozen version 10, scientific '
+ 'requirements, original artifacts, all predecessor assertions, original scope baseline, paid-launch '
+ 'workflows and subscriber assertion. Protected evidence/Drive/history/timing/lock files and existing '
+ 'tests/benchmarks are unchanged. No provider/API/Drive access, quota, acquisition, restoration, analysis, '
+ 'fitting, registration, publication, activation, provider messaging, merge, deployment or financial '
+ 'execution. Owner authorizes GitHub draft review, pushes and required CI; test-only external transport '
+ 'isolation preserves existing assertions and clocks. Synthetic offline tests only. Model compatibility and '
+ 'source acceptance are separate follow-ups; MLB is paused.')
+SLATE_AUDIT_PATHS = ('app/ui/daily_dashboard.py',
+ 'app/ui/publish_panel.py',
+ 'app/ui/sidebar_controls.py',
+ 'app/ui/slate_coverage.py',
+ 'app_core/football_identity_capture.py',
+ 'app_core/game_coverage.py',
+ 'app_core/per_game_boards.py',
+ 'app_core/public_board.py',
+ 'app_core/slate_coverage.py',
+ 'core/live_wager_contract.py',
+ 'core/run_readiness.py',
+ 'core/streamlit_pipeline.py',
+ 'docs/examples/slate-coverage-synthetic.json',
+ 'docs/slate-coverage.md',
+ 'publishing/board.html',
+ 'scripts/check_launch_change_scope.py',
+ 'scripts/reconcile_slate.py',
+ 'scripts/slate_audit_scope.py',
+ 'streamlit_app.py',
+ 'tests/conftest.py',
+ 'tests/test_ci_offline_transports.py',
+ 'tests/test_slate_audit_scope.py',
+ 'tests/test_slate_coverage.py')
+SLATE_AUDIT_FROZEN_PATHS = ('.github/workflows/paid-launch.yml',
+ 'app/ui/lock_picks.py',
+ 'app_core/canonical_download.py',
+ 'app_core/evidence_drive.py',
+ 'app_core/evidence_remote.py',
+ 'app_core/ncaaf_history.py',
+ 'app_core/ncaaf_identity.py',
+ 'app_core/ncaaf_prospective.py',
+ 'app_core/ncaaf_prospective_store.py',
+ 'app_core/ncaaf_research.py',
+ 'app_core/ncaaf_research_contract.py',
+ 'app_core/ncaaf_schedule.py',
+ 'app_core/nfl_calibration_evidence.py',
+ 'app_core/nfl_inference_evidence.py',
+ 'app_core/nfl_native_provenance.py',
+ 'app_core/nhl_puck_line_evidence.py',
+ 'app_core/performance_spans.py',
+ 'app_core/prediction_evidence.py',
+ 'app_core/public_history.py',
+ 'app_core/remote_canonical_download.py',
+ 'app_core/source_contract.py',
+ 'app_core/source_evidence_intake.py',
+ 'app_core/stage_timing.py',
+ 'app_core/weights_config.py',
+ 'core/team_mapper.py',
+ 'scripts/benchmark_drive_history_loading.py',
+ 'scripts/football_research_scope.py',
+ 'scripts/remote_continuation_scope.py',
+ 'tests/paid_launch/case_isolation_and_scope.py',
+ 'tests/test_daily_dashboard.py',
+ 'tests/test_football_research_scope.py',
+ 'tests/test_game_coverage.py',
+ 'tests/test_live_wager_contract.py',
+ 'tests/test_ncaaf_research_contract.py',
+ 'tests/test_nfl_inference_evidence.py',
+ 'tests/test_nfl_native_provenance.py',
+ 'tests/test_nfl_ui_reblend.py',
+ 'tests/test_per_game_boards.py',
+ 'tests/test_producer_provenance.py',
+ 'tests/test_public_board.py',
+ 'tests/test_publish_panel.py',
+ 'tests/test_remote_continuation_scope.py')
+SLATE_AUDIT_BINDINGS = {'base': 'e8e36e303bb663442702023cad2b2939854cf411',
+ 'base_tree': '7197b4c3389e1c11b0c31d14951dc1679e9495eb',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '1f56664efc9e8462cf0879430af78f27e0b530c4f6052477ad099d57d25e738e',
+ 'previous_policy_blob': '46f4c00bb3f2925e50404eef56ab4ed78473ec96',
+ 'reviewed_blobs': {'app/ui/daily_dashboard.py': 'd896694db727cce78236e9b134f3b9e8e95fa9ec',
+                    'app/ui/publish_panel.py': '66894f745cf6cfa7ebb45eda377bdcf5ee1eb045',
+                    'app/ui/sidebar_controls.py': '8407e08913d539879a4673f25eee1de7e558fe4c',
+                    'app/ui/slate_coverage.py': '64c7d7dbe2281d1af0ef81860103ff14d72ab27e',
+                    'app_core/football_identity_capture.py': '27007106444efc98c1bb726cadd992c97967cc2e',
+                    'app_core/game_coverage.py': '3987b4c3e88b5fedf35e807e02e23cd6f5b504fc',
+                    'app_core/per_game_boards.py': '66eaecb9c11b4ff66c5651f1563fb76625274893',
+                    'app_core/public_board.py': 'bfa74439e5c83d28ca4141f5887474dd4c8a7d1f',
+                    'app_core/slate_coverage.py': '92fc319d40779248ccf10166811b781da76e12ac',
+                    'core/live_wager_contract.py': 'aaa73e72575ca8b8a136ba6ae5cc5d1e67d31743',
+                    'core/run_readiness.py': '10d7eb125e7e12a373e172f099310ce76063a475',
+                    'core/streamlit_pipeline.py': '090bd94fe62cef820c3ed8d7fba38fa11555b728',
+                    'docs/examples/slate-coverage-synthetic.json': '525f187aeb5a76c8e1141aa3b47f6f013b504e21',
+                    'docs/slate-coverage.md': '6161fb8404a689e52256d1aee8a53f905e623ec3',
+                    'publishing/board.html': '184ac8666832d146127516de54a20ded43d141d9',
+                    'scripts/reconcile_slate.py': '83ad4aa7760d02817b4c282f7de43ebc2e024b35',
+                    'scripts/slate_audit_scope.py': 'f06b906cd0f8c2ec368407edab3d46087ff3eaa0',
+                    'streamlit_app.py': '124319e75c1aed4522cb6340f53c0b6f5ef24cb6',
+                    'tests/conftest.py': '22806b5777860496ecfb8956083ee0370038537e',
+                    'tests/test_ci_offline_transports.py': 'c63daa6e7575a8e5d830bfe6416f4c722ed2fba8',
+                    'tests/test_slate_audit_scope.py': 'db967628f548001cc3d45db68edb8d2817dd9bbb',
+                    'tests/test_slate_coverage.py': '752fee9d02b79a4a16ee60aff3a4cb66dce62438'},
+ 'scope_module_sha256': 'e19f2fbb79e2a9525651a7e77c5cb864dc87a59eecb2de44e8b0d3f9f79cf578',
+ 'successor_guard_sha256': '643cecc06f4293619e16682c9eed0dc572732c203818263c1a012a2784948791'}
+SLATE_AUDIT_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", typ'
+ b'e=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-outp'
+ b'ut", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", FOOTBALL_RESEAR'
+ b'CH_POLICY_PATH):\n            code, report = _run_football_research_integrated(args.manifest, args.base, '
+ b'FOOTBALL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):\n           '
+ b' code, report = _run_remote_continuation_integrated(args.manifest, args.base, REMOTE_CONTINUATION_BINDIN'
+ b'GS)\n        elif exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):\n            code, report = _run_remote'
+ b'_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)\n        elif exists_at("HEAD"'
+ b', CANONICAL_DOWNLOAD_POLICY_PATH):\n            code, report = _run_canonical_download_integrated(args.ma'
+ b'nifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)\n        elif exists_at("HEAD", NCAAF_RESEARCH_POLICY_PAT'
+ b'H):\n            code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_B'
+ b'INDINGS)\n        elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n            code, report = _run_m'
+ b'lb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)\n        elif exists_at("'
+ b'HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, report = _run_football_catalog_integrated(args.m'
+ b'anifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH)'
+ b':\n            code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDI'
+ b'NGS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code, report = _run_nfl_ca'
+ b'libration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif exists_at("HEAD", '
+ b'SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_intake_integrated(args.manifest, args'
+ b'.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code, rep'
+ b'ort = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", P'
+ b'ICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.base, '
+ b'PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = '
+ b'_run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD",'
+ b' NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, arg'
+ b's.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code'
+ b', report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists'
+ b'_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(arg'
+ b's.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):'
+ b'\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n    '
+ b'    elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manif'
+ b'est, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report'
+ b' = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_P'
+ b'OLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BIND'
+ b'INGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrate'
+ b'd(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            '
+ b'code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD"'
+ b', COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, C'
+ b'OVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_'
+ b'schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLIC'
+ b'Y_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS'
+ b')\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS'
+ b')\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes":'
+ b' ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent'
+ b'=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_o'
+ b'k=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n '
+ b'   return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n')
+SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/daily_dashboard.py': {'after_sha256': '23fd523b4df75f192a6523691f081cc99c16947cc1ed736f6d020717938225dd',
+                               'edits': [(b'        return\n    display = result.rename(columns={"league":"Sp'
+                                          b'ort", "matchup":"Game", "start":"Start", "pick":"Best pick", "se'
+                                          b'lection_label":"Selection", "status":"Wager status", "approval_r'
+                                          b'eason":"Wager explanation", "odds":"Odds", "win_probability":"Wi'
+                                          b'n estimate", "edge":"Edge", "ev":"EV estimate", "selection_score'
+                                          b'":"Selection score", "probability_basis":"Win estimate source"})'
+                                          b'\n    columns = ["Game", "Best pick", "Odds", "Win estimate", "EV'
+                                          b' estimate", "Wager status"]\n    display = display[columns].copy('
+                                          b')\n    for column in ("Win estimate", "EV estimate"):\n       '
+                                          b' display[column] = display[column].map(lambda v: f"{v:.1%}" if p'
+                                          b'd.notna(v) else "Unavailable")\n',
+                                          b'        return\n    display = result.rename(columns={"league":"Sp'
+                                          b'ort", "matchup":"Game", "start":"Start", "pick":"Best pick", "se'
+                                          b'lection_label":"Selection", "status":"Wager status", "approval_r'
+                                          b'eason":"Wager explanation", "odds":"Odds", "win_probability":"Wi'
+                                          b'n estimate", "edge":"Edge", "ev":"EV estimate", "selection_score'
+                                          b'":"Selection score", "probability_basis":"Win estimate source"})'
+                                          b'\n    columns = ["Game", "Best pick", "Odds", "Win estimate", "EV'
+                                          b' estimate", "Wager status"]\n    if \'coverage_decision_state\''
+                                          b" in result:\n        display['Coverage decision'] = result['cover"
+                                          b"age_decision_state']\n        display['Coverage explanation'] = r"
+                                          b"esult['coverage_explanation']\n        columns += ['Coverage deci"
+                                          b"sion', 'Coverage explanation']\n    display = display[columns].co"
+                                          b'py()\n    for column in ("Win estimate", "EV estimate"):\n    '
+                                          b'    display[column] = display[column].map(lambda v: f"{v:.1%}" i'
+                                          b'f pd.notna(v) else "Unavailable")\n'),
+                                         (b'def render_daily_dashboard(today, details, frame: pd.DataFrame, '
+                                          b'candidates: pd.DataFrame | None = None) -> None:\n    board = dai'
+                                          b'ly_board(frame)\n    with today.container():\n        st.subhe'
+                                          b'ader("Best picks")\n        st.caption("Saved analysis \xc2\xb7'
+                                          b' One selection per game in each view. Game markets only. Player '
+                                          b'props and parlays remain in Workspace \xe2\x86\x92 Full Pick Boar'
+                                          b'd and Parlays.")\n        if board.empty:\n',
+                                          b'def render_daily_dashboard(today, details, frame: pd.DataFrame, '
+                                          b'candidates: pd.DataFrame | None = None) -> None:\n    board = dai'
+                                          b'ly_board(frame)\n    with today.container():\n        from app'
+                                          b'.ui.slate_coverage import render_coverage\n        render_coverag'
+                                          b"e(frame.attrs.get('slate_coverage'), key='today_slate_coverage')"
+                                          b'\n        st.subheader("Best picks")\n        st.caption("Save'
+                                          b'd analysis \xc2\xb7 One selection per game in each view. Game '
+                                          b'markets only. Player props and parlays remain in Workspace \xe2'
+                                          b'\x86\x92 Full Pick Board and Parlays.")\n        if board.empty'
+                                          b':\n'),
+                                         (b'                                   "approved-game-wagers.csv", "'
+                                          b'text/csv", key="daily_approved_export")\n            st.caption("'
+                                          b'Use Results after games finish. Readiness for grading does not e'
+                                          b'stablish a profitable edge or an achieved win rate.")\n    with d'
+                                          b'etails.container():\n        st.subheader("Understand a selection'
+                                          b'")\n        if board.empty:\n            st.info("Run an analy'
+                                          b'sis to inspect game selections and their final decisions.")\n',
+                                          b'                                   "approved-game-wagers.csv", "'
+                                          b'text/csv", key="daily_approved_export")\n            st.caption("'
+                                          b'Use Results after games finish. Readiness for grading does not e'
+                                          b'stablish a profitable edge or an achieved win rate.")\n    with d'
+                                          b"etails.container():\n        render_coverage(frame.attrs.get('sla"
+                                          b"te_coverage'), key='details_slate_coverage')\n        st.subheade"
+                                          b'r("Understand a selection")\n        if board.empty:\n        '
+                                          b'    st.info("Run an analysis to inspect game selections and thei'
+                                          b'r final decisions.")\n')],
+                               'sha256': '744ca9578db475b42959e0daa1d9953fee6eceaab2646a4949883bd7571a48f0'},
+ 'app/ui/publish_panel.py': {'after_sha256': 'ed09d06006b514eb806b22f14028a15f6615f3c2e78eecad45f9eab612b14382',
+                             'edits': [(b"        notice=st.session_state.pop('lock_publish_notice', None)"
+                                        b'\n        if notice:\n            st.info(notice)\n    if games is '
+                                        b'None or games.empty:\n        if publish_results_requested:\n     '
+                                        b'       from copy import deepcopy\n            from app.ui.sftp_pu'
+                                        b'blish import publish_action\n',
+                                        b"        notice=st.session_state.pop('lock_publish_notice', None)"
+                                        b'\n        if notice:\n            st.info(notice)\n    if games is '
+                                        b"None or (games.empty and not games.attrs.get('slate_coverage')):"
+                                        b'\n        if publish_results_requested:\n            from copy imp'
+                                        b'ort deepcopy\n            from app.ui.sftp_publish import publish'
+                                        b'_action\n'),
+                                       (b"                                    help='When Novig is unavaila"
+                                        b'ble, use an exact fresh DraftKings, FanDuel or BetMGM quote for '
+                                        b"a research-only lock. This never approves or funds a wager.')\n  "
+                                        b'  selected_props = props if include_props else pd.DataFrame()\n  '
+                                        b"  selected_dfs = dfs.get(chosen)\n    options = {'results':public"
+                                        b"_results, 'props':include_props, 'dfs':chosen, 'slate':slate, 's"
+                                        b"tart':start, 'nfl_fallback':nfl_fallback, 'research_fallback':re"
+                                        b'search_fallback}\n    fingerprint = source_fingerprint(games,cand'
+                                        b'idates,selected_props,selected_dfs,options)\n    saved = st.sessi'
+                                        b"on_state.get('publication_preview')\n    if saved and saved['fing"
+                                        b"erprint'] != fingerprint:\n",
+                                        b"                                    help='When Novig is unavaila"
+                                        b'ble, use an exact fresh DraftKings, FanDuel or BetMGM quote for '
+                                        b"a research-only lock. This never approves or funds a wager.')\n  "
+                                        b'  selected_props = props if include_props else pd.DataFrame()\n  '
+                                        b'  selected_dfs = dfs.get(chosen)\n    from app.ui.slate_coverage '
+                                        b"import render_coverage\n    render_coverage(games.attrs.get('slat"
+                                        b"e_coverage'), key='publication_slate_coverage')\n    options = {'"
+                                        b"results':public_results, 'props':include_props, 'dfs':chosen, 's"
+                                        b"late':slate, 'start':start, 'nfl_fallback':nfl_fallback, 'resear"
+                                        b"ch_fallback':research_fallback}\n    if games.attrs.get('slate_co"
+                                        b"verage') is not None:\n        from app_core.slate_coverage impor"
+                                        b"t digest\n        options['slate_coverage_hash'] = digest(games.a"
+                                        b"ttrs['slate_coverage'])\n    fingerprint = source_fingerprint(gam"
+                                        b'es,candidates,selected_props,selected_dfs,options)\n    saved = s'
+                                        b"t.session_state.get('publication_preview')\n    if saved and save"
+                                        b"d['fingerprint'] != fingerprint:\n")],
+                             'sha256': '34789c758e75ea3a23637a2725d33777023c93484f0ba6af52fb79347506d4b7'},
+ 'app/ui/sidebar_controls.py': {'after_sha256': '76b0e6647f7572e0c87be2037d17f569c53ac8f0d0aacd6f68e4d069e099cf82',
+                                'edits': [(b'from typing import MutableMapping\nfrom datetime import date,'
+                                           b' timedelta\n\nimport pandas as pd\nimport streamlit as st\n',
+                                           b'from typing import MutableMapping\nfrom datetime import date,'
+                                           b' datetime, timedelta\nfrom zoneinfo import ZoneInfo\n\nimport p'
+                                           b'andas as pd\nimport streamlit as st\n'),
+                                          (b'    use_ml = advanced.checkbox("Enable ML Predictions", True, ke'
+                                           b'y="use_ml")\n    from app.ui.ncaaf_inventory import schedule_'
+                                           b'controls\n    schedule_start, schedule_end = schedule_control'
+                                           b's(advanced, sports)\n    use_gemini = advanced.checkbox(\n    '
+                                           b'    "Require Gemini Review for Bets",\n        value=True,\n',
+                                           b'    use_ml = advanced.checkbox("Enable ML Predictions", True, ke'
+                                           b'y="use_ml")\n    from app.ui.ncaaf_inventory import schedule_'
+                                           b'controls\n    schedule_start, schedule_end = schedule_control'
+                                           b's(advanced, sports)\n    coverage_date = advanced.date_input('
+                                           b"'Coverage Eastern date',\n        value=datetime.now(ZoneInfo"
+                                           b"('America/New_York')).date(), key='coverage_eastern_date',\n "
+                                           b"       help='Reconcile retained schedules for this date. This co"
+                                           b"ntrol does not fetch a schedule or run analysis.')\n    use_g"
+                                           b'emini = advanced.checkbox(\n        "Require Gemini Review fo'
+                                           b'r Bets",\n        value=True,\n'),
+                                          (b'        "theover_totals": theover_totals,\n        "schedule_'
+                                           b'start": schedule_start,\n        "schedule_end": schedule_end'
+                                           b',\n        "prop_results_log": active_ledger,\n        "run_an'
+                                           b'alysis_counter": run_counter,\n        "run_player_props": ru'
+                                           b'n_player_props,\n',
+                                           b'        "theover_totals": theover_totals,\n        "schedule_'
+                                           b'start": schedule_start,\n        "schedule_end": schedule_end'
+                                           b',\n        "coverage_date": coverage_date.isoformat(),\n      '
+                                           b'  "prop_results_log": active_ledger,\n        "run_analysis_c'
+                                           b'ounter": run_counter,\n        "run_player_props": run_player'
+                                           b'_props,\n')],
+                                'sha256': 'c674ff2be375ba5ad6464028ffb5e6b0f586e525f4c6b96e13670fa6bada071f'},
+ 'app_core/football_identity_capture.py': {'after_sha256': '0eb0b3bde53671ddc685bcb258f452e7c52f3704a8f25a52e4c9849653e184c2',
+                                           'edits': [(b'from app_core.ncaaf_history import timestamp\nfrom ap'
+                                                      b'p_core.espn_results import _scoreboard_urls\nfrom cor'
+                                                      b'e.exposure_ledger import digest\n\n\ndef attach(gam'
+                                                      b'es, sport, events, observed_at):\n',
+                                                      b'from app_core.ncaaf_history import timestamp\nfrom ap'
+                                                      b'p_core.espn_results import _scoreboard_urls\nfrom cor'
+                                                      b'e.exposure_ledger import digest\n\n\nclass Observed'
+                                                      b'Games(list):\n    """Existing list API plus retained '
+                                                      b'independent schedule observations."""\n\n    def _'
+                                                      b'_init__(self, games, observation):\n        super()._'
+                                                      b'_init__(games)\n        self.retained_schedule_observ'
+                                                      b'ation = observation\n\n\ndef attach(games, sport, e'
+                                                      b'vents, observed_at):\n'),
+                                                     (b'    dates = sorted({t.strftime("%Y%m%d") for g in ga'
+                                                      b'mes if (t := timestamp(g.get("commence_time")))})\n  '
+                                                      b'  # Bounded work per refresh. Missing dates stay unr'
+                                                      b'esolved, never guessed.\n    events = []\n    for '
+                                                      b'day in dates[:3]:\n        for url in _scoreboard_url'
+                                                      b's(sport, day):\n            try:\n                '
+                                                      b'response = requests.get(url, timeout=(3, 5))\n       '
+                                                      b'         response.raise_for_status()\n               '
+                                                      b' events.extend(response.json().get("events", []))\n  '
+                                                      b'          except (requests.RequestException, ValueEr'
+                                                      b'ror, TypeError, AttributeError):\n                con'
+                                                      b'tinue\n    result = attach(games, sport, events, date'
+                                                      b'time.now(timezone.utc).isoformat())\n    import loggi'
+                                                      b'ng\n    from collections import Counter\n    loggi'
+                                                      b'ng.getLogger(__name__).warning("FOOTBALL IDENTITY sp'
+                                                      b'ort=%s games=%s statuses=%s",\n',
+                                                      b'    dates = sorted({t.strftime("%Y%m%d") for g in ga'
+                                                      b'mes if (t := timestamp(g.get("commence_time")))})\n  '
+                                                      b'  # Bounded work per refresh. Missing dates stay unr'
+                                                      b'esolved, never guessed.\n    events = []\n    rece'
+                                                      b'ipts = []\n    for day in dates[:3]:\n        for '
+                                                      b'url in _scoreboard_urls(sport, day):\n            try'
+                                                      b':\n                response = requests.get(url, timeo'
+                                                      b'ut=(3, 5))\n                response.raise_for_status'
+                                                      b'()\n                returned = response.json().get("e'
+                                                      b'vents", [])\n                events.extend(return'
+                                                      b"ed)\n                receipts.append({'day': day, 'ou"
+                                                      b"tcome': 'SUCCESS' if returned else 'SUCCESS_EMPTY'})"
+                                                      b'\n            except (requests.RequestException, Valu'
+                                                      b'eError, TypeError, AttributeError):\n                '
+                                                      b"receipts.append({'day': day, 'outcome': 'FAILED'})\n "
+                                                      b'               continue\n    observed_at = datetime.n'
+                                                      b'ow(timezone.utc).isoformat()\n    result = ObservedGa'
+                                                      b'mes(attach(games, sport, events, observed_at),\n     '
+                                                      b"   {'sport': sport, 'observed_at': observed_at, 'eve"
+                                                      b"nts': deepcopy(events),\n         'request_receipts':"
+                                                      b" receipts, 'requested_utc_dates': dates[:3],\n       "
+                                                      b"  'status': 'PARTIAL' if receipts else 'UNAVAILABLE'"
+                                                      b",\n         'reasons': ['QUOTE_DERIVED_DATE_WINDOW_NO"
+                                                      b"_COMPLETE_INDEX'] +\n                    (['DATE_LIMI"
+                                                      b"T_REACHED'] if len(dates) > 3 else []) +\n           "
+                                                      b"         (['SCHEDULE_REQUEST_FAILED'] if any(r['outc"
+                                                      b"ome'] == 'FAILED' for r in receipts) else [])})\n    "
+                                                      b'import logging\n    from collections import Count'
+                                                      b'er\n    logging.getLogger(__name__).warning("FOOTBALL'
+                                                      b' IDENTITY sport=%s games=%s statuses=%s",\n')],
+                                           'sha256': '2113d333ed21ac606dc4b7501cd6710638d1144693abd2b41c47953495d91fc9'},
+ 'app_core/game_coverage.py': {'after_sha256': '457612881fbb182dd685d4e184c433f0075fea74d16cb5029bcb3f0d7c48be85',
+                               'edits': [(b'    return pd.DataFrame(rows).sort_values(["Commence (Local)", "'
+                                          b'league", "Away", "Home"]).reset_index(drop=True) if rows else pd'
+                                          b'.DataFrame()\n\n\ndef publication_games(best_picks: pd.DataFram'
+                                          b'e, candidate_audit: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data'
+                                          b'Frame]:\n    """Append coverage rows while retaining the exact ra'
+                                          b'nked Best Picks export."""\n    best = best_picks if isinstance(b'
+                                          b'est_picks, pd.DataFrame) else pd.DataFrame()\n    coverage = unra'
+                                          b'nked_games(best, candidate_audit)\n    if coverage.empty:\n   '
+                                          b'     return best.copy(), coverage\n',
+                                          b'    return pd.DataFrame(rows).sort_values(["Commence (Local)", "'
+                                          b'league", "Away", "Home"]).reset_index(drop=True) if rows else pd'
+                                          b'.DataFrame()\n\n\ndef publication_games(best_picks: pd.DataFram'
+                                          b'e, candidate_audit: pd.DataFrame, *, slate_report=None) -> tuple'
+                                          b'[pd.DataFrame, pd.DataFrame]:\n    """Append coverage rows while '
+                                          b'retaining the exact ranked Best Picks export."""\n    best = best'
+                                          b'_picks if isinstance(best_picks, pd.DataFrame) else pd.DataFrame'
+                                          b'()\n    if slate_report is not None:\n        from app_core.sl'
+                                          b'ate_coverage import publication_rows\n        return publication_'
+                                          b'rows(best, candidate_audit, slate_report)\n    coverage = unranke'
+                                          b'd_games(best, candidate_audit)\n    if coverage.empty:\n      '
+                                          b'  return best.copy(), coverage\n')],
+                               'sha256': '1c718c97b8f67642cbf2942ef361f0898bbc4d57b6f951c0e66acc5d924081b3'},
+ 'app_core/per_game_boards.py': {'after_sha256': '42bec7b0091a8c6e23a9bdb20611105ed487beaba2bb092a06526c820fa730a6',
+                                 'edits': [(b"\ndef per_game_board(board, candidates=None, family='overall'"
+                                            b', *, novig_only=False, college_fallback=False, nfl_fallback='
+                                            b"False, research_fallback=False):\n    if family not in {'over"
+                                            b"all','sides','totals'}: raise ValueError('Unknown family')\n "
+                                            b'   if board is None or board.empty: return pd.DataFrame()\n  '
+                                            b'  candidates=candidates if isinstance(candidates,pd.DataFram'
+                                            b'e) else pd.DataFrame()\n    from core.market_policy import pr'
+                                            b'oduction_market\n    candidate_rows = [row for _, row in cand'
+                                            b"idates.iterrows() if production_market(text(row, 'market_typ"
+                                            b"e'))]\n",
+                                            b"\ndef per_game_board(board, candidates=None, family='overall'"
+                                            b', *, novig_only=False, college_fallback=False, nfl_fallback='
+                                            b"False, research_fallback=False):\n    if family not in {'over"
+                                            b"all','sides','totals'}: raise ValueError('Unknown family')\n "
+                                            b'   if board is None or board.empty:\n        result = pd.Data'
+                                            b'Frame()\n        if isinstance(board, pd.DataFrame):\n        '
+                                            b'    result.attrs.update(board.attrs)\n        return result\n '
+                                            b'   candidates=candidates if isinstance(candidates,pd.DataFra'
+                                            b'me) else pd.DataFrame()\n    from core.market_policy import p'
+                                            b'roduction_market\n    candidate_rows = [row for _, row in can'
+                                            b"didates.iterrows() if production_market(text(row, 'market_ty"
+                                            b"pe'))]\n"),
+                                           (b"        exported['research_display']=json.dumps(display, all"
+                                            b"ow_nan=False, sort_keys=True, separators=(',',':'))\n        "
+                                            b"# Owner export only: public_board's allowlist never publishe"
+                                            b"s this trace.\n        exported['research_estimate_trace']=bo"
+                                            b'undary_trace(source,exported,display)\n        rows.append(ex'
+                                            b'ported)\n    return pd.DataFrame(rows)\n',
+                                            b"        exported['research_display']=json.dumps(display, all"
+                                            b"ow_nan=False, sort_keys=True, separators=(',',':'))\n        "
+                                            b"# Owner export only: public_board's allowlist never publishe"
+                                            b"s this trace.\n        exported['research_estimate_trace']=bo"
+                                            b'undary_trace(source,exported,display)\n        coverage = fin'
+                                            b"al.get('coverage_decision')\n        if isinstance(coverage, "
+                                            b"str):\n            exported['coverage_decision'] = json.loads"
+                                            b"(coverage)\n            exported['coverage_decision_state'] ="
+                                            b" exported['coverage_decision']['coverage_decision_state']\n  "
+                                            b"          exported['coverage_explanation'] = exported['cover"
+                                            b"age_decision']['explanation']\n            if final.get('cove"
+                                            b"rage_only') is True:\n                exported['coverage_only"
+                                            b"'] = True\n                exported['pick'] = ''\n        rows"
+                                            b".append(exported)\n    result = pd.DataFrame(rows)\n    if 'sl"
+                                            b"ate_coverage' in board.attrs:\n        result.attrs['slate_co"
+                                            b"verage'] = board.attrs['slate_coverage']\n    return resu"
+                                            b'lt\n')],
+                                 'sha256': '0bcedb8b7ef4302c114cb7d5cb5527739a30a5d1f11e15d10a1aa6a1117eda71'},
+ 'app_core/public_board.py': {'after_sha256': 'ef67550b4aa29fb2acd6e274695ef92549bcf11386e2f5fdb3d95456ddb85bcf',
+                              'edits': [(b'\n\ndef pick_record(row, *, prop=False, as_of=None):\n    at = '
+                                         b"timestamp(text(row, 'prediction_generated_at', 'export_run_id') "
+                                         b"or as_of)\n    if at is None:\n        raise ValueError('Every sel"
+                                         b"ection needs its original analysis timestamp')\n    start = times"
+                                         b"tamp(text(row, 'game_start_utc', 'start', 'game_time_est'))\n    "
+                                         b"probability = number(row, *(['ConservativeWinProbability', 'Cali"
+                                         b"bratedProbability'] if prop else ['win_probability']))\n",
+                                         b'\n\ndef pick_record(row, *, prop=False, as_of=None):\n    cover'
+                                         b"age_only = not prop and row.get('coverage_only') is True and isi"
+                                         b"nstance(row.get('coverage_decision'), dict)\n    at = None if cov"
+                                         b"erage_only else timestamp(text(row, 'prediction_generated_at', '"
+                                         b"export_run_id') or as_of)\n    if at is None and not coverage_onl"
+                                         b"y:\n        raise ValueError('Every selection needs its original "
+                                         b"analysis timestamp')\n    start = timestamp(text(row, 'game_start"
+                                         b"_utc', 'start', 'game_time_est'))\n    probability = number(row, "
+                                         b"*(['ConservativeWinProbability', 'CalibratedProbability'] if pro"
+                                         b"p else ['win_probability']))\n"),
+                                        (b'            record["win_estimate"]=None\n            record["ev"]'
+                                         b'=None\n            record.update(display(None, record["odds"], No'
+                                         b'ne, push_probability=push))\n    return record\n\n\n',
+                                         b'            record["win_estimate"]=None\n            record["ev"]'
+                                         b'=None\n            record.update(display(None, record["odds"], No'
+                                         b'ne, push_probability=push))\n    if not prop and isinstance(row.g'
+                                         b"et('coverage_decision'), dict):\n        from copy import deepcop"
+                                         b"y\n        record['coverage_decision'] = deepcopy(row['coverage_d"
+                                         b"ecision'])\n        if coverage_only:\n            record['record_"
+                                         b"kind'] = 'coverage_only_no_inference'\n    return record\n\n\n"),
+                                        (b'    identities = None\n    run = None\n    games = {}\n    for '
+                                         b"family, frame in frames.items():\n        required = {'matchup_id"
+                                         b"','export_run_id','pick','status','Bettable','Play_Stake'}\n     "
+                                         b'   if frame.empty or not required.issubset(frame.columns):\n     '
+                                         b"       raise ValueError('Supply all three nonempty per-game expo"
+                                         b"rts from the same run')\n        ids = frame.matchup_id.fillna(''"
+                                         b').astype(str)\n',
+                                         b'    identities = None\n    run = None\n    games = {}\n    cove'
+                                         b"rage = overall.attrs.get('slate_coverage')\n    for family, frame"
+                                         b" in frames.items():\n        required = {'matchup_id','export_run"
+                                         b"_id','pick','status','Bettable','Play_Stake'}\n        if coverag"
+                                         b"e is not None and frame.attrs.get('slate_coverage') != coverage:"
+                                         b"\n            raise ValueError('COVERAGE_BOARD_REPORT_CONFLICT')\n"
+                                         b'        if frame.empty and coverage is not None and not coverage'
+                                         b"['decisions']:\n            games[family] = []\n            contin"
+                                         b'ue\n        if frame.empty or not required.issubset(frame.columns'
+                                         b"):\n            raise ValueError('Supply all three nonempty per-g"
+                                         b"ame exports from the same run')\n        ids = frame.matchup_id.f"
+                                         b"illna('').astype(str)\n"),
+                                        (b'    diagnostics = build_selected_diagnostics([row for _, row in '
+                                         b"overall.iterrows()], games['overall'], built_at, QUOTE_MAX_AGE_M"
+                                         b"INUTES)\n    return {'schema_version':2, 'parlay_funnel':summary,"
+                                         b" 'parlay_policy':'canonical-v3', 'research_parlay_policy':'diver"
+                                         b"sified-v2', 'research_parlays':research_parlays, 'parlay_product"
+                                         b"_policy':POLICY_VERSION, 'parlay_products':parlay_products, 'par"
+                                         b"lay_product_funnel':product_funnel, 'board_diagnostics':diagnost"
+                                         b"ics, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-"
+                                         b"publication-v1', 'parlays':qualified_parlays, 'built_at':built_a"
+                                         b"t.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,\n    "
+                                         b"        'games':games, 'props':public_props,\n            'dfs':l"
+                                         b'ineups}\n\n\ndef validate_package(package):\n',
+                                         b'    diagnostics = build_selected_diagnostics([row for _, row in '
+                                         b"overall.iterrows()], games['overall'], built_at, QUOTE_MAX_AGE_M"
+                                         b"INUTES)\n    return {'schema_version':2, 'parlay_funnel':summary,"
+                                         b" 'parlay_policy':'canonical-v3', 'research_parlay_policy':'diver"
+                                         b"sified-v2', 'research_parlays':research_parlays, 'parlay_product"
+                                         b"_policy':POLICY_VERSION, 'parlay_products':parlay_products, 'par"
+                                         b"lay_product_funnel':product_funnel, 'board_diagnostics':diagnost"
+                                         b"ics, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-"
+                                         b"publication-v1', 'parlays':qualified_parlays, 'built_at':built_a"
+                                         b"t.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,\n    "
+                                         b"        'games':games, 'props':public_props,\n            'dfs':l"
+                                         b"ineups, **({'slate_coverage':coverage} if coverage is not None e"
+                                         b'lse {})}\n\n\ndef validate_package(package):\n'),
+                                        (b"        value = row.get('expected_stat')\n        if 'expected_st"
+                                         b"at' in row and (isinstance(value, bool) or not isinstance(value,"
+                                         b' (int, float)) or not math.isfinite(value) or value < 0):\n      '
+                                         b"      raise ValueError('Invalid expected statistic')\n    exact(p"
+                                         b"ackage, 'schema_version built_at stale_after_minutes games props"
+                                         b" dfs' + (' research_parlay_policy research_parlays' if 'research"
+                                         b"_parlay_policy' in package else '') + (' selection_policy' if 's"
+                                         b"election_policy' in package else '') + (' top_ten_policy' if 'to"
+                                         b"p_ten_policy' in package else '') + (' parlays' if package.get('"
+                                         b"schema_version') in {2,3,4,5} else '') + (' results' if package."
+                                         b"get('schema_version') in {3,4,5} else '') + (' parlay_policy' if"
+                                         b" 'parlay_policy' in package else '') + (' parlay_funnel' if 'par"
+                                         b"lay_funnel' in package else '') + (' parlay_product_policy parla"
+                                         b"y_products parlay_product_funnel' if 'parlay_product_policy' in "
+                                         b"package else '') + (' board_diagnostics' if 'board_diagnostics' "
+                                         b'in package else \'\'))\n    if package.get("parlay_policy", "su'
+                                         b'pported-v2") not in {"supported-v2", "canonical-v3"}:\n        ra'
+                                         b'ise ValueError("Unsupported parlay policy")\n    package_age_minu'
+                                         b'tes(package)\n',
+                                         b"        value = row.get('expected_stat')\n        if 'expected_st"
+                                         b"at' in row and (isinstance(value, bool) or not isinstance(value,"
+                                         b' (int, float)) or not math.isfinite(value) or value < 0):\n      '
+                                         b"      raise ValueError('Invalid expected statistic')\n    exact({"
+                                         b"k:v for k,v in package.items() if k != 'slate_coverage'}, 'schem"
+                                         b"a_version built_at stale_after_minutes games props dfs' + (' res"
+                                         b"earch_parlay_policy research_parlays' if 'research_parlay_policy"
+                                         b"' in package else '') + (' selection_policy' if 'selection_polic"
+                                         b"y' in package else '') + (' top_ten_policy' if 'top_ten_policy' "
+                                         b"in package else '') + (' parlays' if package.get('schema_version"
+                                         b"') in {2,3,4,5} else '') + (' results' if package.get('schema_ve"
+                                         b"rsion') in {3,4,5} else '') + (' parlay_policy' if 'parlay_polic"
+                                         b"y' in package else '') + (' parlay_funnel' if 'parlay_funnel' in"
+                                         b" package else '') + (' parlay_product_policy parlay_products par"
+                                         b"lay_product_funnel' if 'parlay_product_policy' in package else '"
+                                         b"') + (' board_diagnostics' if 'board_diagnostics' in package els"
+                                         b'e \'\'))\n    if package.get("parlay_policy", "supported-v2") n'
+                                         b'ot in {"supported-v2", "canonical-v3"}:\n        raise ValueError'
+                                         b'("Unsupported parlay policy")\n    package_age_minutes(packag'
+                                         b'e)\n'),
+                                        (b'        if not isinstance(rows, list):\n            raise ValueEr'
+                                         b"ror('Selections must be lists')\n        for row in rows:\n       "
+                                         b"     exact(row, 'sport game pick player market odds win_estimate"
+                                         b" ev status start as_of' + (' qualification_reason' if 'qualifica"
+                                         b"tion_reason' in row else '') + ((' quote_source quote_time' + ('"
+                                         b" quote_reason' if 'quote_reason' in row else '') + (' quote_time"
+                                         b"_basis' if 'quote_time_basis' in row else '')) if rows is not pa"
+                                         b"ckage['props'] and 'quote_source' in row else '') + (' expected_"
+                                         b"stat' if rows is package['props'] and 'expected_stat' in row els"
+                                         b"e '') + (' wager_contract' if 'wager_contract' in row else '') +"
+                                         b" (' controlled_trial_contract' if 'controlled_trial_contract' in"
+                                         b" row else '') + (' research_display' if 'research_display' in ro"
+                                         b"w else '') + (' price_push_probability' if 'price_push_probabili"
+                                         b"ty' in row else '') + ''.join(' '+k for k in ('maturity','gemini"
+                                         b"_review_status','gemini_review_completion','gemini_review_scope'"
+                                         b",'gemini_factual_evidence','gemini_reviewed_at','conservative_ev"
+                                         b"','espn_event_id','mlb_game_pk','game_number', *PUBLIC_NFL_CONTE"
+                                         b'XT_FIELDS, *TQ_FIELDS, *VALUE_FIELDS) if k in row))\n            '
+                                         b'if any(k in row for k in TQ_FIELDS):\n                validate_qu'
+                                         b'ality({k:row[k] for k in TQ_FIELDS if k in row})\n               '
+                                         b" if row['sport'] != 'MLB' or row['market'] not in {'total_over',"
+                                         b"'total_under'}:\n",
+                                         b'        if not isinstance(rows, list):\n            raise ValueEr'
+                                         b"ror('Selections must be lists')\n        for row in rows:\n       "
+                                         b"     exact(row, 'sport game pick player market odds win_estimate"
+                                         b" ev status start as_of' + (' qualification_reason' if 'qualifica"
+                                         b"tion_reason' in row else '') + ((' quote_source quote_time' + ('"
+                                         b" quote_reason' if 'quote_reason' in row else '') + (' quote_time"
+                                         b"_basis' if 'quote_time_basis' in row else '')) if rows is not pa"
+                                         b"ckage['props'] and 'quote_source' in row else '') + (' expected_"
+                                         b"stat' if rows is package['props'] and 'expected_stat' in row els"
+                                         b"e '') + (' wager_contract' if 'wager_contract' in row else '') +"
+                                         b" (' controlled_trial_contract' if 'controlled_trial_contract' in"
+                                         b" row else '') + (' research_display' if 'research_display' in ro"
+                                         b"w else '') + (' price_push_probability' if 'price_push_probabili"
+                                         b"ty' in row else '') + (' coverage_decision' if 'coverage_decisio"
+                                         b"n' in row else '') + (' record_kind' if 'record_kind' in row els"
+                                         b"e '') + ''.join(' '+k for k in ('maturity','gemini_review_status"
+                                         b"','gemini_review_completion','gemini_review_scope','gemini_factu"
+                                         b"al_evidence','gemini_reviewed_at','conservative_ev','espn_event_"
+                                         b"id','mlb_game_pk','game_number', *PUBLIC_NFL_CONTEXT_FIELDS, *TQ"
+                                         b'_FIELDS, *VALUE_FIELDS) if k in row))\n            if any(k in ro'
+                                         b'w for k in TQ_FIELDS):\n                validate_quality({k:row[k'
+                                         b"] for k in TQ_FIELDS if k in row})\n                if row['sport"
+                                         b"'] != 'MLB' or row['market'] not in {'total_over','total_under'}"
+                                         b':\n'),
+                                        (b"                    raise ValueError('Public labels must be text"
+                                         b"')\n            if row['status'] not in {'APPROVED','TRIAL','PASS"
+                                         b"'}:\n                raise ValueError('Invalid status')\n         "
+                                         b"   if not timestamp(row['as_of']):\n                raise ValueEr"
+                                         b"ror('Missing analysis time')\n            timestamp(row['start'])"
+                                         b"\n            for key in ('odds','win_estimate','ev'):\n          "
+                                         b'      if row[key] is not None and (not isinstance(row[key], (int'
+                                         b',float)) or not math.isfinite(row[key])):\n                    ra'
+                                         b"ise ValueError('Invalid metric')\n    if not isinstance(package['"
+                                         b"dfs'], list):\n        raise ValueError('DFS must be a list')\n   "
+                                         b" for row in package['dfs']:\n",
+                                         b"                    raise ValueError('Public labels must be text"
+                                         b"')\n            if row['status'] not in {'APPROVED','TRIAL','PASS"
+                                         b"'}:\n                raise ValueError('Invalid status')\n         "
+                                         b"   coverage_only = row.get('record_kind') == 'coverage_only_no_i"
+                                         b"nference'\n            if 'record_kind' in row and not coverage_o"
+                                         b"nly:\n                raise ValueError('Invalid coverage record k"
+                                         b"ind')\n            if coverage_only and (row['status'] != 'PASS' "
+                                         b"or row['market'] or row['pick']\n                    or any(row[k"
+                                         b"] is not None for k in ('odds', 'win_estimate', 'ev'))\n         "
+                                         b"           or row['as_of'] is not None or 'wager_contract' in ro"
+                                         b"w or 'controlled_trial_contract' in row\n                    or '"
+                                         b"coverage_decision' not in row or 'slate_coverage' not in package"
+                                         b"):\n                raise ValueError('Coverage placeholder cannot"
+                                         b" carry selection or authority')\n            if not timestamp(row"
+                                         b"['as_of']) and not coverage_only:\n                raise ValueErr"
+                                         b"or('Missing analysis time')\n            timestamp(row['start'])\n"
+                                         b"            for key in ('odds','win_estimate','ev'):\n           "
+                                         b'     if row[key] is not None and (not isinstance(row[key], (int,'
+                                         b'float)) or not math.isfinite(row[key])):\n                    rai'
+                                         b"se ValueError('Invalid metric')\n    if 'slate_coverage' in packa"
+                                         b'ge:\n        from app_core.slate_coverage import validate_public_'
+                                         b"coverage\n        validate_public_coverage(package['slate_coverag"
+                                         b"e'], package['games'])\n    elif any('coverage_decision' in r for"
+                                         b" group in package['games'].values() for r in group):\n        rai"
+                                         b"se ValueError('Coverage decisions require their inventory report"
+                                         b"')\n    if not isinstance(package['dfs'], list):\n        raise Va"
+                                         b"lueError('DFS must be a list')\n    for row in package['dfs']"
+                                         b':\n')],
+                              'sha256': '5c8c2187ccdcab6b054c0847589600c9e9cb1b29b0d19303aad706bec593ff9a'},
+ 'core/live_wager_contract.py': {'after_sha256': '385c2175be7926a8e01cc49aed10e14024b3a9f50cd24726c277b4271dbc4fc8',
+                                 'edits': [(b"            row,deployment,owner,config.get('exposure'),now,"
+                                            b"\n            allow_test_only=config.get('_test_only') is Tru"
+                                            b"e,\n            evidence_path=config.get('prospective_evidenc"
+                                            b"e_path'))\n        if authority_policy is not None:\n         "
+                                            b'   policy=authority_policy\n            row.update(market_fam'
+                                            b"ily=family,validation_id=deployment['validation_id'],\n",
+                                            b"            row,deployment,owner,config.get('exposure'),now,"
+                                            b"\n            allow_test_only=config.get('_test_only') is Tru"
+                                            b"e,\n            evidence_path=config.get('prospective_evidenc"
+                                            b"e_path'))\n        # Informational observations in actual cal"
+                                            b'l order; never authority.\n        coverage_trace = ([dict(ga'
+                                            b"te='market_authority', status='FAIL', code=code)\n           "
+                                            b'                for code in market_blockers] or\n            '
+                                            b"              [dict(gate='market_authority', status='PASS', "
+                                            b'code=None)])\n        if authority_policy is not None:\n      '
+                                            b'      policy=authority_policy\n            row.update(market_'
+                                            b"family=family,validation_id=deployment['validation_id'],\n"),
+                                           (b"            if row.get('critical_feature_error') is False:\n "
+                                            b"               row['validated_evidence_family'] = validation"
+                                            b".get('market_family')\n            row=assign(row,policy,runt"
+                                            b"ime.get('maturity_rules',{}),now)\n        decision = candida"
+                                            b'te_decision(row, policy, now,\n                              '
+                                            b"        outage_policy=runtime.get('gemini_outage',config.get"
+                                            b"('gemini_outage')),\n                                      ca"
+                                            b'nonical_quote_verified=canonical_book_verified)\n        if m'
+                                            b'arket_blockers:\n            reasons=list(dict.fromkeys(decis'
+                                            b"ion['reason_for_pass']+market_blockers))\n            decisio"
+                                            b'n.update(production_eligible=False,recommended_fraction=0.0,'
+                                            b"\n                            strategic_action='PASS',reason_"
+                                            b'for_pass=reasons,\n                            production_gat'
+                                            b"e_reason='; '.join(reasons))\n        if _invalid_selection_f"
+                                            b'acts(row):\n            decision.update(production_eligible=F'
+                                            b'alse,recommended_fraction=0.0,\n                            s'
+                                            b"trategic_action='PASS',\n                            producti"
+                                            b"on_gate_reason='invalid_quote_chronology_or_model_authority'"
+                                            b')\n',
+                                            b"            if row.get('critical_feature_error') is False:\n "
+                                            b"               row['validated_evidence_family'] = validation"
+                                            b".get('market_family')\n            row=assign(row,policy,runt"
+                                            b"ime.get('maturity_rules',{}),now)\n        recorded_market_co"
+                                            b"des = {g['code'] for g in coverage_trace if g['status'] == '"
+                                            b"FAIL'}\n        coverage_trace.extend(dict(gate='maturity_aut"
+                                            b"hority', status='FAIL', code=code)\n                         "
+                                            b'     for code in market_blockers if code not in recorded_mar'
+                                            b'ket_codes)\n        decision = candidate_decision(row, policy'
+                                            b', now,\n                                      outage_policy=r'
+                                            b"untime.get('gemini_outage',config.get('gemini_outage')),\n   "
+                                            b'                                   canonical_quote_verified='
+                                            b'canonical_book_verified)\n        coverage_trace.extend([dict'
+                                            b"(gate='candidate_contract', status='FAIL', code=code)\n      "
+                                            b"                         for code in decision['reason_for_pa"
+                                            b"ss']] or\n                              [dict(gate='candidate"
+                                            b"_contract', status='PASS', code=None)])\n        decision['co"
+                                            b"verage_gate_trace'] = coverage_trace\n        decision['cover"
+                                            b"age_evaluated_at'] = now.isoformat()\n        decision['cover"
+                                            b"age_run_id'] = _value(raw, 'export_run_id', 'run_id')\n      "
+                                            b'  if market_blockers:\n            reasons=list(dict.fromkeys'
+                                            b"(decision['reason_for_pass']+market_blockers))\n            d"
+                                            b'ecision.update(production_eligible=False,recommended_fractio'
+                                            b"n=0.0,\n                            strategic_action='PASS',r"
+                                            b'eason_for_pass=reasons,\n                            producti'
+                                            b"on_gate_reason='; '.join(reasons))\n        invalid_selection"
+                                            b' = _invalid_selection_facts(row)\n        coverage_trace.appe'
+                                            b"nd(dict(gate='selection_identity_safety',\n            status"
+                                            b"='FAIL' if invalid_selection else 'PASS',\n            code='"
+                                            b"invalid_quote_chronology_or_model_authority' if invalid_sele"
+                                            b'ction else None))\n        if invalid_selection:\n            '
+                                            b'decision.update(production_eligible=False,recommended_fracti'
+                                            b"on=0.0,\n                            strategic_action='PASS',"
+                                            b"\n                            production_gate_reason='invalid"
+                                            b"_quote_chronology_or_model_authority')\n"),
+                                           (b"        result['canonical_pick_key']=_build_canonical_pick_k"
+                                            b"ey(pd.Series(result))\n        result['wager_contract']=contr"
+                                            b'act\n        output.append(result)\n    return enforce_frame(p'
+                                            b'd.DataFrame(output)), [dict(snapshot(r,now),**{k:r.get(k) fo'
+                                            b"r k in ('maturity_reason','maturity_policy_version','maturit"
+                                            b"y_inputs_hash','deployment_state','validated_evidence_family"
+                                            b"','candidate_id')}) for pool in grouped.values() for r in po"
+                                            b'ol]\n\n\ndef enforce_frame(frame):\n',
+                                            b"        result['canonical_pick_key']=_build_canonical_pick_k"
+                                            b"ey(pd.Series(result))\n        result['wager_contract']=contr"
+                                            b'act\n        output.append(result)\n    return enforce_frame(p'
+                                            b'd.DataFrame(output)), [dict(snapshot(r,now),**{k:r.get(k) fo'
+                                            b"r k in ('maturity_reason','maturity_policy_version','maturit"
+                                            b"y_inputs_hash','deployment_state','validated_evidence_family"
+                                            b"','candidate_id','coverage_gate_trace','coverage_evaluated_a"
+                                            b"t','coverage_run_id')}) for pool in grouped.values() for r i"
+                                            b'n pool]\n\n\ndef enforce_frame(frame):\n')],
+                                 'sha256': 'aff35332d13b23629c1452a2328612c5e25798e821c8c0c5d98a8d1116edc514'},
+ 'core/run_readiness.py': {'after_sha256': '9b9906a93b1fcd1978db1e8040035794f6702dabae816a4c715c2a809e0ec866',
+                           'edits': [(b'    report = {"version": 1, "quote_warning_minutes": quote_warning_m'
+                                      b'inutes,\n              "production_changes": False, "games": [], "can'
+                                      b'didates": [], "run_warnings": []}\n    diagnostics = diagnostics or {'
+                                      b'}\n    for key in ("stale_base_schedule", "prediction_snapshot_error"'
+                                      b', "run_health_warning"):\n        value = diagnostics.get(key)\n  '
+                                      b'      if isinstance(value, (str, bool)) and value:\n',
+                                      b'    report = {"version": 1, "quote_warning_minutes": quote_warning_m'
+                                      b'inutes,\n              "production_changes": False, "games": [], "can'
+                                      b'didates": [], "run_warnings": []}\n    diagnostics = diagnostics or {'
+                                      b"}\n    if diagnostics.get('slate_coverage') is not None:\n        "
+                                      b"from app_core.slate_coverage import validate_report\n        report['"
+                                      b"slate_coverage'] = validate_report(diagnostics['slate_coverage'])\n  "
+                                      b'  for key in ("stale_base_schedule", "prediction_snapshot_error", "r'
+                                      b'un_health_warning"):\n        value = diagnostics.get(key)\n      '
+                                      b'  if isinstance(value, (str, bool)) and value:\n'),
+                                     (b'\n\ndef game_table(report):\n    rows = []\n    for row in report["g'
+                                      b'ames"]:\n        item = dict(row)\n',
+                                      b"\n\ndef game_table(report):\n    if 'slate_coverage' in report:\n   "
+                                      b"     rows = []\n        for decision in report['slate_coverage']['dec"
+                                      b"isions']:\n            rows.append({k:json.dumps(v, sort_keys=True) i"
+                                      b'f isinstance(v, (dict, list)) else v\n                         for k,'
+                                      b'v in decision.items()})\n        return pd.DataFrame(rows)\n    ro'
+                                      b'ws = []\n    for row in report["games"]:\n        item = dict(row)'
+                                      b'\n'),
+                                     (b'              "MLB receipt collection: " + json.dumps(report.get("ml'
+                                      b'b_receipt_health", {}), sort_keys=True)]\n    lines += ["", "## Run w'
+                                      b'arnings", ""] + ["- " + escape(v) for v in report["run_warnings"]]\n '
+                                      b'   lines += ["", "Candidate-level issues, source coverage and evalua'
+                                      b'tion-day eligibility are included in the JSON download."]\n    return'
+                                      b' "\\n".join(lines) + "\\n"\n',
+                                      b'              "MLB receipt collection: " + json.dumps(report.get("ml'
+                                      b'b_receipt_health", {}), sort_keys=True)]\n    lines += ["", "## Run w'
+                                      b'arnings", ""] + ["- " + escape(v) for v in report["run_warnings"]]\n '
+                                      b'   lines += ["", "Candidate-level issues, source coverage and evalua'
+                                      b'tion-day eligibility are included in the JSON download."]\n    if'
+                                      b" 'slate_coverage' in report:\n        coverage = report['slate_covera"
+                                      b"ge']\n        lines += ['', '## Independent slate coverage', '',\n"
+                                      b'            f"Eastern date: {coverage[\'selected_date\']}; as of {'
+                                      b'coverage[\'as_of\']}; inventory: {coverage[\'inventory_status\']}.",'
+                                      b"\n            'Internal equality does not establish external schedule"
+                                      b" completeness.',\n            json.dumps(coverage['counts'], sort_key"
+                                      b's=True)]\n    return "\\n".join(lines) + "\\n"\n')],
+                           'sha256': 'c1d2e21e3f421c793ffc53192ef6bc0e6850092af7d7d1a036f303c6219268e8'},
+ 'core/streamlit_pipeline.py': {'after_sha256': 'af757e2e3a7a878f445573f0dc3feeeb95bf1789629ca2a5c6e023e688b017b7',
+                                'edits': [(b'    if schedule_start is not None and (not sports or "NCAAF" in '
+                                           b'[s.upper() for s in sports]):\n        from app_core.ncaaf_sc'
+                                           b'hedule import fetch_schedule\n        inventory = fetch_sched'
+                                           b'ule(schedule_start, schedule_end or schedule_start)\n    resu'
+                                           b'lt = _fetch_live_odds_dataframe(sports, date, _schedule_inventor'
+                                           b'y=inventory)\n    if inventory is not None:\n        result.at'
+                                           b'trs["ncaaf_schedule"] = inventory\n        result.attrs["ncaa'
+                                           b'f_provider_games"] = result.loc[result["league"].eq("NCAAF")].to'
+                                           b'_dict("records") if "league" in result else []\n',
+                                           b'    if schedule_start is not None and (not sports or "NCAAF" in '
+                                           b'[s.upper() for s in sports]):\n        from app_core.ncaaf_sc'
+                                           b'hedule import fetch_schedule\n        inventory = fetch_sched'
+                                           b'ule(schedule_start, schedule_end or schedule_start)\n    cove'
+                                           b'rage_receipts = {}\n    result = _fetch_live_odds_dataframe(s'
+                                           b'ports, date, _schedule_inventory=inventory,\n                '
+                                           b'                       _coverage_receipts=coverage_receipts)'
+                                           b'\n    result.attrs.update(coverage_receipts)\n    if inventory'
+                                           b' is not None:\n        result.attrs["ncaaf_schedule"] = inven'
+                                           b'tory\n        result.attrs["ncaaf_provider_games"] = result.l'
+                                           b'oc[result["league"].eq("NCAAF")].to_dict("records") if "league" '
+                                           b'in result else []\n'),
+                                          (b'\n\ndef _fetch_live_odds_dataframe(sports: list[str] | None = '
+                                           b'None, date: str | None = None,\n                             '
+                                           b'  *, _schedule_inventory=None) -> pd.DataFrame:\n    from app'
+                                           b'_core.espn_ncaaf_odds import (\n        fetch_espn_ncaaf_fcs_'
+                                           b'odds,\n        merge_missing_ncaaf_games,\n',
+                                           b'\n\ndef _fetch_live_odds_dataframe(sports: list[str] | None = '
+                                           b'None, date: str | None = None,\n                             '
+                                           b'  *, _schedule_inventory=None, _coverage_receipts=None) -> pd.Da'
+                                           b'taFrame:\n    from app_core.espn_ncaaf_odds import (\n        '
+                                           b'fetch_espn_ncaaf_fcs_odds,\n        merge_missing_ncaaf_games'
+                                           b',\n'),
+                                          (b'    game_dict = {}\n    mlb_receipt_health = {}\n    provider_'
+                                           b'outcomes = {}\n    for sk in sport_keys:\n        games = []\n '
+                                           b'       provider_outcomes[sk] = outcome("NOT_CONFIGURED")\n',
+                                           b'    game_dict = {}\n    mlb_receipt_health = {}\n    provider_'
+                                           b'outcomes = {}\n    coverage_provider_events = []\n    retained'
+                                           b'_football_schedules = []\n    if _coverage_receipts is not No'
+                                           b'ne:\n        _coverage_receipts.update(retained_football_sche'
+                                           b'dules=retained_football_schedules,\n                         '
+                                           b'         coverage_provider_events=coverage_provider_events)\n'
+                                           b'    for sk in sport_keys:\n        games = []\n        provide'
+                                           b'r_outcomes[sk] = outcome("NOT_CONFIGURED")\n'),
+                                          (b'                            game["football_identity_status"] = "'
+                                           b'CONFLICT"\n                else:\n                    sport_ga'
+                                           b'mes = collect_football_identity(sport_games, football_sport)'
+                                           b'\n\n            if not sport_games:\n                provider_o'
+                                           b'utcomes[sk]["processing"] = "FILTERED_EMPTY"\n',
+                                           b'                            game["football_identity_status"] = "'
+                                           b'CONFLICT"\n                else:\n                    sport_ga'
+                                           b'mes = collect_football_identity(sport_games, football_sport)'
+                                           b"\n                    observation = getattr(sport_games, 'ret"
+                                           b"ained_schedule_observation', None)\n                    if ob"
+                                           b'servation is not None:\n                        retained_foot'
+                                           b'ball_schedules.append(observation)\n\n            if football_'
+                                           b'sport:\n                from app_core.prediction_evidence imp'
+                                           b'ort provider_quotes\n                coverage_provider_events'
+                                           b'.extend(dict(game, league=football_sport,\n                  '
+                                           b'  provider_quotes=provider_quotes(game)) for game in sport_games'
+                                           b')\n\n            if not sport_games:\n                provider_'
+                                           b'outcomes[sk]["processing"] = "FILTERED_EMPTY"\n'),
+                                          (b'                    if schedule_start is not None else fetch_liv'
+                                           b'e_odds_dataframe(sports))\n    ncaaf_schedule = live_odds_df.'
+                                           b'attrs.get("ncaaf_schedule")\n    ncaaf_provider_games = live_'
+                                           b'odds_df.attrs.get("ncaaf_provider_games", [])\n    mlb_receip'
+                                           b't_health = live_odds_df.attrs.get("mlb_receipt_health", {})\n'
+                                           b'    from app_core.provider_health import sanitized_health\n  '
+                                           b'  provider_health = sanitized_health(live_odds_df.attrs.get("pro'
+                                           b'vider_health"))\n',
+                                           b'                    if schedule_start is not None else fetch_liv'
+                                           b'e_odds_dataframe(sports))\n    ncaaf_schedule = live_odds_df.'
+                                           b'attrs.get("ncaaf_schedule")\n    ncaaf_provider_games = live_'
+                                           b'odds_df.attrs.get("ncaaf_provider_games", [])\n    retained_f'
+                                           b"ootball_schedules = live_odds_df.attrs.get('retained_football_sc"
+                                           b"hedules', [])\n    coverage_provider_events = live_odds_df.at"
+                                           b"trs.get('coverage_provider_events', [])\n    mlb_receipt_heal"
+                                           b'th = live_odds_df.attrs.get("mlb_receipt_health", {})\n    fr'
+                                           b'om app_core.provider_health import sanitized_health\n    prov'
+                                           b'ider_health = sanitized_health(live_odds_df.attrs.get("provider_'
+                                           b'health"))\n'),
+                                          (b'\n    diagnostics["provider_health"] = provider_health\n    di'
+                                           b'agnostics["mlb_receipt_health"] = mlb_receipt_health\n    if '
+                                           b'ncaaf_schedule is not None:\n        from app_core.ncaaf_sche'
+                                           b'dule import refresh_coverage\n        diagnostics["ncaaf_sche'
+                                           b'dule"] = ncaaf_schedule\n',
+                                           b'\n    diagnostics["provider_health"] = provider_health\n    di'
+                                           b'agnostics["mlb_receipt_health"] = mlb_receipt_health\n    dia'
+                                           b"gnostics['retained_football_schedules'] = retained_football_sche"
+                                           b"dules\n    diagnostics['coverage_provider_events'] = coverage"
+                                           b'_provider_events\n    if ncaaf_schedule is not None:\n        '
+                                           b'from app_core.ncaaf_schedule import refresh_coverage\n       '
+                                           b' diagnostics["ncaaf_schedule"] = ncaaf_schedule\n')],
+                                'sha256': '10ea5cdbcaee524223c92a0774a83687f316b1a18b3c6ef4295566fcdf9d718f'},
+ 'publishing/board.html': {'after_sha256': '6603faf89967cf91af29232644c9cceeeb715aba8f3a03fa55f60b29505d04e0',
+                           'edits': [(b'table=function(rows,props=false,ranked=false){const wrap=baseTable(r'
+                                      b"ows,props,ranked);if(!props)[...wrap.querySelectorAll('.pp-pick-card"
+                                      b"')].forEach((card,index)=>{const row=rows[index];if(!row||state(row)"
+                                      b"!=='TRIAL')return;const contract=row.controlled_trial_contract||{},b"
+                                      b"adge=card.querySelector('.pp-status'),footer=card.querySelector('.pp"
+                                      b"-card-footer');if(badge){badge.className='pp-status pp-status-trial'"
+                                      b";badge.textContent='CONTROLLED TRIAL';}const old=[...card.querySelec"
+                                      b"torAll('p')].find(node=>node.textContent==='Not a current approved w"
+                                      b"ager.');if(old)old.textContent='Owner-authorized unvalidated tri"
+                                      b"al \xe2\x80\x94 manual placement only.';if(footer){const stake=el('p'"
+                                      b",'Recommended trial stake: $'+Number(contract.recommended_bet_amount"
+                                      b"||0).toFixed(2)+' \xc2\xb7 hard cap 0.25% bankroll / $5');stake.cl"
+                                      b"assName='small pp-trial-stake';footer.after(stake);}});return wrap;}"
+                                      b';\ncurrentResearchRows=function(){const league=document.getElementByI'
+                                      b"d('gameLeague').value,current=document.getElementById('pickView').va"
+                                      b"lue==='qualified';return probabilityOrder((data.games[activeBoardVie"
+                                      b'w]||[]).filter(row=>(!league||row.sport===league)&&(!current||curren'
+                                      b'tWager(row))));};\nrenderApprovedPicks=function(){const root=document'
+                                      b".getElementById('approvedPicks'),rows=probabilityOrder(data.games.ov"
+                                      b'erall.filter(currentWager));root.replaceChildren();if(rows.length)ro'
+                                      b'ot.append(table(rows,false,true));};\nrenderBoardSummary=function(){c'
+                                      b"onst root=document.getElementById('boardSummary');root.replaceChildr"
+                                      b'en();const rows=data.games.overall,approved=rows.filter(qualifiedPic'
+                                      b"k).length,trials=rows.filter(row=>state(row)==='TRIAL'&&currentWager"
+                                      b'(row)).length,current=approved+trials;root.dataset.approved=String(c'
+                                      b'urrent);const heading=el(\'div\'),eyebrow=el(\'span\',"Today\'s board'
+                                      b'"),title=el(\'h1\',approved&&trials?approved+\' approved \'+(approve'
+                                      b"d===1?'play':'plays')+' \xc2\xb7 '+trials+' controlled '+(trials=="
+                                      b"=1?'trial':'trials'):approved?approved+' approved '+(approved===1?'p"
+                                      b"lay':'plays'):trials?trials+' controlled trial '+(trials===1?'wager'"
+                                      b":'wagers'):'No current wagers right now');eyebrow.className='pp-eyeb"
+                                      b"row';title.id='board-title';heading.append(eyebrow,title);if(!curren"
+                                      b"t)heading.append(el('p',rows.length+(rows.length===1?' game analyzed"
+                                      b". Research':' games analyzed. Research')+' and pass selections remai"
+                                      b"n available below.'));const meta=el('dl');meta.className='pp-board-m"
+                                      b"eta';[['Games reviewed',rows.length],['Validated',approved],['Contro"
+                                      b"lled trial',trials],['Analysis',analysisFreshness(data).primary]].fo"
+                                      b"rEach(([label,value])=>{const item=el('div'),dd=el('dd',String(value"
+                                      b"));if(label==='Analysis')dd.id='boardAnalysisAge';item.append(el('dt"
+                                      b"',label),dd);meta.append(item)});root.append(heading,meta);};\n// The"
+                                      b' saved producer trace is never recomputed in the browser. Current bl'
+                                      b'ockers\n// are evaluated on each render so an expired approval still '
+                                      b'shows its saved reason.\nfunction boardTime(value){return typeof valu'
+                                      b"e==='string'&&/(?:Z|[+-]\\d\\d:\\d\\d)$/.test(value)&&Number.isFinit"
+                                      b'e(Date.parse(value))?Date.parse(value):null;}\n',
+                                      b'table=function(rows,props=false,ranked=false){const wrap=baseTable(r'
+                                      b"ows,props,ranked);if(!props)[...wrap.querySelectorAll('.pp-pick-card"
+                                      b"')].forEach((card,index)=>{const row=rows[index];if(!row||state(row)"
+                                      b"!=='TRIAL')return;const contract=row.controlled_trial_contract||{},b"
+                                      b"adge=card.querySelector('.pp-status'),footer=card.querySelector('.pp"
+                                      b"-card-footer');if(badge){badge.className='pp-status pp-status-trial'"
+                                      b";badge.textContent='CONTROLLED TRIAL';}const old=[...card.querySelec"
+                                      b"torAll('p')].find(node=>node.textContent==='Not a current approved w"
+                                      b"ager.');if(old)old.textContent='Owner-authorized unvalidated tri"
+                                      b"al \xe2\x80\x94 manual placement only.';if(footer){const stake=el('p'"
+                                      b",'Recommended trial stake: $'+Number(contract.recommended_bet_amount"
+                                      b"||0).toFixed(2)+' \xc2\xb7 hard cap 0.25% bankroll / $5');stake.cl"
+                                      b"assName='small pp-trial-stake';footer.after(stake);}});return wrap;}"
+                                      b';\ncurrentResearchRows=function(){const league=document.getElementByI'
+                                      b"d('gameLeague').value,current=document.getElementById('pickView').va"
+                                      b"lue==='qualified';return probabilityOrder((data.games[activeBoardVie"
+                                      b'w]||[]).filter(row=>(!league||row.sport===league)&&(!current||curren'
+                                      b'tWager(row))));};\nrenderApprovedPicks=function(){const root=document'
+                                      b".getElementById('approvedPicks'),rows=probabilityOrder(data.games.ov"
+                                      b'erall.filter(currentWager));root.replaceChildren();if(rows.length)ro'
+                                      b'ot.append(table(rows,false,true));};\nrenderBoardSummary=function(){c'
+                                      b"onst root=document.getElementById('boardSummary');root.replaceChildr"
+                                      b'en();const rows=data.games.overall,approved=rows.filter(qualifiedPic'
+                                      b"k).length,trials=rows.filter(row=>state(row)==='TRIAL'&&currentWager"
+                                      b'(row)).length,current=approved+trials;root.dataset.approved=String(c'
+                                      b'urrent);const heading=el(\'div\'),eyebrow=el(\'span\',"Today\'s board'
+                                      b'"),title=el(\'h1\',approved&&trials?approved+\' approved \'+(approve'
+                                      b"d===1?'play':'plays')+' \xc2\xb7 '+trials+' controlled '+(trials=="
+                                      b"=1?'trial':'trials'):approved?approved+' approved '+(approved===1?'p"
+                                      b"lay':'plays'):trials?trials+' controlled trial '+(trials===1?'wager'"
+                                      b":'wagers'):'No current wagers right now');eyebrow.className='pp-eyeb"
+                                      b"row';title.id='board-title';heading.append(eyebrow,title);if(!curren"
+                                      b"t)heading.append(el('p',rows.length+(data.slate_coverage?(rows.lengt"
+                                      b"h===1?' game row retained. Research':' game rows retained. Research'"
+                                      b"):(rows.length===1?' game analyzed. Research':' games analyzed. Rese"
+                                      b"arch'))+' and pass selections remain available below.'));const meta="
+                                      b"el('dl');meta.className='pp-board-meta';[[data.slate_coverage?'Game "
+                                      b"rows retained':'Games reviewed',rows.length],['Validated',approved],"
+                                      b"['Controlled trial',trials],['Analysis',analysisFreshness(data).prim"
+                                      b"ary]].forEach(([label,value])=>{const item=el('div'),dd=el('dd',Stri"
+                                      b"ng(value));if(label==='Analysis')dd.id='boardAnalysisAge';item.appen"
+                                      b"d(el('dt',label),dd);meta.append(item)});root.append(heading,meta);}"
+                                      b';\n// The saved producer trace is never recomputed in the browser. Cu'
+                                      b'rrent blockers\n// are evaluated on each render so an expired approva'
+                                      b'l still shows its saved reason.\nfunction boardTime(value){return typ'
+                                      b"eof value==='string'&&/(?:Z|[+-]\\d\\d:\\d\\d)$/.test(value)&&Number"
+                                      b'.isFinite(Date.parse(value))?Date.parse(value):null;}\n'),
+                                     (b'currentWager=function(row){const trace=selectedTrace(row);return pri'
+                                      b"orCurrentWager(row)&&(!trace||row.status!=='TRIAL'||(trace.trial_gat"
+                                      b"e_status==='PASS'&&trace.trial_blockers.length===0));};\nconst priorB"
+                                      b'oardFreshness=window.parlayPicker.freshness;\nwindow.parlayPicker.fre'
+                                      b'shness=function(version){boardPublicationVersion=version;renderBoard'
+                                      b'Summary();const result=priorBoardFreshness(version);if(data.stale_af'
+                                      b'ter_minutes===15||data.stale_after_minutes===30){const games=cohortC'
+                                      b"lock(data.games.overall||[],'as_of'),props=cohortClock(data.props||["
+                                      b"],'as_of'),expired=games.expired+props.expired,unavailable=games.una"
+                                      b"vailable+props.unavailable;const message=(expired?' \xc2\xb7 wager"
+                                      b" window expired for '+expired+' selected game/prop '+(expired===1?'r"
+                                      b"ow':'rows'):'')+(unavailable?' \xc2\xb7 missing, invalid or future"
+                                      b" analysis timestamps for '+unavailable+' selected game/prop '+(unava"
+                                      b"ilable===1?'row':'rows'):'');return {...result,text:result.primary+m"
+                                      b"essage+(result.publication?' \xc2\xb7 '+result.publication:''),sta"
+                                      b"te:result.state==='old'?'old':expired?'expired':unavailable?'unavail"
+                                      b"able':result.state};}return result;};\nconst baseMatchesResultGroup=m"
+                                      b'atchesResultGroup;\nmatchesResultGroup=function(row,group){return gro'
+                                      b"up==='Published picks'?['Approved','Controlled trial','Research'].in"
+                                      b'cludes(row.group):baseMatchesResultGroup(row,group);};\nconst wagerOp'
+                                      b"tion=[...document.getElementById('pickView').options].find(option=>o"
+                                      b"ption.value==='qualified');\n",
+                                      b'currentWager=function(row){const trace=selectedTrace(row);return pri'
+                                      b"orCurrentWager(row)&&(!trace||row.status!=='TRIAL'||(trace.trial_gat"
+                                      b"e_status==='PASS'&&trace.trial_blockers.length===0));};\nconst priorB"
+                                      b'oardFreshness=window.parlayPicker.freshness;\nwindow.parlayPicker.fre'
+                                      b'shness=function(version){boardPublicationVersion=version;renderBoard'
+                                      b'Summary();const result=priorBoardFreshness(version);if(data.stale_af'
+                                      b'ter_minutes===15||data.stale_after_minutes===30){const games=cohortC'
+                                      b"lock(data.games.overall||[],'as_of'),props=cohortClock(data.props||["
+                                      b"],'as_of'),expired=games.expired+props.expired,unavailable=games.una"
+                                      b"vailable+props.unavailable;const message=(expired?' \xc2\xb7 wager"
+                                      b" window expired for '+expired+' selected game/prop '+(expired===1?'r"
+                                      b"ow':'rows'):'')+(unavailable?' \xc2\xb7 missing, invalid or future"
+                                      b" analysis timestamps for '+unavailable+' selected game/prop '+(unava"
+                                      b"ilable===1?'row':'rows'):'');return {...result,text:result.primary+m"
+                                      b"essage+(result.publication?' \xc2\xb7 '+result.publication:''),sta"
+                                      b"te:result.state==='old'?'old':expired?'expired':unavailable?'unavail"
+                                      b"able':result.state};}return result;};\n// Informational independent-s"
+                                      b'late state; existing wagering predicates stay authoritative.\nconst c'
+                                      b'overageBeforeTable=table;\nfunction coverageStateNow(decision){\n '
+                                      b"if(decision.coverage_decision_state!=='APPROVED')return decision.cov"
+                                      b'erage_decision_state;\n const selected=(data.games.overall||[]).find('
+                                      b'row=>row.coverage_decision?.canonical_event_id===decision.canonical_'
+                                      b"event_id);\n return selected&&currentWager(selected)?'APPROVED':'UNVE"
+                                      b"RIFIED';\n}\ntable=function(rows,props=false,ranked=false){\n const"
+                                      b' wrap=coverageBeforeTable(rows,props,ranked);\n if(!props)[...wrap.qu'
+                                      b"erySelectorAll('.pp-pick-card')].forEach((card,index)=>{\n  const dec"
+                                      b'ision=rows[index]?.coverage_decision;if(!decision)return;\n  const cu'
+                                      b"rrent=coverageStateNow(decision),badge=el('p','Coverage: '+current);"
+                                      b"\n  badge.className='small pp-coverage-'+current.toLowerCase();\n "
+                                      b" badge.dataset.coverageState=current;\n  card.append(badge,el('p',cur"
+                                      b"rent!==decision.coverage_decision_state?'Saved coverage approval is "
+                                      b"no longer current.':decision.explanation),\n    el('p','Coverage chec"
+                                      b"ked '+decision.as_of+' \xc2\xb7 '+decision.selected_date+' Eastern"
+                                      b". Wager status is separate.'));\n });\n return wrap;\n};\nconst cove"
+                                      b'rageBeforeSummary=renderBoardSummary;\nrenderBoardSummary=function(){'
+                                      b'\n coverageBeforeSummary();const coverage=data.slate_coverage;if(!cov'
+                                      b"erage)return;\n const section=el('section'),title=el('h2','Independen"
+                                      b"t slate coverage');section.id='slateCoverage';\n section.append(title"
+                                      b",el('p',coverage.selected_date+' \xc2\xb7 America/New_York \xc2\xb7 "
+                                      b"checked '+coverage.as_of),\n  el('p','Inventory '+coverage.inventory_"
+                                      b"status+' \xc2\xb7 '+coverage.counts.scheduled_events+' scheduled e"
+                                      b"vents \xc2\xb7 '+coverage.counts.decision_rows+' decision rows.'),"
+                                      b"\n  el('p','Recorded decisions: APPROVED '+coverage.counts.states.APP"
+                                      b"ROVED+' \xc2\xb7 PASS '+coverage.counts.states.PASS+' \xc2\xb7 UNVER"
+                                      b"IFIED '+coverage.counts.states.UNVERIFIED+'.'),\n  el('p',coverage.fu"
+                                      b"lly_reconciled?'Retained inventory reconciled. Evaluation and wageri"
+                                      b"ng authority remain separate.':'Full schedule coverage is unverified"
+                                      b". Equal internal sets do not establish completeness.'),\n  el('p',cov"
+                                      b"erage.orphan_events.length+' unmatched stage records are outside the"
+                                      b" scheduled denominator.'));\n document.getElementById('boardSummary')"
+                                      b'.append(section);\n};\nconst baseMatchesResultGroup=matchesResultG'
+                                      b"roup;\nmatchesResultGroup=function(row,group){return group==='Publish"
+                                      b"ed picks'?['Approved','Controlled trial','Research'].includes(row.gr"
+                                      b'oup):baseMatchesResultGroup(row,group);};\nconst wagerOption=[...docu'
+                                      b"ment.getElementById('pickView').options].find(option=>option.value=="
+                                      b"='qualified');\n")],
+                           'sha256': '1011ba5d4d527d886cce91a46f0eb2b77470c53dd3b3114daaf9188bae0953d9'},
+ 'streamlit_app.py': {'after_sha256': '2883ffc1000166992209a4612dcdaf28ff1f68bc55eaa50ccd6ead5c045ec076',
+                      'edits': [(b'        {"reviews": wager_reviews}\n        if "reviews" in signature(fin'
+                                 b'alize_live_wagers).parameters else {}\n    )\n    best_picks_df, contract_'
+                                 b'audit = finalize_live_wagers(\n        candidate_pool,\n        best_picks'
+                                 b'_df,\n',
+                                 b'        {"reviews": wager_reviews}\n        if "reviews" in signature(fin'
+                                 b'alize_live_wagers).parameters else {}\n    )\n    # Retain the original te'
+                                 b'rminal run separately from the later capture/export\n    # clock; no infe'
+                                 b'rence/quote clock or protected capture reader is changed.\n    candidate_'
+                                 b"pool = candidate_pool.copy()\n    if 'export_run_id' in candidate_pool:\n "
+                                 b"       candidate_pool['finalization_run_id'] = candidate_pool['export_ru"
+                                 b"n_id']\n    best_picks_df, contract_audit = finalize_live_wagers(\n       "
+                                 b' candidate_pool,\n        best_picks_df,\n'),
+                                (b'\n    from app_core.ncaaf_schedule import refresh_coverage\n    refresh_co'
+                                 b'verage(diagnostics, diagnostics.get("candidate_audit_df", candidate_pool'
+                                 b'), best_picks_df)\n    timer.finish()\n    state_updates = {\n        "'
+                                 b'pipeline_status": "using stored results",\n',
+                                 b'\n    from app_core.ncaaf_schedule import refresh_coverage\n    refresh_co'
+                                 b'verage(diagnostics, diagnostics.get("candidate_audit_df", candidate_pool'
+                                 b'), best_picks_df)\n    # Coverage is read-only and distinct from the term'
+                                 b'inal wagering contract.\n    from app_core.slate_coverage import refresh '
+                                 b"as refresh_slate_coverage\n    coverage_at = pd.Timestamp.now(tz='UTC').i"
+                                 b"soformat()\n    diagnostics['coverage_leagues'] = [s for s in controls['s"
+                                 b"ports'] if s in {'NCAAF', 'NFL'}]\n    coverage_candidates = diagnostics."
+                                 b"get('candidate_authority_df', diagnostics.get('candidate_audit_df', cand"
+                                 b"idate_pool))\n    coverage_run = (str(coverage_candidates['export_run_id'"
+                                 b'].iloc[0])\n                    if isinstance(coverage_candidates, pd.Dat'
+                                 b"aFrame) and not coverage_candidates.empty and 'export_run_id' in coverag"
+                                 b"e_candidates\n                    else str(best_picks_df['export_run_id']"
+                                 b".iloc[0]) if not best_picks_df.empty and 'export_run_id' in best_picks_d"
+                                 b"f\n                    else 'coverage:' + str(evidence_context['snapshot_"
+                                 b"id']) if isinstance(evidence_context, dict)\n                    else 'co"
+                                 b"verage:' + coverage_at)\n    if coverage_run:\n        try:\n          "
+                                 b'  refresh_slate_coverage(diagnostics, coverage_candidates, best_picks_df'
+                                 b",\n                selected_date=controls.get('coverage_date') or pd.Time"
+                                 b"stamp(coverage_at).tz_convert('America/New_York').date().isoformat(),\n  "
+                                 b'              as_of=coverage_at, run_id=coverage_run)\n        except Val'
+                                 b"ueError as exc:\n            diagnostics['slate_coverage_error'] = str(ex"
+                                 b"c)\n            deferred_errors.append('Slate coverage reconciliation fai"
+                                 b"led: ' + str(exc))\n    timer.finish()\n    state_updates = {\n        "
+                                 b'"pipeline_status": "using stored results",\n'),
+                                (b'            else:\n                st.info("No recap files uploaded yet."'
+                                 b')\n\n        display_df = best_picks_df.copy() if best_picks_df is not Non'
+                                 b'e else pd.DataFrame(columns=["league", "pick", "edge"])\n        if not d'
+                                 b'isplay_df.empty and "parlay_rank" in display_df.columns:\n            dis'
+                                 b'play_df["parlay_rank"] = range(1, len(display_df) + 1)\n',
+                                 b'            else:\n                st.info("No recap files uploaded yet."'
+                                 b')\n\n        # Reconcile retained inputs for the selected date without ana'
+                                 b"lysis or I/O.\n        retained_coverage = diagnostics.get('slate_coverag"
+                                 b"e')\n        if isinstance(diagnostics, dict):\n            from app_core."
+                                 b'slate_coverage import refresh as refresh_retained_coverage\n            c'
+                                 b"overage_at = pd.Timestamp.now(tz='UTC').isoformat()\n            retained"
+                                 b"_candidates = diagnostics.get('candidate_authority_df', diagnostics.get("
+                                 b"'candidate_audit_df', pd.DataFrame()))\n            retained_run = (retai"
+                                 b"ned_coverage['run_id'] if isinstance(retained_coverage, dict)\n          "
+                                 b"      else str(retained_candidates['export_run_id'].iloc[0]) if isinstan"
+                                 b'ce(retained_candidates, pd.DataFrame) and not retained_candidates.empty '
+                                 b"and 'export_run_id' in retained_candidates\n                else str(best"
+                                 b"_picks_df['export_run_id'].iloc[0]) if isinstance(best_picks_df, pd.Data"
+                                 b"Frame) and not best_picks_df.empty and 'export_run_id' in best_picks_df\n"
+                                 b"                else 'coverage:' + coverage_at)\n            diagnostics["
+                                 b"'coverage_leagues'] = [s for s in controls['sports'] if s in {'NCAAF', '"
+                                 b"NFL'}]\n            try:\n                refresh_retained_coverage(diagno"
+                                 b'stics, retained_candidates,\n                    best_picks_df, selected_'
+                                 b"date=controls.get('coverage_date') or pd.Timestamp(coverage_at).tz_conve"
+                                 b"rt('America/New_York').date().isoformat(),\n                    as_of=cov"
+                                 b"erage_at, run_id=retained_run)\n                diagnostics.pop('slate_co"
+                                 b"verage_error', None)\n            except (ValueError, TypeError, KeyError"
+                                 b") as exc:\n                diagnostics.pop('slate_coverage', None)\n      "
+                                 b"          diagnostics['slate_coverage_error'] = str(exc)\n               "
+                                 b" st.error('Retained slate reconciliation failed: ' + str(exc))\n        d"
+                                 b'isplay_df = best_picks_df.copy() if best_picks_df is not None else pd.Da'
+                                 b'taFrame(columns=["league", "pick", "edge"])\n        if not display_df.em'
+                                 b'pty and "parlay_rank" in display_df.columns:\n            display_df["par'
+                                 b'lay_rank"] = range(1, len(display_df) + 1)\n'),
+                                (b'            from app_core.game_coverage import publication_games as with'
+                                 b'_game_coverage\n            try:\n                publication_games, cover'
+                                 b'age_games = with_game_coverage(\n                    pd.DataFrame(), _pub'
+                                 b'lication_candidates(diagnostics)\n                )\n                if no'
+                                 b't coverage_games.empty:\n                    st.caption(f"{len(coverage_g'
+                                 b'ames)} audited schedule game(s) have no verified current pick.")\n       '
+                                 b'             st.dataframe(\n',
+                                 b'            from app_core.game_coverage import publication_games as with'
+                                 b'_game_coverage\n            try:\n                publication_games, cover'
+                                 b'age_games = with_game_coverage(\n                    pd.DataFrame(), _pub'
+                                 b"lication_candidates(diagnostics), slate_report=diagnostics.get('slate_co"
+                                 b"verage')\n                )\n                render_daily_dashboard(today_"
+                                 b"content, details_content, publication_games, diagnostics.get('candidate_"
+                                 b"audit_df'))\n                if not coverage_games.empty:\n               "
+                                 b'     st.caption(f"{len(coverage_games)} audited schedule game(s) have no'
+                                 b' verified current pick.")\n                    st.dataframe(\n'),
+                                (b'            from app_core.game_coverage import publication_games as with'
+                                 b'_game_coverage\n            try:\n                publication_games, cover'
+                                 b'age_games = with_game_coverage(\n                    best_picks_export, _'
+                                 b'publication_candidates(diagnostics)\n                )\n            except'
+                                 b' ValueError as exc:\n                publication_games = best_picks_expor'
+                                 b't.copy()\n                st.error(f"Audited game coverage could not be p'
+                                 b'repared: {exc}")\n            render_daily_dashboard(today_content, detai'
+                                 b'ls_content, best_picks_export, diagnostics.get("candidate_audit_df"))\n  '
+                                 b'          precision_game_export = precision_shortlist(best_picks_export)'
+                                 b'\n\n            if "Home" in best_picks_export.columns and not best_picks_'
+                                 b'export.empty:\n',
+                                 b'            from app_core.game_coverage import publication_games as with'
+                                 b'_game_coverage\n            try:\n                publication_games, cover'
+                                 b'age_games = with_game_coverage(\n                    best_picks_export, _'
+                                 b"publication_candidates(diagnostics), slate_report=diagnostics.get('slate"
+                                 b"_coverage')\n                )\n            except ValueError as exc:\n"
+                                 b'                publication_games = pd.DataFrame()\n                st.er'
+                                 b'ror(f"Audited game coverage could not be prepared: {exc}")\n            r'
+                                 b'ender_daily_dashboard(today_content, details_content, publication_games,'
+                                 b' diagnostics.get("candidate_audit_df"))\n            precision_game_expor'
+                                 b't = precision_shortlist(best_picks_export)\n\n            if "Home" in bes'
+                                 b't_picks_export.columns and not best_picks_export.empty:\n')],
+                      'sha256': 'aa7c6581ae18e8f9989e7f1231718b70e082450c9d0f5e94e4081b992360c9d3'}}
+
+
+def _slate_audit_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _slate_audit_previous_guard_source(source, binding=None):
+    binding = SLATE_AUDIT_BINDINGS if binding is None else binding
+    if b"\nSLATE_AUDIT_POLICY_PATH =" not in source:
+        return source
+    _require(_slate_audit_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nSLATE_AUDIT_POLICY_PATH =", 1)[0] + SLATE_AUDIT_PREVIOUS_CLI
+
+
+def _slate_audit_previous_main_source(path, source):
+    if path == GUARD_PATH:
+        return _slate_audit_previous_guard_source(source)
+    frozen = SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    earlier = {entry[path]["sha256"] for name, entry in globals().items()
+               if name.endswith("_PRIOR_SOURCE_RECONSTRUCTIONS") and name != "SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS"
+               and path in entry}
+    if hashlib.sha256(source).hexdigest() in earlier:
+        return source
+    _require(hashlib.sha256(source).hexdigest() == frozen["after_sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+# Reuse the exact immutable predecessor for historical fixture semantics.
+# New bytes are peeled only by their exact reviewed hashes and edit receipts.
+_slate_frozen_module = None
+def _slate_predecessor():
+    global _slate_frozen_module
+    if _slate_frozen_module is None:
+        import types
+        source = Path(__file__).read_bytes().replace(b"\r\n", b"\n")
+        previous = _slate_audit_previous_guard_source(source)
+        _require(hashlib.sha256(previous).hexdigest() == SLATE_AUDIT_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        frozen = types.ModuleType("exact_slate_predecessor")
+        frozen.__file__ = __file__
+        exec(previous, frozen.__dict__)
+        _slate_frozen_module = frozen
+    _slate_frozen_module.ROOT = ROOT
+    return _slate_frozen_module
+
+
+def _slate_wrap_previous(name):
+    def wrapped(*args, **kwargs):
+        method = getattr(_slate_predecessor(), name)
+        if name.endswith("_previous_main_source"):
+            path, source = args
+            return method(path, _slate_audit_previous_main_source(path, source), **kwargs)
+        source, *rest = args
+        return method(_slate_audit_previous_guard_source(source), *rest, **kwargs)
+    return wrapped
+
+
+for _slate_name, _slate_method in list(globals().items()):
+    if callable(_slate_method) and (_slate_name.endswith("_previous_guard_source") or _slate_name.endswith("_previous_main_source")) and not _slate_name.startswith("_slate_"):
+        globals()[_slate_name] = _slate_wrap_previous(_slate_name)
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nSLATE_AUDIT_POLICY_PATH =" in source:
+        if reviewed == SLATE_AUDIT_BINDINGS["successor_guard_sha256"]:
+            return _slate_audit_raw_guard_matches(source, reviewed)
+        if not _slate_audit_raw_guard_matches(source, SLATE_AUDIT_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = _slate_audit_previous_guard_source(source)
+    return _slate_predecessor()._dfs_guard_matches(source, reviewed)
+
+
+# Keep the predecessor's assertions meaningful for the newly reviewed source:
+# compose exact reverse edits; no assertion is removed or relaxed.
+FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {p: dict(v) for p,v in FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS.items()}
+for _slate_path, _slate_receipt in SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS.items():
+    if _slate_path in FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS:
+        _slate_prior = FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS[_slate_path]
+        _require(_slate_prior["after_sha256"] == _slate_receipt["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+        _slate_prior["after_sha256"] = _slate_receipt["after_sha256"]
+        _slate_prior["edits"] = _slate_prior["edits"] + _slate_receipt["edits"]
+
+
+def _run_slate_audit_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/slate_audit_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_slate_audit_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -8234,7 +9463,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", FOOTBALL_RESEARCH_POLICY_PATH):
+        if exists_at("HEAD", SLATE_AUDIT_POLICY_PATH):
+            code, report = _run_slate_audit_integrated(args.manifest, args.base, SLATE_AUDIT_BINDINGS)
+        elif exists_at("HEAD", FOOTBALL_RESEARCH_POLICY_PATH):
             code, report = _run_football_research_integrated(args.manifest, args.base, FOOTBALL_RESEARCH_BINDINGS)
         elif exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):
             code, report = _run_remote_continuation_integrated(args.manifest, args.base, REMOTE_CONTINUATION_BINDINGS)
