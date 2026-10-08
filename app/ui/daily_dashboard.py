@@ -39,7 +39,19 @@ def wager_rejection_summary(board):
 
 def _render_game_board(board, candidates, family):
     from app_core.per_game_boards import per_game_board
-    result = per_game_board(board, candidates, family)
+    from app_core.coverage_presentation import CoverageBindingConflict
+    try:
+        result = per_game_board(board, candidates, family)
+    except CoverageBindingConflict as exc:
+        # Keep the schedule visible and the owner Publish panel reachable.
+        # Field-level diagnostics stay behind its token gate; no rejected metrics.
+        st.error('Game board could not be built: '+str(exc))
+        decisions = board.attrs.get('slate_coverage', {}).get('decisions', [])
+        st.dataframe(pd.DataFrame([dict(Event=d['canonical_event_id'],
+            Game=d['away_team']+' at '+d['home_team'], Start=d['original_start'],
+            **{'Coverage decision': d['coverage_decision_state'], 'Wager status': 'PASS',
+               'Preview blocker': str(exc)}) for d in decisions]), hide_index=True, width='stretch')
+        return
     if result.empty:
         st.info("Run an analysis to populate the game board.")
         return

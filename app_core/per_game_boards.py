@@ -186,6 +186,12 @@ def _compatible_ncaaf_research(row):
 
 def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
+    from app_core.coverage_presentation import CoverageBindingConflict, decision_for, verify, original_descriptors
+    if isinstance(board, pd.DataFrame) and board.attrs.get('coverage_binding_failures'):
+        failure = board.attrs['coverage_binding_failures'][0]
+        exc = CoverageBindingConflict({}, family, failure['field'], failure['expected'], failure['actual'])
+        exc.diagnostic = dict(failure, board_category=family)
+        raise exc
     if board is None or board.empty:
         result = pd.DataFrame()
         if isinstance(board, pd.DataFrame):
@@ -196,7 +202,11 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
     candidate_rows = [row for _, row in candidates.iterrows() if production_market(text(row, 'market_type'))]
     rows=[]
     for _, final in board.iterrows():
-        league = text(final, 'league', 'League').upper()
+        report = board.attrs.get('slate_coverage')
+        decision = decision_for(final, report) if report is not None else None
+        if decision is not None:
+            verify(final, decision, report['decisions'], family, placeholder=final.get('coverage_only') is True)
+        league = decision['league'] if decision is not None else text(final, 'league', 'League').upper()
         coverage_reason = text(final, 'coverage_reason')
         allow_fallback = ((college_fallback and league == 'NCAAF') or (nfl_fallback and league == 'NFL')
                           or (research_fallback and league in {'MLB', 'WNBA'}))
@@ -212,7 +222,17 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 fid,cid=text(final,'matchup_id'),text(candidate,'matchup_id')
                 if fid and cid:
                     if fid!=cid: continue
-                    if all(key) and identity(candidate)!=key: continue
+                    if decision is not None:
+                        verify(candidate, decision, report['decisions'], family)
+                    elif all(key) and identity(candidate)!=key: continue
+                elif decision is not None:
+                    # A missing local matchup ID cannot justify a daily-name
+                    # join. The independent schedule must resolve this exact
+                    # named-side/start identity uniquely before quote binding.
+                    from app_core.coverage_presentation import resolve
+                    resolved = resolve(candidate, report['decisions'])
+                    if resolved is None or resolved['canonical_event_id'] != decision['canonical_event_id']: continue
+                    verify(candidate, decision, report['decisions'], family)
                 elif not all(key) or identity(candidate)!=key: continue
                 # Bind quotes only after matching the run and game identity.
                 if novig_only and not public_quote(candidate, college_fallback, nfl_fallback=nfl_fallback, research_fallback=research_fallback): continue
@@ -269,6 +289,8 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
             same = (text(selected,'best_pick')==canonical.get('selection') and number(selected,'odds_american')==canonical.get('odds') and text(selected,'market_type')==canonical.get('market_type') and (not novig_only or bool(quote and quote[0].casefold()==str(canonical.get('sportsbook') or '').casefold())))
         # Only the exact final ticket can inherit the finalized approval or stake.
         source=selected if selected is None or novig_only else final if same or family=='overall' else selected
+        if source is not None and decision is not None:
+            verify(source, decision, report['decisions'], family)
         final_ticket = same or (family=='overall' and not novig_only)
         research_only_fallback = fallback_selected and league in {'MLB', 'WNBA'}
         approved=not research_only_fallback and not observed_selected and (not fallback_selected or (text(final,'production_eligible').lower() in {'true','1','yes'} and text(final,'wager_approved').lower() in {'true','1','yes'})) and source is not None and final_ticket and text(final,'Bettable').lower() in {'true','1','yes'} and (number(final,'Play_Stake') or 0)>0
@@ -420,6 +442,15 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                     # existing date/lock checks must not be hidden by an alias.
                     target='start' if field=='game_start_utc' else field
                     exported[target]=value.isoformat() if isinstance(value,datetime) else value
+        if decision is not None:
+            # Verify originals first; canonicalize presentation only. Every
+            # original descriptor remains available in private per-game exports.
+            exported['coverage_origin_descriptors'] = original_descriptors(final)
+            if source is not None:
+                exported['coverage_candidate_descriptors'] = original_descriptors(source)
+            exported.update(league=decision['league'],
+                matchup=decision['away_team']+' at '+decision['home_team'],
+                start=decision['original_start'])
         from app_core.research_display import from_export
         from app_core.research_estimate_trace import boundary_trace
         import json
