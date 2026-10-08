@@ -96,7 +96,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -110,21 +110,27 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest
       - name: Run application test shard
-        run: python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 2 -q tests --durations=30 --junitxml=test-results/full-suite-${{ matrix.shard }}.xml
+        run: >
+          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 3
+          --timing-profile scripts/ci_test_file_costs_v1.json
+          --assignment-manifest test-results/full-suite-${{ matrix.shard }}-assignment.json
+          -v tests --durations=30 --junitxml=test-results/full-suite-${{ matrix.shard }}.xml
       - name: Upload full-suite test report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: full-suite-test-results-${{ matrix.shard }}
-          path: test-results/full-suite-${{ matrix.shard }}.xml
+          path: |
+            test-results/full-suite-${{ matrix.shard }}.xml
+            test-results/full-suite-${{ matrix.shard }}-assignment.json
           retention-days: 7
-          if-no-files-found: warn
+          if-no-files-found: error
 
 
   # Preserve the existing required check name; every shard must pass.
   full-suite:
     needs: full-suite-tests
-    if: ${{ !cancelled() }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -132,3 +138,14 @@ jobs:
         env:
           SHARD_RESULT: ${{ needs.full-suite-tests.result }}
         run: test "$SHARD_RESULT" = success
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Download all application shard reports
+        uses: actions/download-artifact@v5
+        with:
+          pattern: full-suite-test-results-*
+          path: test-results
+      - name: Reconcile complete test identities and outcomes across all three shards
+        run: python scripts/run_ci_tests.py --shards 3 --reconcile-manifests test-results

@@ -1,0 +1,4342 @@
+{
+  "fallback": {
+    "minimum_file_seconds": 30.0,
+    "seconds_per_test": 3.5
+  },
+  "fallback_basis": "3.5 seconds per unprofiled/additional case exceeds the observed 224.836/72=3.123 seconds per case block; 30-second unprofiled-file floor. Conservative estimate, not an empirical upper bound.",
+  "files": [
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.197,
+      "path": "tests/test_absolute_production_gate.py",
+      "profiled_tests": 8,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2167
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_activation_reverification.py",
+      "profiled_tests": 38,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.883
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.119,
+      "path": "tests/test_activation_scheduler_performance.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1309
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_bankroll_simulator_resilience.py",
+      "profiled_tests": 4,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.009
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.143,
+      "path": "tests/test_batter_props.py",
+      "profiled_tests": 20,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1573
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_best_available_candidate_audit.py",
+      "profiled_tests": 19,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 3.932
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.043,
+      "path": "tests/test_best_duos.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0473
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_best_duos_strict.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.061
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.011,
+      "path": "tests/test_best_overall_pick_logic.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0121
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_best_picks_calibration_pass.py",
+      "profiled_tests": 69,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 28.751
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.061,
+      "path": "tests/test_best_picks_export_identity_columns.py",
+      "profiled_tests": 22,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0671
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_best_picks_full_game_coverage.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.993
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.224,
+      "path": "tests/test_best_picks_identity_required.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2464
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_best_picks_kelly_attach.py",
+      "profiled_tests": 10,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.11
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.224,
+      "path": "tests/test_best_picks_match_analysis.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2464
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_best_picks_novig_priority.py",
+      "profiled_tests": 3,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.086
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.246,
+      "path": "tests/test_board_diagnostics.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2706
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_bucket_calibration.py",
+      "profiled_tests": 5,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.01
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.009,
+      "path": "tests/test_calibration.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0099
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_calibration_promotion.py",
+      "profiled_tests": 6,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.114
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.289,
+      "path": "tests/test_calibration_tuning.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3179
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_calibration_update.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.837
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 4.853,
+      "path": "tests/test_candidate_authority_projection.py",
+      "profiled_tests": 17,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 5.3383
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_candidate_chronology_hotfix.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.57
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.04,
+      "path": "tests/test_candidate_evidence_serialization.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.044
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_candidate_generation.py",
+      "profiled_tests": 10,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.205
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.154,
+      "path": "tests/test_candidate_recap.py",
+      "profiled_tests": 15,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1694
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_candidate_weight_analysis.py",
+      "profiled_tests": 3,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.37
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 2.935,
+      "path": "tests/test_canonical_download.py",
+      "profiled_tests": 23,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 3.2285
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_canonical_download_scope.py",
+      "profiled_tests": 68,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 173.861
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.013,
+      "path": "tests/test_card_recovery_emptiness.py",
+      "profiled_tests": 10,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0143
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_chicago_bkn.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.064
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.007,
+      "path": "tests/test_ci_offline_transports.py",
+      "profiled_tests": 7,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0077
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ci_test_shards.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.823
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 3.177,
+      "path": "tests/test_clock_scope_exception_proposal.py",
+      "profiled_tests": 21,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 3.4947
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_clv_and_backtest.py",
+      "profiled_tests": 10,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.027
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.003,
+      "path": "tests/test_college_novig.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0033
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_college_public_grading.py",
+      "profiled_tests": 35,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.039
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.042,
+      "path": "tests/test_compact_export.py",
+      "profiled_tests": 11,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0462
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_compact_probability_export.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.108
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.354,
+      "path": "tests/test_consistent_spread_book.py",
+      "profiled_tests": 24,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3894
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_consistent_total_book.py",
+      "profiled_tests": 10,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.165
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.065,
+      "path": "tests/test_controlled_prop_rollout.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0715
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_controlled_trial.py",
+      "profiled_tests": 24,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.498
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.024,
+      "path": "tests/test_controlled_trial_integration.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0264
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_controlled_trial_quality.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.024
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.013,
+      "path": "tests/test_core_engine_updates.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0143
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_corrupt_odds_guard.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.01
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.209,
+      "path": "tests/test_current_wagers_trace_and_release.py",
+      "profiled_tests": 15,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2299
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_daily_dashboard.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.497
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.131,
+      "path": "tests/test_dfs_lock_picker.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1441
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_dfs_projection_identity.py",
+      "profiled_tests": 35,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.369
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 31.541,
+      "path": "tests/test_dfs_scope_policy.py",
+      "profiled_tests": 60,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 34.6951
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_diagnostics.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.009
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.605,
+      "path": "tests/test_draftkings_classic.py",
+      "profiled_tests": 13,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.6655
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_draftkings_mlb_classic.py",
+      "profiled_tests": 12,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.531
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.209,
+      "path": "tests/test_draftkings_panel.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2299
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_drive_history_loading.py",
+      "profiled_tests": 33,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 6.446
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 29.426,
+      "path": "tests/test_drive_history_scope_policy.py",
+      "profiled_tests": 37,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 32.3686
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_earned_actionable_over.py",
+      "profiled_tests": 5,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.018
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.001,
+      "path": "tests/test_edge_instrumentation.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0011
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_edge_no_stake_gates.py",
+      "profiled_tests": 7,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.007
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.754,
+      "path": "tests/test_empirical_finalist_selection.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.8294
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_empirical_tiers.py",
+      "profiled_tests": 24,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.069
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.047,
+      "path": "tests/test_espn_observed_quotes.py",
+      "profiled_tests": 15,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0517
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_espn_results_wnba.py",
+      "profiled_tests": 4,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.007
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 18.14,
+      "path": "tests/test_estimate_availability.py",
+      "profiled_tests": 23,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 19.954
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_estimate_scope_policy.py",
+      "profiled_tests": 37,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 39.334
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.008,
+      "path": "tests/test_evidence_config.py",
+      "profiled_tests": 9,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0088
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_evidence_drive.py",
+      "profiled_tests": 10,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.159
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.878,
+      "path": "tests/test_evidence_health.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.9658
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_evidence_remote.py",
+      "profiled_tests": 11,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.117
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.105,
+      "path": "tests/test_export_scope.py",
+      "profiled_tests": 9,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1155
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_fallback_ev.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.014
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.266,
+      "path": "tests/test_fallback_slate_keeps_theover_signal.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2926
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_feature_population.py",
+      "profiled_tests": 1,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.001
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.014,
+      "path": "tests/test_feature_processing.py",
+      "profiled_tests": 15,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0154
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_fit_blend_weights.py",
+      "profiled_tests": 12,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.093
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.05,
+      "path": "tests/test_fit_bucket_stats_recency.py",
+      "profiled_tests": 7,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.055
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_football_catalog_aliases.py",
+      "profiled_tests": 16,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.676
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 82.947,
+      "path": "tests/test_football_catalog_scope.py",
+      "profiled_tests": 49,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 91.2417
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_football_coverage.py",
+      "profiled_tests": 2,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.002
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.009,
+      "path": "tests/test_football_fallback.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0099
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_football_feature_capture.py",
+      "profiled_tests": 5,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.01
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.002,
+      "path": "tests/test_football_identity_capture.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0022
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_football_inventory.py",
+      "profiled_tests": 2,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.002
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 136.881,
+      "path": "tests/test_football_research_scope.py",
+      "profiled_tests": 75,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 150.5691
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_football_side_fallback.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 3.378
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 3.417,
+      "path": "tests/test_football_stage1.py",
+      "profiled_tests": 27,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 3.7587
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_football_stage2.py",
+      "profiled_tests": 17,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.513
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.199,
+      "path": "tests/test_football_v3_feasibility.py",
+      "profiled_tests": 8,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2189
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_football_validation_v2.py",
+      "profiled_tests": 8,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.097
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.356,
+      "path": "tests/test_force_deploy_staking.py",
+      "profiled_tests": 11,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3916
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_game_already_started_guard.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.676
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.044,
+      "path": "tests/test_game_coverage.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0484
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_game_time_est_conversion.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.177
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.2,
+      "path": "tests/test_gemini_bet_gate.py",
+      "profiled_tests": 18,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.22
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_gemini_public_evidence.py",
+      "profiled_tests": 2,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.002
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.001,
+      "path": "tests/test_gemini_research_batch.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0011
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_gemini_review_evidence.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.053
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.054,
+      "path": "tests/test_generate_parlays_no_infinite_loop.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0594
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_grade_from_scores.py",
+      "profiled_tests": 3,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.009
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.003,
+      "path": "tests/test_grade_props.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0033
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_grade_slate_no_play.py",
+      "profiled_tests": 6,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.047
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.003,
+      "path": "tests/test_grade_tiers.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0033
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_home_runline_scope_policy.py",
+      "profiled_tests": 52,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 65.186
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.067,
+      "path": "tests/test_hosted_board_reconciliation.py",
+      "profiled_tests": 7,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0737
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_imported_recaps.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.04
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.013,
+      "path": "tests/test_jul27_regression_guardrails.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0143
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_alias_overrides.py",
+      "profiled_tests": 4,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.006
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.022,
+      "path": "tests/test_kalshi_diagnostics.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0242
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_direction_veto.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.472
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.004,
+      "path": "tests/test_kalshi_enrich_league_inference.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0044
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_enrich_markets.py",
+      "profiled_tests": 6,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.073
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.004,
+      "path": "tests/test_kalshi_enrich_nullable_inputs.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0044
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_enrich_timeout.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.012
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.005,
+      "path": "tests/test_kalshi_event_date_filter.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0055
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_event_match_one_sided.py",
+      "profiled_tests": 3,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.006
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.0,
+      "path": "tests/test_kalshi_extreme_price_guard.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_failure_reasons.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.037
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.008,
+      "path": "tests/test_kalshi_family_inference.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0088
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_matching_fixes.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.382
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.009,
+      "path": "tests/test_kalshi_merge_game_date_types.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0099
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_mlb_event_matching.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.026
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.001,
+      "path": "tests/test_kalshi_nba_spread.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0011
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_orientation_and_recap.py",
+      "profiled_tests": 3,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.017
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.009,
+      "path": "tests/test_kalshi_series_cache_refresh.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0099
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_spread_orientation.py",
+      "profiled_tests": 9,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.01
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.022,
+      "path": "tests/test_kalshi_totals_line_tolerance.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0242
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_kalshi_wrong_game_title_guard.py",
+      "profiled_tests": 9,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.009
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 5.07,
+      "path": "tests/test_launch_scope_integration.py",
+      "profiled_tests": 23,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 5.577
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_league_evaluation.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.018
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 2.834,
+      "path": "tests/test_league_infer_from_base.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 3.1174
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_league_recovery_and_kalshi_tolerance.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.025
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.476,
+      "path": "tests/test_lean_card.py",
+      "profiled_tests": 35,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.5236
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_line_drift.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.057
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.018,
+      "path": "tests/test_line_drift_diagnostics.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0198
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_live_activation_acceptance.py",
+      "profiled_tests": 18,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.648
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.919,
+      "path": "tests/test_live_wager_contract.py",
+      "profiled_tests": 67,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 1.0109
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_lock_storage_performance.py",
+      "profiled_tests": 6,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.652
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.001,
+      "path": "tests/test_lock_total_input_review.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0011
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_locked_picks.py",
+      "profiled_tests": 24,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.777
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.01,
+      "path": "tests/test_low_line_over_override.py",
+      "profiled_tests": 10,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.011
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_market_calibration.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.421
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.107,
+      "path": "tests/test_market_probability_model.py",
+      "profiled_tests": 14,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1177
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_matchup_auto_detect_column.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.637
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.199,
+      "path": "tests/test_matchup_identity_fallback.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2189
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_meta_model.py",
+      "profiled_tests": 2,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.002
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.328,
+      "path": "tests/test_minor_improvements.py",
+      "profiled_tests": 17,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3608
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ml_flatness_diagnostics.py",
+      "profiled_tests": 1,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.003
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.294,
+      "path": "tests/test_ml_target_guard.py",
+      "profiled_tests": 9,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3234
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_event_matcher.py",
+      "profiled_tests": 14,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.014
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.012,
+      "path": "tests/test_mlb_history.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0132
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_home_runline_contract.py",
+      "profiled_tests": 59,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.198
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.603,
+      "path": "tests/test_mlb_live_model_connection.py",
+      "profiled_tests": 10,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.6633
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_nhl_research_bindings.py",
+      "profiled_tests": 13,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 22.642
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 103.008,
+      "path": "tests/test_mlb_nhl_research_scope.py",
+      "profiled_tests": 56,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 113.3088
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_pitcher_history.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.141
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.003,
+      "path": "tests/test_mlb_pitcher_stats.py",
+      "profiled_tests": 7,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0033
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_pregame_receipts.py",
+      "profiled_tests": 50,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.317
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.856,
+      "path": "tests/test_mlb_production_readiness.py",
+      "profiled_tests": 12,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.9416
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_prospective.py",
+      "profiled_tests": 6,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.226
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.165,
+      "path": "tests/test_mlb_receipt_audit.py",
+      "profiled_tests": 8,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1815
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_receipt_remote.py",
+      "profiled_tests": 30,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.979
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.005,
+      "path": "tests/test_mlb_receipt_workflow.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0055
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_research.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.305
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.013,
+      "path": "tests/test_mlb_runline_cover.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0143
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_spread_total_model.py",
+      "profiled_tests": 24,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.121
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.624,
+      "path": "tests/test_mlb_spread_total_training.py",
+      "profiled_tests": 22,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.6864
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_team_stats.py",
+      "profiled_tests": 8,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.025
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.021,
+      "path": "tests/test_mlb_total_debias.py",
+      "profiled_tests": 7,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0231
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_mlb_total_direction_conflict.py",
+      "profiled_tests": 15,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.016
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.094,
+      "path": "tests/test_model_direction.py",
+      "profiled_tests": 13,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1034
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_model_validation.py",
+      "profiled_tests": 3,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.003
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.0,
+      "path": "tests/test_moneyline_parlay.py",
+      "profiled_tests": 7,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_moneyline_wiring.py",
+      "profiled_tests": 13,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.786
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.001,
+      "path": "tests/test_my_fixes.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0011
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_navigation_persistence.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.367
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.22,
+      "path": "tests/test_nba_stats_reliability.py",
+      "profiled_tests": 26,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.242
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_closing.py",
+      "profiled_tests": 13,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.108
+    },
+    {
+      "basis": "72-case interior progress-block duration extrapolated to retained collection size; not a measured file total",
+      "kind": "estimated",
+      "path": "tests/test_ncaaf_compatibility_scope.py",
+      "profiled_tests": 108,
+      "references": [
+        "pr-compat-progress"
+      ],
+      "seconds": 337.254
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_coverage_corrections.py",
+      "profiled_tests": 48,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.057
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_coverage_scope_policy.py",
+      "profiled_tests": 47,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 27.353
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_data_access.py",
+      "profiled_tests": 17,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.202
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_history.py",
+      "profiled_tests": 21,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.201
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_identity.py",
+      "profiled_tests": 19,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.042
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.193,
+      "path": "tests/test_ncaaf_model_compatibility.py",
+      "profiled_tests": 51,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2123
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_normal_pipeline.py",
+      "profiled_tests": 27,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 10.517
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.248,
+      "path": "tests/test_ncaaf_prospective.py",
+      "profiled_tests": 25,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2728
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_research.py",
+      "profiled_tests": 17,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.249
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.569,
+      "path": "tests/test_ncaaf_research_contract.py",
+      "profiled_tests": 41,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.6259
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_research_scope.py",
+      "profiled_tests": 61,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 145.818
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.155,
+      "path": "tests/test_ncaaf_schedule_coverage.py",
+      "profiled_tests": 35,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1705
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_schedule_scope_policy.py",
+      "profiled_tests": 26,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 15.29
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.527,
+      "path": "tests/test_ncaaf_selection.py",
+      "profiled_tests": 33,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.5797
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ncaaf_stats_aliases.py",
+      "profiled_tests": 8,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.055
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.293,
+      "path": "tests/test_netlify_publishing.py",
+      "profiled_tests": 7,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3223
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_admission_bindings.py",
+      "profiled_tests": 38,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 18.59
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 63.406,
+      "path": "tests/test_nfl_admission_scope.py",
+      "profiled_tests": 48,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 69.7466
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_calibration_evidence.py",
+      "profiled_tests": 19,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 90.525
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 49.02,
+      "path": "tests/test_nfl_calibration_scope.py",
+      "profiled_tests": 35,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 53.922
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_context_export.py",
+      "profiled_tests": 2,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.545
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 11.938,
+      "path": "tests/test_nfl_inference_evidence.py",
+      "profiled_tests": 23,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 13.1318
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_injury_context.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.007
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 67.786,
+      "path": "tests/test_nfl_inputs_scope.py",
+      "profiled_tests": 51,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 74.5646
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_lock_inputs.py",
+      "profiled_tests": 48,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.156
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.622,
+      "path": "tests/test_nfl_market.py",
+      "profiled_tests": 10,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.6842
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_model_validation.py",
+      "profiled_tests": 9,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.09
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 50.221,
+      "path": "tests/test_nfl_native_provenance.py",
+      "profiled_tests": 46,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 55.2431
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_native_scope.py",
+      "profiled_tests": 32,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 50.962
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.032,
+      "path": "tests/test_nfl_player_props.py",
+      "profiled_tests": 18,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0352
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_provenance_scope.py",
+      "profiled_tests": 38,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 44.457
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 18.55,
+      "path": "tests/test_nfl_research_replay.py",
+      "profiled_tests": 33,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 20.405
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_selection.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.006
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 17.504,
+      "path": "tests/test_nfl_ui_reblend.py",
+      "profiled_tests": 30,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 19.2544
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nfl_ui_scope.py",
+      "profiled_tests": 34,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 57.831
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.003,
+      "path": "tests/test_nhl_pittsburgh_stats_resolution.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0033
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_nhl_puck_line_evidence.py",
+      "profiled_tests": 24,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 20.621
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 70.985,
+      "path": "tests/test_nhl_puck_line_scope.py",
+      "profiled_tests": 43,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 78.0835
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_no_bet_display_reasons.py",
+      "profiled_tests": 3,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.003
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.006,
+      "path": "tests/test_no_bet_pick_quality.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0066
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_normalized_ev.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.22
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.008,
+      "path": "tests/test_novig_fetch_no_hardcoded_date.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0088
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_novig_half_run.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.038
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.625,
+      "path": "tests/test_novig_unmatched_fallback.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.6875
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_odds_api_failures.py",
+      "profiled_tests": 12,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.036
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.002,
+      "path": "tests/test_odds_api_key.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0022
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_odds_api_pagination.py",
+      "profiled_tests": 1,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.003
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.168,
+      "path": "tests/test_odds_fill_reverse_match.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1848
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_odds_source.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.003
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.1,
+      "path": "tests/test_odds_source_calibration.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.11
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_original_estimates.py",
+      "profiled_tests": 11,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.482
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.273,
+      "path": "tests/test_parlay_accuracy_changes.py",
+      "profiled_tests": 21,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3003
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_parlay_correlation.py",
+      "profiled_tests": 2,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.009
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.295,
+      "path": "tests/test_parlay_persistence.py",
+      "profiled_tests": 8,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3245
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_parlay_safety.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.01
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.046,
+      "path": "tests/test_parlay_ticket_quotes.py",
+      "profiled_tests": 9,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0506
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_parlay_unique_games.py",
+      "profiled_tests": 8,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.135
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 1.079,
+      "path": "tests/test_parlay_validation.py",
+      "profiled_tests": 9,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 1.1869
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_per_game_boards.py",
+      "profiled_tests": 19,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.553
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.311,
+      "path": "tests/test_per_game_boards_ui.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3421
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_performance_pipeline_wnba.py",
+      "profiled_tests": 3,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.049
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.006,
+      "path": "tests/test_performance_recap_scope.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0066
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_pick_accuracy.py",
+      "profiled_tests": 9,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.326
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 27.674,
+      "path": "tests/test_pick_board_origin.py",
+      "profiled_tests": 41,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 30.4414
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_pick_board_scope.py",
+      "profiled_tests": 38,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 73.21
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.042,
+      "path": "tests/test_pick_of_day.py",
+      "profiled_tests": 8,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0462
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_pipeline_date_fill_from_base.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.275
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.93,
+      "path": "tests/test_pipeline_identity_before_portfolio.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 1.023
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_pipeline_master_et_kalshi_fixes.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.221
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.167,
+      "path": "tests/test_pipeline_missing_columns.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1837
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_pitcher_prop_expansion.py",
+      "profiled_tests": 15,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.131
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.147,
+      "path": "tests/test_portfolio_calibration_and_caps.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1617
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_post2352_probability_closure.py",
+      "profiled_tests": 16,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.527
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 8.558,
+      "path": "tests/test_post2355_integration_verification.py",
+      "profiled_tests": 16,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 9.4138
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_post2356_priced_value_consistency.py",
+      "profiled_tests": 16,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.534
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.036,
+      "path": "tests/test_post2357_paid_launch_evidence.py",
+      "profiled_tests": 14,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0396
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_post2357_read_only_census.py",
+      "profiled_tests": 11,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.174
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.338,
+      "path": "tests/test_post2357_row_contract_isolation.py",
+      "profiled_tests": 8,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3718
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_post2360_census_launcher.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.461
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.312,
+      "path": "tests/test_post2362_census_closure.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3432
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_post2362_external_verification.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.124
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.155,
+      "path": "tests/test_post2362_trace_probability_closure.py",
+      "profiled_tests": 14,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1705
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_post2366_eligibility_capacity.py",
+      "profiled_tests": 29,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.104
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.103,
+      "path": "tests/test_precision_card.py",
+      "profiled_tests": 12,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1133
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prediction_engine_flatness_diagnostics.py",
+      "profiled_tests": 6,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.37
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.224,
+      "path": "tests/test_prediction_engine_settingwithcopy.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2464
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prediction_evidence.py",
+      "profiled_tests": 109,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 5.401
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 2.833,
+      "path": "tests/test_preselection_line_audit_consistency.py",
+      "profiled_tests": 12,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 3.1163
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_price_value.py",
+      "profiled_tests": 7,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.007
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.233,
+      "path": "tests/test_probability_display_order.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.2563
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_probability_first_selection.py",
+      "profiled_tests": 14,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 5.586
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.058,
+      "path": "tests/test_probability_integrity_v11.py",
+      "profiled_tests": 32,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0638
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_probability_semantics.py",
+      "profiled_tests": 6,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.006
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.019,
+      "path": "tests/test_probation_portfolio_guard.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0209
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_producer_provenance.py",
+      "profiled_tests": 28,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 17.792
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 54.51,
+      "path": "tests/test_producer_provenance_scope.py",
+      "profiled_tests": 50,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 59.961
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_production_card_calibration_guard.py",
+      "profiled_tests": 9,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.339
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.048,
+      "path": "tests/test_productionization_status.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0528
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prop_calibration.py",
+      "profiled_tests": 11,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.122
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.033,
+      "path": "tests/test_prop_grading.py",
+      "profiled_tests": 12,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0363
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prop_model.py",
+      "profiled_tests": 9,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.012
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.002,
+      "path": "tests/test_prop_odds_ingest.py",
+      "profiled_tests": 8,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0022
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prop_performance_recap.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.008
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.011,
+      "path": "tests/test_prop_pipeline.py",
+      "profiled_tests": 12,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0121
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prop_runner.py",
+      "profiled_tests": 20,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.461
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 1.609,
+      "path": "tests/test_prospective_evidence.py",
+      "profiled_tests": 16,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 1.7699
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prospective_legacy_view.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.037
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.325,
+      "path": "tests/test_prospective_readiness_report.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3575
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prospective_reconciliation.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.669
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.84,
+      "path": "tests/test_prospective_remote.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.924
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prospective_research_models.py",
+      "profiled_tests": 8,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 18.35
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.321,
+      "path": "tests/test_prospective_source_view.py",
+      "profiled_tests": 8,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3531
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_prospective_sync.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.036
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 1.363,
+      "path": "tests/test_prospective_validation_plans.py",
+      "profiled_tests": 10,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 1.4993
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_provider_caller_health.py",
+      "profiled_tests": 34,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.497
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 16.149,
+      "path": "tests/test_provider_health_scope_policy.py",
+      "profiled_tests": 48,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 17.7639
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_public_assets.py",
+      "profiled_tests": 9,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.195
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.007,
+      "path": "tests/test_public_betting_fade.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0077
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_public_board.py",
+      "profiled_tests": 22,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.99
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.084,
+      "path": "tests/test_public_brand.py",
+      "profiled_tests": 9,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0924
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_public_grading_scheduler.py",
+      "profiled_tests": 10,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.082
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.468,
+      "path": "tests/test_public_history.py",
+      "profiled_tests": 14,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.5148
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_public_parlays.py",
+      "profiled_tests": 6,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.014
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.013,
+      "path": "tests/test_public_probability_audit.py",
+      "profiled_tests": 9,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0143
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_public_prop_history.py",
+      "profiled_tests": 24,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.586
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.012,
+      "path": "tests/test_public_prop_timing.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0132
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_public_reconciliation.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.021
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.013,
+      "path": "tests/test_public_record.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0143
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_public_refresh.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.43
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 5.665,
+      "path": "tests/test_publish_authority_wiring.py",
+      "profiled_tests": 39,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 6.2315
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_publish_panel.py",
+      "profiled_tests": 5,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.381
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.031,
+      "path": "tests/test_quote_freshness.py",
+      "profiled_tests": 20,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0341
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_ranking_evidence_rebuild.py",
+      "profiled_tests": 8,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.03
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.006,
+      "path": "tests/test_raw_book_odds_diag.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0066
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_recap_tier_summary.py",
+      "profiled_tests": 3,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.012
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.021,
+      "path": "tests/test_recovered_row_value.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0231
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_recovery_calibration_gate.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.007
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.015,
+      "path": "tests/test_refresh_calibration.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0165
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_refresh_lock_performance.py",
+      "profiled_tests": 10,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.089
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.048,
+      "path": "tests/test_regression_kalshi_and_results.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0528
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_relock_changes.py",
+      "profiled_tests": 31,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.906
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.176,
+      "path": "tests/test_remote_canonical_continuation.py",
+      "profiled_tests": 14,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1936
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_remote_canonical_download.py",
+      "profiled_tests": 38,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.522
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 82.248,
+      "path": "tests/test_remote_canonical_scope.py",
+      "profiled_tests": 44,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 90.4728
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_remote_continuation_scope.py",
+      "profiled_tests": 46,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 123.017
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.032,
+      "path": "tests/test_research_actions_preflight.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0352
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_research_api_budget.py",
+      "profiled_tests": 9,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.02
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.024,
+      "path": "tests/test_research_cycle_audit.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0264
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_research_parlays.py",
+      "profiled_tests": 26,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.124
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.081,
+      "path": "tests/test_research_performance.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0891
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_research_probability_browser.py",
+      "profiled_tests": 35,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 28.145
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 1.183,
+      "path": "tests/test_research_probability_display.py",
+      "profiled_tests": 47,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 1.3013
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_research_probability_producer.py",
+      "profiled_tests": 27,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 17.79
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 1.091,
+      "path": "tests/test_research_scheduler.py",
+      "profiled_tests": 14,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 1.2001
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_results_clarity.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.061
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.026,
+      "path": "tests/test_results_ingestion.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0286
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_results_overview.py",
+      "profiled_tests": 7,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.625
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.18,
+      "path": "tests/test_results_parlay_reconciliation.py",
+      "profiled_tests": 28,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.198
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_reversed_game_dedupe.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.182
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.004,
+      "path": "tests/test_run_click_counter.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0044
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_run_readiness.py",
+      "profiled_tests": 25,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 3.296
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.336,
+      "path": "tests/test_sanitization.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3696
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_schedule_staleness.py",
+      "profiled_tests": 5,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.262
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 6.437,
+      "path": "tests/test_scheduler_recovery.py",
+      "profiled_tests": 12,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 7.0807
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_selection_probability_integrity.py",
+      "profiled_tests": 5,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.015
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 2.894,
+      "path": "tests/test_selector_validation.py",
+      "profiled_tests": 32,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 3.1834
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_separate_prop_analysis.py",
+      "profiled_tests": 5,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.1
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.338,
+      "path": "tests/test_sftp_publishing.py",
+      "profiled_tests": 19,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3718
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_sidebar_sport_view.py",
+      "profiled_tests": 5,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.005
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.957,
+      "path": "tests/test_simple_publication_workflow.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 1.0527
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_six_sport_adapters.py",
+      "profiled_tests": 30,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.957
+    },
+    {
+      "basis": "72-case interior progress-block duration extrapolated to retained collection size; not a measured file total",
+      "kind": "estimated",
+      "path": "tests/test_slate_audit_scope.py",
+      "profiled_tests": 110,
+      "references": [
+        "main-slate-progress"
+      ],
+      "seconds": 233.077778
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_slate_coverage.py",
+      "profiled_tests": 33,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.258
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.15,
+      "path": "tests/test_slate_performance.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.165
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_slate_quality.py",
+      "profiled_tests": 30,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.05
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 15.201,
+      "path": "tests/test_source_contract_pipeline.py",
+      "profiled_tests": 27,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 16.7211
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_source_contract_scope.py",
+      "profiled_tests": 51,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 98.47
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 131.416,
+      "path": "tests/test_source_evidence_intake.py",
+      "profiled_tests": 78,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 144.5576
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_source_intake_scope.py",
+      "profiled_tests": 42,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 108.061
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.877,
+      "path": "tests/test_speculative_lean_recovery.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.9647
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_sport_deployment.py",
+      "profiled_tests": 27,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.027
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 1.174,
+      "path": "tests/test_sport_market_gate.py",
+      "profiled_tests": 19,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 1.2914
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_spread_away_orientation.py",
+      "profiled_tests": 5,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.005
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 109.531,
+      "path": "tests/test_stale_research_carrier.py",
+      "profiled_tests": 230,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 120.4841
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_status_display_labels.py",
+      "profiled_tests": 5,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.007
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.039,
+      "path": "tests/test_strategy_lab_kelly_alignment.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0429
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_strategy_lab_realized.py",
+      "profiled_tests": 28,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.829
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.149,
+      "path": "tests/test_strategy_lab_top_ev_kelly_safety.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1639
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_strategy_lab_top_ev_production_source.py",
+      "profiled_tests": 3,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.023
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.032,
+      "path": "tests/test_string_series_categorical_safety.py",
+      "profiled_tests": 4,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0352
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_subscriber_journey.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.093
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.665,
+      "path": "tests/test_suspicious_upload_mismatch.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.7315
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_sweet_spot_export_scope.py",
+      "profiled_tests": 3,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.375
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.001,
+      "path": "tests/test_sweet_spot_filter.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0011
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_sweet_spot_segmentation.py",
+      "profiled_tests": 2,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.005
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.034,
+      "path": "tests/test_team_mapper.py",
+      "profiled_tests": 9,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0374
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_theover_bet_rows_resilience.py",
+      "profiled_tests": 8,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.192
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.006,
+      "path": "tests/test_theover_fade_scope.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0066
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_theover_overweight_fix.py",
+      "profiled_tests": 3,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.723
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.045,
+      "path": "tests/test_theover_source_filter.py",
+      "profiled_tests": 2,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0495
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_threshold_validation.py",
+      "profiled_tests": 12,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 3.136
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.025,
+      "path": "tests/test_tiered_prop_parlays.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0275
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_tighten_thin_actionable_overs.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.016
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.062,
+      "path": "tests/test_top_ten_history.py",
+      "profiled_tests": 6,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0682
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_total_consensus_provenance.py",
+      "profiled_tests": 5,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.437
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.101,
+      "path": "tests/test_total_quality_diagnostics.py",
+      "profiled_tests": 7,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.1111
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_totals_pick_direction.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.429
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.064,
+      "path": "tests/test_true_parlay_engine_unittest.py",
+      "profiled_tests": 24,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0704
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_true_parlay_public_unittest.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.056
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.26,
+      "path": "tests/test_two_stage_finalist_selection.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.286
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_under_floor_relaxation.py",
+      "profiled_tests": 3,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.003
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 2.783,
+      "path": "tests/test_upload_column_aliases_and_game_date_fallback.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 3.0613
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_upload_header_punctuation_normalization.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.65
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 2.498,
+      "path": "tests/test_upload_placeholder_identity_fallback.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 2.7478
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_upload_team_columns_fallback.py",
+      "profiled_tests": 1,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 2.652
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.006,
+      "path": "tests/test_uploader_compat.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0066
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_wager_integrity_audit.py",
+      "profiled_tests": 54,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.272
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.01,
+      "path": "tests/test_walk_forward.py",
+      "profiled_tests": 5,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.011
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_win_probability_first_card.py",
+      "profiled_tests": 4,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 1.465
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.004,
+      "path": "tests/test_wnba_cold_start_blend.py",
+      "profiled_tests": 3,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0044
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_wnba_kalshi_matching.py",
+      "profiled_tests": 14,
+      "references": [
+        "main-full2"
+      ],
+      "seconds": 0.024
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.001,
+      "path": "tests/test_wnba_model_features.py",
+      "profiled_tests": 1,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.0011
+    },
+    {
+      "basis": "Maximum completed current-main/#2402 whole-file testcase sum; excludes collection/report/upload overhead",
+      "kind": "measured",
+      "path": "tests/test_wnba_public_results.py",
+      "profiled_tests": 9,
+      "references": [
+        "pr-full2"
+      ],
+      "seconds": 0.013
+    },
+    {
+      "basis": "Older different-head completed file testcase sum multiplied by explicitly estimated 1.10 variance margin",
+      "kind": "estimated",
+      "original_measured_seconds": 0.323,
+      "path": "tests/test_wnba_selection.py",
+      "profiled_tests": 9,
+      "references": [
+        "old-success-full1"
+      ],
+      "seconds": 0.3553
+    }
+  ],
+  "profiled_tests_definition": "Collection size covered by this advisory cost. Estimate rows do not establish completed test measurements.",
+  "purpose": "Advisory CI assignment only. No tests excluded, runtime guarantee, predictive-quality claim or wagering authority.",
+  "schema": "parlaypicker/ci-file-costs-v1",
+  "sources": {
+    "main-full2": {
+      "artifact_id": 11548407673,
+      "artifact_sha256": "2527800eb56d045a6e6d14d51d68b11959104b21fa52e2af23599a0d6ab20d53",
+      "attempt": 2,
+      "checkout_commit": "8493961f82a7b953dcbd16bdf5b4e44fc8011afa",
+      "checkout_log_sha256": "39d170ce7e8f3595258409ea825a1e1a0caaae346a53128e24bb3d819102fb51",
+      "head": "8493961f82a7b953dcbd16bdf5b4e44fc8011afa",
+      "junit_name": "full-suite-2.xml",
+      "junit_sha256": "869669b2ecb8c50d1f12a29850346f7f34bc2dff2c2d60a1ef45be3e7f8b3d23",
+      "kind": "completed_junit",
+      "run": 37766230269,
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/37766230269/attempts/2"
+    },
+    "main-slate-progress": {
+      "attempt": 2,
+      "checkout_commit": "8493961f82a7b953dcbd16bdf5b4e44fc8011afa",
+      "head": "8493961f82a7b953dcbd16bdf5b4e44fc8011afa",
+      "job": 113286178523,
+      "kind": "quiet_progress_block",
+      "log_sha256": "9ce88027301a485e44d65cc88c8e6d459632600905975d65c49bb03be235f87e",
+      "observed_block_seconds": 152.56,
+      "observed_block_tests": 72,
+      "run": 37766230269,
+      "total_file_runtime": "UNKNOWN",
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/37766230269/job/113286178523"
+    },
+    "old-success-full1": {
+      "artifact_id": 11526579420,
+      "artifact_sha256": "a919caaf66c46a537c77e6d54fe4d9f3c37ad98f8af0c6522a06bb6fb69d869e",
+      "attempt": 2,
+      "checkout_commit": "b81751f2c4ad70190b62cafdf4546d605a4f466c",
+      "checkout_log_sha256": "8e66068338b0142e0ccc697bc3aa6b8b34fd563de0f864dd15c704e2dc1d3484",
+      "head": "8a6b1a53d0e9cd842d4448af1fcd4c5563186c63",
+      "junit_name": "full-suite-1.xml",
+      "junit_sha256": "93f7fae591f3160d7e1c05f4412af81ee23230d339f1173f375eb6a0cac24e83",
+      "kind": "completed_junit",
+      "run": 37719164550,
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/37719164550/attempts/2"
+    },
+    "old-success-full2": {
+      "artifact_id": 11526741915,
+      "artifact_sha256": "51b1cd4c455b628013145c3d1a5fb02bd118696c8e85a7b716782c94f8dda23f",
+      "attempt": 2,
+      "checkout_commit": "b81751f2c4ad70190b62cafdf4546d605a4f466c",
+      "checkout_log_sha256": "040ff3cc3ee15799f6e5d93e2791cecb8f229f8a3531647029ef76a0b9b6c3ec",
+      "head": "8a6b1a53d0e9cd842d4448af1fcd4c5563186c63",
+      "junit_name": "full-suite-2.xml",
+      "junit_sha256": "a5b1836ba3db4c395cc865e77c2fc6ae4e2a7a615269b408c6b6444ba38a98ac",
+      "kind": "completed_junit",
+      "run": 37719164550,
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/37719164550/attempts/2"
+    },
+    "pr-compat-progress": {
+      "attempt": 2,
+      "checkout_commit": "c99b663ed641f736fdeb596f12147c449155d8cb",
+      "head": "c5fd78845c94b7d77cb928297665657b9d5b8500",
+      "job": 113292279699,
+      "kind": "quiet_progress_block",
+      "log_sha256": "def12b36912579b22be9e6df6c0ef8262964bdf6a54241993542197f9aa76be2",
+      "observed_block_seconds": 224.836,
+      "observed_block_tests": 72,
+      "run": 37768186685,
+      "total_file_runtime": "UNKNOWN",
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/37768186685/job/113292279699"
+    },
+    "pr-full2": {
+      "artifact_id": 11549940373,
+      "artifact_sha256": "e468e7716ec6a8897cc586fb6528ba6aab98adc87b6b47a9f842ae51e25be1ed",
+      "attempt": 2,
+      "checkout_commit": "c99b663ed641f736fdeb596f12147c449155d8cb",
+      "checkout_log_sha256": "876551fec63074d7e861ec4e33ffa1c12eac7fc8ecfe105c5a1eb2e1db796466",
+      "head": "c5fd78845c94b7d77cb928297665657b9d5b8500",
+      "junit_name": "full-suite-2.xml",
+      "junit_sha256": "eeef06078b4016aae47ce60c709c212e46ebfe33abeb39e6c12756dd603443a0",
+      "kind": "completed_junit",
+      "run": 37768186685,
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/37768186685/attempts/2"
+    }
+  },
+  "version": 1
+}

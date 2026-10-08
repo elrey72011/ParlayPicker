@@ -9456,6 +9456,124 @@ def _run_slate_audit_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+CI_SCHEDULING_POLICY_PATH = "docs/paid-launch/launch-scope-policy-ci-scheduling-v1.json"
+CI_SCHEDULING_POLICY_VERSION = "ci-duration-balanced-v1"
+CI_SCHEDULING_APPROVAL_REFERENCE = 'Owner authorizes the separately scoped CI scheduling correction: three deterministic duration-balanced whole-file shards, versioned advisory timings with exact retained CI source identities and honest estimates/fallbacks, complete assignment/result manifests, portable paths and fail-closed three-shard reconciliation. Preserve every original assertion, network blocking, the 30-minute limit, production-safety selection and full-suite gate name. Preserve paid-launch/all other workflows, coverage, #2402 unchanged, original models/evidence, scientific requirements, frozen baseline/bindings and owner work. Push a separate draft PR and required exact-head CI only. No merge, deployment, provider/Drive operations, analysis, fitting, collection or wagering activation; PASS zero stake remains unchanged.'
+CI_SCHEDULING_PATHS = ('.github/workflows/ci.yml',
+ 'docs/ci-test-execution.md',
+ 'scripts/run_ci_tests.py',
+ 'scripts/ci_test_file_costs_v1.json',
+ 'tests/test_ci_test_shards.py',
+ 'scripts/ci_scheduling_scope.py',
+ 'tests/test_ci_scheduling_scope.py',
+ 'scripts/check_launch_change_scope.py')
+CI_SCHEDULING_FROZEN_PATHS = ('.github/workflows/activation-grading.yml',
+ '.github/workflows/football-stage1.yml',
+ '.github/workflows/football-stage2.yml',
+ '.github/workflows/mlb-receipt-reconciliation.yml',
+ '.github/workflows/paid-launch.yml',
+ '.github/workflows/qualification-operations.yml',
+ '.github/workflows/read-only-census.yml',
+ '.github/workflows/research-scheduler.yml',
+ '.github/workflows/subscriber-completion-postgres.yml',
+ 'tests/conftest.py',
+ 'tests/paid_launch/case_isolation_and_scope.py')
+CI_SCHEDULING_BINDINGS = {'base': '8493961f82a7b953dcbd16bdf5b4e44fc8011afa',
+ 'base_tree': 'bf8a8591a2a99709b4a1a547afd54fab32373781',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_policy_blob': 'a210ee733bd00073028d79fe7d624157b0d734ab',
+ 'previous_guard_sha256': 'cb8e3f4aae84b1a6f31cc9842d0f47ec5b3203a589db6482d3eda59c62a70a0e',
+ 'prior_shard_assertions_sha256': '27960672fb9d4853673a99f143e56d337e588f7147040da79d806bbb37f03da2',
+ 'prior_shard_assertions_bytes': 1902,
+ 'scope_module_sha256': '813a17c2c4ef5a4df9940eaa632ecd97233dbc961f0759fd222faf9b8ea13cb3',
+ 'reviewed_blobs': {'.github/workflows/ci.yml': '245f8d6d2da9ade9edf3d7e96b77d4d5ecf59e73',
+                    'docs/ci-test-execution.md': '0cf6a16d4d72603a87e48e33f6011a07b8199944',
+                    'scripts/run_ci_tests.py': '67a882450012b0e05601d7ab48e24e81a20c0995',
+                    'scripts/ci_test_file_costs_v1.json': 'b0f408428b971e5b1cae41a949ad698c40ead6be',
+                    'tests/test_ci_test_shards.py': 'c56f75b423274599d0a8e2dc1bd27c70fc1c0295',
+                    'scripts/ci_scheduling_scope.py': 'faf317c99270118baa4d1da1010ec1d5d6fb9069',
+                    'tests/test_ci_scheduling_scope.py': 'd3426acaccbbf9436cc721c60d62f35c2621f61a'},
+ 'successor_guard_sha256': '7e7e9c39b020a8bf55d2fa5c62bc7dc940267e67eb21a2848da606871af64c45'}
+CI_SCHEDULING_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", SLATE_AUDIT_POLICY_PATH):\n            code, report = _run_slate_audit_integrated(args.manifest, args.base, SLATE_AUDIT_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_RESEARCH_POLICY_PATH):\n            code, report = _run_football_research_integrated(args.manifest, args.base, FOOTBALL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):\n            code, report = _run_remote_continuation_integrated(args.manifest, args.base, REMOTE_CONTINUATION_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):\n            code, report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)\n        elif exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):\n            code, report = _run_canonical_download_integrated(args.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)\n        elif exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):\n            code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n            code, report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, report = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n            code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+CI_SCHEDULING_PRIOR_SOURCE_RECONSTRUCTIONS = {}
+
+
+def _ci_scheduling_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _ci_scheduling_previous_guard_source(source, binding=None):
+    binding = CI_SCHEDULING_BINDINGS if binding is None else binding
+    if b"\nCI_SCHEDULING_POLICY_PATH =" not in source:
+        return source
+    _require(_ci_scheduling_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nCI_SCHEDULING_POLICY_PATH =", 1)[0] + CI_SCHEDULING_PREVIOUS_CLI
+
+
+def _ci_scheduling_previous_main_source(path, source):
+    return _ci_scheduling_previous_guard_source(source) if path == GUARD_PATH else source
+
+
+_ci_scheduling_frozen_module = None
+
+def _ci_scheduling_predecessor():
+    global _ci_scheduling_frozen_module
+    if _ci_scheduling_frozen_module is None:
+        import types
+        source = Path(__file__).read_bytes().replace(b"\r\n", b"\n")
+        previous = _ci_scheduling_previous_guard_source(source)
+        _require(hashlib.sha256(previous).hexdigest() == CI_SCHEDULING_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        frozen = types.ModuleType("exact_ci_scheduling_predecessor")
+        frozen.__file__ = __file__
+        exec(previous, frozen.__dict__)
+        # Seed coverage's lazy reader with exact verified pre-coverage bytes.
+        coverage_previous = frozen._slate_audit_previous_guard_source(previous)
+        _require(hashlib.sha256(coverage_previous).hexdigest() == frozen.SLATE_AUDIT_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        coverage_frozen = types.ModuleType("exact_ci_precoverage_predecessor")
+        coverage_frozen.__file__ = __file__
+        exec(coverage_previous, coverage_frozen.__dict__)
+        frozen._slate_frozen_module = coverage_frozen
+        _ci_scheduling_frozen_module = frozen
+    _ci_scheduling_frozen_module.ROOT = ROOT
+    return _ci_scheduling_frozen_module
+
+
+def _ci_scheduling_wrap_previous(name):
+    def wrapped(*args, **kwargs):
+        method = getattr(_ci_scheduling_predecessor(), name)
+        if name.endswith("_previous_main_source"):
+            path, source = args
+            return method(path, _ci_scheduling_previous_main_source(path, source), **kwargs)
+        source, *rest = args
+        return method(_ci_scheduling_previous_guard_source(source), *rest, **kwargs)
+    return wrapped
+
+
+for _ci_name, _ci_method in list(globals().items()):
+    if callable(_ci_method) and (_ci_name.endswith("_previous_guard_source") or _ci_name.endswith("_previous_main_source")) and not _ci_name.startswith("_ci_scheduling_"):
+        globals()[_ci_name] = _ci_scheduling_wrap_previous(_ci_name)
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nCI_SCHEDULING_POLICY_PATH =" in source:
+        if reviewed == CI_SCHEDULING_BINDINGS["successor_guard_sha256"]:
+            return _ci_scheduling_raw_guard_matches(source, reviewed)
+        if not _ci_scheduling_raw_guard_matches(source, CI_SCHEDULING_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = _ci_scheduling_previous_guard_source(source)
+    return _ci_scheduling_predecessor()._dfs_guard_matches(source, reviewed)
+
+
+def _run_ci_scheduling_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/ci_scheduling_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_ci_scheduling_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -9463,7 +9581,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", SLATE_AUDIT_POLICY_PATH):
+        if exists_at("HEAD", CI_SCHEDULING_POLICY_PATH):
+            code, report = _run_ci_scheduling_integrated(args.manifest, args.base, CI_SCHEDULING_BINDINGS)
+        elif exists_at("HEAD", SLATE_AUDIT_POLICY_PATH):
             code, report = _run_slate_audit_integrated(args.manifest, args.base, SLATE_AUDIT_BINDINGS)
         elif exists_at("HEAD", FOOTBALL_RESEARCH_POLICY_PATH):
             code, report = _run_football_research_integrated(args.manifest, args.base, FOOTBALL_RESEARCH_BINDINGS)
