@@ -1,0 +1,168 @@
+{
+  "artifact_sha256": "9334f2a4904e9cdb88f0b50563c058b846647d876a72e46a0548035a27c2d25e",
+  "calibration_sha256": "052f7839df8ba81be71b195d70f5ea4c867e4ecdc4797d63a401d17cdd2045d3",
+  "compatibility_scope": {
+    "mapping": "exact event-specific accepted crosswalk; no fuzzy/dynamic fallback",
+    "model_name": "ridge",
+    "reviewed_mapping_changes": [
+      "McNeese/McNeese State",
+      "LSU/Louisiana State",
+      "GardnerWebb/Gardner-Webb",
+      "shared mapper: distinct New York Rangers and New York Islanders"
+    ],
+    "scientific_acceptance": false,
+    "source_acceptance": false,
+    "targets": {
+      "spread": "selected_side_full_game_half_point_cover",
+      "total": "full_game_half_point_over_under"
+    },
+    "wagering_authority": false
+  },
+  "current_alias_table_sha256": "3134158898096659548a1cf0f87852b61dc823c51638abf4aac084a33799475d",
+  "current_components": {
+    "app_core/ncaaf_compatible_observation.py": {
+      "git_blob_sha256": "4ff11ab2e229ee9d4868c32dec4a7f1ae2a6848865d55c8df3c23b490e061abf",
+      "installed_sha256": [
+        "4ff11ab2e229ee9d4868c32dec4a7f1ae2a6848865d55c8df3c23b490e061abf",
+        "fa9cc3df7c3d3e08bd1d4552a6eceb0f4fe3e0ca1abdd8c8a8135d748615ba40"
+      ]
+    },
+    "app_core/ncaaf_history.py": {
+      "git_blob_sha256": "ed328551bb8e961d432a5c371732dc860fcf3c23f69dbb4a77d922f48ea30411",
+      "installed_sha256": [
+        "031ee9caa5f39c9b7fe6d9ce776097475253e35c70eec490b4e2394ae531521e",
+        "ed328551bb8e961d432a5c371732dc860fcf3c23f69dbb4a77d922f48ea30411"
+      ]
+    },
+    "app_core/ncaaf_identity.py": {
+      "git_blob_sha256": "cd83e7b0915d9c98b6b7c3abbf4f1d28f0157c185d0bcd1c05d9ad9d4918f438",
+      "installed_sha256": [
+        "57085fd6997f9d8a87281d651d580e5a043aa0c0bac0b382ae6d6bf416f2fd9b",
+        "cd83e7b0915d9c98b6b7c3abbf4f1d28f0157c185d0bcd1c05d9ad9d4918f438"
+      ]
+    },
+    "app_core/ncaaf_model_compatibility.py": {
+      "git_blob_sha256": "5e250f699bafe694e496168d2b57b72123773fc44507262330e521c7716c380f",
+      "installed_sha256": [
+        "5e250f699bafe694e496168d2b57b72123773fc44507262330e521c7716c380f",
+        "f5a591977dc1e5732e53e7fc37d5d50a8f7fbbdf6cd182aed58ae2c0b2a3033f"
+      ]
+    },
+    "app_core/ncaaf_prospective.py": {
+      "git_blob_sha256": "ed6b27ee3c1c935daeee7c9c7c72070d46f6e25e26780fff9daa76ad85cb05a6",
+      "installed_sha256": [
+        "c8b42171f4e8b503a0918f248926c820b79c11a111ff0d1b54447e6ffe9d322c",
+        "ed6b27ee3c1c935daeee7c9c7c72070d46f6e25e26780fff9daa76ad85cb05a6"
+      ]
+    },
+    "app_core/ncaaf_research.py": {
+      "git_blob_sha256": "e85a82eb585967c0f9fda8d483aecb8155d982a471b20a4359eda340046d579b",
+      "installed_sha256": [
+        "0abff6d5475db2e93821885af58460a05d83d2ed7ae07416b18db8d4e922bbed",
+        "e85a82eb585967c0f9fda8d483aecb8155d982a471b20a4359eda340046d579b"
+      ]
+    },
+    "app_core/team_name_mapping.py": {
+      "git_blob_sha256": "1e10d9d988f6bfc2096740cfe91f10030f3029b78e43dc203fc42cf1e3cd3aa3",
+      "installed_sha256": [
+        "1e10d9d988f6bfc2096740cfe91f10030f3029b78e43dc203fc42cf1e3cd3aa3",
+        "7ec9815707fee289d5d349a3a1fb93edf2a725adfd06b2b5d99cee3130dbce62"
+      ]
+    },
+    "core/team_mapper.py": {
+      "git_blob_sha256": "885d6be816b337d67e4af08ba79d91e6b436d56138a770c15e35a944c048bd9f",
+      "installed_sha256": [
+        "885d6be816b337d67e4af08ba79d91e6b436d56138a770c15e35a944c048bd9f",
+        "e7776c56d66f4bb1b7fa4804b4b73f56575c1fba703a1be8212989144a8ab04c"
+      ]
+    }
+  },
+  "historical_runtime": {
+    "dynamic_alias_contents": "UNKNOWN",
+    "numpy": "UNKNOWN",
+    "python": "UNKNOWN",
+    "recovered": {
+      "components": {
+        "app_core/ncaaf_history.py": "ed328551bb8e961d432a5c371732dc860fcf3c23f69dbb4a77d922f48ea30411",
+        "app_core/ncaaf_identity.py": "7189894b9a11b7dedda1776361c3310d55ea04bf43ccd0b32c2f49d469f4eb6f",
+        "app_core/ncaaf_prospective.py": "ed6b27ee3c1c935daeee7c9c7c72070d46f6e25e26780fff9daa76ad85cb05a6",
+        "app_core/ncaaf_research.py": "e85a82eb585967c0f9fda8d483aecb8155d982a471b20a4359eda340046d579b",
+        "core/team_mapper.py": "8f2dfaaeab7b0344fb54cbba7a6448a8d04b3c4c4f877b64590b1812b6c84341"
+      },
+      "sha256": "d5acdd2cd5dc9264eaf9a322fe1b7498033b3c6273ad31396154fc644486eb23"
+    },
+    "source": {
+      "components": {
+        "app_core/ncaaf_history.py": "ed328551bb8e961d432a5c371732dc860fcf3c23f69dbb4a77d922f48ea30411",
+        "app_core/ncaaf_identity.py": "7189894b9a11b7dedda1776361c3310d55ea04bf43ccd0b32c2f49d469f4eb6f",
+        "app_core/ncaaf_prospective.py": "ed6b27ee3c1c935daeee7c9c7c72070d46f6e25e26780fff9daa76ad85cb05a6",
+        "app_core/ncaaf_research.py": "e85a82eb585967c0f9fda8d483aecb8155d982a471b20a4359eda340046d579b",
+        "core/team_mapper.py": "12afb8948a76d2628463b1680bdb67abcaa664b5ba1c0dea5a1aaf860361ad01"
+      },
+      "sha256": "bd837b0b5f9d175c235002b43a9c862df47c205582432da42114b8ebcb220e57"
+    }
+  },
+  "original_record_sha256": "881833a03169d8ff3cfdc7cfb6000a174ccb545b1d087657169fe06d5f8a1153",
+  "parameters_sha256": "612612dc73c8719c38447517dc018fc76188c0c1656087f49f7399bc6424ac7a",
+  "predecessor_record_sha256": "6d7291fd464a9a367ba060ccf7bd526708bdba7b5809657930e1616f026173c0",
+  "protocol_sha256": "4e3e2f9beaf161fbf0ad4b7364b2abd3a2ba4da9e26aa3a7b3cbc5a44cb96c32",
+  "recovery": {
+    "production_eligible": false,
+    "reason": "reviewed_NFL_alias_only_change_0d36bd74",
+    "source_model_id": "6d7291fd464a9a367ba060ccf7bd526708bdba7b5809657930e1616f026173c0",
+    "source_runtime": "bd837b0b5f9d175c235002b43a9c862df47c205582432da42114b8ebcb220e57"
+  },
+  "reviewed_aliases": {
+    "app state": "app state",
+    "appalachian state": "app state",
+    "appalachian state mountaineers": "app state",
+    "army": "army",
+    "army black knights": "army",
+    "bgsu": "bowling green",
+    "bowling green": "bowling green",
+    "bowling green falcons": "bowling green",
+    "gardner webb": "gardner webb",
+    "gardner webb runnin bulldogs": "gardner webb",
+    "gardner webb running bulldogs": "gardner webb",
+    "gardnerwebb": "gardner webb",
+    "grambling": "grambling",
+    "grambling state": "grambling",
+    "grambling state tigers": "grambling",
+    "illinois": "illinois",
+    "illinois fighting illini": "illinois",
+    "kennesaw state": "kennesaw state",
+    "kennesaw state owls": "kennesaw state",
+    "louisiana state": "lsu",
+    "louisiana state tigers": "lsu",
+    "lsu": "lsu",
+    "lsu tigers": "lsu",
+    "mcneese": "mcneese",
+    "mcneese cowboys": "mcneese",
+    "mcneese state": "mcneese",
+    "mcneese state cowboys": "mcneese",
+    "missouri": "missouri",
+    "missouri tigers": "missouri",
+    "mizzou": "missouri",
+    "north dakota state": "north dakota state",
+    "north dakota state bison": "north dakota state",
+    "sam houston": "sam houston",
+    "sam houston bearkats": "sam houston",
+    "sam houston state": "sam houston",
+    "sam houston state bearkats": "sam houston",
+    "san jose state": "san jose state",
+    "san jose state spartans": "san jose state",
+    "southern": "southern",
+    "southern miss": "southern miss",
+    "southern miss golden eagles": "southern miss",
+    "southern mississippi": "southern miss",
+    "southern mississippi golden eagles": "southern miss",
+    "southern university": "southern",
+    "southern university jaguars": "southern",
+    "tcu": "tcu",
+    "tcu horned frogs": "tcu",
+    "vanderbilt": "vanderbilt",
+    "vanderbilt commodores": "vanderbilt"
+  },
+  "training_sha256": "fced6ef8dac00e4e502fdda97344e3da99848fac8c790861372cbb05953d51cd",
+  "version": "ncaaf-recovered-model-compatibility-v1"
+}
