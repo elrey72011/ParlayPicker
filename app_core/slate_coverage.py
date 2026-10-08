@@ -541,11 +541,20 @@ def publication_rows(best, candidate_audit, report):
     records = rows(best)
     events = report['decisions']
     indexed = {}
+    binding_failures = []
     for row in records:
         run = text(row, 'export_run_id')
         if run and run != report['run_id']:
             raise ValueError('COVERAGE_CONFLICTING_RUN_IDENTITIES')
-        eid, status, _ = _match(row, events)
+        from app_core.coverage_presentation import resolve, CoverageBindingConflict
+        try:
+            decision = resolve(row, events)
+        except CoverageBindingConflict as exc:
+            # Preserve decisions, but reject preview before package construction.
+            # No rejected selection or metrics migrate to a placeholder.
+            binding_failures.append(exc.diagnostic)
+            continue
+        eid = decision['canonical_event_id'] if decision else None
         if eid:
             if eid in indexed:
                 raise ValueError('COVERAGE_DUPLICATE_FINAL_GAME')
@@ -571,14 +580,16 @@ def publication_rows(best, candidate_audit, report):
             placeholders.append(row)
     # Existing other-league display remains unchanged and outside this inventory.
     # Unmatched scoped events are reported as orphans, never added to the slate.
-    outside = best.loc[~best.get('league', pd.Series('', index=best.index)).astype(str).str.upper().isin(scoped_leagues)] if not best.empty else best
+    outside = best.loc[[text(r, 'league', 'sport', 'League').upper() not in scoped_leagues for r in records]] if not best.empty else best
     audit = candidate_audit if isinstance(candidate_audit, pd.DataFrame) else pd.DataFrame()
-    audit = audit.loc[~audit.get('league', pd.Series('', index=audit.index)).astype(str).str.upper().isin(scoped_leagues)] if not audit.empty else audit
+    audit = audit.loc[[text(r, 'league', 'sport', 'League').upper() not in scoped_leagues for r in rows(audit)]] if not audit.empty else audit
     if not outside.empty or not audit.empty:
         legacy, _ = publication_games(outside, audit)
         output.extend(legacy.to_dict('records'))
     result = pd.DataFrame(output)
     result.attrs['slate_coverage'] = deepcopy(report)
+    if binding_failures:
+        result.attrs['coverage_binding_failures'] = binding_failures
     return result, pd.DataFrame(placeholders)
 
 
@@ -648,9 +659,12 @@ def validate_public_coverage(report, games):
     for family, group in games.items():
         for row in group:
             d = row.get('coverage_decision')
-            if d and (row['sport'] != d['league'] or row['game'] != d['away_team'] + ' at ' + d['home_team']
-                    or clock(row['start']) != clock(d['original_start'])):
-                raise ValueError('COVERAGE_PUBLIC_EVENT_BINDING_CONFLICT')
+            if d:
+                from app_core.coverage_presentation import CoverageBindingConflict
+                for field, expected_value in (('sport', d['league']), ('game', d['away_team'] + ' at ' + d['home_team']), ('start', d['original_start'])):
+                    agrees = clock(row[field]) == clock(expected_value) if field == 'start' else row[field] == expected_value
+                    if not agrees:
+                        raise CoverageBindingConflict(d, family, field, expected_value, row[field])
         observed = [r['coverage_decision'] for r in group if 'coverage_decision' in r]
         if len(observed) != len(expected) or {r['canonical_event_id'] for r in observed} != set(expected):
             raise ValueError('COVERAGE_PUBLIC_RECONCILIATION_MISMATCH')

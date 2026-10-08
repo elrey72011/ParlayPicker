@@ -135,6 +135,9 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
     if games.attrs.get('slate_coverage') is not None:
         from app_core.slate_coverage import digest
         options['slate_coverage_hash'] = digest(games.attrs['slate_coverage'])
+        # A previous successful placeholder preview must not hide a new rejected
+        # original row whose DataFrame cells otherwise resemble that placeholder.
+        options['coverage_binding_failures_hash'] = digest(games.attrs.get('coverage_binding_failures', []))
     fingerprint = source_fingerprint(games,candidates,selected_props,selected_dfs,options)
     saved = st.session_state.get('publication_preview')
     if saved and saved['fingerprint'] != fingerprint:
@@ -174,6 +177,22 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
             st.session_state.pop('publication_preview',None)
             saved = None
             st.error('Preview could not be built: '+str(exc))
+            diagnostic = getattr(exc, 'diagnostic', None)
+            if isinstance(diagnostic, dict):
+                # Existing owner-token gate applies before this pre-build error.
+                # Never log raw rows or include private prediction dependencies.
+                allowed = ('version', 'code', 'stage', 'board_category', 'canonical_event_id',
+                    'inventory_id', 'run_id', 'field', 'expected', 'actual')
+                from app_core.coverage_presentation import _safe
+                safe = {k: _safe(diagnostic[k]) for k in allowed if k in diagnostic}
+                safe = {k: v.replace(token, '[redacted]') if isinstance(v, str) else v for k, v in safe.items()}
+                serialized = json.dumps(safe, sort_keys=True, indent=2)
+                with st.expander('Private preview conflict diagnostic', expanded=True):
+                    st.caption('Original identity descriptors only; no prediction inputs or credentials. No analysis refresh is needed.')
+                    st.json(json.loads(serialized))
+                    st.download_button('Download private preview conflict JSON', serialized,
+                        file_name='private-preview-coverage-conflict.json', mime='application/json',
+                        key='publication_coverage_conflict_download')
     if not saved:
         if publish_results_requested:
             st.error('Results were saved, but the preview could not be prepared. Correct the inputs and click Publish board.')
