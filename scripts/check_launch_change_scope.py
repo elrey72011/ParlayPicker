@@ -9802,6 +9802,147 @@ def _run_ncaaf_compatibility_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+READINESS_DASHBOARD_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-readiness-dashboard-v1.json'
+READINESS_DASHBOARD_POLICY_VERSION = 'paid-launch-readiness-dashboard-v1'
+READINESS_DASHBOARD_APPROVAL_REFERENCE = 'Owner-authorized separate bounded readiness-dashboard DRAFT PR from verified main; offline tests and required CI only; preserve coverage, NCAAF, all gates, formulas, source acceptance, stakes and existing assertions; no merge, deployment or operational workflows'
+READINESS_DASHBOARD_PATHS = ('app/ui/readiness_dashboard.py',
+ 'tests/test_readiness_dashboard.py',
+ 'scripts/readiness_dashboard_scope.py',
+ 'tests/test_readiness_dashboard_scope.py',
+ 'docs/paid-launch/readiness-dashboard-schemas.md',
+ 'scripts/check_launch_change_scope.py')
+READINESS_DASHBOARD_FROZEN_PATHS = ('core/run_readiness.py',
+ 'app_core/slate_coverage.py',
+ 'core/live_wager_contract.py',
+ 'core/streamlit_pipeline.py',
+ 'core/probability_calibration.py',
+ 'core/price_value.py',
+ 'core/market_policy.py',
+ 'core/sport_policy.py',
+ 'core/wager_decisions.py',
+ 'tests/test_run_readiness.py',
+ 'tests/test_slate_coverage.py',
+ 'tests/conftest.py',
+ 'tests/paid_launch/case_isolation_and_scope.py',
+ 'tests/test_board_diagnostics.py',
+ 'scripts/ncaaf_compatibility_scope.py',
+ 'scripts/ci_scheduling_scope.py',
+ 'app_core/ncaaf_model_compatibility.py',
+ 'app_core/ncaaf_compatible_observation.py',
+ '.github/workflows/activation-grading.yml',
+ '.github/workflows/ci.yml',
+ '.github/workflows/football-stage1.yml',
+ '.github/workflows/football-stage2.yml',
+ '.github/workflows/mlb-receipt-reconciliation.yml',
+ '.github/workflows/paid-launch.yml',
+ '.github/workflows/qualification-operations.yml',
+ '.github/workflows/read-only-census.yml',
+ '.github/workflows/research-scheduler.yml',
+ '.github/workflows/subscriber-completion-postgres.yml')
+READINESS_DASHBOARD_BINDINGS = {'base': 'd955ceb9843c9bc320b63b29b7da9c7aa2305441',
+ 'base_tree': 'a3b7e7c1db957d3a8c4fb705e75a71046d5ccea3',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '522e938deb1114a7d3bfcfa09cf0b46a1f68b4961021abb88095263255a2da0f',
+ 'previous_policy_blob': '4d0442c4a3626f717ae92bf02296279f69bf0c0e',
+ 'reviewed_blobs': {'app/ui/readiness_dashboard.py': 'c295740c429f5d00dc2a1b907b79d32ecb7ba3f4',
+                    'tests/test_readiness_dashboard.py': '175d7d09cc3e6f4a6b7d5369f70116fc68f7da21',
+                    'scripts/readiness_dashboard_scope.py': '03bb1a1a5241522d15e762b5daccad5d363d21d3',
+                    'tests/test_readiness_dashboard_scope.py': 'a12723040bf5a44690af41d85f022c8153594112',
+                    'docs/paid-launch/readiness-dashboard-schemas.md': 'fbe7b2355f6eada37b972b906f73834beea41d73'},
+ 'scope_module_sha256': '79eafdd09c48dfa9854a9750ce296c31031ccc891617b85a391d529fdac23932',
+ 'successor_guard_sha256': '3224caf3b086a10134c5c646c0e3a0b24f29b025dcce7387dc6c915b60b0e6c8'}
+READINESS_DASHBOARD_PREVIOUS_CLI = b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NCAAF_COMPAT_POLICY_PATH):\n            code, report = _run_ncaaf_compatibility_integrated(args.manifest, args.base, NCAAF_COMPAT_BINDINGS)\n        elif exists_at("HEAD", CI_SCHEDULING_POLICY_PATH):\n            code, report = _run_ci_scheduling_integrated(args.manifest, args.base, CI_SCHEDULING_BINDINGS)\n        elif exists_at("HEAD", SLATE_AUDIT_POLICY_PATH):\n            code, report = _run_slate_audit_integrated(args.manifest, args.base, SLATE_AUDIT_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_RESEARCH_POLICY_PATH):\n            code, report = _run_football_research_integrated(args.manifest, args.base, FOOTBALL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):\n            code, report = _run_remote_continuation_integrated(args.manifest, args.base, REMOTE_CONTINUATION_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):\n            code, report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)\n        elif exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):\n            code, report = _run_canonical_download_integrated(args.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)\n        elif exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):\n            code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n            code, report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, report = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n            code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n'
+READINESS_DASHBOARD_PRIOR_SOURCE_RECONSTRUCTIONS = {}
+
+
+def _readiness_dashboard_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _readiness_dashboard_previous_guard_source(source, binding=None):
+    binding = READINESS_DASHBOARD_BINDINGS if binding is None else binding
+    if b"\nREADINESS_DASHBOARD_POLICY_PATH =" not in source:
+        return source
+    _require(_readiness_dashboard_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nREADINESS_DASHBOARD_POLICY_PATH =", 1)[0] + READINESS_DASHBOARD_PREVIOUS_CLI
+
+
+def _readiness_dashboard_previous_main_source(path, source):
+    return _readiness_dashboard_previous_guard_source(source) if path == GUARD_PATH else source
+
+
+_readiness_dashboard_frozen_module = None
+
+
+def _readiness_dashboard_predecessor():
+    global _readiness_dashboard_frozen_module
+    if _readiness_dashboard_frozen_module is None:
+        import types
+
+        def load(source, name):
+            module = types.ModuleType(name)
+            module.__file__ = __file__
+            exec(source, module.__dict__)
+            return module
+
+        source = Path(__file__).read_bytes().replace(b"\r\n", b"\n")
+        previous = _readiness_dashboard_previous_guard_source(source)
+        _require(hashlib.sha256(previous).hexdigest() == READINESS_DASHBOARD_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        frozen = load(previous, "exact_readiness_predecessor")
+        # Seed each historical lazy reader with its exact source, preserving all
+        # merged compatibility, CI and coverage assertions without file rereads.
+        ci_source = frozen._ncaaf_compatibility_previous_guard_source(previous)
+        _require(hashlib.sha256(ci_source).hexdigest() == frozen.NCAAF_COMPAT_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        ci_module = load(ci_source, "exact_readiness_ci_predecessor")
+        slate_source = ci_module._ci_scheduling_previous_guard_source(ci_source)
+        _require(hashlib.sha256(slate_source).hexdigest() == ci_module.CI_SCHEDULING_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        slate_module = load(slate_source, "exact_readiness_slate_predecessor")
+        research_source = slate_module._slate_audit_previous_guard_source(slate_source)
+        _require(hashlib.sha256(research_source).hexdigest() == slate_module.SLATE_AUDIT_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        slate_module._slate_frozen_module = load(research_source, "exact_readiness_research_predecessor")
+        ci_module._ci_scheduling_frozen_module = slate_module
+        frozen._ncaaf_compatibility_frozen_module = ci_module
+        _readiness_dashboard_frozen_module = frozen
+    _readiness_dashboard_frozen_module.ROOT = ROOT
+    return _readiness_dashboard_frozen_module
+
+
+def _readiness_dashboard_wrap_previous(name):
+    def wrapped(*args, **kwargs):
+        method = getattr(_readiness_dashboard_predecessor(), name)
+        if name.endswith("_previous_main_source"):
+            path, source = args
+            return method(path, _readiness_dashboard_previous_main_source(path, source), **kwargs)
+        source, *rest = args
+        return method(_readiness_dashboard_previous_guard_source(source), *rest, **kwargs)
+    return wrapped
+
+
+for _readiness_dashboard_name, _readiness_dashboard_method in list(globals().items()):
+    if callable(_readiness_dashboard_method) and (_readiness_dashboard_name.endswith("_previous_guard_source") or _readiness_dashboard_name.endswith("_previous_main_source")) and not _readiness_dashboard_name.startswith("_readiness_dashboard_"):
+        globals()[_readiness_dashboard_name] = _readiness_dashboard_wrap_previous(_readiness_dashboard_name)
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nREADINESS_DASHBOARD_POLICY_PATH =" in source:
+        if reviewed == READINESS_DASHBOARD_BINDINGS["successor_guard_sha256"]:
+            return _readiness_dashboard_raw_guard_matches(source, reviewed)
+        if not _readiness_dashboard_raw_guard_matches(source, READINESS_DASHBOARD_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = _readiness_dashboard_previous_guard_source(source)
+    return _readiness_dashboard_predecessor()._dfs_guard_matches(source, reviewed)
+
+
+def _run_readiness_dashboard_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/readiness_dashboard_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_readiness_dashboard_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -9809,7 +9950,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NCAAF_COMPAT_POLICY_PATH):
+        if exists_at("HEAD", READINESS_DASHBOARD_POLICY_PATH):
+            code, report = _run_readiness_dashboard_integrated(args.manifest, args.base, READINESS_DASHBOARD_BINDINGS)
+        elif exists_at("HEAD", NCAAF_COMPAT_POLICY_PATH):
             code, report = _run_ncaaf_compatibility_integrated(args.manifest, args.base, NCAAF_COMPAT_BINDINGS)
         elif exists_at("HEAD", CI_SCHEDULING_POLICY_PATH):
             code, report = _run_ci_scheduling_integrated(args.manifest, args.base, CI_SCHEDULING_BINDINGS)

@@ -7,6 +7,47 @@ import streamlit as st
 from core.run_readiness import build_readiness, game_table, render_readiness
 
 
+READINESS_COLUMNS = (
+    "league", "matchup", "selected_pick", "readiness", "wager_decision",
+    "displayed_probability", "production_probability", "independent_model_probability",
+    "verified_quote_candidates", "candidate_count", "evidence_blockers", "data_warnings",
+    "wager_reasons", "snapshot_id", "export_run_id", "matchup_id",
+)
+COVERAGE_COLUMNS = (
+    "canonical_event_id", "league", "home_team", "away_team", "home_team_id", "away_team_id",
+    "original_start", "coverage_decision_state", "blocker_codes", "explanation",
+    "selected_date", "timezone", "as_of", "run_id", "inventory_id", "required_markets",
+    "market_results", "first_observed_failure", "observed_failures", "policy_exclusion",
+    "divisions", "stage1_cohort",
+)
+CANDIDATE_COLUMNS = (
+    "matchup_id", "pick", "selected", "quote_verified", "line_eligible", "quoted_line",
+    "settlement_rule", "probability_semantics", "quote_age_minutes_at_capture", "odds_source",
+    "issues", "snapshot_id", "export_run_id",
+)
+
+
+def _display_table(table, columns):
+    """Keep recorded details and stable empty headers for both display and CSV."""
+    ordered = list(columns) + [column for column in table if column not in columns]
+    table = table.reindex(columns=ordered).astype(object)
+    empty = table.eq("")
+    # Joined empty reason/issue lists mean no recorded issues; blank identity,
+    # selection and source fields carry no recorded value.
+    for column in ("evidence_blockers", "data_warnings", "wager_reasons", "issues"):
+        if column in empty:
+            empty[column] = False
+    unavailable = table.isna() | empty
+    missing = unavailable.any()
+    table = table.mask(unavailable, "Unavailable")
+    # Arrow needs one scalar type per column. Serialize columns with unavailable
+    # values explicitly so Streamlit and the CSV consume identical values.
+    for column in table:
+        if missing[column]:
+            table[column] = table[column].map(str)
+    return table
+
+
 def render_provider_health(diagnostics):
     from app_core.provider_health import sanitized_health
     health = sanitized_health((diagnostics or {}).get("provider_health"))
@@ -167,10 +208,9 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
                 for title, filename, value in downloads:
                     st.download_button("Download " + title, value,
                                        file_name=filename, mime="application/json")
-        if audit is None or audit.empty:
-            st.info("No candidate evidence is available for this run. Run Game Analysis or select a saved snapshot.")
-            return
         report = build_readiness(audit, final, diagnostics=diagnostics)
+        if not report["candidates"]:
+            st.info("No candidate evidence is available for this run. Run Game Analysis or select a saved snapshot.")
         football = report.get("football_coverage", {})
         if football.get("sports"):
             with st.expander("Football model and input coverage"):
@@ -187,19 +227,30 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             st.download_button("Download excluded market candidates", json.dumps(rejected, indent=2),
                                file_name="excluded-market-candidates.json", mime="application/json")
         counts = report["counts"]
-        st.write(f"Games: {counts['games']} · Evidence ready for grading: {counts['ready_for_grading']} · Approved wagers: {counts['approved_wagers']}")
+        st.write(f"Candidate games: {counts['games']} · Evidence ready for grading: {counts['ready_for_grading']} · Approved wagers: {counts['approved_wagers']}")
         st.caption(f"Quote age warning: {report['quote_warning_minutes']} minutes at capture, for diagnostics only. Feature freshness is unavailable without a source timestamp.")
-        table = game_table(report)
-        visible = ["league", "matchup", "selected_pick", "readiness", "wager_decision", "displayed_probability",
-                   "production_probability", "independent_model_probability", "verified_quote_candidates", "candidate_count",
-                   "evidence_blockers", "data_warnings", "wager_reasons"]
-        st.dataframe(table[visible], hide_index=True)
+        if "slate_coverage" in report:
+            coverage = report["slate_coverage"]
+            st.caption("Coverage decisions describe the independent slate and its evaluation states. They do not authorize a wager or supply missing candidate probabilities or selections.")
+            st.write(f"Scheduled events: {coverage['counts']['scheduled_events']} · Inventory: {coverage['inventory_status']}")
+            table = _display_table(game_table(report), COVERAGE_COLUMNS)
+            st.dataframe(table, hide_index=True)
+            st.caption("Candidate game readiness describes the supplied candidate evidence, including games outside this independent slate.")
+            readiness = _display_table(game_table({"games": report["games"]}), READINESS_COLUMNS)
+            st.dataframe(readiness, hide_index=True)
+            st.download_button("Download Candidate Game Readiness CSV", readiness.to_csv(index=False),
+                               file_name="candidate-game-readiness.csv", mime="text/csv")
+        else:
+            table = _display_table(game_table(report), READINESS_COLUMNS)
+            st.dataframe(table, hide_index=True)
         for warning in report["run_warnings"]:
             st.warning(warning)
         st.caption("Quote verified means the provider quote matched. Line eligible separately reflects final line rejection. Push-capable lines require verified probability semantics for validation.")
         candidates = pd.DataFrame(report["candidates"])
-        candidates["issues"] = candidates["issues"].map(lambda values: "; ".join(values))
-        st.dataframe(candidates[["matchup_id", "pick", "selected", "quote_verified", "line_eligible", "quoted_line", "settlement_rule", "probability_semantics", "quote_age_minutes_at_capture", "odds_source", "issues"]], hide_index=True)
+        if "issues" in candidates:
+            candidates["issues"] = candidates["issues"].map(lambda values: "; ".join(values))
+        candidates = _display_table(candidates, CANDIDATE_COLUMNS)
+        st.dataframe(candidates, hide_index=True)
         st.download_button("Download Readiness Report", render_readiness(report), file_name="run-readiness.md", mime="text/markdown")
         st.download_button("Download Readiness Metrics", json.dumps(report, indent=2, allow_nan=False), file_name="run-readiness.json", mime="application/json")
         st.download_button("Download Game Readiness CSV", table.to_csv(index=False), file_name="game-readiness.csv", mime="text/csv")
