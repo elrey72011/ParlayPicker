@@ -16,6 +16,7 @@ import platform
 
 from app_core import ncaaf_research_contract as contract, ncaaf_research as research
 from app_core import producer_provenance as producer
+from app_core import ncaaf_compatible_pipeline as compatible
 from app_core.research_estimate_trace import encode, fact, origin_metadata, generated_time
 
 VERSION = "ncaaf-normal-pipeline-inputs-v1"
@@ -37,7 +38,7 @@ NCAAF_EXACT_SOURCE_REVIEW_MISSING_OR_CONFLICT NCAAF_SOURCE_REVIEW_CLOCK_CONFLICT
 NCAAF_CANONICAL_EVENT_CONFLICT NCAAF_EVENT_AMBIGUOUS NCAAF_EXACT_OFFER_AMBIGUOUS_OR_MISSING
 NCAAF_ALTERED_ORDERED_FEATURES NCAAF_EVALUATED_HOLDOUT_CONTAMINATION NCAAF_RUNTIME_BINDING_CONFLICT
 NCAAF_PROBABILITY_BINDING_CONFLICT NCAAF_AUTHORITY_FORBIDDEN NCAAF_SCHEDULE_RECEIPT_MISSING
-NCAAF_SCHEDULE_RECEIPT_CONFLICT""".split())
+NCAAF_SCHEDULE_RECEIPT_CONFLICT""".split()) | compatible.REASONS
 
 
 def digest(value):
@@ -55,11 +56,13 @@ def load(raw, *, owner_upload=False):
     packet = json.loads(raw)
     require(isinstance(packet, dict) and set(packet) == {"payload", "sha256"}, "NCAAF_PACKET_SCHEMA")
     p = packet["payload"]
-    require(isinstance(p, dict) and p.get("version") == contract.VERSION, "NCAAF_PACKET_SCHEMA")
+    require(isinstance(p, dict) and p.get("version") in {contract.VERSION, compatible.VERSION}, "NCAAF_PACKET_SCHEMA")
     require(digest(p) == packet["sha256"], "NCAAF_PACKET_INTEGRITY")
     require(p.get("evidence_label") in {"RETAINED", "SYNTHETIC"}, "NCAAF_PACKET_SCHEMA")
     if owner_upload:
         require(p["evidence_label"] == "RETAINED", "NCAAF_PACKET_SCHEMA")
+    if p["version"] == compatible.VERSION:
+        compatible.load(packet)
     return packet
 
 
@@ -93,14 +96,20 @@ def reader_binding():
 def accepted(packet):
     approval = ACCEPTED_PACKETS.get(packet["sha256"])
     require(isinstance(approval, dict) and approval.get("source_review_sha256") ==
-            digest(packet["payload"]["source_review"]), "NCAAF_SOURCE_REVIEW_NOT_ACCEPTED")
+            digest(_transport(packet)["source_review"]), "NCAAF_SOURCE_REVIEW_NOT_ACCEPTED")
     require(approval.get("public_derived_output") == "permitted", "NCAAF_PUBLIC_DERIVED_RIGHTS_UNAVAILABLE")
+    return deepcopy(approval)
+
+
+def _transport(packet):
+    return compatible.view(packet) if packet["payload"]["version"] == compatible.VERSION else packet["payload"]
 
 
 def _offer_matches(packet, source):
     if producer.text(source.get("league") or source.get("League")).upper() != "NCAAF":
         return False
-    p, q = packet["payload"], packet["payload"]["original_quote"]
+    p = _transport(packet)
+    q = p["original_quote"]
     chosen = p["selection"]
     kind = producer.text(source.get("market_type"))
     line = producer.number(source.get("total_line" if kind.startswith("total") else "spread_line"))
@@ -157,7 +166,7 @@ def board_schedule(source, packet, inventory, at):
         return None
     require(isinstance(inventory, dict), "NCAAF_SCHEDULE_RECEIPT_MISSING")
     from app_core.ncaaf_schedule import match_event
-    q = packet["payload"]["original_quote"]
+    q = _transport(packet)["original_quote"]
     event, status = match_event(dict(home_team=q["event_home_team"], away_team=q["event_away_team"],
         commence_time=q["event_start_utc"]), inventory)
     require(status == "MATCHED" and event["schedule_event_id"] == source.get("matchup_id"), "NCAAF_SCHEDULE_RECEIPT_CONFLICT")
@@ -185,18 +194,27 @@ def predict(source, *, inventory=None):
         require(len(packets) == 1, "NCAAF_PACKET_AMBIGUOUS" if packets else "NCAAF_EXACT_OFFER_NOT_SELECTED")
         attempted = packets[0]
         schedule = board_schedule(source, attempted, inventory, at)
-        m, features, target = _checked(attempted, source, at)
+        is_compatible = attempted["payload"]["version"] == compatible.VERSION
+        if is_compatible:
+            approval = accepted(attempted)
+            dependency_review = compatible.accepted_dependencies(attempted, approval, at)
+            checked, center, win, computation = compatible.infer(attempted, at)
+            m, target = checked["model"]["original_record"], checked["target"]
+            fit = checked["fit"]
+        else:
+            m, features, target = _checked(attempted, source, at)
         family, kind, line = target["family"], source["market_type"], target["signed_line"]
         fitted_target = "margin" if family == "spread" else "total"
-        fit = m["data"]["artifact"]["models"][attempted["payload"]["selection"]["model_name"]][fitted_target]
-        center = float(research.centers(fit, [features], fitted_target)[0])
-        threshold = (-line if kind == "spread_home" else line) if family == "spread" else line
-        mass = research.probabilities(center, fit["sigma"], threshold, total=family == "total")
-        win = mass["over" if kind in {"spread_home", "total_over"} else "under"]
-        require(mass["push"] == 0 and math.isclose(win, attempted["payload"]["probabilities"]["win"], abs_tol=1e-12),
-                "NCAAF_PROBABILITY_BINDING_CONFLICT")
+        if not is_compatible:
+            fit = m["data"]["artifact"]["models"][attempted["payload"]["selection"]["model_name"]][fitted_target]
+            center = float(research.centers(fit, [features], fitted_target)[0])
+            threshold = (-line if kind == "spread_home" else line) if family == "spread" else line
+            mass = research.probabilities(center, fit["sigma"], threshold, total=family == "total")
+            win = mass["over" if kind in {"spread_home", "total_over"} else "under"]
+            require(mass["push"] == 0 and math.isclose(win, attempted["payload"]["probabilities"]["win"], abs_tol=1e-12),
+                    "NCAAF_PROBABILITY_BINDING_CONFLICT")
         result.update(ml_probability=win, ml_probability_source="ncaaf-research-v1:" +
-            m["data"]["artifact_hash"] + ":" + attempted["payload"]["selection"]["model_name"],
+            m["data"]["artifact_hash"] + ":" + _transport(attempted)["selection"]["model_name"],
             ml_target="spread_cover" if family == "spread" else "total",
             ml_projection=center if kind != "spread_away" else -center,
             ml_residual_scale=fit["sigma"], ml_feature_quality="native_ordered_seven_day_lag_features",
@@ -211,11 +229,18 @@ def predict(source, *, inventory=None):
     item = json.loads(metadata)
     p = dict(version=VERSION, status=result["ml_inference_status"], reason=result["ml_unavailable_reason"],
         inference_time=at, scientific_acceptance=False, wagering_authority=False, live_stake=0)
+    if attempted is None and any(v["payload"]["version"] == compatible.VERSION for v in _SELECTED.get()):
+        p.update(version=compatible.RESULT_VERSION, selected_packet_hashes=[v["sha256"] for v in _SELECTED.get()])
     if result["ml_inference_status"] == "success":
         p.update(original_packet=deepcopy(attempted), consumed_reader=reader_binding(),
             board_schedule=schedule, raw_probability=fact(result["ml_probability"]), original_blend=None, ui_refresh=None)
+        if attempted["payload"]["version"] == compatible.VERSION:
+            p.update(version=compatible.RESULT_VERSION, computation=computation, consumed_reader=compatible_reader_binding(),
+                consumed_dependency_review=dependency_review)
     elif attempted is not None:
         p["attempted_packet_sha256"] = attempted["sha256"]
+        if attempted["payload"]["version"] == compatible.VERSION:
+            p.update(version=compatible.RESULT_VERSION, original_packet=deepcopy(attempted))
     item["ncaaf_inputs"] = dict(payload=p, sha256=digest(p))
     result.update(fields, ml_estimate_metadata=encode(item))
     return result
@@ -228,6 +253,8 @@ def diagnose(source, item=None):
         saved = item["ncaaf_inputs"]
         p = saved["payload"]
         require(set(saved) == {"payload", "sha256"} and digest(p) == saved["sha256"], "NCAAF_PACKET_INTEGRITY")
+        if p.get("version") == compatible.RESULT_VERSION:
+            return _diagnose_compatible(source, item, p)
         require(p["version"] == VERSION, "NCAAF_PACKET_SCHEMA")
         require(p["scientific_acceptance"] is False and p["wagering_authority"] is False and p["live_stake"] == 0,
                 "NCAAF_AUTHORITY_FORBIDDEN")
@@ -260,6 +287,43 @@ def diagnose(source, item=None):
         return dict(status="COMPLETE", reason="AVAILABLE")
     except (ValueError, TypeError, KeyError, StopIteration, IndexError, AttributeError) as exc:
         return dict(status="REJECTED", reason=str(exc) if str(exc) in PUBLIC_REASONS else "NCAAF_PACKET_SCHEMA")
+
+
+def compatible_reader_binding():
+    return dict(pipeline=reader_binding(), compatible_caller_sha256=hashlib.sha256(
+        Path(compatible.__file__).read_bytes().replace(b"\r\n", b"\n")).hexdigest())
+
+
+def _diagnose_compatible(source, item, p):
+    require(p["scientific_acceptance"] is False and p["wagering_authority"] is False and p["live_stake"] == 0,
+            "NCAAF_AUTHORITY_FORBIDDEN")
+    if p["status"] != "success":
+        return dict(status="INCOMPLETE", reason=p["reason"] if p["reason"] in PUBLIC_REASONS else "NCAAF_INFERENCE_FAILED")
+    packet = load(encode(p["original_packet"]).encode())
+    require(_offer_matches(packet, source), "NCAAF_EVENT_OFFER_CONFLICT")
+    schedule = p["board_schedule"]
+    if producer.text(source.get("matchup_id")).startswith("espn:college-football:"):
+        require(isinstance(schedule, dict) and schedule.get("scope") == "selected_event_only"
+            and digest(schedule["payload"]) == schedule["sha256"], "NCAAF_SCHEDULE_RECEIPT_CONFLICT")
+        require(board_schedule(source, packet, schedule["payload"], p["inference_time"])["payload"] == schedule["payload"],
+                "NCAAF_SCHEDULE_RECEIPT_CONFLICT")
+    else:
+        require(schedule is None, "NCAAF_SCHEDULE_RECEIPT_CONFLICT")
+    approval = accepted(packet)
+    require(p["consumed_dependency_review"] == compatible.accepted_dependencies(packet, approval, p["inference_time"]),
+            "NCAAF_COMPAT_DEPENDENCY_SOURCE_REVIEW_MISSING_OR_CONFLICT")
+    checked, computation = compatible.inspect_result(packet, p["computation"], p["inference_time"])
+    require(p["inference_time"] == item["generated_at"] and p["consumed_reader"] == compatible_reader_binding(),
+            "NCAAF_RUNTIME_BINDING_CONFLICT")
+    require(p["raw_probability"] == item["probability"] == fact(source.get("ml_probability")) == fact(computation["raw_probability"]),
+            "NCAAF_PROBABILITY_BINDING_CONFLICT")
+    expected = "ncaaf-research-v1:" + checked["model"]["original_record"]["data"]["artifact_hash"] + ":ridge"
+    require(source.get("ml_probability_source") == expected and item["predictor_id"] == fact(expected), "NCAAF_ARTIFACT_TARGET_CONFLICT")
+    original = dict(item)
+    original.pop("ncaaf_inputs")
+    from app_core.research_estimate_trace import origin_rejection
+    require(origin_rejection(dict(source, ml_estimate_metadata=encode(original))) is None, "NCAAF_EVENT_OFFER_CONFLICT")
+    return dict(status="COMPLETE", reason="AVAILABLE")
 
 
 def finish(frame):

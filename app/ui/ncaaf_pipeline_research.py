@@ -6,7 +6,7 @@ from app_core import ncaaf_pipeline_evidence as evidence
 def render():
     # publish_panel invokes this only after the constant-time owner token gate.
     with st.expander("Private NCAAF research inputs", expanded=False):
-        st.caption("Select an existing native target packet for a future explicitly requested analysis. Loading checks JSON and hashes only. Stale inputs, unsupported rules and unaccepted source reviews remain unavailable. No fitting or collection occurs here.")
+        st.caption("Select an existing native v1 or compatible recovered-model prospective packet for a future explicitly requested analysis. Staging inspects bounded JSON and hashes only; it does not verify features or run analysis. The compatible caller separately verifies original dependency bytes, event mapping, derived features and accepted public-output rights before computation. Stale inputs and unaccepted reviews remain unavailable. No fitting or collection occurs here.")
         upload = st.file_uploader("Existing private NCAAF target packet", type=["json"], key="ncaaf_native_target_packet")
         if st.button("Stage existing NCAAF packet", disabled=upload is None, key="ncaaf_native_stage"):
             try:
