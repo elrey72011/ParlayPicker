@@ -40,6 +40,20 @@ EXPLANATIONS = {
     'FINAL_APPROVAL_NOT_CURRENT': 'Saved approval is not current',
     'WAGER_REJECTION_RECORDED': 'Candidate rejected by the existing wagering gates',
     'POLICY_EXCLUSION': 'Excluded by the declared evaluation policy',
+    'NCAAF_COMPAT_DEPENDENCY_BYTES_MISSING': 'Original feature dependency bytes are missing',
+    'NCAAF_COMPAT_DEPENDENCY_BYTES_CORRUPT': 'Original feature dependency bytes fail integrity checks',
+    'NCAAF_COMPAT_DEPENDENCY_IDENTITY_CONFLICT': 'Feature dependencies conflict with the selected event or teams',
+    'NCAAF_COMPAT_DEPENDENCY_REFERENCE_CONFLICT': 'Feature dependency references do not match the consumed inputs',
+    'NCAAF_COMPAT_FEATURE_DERIVATION_CONFLICT': 'Recorded features differ from the verified feature derivation',
+    'NCAAF_COMPAT_MINIMUM_HISTORY_MISSING': 'Required prior scoring or yardage history is missing',
+    'NCAAF_COMPAT_DEPENDENCY_SOURCE_REVIEW_MISSING_OR_CONFLICT': 'Exact feature-provider review is missing or conflicts with the dependencies',
+    'NCAAF_COMPAT_DEPENDENCY_RIGHTS_UNAVAILABLE': 'Feature-provider use or public derived-output permission is unavailable',
+    'NCAAF_COMPAT_EVENT_REVIEW_NOT_ACCEPTED': 'Exact event mapping has no accepted independent review',
+    'NCAAF_SOURCE_REVIEW_NOT_ACCEPTED': 'Applicable source review has not been accepted',
+    'NCAAF_PUBLIC_DERIVED_RIGHTS_UNAVAILABLE': 'Public derived-output permission is unavailable',
+    'NCAAF_COMPAT_NEW_INFERENCE_CLOCK_CONFLICT': 'Quote or start clock does not support a new inference',
+    'NCAAF_INTEGER_PUSH_MODEL_UNVALIDATED': 'Integer-line push model is unvalidated',
+    'NCAAF_COMPAT_RUNTIME_COMPONENT_CHANGED': 'Model incompatible with an unreviewed runtime component',
 }
 
 
@@ -352,6 +366,15 @@ def _market(event, market, providers, candidates, finals, audit, at, run, health
         incompatible = any(k in model_code for k in ('RUNTIME_MISMATCH', 'MODEL_SCHEMA', 'ARTIFACT_READER', 'TARGET_CONFLICT', 'INCOMPATIBLE'))
         model = gate('model_evidence', 'FAIL' if incompatible or status in {'unavailable', 'failed', 'error'} else 'UNKNOWN',
             'MODEL_INCOMPATIBLE' if incompatible else 'MODEL_INFERENCE_UNAVAILABLE' if status in {'unavailable', 'failed', 'error'} else 'MODEL_EVIDENCE_MISSING')
+        if text(candidate, 'league', 'League').upper() == 'NCAAF' and status in {'unavailable', 'failed', 'error'}:
+            from app_core.ncaaf_compatible_pipeline import RESULT_VERSION
+            from app_core.ncaaf_pipeline_evidence import PUBLIC_REASONS
+            try:
+                retained = json.loads(candidate.get('ml_estimate_metadata', ''))
+                if retained['ncaaf_inputs']['payload']['version'] == RESULT_VERSION and model_code in PUBLIC_REASONS:
+                    model = gate('model_evidence', 'FAIL', model_code)
+            except (ValueError, TypeError, KeyError):
+                pass
         # A completed actual finalizer receipt resolves its own prerequisites;
         # no absent receipt is promoted using a legacy probability alias.
         if trace and not model_code and not any('model' in str(g.get('code', '')).lower() or 'probability' in str(g.get('code', '')).lower() for g in trace if g['status'] == 'FAIL'):

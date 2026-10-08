@@ -169,6 +169,21 @@ def _display_line(source):
     return line if line is not None else number(source,'market_line_used')
 
 
+def _compatible_ncaaf_research(row):
+    """Static exact-candidate availability, never an approval or value ranking."""
+    if text(row, 'league', 'League').upper() != 'NCAAF':
+        return False
+    import json
+    from app_core.ncaaf_compatible_pipeline import RESULT_VERSION
+    from app_core.ncaaf_pipeline_evidence import diagnose
+    try:
+        item = json.loads(row.get('ml_estimate_metadata', ''))
+        return (item['ncaaf_inputs']['payload']['version'] == RESULT_VERSION
+            and diagnose(row, item)['status'] == 'COMPLETE')
+    except (ValueError, KeyError, TypeError):
+        return False
+
+
 def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     if board is None or board.empty:
@@ -213,12 +228,23 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 pool=[]
             if pool:
                 pool.sort(key=lambda c:((0 if not novig_only or novig_quote(c) else 1),number(c,'best_available_rank' if family=='overall' else 'best_available_family_rank'),number(c,'best_available_rank') or math.inf,text(c,'best_pick')))
+                # For an unapproved NCAAF research view, a rejected opposite
+                # market's legacy aliases must not hide an explicitly selected,
+                # fully bound compatible research estimate. Preserve original
+                # rank within each group and every actual approved ticket.
+                retained_authority = any(isinstance(final.get(name), dict) and final[name].get(flag) is True
+                    for name, flag in (('wager_contract', 'production_eligible'), ('controlled_trial_contract', 'trial_eligible')))
+                if league == 'NCAAF' and not retained_authority and not (text(final, 'Bettable').lower() in {'true', '1', 'yes'} and (number(final, 'Play_Stake') or 0) > 0):
+                    pool.sort(key=lambda c: not _compatible_ncaaf_research(c))
                 strict_contract=final.get('wager_contract')
                 trial_contract=final.get('controlled_trial_contract')
                 authority_contract=strict_contract if isinstance(strict_contract,dict) and strict_contract.get('production_eligible') else trial_contract
                 exact_final=[c for c in pool if text(c,'best_pick')==text(final,'best_pick') and number(c,'odds_american')==number(final,'odds_american') and text(c,'market_type')==text(final,'market_type')]
                 selected=exact_final[0] if family=='overall' and isinstance(authority_contract,dict) and len(exact_final)==1 else pool[0]
                 reason='Highest-ranked '+family+' candidate in this game'
+                if not retained_authority and _compatible_ncaaf_research(pool[0]) and not _compatible_ncaaf_research(selected):
+                    selected = pool[0]
+                    reason = 'Identity-bound compatible NCAAF research estimate; no wagering authority'
             elif (family=='overall' or family_of(final)==family) and (not novig_only or public_quote(final, college_fallback, nfl_fallback=nfl_fallback, research_fallback=research_fallback)):
                 selected=final
                 reason='Final overall pick; no matching family audit available'
