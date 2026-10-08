@@ -7426,7 +7426,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
     if schedule_start is not None and (not sports or "NCAAF" in [s.upper() for s in sports]):
         from app_core.ncaaf_schedule import fetch_schedule
         inventory = fetch_schedule(schedule_start, schedule_end or schedule_start)
-    result = _fetch_live_odds_dataframe(sports, date, _schedule_inventory=inventory)
+    coverage_receipts = {}
+    result = _fetch_live_odds_dataframe(sports, date, _schedule_inventory=inventory,
+                                       _coverage_receipts=coverage_receipts)
+    result.attrs.update(coverage_receipts)
     if inventory is not None:
         result.attrs["ncaaf_schedule"] = inventory
         result.attrs["ncaaf_provider_games"] = result.loc[result["league"].eq("NCAAF")].to_dict("records") if "league" in result else []
@@ -7434,7 +7437,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
 
 def _fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None,
-                               *, _schedule_inventory=None) -> pd.DataFrame:
+                               *, _schedule_inventory=None, _coverage_receipts=None) -> pd.DataFrame:
     from app_core.espn_ncaaf_odds import (
         fetch_espn_ncaaf_fcs_odds,
         merge_missing_ncaaf_games,
@@ -7493,6 +7496,11 @@ def _fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None
     game_dict = {}
     mlb_receipt_health = {}
     provider_outcomes = {}
+    coverage_provider_events = []
+    retained_football_schedules = []
+    if _coverage_receipts is not None:
+        _coverage_receipts.update(retained_football_schedules=retained_football_schedules,
+                                  coverage_provider_events=coverage_provider_events)
     for sk in sport_keys:
         games = []
         provider_outcomes[sk] = outcome("NOT_CONFIGURED")
@@ -7582,6 +7590,14 @@ def _fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None
                             game["football_identity_status"] = "CONFLICT"
                 else:
                     sport_games = collect_football_identity(sport_games, football_sport)
+                    observation = getattr(sport_games, 'retained_schedule_observation', None)
+                    if observation is not None:
+                        retained_football_schedules.append(observation)
+
+            if football_sport:
+                from app_core.prediction_evidence import provider_quotes
+                coverage_provider_events.extend(dict(game, league=football_sport,
+                    provider_quotes=provider_quotes(game)) for game in sport_games)
 
             if not sport_games:
                 provider_outcomes[sk]["processing"] = "FILTERED_EMPTY"
@@ -9495,6 +9511,8 @@ def run_analysis_pipeline(
                     if schedule_start is not None else fetch_live_odds_dataframe(sports))
     ncaaf_schedule = live_odds_df.attrs.get("ncaaf_schedule")
     ncaaf_provider_games = live_odds_df.attrs.get("ncaaf_provider_games", [])
+    retained_football_schedules = live_odds_df.attrs.get('retained_football_schedules', [])
+    coverage_provider_events = live_odds_df.attrs.get('coverage_provider_events', [])
     mlb_receipt_health = live_odds_df.attrs.get("mlb_receipt_health", {})
     from app_core.provider_health import sanitized_health
     provider_health = sanitized_health(live_odds_df.attrs.get("provider_health"))
@@ -10796,6 +10814,8 @@ def run_analysis_pipeline(
 
     diagnostics["provider_health"] = provider_health
     diagnostics["mlb_receipt_health"] = mlb_receipt_health
+    diagnostics['retained_football_schedules'] = retained_football_schedules
+    diagnostics['coverage_provider_events'] = coverage_provider_events
     if ncaaf_schedule is not None:
         from app_core.ncaaf_schedule import refresh_coverage
         diagnostics["ncaaf_schedule"] = ncaaf_schedule

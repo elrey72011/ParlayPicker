@@ -1,0 +1,1734 @@
+{
+  "version": "slate-coverage-v1",
+  "selected_date": "2026-10-07",
+  "timezone": "America/New_York",
+  "as_of": "2026-10-07T16:00:00+00:00",
+  "run_id": "20261007T160000.000000Z",
+  "inventory_status": "COMPLETE",
+  "inventory_scope": [
+    {
+      "league": "NFL",
+      "source": "synthetic_schedule",
+      "inventory_id": "621b389f7e858800e643c8cef568e8c0fa7ced721931564f7771ab44058b9d1c",
+      "status": "COMPLETE",
+      "observed_at": "2026-10-07T16:00:00+00:00",
+      "source_window": null,
+      "completeness_basis": "synthetic complete index",
+      "reasons": []
+    },
+    {
+      "league": "NCAAF",
+      "source": "synthetic_schedule",
+      "inventory_id": "8d56228565dabe55bf5b2bf23927a7dda70f2701b1ae02d3759892439cec310e",
+      "status": "COMPLETE",
+      "observed_at": "2026-10-07T16:00:00+00:00",
+      "source_window": null,
+      "completeness_basis": "synthetic complete index",
+      "reasons": []
+    }
+  ],
+  "scheduled_event_ids": [
+    "nfl:one",
+    "nfl:started",
+    "nfl:policy",
+    "ncaaf:model",
+    "ncaaf:mixed"
+  ],
+  "decisions": [
+    {
+      "canonical_event_id": "nfl:one",
+      "league": "NFL",
+      "home_team": "Home",
+      "away_team": "Away",
+      "home_team_id": "h",
+      "away_team_id": "a",
+      "original_start": "2026-10-07T23:00:00+00:00",
+      "selected_date": "2026-10-07",
+      "timezone": "America/New_York",
+      "as_of": "2026-10-07T16:00:00+00:00",
+      "run_id": "20261007T160000.000000Z",
+      "inventory_id": "621b389f7e858800e643c8cef568e8c0fa7ced721931564f7771ab44058b9d1c",
+      "coverage_decision_state": "UNVERIFIED",
+      "blocker_codes": [
+        "NO_MATCHING_ODDS_EVENT"
+      ],
+      "explanation": "No matching odds event",
+      "required_markets": [
+        "spread_home",
+        "spread_away",
+        "total_over",
+        "total_under"
+      ],
+      "market_results": [
+        {
+          "market": "spread_home",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "odds_match",
+            "status": "FAIL",
+            "code": "NO_MATCHING_ODDS_EVENT"
+          },
+          "observed_failures": [
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            }
+          ]
+        },
+        {
+          "market": "spread_away",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "odds_match",
+            "status": "FAIL",
+            "code": "NO_MATCHING_ODDS_EVENT"
+          },
+          "observed_failures": [
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            }
+          ]
+        },
+        {
+          "market": "total_over",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "odds_match",
+            "status": "FAIL",
+            "code": "NO_MATCHING_ODDS_EVENT"
+          },
+          "observed_failures": [
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            }
+          ]
+        },
+        {
+          "market": "total_under",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "odds_match",
+            "status": "FAIL",
+            "code": "NO_MATCHING_ODDS_EVENT"
+          },
+          "observed_failures": [
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            }
+          ]
+        }
+      ],
+      "first_observed_failure": {
+        "gate": "odds_match",
+        "status": "FAIL",
+        "code": "NO_MATCHING_ODDS_EVENT"
+      },
+      "observed_failures": [
+        {
+          "gate": "odds_match",
+          "status": "FAIL",
+          "code": "NO_MATCHING_ODDS_EVENT"
+        },
+        {
+          "gate": "odds_match",
+          "status": "FAIL",
+          "code": "NO_MATCHING_ODDS_EVENT"
+        },
+        {
+          "gate": "odds_match",
+          "status": "FAIL",
+          "code": "NO_MATCHING_ODDS_EVENT"
+        },
+        {
+          "gate": "odds_match",
+          "status": "FAIL",
+          "code": "NO_MATCHING_ODDS_EVENT"
+        }
+      ],
+      "policy_exclusion": null,
+      "divisions": [],
+      "stage1_cohort": "SEPARATE_FROZEN_FBS_ONLY_POLICY_NOT_EVALUATED"
+    },
+    {
+      "canonical_event_id": "nfl:started",
+      "league": "NFL",
+      "home_team": "Home",
+      "away_team": "Away",
+      "home_team_id": "h",
+      "away_team_id": "a",
+      "original_start": "2026-10-07T16:00:00+00:00",
+      "selected_date": "2026-10-07",
+      "timezone": "America/New_York",
+      "as_of": "2026-10-07T16:00:00+00:00",
+      "run_id": "20261007T160000.000000Z",
+      "inventory_id": "621b389f7e858800e643c8cef568e8c0fa7ced721931564f7771ab44058b9d1c",
+      "coverage_decision_state": "UNVERIFIED",
+      "blocker_codes": [
+        "GAME_STARTED",
+        "NO_MATCHING_ODDS_EVENT"
+      ],
+      "explanation": "Game has started; new wagering is unavailable",
+      "required_markets": [
+        "spread_home",
+        "spread_away",
+        "total_over",
+        "total_under"
+      ],
+      "market_results": [
+        {
+          "market": "spread_home",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "FAIL",
+              "code": "GAME_STARTED"
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "pregame",
+            "status": "FAIL",
+            "code": "GAME_STARTED"
+          },
+          "observed_failures": [
+            {
+              "gate": "pregame",
+              "status": "FAIL",
+              "code": "GAME_STARTED"
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            }
+          ]
+        },
+        {
+          "market": "spread_away",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "FAIL",
+              "code": "GAME_STARTED"
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "pregame",
+            "status": "FAIL",
+            "code": "GAME_STARTED"
+          },
+          "observed_failures": [
+            {
+              "gate": "pregame",
+              "status": "FAIL",
+              "code": "GAME_STARTED"
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            }
+          ]
+        },
+        {
+          "market": "total_over",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "FAIL",
+              "code": "GAME_STARTED"
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "pregame",
+            "status": "FAIL",
+            "code": "GAME_STARTED"
+          },
+          "observed_failures": [
+            {
+              "gate": "pregame",
+              "status": "FAIL",
+              "code": "GAME_STARTED"
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            }
+          ]
+        },
+        {
+          "market": "total_under",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "FAIL",
+              "code": "GAME_STARTED"
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "pregame",
+            "status": "FAIL",
+            "code": "GAME_STARTED"
+          },
+          "observed_failures": [
+            {
+              "gate": "pregame",
+              "status": "FAIL",
+              "code": "GAME_STARTED"
+            },
+            {
+              "gate": "odds_match",
+              "status": "FAIL",
+              "code": "NO_MATCHING_ODDS_EVENT"
+            }
+          ]
+        }
+      ],
+      "first_observed_failure": {
+        "gate": "pregame",
+        "status": "FAIL",
+        "code": "GAME_STARTED"
+      },
+      "observed_failures": [
+        {
+          "gate": "pregame",
+          "status": "FAIL",
+          "code": "GAME_STARTED"
+        },
+        {
+          "gate": "odds_match",
+          "status": "FAIL",
+          "code": "NO_MATCHING_ODDS_EVENT"
+        },
+        {
+          "gate": "pregame",
+          "status": "FAIL",
+          "code": "GAME_STARTED"
+        },
+        {
+          "gate": "odds_match",
+          "status": "FAIL",
+          "code": "NO_MATCHING_ODDS_EVENT"
+        },
+        {
+          "gate": "pregame",
+          "status": "FAIL",
+          "code": "GAME_STARTED"
+        },
+        {
+          "gate": "odds_match",
+          "status": "FAIL",
+          "code": "NO_MATCHING_ODDS_EVENT"
+        },
+        {
+          "gate": "pregame",
+          "status": "FAIL",
+          "code": "GAME_STARTED"
+        },
+        {
+          "gate": "odds_match",
+          "status": "FAIL",
+          "code": "NO_MATCHING_ODDS_EVENT"
+        }
+      ],
+      "policy_exclusion": null,
+      "divisions": [],
+      "stage1_cohort": "SEPARATE_FROZEN_FBS_ONLY_POLICY_NOT_EVALUATED"
+    },
+    {
+      "canonical_event_id": "nfl:policy",
+      "league": "NFL",
+      "home_team": "Home",
+      "away_team": "Away",
+      "home_team_id": "h",
+      "away_team_id": "a",
+      "original_start": "2026-10-07T23:00:00+00:00",
+      "selected_date": "2026-10-07",
+      "timezone": "America/New_York",
+      "as_of": "2026-10-07T16:00:00+00:00",
+      "run_id": "20261007T160000.000000Z",
+      "inventory_id": "621b389f7e858800e643c8cef568e8c0fa7ced721931564f7771ab44058b9d1c",
+      "coverage_decision_state": "PASS",
+      "blocker_codes": [
+        "SYNTHETIC_POLICY_EXCLUSION"
+      ],
+      "explanation": "SYNTHETIC_POLICY_EXCLUSION",
+      "required_markets": [
+        "spread_home",
+        "spread_away",
+        "total_over",
+        "total_under"
+      ],
+      "market_results": [
+        {
+          "market": "spread_home",
+          "state": "PASS",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "evaluation_policy",
+              "status": "FAIL",
+              "code": "SYNTHETIC_POLICY_EXCLUSION"
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "evaluation_policy",
+            "status": "FAIL",
+            "code": "SYNTHETIC_POLICY_EXCLUSION"
+          },
+          "observed_failures": [
+            {
+              "gate": "evaluation_policy",
+              "status": "FAIL",
+              "code": "SYNTHETIC_POLICY_EXCLUSION"
+            }
+          ]
+        },
+        {
+          "market": "spread_away",
+          "state": "PASS",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "evaluation_policy",
+              "status": "FAIL",
+              "code": "SYNTHETIC_POLICY_EXCLUSION"
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "evaluation_policy",
+            "status": "FAIL",
+            "code": "SYNTHETIC_POLICY_EXCLUSION"
+          },
+          "observed_failures": [
+            {
+              "gate": "evaluation_policy",
+              "status": "FAIL",
+              "code": "SYNTHETIC_POLICY_EXCLUSION"
+            }
+          ]
+        },
+        {
+          "market": "total_over",
+          "state": "PASS",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "evaluation_policy",
+              "status": "FAIL",
+              "code": "SYNTHETIC_POLICY_EXCLUSION"
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "evaluation_policy",
+            "status": "FAIL",
+            "code": "SYNTHETIC_POLICY_EXCLUSION"
+          },
+          "observed_failures": [
+            {
+              "gate": "evaluation_policy",
+              "status": "FAIL",
+              "code": "SYNTHETIC_POLICY_EXCLUSION"
+            }
+          ]
+        },
+        {
+          "market": "total_under",
+          "state": "PASS",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "evaluation_policy",
+              "status": "FAIL",
+              "code": "SYNTHETIC_POLICY_EXCLUSION"
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "evaluation_policy",
+            "status": "FAIL",
+            "code": "SYNTHETIC_POLICY_EXCLUSION"
+          },
+          "observed_failures": [
+            {
+              "gate": "evaluation_policy",
+              "status": "FAIL",
+              "code": "SYNTHETIC_POLICY_EXCLUSION"
+            }
+          ]
+        }
+      ],
+      "first_observed_failure": {
+        "gate": "evaluation_policy",
+        "status": "FAIL",
+        "code": "SYNTHETIC_POLICY_EXCLUSION"
+      },
+      "observed_failures": [
+        {
+          "gate": "evaluation_policy",
+          "status": "FAIL",
+          "code": "SYNTHETIC_POLICY_EXCLUSION"
+        },
+        {
+          "gate": "evaluation_policy",
+          "status": "FAIL",
+          "code": "SYNTHETIC_POLICY_EXCLUSION"
+        },
+        {
+          "gate": "evaluation_policy",
+          "status": "FAIL",
+          "code": "SYNTHETIC_POLICY_EXCLUSION"
+        },
+        {
+          "gate": "evaluation_policy",
+          "status": "FAIL",
+          "code": "SYNTHETIC_POLICY_EXCLUSION"
+        }
+      ],
+      "policy_exclusion": {
+        "canonical_event_id": "nfl:policy",
+        "policy_id": "SYNTHETIC-policy",
+        "reason_code": "SYNTHETIC_POLICY_EXCLUSION",
+        "scope": [
+          "spread_home",
+          "spread_away",
+          "total_over",
+          "total_under"
+        ]
+      },
+      "divisions": [],
+      "stage1_cohort": "SEPARATE_FROZEN_FBS_ONLY_POLICY_NOT_EVALUATED"
+    },
+    {
+      "canonical_event_id": "ncaaf:model",
+      "league": "NCAAF",
+      "home_team": "Model Home",
+      "away_team": "Away",
+      "home_team_id": "h",
+      "away_team_id": "a",
+      "original_start": "2026-10-07T23:00:00+00:00",
+      "selected_date": "2026-10-07",
+      "timezone": "America/New_York",
+      "as_of": "2026-10-07T16:00:00+00:00",
+      "run_id": "20261007T160000.000000Z",
+      "inventory_id": "8d56228565dabe55bf5b2bf23927a7dda70f2701b1ae02d3759892439cec310e",
+      "coverage_decision_state": "UNVERIFIED",
+      "blocker_codes": [
+        "MODEL_INCOMPATIBLE",
+        "ODDS_MARKET_MISSING"
+      ],
+      "explanation": "Model incompatible",
+      "required_markets": [
+        "spread_home",
+        "spread_away",
+        "total_over",
+        "total_under"
+      ],
+      "market_results": [
+        {
+          "market": "spread_home",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "FAIL",
+              "code": "MODEL_INCOMPATIBLE"
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": "FINALIZATION_NOT_EVALUATED"
+            }
+          ],
+          "candidates": [
+            {
+              "candidate_id": "SYNTHETIC-model",
+              "market": "spread_home",
+              "decision_state": "UNVERIFIED",
+              "gate_results": [
+                {
+                  "gate": "quote_clock",
+                  "status": "PASS",
+                  "code": null
+                },
+                {
+                  "gate": "model_evidence",
+                  "status": "FAIL",
+                  "code": "MODEL_INCOMPATIBLE"
+                },
+                {
+                  "gate": "finalization",
+                  "status": "NOT_EVALUATED",
+                  "code": "FINALIZATION_NOT_EVALUATED"
+                }
+              ],
+              "actual_gate_results": [],
+              "first_actual_failure": null,
+              "evaluated_offer": null,
+              "original_model_blocker": "NCAAF_FROZEN_RUNTIME_MISMATCH"
+            }
+          ],
+          "first_observed_failure": {
+            "gate": "model_evidence",
+            "status": "FAIL",
+            "code": "MODEL_INCOMPATIBLE"
+          },
+          "observed_failures": [
+            {
+              "gate": "model_evidence",
+              "status": "FAIL",
+              "code": "MODEL_INCOMPATIBLE"
+            },
+            {
+              "gate": "model_evidence",
+              "status": "FAIL",
+              "code": "MODEL_INCOMPATIBLE"
+            }
+          ]
+        },
+        {
+          "market": "spread_away",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "quote_clock",
+            "status": "FAIL",
+            "code": "ODDS_MARKET_MISSING"
+          },
+          "observed_failures": [
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            }
+          ]
+        },
+        {
+          "market": "total_over",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "quote_clock",
+            "status": "FAIL",
+            "code": "ODDS_MARKET_MISSING"
+          },
+          "observed_failures": [
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            }
+          ]
+        },
+        {
+          "market": "total_under",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "quote_clock",
+            "status": "FAIL",
+            "code": "ODDS_MARKET_MISSING"
+          },
+          "observed_failures": [
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            }
+          ]
+        }
+      ],
+      "first_observed_failure": {
+        "gate": "model_evidence",
+        "status": "FAIL",
+        "code": "MODEL_INCOMPATIBLE"
+      },
+      "observed_failures": [
+        {
+          "gate": "model_evidence",
+          "status": "FAIL",
+          "code": "MODEL_INCOMPATIBLE"
+        },
+        {
+          "gate": "model_evidence",
+          "status": "FAIL",
+          "code": "MODEL_INCOMPATIBLE"
+        },
+        {
+          "gate": "quote_clock",
+          "status": "FAIL",
+          "code": "ODDS_MARKET_MISSING"
+        },
+        {
+          "gate": "quote_clock",
+          "status": "FAIL",
+          "code": "ODDS_MARKET_MISSING"
+        },
+        {
+          "gate": "quote_clock",
+          "status": "FAIL",
+          "code": "ODDS_MARKET_MISSING"
+        }
+      ],
+      "policy_exclusion": null,
+      "divisions": [
+        "FBS"
+      ],
+      "stage1_cohort": "SEPARATE_FROZEN_FBS_ONLY_POLICY_NOT_EVALUATED"
+    },
+    {
+      "canonical_event_id": "ncaaf:mixed",
+      "league": "NCAAF",
+      "home_team": "Mixed Home",
+      "away_team": "Away",
+      "home_team_id": "h",
+      "away_team_id": "a",
+      "original_start": "2026-10-07T23:00:00+00:00",
+      "selected_date": "2026-10-07",
+      "timezone": "America/New_York",
+      "as_of": "2026-10-07T16:00:00+00:00",
+      "run_id": "20261007T160000.000000Z",
+      "inventory_id": "8d56228565dabe55bf5b2bf23927a7dda70f2701b1ae02d3759892439cec310e",
+      "coverage_decision_state": "UNVERIFIED",
+      "blocker_codes": [
+        "WAGER_REJECTION_RECORDED",
+        "negative_conservative_ev",
+        "ODDS_MARKET_MISSING"
+      ],
+      "explanation": "Candidate rejected by the existing wagering gates",
+      "required_markets": [
+        "spread_home",
+        "spread_away",
+        "total_over",
+        "total_under"
+      ],
+      "market_results": [
+        {
+          "market": "spread_home",
+          "state": "PASS",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "FAIL",
+              "code": "WAGER_REJECTION_RECORDED"
+            }
+          ],
+          "candidates": [
+            {
+              "candidate_id": "SYNTHETIC-mixed",
+              "market": "spread_home",
+              "decision_state": "PASS",
+              "gate_results": [
+                {
+                  "gate": "quote_clock",
+                  "status": "PASS",
+                  "code": null
+                },
+                {
+                  "gate": "model_evidence",
+                  "status": "PASS",
+                  "code": null
+                },
+                {
+                  "gate": "candidate_contract",
+                  "status": "FAIL",
+                  "code": "negative_conservative_ev"
+                },
+                {
+                  "gate": "finalization",
+                  "status": "FAIL",
+                  "code": "WAGER_REJECTION_RECORDED"
+                }
+              ],
+              "actual_gate_results": [
+                {
+                  "gate": "candidate_contract",
+                  "status": "FAIL",
+                  "code": "negative_conservative_ev"
+                }
+              ],
+              "first_actual_failure": {
+                "gate": "candidate_contract",
+                "status": "FAIL",
+                "code": "negative_conservative_ev"
+              },
+              "evaluated_offer": {
+                "selection": "Home -2.5",
+                "market": "spread_home",
+                "signed_line": -2.5,
+                "price": -110,
+                "operator": "DraftKings",
+                "quote_clock": "2026-10-07T16:00:00+00:00"
+              },
+              "original_model_blocker": null
+            }
+          ],
+          "first_observed_failure": {
+            "gate": "finalization",
+            "status": "FAIL",
+            "code": "WAGER_REJECTION_RECORDED"
+          },
+          "observed_failures": [
+            {
+              "gate": "finalization",
+              "status": "FAIL",
+              "code": "WAGER_REJECTION_RECORDED"
+            },
+            {
+              "gate": "candidate_contract",
+              "status": "FAIL",
+              "code": "negative_conservative_ev"
+            },
+            {
+              "gate": "finalization",
+              "status": "FAIL",
+              "code": "WAGER_REJECTION_RECORDED"
+            }
+          ]
+        },
+        {
+          "market": "spread_away",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "quote_clock",
+            "status": "FAIL",
+            "code": "ODDS_MARKET_MISSING"
+          },
+          "observed_failures": [
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            }
+          ]
+        },
+        {
+          "market": "total_over",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "quote_clock",
+            "status": "FAIL",
+            "code": "ODDS_MARKET_MISSING"
+          },
+          "observed_failures": [
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            }
+          ]
+        },
+        {
+          "market": "total_under",
+          "state": "UNVERIFIED",
+          "gate_results": [
+            {
+              "gate": "schedule_identity",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "pregame",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "provider_request",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "odds_match",
+              "status": "PASS",
+              "code": null
+            },
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            },
+            {
+              "gate": "candidate_generation",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "model_evidence",
+              "status": "NOT_EVALUATED",
+              "code": null
+            },
+            {
+              "gate": "finalization",
+              "status": "NOT_EVALUATED",
+              "code": null
+            }
+          ],
+          "candidates": [],
+          "first_observed_failure": {
+            "gate": "quote_clock",
+            "status": "FAIL",
+            "code": "ODDS_MARKET_MISSING"
+          },
+          "observed_failures": [
+            {
+              "gate": "quote_clock",
+              "status": "FAIL",
+              "code": "ODDS_MARKET_MISSING"
+            }
+          ]
+        }
+      ],
+      "first_observed_failure": {
+        "gate": "finalization",
+        "status": "FAIL",
+        "code": "WAGER_REJECTION_RECORDED"
+      },
+      "observed_failures": [
+        {
+          "gate": "finalization",
+          "status": "FAIL",
+          "code": "WAGER_REJECTION_RECORDED"
+        },
+        {
+          "gate": "candidate_contract",
+          "status": "FAIL",
+          "code": "negative_conservative_ev"
+        },
+        {
+          "gate": "finalization",
+          "status": "FAIL",
+          "code": "WAGER_REJECTION_RECORDED"
+        },
+        {
+          "gate": "quote_clock",
+          "status": "FAIL",
+          "code": "ODDS_MARKET_MISSING"
+        },
+        {
+          "gate": "quote_clock",
+          "status": "FAIL",
+          "code": "ODDS_MARKET_MISSING"
+        },
+        {
+          "gate": "quote_clock",
+          "status": "FAIL",
+          "code": "ODDS_MARKET_MISSING"
+        }
+      ],
+      "policy_exclusion": null,
+      "divisions": [
+        "FBS"
+      ],
+      "stage1_cohort": "SEPARATE_FROZEN_FBS_ONLY_POLICY_NOT_EVALUATED"
+    }
+  ],
+  "orphan_events": [
+    {
+      "stage": "providers",
+      "league": "NFL",
+      "provider_event_id": "SYNTHETIC-orphan",
+      "status": "NO_SCHEDULE_MATCH",
+      "possible_canonical_events": []
+    }
+  ],
+  "counts": {
+    "scheduled_events": 5,
+    "decision_rows": 5,
+    "states": {
+      "APPROVED": 0,
+      "PASS": 1,
+      "UNVERIFIED": 4
+    }
+  },
+  "blockers_by_league_market": {
+    "NFL:spread_home:NO_MATCHING_ODDS_EVENT": 2,
+    "NFL:spread_away:NO_MATCHING_ODDS_EVENT": 2,
+    "NFL:total_over:NO_MATCHING_ODDS_EVENT": 2,
+    "NFL:total_under:NO_MATCHING_ODDS_EVENT": 2,
+    "NFL:spread_home:GAME_STARTED": 1,
+    "NFL:spread_away:GAME_STARTED": 1,
+    "NFL:total_over:GAME_STARTED": 1,
+    "NFL:total_under:GAME_STARTED": 1,
+    "NFL:spread_home:SYNTHETIC_POLICY_EXCLUSION": 1,
+    "NFL:spread_away:SYNTHETIC_POLICY_EXCLUSION": 1,
+    "NFL:total_over:SYNTHETIC_POLICY_EXCLUSION": 1,
+    "NFL:total_under:SYNTHETIC_POLICY_EXCLUSION": 1,
+    "NCAAF:spread_home:MODEL_INCOMPATIBLE": 2,
+    "NCAAF:spread_away:ODDS_MARKET_MISSING": 2,
+    "NCAAF:total_over:ODDS_MARKET_MISSING": 2,
+    "NCAAF:total_under:ODDS_MARKET_MISSING": 2,
+    "NCAAF:spread_home:WAGER_REJECTION_RECORDED": 2,
+    "NCAAF:spread_home:negative_conservative_ev": 1
+  },
+  "scientific_acceptance": false,
+  "wagering_authority": false,
+  "reconciliation": {
+    "missing": [],
+    "duplicates": [],
+    "extras": []
+  },
+  "fully_reconciled": true
+}

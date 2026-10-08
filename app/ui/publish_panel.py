@@ -78,7 +78,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
         notice=st.session_state.pop('lock_publish_notice', None)
         if notice:
             st.info(notice)
-    if games is None or games.empty:
+    if games is None or (games.empty and not games.attrs.get('slate_coverage')):
         if publish_results_requested:
             from copy import deepcopy
             from app.ui.sftp_publish import publish_action
@@ -129,7 +129,12 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
                                     help='When Novig is unavailable, use an exact fresh DraftKings, FanDuel or BetMGM quote for a research-only lock. This never approves or funds a wager.')
     selected_props = props if include_props else pd.DataFrame()
     selected_dfs = dfs.get(chosen)
+    from app.ui.slate_coverage import render_coverage
+    render_coverage(games.attrs.get('slate_coverage'), key='publication_slate_coverage')
     options = {'results':public_results, 'props':include_props, 'dfs':chosen, 'slate':slate, 'start':start, 'nfl_fallback':nfl_fallback, 'research_fallback':research_fallback}
+    if games.attrs.get('slate_coverage') is not None:
+        from app_core.slate_coverage import digest
+        options['slate_coverage_hash'] = digest(games.attrs['slate_coverage'])
     fingerprint = source_fingerprint(games,candidates,selected_props,selected_dfs,options)
     saved = st.session_state.get('publication_preview')
     if saved and saved['fingerprint'] != fingerprint:

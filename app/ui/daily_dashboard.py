@@ -45,6 +45,10 @@ def _render_game_board(board, candidates, family):
         return
     display = result.rename(columns={"league":"Sport", "matchup":"Game", "start":"Start", "pick":"Best pick", "selection_label":"Selection", "status":"Wager status", "approval_reason":"Wager explanation", "odds":"Odds", "win_probability":"Win estimate", "edge":"Edge", "ev":"EV estimate", "selection_score":"Selection score", "probability_basis":"Win estimate source"})
     columns = ["Game", "Best pick", "Odds", "Win estimate", "EV estimate", "Wager status"]
+    if 'coverage_decision_state' in result:
+        display['Coverage decision'] = result['coverage_decision_state']
+        display['Coverage explanation'] = result['coverage_explanation']
+        columns += ['Coverage decision', 'Coverage explanation']
     display = display[columns].copy()
     for column in ("Win estimate", "EV estimate"):
         display[column] = display[column].map(lambda v: f"{v:.1%}" if pd.notna(v) else "Unavailable")
@@ -58,6 +62,8 @@ def _render_game_board(board, candidates, family):
 def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.DataFrame | None = None) -> None:
     board = daily_board(frame)
     with today.container():
+        from app.ui.slate_coverage import render_coverage
+        render_coverage(frame.attrs.get('slate_coverage'), key='today_slate_coverage')
         st.subheader("Best picks")
         st.caption("Saved analysis · One selection per game in each view. Game markets only. Player props and parlays remain in Workspace → Full Pick Board and Parlays.")
         if board.empty:
@@ -85,6 +91,7 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.D
                                    "approved-game-wagers.csv", "text/csv", key="daily_approved_export")
             st.caption("Use Results after games finish. Readiness for grading does not establish a profitable edge or an achieved win rate.")
     with details.container():
+        render_coverage(frame.attrs.get('slate_coverage'), key='details_slate_coverage')
         st.subheader("Understand a selection")
         if board.empty:
             st.info("Run an analysis to inspect game selections and their final decisions.")

@@ -7,6 +7,14 @@ from app_core.espn_results import _scoreboard_urls
 from core.exposure_ledger import digest
 
 
+class ObservedGames(list):
+    """Existing list API plus retained independent schedule observations."""
+
+    def __init__(self, games, observation):
+        super().__init__(games)
+        self.retained_schedule_observation = observation
+
+
 def attach(games, sport, events, observed_at):
     out = deepcopy(games)
     observed = timestamp(observed_at)
@@ -63,15 +71,26 @@ def collect(games, sport):
     dates = sorted({t.strftime("%Y%m%d") for g in games if (t := timestamp(g.get("commence_time")))})
     # Bounded work per refresh. Missing dates stay unresolved, never guessed.
     events = []
+    receipts = []
     for day in dates[:3]:
         for url in _scoreboard_urls(sport, day):
             try:
                 response = requests.get(url, timeout=(3, 5))
                 response.raise_for_status()
-                events.extend(response.json().get("events", []))
+                returned = response.json().get("events", [])
+                events.extend(returned)
+                receipts.append({'day': day, 'outcome': 'SUCCESS' if returned else 'SUCCESS_EMPTY'})
             except (requests.RequestException, ValueError, TypeError, AttributeError):
+                receipts.append({'day': day, 'outcome': 'FAILED'})
                 continue
-    result = attach(games, sport, events, datetime.now(timezone.utc).isoformat())
+    observed_at = datetime.now(timezone.utc).isoformat()
+    result = ObservedGames(attach(games, sport, events, observed_at),
+        {'sport': sport, 'observed_at': observed_at, 'events': deepcopy(events),
+         'request_receipts': receipts, 'requested_utc_dates': dates[:3],
+         'status': 'PARTIAL' if receipts else 'UNAVAILABLE',
+         'reasons': ['QUOTE_DERIVED_DATE_WINDOW_NO_COMPLETE_INDEX'] +
+                    (['DATE_LIMIT_REACHED'] if len(dates) > 3 else []) +
+                    (['SCHEDULE_REQUEST_FAILED'] if any(r['outcome'] == 'FAILED' for r in receipts) else [])})
     import logging
     from collections import Counter
     logging.getLogger(__name__).warning("FOOTBALL IDENTITY sport=%s games=%s statuses=%s",

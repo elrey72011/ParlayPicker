@@ -79,9 +79,12 @@ def unranked_games(best_picks: pd.DataFrame, candidate_audit: pd.DataFrame) -> p
     return pd.DataFrame(rows).sort_values(["Commence (Local)", "league", "Away", "Home"]).reset_index(drop=True) if rows else pd.DataFrame()
 
 
-def publication_games(best_picks: pd.DataFrame, candidate_audit: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def publication_games(best_picks: pd.DataFrame, candidate_audit: pd.DataFrame, *, slate_report=None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Append coverage rows while retaining the exact ranked Best Picks export."""
     best = best_picks if isinstance(best_picks, pd.DataFrame) else pd.DataFrame()
+    if slate_report is not None:
+        from app_core.slate_coverage import publication_rows
+        return publication_rows(best, candidate_audit, slate_report)
     coverage = unranked_games(best, candidate_audit)
     if coverage.empty:
         return best.copy(), coverage

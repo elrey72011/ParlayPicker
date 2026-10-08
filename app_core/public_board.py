@@ -47,8 +47,9 @@ def timestamp(value):
 
 
 def pick_record(row, *, prop=False, as_of=None):
-    at = timestamp(text(row, 'prediction_generated_at', 'export_run_id') or as_of)
-    if at is None:
+    coverage_only = not prop and row.get('coverage_only') is True and isinstance(row.get('coverage_decision'), dict)
+    at = None if coverage_only else timestamp(text(row, 'prediction_generated_at', 'export_run_id') or as_of)
+    if at is None and not coverage_only:
         raise ValueError('Every selection needs its original analysis timestamp')
     start = timestamp(text(row, 'game_start_utc', 'start', 'game_time_est'))
     probability = number(row, *(['ConservativeWinProbability', 'CalibratedProbability'] if prop else ['win_probability']))
@@ -176,6 +177,11 @@ def pick_record(row, *, prop=False, as_of=None):
             record["win_estimate"]=None
             record["ev"]=None
             record.update(display(None, record["odds"], None, push_probability=push))
+    if not prop and isinstance(row.get('coverage_decision'), dict):
+        from copy import deepcopy
+        record['coverage_decision'] = deepcopy(row['coverage_decision'])
+        if coverage_only:
+            record['record_kind'] = 'coverage_only_no_inference'
     return record
 
 
@@ -184,8 +190,14 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
     identities = None
     run = None
     games = {}
+    coverage = overall.attrs.get('slate_coverage')
     for family, frame in frames.items():
         required = {'matchup_id','export_run_id','pick','status','Bettable','Play_Stake'}
+        if coverage is not None and frame.attrs.get('slate_coverage') != coverage:
+            raise ValueError('COVERAGE_BOARD_REPORT_CONFLICT')
+        if frame.empty and coverage is not None and not coverage['decisions']:
+            games[family] = []
+            continue
         if frame.empty or not required.issubset(frame.columns):
             raise ValueError('Supply all three nonempty per-game exports from the same run')
         ids = frame.matchup_id.fillna('').astype(str)
@@ -229,7 +241,7 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
     diagnostics = build_selected_diagnostics([row for _, row in overall.iterrows()], games['overall'], built_at, QUOTE_MAX_AGE_MINUTES)
     return {'schema_version':2, 'parlay_funnel':summary, 'parlay_policy':'canonical-v3', 'research_parlay_policy':'diversified-v2', 'research_parlays':research_parlays, 'parlay_product_policy':POLICY_VERSION, 'parlay_products':parlay_products, 'parlay_product_funnel':product_funnel, 'board_diagnostics':diagnostics, 'selection_policy':'qualified-v1', 'top_ten_policy':'first-publication-v1', 'parlays':qualified_parlays, 'built_at':built_at.isoformat(), 'stale_after_minutes':QUOTE_MAX_AGE_MINUTES,
             'games':games, 'props':public_props,
-            'dfs':lineups}
+            'dfs':lineups, **({'slate_coverage':coverage} if coverage is not None else {})}
 
 
 def validate_package(package):
@@ -243,7 +255,7 @@ def validate_package(package):
         value = row.get('expected_stat')
         if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
             raise ValueError('Invalid expected statistic')
-    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' research_parlay_policy research_parlays' if 'research_parlay_policy' in package else '') + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else '') + (' parlay_policy' if 'parlay_policy' in package else '') + (' parlay_funnel' if 'parlay_funnel' in package else '') + (' parlay_product_policy parlay_products parlay_product_funnel' if 'parlay_product_policy' in package else '') + (' board_diagnostics' if 'board_diagnostics' in package else ''))
+    exact({k:v for k,v in package.items() if k != 'slate_coverage'}, 'schema_version built_at stale_after_minutes games props dfs' + (' research_parlay_policy research_parlays' if 'research_parlay_policy' in package else '') + (' selection_policy' if 'selection_policy' in package else '') + (' top_ten_policy' if 'top_ten_policy' in package else '') + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else '') + (' parlay_policy' if 'parlay_policy' in package else '') + (' parlay_funnel' if 'parlay_funnel' in package else '') + (' parlay_product_policy parlay_products parlay_product_funnel' if 'parlay_product_policy' in package else '') + (' board_diagnostics' if 'board_diagnostics' in package else ''))
     if package.get("parlay_policy", "supported-v2") not in {"supported-v2", "canonical-v3"}:
         raise ValueError("Unsupported parlay policy")
     package_age_minutes(package)
@@ -274,7 +286,7 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + (' controlled_trial_contract' if 'controlled_trial_contract' in row else '') + (' research_display' if 'research_display' in row else '') + (' price_push_probability' if 'price_push_probability' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','conservative_ev','espn_event_id','mlb_game_pk','game_number', *PUBLIC_NFL_CONTEXT_FIELDS, *TQ_FIELDS, *VALUE_FIELDS) if k in row))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' qualification_reason' if 'qualification_reason' in row else '') + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '') + (' quote_time_basis' if 'quote_time_basis' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else '') + (' wager_contract' if 'wager_contract' in row else '') + (' controlled_trial_contract' if 'controlled_trial_contract' in row else '') + (' research_display' if 'research_display' in row else '') + (' price_push_probability' if 'price_push_probability' in row else '') + (' coverage_decision' if 'coverage_decision' in row else '') + (' record_kind' if 'record_kind' in row else '') + ''.join(' '+k for k in ('maturity','gemini_review_status','gemini_review_completion','gemini_review_scope','gemini_factual_evidence','gemini_reviewed_at','conservative_ev','espn_event_id','mlb_game_pk','game_number', *PUBLIC_NFL_CONTEXT_FIELDS, *TQ_FIELDS, *VALUE_FIELDS) if k in row))
             if any(k in row for k in TQ_FIELDS):
                 validate_quality({k:row[k] for k in TQ_FIELDS if k in row})
                 if row['sport'] != 'MLB' or row['market'] not in {'total_over','total_under'}:
@@ -321,12 +333,25 @@ def validate_package(package):
                     raise ValueError('Public labels must be text')
             if row['status'] not in {'APPROVED','TRIAL','PASS'}:
                 raise ValueError('Invalid status')
-            if not timestamp(row['as_of']):
+            coverage_only = row.get('record_kind') == 'coverage_only_no_inference'
+            if 'record_kind' in row and not coverage_only:
+                raise ValueError('Invalid coverage record kind')
+            if coverage_only and (row['status'] != 'PASS' or row['market'] or row['pick']
+                    or any(row[k] is not None for k in ('odds', 'win_estimate', 'ev'))
+                    or row['as_of'] is not None or 'wager_contract' in row or 'controlled_trial_contract' in row
+                    or 'coverage_decision' not in row or 'slate_coverage' not in package):
+                raise ValueError('Coverage placeholder cannot carry selection or authority')
+            if not timestamp(row['as_of']) and not coverage_only:
                 raise ValueError('Missing analysis time')
             timestamp(row['start'])
             for key in ('odds','win_estimate','ev'):
                 if row[key] is not None and (not isinstance(row[key], (int,float)) or not math.isfinite(row[key])):
                     raise ValueError('Invalid metric')
+    if 'slate_coverage' in package:
+        from app_core.slate_coverage import validate_public_coverage
+        validate_public_coverage(package['slate_coverage'], package['games'])
+    elif any('coverage_decision' in r for group in package['games'].values() for r in group):
+        raise ValueError('Coverage decisions require their inventory report')
     if not isinstance(package['dfs'], list):
         raise ValueError('DFS must be a list')
     for row in package['dfs']:
