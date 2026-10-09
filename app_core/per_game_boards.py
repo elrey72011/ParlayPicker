@@ -174,7 +174,7 @@ def _compatible_ncaaf_research(row):
     if text(row, 'league', 'League').upper() != 'NCAAF':
         return False
     import json
-    from app_core.ncaaf_compatible_pipeline import RESULT_VERSIONS
+    from app_core.ncaaf_pipeline_evidence import RESULT_VERSIONS
     from app_core.ncaaf_pipeline_evidence import diagnose
     try:
         item = json.loads(row.get('ml_estimate_metadata', ''))

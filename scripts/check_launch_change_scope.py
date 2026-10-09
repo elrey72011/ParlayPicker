@@ -19468,6 +19468,1179 @@ def _run_ncaaf_chronology_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+NCAAF_CUSTODY_POLICY_PATH = "docs/paid-launch/launch-scope-policy-ncaaf-custody-v1.json"
+NCAAF_CUSTODY_POLICY_VERSION = "ncaaf-original-response-custody-v1"
+NCAAF_CUSTODY_APPROVAL_REFERENCE = ('Owner authorizes only bounded versioned NCAAF decoded original-response custody, explicit selected '
+ 'successor integration, synthetic network-blocked verification, exact successor bindings, policy-only seal, '
+ 'draft PR and required CI. Only selected CFBD games/games-teams and primary NCAAF Odds API responses; no '
+ 'transport, acquisition, collection, Drive, restoration, historical inference, fitting, source '
+ 'registration, aliases, pilot-runner expansion, inquiries, publication, merge, deployment or financial '
+ 'actions. Preserve all 633 inherited frozen bindings, original records/recovery/runtime hashes, v1/v2/v3 '
+ 'readers, chronology, mathematics, features, histories/lag, freshness, half-point and Novig/integer '
+ 'restrictions, coverage/preview, assertions, protected paths/tests, original baseline, workflows, owner '
+ 'work and frozen version 10. Raw bodies remain private and byte-exact; credentials excluded; independent '
+ 'acceptance separate and catalogs empty. Unqualified wagering stays PASS zero stake; custody supplies no '
+ 'scientific qualification or authority.')
+NCAAF_CUSTODY_PATHS = ('app_core/ncaaf_response_custody.py',
+ 'app_core/ncaaf_pipeline_evidence.py',
+ 'app_core/per_game_boards.py',
+ 'app_core/slate_coverage.py',
+ 'tests/test_ncaaf_response_custody.py',
+ 'docs/paid-launch/ncaaf-original-response-custody.md',
+ 'scripts/ncaaf_custody_scope.py',
+ 'tests/test_ncaaf_custody_scope.py',
+ 'scripts/check_launch_change_scope.py')
+NCAAF_CUSTODY_FROZEN_PATHS = ('.github/workflows/activation-grading.yml',
+ '.github/workflows/ci.yml',
+ '.github/workflows/football-stage1.yml',
+ '.github/workflows/football-stage2.yml',
+ '.github/workflows/mlb-receipt-reconciliation.yml',
+ '.github/workflows/paid-launch.yml',
+ '.github/workflows/qualification-operations.yml',
+ '.github/workflows/read-only-census.yml',
+ '.github/workflows/research-scheduler.yml',
+ '.github/workflows/subscriber-completion-postgres.yml',
+ 'app/ui/canonical_evidence_download.py',
+ 'app/ui/daily_dashboard.py',
+ 'app/ui/draftkings.py',
+ 'app/ui/lock_picks.py',
+ 'app/ui/ncaaf_inventory.py',
+ 'app/ui/ncaaf_pipeline_research.py',
+ 'app/ui/public_results.py',
+ 'app/ui/publish_panel.py',
+ 'app/ui/readiness_dashboard.py',
+ 'app/ui/remote_canonical_download.py',
+ 'app/ui/sidebar_controls.py',
+ 'app/ui/slate_coverage.py',
+ 'app/ui/source_evidence_panel.py',
+ 'app_core/candidate_evidence_schema.py',
+ 'app_core/canonical_download.py',
+ 'app_core/canonical_remote_contract.py',
+ 'app_core/canonical_schema.py',
+ 'app_core/coverage_presentation.py',
+ 'app_core/current_wagers_trace.py',
+ 'app_core/draftkings_classic.py',
+ 'app_core/espn_ncaaf_odds.py',
+ 'app_core/evidence_drive.py',
+ 'app_core/evidence_remote.py',
+ 'app_core/feature_processing.py',
+ 'app_core/football_feature_capture.py',
+ 'app_core/football_identity_capture.py',
+ 'app_core/football_stage1_cycle.py',
+ 'app_core/football_validation_v2.py',
+ 'app_core/game_coverage.py',
+ 'app_core/market_probability_model.py',
+ 'app_core/market_stage_metrics.py',
+ 'app_core/mlb_home_runline_contract.py',
+ 'app_core/ncaaf_compatible_observation.py',
+ 'app_core/ncaaf_compatible_pipeline.py',
+ 'app_core/ncaaf_history.py',
+ 'app_core/ncaaf_identity.py',
+ 'app_core/ncaaf_model_compatibility.py',
+ 'app_core/ncaaf_prospective.py',
+ 'app_core/ncaaf_prospective_chronology.py',
+ 'app_core/ncaaf_prospective_store.py',
+ 'app_core/ncaaf_research.py',
+ 'app_core/ncaaf_research_contract.py',
+ 'app_core/ncaaf_schedule.py',
+ 'app_core/nfl_calibration_evidence.py',
+ 'app_core/nfl_inference_evidence.py',
+ 'app_core/nfl_native_provenance.py',
+ 'app_core/nhl_puck_line_evidence.py',
+ 'app_core/performance_spans.py',
+ 'app_core/prediction_evidence.py',
+ 'app_core/producer_provenance.py',
+ 'app_core/prospective_remote.py',
+ 'app_core/prospective_validation_plans.py',
+ 'app_core/provider_health.py',
+ 'app_core/public_board.py',
+ 'app_core/public_history.py',
+ 'app_core/remote_canonical_download.py',
+ 'app_core/research_display.py',
+ 'app_core/research_estimate_trace.py',
+ 'app_core/research_model_recovery.py',
+ 'app_core/research_replay.py',
+ 'app_core/scoped_reads.py',
+ 'app_core/source_contract.py',
+ 'app_core/source_evidence_intake.py',
+ 'app_core/stage_timing.py',
+ 'app_core/team_name_mapping.py',
+ 'app_core/weights_config.py',
+ 'core/live_wager_contract.py',
+ 'core/market_policy.py',
+ 'core/price_value.py',
+ 'core/probability_calibration.py',
+ 'core/run_readiness.py',
+ 'core/sport_policy.py',
+ 'core/streamlit_pipeline.py',
+ 'core/team_mapper.py',
+ 'core/wager_decisions.py',
+ 'data/calibration/bucket_stats.json',
+ 'data/calibration/effective_prob_calibration.json',
+ 'docs/audits/2026-09-23-prospective-validation-plans.md',
+ 'docs/ci-test-execution.md',
+ 'docs/examples/slate-coverage-synthetic.json',
+ 'docs/football-stage2.md',
+ 'docs/football-validation-v2.md',
+ 'docs/paid-launch/dfs-projection-identity-policy.md',
+ 'docs/paid-launch/drive-history-loading.md',
+ 'docs/paid-launch/estimate-availability.md',
+ 'docs/paid-launch/football-catalog-reconciliation.md',
+ 'docs/paid-launch/launch-baseline-manifest.json',
+ 'docs/paid-launch/launch-scope-policy-canonical-download-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ci-scheduling-v1.json',
+ 'docs/paid-launch/launch-scope-policy-drive-history-v1.json',
+ 'docs/paid-launch/launch-scope-policy-estimate-v1.json',
+ 'docs/paid-launch/launch-scope-policy-football-catalog-v1.json',
+ 'docs/paid-launch/launch-scope-policy-football-research-v1.json',
+ 'docs/paid-launch/launch-scope-policy-home-runline-v1.json',
+ 'docs/paid-launch/launch-scope-policy-mlb-nhl-research-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-chronology-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-compatibility-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-normal-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-research-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-v2.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-admission-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-calibration-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-inputs-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-native-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-provenance-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-ui-reblend-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nhl-puck-line-v1.json',
+ 'docs/paid-launch/launch-scope-policy-pick-board-origin-v1.json',
+ 'docs/paid-launch/launch-scope-policy-preview-binding-v1.json',
+ 'docs/paid-launch/launch-scope-policy-producer-provenance-v1.json',
+ 'docs/paid-launch/launch-scope-policy-readiness-dashboard-v1.json',
+ 'docs/paid-launch/launch-scope-policy-remote-canonical-v1.json',
+ 'docs/paid-launch/launch-scope-policy-remote-continuation-v1.json',
+ 'docs/paid-launch/launch-scope-policy-slate-audit-v1.json',
+ 'docs/paid-launch/launch-scope-policy-source-contract-v1.json',
+ 'docs/paid-launch/launch-scope-policy-source-evidence-intake-v1.json',
+ 'docs/paid-launch/launch-scope-policy-v2.json',
+ 'docs/paid-launch/launch-scope-policy-v3.json',
+ 'docs/paid-launch/launch-scope-policy-v4.json',
+ 'docs/paid-launch/mlb-home-runline-contract.md',
+ 'docs/paid-launch/mlb-nhl-research-bindings.md',
+ 'docs/paid-launch/ncaaf-compatibility-binding-v1.json',
+ 'docs/paid-launch/ncaaf-compatible-normal-integration.md',
+ 'docs/paid-launch/ncaaf-coverage-corrections.md',
+ 'docs/paid-launch/ncaaf-private-target-replay.md',
+ 'docs/paid-launch/ncaaf-prospective-chronology.md',
+ 'docs/paid-launch/ncaaf-recovered-compatibility.md',
+ 'docs/paid-launch/ncaaf-schedule-coverage.md',
+ 'docs/paid-launch/nfl-admission-bindings.md',
+ 'docs/paid-launch/nfl-calibration-evidence.md',
+ 'docs/paid-launch/nfl-native-feature-provenance.md',
+ 'docs/paid-launch/nfl-novig-qualification-decision.md',
+ 'docs/paid-launch/nfl-novig-source-contract.md',
+ 'docs/paid-launch/nfl-novig-source-evidence.json',
+ 'docs/paid-launch/nfl-oct4-provenance.md',
+ 'docs/paid-launch/nfl-prospective-capture.md',
+ 'docs/paid-launch/nfl-prospective-research-plan.md',
+ 'docs/paid-launch/nfl-ui-reblend-retention.md',
+ 'docs/paid-launch/nhl-puck-line-evidence.md',
+ 'docs/paid-launch/normal-football-research.md',
+ 'docs/paid-launch/pick-board-origin.md',
+ 'docs/paid-launch/preview-coverage-binding.md',
+ 'docs/paid-launch/private-canonical-download.md',
+ 'docs/paid-launch/private-remote-canonical-download.md',
+ 'docs/paid-launch/producer-provenance-v2.md',
+ 'docs/paid-launch/provider-caller-health-policy.md',
+ 'docs/paid-launch/readiness-dashboard-schemas.md',
+ 'docs/paid-launch/source-evidence-intake.md',
+ 'docs/slate-coverage.md',
+ 'parlaypicker/app/streamlit_app.py',
+ 'publishing/board.html',
+ 'scripts/benchmark_drive_history_loading.py',
+ 'scripts/benchmark_refresh_lock_storage.py',
+ 'scripts/canonical_download_scope.py',
+ 'scripts/ci_scheduling_scope.py',
+ 'scripts/ci_test_file_costs_v1.json',
+ 'scripts/drive_history_scope.py',
+ 'scripts/estimate_scope.py',
+ 'scripts/football_catalog_scope.py',
+ 'scripts/football_research_scope.py',
+ 'scripts/home_runline_scope.py',
+ 'scripts/mlb_nhl_research_scope.py',
+ 'scripts/ncaaf_chronology_scope.py',
+ 'scripts/ncaaf_compatibility_scope.py',
+ 'scripts/ncaaf_normal_scope.py',
+ 'scripts/ncaaf_research_scope.py',
+ 'scripts/nfl_admission_scope.py',
+ 'scripts/nfl_calibration_scope.py',
+ 'scripts/nfl_inputs_scope.py',
+ 'scripts/nfl_native_scope.py',
+ 'scripts/nfl_provenance_scope.py',
+ 'scripts/nfl_ui_scope.py',
+ 'scripts/nhl_puck_line_scope.py',
+ 'scripts/pick_board_scope.py',
+ 'scripts/prepare_nfl_calibration_evidence.py',
+ 'scripts/preview_binding_scope.py',
+ 'scripts/producer_provenance_scope.py',
+ 'scripts/readiness_dashboard_scope.py',
+ 'scripts/reconcile_slate.py',
+ 'scripts/remote_canonical_scope.py',
+ 'scripts/remote_continuation_scope.py',
+ 'scripts/run_ci_tests.py',
+ 'scripts/slate_audit_scope.py',
+ 'scripts/source_contract_scope.py',
+ 'scripts/source_intake_scope.py',
+ 'streamlit_app.py',
+ 'tests/activation_fixture.py',
+ 'tests/conftest.py',
+ 'tests/fixtures/activation/config.json',
+ 'tests/fixtures/football/cfbd-alternate-names-retained.json',
+ 'tests/paid_launch/case_isolation_and_scope.py',
+ 'tests/paid_launch/case_policy_and_contracts.py',
+ 'tests/paid_launch/case_postgres_api.py',
+ 'tests/paid_launch/case_subscriber_completion.py',
+ 'tests/paid_launch/conftest.py',
+ 'tests/pregame_selection_fixture.py',
+ 'tests/public_bundle_browser.cjs',
+ 'tests/public_parlay_products.cjs',
+ 'tests/public_refresh.cjs',
+ 'tests/public_results_filters.cjs',
+ 'tests/public_site_browser.cjs',
+ 'tests/qualification_ops/__init__.py',
+ 'tests/qualification_ops/auth_recovery_suite.py',
+ 'tests/qualification_ops/duration_suite.py',
+ 'tests/qualification_ops/fixtures/.gitattributes',
+ 'tests/qualification_ops/fixtures/legacy_snapshot_acquire.py',
+ 'tests/qualification_ops/fixtures/previous_oauth_snapshot_acquire.py',
+ 'tests/qualification_ops/functional_suite.py',
+ 'tests/qualification_ops/mirror_recovery_suite.py',
+ 'tests/qualification_ops/paths.py',
+ 'tests/qualification_ops/requirements.txt',
+ 'tests/qualification_ops/review_closure_suite.py',
+ 'tests/qualification_ops/run_offline.py',
+ 'tests/qualification_ops/runner_scheduling_suite.py',
+ 'tests/subscriber_journey_browser.cjs',
+ 'tests/test_absolute_production_gate.py',
+ 'tests/test_activation_reverification.py',
+ 'tests/test_activation_scheduler_performance.py',
+ 'tests/test_bankroll_simulator_resilience.py',
+ 'tests/test_batter_props.py',
+ 'tests/test_best_available_candidate_audit.py',
+ 'tests/test_best_duos.py',
+ 'tests/test_best_duos_strict.py',
+ 'tests/test_best_overall_pick_logic.py',
+ 'tests/test_best_picks_calibration_pass.py',
+ 'tests/test_best_picks_export_identity_columns.py',
+ 'tests/test_best_picks_full_game_coverage.py',
+ 'tests/test_best_picks_identity_required.py',
+ 'tests/test_best_picks_kelly_attach.py',
+ 'tests/test_best_picks_match_analysis.py',
+ 'tests/test_best_picks_novig_priority.py',
+ 'tests/test_board_diagnostics.py',
+ 'tests/test_bucket_calibration.py',
+ 'tests/test_calibration.py',
+ 'tests/test_calibration_promotion.py',
+ 'tests/test_calibration_tuning.py',
+ 'tests/test_calibration_update.py',
+ 'tests/test_candidate_authority_projection.py',
+ 'tests/test_candidate_chronology_hotfix.py',
+ 'tests/test_candidate_evidence_serialization.py',
+ 'tests/test_candidate_generation.py',
+ 'tests/test_candidate_recap.py',
+ 'tests/test_candidate_weight_analysis.py',
+ 'tests/test_canonical_download.py',
+ 'tests/test_canonical_download_scope.py',
+ 'tests/test_card_recovery_emptiness.py',
+ 'tests/test_chicago_bkn.py',
+ 'tests/test_ci_offline_transports.py',
+ 'tests/test_ci_scheduling_scope.py',
+ 'tests/test_ci_test_shards.py',
+ 'tests/test_clock_scope_exception_proposal.py',
+ 'tests/test_clv_and_backtest.py',
+ 'tests/test_college_novig.py',
+ 'tests/test_college_public_grading.py',
+ 'tests/test_compact_export.py',
+ 'tests/test_compact_probability_export.py',
+ 'tests/test_consistent_spread_book.py',
+ 'tests/test_consistent_total_book.py',
+ 'tests/test_controlled_prop_rollout.py',
+ 'tests/test_controlled_trial.py',
+ 'tests/test_controlled_trial_integration.py',
+ 'tests/test_controlled_trial_quality.py',
+ 'tests/test_core_engine_updates.py',
+ 'tests/test_corrupt_odds_guard.py',
+ 'tests/test_current_wagers_trace_and_release.py',
+ 'tests/test_daily_dashboard.py',
+ 'tests/test_dfs_lock_picker.py',
+ 'tests/test_dfs_projection_identity.py',
+ 'tests/test_dfs_scope_policy.py',
+ 'tests/test_diagnostics.py',
+ 'tests/test_draftkings_classic.py',
+ 'tests/test_draftkings_mlb_classic.py',
+ 'tests/test_draftkings_panel.py',
+ 'tests/test_drive_history_loading.py',
+ 'tests/test_drive_history_scope_policy.py',
+ 'tests/test_earned_actionable_over.py',
+ 'tests/test_edge_instrumentation.py',
+ 'tests/test_edge_no_stake_gates.py',
+ 'tests/test_empirical_finalist_selection.py',
+ 'tests/test_empirical_tiers.py',
+ 'tests/test_espn_observed_quotes.py',
+ 'tests/test_espn_results_wnba.py',
+ 'tests/test_estimate_availability.py',
+ 'tests/test_estimate_scope_policy.py',
+ 'tests/test_evidence_config.py',
+ 'tests/test_evidence_drive.py',
+ 'tests/test_evidence_health.py',
+ 'tests/test_evidence_remote.py',
+ 'tests/test_export_scope.py',
+ 'tests/test_fallback_ev.py',
+ 'tests/test_fallback_slate_keeps_theover_signal.py',
+ 'tests/test_feature_population.py',
+ 'tests/test_feature_processing.py',
+ 'tests/test_fit_blend_weights.py',
+ 'tests/test_fit_bucket_stats_recency.py',
+ 'tests/test_football_catalog_aliases.py',
+ 'tests/test_football_catalog_scope.py',
+ 'tests/test_football_coverage.py',
+ 'tests/test_football_fallback.py',
+ 'tests/test_football_feature_capture.py',
+ 'tests/test_football_identity_capture.py',
+ 'tests/test_football_inventory.py',
+ 'tests/test_football_research_scope.py',
+ 'tests/test_football_side_fallback.py',
+ 'tests/test_football_stage1.py',
+ 'tests/test_football_stage2.py',
+ 'tests/test_football_v3_feasibility.py',
+ 'tests/test_football_validation_v2.py',
+ 'tests/test_force_deploy_staking.py',
+ 'tests/test_game_already_started_guard.py',
+ 'tests/test_game_coverage.py',
+ 'tests/test_game_time_est_conversion.py',
+ 'tests/test_gemini_bet_gate.py',
+ 'tests/test_gemini_public_evidence.py',
+ 'tests/test_gemini_research_batch.py',
+ 'tests/test_gemini_review_evidence.py',
+ 'tests/test_generate_parlays_no_infinite_loop.py',
+ 'tests/test_grade_from_scores.py',
+ 'tests/test_grade_props.py',
+ 'tests/test_grade_slate_no_play.py',
+ 'tests/test_grade_tiers.py',
+ 'tests/test_home_runline_scope_policy.py',
+ 'tests/test_hosted_board_reconciliation.py',
+ 'tests/test_imported_recaps.py',
+ 'tests/test_jul27_regression_guardrails.py',
+ 'tests/test_kalshi_alias_overrides.py',
+ 'tests/test_kalshi_diagnostics.py',
+ 'tests/test_kalshi_direction_veto.py',
+ 'tests/test_kalshi_enrich_league_inference.py',
+ 'tests/test_kalshi_enrich_markets.py',
+ 'tests/test_kalshi_enrich_nullable_inputs.py',
+ 'tests/test_kalshi_enrich_timeout.py',
+ 'tests/test_kalshi_event_date_filter.py',
+ 'tests/test_kalshi_event_match_one_sided.py',
+ 'tests/test_kalshi_extreme_price_guard.py',
+ 'tests/test_kalshi_failure_reasons.py',
+ 'tests/test_kalshi_family_inference.py',
+ 'tests/test_kalshi_matching_fixes.py',
+ 'tests/test_kalshi_merge_game_date_types.py',
+ 'tests/test_kalshi_mlb_event_matching.py',
+ 'tests/test_kalshi_nba_spread.py',
+ 'tests/test_kalshi_orientation_and_recap.py',
+ 'tests/test_kalshi_series_cache_refresh.py',
+ 'tests/test_kalshi_spread_orientation.py',
+ 'tests/test_kalshi_totals_line_tolerance.py',
+ 'tests/test_kalshi_wrong_game_title_guard.py',
+ 'tests/test_launch_scope_integration.py',
+ 'tests/test_league_evaluation.py',
+ 'tests/test_league_infer_from_base.py',
+ 'tests/test_league_recovery_and_kalshi_tolerance.py',
+ 'tests/test_lean_card.py',
+ 'tests/test_line_drift.py',
+ 'tests/test_line_drift_diagnostics.py',
+ 'tests/test_live_activation_acceptance.py',
+ 'tests/test_live_wager_contract.py',
+ 'tests/test_lock_storage_performance.py',
+ 'tests/test_lock_total_input_review.py',
+ 'tests/test_locked_picks.py',
+ 'tests/test_low_line_over_override.py',
+ 'tests/test_market_calibration.py',
+ 'tests/test_market_probability_model.py',
+ 'tests/test_matchup_auto_detect_column.py',
+ 'tests/test_matchup_identity_fallback.py',
+ 'tests/test_meta_model.py',
+ 'tests/test_minor_improvements.py',
+ 'tests/test_ml_flatness_diagnostics.py',
+ 'tests/test_ml_target_guard.py',
+ 'tests/test_mlb_event_matcher.py',
+ 'tests/test_mlb_history.py',
+ 'tests/test_mlb_home_runline_contract.py',
+ 'tests/test_mlb_live_model_connection.py',
+ 'tests/test_mlb_nhl_research_bindings.py',
+ 'tests/test_mlb_nhl_research_scope.py',
+ 'tests/test_mlb_pitcher_history.py',
+ 'tests/test_mlb_pitcher_stats.py',
+ 'tests/test_mlb_pregame_receipts.py',
+ 'tests/test_mlb_production_readiness.py',
+ 'tests/test_mlb_prospective.py',
+ 'tests/test_mlb_receipt_audit.py',
+ 'tests/test_mlb_receipt_remote.py',
+ 'tests/test_mlb_receipt_workflow.py',
+ 'tests/test_mlb_research.py',
+ 'tests/test_mlb_runline_cover.py',
+ 'tests/test_mlb_spread_total_model.py',
+ 'tests/test_mlb_spread_total_training.py',
+ 'tests/test_mlb_team_stats.py',
+ 'tests/test_mlb_total_debias.py',
+ 'tests/test_mlb_total_direction_conflict.py',
+ 'tests/test_model_direction.py',
+ 'tests/test_model_validation.py',
+ 'tests/test_moneyline_parlay.py',
+ 'tests/test_moneyline_wiring.py',
+ 'tests/test_my_fixes.py',
+ 'tests/test_navigation_persistence.py',
+ 'tests/test_nba_stats_reliability.py',
+ 'tests/test_ncaaf_chronology_scope.py',
+ 'tests/test_ncaaf_closing.py',
+ 'tests/test_ncaaf_compatibility_scope.py',
+ 'tests/test_ncaaf_compatible_pipeline.py',
+ 'tests/test_ncaaf_coverage_corrections.py',
+ 'tests/test_ncaaf_coverage_scope_policy.py',
+ 'tests/test_ncaaf_data_access.py',
+ 'tests/test_ncaaf_history.py',
+ 'tests/test_ncaaf_identity.py',
+ 'tests/test_ncaaf_model_compatibility.py',
+ 'tests/test_ncaaf_normal_pipeline.py',
+ 'tests/test_ncaaf_normal_scope.py',
+ 'tests/test_ncaaf_prospective.py',
+ 'tests/test_ncaaf_prospective_chronology.py',
+ 'tests/test_ncaaf_research.py',
+ 'tests/test_ncaaf_research_contract.py',
+ 'tests/test_ncaaf_research_scope.py',
+ 'tests/test_ncaaf_schedule_coverage.py',
+ 'tests/test_ncaaf_schedule_scope_policy.py',
+ 'tests/test_ncaaf_selection.py',
+ 'tests/test_ncaaf_stats_aliases.py',
+ 'tests/test_netlify_publishing.py',
+ 'tests/test_nfl_admission_bindings.py',
+ 'tests/test_nfl_admission_scope.py',
+ 'tests/test_nfl_calibration_evidence.py',
+ 'tests/test_nfl_calibration_scope.py',
+ 'tests/test_nfl_context_export.py',
+ 'tests/test_nfl_inference_evidence.py',
+ 'tests/test_nfl_injury_context.py',
+ 'tests/test_nfl_inputs_scope.py',
+ 'tests/test_nfl_lock_inputs.py',
+ 'tests/test_nfl_market.py',
+ 'tests/test_nfl_model_validation.py',
+ 'tests/test_nfl_native_provenance.py',
+ 'tests/test_nfl_native_scope.py',
+ 'tests/test_nfl_player_props.py',
+ 'tests/test_nfl_provenance_scope.py',
+ 'tests/test_nfl_research_replay.py',
+ 'tests/test_nfl_selection.py',
+ 'tests/test_nfl_ui_reblend.py',
+ 'tests/test_nfl_ui_scope.py',
+ 'tests/test_nhl_pittsburgh_stats_resolution.py',
+ 'tests/test_nhl_puck_line_evidence.py',
+ 'tests/test_nhl_puck_line_scope.py',
+ 'tests/test_no_bet_display_reasons.py',
+ 'tests/test_no_bet_pick_quality.py',
+ 'tests/test_normalized_ev.py',
+ 'tests/test_novig_fetch_no_hardcoded_date.py',
+ 'tests/test_novig_half_run.py',
+ 'tests/test_novig_unmatched_fallback.py',
+ 'tests/test_odds_api_failures.py',
+ 'tests/test_odds_api_key.py',
+ 'tests/test_odds_api_pagination.py',
+ 'tests/test_odds_fill_reverse_match.py',
+ 'tests/test_odds_source.py',
+ 'tests/test_odds_source_calibration.py',
+ 'tests/test_original_estimates.py',
+ 'tests/test_parlay_accuracy_changes.py',
+ 'tests/test_parlay_correlation.py',
+ 'tests/test_parlay_persistence.py',
+ 'tests/test_parlay_safety.py',
+ 'tests/test_parlay_ticket_quotes.py',
+ 'tests/test_parlay_unique_games.py',
+ 'tests/test_parlay_validation.py',
+ 'tests/test_per_game_boards.py',
+ 'tests/test_per_game_boards_ui.py',
+ 'tests/test_performance_pipeline_wnba.py',
+ 'tests/test_performance_recap_scope.py',
+ 'tests/test_pick_accuracy.py',
+ 'tests/test_pick_board_origin.py',
+ 'tests/test_pick_board_scope.py',
+ 'tests/test_pick_of_day.py',
+ 'tests/test_pipeline_date_fill_from_base.py',
+ 'tests/test_pipeline_identity_before_portfolio.py',
+ 'tests/test_pipeline_master_et_kalshi_fixes.py',
+ 'tests/test_pipeline_missing_columns.py',
+ 'tests/test_pitcher_prop_expansion.py',
+ 'tests/test_portfolio_calibration_and_caps.py',
+ 'tests/test_post2352_probability_closure.py',
+ 'tests/test_post2355_integration_verification.py',
+ 'tests/test_post2356_priced_value_consistency.py',
+ 'tests/test_post2357_paid_launch_evidence.py',
+ 'tests/test_post2357_read_only_census.py',
+ 'tests/test_post2357_row_contract_isolation.py',
+ 'tests/test_post2360_census_launcher.py',
+ 'tests/test_post2362_census_closure.py',
+ 'tests/test_post2362_external_verification.py',
+ 'tests/test_post2362_trace_probability_closure.py',
+ 'tests/test_post2366_eligibility_capacity.py',
+ 'tests/test_precision_card.py',
+ 'tests/test_prediction_engine_flatness_diagnostics.py',
+ 'tests/test_prediction_engine_settingwithcopy.py',
+ 'tests/test_prediction_evidence.py',
+ 'tests/test_preselection_line_audit_consistency.py',
+ 'tests/test_preview_binding_scope.py',
+ 'tests/test_preview_coverage_binding.py',
+ 'tests/test_price_value.py',
+ 'tests/test_probability_display_order.py',
+ 'tests/test_probability_first_selection.py',
+ 'tests/test_probability_integrity_v11.py',
+ 'tests/test_probability_semantics.py',
+ 'tests/test_probation_portfolio_guard.py',
+ 'tests/test_producer_provenance.py',
+ 'tests/test_producer_provenance_scope.py',
+ 'tests/test_production_card_calibration_guard.py',
+ 'tests/test_productionization_status.py',
+ 'tests/test_prop_calibration.py',
+ 'tests/test_prop_grading.py',
+ 'tests/test_prop_model.py',
+ 'tests/test_prop_odds_ingest.py',
+ 'tests/test_prop_performance_recap.py',
+ 'tests/test_prop_pipeline.py',
+ 'tests/test_prop_runner.py',
+ 'tests/test_prospective_evidence.py',
+ 'tests/test_prospective_legacy_view.py',
+ 'tests/test_prospective_readiness_report.py',
+ 'tests/test_prospective_reconciliation.py',
+ 'tests/test_prospective_remote.py',
+ 'tests/test_prospective_research_models.py',
+ 'tests/test_prospective_source_view.py',
+ 'tests/test_prospective_sync.py',
+ 'tests/test_prospective_validation_plans.py',
+ 'tests/test_provider_caller_health.py',
+ 'tests/test_provider_health_scope_policy.py',
+ 'tests/test_public_assets.py',
+ 'tests/test_public_betting_fade.py',
+ 'tests/test_public_board.py',
+ 'tests/test_public_brand.py',
+ 'tests/test_public_grading_scheduler.py',
+ 'tests/test_public_history.py',
+ 'tests/test_public_parlays.py',
+ 'tests/test_public_probability_audit.py',
+ 'tests/test_public_prop_history.py',
+ 'tests/test_public_prop_timing.py',
+ 'tests/test_public_reconciliation.py',
+ 'tests/test_public_record.py',
+ 'tests/test_public_refresh.py',
+ 'tests/test_publish_authority_wiring.py',
+ 'tests/test_publish_panel.py',
+ 'tests/test_quote_freshness.py',
+ 'tests/test_ranking_evidence_rebuild.py',
+ 'tests/test_raw_book_odds_diag.py',
+ 'tests/test_readiness_dashboard.py',
+ 'tests/test_readiness_dashboard_scope.py',
+ 'tests/test_recap_tier_summary.py',
+ 'tests/test_recovered_row_value.py',
+ 'tests/test_recovery_calibration_gate.py',
+ 'tests/test_refresh_calibration.py',
+ 'tests/test_refresh_lock_performance.py',
+ 'tests/test_regression_kalshi_and_results.py',
+ 'tests/test_relock_changes.py',
+ 'tests/test_remote_canonical_continuation.py',
+ 'tests/test_remote_canonical_download.py',
+ 'tests/test_remote_canonical_scope.py',
+ 'tests/test_remote_continuation_scope.py',
+ 'tests/test_research_actions_preflight.py',
+ 'tests/test_research_api_budget.py',
+ 'tests/test_research_cycle_audit.py',
+ 'tests/test_research_parlays.py',
+ 'tests/test_research_performance.py',
+ 'tests/test_research_probability_browser.py',
+ 'tests/test_research_probability_display.py',
+ 'tests/test_research_probability_producer.py',
+ 'tests/test_research_scheduler.py',
+ 'tests/test_results_clarity.py',
+ 'tests/test_results_ingestion.py',
+ 'tests/test_results_overview.py',
+ 'tests/test_results_parlay_reconciliation.py',
+ 'tests/test_reversed_game_dedupe.py',
+ 'tests/test_run_click_counter.py',
+ 'tests/test_run_readiness.py',
+ 'tests/test_sanitization.py',
+ 'tests/test_schedule_staleness.py',
+ 'tests/test_scheduler_recovery.py',
+ 'tests/test_selection_probability_integrity.py',
+ 'tests/test_selector_validation.py',
+ 'tests/test_separate_prop_analysis.py',
+ 'tests/test_sftp_publishing.py',
+ 'tests/test_sidebar_sport_view.py',
+ 'tests/test_simple_publication_workflow.py',
+ 'tests/test_six_sport_adapters.py',
+ 'tests/test_slate_audit_scope.py',
+ 'tests/test_slate_coverage.py',
+ 'tests/test_slate_performance.py',
+ 'tests/test_slate_quality.py',
+ 'tests/test_source_contract_pipeline.py',
+ 'tests/test_source_contract_scope.py',
+ 'tests/test_source_evidence_intake.py',
+ 'tests/test_source_intake_scope.py',
+ 'tests/test_speculative_lean_recovery.py',
+ 'tests/test_sport_deployment.py',
+ 'tests/test_sport_market_gate.py',
+ 'tests/test_spread_away_orientation.py',
+ 'tests/test_stale_research_carrier.py',
+ 'tests/test_status_display_labels.py',
+ 'tests/test_strategy_lab_kelly_alignment.py',
+ 'tests/test_strategy_lab_realized.py',
+ 'tests/test_strategy_lab_top_ev_kelly_safety.py',
+ 'tests/test_strategy_lab_top_ev_production_source.py',
+ 'tests/test_string_series_categorical_safety.py',
+ 'tests/test_subscriber_journey.py',
+ 'tests/test_suspicious_upload_mismatch.py',
+ 'tests/test_sweet_spot_export_scope.py',
+ 'tests/test_sweet_spot_filter.py',
+ 'tests/test_sweet_spot_segmentation.py',
+ 'tests/test_team_mapper.py',
+ 'tests/test_theover_bet_rows_resilience.py',
+ 'tests/test_theover_fade_scope.py',
+ 'tests/test_theover_overweight_fix.py',
+ 'tests/test_theover_source_filter.py',
+ 'tests/test_threshold_validation.py',
+ 'tests/test_tiered_prop_parlays.py',
+ 'tests/test_tighten_thin_actionable_overs.py',
+ 'tests/test_top_ten_history.py',
+ 'tests/test_total_consensus_provenance.py',
+ 'tests/test_total_quality_diagnostics.py',
+ 'tests/test_totals_pick_direction.py',
+ 'tests/test_true_parlay_engine_unittest.py',
+ 'tests/test_true_parlay_public_unittest.py',
+ 'tests/test_two_stage_finalist_selection.py',
+ 'tests/test_under_floor_relaxation.py',
+ 'tests/test_upload_column_aliases_and_game_date_fallback.py',
+ 'tests/test_upload_header_punctuation_normalization.py',
+ 'tests/test_upload_placeholder_identity_fallback.py',
+ 'tests/test_upload_team_columns_fallback.py',
+ 'tests/test_uploader_compat.py',
+ 'tests/test_wager_integrity_audit.py',
+ 'tests/test_walk_forward.py',
+ 'tests/test_win_probability_first_card.py',
+ 'tests/test_wnba_cold_start_blend.py',
+ 'tests/test_wnba_kalshi_matching.py',
+ 'tests/test_wnba_model_features.py',
+ 'tests/test_wnba_public_results.py',
+ 'tests/test_wnba_selection.py')
+NCAAF_CUSTODY_BINDINGS = {'base': '00434dc8d14227648bb19795d8e05bb9304bca99',
+ 'base_tree': '4fb2f053e3cc38c75c73bf135dfb9c62f666847b',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '0772744a3b07e7a3aa67d889efff45743e4562e4fe8b781e2d2b3d5111424d9d',
+ 'previous_policy_blob': '58f1ff6faa24356e80350fde2169e7c420fc55b4',
+ 'previous_ci_policy_blob': 'f803a4405199ba3a2686cfb8e2948270a17268b4',
+ 'previous_compatibility_policy_blob': '4d0442c4a3626f717ae92bf02296279f69bf0c0e',
+ 'reviewed_blobs': {'app_core/ncaaf_response_custody.py': '0802648a806a6934db0d5fac0aab839c20aa5acf',
+                    'app_core/ncaaf_pipeline_evidence.py': '07ae5505820bbe1410fd09c3300bad2838a92fc0',
+                    'app_core/per_game_boards.py': '5dd9866320bd0a658cc1a6986e713e48f69f3620',
+                    'app_core/slate_coverage.py': 'c2f24191c251bb3ae75d220aa84ea470146a4560',
+                    'tests/test_ncaaf_response_custody.py': '2a0e6174ce5d83e121ff2068161ce9cec64c877b',
+                    'docs/paid-launch/ncaaf-original-response-custody.md': '979fc56b1f32095dbca9fb7cdae0e1c021809f53',
+                    'scripts/ncaaf_custody_scope.py': '3c4a030cccb3e36127d6a8cae7b3a2a2e07bbd55',
+                    'tests/test_ncaaf_custody_scope.py': 'd9facae4405e54cbae44df3755cf4015b7a12aa0'},
+ 'scope_module_sha256': '7998eeca426f21412e8e65c61da81ae09fd7a0499379f5e5e6c19205fe6b1e1d',
+ 'successor_guard_sha256': '7ceb9d0cf512e1702b774b3939fcaf837dc2526bcf73a3cb730996a18216b2f6'}
+NCAAF_CUSTODY_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", typ'
+ b'e=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-outp'
+ b'ut", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NCAAF_CHRONOLOG'
+ b'Y_POLICY_PATH):\n            code, report = _run_ncaaf_chronology_integrated(args.manifest, args.base, NC'
+ b'AAF_CHRONOLOGY_BINDINGS)\n        elif exists_at("HEAD", PREVIEW_BINDING_POLICY_PATH):\n            code, '
+ b'report = _run_preview_binding_integrated(args.manifest, args.base, PREVIEW_BINDING_BINDINGS)\n        eli'
+ b'f exists_at("HEAD", NCAAF_NORMAL_POLICY_PATH):\n            code, report = _run_ncaaf_normal_integrated(a'
+ b'rgs.manifest, args.base, NCAAF_NORMAL_BINDINGS)\n        elif exists_at("HEAD", READINESS_DASHBOARD_POLIC'
+ b'Y_PATH):\n            code, report = _run_readiness_dashboard_integrated(args.manifest, args.base, READIN'
+ b'ESS_DASHBOARD_BINDINGS)\n        elif exists_at("HEAD", NCAAF_COMPAT_POLICY_PATH):\n            code, repo'
+ b'rt = _run_ncaaf_compatibility_integrated(args.manifest, args.base, NCAAF_COMPAT_BINDINGS)\n        elif e'
+ b'xists_at("HEAD", CI_SCHEDULING_POLICY_PATH):\n            code, report = _run_ci_scheduling_integrated(ar'
+ b'gs.manifest, args.base, CI_SCHEDULING_BINDINGS)\n        elif exists_at("HEAD", SLATE_AUDIT_POLICY_PATH):'
+ b'\n            code, report = _run_slate_audit_integrated(args.manifest, args.base, SLATE_AUDIT_BINDINGS)\n'
+ b'        elif exists_at("HEAD", FOOTBALL_RESEARCH_POLICY_PATH):\n            code, report = _run_football_'
+ b'research_integrated(args.manifest, args.base, FOOTBALL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD",'
+ b' REMOTE_CONTINUATION_POLICY_PATH):\n            code, report = _run_remote_continuation_integrated(args.m'
+ b'anifest, args.base, REMOTE_CONTINUATION_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CANONICAL_POLICY'
+ b'_PATH):\n            code, report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CAN'
+ b'ONICAL_BINDINGS)\n        elif exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):\n            code, repor'
+ b't = _run_canonical_download_integrated(args.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)\n        el'
+ b'if exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):\n            code, report = _run_ncaaf_research_integra'
+ b'ted(args.manifest, args.base, NCAAF_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", MLB_NHL_RESEARCH_P'
+ b'OLICY_PATH):\n            code, report = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_N'
+ b'HL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, re'
+ b'port = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        eli'
+ b'f exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n            code, report = _run_nhl_puck_line_integrated'
+ b'(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY'
+ b'_PATH):\n            code, report = _run_nfl_calibration_integrated(args.manifest, args.base, NFL_CALIBRA'
+ b'TION_BINDINGS)\n        elif exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _ru'
+ b'n_source_intake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEA'
+ b'D", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args.manifest, args.base, NFL'
+ b'_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pi'
+ b'ck_board_integrated(args.manifest, args.base, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NA'
+ b'TIVE_POLICY_PATH):\n            code, report = _run_nfl_native_integrated(args.manifest, args.base, NFL_N'
+ b'ATIVE_BINDINGS)\n        elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _r'
+ b'un_nfl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HE'
+ b'AD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_integrated(args.manifest, args.'
+ b'base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code'
+ b', report = _run_source_contract_integrated(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        e'
+ b'lif exists_at("HEAD", PROVENANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.'
+ b'manifest, args.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n            '
+ b'code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEA'
+ b'D", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated(args.manifest, args.base, NFL_BINDI'
+ b'NGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_PATH):\n            code, report = _run_estimate_inte'
+ b'grated(args.manifest, args.base, ESTIMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n '
+ b'           code, report = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif e'
+ b'xists_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manifest, args.bas'
+ b'e, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n            code, report = _run_c'
+ b'overage_integrated(args.manifest, args.base, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_'
+ b'POLICY_PATH):\n            code, report = _run_schedule_integrated(args.manifest, args.base, SCHEDULE_BIN'
+ b'DINGS)\n        elif exists_at("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrat'
+ b'ed(args.manifest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integrated'
+ b'(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n        report = {"schema_v'
+ b'ersion": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        cod'
+ b'e = 2\n    rendered = json.dumps(report, indent=2, sort_keys=True)\n    if args.json_output:\n        a'
+ b'rgs.json_output.parent.mkdir(parents=True, exist_ok=True)\n        args.json_output.write_text(rendered +'
+ b' "\\n", encoding="utf-8")\n    print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    ra'
+ b'ise SystemExit(main())\n')
+NCAAF_CUSTODY_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/ncaaf_pipeline_evidence.py': {'sha256': '3ad2b295b8dabee5c31e568b68d86b2cf92b728eae08ebf0e883a504aa25f60b',
+                                         'after_sha256': '7fdb9d01149f2e9ee19ee4092ed342ad11107d6cbca570450f964b6df2f9f49a',
+                                         'edits': [(b'from app_core import ncaaf_research_contract as cont'
+                                                    b'ract, ncaaf_research as research\nfrom app_core impor'
+                                                    b't producer_provenance as producer\nfrom app_core impo'
+                                                    b'rt ncaaf_compatible_pipeline as compatible\nfrom app_'
+                                                    b'core.research_estimate_trace import encode, fact, or'
+                                                    b'igin_metadata, generated_time\n\nVERSION = "ncaaf-norm'
+                                                    b'al-pipeline-inputs-v1"\n',
+                                                    b'from app_core import ncaaf_research_contract as cont'
+                                                    b'ract, ncaaf_research as research\nfrom app_core impor'
+                                                    b't producer_provenance as producer\nfrom app_core impo'
+                                                    b'rt ncaaf_compatible_pipeline as compatible\nfrom app_'
+                                                    b'core import ncaaf_response_custody as custody\nfrom a'
+                                                    b'pp_core.research_estimate_trace import encode, fact,'
+                                                    b' origin_metadata, generated_time\n\nVERSION = "ncaaf-n'
+                                                    b'ormal-pipeline-inputs-v1"\n'),
+                                                   (b'# Independently accepted exact packet/review and PUB'
+                                                    b'LIC derived-output permission.\n# Owner upload/select'
+                                                    b'ion never writes this catalog. It is empty in produc'
+                                                    b'tion.\nACCEPTED_PACKETS = {}\nPUBLIC_REASONS = frozens'
+                                                    b'et("""NCAAF_ORIGINAL_PACKET_NOT_SELECTED NCAAF_EXACT'
+                                                    b'_OFFER_NOT_SELECTED\nNCAAF_PACKET_AMBIGUOUS NCAAF_PAC'
+                                                    b'KET_INTEGRITY NCAAF_PACKET_SCHEMA NCAAF_INTEGER_PUSH'
+                                                    b'_MODEL_UNVALIDATED\nNCAAF_SOURCE_REVIEW_NOT_ACCEPTED '
+                                                    b'NCAAF_PUBLIC_DERIVED_RIGHTS_UNAVAILABLE NCAAF_INFERE'
+                                                    b'NCE_FAILED\n',
+                                                    b'# Independently accepted exact packet/review and PUB'
+                                                    b'LIC derived-output permission.\n# Owner upload/select'
+                                                    b'ion never writes this catalog. It is empty in produc'
+                                                    b'tion.\nACCEPTED_PACKETS = {}\nINPUT_VERSIONS = compati'
+                                                    b'ble.INPUT_VERSIONS | {custody.VERSION}\nRESULT_VERSIO'
+                                                    b'NS = compatible.RESULT_VERSIONS | {custody.RESULT_VE'
+                                                    b'RSION}\n\n\ndef _reader(packet):\n    return custody'
+                                                    b" if packet['payload']['version'] == custody.VERSION "
+                                                    b'else compatible\nPUBLIC_REASONS = frozenset("""NCAAF_'
+                                                    b'ORIGINAL_PACKET_NOT_SELECTED NCAAF_EXACT_OFFER_NOT_S'
+                                                    b'ELECTED\nNCAAF_PACKET_AMBIGUOUS NCAAF_PACKET_INTEGRIT'
+                                                    b'Y NCAAF_PACKET_SCHEMA NCAAF_INTEGER_PUSH_MODEL_UNVAL'
+                                                    b'IDATED\nNCAAF_SOURCE_REVIEW_NOT_ACCEPTED NCAAF_PUBLIC'
+                                                    b'_DERIVED_RIGHTS_UNAVAILABLE NCAAF_INFERENCE_FAILED\n'),
+                                                   (b'NCAAF_CANONICAL_EVENT_CONFLICT NCAAF_EVENT_AMBIGUOUS'
+                                                    b' NCAAF_EXACT_OFFER_AMBIGUOUS_OR_MISSING\nNCAAF_ALTERE'
+                                                    b'D_ORDERED_FEATURES NCAAF_EVALUATED_HOLDOUT_CONTAMINA'
+                                                    b'TION NCAAF_RUNTIME_BINDING_CONFLICT\nNCAAF_PROBABILIT'
+                                                    b'Y_BINDING_CONFLICT NCAAF_AUTHORITY_FORBIDDEN NCAAF_S'
+                                                    b'CHEDULE_RECEIPT_MISSING\nNCAAF_SCHEDULE_RECEIPT_CONFL'
+                                                    b'ICT""".split()) | compatible.REASONS\n\n\ndef digest(va'
+                                                    b'lue):\n',
+                                                    b'NCAAF_CANONICAL_EVENT_CONFLICT NCAAF_EVENT_AMBIGUOUS'
+                                                    b' NCAAF_EXACT_OFFER_AMBIGUOUS_OR_MISSING\nNCAAF_ALTERE'
+                                                    b'D_ORDERED_FEATURES NCAAF_EVALUATED_HOLDOUT_CONTAMINA'
+                                                    b'TION NCAAF_RUNTIME_BINDING_CONFLICT\nNCAAF_PROBABILIT'
+                                                    b'Y_BINDING_CONFLICT NCAAF_AUTHORITY_FORBIDDEN NCAAF_S'
+                                                    b'CHEDULE_RECEIPT_MISSING\nNCAAF_SCHEDULE_RECEIPT_CONFL'
+                                                    b'ICT""".split()) | compatible.REASONS | custody.REASO'
+                                                    b'NS\n\n\ndef digest(value):\n'),
+                                                   (b'    packet = json.loads(raw)\n    require(isinstance('
+                                                    b'packet, dict) and set(packet) == {"payload", "sha256'
+                                                    b'"}, "NCAAF_PACKET_SCHEMA")\n    p = packet["payload"]'
+                                                    b'\n    require(isinstance(p, dict) and p.get("version"'
+                                                    b') in {contract.VERSION, *compatible.INPUT_VERSIONS},'
+                                                    b' "NCAAF_PACKET_SCHEMA")\n    require(digest(p) == pac'
+                                                    b'ket["sha256"], "NCAAF_PACKET_INTEGRITY")\n    require'
+                                                    b'(p.get("evidence_label") in {"RETAINED", "SYNTHETIC"'
+                                                    b'}, "NCAAF_PACKET_SCHEMA")\n    if owner_upload:\n     '
+                                                    b'   require(p["evidence_label"] == "RETAINED", "NCAAF'
+                                                    b'_PACKET_SCHEMA")\n    if p["version"] in compatible.I'
+                                                    b'NPUT_VERSIONS:\n        compatible.load(packet)\n    r'
+                                                    b'eturn packet\n\n\n',
+                                                    b'    packet = json.loads(raw)\n    require(isinstance('
+                                                    b'packet, dict) and set(packet) == {"payload", "sha256'
+                                                    b'"}, "NCAAF_PACKET_SCHEMA")\n    p = packet["payload"]'
+                                                    b'\n    require(isinstance(p, dict) and p.get("version"'
+                                                    b') in {contract.VERSION, *INPUT_VERSIONS}, "NCAAF_PAC'
+                                                    b'KET_SCHEMA")\n    require(digest(p) == packet["sha256'
+                                                    b'"], "NCAAF_PACKET_INTEGRITY")\n    require(p.get("evi'
+                                                    b'dence_label") in {"RETAINED", "SYNTHETIC"}, "NCAAF_P'
+                                                    b'ACKET_SCHEMA")\n    if owner_upload:\n        require('
+                                                    b'p["evidence_label"] == "RETAINED", "NCAAF_PACKET_SCH'
+                                                    b'EMA")\n    if p["version"] in INPUT_VERSIONS:\n       '
+                                                    b' _reader(packet).load(packet)\n    return packet\n'
+                                                    b'\n\n'),
+                                                   (b'\n\ndef _transport(packet):\n    return compatible.view'
+                                                    b'(packet) if packet["payload"]["version"] in compatib'
+                                                    b'le.INPUT_VERSIONS else packet["payload"]\n\n\ndef _offe'
+                                                    b'r_matches(packet, source):\n',
+                                                    b'\n\ndef _transport(packet):\n    return _reader(packet)'
+                                                    b'.view(packet) if packet["payload"]["version"] in INP'
+                                                    b'UT_VERSIONS else packet["payload"]\n\n\ndef _offer_matc'
+                                                    b'hes(packet, source):\n'),
+                                                   (b'        require(len(packets) == 1, "NCAAF_PACKET_AMB'
+                                                    b'IGUOUS" if packets else "NCAAF_EXACT_OFFER_NOT_SELEC'
+                                                    b'TED")\n        attempted = packets[0]\n        schedul'
+                                                    b'e = board_schedule(source, attempted, inventory, at)'
+                                                    b'\n        is_compatible = attempted["payload"]["versi'
+                                                    b'on"] in compatible.INPUT_VERSIONS\n        if is_comp'
+                                                    b'atible:\n            approval = accepted(attempted)\n '
+                                                    b'           dependency_review = compatible.accepted_d'
+                                                    b'ependencies(attempted, approval, at)\n            che'
+                                                    b'cked, center, win, computation = compatible.infer(at'
+                                                    b'tempted, at)\n            m, target = checked["model"'
+                                                    b']["original_record"], checked["target"]\n            '
+                                                    b'fit = checked["fit"]\n        else:\n',
+                                                    b'        require(len(packets) == 1, "NCAAF_PACKET_AMB'
+                                                    b'IGUOUS" if packets else "NCAAF_EXACT_OFFER_NOT_SELEC'
+                                                    b'TED")\n        attempted = packets[0]\n        schedul'
+                                                    b'e = board_schedule(source, attempted, inventory, at)'
+                                                    b'\n        is_compatible = attempted["payload"]["versi'
+                                                    b'on"] in INPUT_VERSIONS\n        if is_compatible:\n   '
+                                                    b'         approval = accepted(attempted)\n            '
+                                                    b'dependency_review = _reader(attempted).accepted_depe'
+                                                    b'ndencies(attempted, approval, at)\n            checke'
+                                                    b'd, center, win, computation = _reader(attempted).inf'
+                                                    b'er(attempted, at)\n            m, target = checked["m'
+                                                    b'odel"]["original_record"], checked["target"]\n       '
+                                                    b'     fit = checked["fit"]\n        else:\n'),
+                                                   (b'    item = json.loads(metadata)\n    p = dict(version'
+                                                    b'=VERSION, status=result["ml_inference_status"], reas'
+                                                    b'on=result["ml_unavailable_reason"],\n        inferenc'
+                                                    b'e_time=at, scientific_acceptance=False, wagering_aut'
+                                                    b'hority=False, live_stake=0)\n    if attempted is None'
+                                                    b' and any(v["payload"]["version"] in compatible.INPUT'
+                                                    b'_VERSIONS for v in _SELECTED.get()):\n        p.updat'
+                                                    b'e(version=compatible.RESULT_VERSION, selected_packet'
+                                                    b'_hashes=[v["sha256"] for v in _SELECTED.get()])\n    '
+                                                    b'if result["ml_inference_status"] == "success":\n     '
+                                                    b'   p.update(original_packet=deepcopy(attempted), con'
+                                                    b'sumed_reader=reader_binding(),\n            board_sch'
+                                                    b'edule=schedule, raw_probability=fact(result["ml_prob'
+                                                    b'ability"]), original_blend=None, ui_refresh=None)\n  '
+                                                    b'      if attempted["payload"]["version"] in compatib'
+                                                    b'le.INPUT_VERSIONS:\n            p.update(version=comp'
+                                                    b'atible.result_version(attempted), computation=comput'
+                                                    b'ation, consumed_reader=compatible_reader_binding(att'
+                                                    b'empted),\n                consumed_dependency_review='
+                                                    b'dependency_review)\n    elif attempted is not None:\n '
+                                                    b'       p["attempted_packet_sha256"] = attempted["sha'
+                                                    b'256"]\n        if attempted["payload"]["version"] in '
+                                                    b'compatible.INPUT_VERSIONS:\n            p.update(vers'
+                                                    b'ion=compatible.result_version(attempted), original_p'
+                                                    b'acket=deepcopy(attempted))\n    item["ncaaf_inputs"] '
+                                                    b'= dict(payload=p, sha256=digest(p))\n    result.updat'
+                                                    b'e(fields, ml_estimate_metadata=encode(item))\n    ret'
+                                                    b'urn result\n',
+                                                    b'    item = json.loads(metadata)\n    p = dict(version'
+                                                    b'=VERSION, status=result["ml_inference_status"], reas'
+                                                    b'on=result["ml_unavailable_reason"],\n        inferenc'
+                                                    b'e_time=at, scientific_acceptance=False, wagering_aut'
+                                                    b'hority=False, live_stake=0)\n    if attempted is None'
+                                                    b' and any(v["payload"]["version"] in INPUT_VERSIONS f'
+                                                    b'or v in _SELECTED.get()):\n        p.update(version=c'
+                                                    b'ompatible.RESULT_VERSION, selected_packet_hashes=[v['
+                                                    b'"sha256"] for v in _SELECTED.get()])\n    if result["'
+                                                    b'ml_inference_status"] == "success":\n        p.update'
+                                                    b'(original_packet=deepcopy(attempted), consumed_reade'
+                                                    b'r=reader_binding(),\n            board_schedule=sched'
+                                                    b'ule, raw_probability=fact(result["ml_probability"]),'
+                                                    b' original_blend=None, ui_refresh=None)\n        if at'
+                                                    b'tempted["payload"]["version"] in INPUT_VERSIONS:\n   '
+                                                    b'         p.update(version=_reader(attempted).result_'
+                                                    b'version(attempted), computation=computation, consume'
+                                                    b'd_reader=compatible_reader_binding(attempted),\n     '
+                                                    b'           consumed_dependency_review=dependency_rev'
+                                                    b'iew)\n    elif attempted is not None:\n        p["atte'
+                                                    b'mpted_packet_sha256"] = attempted["sha256"]\n        '
+                                                    b'if attempted["payload"]["version"] in INPUT_VERSIONS'
+                                                    b':\n            p.update(version=_reader(attempted).re'
+                                                    b'sult_version(attempted), original_packet=deepcopy(at'
+                                                    b'tempted))\n    item["ncaaf_inputs"] = dict(payload=p,'
+                                                    b' sha256=digest(p))\n    result.update(fields, ml_esti'
+                                                    b'mate_metadata=encode(item))\n    return result\n'),
+                                                   (b'        saved = item["ncaaf_inputs"]\n        p = sav'
+                                                    b'ed["payload"]\n        require(set(saved) == {"payloa'
+                                                    b'd", "sha256"} and digest(p) == saved["sha256"], "NCA'
+                                                    b'AF_PACKET_INTEGRITY")\n        if p.get("version") in'
+                                                    b' compatible.RESULT_VERSIONS:\n            return _dia'
+                                                    b'gnose_compatible(source, item, p)\n        require(p['
+                                                    b'"version"] == VERSION, "NCAAF_PACKET_SCHEMA")\n      '
+                                                    b'  require(p["scientific_acceptance"] is False and p['
+                                                    b'"wagering_authority"] is False and p["live_stake"] ='
+                                                    b'= 0,\n',
+                                                    b'        saved = item["ncaaf_inputs"]\n        p = sav'
+                                                    b'ed["payload"]\n        require(set(saved) == {"payloa'
+                                                    b'd", "sha256"} and digest(p) == saved["sha256"], "NCA'
+                                                    b'AF_PACKET_INTEGRITY")\n        if p.get("version") in'
+                                                    b' RESULT_VERSIONS:\n            return _diagnose_compa'
+                                                    b'tible(source, item, p)\n        require(p["version"] '
+                                                    b'== VERSION, "NCAAF_PACKET_SCHEMA")\n        require(p'
+                                                    b'["scientific_acceptance"] is False and p["wagering_a'
+                                                    b'uthority"] is False and p["live_stake"] == 0,\n'),
+                                                   (b'    if packet is not None and packet["payload"]["ver'
+                                                    b'sion"] == compatible.SUCCESSOR_VERSION:\n        bind'
+                                                    b'ing["chronology_reader"] = dict(version=compatible.c'
+                                                    b'hronology.VERSION, sha256=hashlib.sha256(\n          '
+                                                    b'  Path(compatible.chronology.__file__).read_bytes().'
+                                                    b'replace(b"\\r\\n", b"\\n")).hexdigest())\n    return'
+                                                    b' binding\n\n\n',
+                                                    b'    if packet is not None and packet["payload"]["ver'
+                                                    b'sion"] == compatible.SUCCESSOR_VERSION:\n        bind'
+                                                    b'ing["chronology_reader"] = dict(version=compatible.c'
+                                                    b'hronology.VERSION, sha256=hashlib.sha256(\n          '
+                                                    b'  Path(compatible.chronology.__file__).read_bytes().'
+                                                    b'replace(b"\\r\\n", b"\\n")).hexdigest())\n    if pac'
+                                                    b"ket is not None and packet['payload']['version'] == "
+                                                    b"custody.VERSION:\n        binding['custody_reader'] ="
+                                                    b' dict(version=custody.VERSION, components=custody.im'
+                                                    b'plementation(),\n            native_reader=compatible'
+                                                    b"_reader_binding(packet['payload']['native_packet']))"
+                                                    b'\n    return binding\n\n\n'),
+                                                   (b'    if p["status"] != "success":\n        return dict'
+                                                    b'(status="INCOMPLETE", reason=p["reason"] if p["reaso'
+                                                    b'n"] in PUBLIC_REASONS else "NCAAF_INFERENCE_FAILED")'
+                                                    b'\n    packet = load(encode(p["original_packet"]).enco'
+                                                    b'de())\n    require(p["version"] == compatible.result_'
+                                                    b'version(packet), "NCAAF_COMPAT_COMPUTATION_RECEIPT_C'
+                                                    b'ONFLICT")\n    require(_offer_matches(packet, source)'
+                                                    b', "NCAAF_EVENT_OFFER_CONFLICT")\n    schedule = p["bo'
+                                                    b'ard_schedule"]\n    if producer.text(source.get("matc'
+                                                    b'hup_id")).startswith("espn:college-football:"):\n',
+                                                    b'    if p["status"] != "success":\n        return dict'
+                                                    b'(status="INCOMPLETE", reason=p["reason"] if p["reaso'
+                                                    b'n"] in PUBLIC_REASONS else "NCAAF_INFERENCE_FAILED")'
+                                                    b'\n    packet = load(encode(p["original_packet"]).enco'
+                                                    b'de())\n    require(p["version"] == _reader(packet).re'
+                                                    b'sult_version(packet), "NCAAF_COMPAT_COMPUTATION_RECE'
+                                                    b'IPT_CONFLICT")\n    require(_offer_matches(packet, so'
+                                                    b'urce), "NCAAF_EVENT_OFFER_CONFLICT")\n    schedule = '
+                                                    b'p["board_schedule"]\n    if producer.text(source.get('
+                                                    b'"matchup_id")).startswith("espn:college-football:"):'
+                                                    b'\n'),
+                                                   (b'    else:\n        require(schedule is None, "NCAAF_S'
+                                                    b'CHEDULE_RECEIPT_CONFLICT")\n    approval = accepted(p'
+                                                    b'acket)\n    require(p["consumed_dependency_review"] ='
+                                                    b'= compatible.accepted_dependencies(packet, approval,'
+                                                    b' p["inference_time"]),\n            "NCAAF_COMPAT_DEP'
+                                                    b'ENDENCY_SOURCE_REVIEW_MISSING_OR_CONFLICT")\n    chec'
+                                                    b'ked, computation = compatible.inspect_result(packet,'
+                                                    b' p["computation"], p["inference_time"])\n    require('
+                                                    b'p["inference_time"] == item["generated_at"] and p["c'
+                                                    b'onsumed_reader"] == compatible_reader_binding(packet'
+                                                    b'),\n            "NCAAF_RUNTIME_BINDING_CONFLICT")\n   '
+                                                    b' require(p["raw_probability"] == item["probability"]'
+                                                    b' == fact(source.get("ml_probability")) == fact(compu'
+                                                    b'tation["raw_probability"]),\n',
+                                                    b'    else:\n        require(schedule is None, "NCAAF_S'
+                                                    b'CHEDULE_RECEIPT_CONFLICT")\n    approval = accepted(p'
+                                                    b'acket)\n    require(p["consumed_dependency_review"] ='
+                                                    b'= _reader(packet).accepted_dependencies(packet, appr'
+                                                    b'oval, p["inference_time"]),\n            "NCAAF_COMPA'
+                                                    b'T_DEPENDENCY_SOURCE_REVIEW_MISSING_OR_CONFLICT")\n   '
+                                                    b' checked, computation = _reader(packet).inspect_resu'
+                                                    b'lt(packet, p["computation"], p["inference_time"])\n  '
+                                                    b'  require(p["inference_time"] == item["generated_at"'
+                                                    b'] and p["consumed_reader"] == compatible_reader_bind'
+                                                    b'ing(packet),\n            "NCAAF_RUNTIME_BINDING_CONF'
+                                                    b'LICT")\n    require(p["raw_probability"] == item["pro'
+                                                    b'bability"] == fact(source.get("ml_probability")) == '
+                                                    b'fact(computation["raw_probability"]),\n')]},
+ 'app_core/per_game_boards.py': {'sha256': 'fdea924e5921cdabc63ea49fd0353bbae0e852c152dd3943cbfc39e78bd28f3f',
+                                 'after_sha256': '56293292483d3eed2f10b5ec16a2564e9f1f41e5d06da3b61260cd672fd23992',
+                                 'edits': [(b"    if text(row, 'league', 'League').upper() != 'NCAAF':\n   "
+                                            b'     return False\n    import json\n    from app_core.ncaaf_co'
+                                            b'mpatible_pipeline import RESULT_VERSIONS\n    from app_core.n'
+                                            b'caaf_pipeline_evidence import diagnose\n    try:\n        item'
+                                            b" = json.loads(row.get('ml_estimate_metadata', ''))\n",
+                                            b"    if text(row, 'league', 'League').upper() != 'NCAAF':\n   "
+                                            b'     return False\n    import json\n    from app_core.ncaaf_pi'
+                                            b'peline_evidence import RESULT_VERSIONS\n    from app_core.nca'
+                                            b'af_pipeline_evidence import diagnose\n    try:\n        item ='
+                                            b" json.loads(row.get('ml_estimate_metadata', ''))\n")]},
+ 'app_core/slate_coverage.py': {'sha256': '83f7fb66a55361ffc18b669f6920e0f427a3e059757002f9607cf4b2af488481',
+                                'after_sha256': 'f2b1fbcbf6967d66214934ce1b409bd5bd98f28eb3a282940df44b0abbe84bbe',
+                                'edits': [(b"        model = gate('model_evidence', 'FAIL' if incompatible or"
+                                           b" status in {'unavailable', 'failed', 'error'} else 'UNKNOWN'"
+                                           b",\n            'MODEL_INCOMPATIBLE' if incompatible else 'MOD"
+                                           b"EL_INFERENCE_UNAVAILABLE' if status in {'unavailable', 'failed',"
+                                           b" 'error'} else 'MODEL_EVIDENCE_MISSING')\n        if text(can"
+                                           b"didate, 'league', 'League').upper() == 'NCAAF' and status in {'u"
+                                           b"navailable', 'failed', 'error'}:\n            from app_core.n"
+                                           b'caaf_compatible_pipeline import RESULT_VERSIONS\n            '
+                                           b'from app_core.ncaaf_pipeline_evidence import PUBLIC_REASONS\n'
+                                           b'            try:\n                retained = json.loads(candi'
+                                           b"date.get('ml_estimate_metadata', ''))\n",
+                                           b"        model = gate('model_evidence', 'FAIL' if incompatible or"
+                                           b" status in {'unavailable', 'failed', 'error'} else 'UNKNOWN'"
+                                           b",\n            'MODEL_INCOMPATIBLE' if incompatible else 'MOD"
+                                           b"EL_INFERENCE_UNAVAILABLE' if status in {'unavailable', 'failed',"
+                                           b" 'error'} else 'MODEL_EVIDENCE_MISSING')\n        if text(can"
+                                           b"didate, 'league', 'League').upper() == 'NCAAF' and status in {'u"
+                                           b"navailable', 'failed', 'error'}:\n            from app_core.n"
+                                           b'caaf_pipeline_evidence import RESULT_VERSIONS\n            fr'
+                                           b'om app_core.ncaaf_pipeline_evidence import PUBLIC_REASONS\n  '
+                                           b'          try:\n                retained = json.loads(candida'
+                                           b"te.get('ml_estimate_metadata', ''))\n")]}}
+
+
+def _ncaaf_custody_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _ncaaf_custody_parent_guard_source(source, binding=None):
+    binding = NCAAF_CUSTODY_BINDINGS if binding is None else binding
+    if b"\nNCAAF_CUSTODY_POLICY_PATH =" not in source:
+        return source
+    _require(_ncaaf_custody_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNCAAF_CUSTODY_POLICY_PATH =", 1)[0] + NCAAF_CUSTODY_PREVIOUS_CLI
+
+
+def _ncaaf_custody_parent_main_source(path, source):
+    if path == GUARD_PATH:
+        return _ncaaf_custody_parent_guard_source(source)
+    frozen = NCAAF_CUSTODY_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    earlier = {entry[path]["sha256"] for name, entry in globals().items()
+               if name.endswith("_PRIOR_SOURCE_RECONSTRUCTIONS") and name != "NCAAF_CUSTODY_PRIOR_SOURCE_RECONSTRUCTIONS"
+               and path in entry}
+    if hashlib.sha256(source).hexdigest() in earlier:
+        return source
+    _require(hashlib.sha256(source).hexdigest() == frozen["after_sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+# Reuse the exact immutable predecessor for historical fixture semantics.
+# New bytes are peeled only by their exact reviewed hashes and edit receipts.
+_ncaaf_custody_frozen_module = None
+def _ncaaf_custody_predecessor():
+    global _ncaaf_custody_frozen_module
+    if _ncaaf_custody_frozen_module is None:
+        import types
+        source = Path(__file__).read_bytes().replace(b"\r\n", b"\n")
+        previous = _ncaaf_custody_parent_guard_source(source)
+        _require(hashlib.sha256(previous).hexdigest() == NCAAF_CUSTODY_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        frozen = types.ModuleType("exact_ncaaf_custody_predecessor")
+        frozen.__file__ = __file__
+        exec(previous, frozen.__dict__)
+        # Seed the exact chronology parent, then its unchanged inherited readers.
+        chronology_previous = frozen._ncaaf_chronology_parent_guard_source(previous)
+        chronology_frozen = types.ModuleType("exact_custody_prechronology_predecessor")
+        chronology_frozen.__file__ = __file__
+        exec(chronology_previous, chronology_frozen.__dict__)
+        # Seed the exact preview parent, then its unchanged inherited readers.
+        preview_previous = chronology_frozen._preview_binding_parent_guard_source(chronology_previous)
+        preview_frozen = types.ModuleType("exact_chronology_prepreview_predecessor")
+        preview_frozen.__file__ = __file__
+        exec(preview_previous, preview_frozen.__dict__)
+        # Preserve the immediate normal-integration parent and all its readers.
+        normal_previous = preview_frozen._ncaaf_normal_parent_guard_source(preview_previous)
+        normal_frozen = types.ModuleType("exact_preview_prenormal_predecessor")
+        normal_frozen.__file__ = __file__
+        exec(normal_previous, normal_frozen.__dict__)
+        # Seed every inherited lazy reader from its exact reviewed source.
+        readiness_previous = normal_frozen._readiness_dashboard_previous_guard_source(normal_previous)
+        readiness_frozen = types.ModuleType("exact_normal_prereadiness_predecessor")
+        readiness_frozen.__file__ = __file__
+        exec(readiness_previous, readiness_frozen.__dict__)
+        compat_previous = readiness_frozen._ncaaf_compatibility_previous_guard_source(readiness_previous)
+        compat_frozen = types.ModuleType("exact_normal_precompat_predecessor")
+        compat_frozen.__file__ = __file__
+        exec(compat_previous, compat_frozen.__dict__)
+        ci_previous = compat_frozen._ci_scheduling_previous_guard_source(compat_previous)
+        ci_frozen = types.ModuleType("exact_normal_preci_predecessor")
+        ci_frozen.__file__ = __file__
+        exec(ci_previous, ci_frozen.__dict__)
+        coverage_previous = ci_frozen._slate_audit_previous_guard_source(ci_previous)
+        coverage_frozen = types.ModuleType("exact_normal_precoverage_predecessor")
+        coverage_frozen.__file__ = __file__
+        exec(coverage_previous, coverage_frozen.__dict__)
+        ci_frozen._slate_frozen_module = coverage_frozen
+        compat_frozen._ci_scheduling_frozen_module = ci_frozen
+        readiness_frozen._ncaaf_compatibility_frozen_module = compat_frozen
+        normal_frozen._readiness_dashboard_frozen_module = readiness_frozen
+        preview_frozen._ncaaf_normal_frozen_module = normal_frozen
+        chronology_frozen._preview_binding_frozen_module = preview_frozen
+        frozen._ncaaf_chronology_frozen_module = chronology_frozen
+        _ncaaf_custody_frozen_module = frozen
+    _ncaaf_custody_frozen_module.ROOT = ROOT
+    return _ncaaf_custody_frozen_module
+
+
+def _ncaaf_custody_wrap_previous(name):
+    def wrapped(*args, **kwargs):
+        method = getattr(_ncaaf_custody_predecessor(), name)
+        if name.endswith(("_previous_main_source", "_parent_main_source")):
+            path, source = args
+            return method(path, _ncaaf_custody_parent_main_source(path, source), **kwargs)
+        source, *rest = args
+        return method(_ncaaf_custody_parent_guard_source(source), *rest, **kwargs)
+    return wrapped
+
+
+for _ncaaf_custody_name, _ncaaf_custody_method in list(globals().items()):
+    if callable(_ncaaf_custody_method) and _ncaaf_custody_name.endswith(("_previous_guard_source", "_previous_main_source", "_parent_guard_source", "_parent_main_source")) and not _ncaaf_custody_name.startswith("_ncaaf_custody_"):
+        globals()[_ncaaf_custody_name] = _ncaaf_custody_wrap_previous(_ncaaf_custody_name)
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nNCAAF_CUSTODY_POLICY_PATH =" in source:
+        if reviewed == NCAAF_CUSTODY_BINDINGS["successor_guard_sha256"]:
+            return _ncaaf_custody_raw_guard_matches(source, reviewed)
+        if not _ncaaf_custody_raw_guard_matches(source, NCAAF_CUSTODY_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = _ncaaf_custody_parent_guard_source(source)
+    return _ncaaf_custody_predecessor()._dfs_guard_matches(source, reviewed)
+
+
+# Keep the predecessor's assertions meaningful for the newly reviewed source:
+# compose exact reverse edits; no assertion is removed or relaxed.
+for _ncaaf_custody_group in ("NCAAF_CHRONOLOGY_PRIOR_SOURCE_RECONSTRUCTIONS", "PREVIEW_BINDING_PRIOR_SOURCE_RECONSTRUCTIONS", "NCAAF_NORMAL_PRIOR_SOURCE_RECONSTRUCTIONS", "SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS", "FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS", "NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS"):
+    _ncaaf_custody_map = {p: dict(v) for p,v in globals()[_ncaaf_custody_group].items()}
+    globals()[_ncaaf_custody_group] = _ncaaf_custody_map
+    for _ncaaf_custody_path, _ncaaf_custody_receipt in NCAAF_CUSTODY_PRIOR_SOURCE_RECONSTRUCTIONS.items():
+        if _ncaaf_custody_path in _ncaaf_custody_map:
+            _ncaaf_custody_prior = _ncaaf_custody_map[_ncaaf_custody_path]
+            _require(_ncaaf_custody_prior["after_sha256"] == _ncaaf_custody_receipt["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+            _ncaaf_custody_prior["after_sha256"] = _ncaaf_custody_receipt["after_sha256"]
+            _ncaaf_custody_prior["edits"] = _ncaaf_custody_prior["edits"] + _ncaaf_custody_receipt["edits"]
+
+
+
+def _run_ncaaf_custody_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/ncaaf_custody_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_ncaaf_custody_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -19475,7 +20648,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NCAAF_CHRONOLOGY_POLICY_PATH):
+        if exists_at("HEAD", NCAAF_CUSTODY_POLICY_PATH):
+            code, report = _run_ncaaf_custody_integrated(args.manifest, args.base, NCAAF_CUSTODY_BINDINGS)
+        elif exists_at("HEAD", NCAAF_CHRONOLOGY_POLICY_PATH):
             code, report = _run_ncaaf_chronology_integrated(args.manifest, args.base, NCAAF_CHRONOLOGY_BINDINGS)
         elif exists_at("HEAD", PREVIEW_BINDING_POLICY_PATH):
             code, report = _run_preview_binding_integrated(args.manifest, args.base, PREVIEW_BINDING_BINDINGS)
