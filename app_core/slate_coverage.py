@@ -367,11 +367,11 @@ def _market(event, market, providers, candidates, finals, audit, at, run, health
         model = gate('model_evidence', 'FAIL' if incompatible or status in {'unavailable', 'failed', 'error'} else 'UNKNOWN',
             'MODEL_INCOMPATIBLE' if incompatible else 'MODEL_INFERENCE_UNAVAILABLE' if status in {'unavailable', 'failed', 'error'} else 'MODEL_EVIDENCE_MISSING')
         if text(candidate, 'league', 'League').upper() == 'NCAAF' and status in {'unavailable', 'failed', 'error'}:
-            from app_core.ncaaf_compatible_pipeline import RESULT_VERSION
+            from app_core.ncaaf_compatible_pipeline import RESULT_VERSIONS
             from app_core.ncaaf_pipeline_evidence import PUBLIC_REASONS
             try:
                 retained = json.loads(candidate.get('ml_estimate_metadata', ''))
-                if retained['ncaaf_inputs']['payload']['version'] == RESULT_VERSION and model_code in PUBLIC_REASONS:
+                if retained['ncaaf_inputs']['payload']['version'] in RESULT_VERSIONS and model_code in PUBLIC_REASONS:
                     model = gate('model_evidence', 'FAIL', model_code)
             except (ValueError, TypeError, KeyError):
                 pass
