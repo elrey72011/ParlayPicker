@@ -1,0 +1,131 @@
+{
+  "payload": {
+    "version": "ncaaf-pilot-plan-v1",
+    "evidence_label": "PROPOSAL",
+    "target": {
+      "canonical_event_id": "cfbd:401862795",
+      "provider_event_id": null,
+      "home_team": "Army",
+      "away_team": "Tulane",
+      "start_utc": "2026-10-10T16:00:00Z",
+      "neutral_site": false
+    },
+    "offer": {
+      "market": "spread_home",
+      "side": "home",
+      "signed_line": null,
+      "price": null,
+      "bookmaker": "draftkings",
+      "product": null,
+      "period": "full_game",
+      "settlement_review_sha256": null
+    },
+    "requests": [
+      {
+        "id": "cfbd-games-2026",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games",
+        "params": {
+          "year": 2026,
+          "seasonType": "both",
+          "classification": "fbs"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "cfbd-teams-2026-regular-week-1",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games/teams",
+        "params": {
+          "year": 2026,
+          "week": 1,
+          "seasonType": "regular"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "cfbd-teams-2026-regular-week-2",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games/teams",
+        "params": {
+          "year": 2026,
+          "week": 2,
+          "seasonType": "regular"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "cfbd-teams-2026-regular-week-3",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games/teams",
+        "params": {
+          "year": 2026,
+          "week": 3,
+          "seasonType": "regular"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "cfbd-teams-2026-regular-week-4",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games/teams",
+        "params": {
+          "year": 2026,
+          "week": 4,
+          "seasonType": "regular"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "odds-ncaaf-draftkings-spreads-20261010",
+        "provider": "odds_api",
+        "host": "api.the-odds-api.com",
+        "endpoint": "v4/sports/americanfootball_ncaaf/odds",
+        "params": {
+          "regions": "us",
+          "markets": "spreads",
+          "bookmakers": "draftkings",
+          "oddsFormat": "american",
+          "dateFormat": "iso",
+          "commenceTimeFrom": "2026-10-10T00:00:00Z",
+          "commenceTimeTo": "2026-10-11T00:00:00Z"
+        },
+        "max_attempts": 1
+      }
+    ],
+    "limits": {
+      "max_attempts": 6,
+      "max_objects": 16,
+      "max_body_bytes": 524288,
+      "max_aggregate_bytes": 2097152,
+      "connect_seconds": 3,
+      "read_seconds": 5,
+      "total_seconds": 60
+    },
+    "execution_window": {
+      "not_before": "2026-10-10T15:30:00Z",
+      "not_after": "2026-10-10T15:31:00Z",
+      "authorization_expires_at": "2026-10-10T15:31:30Z"
+    },
+    "advance_permissions": [],
+    "collection_authorization_ref": null,
+    "custody_id": "OWNER_DURABLE_PRIVATE_CUSTODY_TO_BE_VERIFIED",
+    "unresolved": [
+      "CURRENT_EVENT_PROVIDER_CROSSWALK_AND_TULANE_MAPPING",
+      "EXACT_LISTING_PRODUCT_AND_FULL_GAME_OVERTIME_TERMS",
+      "OWNER_SPECIFIC_CFBD_ODDS_OPERATOR_RIGHTS_AND_CLOCK_MEANINGS",
+      "INDEPENDENT_ADVANCE_PERMISSION_REVIEW",
+      "THREE_QUALIFYING_HISTORIES_SCORING_AND_YARDAGE_AND_WEEK_ASSIGNMENTS",
+      "DURABLE_PRIVATE_CUSTODY_AND_EXISTING_PREDICTION_STORE",
+      "OWNER_ACCOUNT_QUOTA_COST_AND_REQUEST_CEILINGS",
+      "SEPARATE_EXACT_PLAN_COLLECTION_AUTHORIZATION",
+      "INDEPENDENT_EXACT_OFFER_DEPENDENCY_ACCEPTANCE_BEFORE_INFERENCE"
+    ]
+  },
+  "sha256": "5eee3a0e0203d6befd396612eee100e1844e985bb1c472c2ab2d2f47f4998d15"
+}

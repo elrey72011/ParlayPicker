@@ -20641,6 +20641,875 @@ def _run_ncaaf_custody_integrated(manifest_path, base, binding):
     spec.loader.exec_module(module)
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
+NCAAF_PILOT_POLICY_PATH = "docs/paid-launch/launch-scope-policy-ncaaf-pilot-v1.json"
+NCAAF_PILOT_POLICY_VERSION = "ncaaf-bounded-pilot-v1"
+NCAAF_PILOT_APPROVAL_REFERENCE = ('Owner authorizes an adjacent versioned bounded NCAAF pilot planning/transport seam and separately admitted '
+ 'existing caller/capture/export/display route, static private availability inventory, synthetic '
+ 'network-blocked verification, exact successor bindings, policy-only seal, draft PR and required CI. No '
+ 'actual provider requests, quota, Drive, restoration, live analysis, historical inference, collection, '
+ 'fitting, source registration, inquiries, publication, merge, deployment or financial execution. Preserve '
+ 'all inherited frozen bindings, original model/recovery/runtime records, v1/v2/v3/custody readers and '
+ 'independent acceptance, chronology/custody/preview/coverage, mathematics, features, histories/lag, '
+ 'freshness, pregame, half-point/Novig/integer restrictions, protected paths/tests/benchmarks, assertions, '
+ 'original baseline, all workflows, owner work and frozen version 10. No aliases, unrelated leagues, default '
+ 'inference or new acceptance registration. Full original bodies and receipts private, credentials excluded, '
+ 'catalogs empty. One target with bounded multi-game responses; fixed host/endpoints/order/budget, no '
+ 'retry/redirect/pagination/fallback or implicit resumption. Unqualified wagering stays PASS zero stake; no '
+ 'synthetic scientific qualification, authentic availability or wagering authority.')
+NCAAF_PILOT_PATHS = ('app_core/ncaaf_pilot.py',
+ 'app_core/availability_inventory.py',
+ 'scripts/ncaaf_pilot.py',
+ 'tests/test_ncaaf_pilot.py',
+ 'tests/test_availability_inventory.py',
+ 'docs/paid-launch/ncaaf-bounded-pilot.md',
+ 'docs/paid-launch/ncaaf-pilot-army-proposal-v1.json',
+ 'docs/audits/ncaaf-pilot-isolation-and-availability.md',
+ 'scripts/ncaaf_pilot_scope.py',
+ 'tests/test_ncaaf_pilot_scope.py',
+ 'scripts/check_launch_change_scope.py')
+NCAAF_PILOT_FROZEN_PATHS = ('.github/workflows/activation-grading.yml',
+ '.github/workflows/ci.yml',
+ '.github/workflows/football-stage1.yml',
+ '.github/workflows/football-stage2.yml',
+ '.github/workflows/mlb-receipt-reconciliation.yml',
+ '.github/workflows/paid-launch.yml',
+ '.github/workflows/qualification-operations.yml',
+ '.github/workflows/read-only-census.yml',
+ '.github/workflows/research-scheduler.yml',
+ '.github/workflows/subscriber-completion-postgres.yml',
+ 'app/ui/canonical_evidence_download.py',
+ 'app/ui/daily_dashboard.py',
+ 'app/ui/draftkings.py',
+ 'app/ui/lock_picks.py',
+ 'app/ui/ncaaf_inventory.py',
+ 'app/ui/ncaaf_pipeline_research.py',
+ 'app/ui/public_results.py',
+ 'app/ui/publish_panel.py',
+ 'app/ui/readiness_dashboard.py',
+ 'app/ui/remote_canonical_download.py',
+ 'app/ui/sidebar_controls.py',
+ 'app/ui/slate_coverage.py',
+ 'app/ui/source_evidence_panel.py',
+ 'app_core/candidate_evidence_schema.py',
+ 'app_core/canonical_download.py',
+ 'app_core/canonical_remote_contract.py',
+ 'app_core/canonical_schema.py',
+ 'app_core/coverage_presentation.py',
+ 'app_core/current_wagers_trace.py',
+ 'app_core/draftkings_classic.py',
+ 'app_core/espn_ncaaf_odds.py',
+ 'app_core/evidence_drive.py',
+ 'app_core/evidence_remote.py',
+ 'app_core/feature_processing.py',
+ 'app_core/football_feature_capture.py',
+ 'app_core/football_identity_capture.py',
+ 'app_core/football_stage1_cycle.py',
+ 'app_core/football_validation_v2.py',
+ 'app_core/game_coverage.py',
+ 'app_core/market_probability_model.py',
+ 'app_core/market_stage_metrics.py',
+ 'app_core/mlb_home_runline_contract.py',
+ 'app_core/ncaaf_compatible_observation.py',
+ 'app_core/ncaaf_compatible_pipeline.py',
+ 'app_core/ncaaf_history.py',
+ 'app_core/ncaaf_identity.py',
+ 'app_core/ncaaf_model_compatibility.py',
+ 'app_core/ncaaf_pipeline_evidence.py',
+ 'app_core/ncaaf_prospective.py',
+ 'app_core/ncaaf_prospective_chronology.py',
+ 'app_core/ncaaf_prospective_store.py',
+ 'app_core/ncaaf_research.py',
+ 'app_core/ncaaf_research_contract.py',
+ 'app_core/ncaaf_response_custody.py',
+ 'app_core/ncaaf_schedule.py',
+ 'app_core/nfl_calibration_evidence.py',
+ 'app_core/nfl_inference_evidence.py',
+ 'app_core/nfl_native_provenance.py',
+ 'app_core/nhl_puck_line_evidence.py',
+ 'app_core/per_game_boards.py',
+ 'app_core/performance_spans.py',
+ 'app_core/prediction_evidence.py',
+ 'app_core/producer_provenance.py',
+ 'app_core/prospective_remote.py',
+ 'app_core/prospective_validation_plans.py',
+ 'app_core/provider_health.py',
+ 'app_core/public_board.py',
+ 'app_core/public_history.py',
+ 'app_core/remote_canonical_download.py',
+ 'app_core/research_display.py',
+ 'app_core/research_estimate_trace.py',
+ 'app_core/research_model_recovery.py',
+ 'app_core/research_replay.py',
+ 'app_core/scoped_reads.py',
+ 'app_core/slate_coverage.py',
+ 'app_core/source_contract.py',
+ 'app_core/source_evidence_intake.py',
+ 'app_core/stage_timing.py',
+ 'app_core/team_name_mapping.py',
+ 'app_core/weights_config.py',
+ 'core/live_wager_contract.py',
+ 'core/market_policy.py',
+ 'core/price_value.py',
+ 'core/probability_calibration.py',
+ 'core/run_readiness.py',
+ 'core/sport_policy.py',
+ 'core/streamlit_pipeline.py',
+ 'core/team_mapper.py',
+ 'core/wager_decisions.py',
+ 'data/calibration/bucket_stats.json',
+ 'data/calibration/effective_prob_calibration.json',
+ 'docs/audits/2026-09-23-prospective-validation-plans.md',
+ 'docs/ci-test-execution.md',
+ 'docs/examples/slate-coverage-synthetic.json',
+ 'docs/football-stage2.md',
+ 'docs/football-validation-v2.md',
+ 'docs/paid-launch/dfs-projection-identity-policy.md',
+ 'docs/paid-launch/drive-history-loading.md',
+ 'docs/paid-launch/estimate-availability.md',
+ 'docs/paid-launch/football-catalog-reconciliation.md',
+ 'docs/paid-launch/launch-baseline-manifest.json',
+ 'docs/paid-launch/launch-scope-policy-canonical-download-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ci-scheduling-v1.json',
+ 'docs/paid-launch/launch-scope-policy-drive-history-v1.json',
+ 'docs/paid-launch/launch-scope-policy-estimate-v1.json',
+ 'docs/paid-launch/launch-scope-policy-football-catalog-v1.json',
+ 'docs/paid-launch/launch-scope-policy-football-research-v1.json',
+ 'docs/paid-launch/launch-scope-policy-home-runline-v1.json',
+ 'docs/paid-launch/launch-scope-policy-mlb-nhl-research-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-chronology-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-compatibility-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-custody-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-normal-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-research-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-v1.json',
+ 'docs/paid-launch/launch-scope-policy-ncaaf-v2.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-admission-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-calibration-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-inputs-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-native-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-provenance-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nfl-ui-reblend-v1.json',
+ 'docs/paid-launch/launch-scope-policy-nhl-puck-line-v1.json',
+ 'docs/paid-launch/launch-scope-policy-pick-board-origin-v1.json',
+ 'docs/paid-launch/launch-scope-policy-preview-binding-v1.json',
+ 'docs/paid-launch/launch-scope-policy-producer-provenance-v1.json',
+ 'docs/paid-launch/launch-scope-policy-readiness-dashboard-v1.json',
+ 'docs/paid-launch/launch-scope-policy-remote-canonical-v1.json',
+ 'docs/paid-launch/launch-scope-policy-remote-continuation-v1.json',
+ 'docs/paid-launch/launch-scope-policy-slate-audit-v1.json',
+ 'docs/paid-launch/launch-scope-policy-source-contract-v1.json',
+ 'docs/paid-launch/launch-scope-policy-source-evidence-intake-v1.json',
+ 'docs/paid-launch/launch-scope-policy-v2.json',
+ 'docs/paid-launch/launch-scope-policy-v3.json',
+ 'docs/paid-launch/launch-scope-policy-v4.json',
+ 'docs/paid-launch/mlb-home-runline-contract.md',
+ 'docs/paid-launch/mlb-nhl-research-bindings.md',
+ 'docs/paid-launch/ncaaf-compatibility-binding-v1.json',
+ 'docs/paid-launch/ncaaf-compatible-normal-integration.md',
+ 'docs/paid-launch/ncaaf-coverage-corrections.md',
+ 'docs/paid-launch/ncaaf-original-response-custody.md',
+ 'docs/paid-launch/ncaaf-private-target-replay.md',
+ 'docs/paid-launch/ncaaf-prospective-chronology.md',
+ 'docs/paid-launch/ncaaf-recovered-compatibility.md',
+ 'docs/paid-launch/ncaaf-schedule-coverage.md',
+ 'docs/paid-launch/nfl-admission-bindings.md',
+ 'docs/paid-launch/nfl-calibration-evidence.md',
+ 'docs/paid-launch/nfl-native-feature-provenance.md',
+ 'docs/paid-launch/nfl-novig-qualification-decision.md',
+ 'docs/paid-launch/nfl-novig-source-contract.md',
+ 'docs/paid-launch/nfl-novig-source-evidence.json',
+ 'docs/paid-launch/nfl-oct4-provenance.md',
+ 'docs/paid-launch/nfl-prospective-capture.md',
+ 'docs/paid-launch/nfl-prospective-research-plan.md',
+ 'docs/paid-launch/nfl-ui-reblend-retention.md',
+ 'docs/paid-launch/nhl-puck-line-evidence.md',
+ 'docs/paid-launch/normal-football-research.md',
+ 'docs/paid-launch/pick-board-origin.md',
+ 'docs/paid-launch/preview-coverage-binding.md',
+ 'docs/paid-launch/private-canonical-download.md',
+ 'docs/paid-launch/private-remote-canonical-download.md',
+ 'docs/paid-launch/producer-provenance-v2.md',
+ 'docs/paid-launch/provider-caller-health-policy.md',
+ 'docs/paid-launch/readiness-dashboard-schemas.md',
+ 'docs/paid-launch/source-evidence-intake.md',
+ 'docs/slate-coverage.md',
+ 'parlaypicker/app/streamlit_app.py',
+ 'publishing/board.html',
+ 'scripts/benchmark_drive_history_loading.py',
+ 'scripts/benchmark_refresh_lock_storage.py',
+ 'scripts/canonical_download_scope.py',
+ 'scripts/ci_scheduling_scope.py',
+ 'scripts/ci_test_file_costs_v1.json',
+ 'scripts/drive_history_scope.py',
+ 'scripts/estimate_scope.py',
+ 'scripts/football_catalog_scope.py',
+ 'scripts/football_research_scope.py',
+ 'scripts/home_runline_scope.py',
+ 'scripts/mlb_nhl_research_scope.py',
+ 'scripts/ncaaf_chronology_scope.py',
+ 'scripts/ncaaf_compatibility_scope.py',
+ 'scripts/ncaaf_custody_scope.py',
+ 'scripts/ncaaf_normal_scope.py',
+ 'scripts/ncaaf_research_scope.py',
+ 'scripts/nfl_admission_scope.py',
+ 'scripts/nfl_calibration_scope.py',
+ 'scripts/nfl_inputs_scope.py',
+ 'scripts/nfl_native_scope.py',
+ 'scripts/nfl_provenance_scope.py',
+ 'scripts/nfl_ui_scope.py',
+ 'scripts/nhl_puck_line_scope.py',
+ 'scripts/pick_board_scope.py',
+ 'scripts/prepare_nfl_calibration_evidence.py',
+ 'scripts/preview_binding_scope.py',
+ 'scripts/producer_provenance_scope.py',
+ 'scripts/readiness_dashboard_scope.py',
+ 'scripts/reconcile_slate.py',
+ 'scripts/remote_canonical_scope.py',
+ 'scripts/remote_continuation_scope.py',
+ 'scripts/run_ci_tests.py',
+ 'scripts/slate_audit_scope.py',
+ 'scripts/source_contract_scope.py',
+ 'scripts/source_intake_scope.py',
+ 'streamlit_app.py',
+ 'tests/activation_fixture.py',
+ 'tests/conftest.py',
+ 'tests/fixtures/activation/config.json',
+ 'tests/fixtures/football/cfbd-alternate-names-retained.json',
+ 'tests/paid_launch/case_isolation_and_scope.py',
+ 'tests/paid_launch/case_policy_and_contracts.py',
+ 'tests/paid_launch/case_postgres_api.py',
+ 'tests/paid_launch/case_subscriber_completion.py',
+ 'tests/paid_launch/conftest.py',
+ 'tests/pregame_selection_fixture.py',
+ 'tests/public_bundle_browser.cjs',
+ 'tests/public_parlay_products.cjs',
+ 'tests/public_refresh.cjs',
+ 'tests/public_results_filters.cjs',
+ 'tests/public_site_browser.cjs',
+ 'tests/qualification_ops/__init__.py',
+ 'tests/qualification_ops/auth_recovery_suite.py',
+ 'tests/qualification_ops/duration_suite.py',
+ 'tests/qualification_ops/fixtures/.gitattributes',
+ 'tests/qualification_ops/fixtures/legacy_snapshot_acquire.py',
+ 'tests/qualification_ops/fixtures/previous_oauth_snapshot_acquire.py',
+ 'tests/qualification_ops/functional_suite.py',
+ 'tests/qualification_ops/mirror_recovery_suite.py',
+ 'tests/qualification_ops/paths.py',
+ 'tests/qualification_ops/requirements.txt',
+ 'tests/qualification_ops/review_closure_suite.py',
+ 'tests/qualification_ops/run_offline.py',
+ 'tests/qualification_ops/runner_scheduling_suite.py',
+ 'tests/subscriber_journey_browser.cjs',
+ 'tests/test_absolute_production_gate.py',
+ 'tests/test_activation_reverification.py',
+ 'tests/test_activation_scheduler_performance.py',
+ 'tests/test_bankroll_simulator_resilience.py',
+ 'tests/test_batter_props.py',
+ 'tests/test_best_available_candidate_audit.py',
+ 'tests/test_best_duos.py',
+ 'tests/test_best_duos_strict.py',
+ 'tests/test_best_overall_pick_logic.py',
+ 'tests/test_best_picks_calibration_pass.py',
+ 'tests/test_best_picks_export_identity_columns.py',
+ 'tests/test_best_picks_full_game_coverage.py',
+ 'tests/test_best_picks_identity_required.py',
+ 'tests/test_best_picks_kelly_attach.py',
+ 'tests/test_best_picks_match_analysis.py',
+ 'tests/test_best_picks_novig_priority.py',
+ 'tests/test_board_diagnostics.py',
+ 'tests/test_bucket_calibration.py',
+ 'tests/test_calibration.py',
+ 'tests/test_calibration_promotion.py',
+ 'tests/test_calibration_tuning.py',
+ 'tests/test_calibration_update.py',
+ 'tests/test_candidate_authority_projection.py',
+ 'tests/test_candidate_chronology_hotfix.py',
+ 'tests/test_candidate_evidence_serialization.py',
+ 'tests/test_candidate_generation.py',
+ 'tests/test_candidate_recap.py',
+ 'tests/test_candidate_weight_analysis.py',
+ 'tests/test_canonical_download.py',
+ 'tests/test_canonical_download_scope.py',
+ 'tests/test_card_recovery_emptiness.py',
+ 'tests/test_chicago_bkn.py',
+ 'tests/test_ci_offline_transports.py',
+ 'tests/test_ci_scheduling_scope.py',
+ 'tests/test_ci_test_shards.py',
+ 'tests/test_clock_scope_exception_proposal.py',
+ 'tests/test_clv_and_backtest.py',
+ 'tests/test_college_novig.py',
+ 'tests/test_college_public_grading.py',
+ 'tests/test_compact_export.py',
+ 'tests/test_compact_probability_export.py',
+ 'tests/test_consistent_spread_book.py',
+ 'tests/test_consistent_total_book.py',
+ 'tests/test_controlled_prop_rollout.py',
+ 'tests/test_controlled_trial.py',
+ 'tests/test_controlled_trial_integration.py',
+ 'tests/test_controlled_trial_quality.py',
+ 'tests/test_core_engine_updates.py',
+ 'tests/test_corrupt_odds_guard.py',
+ 'tests/test_current_wagers_trace_and_release.py',
+ 'tests/test_daily_dashboard.py',
+ 'tests/test_dfs_lock_picker.py',
+ 'tests/test_dfs_projection_identity.py',
+ 'tests/test_dfs_scope_policy.py',
+ 'tests/test_diagnostics.py',
+ 'tests/test_draftkings_classic.py',
+ 'tests/test_draftkings_mlb_classic.py',
+ 'tests/test_draftkings_panel.py',
+ 'tests/test_drive_history_loading.py',
+ 'tests/test_drive_history_scope_policy.py',
+ 'tests/test_earned_actionable_over.py',
+ 'tests/test_edge_instrumentation.py',
+ 'tests/test_edge_no_stake_gates.py',
+ 'tests/test_empirical_finalist_selection.py',
+ 'tests/test_empirical_tiers.py',
+ 'tests/test_espn_observed_quotes.py',
+ 'tests/test_espn_results_wnba.py',
+ 'tests/test_estimate_availability.py',
+ 'tests/test_estimate_scope_policy.py',
+ 'tests/test_evidence_config.py',
+ 'tests/test_evidence_drive.py',
+ 'tests/test_evidence_health.py',
+ 'tests/test_evidence_remote.py',
+ 'tests/test_export_scope.py',
+ 'tests/test_fallback_ev.py',
+ 'tests/test_fallback_slate_keeps_theover_signal.py',
+ 'tests/test_feature_population.py',
+ 'tests/test_feature_processing.py',
+ 'tests/test_fit_blend_weights.py',
+ 'tests/test_fit_bucket_stats_recency.py',
+ 'tests/test_football_catalog_aliases.py',
+ 'tests/test_football_catalog_scope.py',
+ 'tests/test_football_coverage.py',
+ 'tests/test_football_fallback.py',
+ 'tests/test_football_feature_capture.py',
+ 'tests/test_football_identity_capture.py',
+ 'tests/test_football_inventory.py',
+ 'tests/test_football_research_scope.py',
+ 'tests/test_football_side_fallback.py',
+ 'tests/test_football_stage1.py',
+ 'tests/test_football_stage2.py',
+ 'tests/test_football_v3_feasibility.py',
+ 'tests/test_football_validation_v2.py',
+ 'tests/test_force_deploy_staking.py',
+ 'tests/test_game_already_started_guard.py',
+ 'tests/test_game_coverage.py',
+ 'tests/test_game_time_est_conversion.py',
+ 'tests/test_gemini_bet_gate.py',
+ 'tests/test_gemini_public_evidence.py',
+ 'tests/test_gemini_research_batch.py',
+ 'tests/test_gemini_review_evidence.py',
+ 'tests/test_generate_parlays_no_infinite_loop.py',
+ 'tests/test_grade_from_scores.py',
+ 'tests/test_grade_props.py',
+ 'tests/test_grade_slate_no_play.py',
+ 'tests/test_grade_tiers.py',
+ 'tests/test_home_runline_scope_policy.py',
+ 'tests/test_hosted_board_reconciliation.py',
+ 'tests/test_imported_recaps.py',
+ 'tests/test_jul27_regression_guardrails.py',
+ 'tests/test_kalshi_alias_overrides.py',
+ 'tests/test_kalshi_diagnostics.py',
+ 'tests/test_kalshi_direction_veto.py',
+ 'tests/test_kalshi_enrich_league_inference.py',
+ 'tests/test_kalshi_enrich_markets.py',
+ 'tests/test_kalshi_enrich_nullable_inputs.py',
+ 'tests/test_kalshi_enrich_timeout.py',
+ 'tests/test_kalshi_event_date_filter.py',
+ 'tests/test_kalshi_event_match_one_sided.py',
+ 'tests/test_kalshi_extreme_price_guard.py',
+ 'tests/test_kalshi_failure_reasons.py',
+ 'tests/test_kalshi_family_inference.py',
+ 'tests/test_kalshi_matching_fixes.py',
+ 'tests/test_kalshi_merge_game_date_types.py',
+ 'tests/test_kalshi_mlb_event_matching.py',
+ 'tests/test_kalshi_nba_spread.py',
+ 'tests/test_kalshi_orientation_and_recap.py',
+ 'tests/test_kalshi_series_cache_refresh.py',
+ 'tests/test_kalshi_spread_orientation.py',
+ 'tests/test_kalshi_totals_line_tolerance.py',
+ 'tests/test_kalshi_wrong_game_title_guard.py',
+ 'tests/test_launch_scope_integration.py',
+ 'tests/test_league_evaluation.py',
+ 'tests/test_league_infer_from_base.py',
+ 'tests/test_league_recovery_and_kalshi_tolerance.py',
+ 'tests/test_lean_card.py',
+ 'tests/test_line_drift.py',
+ 'tests/test_line_drift_diagnostics.py',
+ 'tests/test_live_activation_acceptance.py',
+ 'tests/test_live_wager_contract.py',
+ 'tests/test_lock_storage_performance.py',
+ 'tests/test_lock_total_input_review.py',
+ 'tests/test_locked_picks.py',
+ 'tests/test_low_line_over_override.py',
+ 'tests/test_market_calibration.py',
+ 'tests/test_market_probability_model.py',
+ 'tests/test_matchup_auto_detect_column.py',
+ 'tests/test_matchup_identity_fallback.py',
+ 'tests/test_meta_model.py',
+ 'tests/test_minor_improvements.py',
+ 'tests/test_ml_flatness_diagnostics.py',
+ 'tests/test_ml_target_guard.py',
+ 'tests/test_mlb_event_matcher.py',
+ 'tests/test_mlb_history.py',
+ 'tests/test_mlb_home_runline_contract.py',
+ 'tests/test_mlb_live_model_connection.py',
+ 'tests/test_mlb_nhl_research_bindings.py',
+ 'tests/test_mlb_nhl_research_scope.py',
+ 'tests/test_mlb_pitcher_history.py',
+ 'tests/test_mlb_pitcher_stats.py',
+ 'tests/test_mlb_pregame_receipts.py',
+ 'tests/test_mlb_production_readiness.py',
+ 'tests/test_mlb_prospective.py',
+ 'tests/test_mlb_receipt_audit.py',
+ 'tests/test_mlb_receipt_remote.py',
+ 'tests/test_mlb_receipt_workflow.py',
+ 'tests/test_mlb_research.py',
+ 'tests/test_mlb_runline_cover.py',
+ 'tests/test_mlb_spread_total_model.py',
+ 'tests/test_mlb_spread_total_training.py',
+ 'tests/test_mlb_team_stats.py',
+ 'tests/test_mlb_total_debias.py',
+ 'tests/test_mlb_total_direction_conflict.py',
+ 'tests/test_model_direction.py',
+ 'tests/test_model_validation.py',
+ 'tests/test_moneyline_parlay.py',
+ 'tests/test_moneyline_wiring.py',
+ 'tests/test_my_fixes.py',
+ 'tests/test_navigation_persistence.py',
+ 'tests/test_nba_stats_reliability.py',
+ 'tests/test_ncaaf_chronology_scope.py',
+ 'tests/test_ncaaf_closing.py',
+ 'tests/test_ncaaf_compatibility_scope.py',
+ 'tests/test_ncaaf_compatible_pipeline.py',
+ 'tests/test_ncaaf_coverage_corrections.py',
+ 'tests/test_ncaaf_coverage_scope_policy.py',
+ 'tests/test_ncaaf_custody_scope.py',
+ 'tests/test_ncaaf_data_access.py',
+ 'tests/test_ncaaf_history.py',
+ 'tests/test_ncaaf_identity.py',
+ 'tests/test_ncaaf_model_compatibility.py',
+ 'tests/test_ncaaf_normal_pipeline.py',
+ 'tests/test_ncaaf_normal_scope.py',
+ 'tests/test_ncaaf_prospective.py',
+ 'tests/test_ncaaf_prospective_chronology.py',
+ 'tests/test_ncaaf_research.py',
+ 'tests/test_ncaaf_research_contract.py',
+ 'tests/test_ncaaf_research_scope.py',
+ 'tests/test_ncaaf_response_custody.py',
+ 'tests/test_ncaaf_schedule_coverage.py',
+ 'tests/test_ncaaf_schedule_scope_policy.py',
+ 'tests/test_ncaaf_selection.py',
+ 'tests/test_ncaaf_stats_aliases.py',
+ 'tests/test_netlify_publishing.py',
+ 'tests/test_nfl_admission_bindings.py',
+ 'tests/test_nfl_admission_scope.py',
+ 'tests/test_nfl_calibration_evidence.py',
+ 'tests/test_nfl_calibration_scope.py',
+ 'tests/test_nfl_context_export.py',
+ 'tests/test_nfl_inference_evidence.py',
+ 'tests/test_nfl_injury_context.py',
+ 'tests/test_nfl_inputs_scope.py',
+ 'tests/test_nfl_lock_inputs.py',
+ 'tests/test_nfl_market.py',
+ 'tests/test_nfl_model_validation.py',
+ 'tests/test_nfl_native_provenance.py',
+ 'tests/test_nfl_native_scope.py',
+ 'tests/test_nfl_player_props.py',
+ 'tests/test_nfl_provenance_scope.py',
+ 'tests/test_nfl_research_replay.py',
+ 'tests/test_nfl_selection.py',
+ 'tests/test_nfl_ui_reblend.py',
+ 'tests/test_nfl_ui_scope.py',
+ 'tests/test_nhl_pittsburgh_stats_resolution.py',
+ 'tests/test_nhl_puck_line_evidence.py',
+ 'tests/test_nhl_puck_line_scope.py',
+ 'tests/test_no_bet_display_reasons.py',
+ 'tests/test_no_bet_pick_quality.py',
+ 'tests/test_normalized_ev.py',
+ 'tests/test_novig_fetch_no_hardcoded_date.py',
+ 'tests/test_novig_half_run.py',
+ 'tests/test_novig_unmatched_fallback.py',
+ 'tests/test_odds_api_failures.py',
+ 'tests/test_odds_api_key.py',
+ 'tests/test_odds_api_pagination.py',
+ 'tests/test_odds_fill_reverse_match.py',
+ 'tests/test_odds_source.py',
+ 'tests/test_odds_source_calibration.py',
+ 'tests/test_original_estimates.py',
+ 'tests/test_parlay_accuracy_changes.py',
+ 'tests/test_parlay_correlation.py',
+ 'tests/test_parlay_persistence.py',
+ 'tests/test_parlay_safety.py',
+ 'tests/test_parlay_ticket_quotes.py',
+ 'tests/test_parlay_unique_games.py',
+ 'tests/test_parlay_validation.py',
+ 'tests/test_per_game_boards.py',
+ 'tests/test_per_game_boards_ui.py',
+ 'tests/test_performance_pipeline_wnba.py',
+ 'tests/test_performance_recap_scope.py',
+ 'tests/test_pick_accuracy.py',
+ 'tests/test_pick_board_origin.py',
+ 'tests/test_pick_board_scope.py',
+ 'tests/test_pick_of_day.py',
+ 'tests/test_pipeline_date_fill_from_base.py',
+ 'tests/test_pipeline_identity_before_portfolio.py',
+ 'tests/test_pipeline_master_et_kalshi_fixes.py',
+ 'tests/test_pipeline_missing_columns.py',
+ 'tests/test_pitcher_prop_expansion.py',
+ 'tests/test_portfolio_calibration_and_caps.py',
+ 'tests/test_post2352_probability_closure.py',
+ 'tests/test_post2355_integration_verification.py',
+ 'tests/test_post2356_priced_value_consistency.py',
+ 'tests/test_post2357_paid_launch_evidence.py',
+ 'tests/test_post2357_read_only_census.py',
+ 'tests/test_post2357_row_contract_isolation.py',
+ 'tests/test_post2360_census_launcher.py',
+ 'tests/test_post2362_census_closure.py',
+ 'tests/test_post2362_external_verification.py',
+ 'tests/test_post2362_trace_probability_closure.py',
+ 'tests/test_post2366_eligibility_capacity.py',
+ 'tests/test_precision_card.py',
+ 'tests/test_prediction_engine_flatness_diagnostics.py',
+ 'tests/test_prediction_engine_settingwithcopy.py',
+ 'tests/test_prediction_evidence.py',
+ 'tests/test_preselection_line_audit_consistency.py',
+ 'tests/test_preview_binding_scope.py',
+ 'tests/test_preview_coverage_binding.py',
+ 'tests/test_price_value.py',
+ 'tests/test_probability_display_order.py',
+ 'tests/test_probability_first_selection.py',
+ 'tests/test_probability_integrity_v11.py',
+ 'tests/test_probability_semantics.py',
+ 'tests/test_probation_portfolio_guard.py',
+ 'tests/test_producer_provenance.py',
+ 'tests/test_producer_provenance_scope.py',
+ 'tests/test_production_card_calibration_guard.py',
+ 'tests/test_productionization_status.py',
+ 'tests/test_prop_calibration.py',
+ 'tests/test_prop_grading.py',
+ 'tests/test_prop_model.py',
+ 'tests/test_prop_odds_ingest.py',
+ 'tests/test_prop_performance_recap.py',
+ 'tests/test_prop_pipeline.py',
+ 'tests/test_prop_runner.py',
+ 'tests/test_prospective_evidence.py',
+ 'tests/test_prospective_legacy_view.py',
+ 'tests/test_prospective_readiness_report.py',
+ 'tests/test_prospective_reconciliation.py',
+ 'tests/test_prospective_remote.py',
+ 'tests/test_prospective_research_models.py',
+ 'tests/test_prospective_source_view.py',
+ 'tests/test_prospective_sync.py',
+ 'tests/test_prospective_validation_plans.py',
+ 'tests/test_provider_caller_health.py',
+ 'tests/test_provider_health_scope_policy.py',
+ 'tests/test_public_assets.py',
+ 'tests/test_public_betting_fade.py',
+ 'tests/test_public_board.py',
+ 'tests/test_public_brand.py',
+ 'tests/test_public_grading_scheduler.py',
+ 'tests/test_public_history.py',
+ 'tests/test_public_parlays.py',
+ 'tests/test_public_probability_audit.py',
+ 'tests/test_public_prop_history.py',
+ 'tests/test_public_prop_timing.py',
+ 'tests/test_public_reconciliation.py',
+ 'tests/test_public_record.py',
+ 'tests/test_public_refresh.py',
+ 'tests/test_publish_authority_wiring.py',
+ 'tests/test_publish_panel.py',
+ 'tests/test_quote_freshness.py',
+ 'tests/test_ranking_evidence_rebuild.py',
+ 'tests/test_raw_book_odds_diag.py',
+ 'tests/test_readiness_dashboard.py',
+ 'tests/test_readiness_dashboard_scope.py',
+ 'tests/test_recap_tier_summary.py',
+ 'tests/test_recovered_row_value.py',
+ 'tests/test_recovery_calibration_gate.py',
+ 'tests/test_refresh_calibration.py',
+ 'tests/test_refresh_lock_performance.py',
+ 'tests/test_regression_kalshi_and_results.py',
+ 'tests/test_relock_changes.py',
+ 'tests/test_remote_canonical_continuation.py',
+ 'tests/test_remote_canonical_download.py',
+ 'tests/test_remote_canonical_scope.py',
+ 'tests/test_remote_continuation_scope.py',
+ 'tests/test_research_actions_preflight.py',
+ 'tests/test_research_api_budget.py',
+ 'tests/test_research_cycle_audit.py',
+ 'tests/test_research_parlays.py',
+ 'tests/test_research_performance.py',
+ 'tests/test_research_probability_browser.py',
+ 'tests/test_research_probability_display.py',
+ 'tests/test_research_probability_producer.py',
+ 'tests/test_research_scheduler.py',
+ 'tests/test_results_clarity.py',
+ 'tests/test_results_ingestion.py',
+ 'tests/test_results_overview.py',
+ 'tests/test_results_parlay_reconciliation.py',
+ 'tests/test_reversed_game_dedupe.py',
+ 'tests/test_run_click_counter.py',
+ 'tests/test_run_readiness.py',
+ 'tests/test_sanitization.py',
+ 'tests/test_schedule_staleness.py',
+ 'tests/test_scheduler_recovery.py',
+ 'tests/test_selection_probability_integrity.py',
+ 'tests/test_selector_validation.py',
+ 'tests/test_separate_prop_analysis.py',
+ 'tests/test_sftp_publishing.py',
+ 'tests/test_sidebar_sport_view.py',
+ 'tests/test_simple_publication_workflow.py',
+ 'tests/test_six_sport_adapters.py',
+ 'tests/test_slate_audit_scope.py',
+ 'tests/test_slate_coverage.py',
+ 'tests/test_slate_performance.py',
+ 'tests/test_slate_quality.py',
+ 'tests/test_source_contract_pipeline.py',
+ 'tests/test_source_contract_scope.py',
+ 'tests/test_source_evidence_intake.py',
+ 'tests/test_source_intake_scope.py',
+ 'tests/test_speculative_lean_recovery.py',
+ 'tests/test_sport_deployment.py',
+ 'tests/test_sport_market_gate.py',
+ 'tests/test_spread_away_orientation.py',
+ 'tests/test_stale_research_carrier.py',
+ 'tests/test_status_display_labels.py',
+ 'tests/test_strategy_lab_kelly_alignment.py',
+ 'tests/test_strategy_lab_realized.py',
+ 'tests/test_strategy_lab_top_ev_kelly_safety.py',
+ 'tests/test_strategy_lab_top_ev_production_source.py',
+ 'tests/test_string_series_categorical_safety.py',
+ 'tests/test_subscriber_journey.py',
+ 'tests/test_suspicious_upload_mismatch.py',
+ 'tests/test_sweet_spot_export_scope.py',
+ 'tests/test_sweet_spot_filter.py',
+ 'tests/test_sweet_spot_segmentation.py',
+ 'tests/test_team_mapper.py',
+ 'tests/test_theover_bet_rows_resilience.py',
+ 'tests/test_theover_fade_scope.py',
+ 'tests/test_theover_overweight_fix.py',
+ 'tests/test_theover_source_filter.py',
+ 'tests/test_threshold_validation.py',
+ 'tests/test_tiered_prop_parlays.py',
+ 'tests/test_tighten_thin_actionable_overs.py',
+ 'tests/test_top_ten_history.py',
+ 'tests/test_total_consensus_provenance.py',
+ 'tests/test_total_quality_diagnostics.py',
+ 'tests/test_totals_pick_direction.py',
+ 'tests/test_true_parlay_engine_unittest.py',
+ 'tests/test_true_parlay_public_unittest.py',
+ 'tests/test_two_stage_finalist_selection.py',
+ 'tests/test_under_floor_relaxation.py',
+ 'tests/test_upload_column_aliases_and_game_date_fallback.py',
+ 'tests/test_upload_header_punctuation_normalization.py',
+ 'tests/test_upload_placeholder_identity_fallback.py',
+ 'tests/test_upload_team_columns_fallback.py',
+ 'tests/test_uploader_compat.py',
+ 'tests/test_wager_integrity_audit.py',
+ 'tests/test_walk_forward.py',
+ 'tests/test_win_probability_first_card.py',
+ 'tests/test_wnba_cold_start_blend.py',
+ 'tests/test_wnba_kalshi_matching.py',
+ 'tests/test_wnba_model_features.py',
+ 'tests/test_wnba_public_results.py',
+ 'tests/test_wnba_selection.py')
+NCAAF_PILOT_BINDINGS = {'base': '497dfe6e9dfce5c5b7d81b99ce36e1f170c1ab9f',
+ 'base_tree': '55883950dd39485e504b54d59b2d5b80adc883d9',
+ 'manifest_sha256': '2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343',
+ 'previous_guard_sha256': '35ac29313e9509efd68894a86e4a98b109a58459605fe589cc6f86159e0dbc64',
+ 'previous_policy_blob': 'f64e56bdd200d9bf6a23590cf82dbe25c7b6a5fa',
+ 'previous_ci_policy_blob': 'f803a4405199ba3a2686cfb8e2948270a17268b4',
+ 'previous_compatibility_policy_blob': '4d0442c4a3626f717ae92bf02296279f69bf0c0e',
+ 'reviewed_blobs': {'app_core/ncaaf_pilot.py': '0c0f68c172ce547e3eea01f7f02ac69890ff98ad',
+                    'app_core/availability_inventory.py': 'ac81799743cb9be9506f9ec219b9f761d9fe8f86',
+                    'scripts/ncaaf_pilot.py': '61590d6a4263eeacb34502979c418fea673fced5',
+                    'tests/test_ncaaf_pilot.py': '16fdea5151b13d9df6c86b32ead94761e1ddde54',
+                    'tests/test_availability_inventory.py': 'd0ce93f47155246e19aa20f632a456ad3911a1bf',
+                    'docs/paid-launch/ncaaf-bounded-pilot.md': '904b70dffbaab20fe4fa0d1de520429b1f3c7f3f',
+                    'docs/paid-launch/ncaaf-pilot-army-proposal-v1.json': '60090c5924bb48cc3fe1bedafa5a7f82c678170b',
+                    'docs/audits/ncaaf-pilot-isolation-and-availability.md': 'a26fdd13f64a808103aeaf3be5f059996cb17ad9',
+                    'scripts/ncaaf_pilot_scope.py': 'a143b17fedf19b78a1e54f3428ea240d9dbfbd7d',
+                    'tests/test_ncaaf_pilot_scope.py': 'bc424f78b34dea596e034c153e3c3ed54b864765'},
+ 'scope_module_sha256': 'd3762635b582afb6b05822e016787cc59aaa52620839f5224454387a85153089',
+ 'successor_guard_sha256': '5bd6ff191aa7f2532304f52034ac786d65435d85d6b33c50ade592d1c2c68526'}
+NCAAF_PILOT_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--manifest", typ'
+ b'e=Path, default=DEFAULT_MANIFEST)\n    parser.add_argument("--base")\n    parser.add_argument("--json-outp'
+ b'ut", type=Path)\n    args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NCAAF_CUSTODY_P'
+ b'OLICY_PATH):\n            code, report = _run_ncaaf_custody_integrated(args.manifest, args.base, NCAAF_CU'
+ b'STODY_BINDINGS)\n        elif exists_at("HEAD", NCAAF_CHRONOLOGY_POLICY_PATH):\n            code, report ='
+ b' _run_ncaaf_chronology_integrated(args.manifest, args.base, NCAAF_CHRONOLOGY_BINDINGS)\n        elif exis'
+ b'ts_at("HEAD", PREVIEW_BINDING_POLICY_PATH):\n            code, report = _run_preview_binding_integrated(a'
+ b'rgs.manifest, args.base, PREVIEW_BINDING_BINDINGS)\n        elif exists_at("HEAD", NCAAF_NORMAL_POLICY_PA'
+ b'TH):\n            code, report = _run_ncaaf_normal_integrated(args.manifest, args.base, NCAAF_NORMAL_BIND'
+ b'INGS)\n        elif exists_at("HEAD", READINESS_DASHBOARD_POLICY_PATH):\n            code, report = _run_r'
+ b'eadiness_dashboard_integrated(args.manifest, args.base, READINESS_DASHBOARD_BINDINGS)\n        elif exist'
+ b's_at("HEAD", NCAAF_COMPAT_POLICY_PATH):\n            code, report = _run_ncaaf_compatibility_integrated(a'
+ b'rgs.manifest, args.base, NCAAF_COMPAT_BINDINGS)\n        elif exists_at("HEAD", CI_SCHEDULING_POLICY_PATH'
+ b'):\n            code, report = _run_ci_scheduling_integrated(args.manifest, args.base, CI_SCHEDULING_BIND'
+ b'INGS)\n        elif exists_at("HEAD", SLATE_AUDIT_POLICY_PATH):\n            code, report = _run_slate_aud'
+ b'it_integrated(args.manifest, args.base, SLATE_AUDIT_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_RE'
+ b'SEARCH_POLICY_PATH):\n            code, report = _run_football_research_integrated(args.manifest, args.ba'
+ b'se, FOOTBALL_RESEARCH_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):\n       '
+ b'     code, report = _run_remote_continuation_integrated(args.manifest, args.base, REMOTE_CONTINUATION_BI'
+ b'NDINGS)\n        elif exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):\n            code, report = _run_re'
+ b'mote_canonical_integrated(args.manifest, args.base, REMOTE_CANONICAL_BINDINGS)\n        elif exists_at("H'
+ b'EAD", CANONICAL_DOWNLOAD_POLICY_PATH):\n            code, report = _run_canonical_download_integrated(arg'
+ b's.manifest, args.base, CANONICAL_DOWNLOAD_BINDINGS)\n        elif exists_at("HEAD", NCAAF_RESEARCH_POLICY'
+ b'_PATH):\n            code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEAR'
+ b'CH_BINDINGS)\n        elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n            code, report = _r'
+ b'un_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS)\n        elif exists_'
+ b'at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, report = _run_football_catalog_integrated(ar'
+ b'gs.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)\n        elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_P'
+ b'ATH):\n            code, report = _run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_B'
+ b'INDINGS)\n        elif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code, report = _run_nf'
+ b'l_calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif exists_at("HEA'
+ b'D", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_intake_integrated(args.manifest, '
+ b'args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at("HEAD", NFL_UI_POLICY_PATH):\n            code,'
+ b' report = _run_nfl_ui_integrated(args.manifest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD'
+ b'", PICK_BOARD_POLICY_PATH):\n            code, report = _run_pick_board_integrated(args.manifest, args.ba'
+ b'se, PICK_BOARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code, repor'
+ b't = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n        elif exists_at("HE'
+ b'AD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_nfl_admission_integrated(args.manifest,'
+ b' args.base, NFL_ADMISSION_BINDINGS)\n        elif exists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            '
+ b'code, report = _run_nfl_inputs_integrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif ex'
+ b'ists_at("HEAD", SOURCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated'
+ b'(args.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVENANCE_POLICY_PA'
+ b'TH):\n            code, report = _run_producer_integrated(args.manifest, args.base, PROVENANCE_BINDINGS)\n'
+ b'        elif exists_at("HEAD", HOME_POLICY_PATH):\n            code, report = _run_home_integrated(args.m'
+ b'anifest, args.base, HOME_BINDINGS)\n        elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, re'
+ b'port = _run_nfl_integrated(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMA'
+ b'TE_POLICY_PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, ESTIMATE_'
+ b'BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, report = _run_drive_integ'
+ b'rated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exists_at("HEAD", V4_POLICY_PATH):\n        '
+ b'    code, report = _run_dfs_integrated(args.manifest, args.base, DFS_BINDINGS)\n        elif exists_at("H'
+ b'EAD", COVERAGE_POLICY_PATH):\n            code, report = _run_coverage_integrated(args.manifest, args.bas'
+ b'e, COVERAGE_BINDINGS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _'
+ b'run_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_at("HEAD", V3_P'
+ b'OLICY_PATH):\n            code, report = _run_provider_integrated(args.manifest, args.base, PROVIDER_BIND'
+ b'INGS)\n        else:\n            code, report = _run_integrated(args.manifest, args.base, PRODUCTION_BIND'
+ b'INGS)\n    except Exception as exc:\n        report = {"schema_version": 1, "status": "ERROR", "reason_cod'
+ b'es": ["GUARD_EXECUTION_ERROR"], "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, in'
+ b'dent=2, sort_keys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, exi'
+ b'st_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n    print(rendere'
+ b'd)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n')
+NCAAF_PILOT_PRIOR_SOURCE_RECONSTRUCTIONS = {}
+
+
+def _ncaaf_pilot_raw_guard_matches(source, reviewed):
+    digest = reviewed.encode("ascii")
+    return source.count(digest) == 1 and hashlib.sha256(source.replace(digest, b"0"*64)).hexdigest() == reviewed
+
+
+def _ncaaf_pilot_parent_guard_source(source, binding=None):
+    binding = NCAAF_PILOT_BINDINGS if binding is None else binding
+    if b"\nNCAAF_PILOT_POLICY_PATH =" not in source:
+        return source
+    _require(_ncaaf_pilot_raw_guard_matches(source, binding["successor_guard_sha256"]), "SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED")
+    return source.split(b"\nNCAAF_PILOT_POLICY_PATH =", 1)[0] + NCAAF_PILOT_PREVIOUS_CLI
+
+
+def _ncaaf_pilot_parent_main_source(path, source):
+    if path == GUARD_PATH:
+        return _ncaaf_pilot_parent_guard_source(source)
+    frozen = NCAAF_PILOT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
+    if frozen is None or hashlib.sha256(source).hexdigest() == frozen["sha256"]:
+        return source
+    earlier = {entry[path]["sha256"] for name, entry in globals().items()
+               if name.endswith("_PRIOR_SOURCE_RECONSTRUCTIONS") and name != "NCAAF_PILOT_PRIOR_SOURCE_RECONSTRUCTIONS"
+               and path in entry}
+    if hashlib.sha256(source).hexdigest() in earlier:
+        return source
+    _require(hashlib.sha256(source).hexdigest() == frozen["after_sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    for before, after in reversed(frozen["edits"]):
+        _require(source.count(after) == 1, "PRIOR_FIXTURE_ANCHOR_CHANGED")
+        source = source.replace(after, before, 1)
+    _require(hashlib.sha256(source).hexdigest() == frozen["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+    return source
+
+
+# Reuse the exact immutable predecessor for historical fixture semantics.
+# New bytes are peeled only by their exact reviewed hashes and edit receipts.
+_ncaaf_pilot_frozen_module = None
+def _ncaaf_pilot_predecessor():
+    global _ncaaf_pilot_frozen_module
+    if _ncaaf_pilot_frozen_module is None:
+        import types
+        source = Path(__file__).read_bytes().replace(b"\r\n", b"\n")
+        previous = _ncaaf_pilot_parent_guard_source(source)
+        _require(hashlib.sha256(previous).hexdigest() == NCAAF_PILOT_BINDINGS["previous_guard_sha256"], "PREVIOUS_GUARD_CHANGED")
+        frozen = types.ModuleType("exact_ncaaf_pilot_predecessor")
+        frozen.__file__ = __file__
+        exec(previous, frozen.__dict__)
+        # Frozen custody parent is seeded before wrapping its historical readers.
+        frozen._ncaaf_custody_frozen_module = _ncaaf_pilot_seeded_custody_parent
+        _ncaaf_pilot_frozen_module = frozen
+    _ncaaf_pilot_frozen_module.ROOT = ROOT
+    return _ncaaf_pilot_frozen_module
+
+
+def _ncaaf_pilot_wrap_previous(name):
+    def wrapped(*args, **kwargs):
+        method = getattr(_ncaaf_pilot_predecessor(), name)
+        if name.endswith(("_previous_main_source", "_parent_main_source")):
+            path, source = args
+            return method(path, _ncaaf_pilot_parent_main_source(path, source), **kwargs)
+        source, *rest = args
+        return method(_ncaaf_pilot_parent_guard_source(source), *rest, **kwargs)
+    return wrapped
+
+
+# Preserve the exact custody guard assertion for this append-only successor.
+_ncaaf_pilot_saved_custody_raw = _ncaaf_custody_raw_guard_matches
+def _ncaaf_custody_raw_guard_matches(source, reviewed):
+    if b"\nNCAAF_PILOT_POLICY_PATH =" in source:
+        if not _ncaaf_pilot_raw_guard_matches(source, NCAAF_PILOT_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = _ncaaf_pilot_parent_guard_source(source)
+    return _ncaaf_pilot_saved_custody_raw(source, reviewed)
+
+_ncaaf_pilot_seeded_custody_parent = _ncaaf_custody_predecessor()
+
+for _ncaaf_pilot_name, _ncaaf_pilot_method in list(globals().items()):
+    if callable(_ncaaf_pilot_method) and _ncaaf_pilot_name.endswith(("_previous_guard_source", "_previous_main_source", "_parent_guard_source", "_parent_main_source")) and not _ncaaf_pilot_name.startswith("_ncaaf_pilot_"):
+        globals()[_ncaaf_pilot_name] = _ncaaf_pilot_wrap_previous(_ncaaf_pilot_name)
+
+
+def _dfs_guard_matches(source, reviewed):
+    if b"\nNCAAF_PILOT_POLICY_PATH =" in source:
+        if reviewed == NCAAF_PILOT_BINDINGS["successor_guard_sha256"]:
+            return _ncaaf_pilot_raw_guard_matches(source, reviewed)
+        if not _ncaaf_pilot_raw_guard_matches(source, NCAAF_PILOT_BINDINGS["successor_guard_sha256"]):
+            return False
+        source = _ncaaf_pilot_parent_guard_source(source)
+    return _ncaaf_pilot_predecessor()._dfs_guard_matches(source, reviewed)
+
+
+# Keep the predecessor's assertions meaningful for the newly reviewed source:
+# compose exact reverse edits; no assertion is removed or relaxed.
+for _ncaaf_pilot_group in ("NCAAF_CUSTODY_PRIOR_SOURCE_RECONSTRUCTIONS", "NCAAF_CHRONOLOGY_PRIOR_SOURCE_RECONSTRUCTIONS", "PREVIEW_BINDING_PRIOR_SOURCE_RECONSTRUCTIONS", "NCAAF_NORMAL_PRIOR_SOURCE_RECONSTRUCTIONS", "SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS", "FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS", "NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS"):
+    _ncaaf_pilot_map = {p: dict(v) for p,v in globals()[_ncaaf_pilot_group].items()}
+    globals()[_ncaaf_pilot_group] = _ncaaf_pilot_map
+    for _ncaaf_pilot_path, _ncaaf_pilot_receipt in NCAAF_PILOT_PRIOR_SOURCE_RECONSTRUCTIONS.items():
+        if _ncaaf_pilot_path in _ncaaf_pilot_map:
+            _ncaaf_pilot_prior = _ncaaf_pilot_map[_ncaaf_pilot_path]
+            _require(_ncaaf_pilot_prior["after_sha256"] == _ncaaf_pilot_receipt["sha256"], "PRIOR_ASSERTIONS_CHANGED")
+            _ncaaf_pilot_prior["after_sha256"] = _ncaaf_pilot_receipt["after_sha256"]
+            _ncaaf_pilot_prior["edits"] = _ncaaf_pilot_prior["edits"] + _ncaaf_pilot_receipt["edits"]
+
+
+
+def _run_ncaaf_pilot_integrated(manifest_path, base, binding):
+    import importlib.util
+    path = ROOT / "scripts/ncaaf_pilot_scope.py"
+    _require(hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED")
+    spec = importlib.util.spec_from_file_location("parlaypicker_ncaaf_pilot_scope", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__], manifest_path, base, binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -20648,7 +21517,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NCAAF_CUSTODY_POLICY_PATH):
+        if exists_at("HEAD", NCAAF_PILOT_POLICY_PATH):
+            code, report = _run_ncaaf_pilot_integrated(args.manifest, args.base, NCAAF_PILOT_BINDINGS)
+        elif exists_at("HEAD", NCAAF_CUSTODY_POLICY_PATH):
             code, report = _run_ncaaf_custody_integrated(args.manifest, args.base, NCAAF_CUSTODY_BINDINGS)
         elif exists_at("HEAD", NCAAF_CHRONOLOGY_POLICY_PATH):
             code, report = _run_ncaaf_chronology_integrated(args.manifest, args.base, NCAAF_CHRONOLOGY_BINDINGS)
