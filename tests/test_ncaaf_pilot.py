@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import pandas as pd
 from app_core import ncaaf_pilot as pilot, ncaaf_response_custody as custody, ncaaf_model_compatibility as model
 from app_core import ncaaf_pipeline_evidence as adapter,ncaaf_research as research
 from scripts.benchmark_drive_history_loading import blocked_network
@@ -227,6 +228,10 @@ def test_accepted_synthetic_caller_then_existing_capture_export_display(syntheti
     monkeypatch.setattr(evidence,'now_utc',lambda:ef.CAPTURE)
     monkeypatch.setattr(pilot,'datetime',ef.FrozenDateTime)
     monkeypatch.setattr('app_core.public_board.datetime',ef.FrozenDateTime)
+    # The selector evaluates pregame status independently. Keep this labelled
+    # synthetic instant aligned with the caller/export clocks; production
+    # chronology and the stale/started rejection fixtures remain unchanged.
+    monkeypatch.setattr('app_core.candidate_chronology.now_utc',lambda:pd.Timestamp(previous.NOW))
     result=pilot.retain_analysis(frame,path=db)
     import hashlib,sqlite3
     with sqlite3.connect(db.resolve().as_uri()+'?mode=ro',uri=True) as stored:
