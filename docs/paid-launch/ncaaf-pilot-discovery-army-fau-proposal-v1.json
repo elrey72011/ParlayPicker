@@ -1,0 +1,66 @@
+{
+  "payload": {
+    "version": "ncaaf-pilot-discovery-plan-v1",
+    "evidence_label": "PROPOSAL",
+    "target": {
+      "canonical_event_id": "cfbd:401862802",
+      "home_team": "Army",
+      "home_id": 349,
+      "away_team": "Florida Atlantic",
+      "away_id": 2226,
+      "start_utc": "2026-10-17T16:00:00Z",
+      "neutral_site": false,
+      "schedule_reference": "Retained September CFBD schedule row501; official Army and FAU schedule recheck; docs/paid-launch/ncaaf-pilot-discovery-v1.md"
+    },
+    "offer_scope": {
+      "market": "spreads",
+      "side": "home",
+      "bookmaker": "draftkings"
+    },
+    "requests": [
+      {
+        "id": "odds-ncaaf-identifiers-20261016",
+        "provider": "odds_api",
+        "host": "api.the-odds-api.com",
+        "endpoint": "v4/sports/americanfootball_ncaaf/odds",
+        "params": {
+          "regions": "us",
+          "markets": "spreads",
+          "bookmakers": "draftkings",
+          "oddsFormat": "american",
+          "dateFormat": "iso",
+          "commenceTimeFrom": "2026-10-17T00:00:00Z",
+          "commenceTimeTo": "2026-10-18T00:00:00Z"
+        },
+        "max_attempts": 1
+      }
+    ],
+    "limits": {
+      "max_attempts": 1,
+      "max_objects": 16,
+      "max_body_bytes": 524288,
+      "max_aggregate_bytes": 2097152,
+      "connect_seconds": 3,
+      "read_seconds": 5,
+      "total_seconds": 60
+    },
+    "execution_window": {
+      "not_before": "2026-10-16T15:30:00Z",
+      "not_after": "2026-10-16T15:31:00Z",
+      "authorization_expires_at": "2026-10-16T15:31:30Z"
+    },
+    "advance_permission": null,
+    "collection_authorization_ref": null,
+    "custody_id": "OWNER_VERIFIED_PRIVATE_DISCOVERY_CUSTODY_REQUIRED",
+    "unresolved": [
+      "ADVANCE_APPLICABLE_IDENTIFIER_DISCOVERY_RETENTION_PERMISSION",
+      "OWNER_ODDS_ENTITLEMENT_QUOTA_CASH_CEILING",
+      "PRIVATE_ENCRYPTED_CUSTODY_BACKUP_AND_SETUP_UNVERIFIED",
+      "SEPARATE_EXACT_DISCOVERY_PLAN_AUTHORIZATION",
+      "EXPLICIT_EIGHT_TOTAL_EVENT_ATTEMPT_SCOPE_APPROVAL",
+      "ORIGINAL_BODY_SIZE_FEASIBILITY_UNKNOWN",
+      "REVALIDATE_SCHEDULE_AND_WINDOWS_BEFORE_EXECUTION"
+    ]
+  },
+  "sha256": "70b35263474627242ea826091568bf5e428cbf8aad11fb098f9d16146cfbb0aa"
+}

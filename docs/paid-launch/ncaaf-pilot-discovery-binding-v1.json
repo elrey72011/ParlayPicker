@@ -1,0 +1,38 @@
+{
+  "base": "0e7122529d952e96392631b1a5cb331c7390abd9",
+  "base_tree": "d40ca8f09600a57a40610a59bbde96f92e83a610",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "previous_guard_sha256": "6e82f1a4e0e14a34d62b3ead8eba8f44f382e40093dcfec447029d22027a219c",
+  "paths": [
+    "scripts/check_launch_change_scope.py",
+    "app_core/ncaaf_pilot_discovery.py",
+    "app_core/ncaaf_pilot_setup.py",
+    "scripts/ncaaf_pilot_discovery.py",
+    "scripts/ncaaf_pilot_setup.py",
+    "scripts/ncaaf_discovery_scope.py",
+    "tests/test_ncaaf_pilot_discovery.py",
+    "tests/test_ncaaf_pilot_setup.py",
+    "tests/test_ncaaf_pilot_discovery_scope.py",
+    "docs/paid-launch/ncaaf-pilot-discovery-v1.md",
+    "docs/paid-launch/ncaaf-pilot-local-custody-setup.md",
+    "docs/paid-launch/ncaaf-pilot-discovery-army-fau-proposal-v1.json",
+    "docs/paid-launch/ncaaf-pilot-army-fau-capture-proposal-v1.json",
+    "docs/paid-launch/ncaaf-pilot-discovery-binding-v1.json"
+  ],
+  "preserved_original_proposal_blob": "60090c5924bb48cc3fe1bedafa5a7f82c678170b",
+  "approval_reference": "Owner authorizes separate versioned identifier-discovery software and conditional isolated local setup; synthetic offline verification, exact successor seal, draft PR and CI. No real provider, quota, Drive, collection, authentic inference, source/acceptance registration, publication, deployment, merge or wagering. Preserve every original reader, packet, plan, baseline, protected file/test, workflow, mathematics and scientific/wagering gate. Discovery outputs unaccepted identifiers only; conditional authentic copy requires verified security/backup. Future proposals are not executable authorizations.",
+  "reviewed_blobs": {
+    "app_core/ncaaf_pilot_discovery.py": "b3297bd713b2aca71b6361ea807f0d83cfeaa257",
+    "app_core/ncaaf_pilot_setup.py": "93ebdce0508a3903db08d4f0308d852048c7e783",
+    "scripts/ncaaf_pilot_discovery.py": "2d565708da4eca07c39457642595985fbd9c5b89",
+    "scripts/ncaaf_pilot_setup.py": "a55cd3db1c3eb2cddb9d023cc5538b5fdc964ee8",
+    "scripts/ncaaf_discovery_scope.py": "21dd00c4e87d79d21f77e6f1ef07965e83e2e2b9",
+    "tests/test_ncaaf_pilot_discovery.py": "e861b227f022d7b2716f4d12d39cbc128bcf7970",
+    "tests/test_ncaaf_pilot_setup.py": "f6c3eff00ed2f09fd0b230d64958d63ce9c48463",
+    "tests/test_ncaaf_pilot_discovery_scope.py": "bd3f26e345a1d0862a5118e655d370aa189fd9ad",
+    "docs/paid-launch/ncaaf-pilot-discovery-v1.md": "ca143bf2aff652f8a78ca65027c5d2877f651155",
+    "docs/paid-launch/ncaaf-pilot-local-custody-setup.md": "b89accdba344ad0a0a5bc9779127165b96605e8b",
+    "docs/paid-launch/ncaaf-pilot-discovery-army-fau-proposal-v1.json": "bcff933bbc42be360306c4aa6e79b870d9470a38",
+    "docs/paid-launch/ncaaf-pilot-army-fau-capture-proposal-v1.json": "e400ee7df1d5adbf138c19d48bda5d5ec5486425"
+  }
+}

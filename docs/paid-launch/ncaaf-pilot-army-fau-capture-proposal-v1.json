@@ -1,0 +1,145 @@
+{
+  "payload": {
+    "version": "ncaaf-pilot-plan-v1",
+    "evidence_label": "PROPOSAL",
+    "target": {
+      "canonical_event_id": "cfbd:401862802",
+      "provider_event_id": null,
+      "home_team": "Army",
+      "away_team": "Florida Atlantic",
+      "start_utc": "2026-10-17T16:00:00Z",
+      "neutral_site": false
+    },
+    "offer": {
+      "market": "spread_home",
+      "side": "home",
+      "signed_line": null,
+      "price": null,
+      "bookmaker": "draftkings",
+      "product": null,
+      "period": "full_game",
+      "settlement_review_sha256": null
+    },
+    "requests": [
+      {
+        "id": "cfbd-games-2026",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games",
+        "params": {
+          "year": 2026,
+          "seasonType": "both",
+          "classification": "fbs"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "cfbd-teams-2026-regular-week-1",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games/teams",
+        "params": {
+          "year": 2026,
+          "week": 1,
+          "seasonType": "regular"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "cfbd-teams-2026-regular-week-2",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games/teams",
+        "params": {
+          "year": 2026,
+          "week": 2,
+          "seasonType": "regular"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "cfbd-teams-2026-regular-week-3",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games/teams",
+        "params": {
+          "year": 2026,
+          "week": 3,
+          "seasonType": "regular"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "cfbd-teams-2026-regular-week-4",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games/teams",
+        "params": {
+          "year": 2026,
+          "week": 4,
+          "seasonType": "regular"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "cfbd-teams-2026-regular-week-5",
+        "provider": "cfbd",
+        "host": "api.collegefootballdata.com",
+        "endpoint": "games/teams",
+        "params": {
+          "year": 2026,
+          "week": 5,
+          "seasonType": "regular"
+        },
+        "max_attempts": 1
+      },
+      {
+        "id": "odds-ncaaf-draftkings-spreads-20261017",
+        "provider": "odds_api",
+        "host": "api.the-odds-api.com",
+        "endpoint": "v4/sports/americanfootball_ncaaf/odds",
+        "params": {
+          "regions": "us",
+          "markets": "spreads",
+          "bookmakers": "draftkings",
+          "oddsFormat": "american",
+          "dateFormat": "iso",
+          "commenceTimeFrom": "2026-10-17T00:00:00Z",
+          "commenceTimeTo": "2026-10-18T00:00:00Z"
+        },
+        "max_attempts": 1
+      }
+    ],
+    "limits": {
+      "max_attempts": 7,
+      "max_objects": 16,
+      "max_body_bytes": 524288,
+      "max_aggregate_bytes": 2097152,
+      "connect_seconds": 3,
+      "read_seconds": 5,
+      "total_seconds": 60
+    },
+    "execution_window": {
+      "not_before": "2026-10-17T15:30:00Z",
+      "not_after": "2026-10-17T15:31:00Z",
+      "authorization_expires_at": "2026-10-17T15:31:30Z"
+    },
+    "advance_permissions": [],
+    "collection_authorization_ref": null,
+    "custody_id": "OWNER_DURABLE_PRIVATE_CUSTODY_TO_BE_VERIFIED",
+    "unresolved": [
+      "AUTHORITATIVE_SCHEDULE_PROVIDER_CROSSWALK_AND_EXACT_LABELS",
+      "INDEPENDENT_LISTING_PRODUCT_PERIOD_OVERTIME_RULES_RIGHTS",
+      "ADVANCE_CFBD_ODDS_PERMISSION_AND_OWNER_ENTITLEMENT",
+      "ORIGINAL_THREE_QUALIFYING_HISTORIES_AND_STRICT_SEVEN_DAY_LAG",
+      "FAU_WEEK3_ORIGINAL_YARDAGE_BYTES_NOT_RETAINED",
+      "FULL_SEASON_BODY_SIZE_FEASIBILITY_UNKNOWN",
+      "VERIFIED_PRIVATE_ENCRYPTED_CUSTODY_AND_BACKUP_SETUP",
+      "EXPLICIT_SEVEN_CAPTURE_EIGHT_COMBINED_ATTEMPT_BUDGET_COST_AND_QUOTA",
+      "FRESH_EXACT_PLAN_COLLECTION_AUTHORIZATION",
+      "LATER_EXACT_VERIFICATION_AND_TRUSTED_INDEPENDENT_ACCEPTANCE",
+      "REVALIDATE_SCHEDULE_AND_WINDOWS_BEFORE_EXECUTION"
+    ]
+  },
+  "sha256": "d478baa2e9e9e87419f5d8ce4651fe05e9410458f90339644a264d0b3ff5847b"
+}
