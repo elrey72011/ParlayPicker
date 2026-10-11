@@ -1,0 +1,147 @@
+{
+  "approval_reference": "Robert Velarde authorized narrow private NFL acquisition failure diagnostics, blocked-network synthetic regressions, successor binding/seal and draft PR/CI only; no acquisition, retry, new window, trust change, inference or NCAAF plan changes.",
+  "base": "0a19dae206d80b482a516e0b780275cfd8278a93",
+  "base_tree": "1b2d5f95ff56d5e2a70f6796924bf644fc5e390c",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/nfl_acquisition_diagnostics.py",
+    "app_core/nfl_scoring_acquisition.py",
+    "docs/paid-launch/nfl-acquisition-diagnostics-binding-v1.json",
+    "docs/paid-launch/nfl-acquisition-diagnostics-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_diagnostics_scope.py",
+    "scripts/nfl_scoring_acquisition.py",
+    "tests/test_nfl_acquisition_diagnostics.py",
+    "tests/test_nfl_diagnostics_scope.py"
+  ],
+  "previous_guard_sha256": "147763725ef8d02b1a0afaeafebca93c4c84125063afebc9b5d907b3f7a4bba2",
+  "reviewed_blobs": {
+    "app_core/nfl_acquisition_diagnostics.py": "3aa553dc315aedea7201045a65900e90611c087d",
+    "app_core/nfl_scoring_acquisition.py": "b3101dfc58325175af91cdb63650ce234f6e124d",
+    "docs/paid-launch/nfl-acquisition-diagnostics-v1.md": "f5356d1a0f65ca9b303cdc35c0f426e487b944a3",
+    "scripts/nfl_diagnostics_scope.py": "ab4ff7b0811b376e1c17d7cabe62ffc4a4639aa4",
+    "scripts/nfl_scoring_acquisition.py": "594d7207802bad3629a105de0e76afb03ade25c4",
+    "tests/test_nfl_acquisition_diagnostics.py": "87aaefd567192eec474c4f21c391922ab9bdc89e",
+    "tests/test_nfl_diagnostics_scope.py": "592b78d23535e7dc127840f4bc9b71357dd3da8e"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app_core/nfl_scoring_acquisition.py": {
+      "after_sha256": "0b285d44b6aaeb41293bdb373215d1ea8e1dcc7932829cdf27c41df674afee43",
+      "before_sha256": "558de3921e89c554b1f5ecbd1003938d7d2342c17c3d401acb6f8dc3f468dc31",
+      "reverse_patches": [
+        {
+          "end": 560,
+          "start": 496,
+          "text": ""
+        },
+        {
+          "end": 11393,
+          "start": 11255,
+          "text": "        conn=http.client.HTTPSConnection(request['host'],timeout=min(limits['connect_seconds'],max(.001,deadline-monotonic())))\n        conn.auto_open=False; cancelled=threading.Event()\n"
+        },
+        {
+          "end": 11594,
+          "start": 11406,
+          "text": ""
+        },
+        {
+          "end": 11743,
+          "start": 11710,
+          "text": ""
+        },
+        {
+          "end": 12079,
+          "start": 12042,
+          "text": ""
+        },
+        {
+          "end": 12295,
+          "start": 12205,
+          "text": ""
+        },
+        {
+          "end": 12870,
+          "start": 12396,
+          "text": "            conn.close()\n            if isinstance(exc,ValueError) and str(exc) in {'NFL_ACQUIRE_HEADER_CONFLICT','NFL_ACQUIRE_HEADER_LIMIT','NFL_ACQUIRE_REDIRECT_OR_PAGINATION'}:raise\n            raise ValueError('NFL_ACQUIRE_TRANSPORT_FAILURE') from None\n"
+        },
+        {
+          "end": 13676,
+          "start": 12994,
+          "text": "                while True:\n                    require(monotonic()<deadline,'NFL_ACQUIRE_DEADLINE')\n                    conn.sock.settimeout(min(limits['read_seconds'],max(.001,deadline-monotonic())))\n                    block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)\n                    if not block: break\n                    yield block\n"
+        },
+        {
+          "end": 16806,
+          "start": 16065,
+          "text": ""
+        },
+        {
+          "end": 17328,
+          "start": 17144,
+          "text": "    deadline=monotonic()+p['limits']['total_seconds']; obj=None; reason=None; attempted=0; chain=[]\n"
+        },
+        {
+          "end": 17598,
+          "start": 17560,
+          "text": ""
+        },
+        {
+          "end": 17909,
+          "start": 17821,
+          "text": ""
+        },
+        {
+          "end": 18102,
+          "start": 18064,
+          "text": ""
+        },
+        {
+          "end": 18295,
+          "start": 18199,
+          "text": ""
+        },
+        {
+          "end": 18381,
+          "start": 18333,
+          "text": ""
+        },
+        {
+          "end": 18748,
+          "start": 18592,
+          "text": "                    else: body,transfer=read(stream,p['limits'],deadline,monotonic)\n"
+        },
+        {
+          "end": 18974,
+          "start": 18936,
+          "text": ""
+        },
+        {
+          "end": 19505,
+          "start": 19473,
+          "text": ""
+        },
+        {
+          "end": 20602,
+          "start": 20090,
+          "text": "        text=str(exc)\n        reason=text if text.startswith(('NFL_ACQUIRE_','NFL_PRIVATE_')) and re.fullmatch('[A-Z_]+',text) else 'NFL_ACQUIRE_STOPPED'\n    bundle=seal(dict(version='nfl-unaccepted-scoring-body-v2',profile=profile.PROFILE,plan=plan,authorization_sha256=authorization['sha256'],\n"
+        },
+        {
+          "end": 20900,
+          "start": 20713,
+          "text": "        owner_reviewed=False,inference=False,source_acceptance=False,wagering_authority=False))\n"
+        }
+      ]
+    },
+    "scripts/nfl_scoring_acquisition.py": {
+      "after_sha256": "16879495ead119fb4c47176f1bac45710c4104169f9fd0077a3ecdba25baeab3",
+      "before_sha256": "0278d31d0fc8930043a8a595ee6676b6afd14613432bbc47b8cead547404c57c",
+      "reverse_patches": [
+        {
+          "end": 1754,
+          "start": 1682,
+          "text": "        print(json.dumps({k:result['payload'][k] for k in ('status','reason','attempted')},sort_keys=True))\n"
+        }
+      ]
+    }
+  }
+}
