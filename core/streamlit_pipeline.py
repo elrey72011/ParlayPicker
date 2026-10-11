@@ -10824,6 +10824,8 @@ def run_analysis_pipeline(
     diagnostics["loaded_model_identity"] = loaded_model_identity
     from app_core.nfl_inference_evidence import finish as finish_nfl_evidence
     finish_nfl_evidence(analysis_df)
+    from app_core.nfl_owner_research import finish as finish_nfl_private
+    finish_nfl_private(analysis_df)
     from app_core.ncaaf_pipeline_evidence import finish as finish_ncaaf_evidence
     finish_ncaaf_evidence(analysis_df)
     from app_core.nhl_puck_line_evidence import finish as finish_nhl_evidence

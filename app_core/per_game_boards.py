@@ -184,6 +184,11 @@ def _compatible_ncaaf_research(row):
         return False
 
 
+def _complete_nfl_private(row):
+    from app_core.nfl_owner_research import private, diagnose
+    return private(row) and diagnose(row)['status'] == 'COMPLETE'
+
+
 def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     from app_core.coverage_presentation import CoverageBindingConflict, decision_for, verify, original_descriptors
@@ -256,6 +261,8 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                     for name, flag in (('wager_contract', 'production_eligible'), ('controlled_trial_contract', 'trial_eligible')))
                 if league == 'NCAAF' and not retained_authority and not (text(final, 'Bettable').lower() in {'true', '1', 'yes'} and (number(final, 'Play_Stake') or 0) > 0):
                     pool.sort(key=lambda c: not _compatible_ncaaf_research(c))
+                if league == 'NFL' and not retained_authority and not (text(final, 'Bettable').lower() in {'true', '1', 'yes'} and (number(final, 'Play_Stake') or 0) > 0):
+                    pool.sort(key=lambda c: not _complete_nfl_private(c))
                 strict_contract=final.get('wager_contract')
                 trial_contract=final.get('controlled_trial_contract')
                 authority_contract=strict_contract if isinstance(strict_contract,dict) and strict_contract.get('production_eligible') else trial_contract
@@ -456,6 +463,9 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         import json
         display=from_export(exported, source=source, source_field=probability_field)
         exported['research_display']=json.dumps(display, allow_nan=False, sort_keys=True, separators=(',',':'))
+        from app_core.nfl_owner_research import private as nfl_private, private_display
+        if source is not None and nfl_private(source):
+            exported['nfl_private_research_display'] = json.dumps(private_display(source), allow_nan=False, sort_keys=True, separators=(',', ':'))
         # Owner export only: public_board's allowlist never publishes this trace.
         exported['research_estimate_trace']=boundary_trace(source,exported,display)
         coverage = final.get('coverage_decision')
