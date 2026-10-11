@@ -580,7 +580,7 @@ def legacy_unrecorded_display(export):
 
 def from_export(row, *, source=None, source_field="win_probability", private_research=False):
     actual_source = source if source is not None else row
-    from app_core.nfl_owner_research import private as nfl_private
+    from app_core.nfl_private_routes import private as nfl_private
     if nfl_private(actual_source):
         # Preserve the public v1 schema/readers. The separate versioned private
         # display is emitted by per_game_boards after exact static diagnosis.

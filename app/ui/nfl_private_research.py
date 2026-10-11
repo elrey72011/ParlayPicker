@@ -1,6 +1,6 @@
 """Token-gated static staging and private browser; no acquisition or inference."""
 import streamlit as st
-from app_core import nfl_owner_research as evidence
+from app_core import nfl_private_routes as evidence
 
 
 def render(candidates=None):
@@ -35,5 +35,7 @@ def render(candidates=None):
                     st.write('OWNER_REVIEWED / PRIVATE_RESEARCH — ' + str(row.get('best_pick', row.get('market_type', ''))))
                     st.metric('Raw NFL research probability', f"{assessed['probability']:.2%}")
                     st.caption('Uncalibrated; EV/edge unavailable. PASS — zero stake. Private evidence is excluded from public packages.')
+                    if evidence.saved_route(row).VERSION == 'nfl-owner-observed-private-inputs-v2':
+                        st.caption('Prospective first-observation evidence; publisher first-publication time UNKNOWN. This supplies no historical availability claim.')
                 else:
                     st.write('Private NFL estimate unavailable: ' + assessed['reason'])

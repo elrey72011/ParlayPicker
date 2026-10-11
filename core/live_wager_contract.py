@@ -269,7 +269,7 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
                             strategic_action='PASS',reason_for_pass=reasons,
                             production_gate_reason='; '.join(reasons))
         invalid_selection = _invalid_selection_facts(row)
-        from app_core.nfl_owner_research import private as nfl_owner_private
+        from app_core.nfl_private_routes import private as nfl_owner_private
         if nfl_owner_private(raw):
             invalid_selection = True
             coverage_trace.append(dict(gate='private_research_authority', status='FAIL', code='NFL_PRIVATE_AUTHORITY_FORBIDDEN'))

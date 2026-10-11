@@ -726,7 +726,7 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
 
     from app_core.nfl_inference_evidence import retain_ui_reblend
     retain_ui_reblend(df, out, nfl_ui_inputs)
-    from app_core.nfl_owner_research import retain_ui_refresh
+    from app_core.nfl_private_routes import retain_ui_refresh
     retain_ui_refresh(df, out, nfl_ui_inputs)
     return out
 
@@ -1039,7 +1039,7 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     timer.start("Fetch odds, team statistics and model predictions")
     from app_core.source_evidence_intake import selected as selected_source_evidence
     from app_core.ncaaf_pipeline_evidence import selected as selected_ncaaf_research
-    from app_core.nfl_owner_research import selected as selected_nfl_private
+    from app_core.nfl_private_routes import selected as selected_nfl_private
     with selected_source_evidence(controls.get("source_evidence_refs", ())), selected_ncaaf_research(controls.get("ncaaf_research_packets", ()), private_research=bool(controls.get("ncaaf_private_research", False))), selected_nfl_private(controls.get("nfl_private_packets", ())):
         analysis_df, pipeline_best_picks_df, diagnostics = run_analysis_pipeline(
             sports=controls["sports"],
