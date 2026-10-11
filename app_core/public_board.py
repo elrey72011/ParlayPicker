@@ -167,6 +167,16 @@ def pick_record(row, *, prop=False, as_of=None):
         ))
         from app_core.research_display import public_display, legacy_unrecorded_display
         record["research_display"]=public_display(row,record)
+        if record["research_display"]["availability_reason"] == "NCAAF_PRIVATE_RESEARCH_ONLY":
+            if record["status"] != "PASS":
+                raise ValueError("NCAAF_PRIVATE_RESEARCH_AUTHORITY_FORBIDDEN")
+            record["win_estimate"] = None
+            record["ev"] = None
+            record.pop("price_push_probability", None)
+            record.pop("wager_contract", None)
+            record.pop("conservative_ev", None)
+            push = None
+            record.update(display(None, record["odds"], None, push_probability=None))
         # Keep established research or explicit source rejection out of legacy
         # authority fields when the exact contract is absent. Older exports
         # without recorded target/provenance retain their legacy saved values;

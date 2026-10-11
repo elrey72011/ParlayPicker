@@ -1,0 +1,603 @@
+{
+  "approval_reference": "Robert Velarde explicitly authorized separate owner-reviewed private NCAAF research implementation and draft PR; no independent/source/scientific/wagering acceptance.",
+  "base": "60fc794fc9c0a1269c5cb4881b7edd7839f170ea",
+  "base_tree": "40098ac31b640a2c667030f256528bba49cfea97",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app/ui/ncaaf_pipeline_research.py",
+    "app/ui/publish_panel.py",
+    "app_core/ncaaf_compatible_pipeline.py",
+    "app_core/ncaaf_owner_mapping.py",
+    "app_core/ncaaf_owner_research.py",
+    "app_core/ncaaf_pipeline_evidence.py",
+    "app_core/ncaaf_prospective_chronology.py",
+    "app_core/ncaaf_response_custody.py",
+    "app_core/per_game_boards.py",
+    "app_core/public_board.py",
+    "app_core/research_display.py",
+    "docs/paid-launch/ncaaf-owner-private-binding-v1.json",
+    "docs/paid-launch/ncaaf-owner-reviewed-private-v1.md",
+    "pytest.ini",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ncaaf_owner_scope.py",
+    "scripts/ncaaf_synthetic_clock_fixture.py",
+    "streamlit_app.py",
+    "tests/test_ncaaf_owner_research.py",
+    "tests/test_ncaaf_owner_scope.py"
+  ],
+  "previous_guard_sha256": "1639ccad41c0943799b30aaf6f8c0f08c08aaef96293408d147a919537a6406b",
+  "reviewed_blobs": {
+    "app/ui/ncaaf_pipeline_research.py": "f723c8ce4153e09993f23da47601c15bc43c1f07",
+    "app/ui/publish_panel.py": "a307f118f66143284e91854117c95edda77d719a",
+    "app_core/ncaaf_compatible_pipeline.py": "d1ed10c5317148a16745639fbe8029b37fff20c0",
+    "app_core/ncaaf_owner_mapping.py": "1a62c6fc3a2ba80445f5e2bd000b8b3bd1492097",
+    "app_core/ncaaf_owner_research.py": "7878cc23fd2495c488b9838414e1bee7725aecc5",
+    "app_core/ncaaf_pipeline_evidence.py": "3b89f63b6e246a49d63bac51933c306d7a17069b",
+    "app_core/ncaaf_prospective_chronology.py": "0cebe4a75241197e2398a00245226c32c17df552",
+    "app_core/ncaaf_response_custody.py": "0654591d94507693563627ba5c10fb414c44145d",
+    "app_core/per_game_boards.py": "2e8567f0f832d9dd8d452e0025f7e5c46aea110e",
+    "app_core/public_board.py": "0a76f76183a5ab4e022e3a6ceade81ffb8f00947",
+    "app_core/research_display.py": "4b5cb1c725dc36fe5ff54e492a220c4ac814a1f7",
+    "docs/paid-launch/ncaaf-owner-reviewed-private-v1.md": "b863d6a8f20b684e807343e9dc001692c19ec4ba",
+    "pytest.ini": "6b955520f8ecf42f192283a8f2fc46c20a2feccc",
+    "scripts/ncaaf_owner_scope.py": "2ce250090d795966ab50d7dfc52ad9a262501dce",
+    "scripts/ncaaf_synthetic_clock_fixture.py": "452dbf25e8da61bcf9d8bbfd7d64709cab876944",
+    "streamlit_app.py": "66d257f55df759b2b3b1e42fa8397912f5310a0d",
+    "tests/test_ncaaf_owner_research.py": "75fd56b3dac79f8023ddf860242b7ab199a5a493",
+    "tests/test_ncaaf_owner_scope.py": "fd82f01b388f6836d9a028e29f69e8a34ca6f95c"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app/ui/ncaaf_pipeline_research.py": {
+      "after_sha256": "a74709863ca1fe2aabc9d26f562de24cca994ce63ca27a06bc7c83d1d1ef4fcd",
+      "before_sha256": "f2d7ddb9d3abd4917e317930888ff005beb4b06873ae0694f8a0bbc32bc300f6",
+      "reverse_patches": [
+        {
+          "end": 215,
+          "start": 164,
+          "text": ""
+        },
+        {
+          "end": 258,
+          "start": 217,
+          "text": "def render():\n"
+        },
+        {
+          "end": 478,
+          "start": 338,
+          "text": ""
+        },
+        {
+          "end": 1429,
+          "start": 549,
+          "text": "        st.caption(\"Select an existing native v1 or compatible recovered-model prospective packet for a future explicitly requested analysis. Staging inspects bounded JSON and hashes only; it does not verify features or run analysis. The compatible caller separately verifies original dependency bytes, event mapping, derived features and accepted public-output rights before computation. Stale inputs and unaccepted reviews remain unavailable. No fitting or collection occurs here.\")\n"
+        },
+        {
+          "end": 2919,
+          "start": 2697,
+          "text": ""
+        },
+        {
+          "end": 3003,
+          "start": 2932,
+          "text": "            with evidence.selected(packets):\n"
+        },
+        {
+          "end": 4961,
+          "start": 3469,
+          "text": ""
+        }
+      ]
+    },
+    "app/ui/publish_panel.py": {
+      "after_sha256": "9a6b08a06298befbe4664dee1366f15366ab33134822a1a8d60609bc264d3dfa",
+      "before_sha256": "505e9f3e24bf00339c3a099eff830490d58ab21935b9756d2f6b8a8b845341af",
+      "reverse_patches": [
+        {
+          "end": 3307,
+          "start": 3232,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/ncaaf_compatible_pipeline.py": {
+      "after_sha256": "880711e4ade7d890f6cc7cab25c49074f7d8832e09f14b35b49793a41dba50a5",
+      "before_sha256": "7bc5acc34725a4dd53a0ab157cbd2d8cb3617550aee46f0cdef5a28c3ed49f7a",
+      "reverse_patches": [
+        {
+          "end": 3932,
+          "start": 3891,
+          "text": "def load(packet):\n"
+        },
+        {
+          "end": 4358,
+          "start": 4198,
+          "text": "        and p[\"version\"] in INPUT_VERSIONS and p[\"evidence_label\"] in {\"RETAINED\", \"SYNTHETIC\"},\n"
+        },
+        {
+          "end": 5141,
+          "start": 4914,
+          "text": "        and o[\"version\"] == (chronology.VERSION if p[\"version\"] == SUCCESSOR_VERSION else observation.VERSION) and o[\"evidence_label\"] == p[\"evidence_label\"],\n"
+        },
+        {
+          "end": 5492,
+          "start": 5364,
+          "text": "def result_version(packet):\n"
+        },
+        {
+          "end": 5663,
+          "start": 5603,
+          "text": "def checked_observation(packet, at):\n"
+        },
+        {
+          "end": 6202,
+          "start": 5711,
+          "text": "    if packet[\"payload\"][\"version\"] == SUCCESSOR_VERSION:\n        checked = chronology.read_observation(original)\n        chronology.check_chronology(original[\"payload\"], at)\n        require(history.timestamp(original[\"payload\"][\"source_review\"][\"acceptance\"][\"accepted_at\"]) < history.timestamp(at),\n"
+        },
+        {
+          "end": 6558,
+          "start": 6510,
+          "text": "def objects(packet, at):\n"
+        },
+        {
+          "end": 6703,
+          "start": 6642,
+          "text": "    p = load(packet)[\"payload\"]\n"
+        },
+        {
+          "end": 7832,
+          "start": 7786,
+          "text": "def fresh(packet, at):\n"
+        },
+        {
+          "end": 8433,
+          "start": 8361,
+          "text": "def accepted_dependencies(packet, approval, at):\n"
+        },
+        {
+          "end": 8817,
+          "start": 8730,
+          "text": "    if packet[\"payload\"][\"version\"] == SUCCESSOR_VERSION:\n"
+        },
+        {
+          "end": 9110,
+          "start": 8932,
+          "text": "        _, index = objects(packet, now)\n        return chronology.check_dependency_admission(packet, review, index, at)\n"
+        },
+        {
+          "end": 10179,
+          "start": 10123,
+          "text": "def derive(packet, checked, at):\n"
+        },
+        {
+          "end": 10552,
+          "start": 10313,
+          "text": "    state, index = objects(packet, at)\n    game = observation.check_mapping(p[\"event\"], p[\"schedule\"], p[\"crosswalk\"], p[\"mapping_review\"], as_of=at)\n"
+        },
+        {
+          "end": 15699,
+          "start": 15505,
+          "text": "def infer(packet, at):\n    now = fresh(load(packet), at)  # Historical/stale inputs rejected before computation.\n"
+        },
+        {
+          "end": 15807,
+          "start": 15732,
+          "text": "    checked = checked_observation(packet, at)\n"
+        },
+        {
+          "end": 16286,
+          "start": 16213,
+          "text": "    features = derive(packet, checked, now)\n"
+        },
+        {
+          "end": 17045,
+          "start": 16934,
+          "text": "    receipt = dict(version=result_version(packet), input_sha256=packet[\"sha256\"],\n"
+        },
+        {
+          "end": 17954,
+          "start": 17763,
+          "text": "    if packet[\"payload\"][\"version\"] == SUCCESSOR_VERSION:\n        receipt[\"admission_receipts\"] = chronology.check_chronology(p, at)\n"
+        },
+        {
+          "end": 18103,
+          "start": 18041,
+          "text": "def inspect_result(packet, saved, at):\n"
+        },
+        {
+          "end": 18277,
+          "start": 18185,
+          "text": "    now = fresh(load(packet), at)\n"
+        },
+        {
+          "end": 18439,
+          "start": 18310,
+          "text": "    checked = checked_observation(packet, at)\n    objects(packet, now)\n"
+        },
+        {
+          "end": 18673,
+          "start": 18551,
+          "text": "        and r[\"version\"] == result_version(packet) and r[\"input_sha256\"] == packet[\"sha256\"]\n"
+        },
+        {
+          "end": 19851,
+          "start": 19610,
+          "text": "    if packet[\"payload\"][\"version\"] == SUCCESSOR_VERSION:\n        require(r.get(\"admission_receipts\") == chronology.check_chronology(packet[\"payload\"][\"observation\"][\"payload\"], at),\n"
+        }
+      ]
+    },
+    "app_core/ncaaf_pipeline_evidence.py": {
+      "after_sha256": "640048b019803eed38276a0ad2860933d868a0ab2b3300d1e95380c4c0cd1b1f",
+      "before_sha256": "7fdb9d01149f2e9ee19ee4092ed342ad11107d6cbca570450f964b6df2f9f49a",
+      "reverse_patches": [
+        {
+          "end": 869,
+          "start": 818,
+          "text": ""
+        },
+        {
+          "end": 1156,
+          "start": 1087,
+          "text": ""
+        },
+        {
+          "end": 1582,
+          "start": 1410,
+          "text": "INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION}\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION}\n"
+        },
+        {
+          "end": 1672,
+          "start": 1605,
+          "text": ""
+        },
+        {
+          "end": 2877,
+          "start": 2778,
+          "text": "NCAAF_SCHEDULE_RECEIPT_CONFLICT\"\"\".split()) | compatible.REASONS | custody.REASONS\n"
+        },
+        {
+          "end": 3955,
+          "start": 3902,
+          "text": "def selected(packets=()):\n"
+        },
+        {
+          "end": 4532,
+          "start": 4269,
+          "text": ""
+        },
+        {
+          "end": 4743,
+          "start": 4644,
+          "text": ""
+        },
+        {
+          "end": 5616,
+          "start": 5474,
+          "text": ""
+        },
+        {
+          "end": 19124,
+          "start": 18899,
+          "text": "    if packet is not None and packet['payload']['version'] == custody.VERSION:\n        binding['custody_reader'] = dict(version=custody.VERSION, components=custody.implementation(),\n"
+        },
+        {
+          "end": 19926,
+          "start": 19213,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/ncaaf_prospective_chronology.py": {
+      "after_sha256": "105dc2e42188f918baa8644f56904e663714a64a14998417ad856cce07927597",
+      "before_sha256": "a4c9075e85bd977955cd654f85909101a5b327adc81639fe08f729912a26a2af",
+      "reverse_patches": [
+        {
+          "end": 2759,
+          "start": 2697,
+          "text": ""
+        },
+        {
+          "end": 3097,
+          "start": 3005,
+          "text": "def check_dependency_admission(packet, review, index, inference_at):\n"
+        },
+        {
+          "end": 3882,
+          "start": 3571,
+          "text": "        \"version\", \"permissions_review\", \"dependency_verification\", \"acceptance\"}\n        and review[\"version\"] == DEPENDENCY_REVIEW_VERSION, \"NCAAF_DEPENDENCY_ADMISSION_SCHEMA\")\n"
+        },
+        {
+          "end": 4067,
+          "start": 3939,
+          "text": "        (\"permissions_review\", \"dependency_verification\", \"acceptance\")]\n"
+        },
+        {
+          "end": 5314,
+          "start": 5145,
+          "text": "        \"prospective_research_features\", \"public_derived_output\"], \"NCAAF_DEPENDENCY_PERMISSION_UNAVAILABLE\")\n"
+        },
+        {
+          "end": 5696,
+          "start": 5513,
+          "text": "    require(ACCEPTED_DEPENDENCY_PERMISSIONS.get(permission[\"review_id\"]) == model.digest(permission),\n"
+        },
+        {
+          "end": 6659,
+          "start": 6503,
+          "text": "        \"review_id\", \"reviewer\", \"accepted_at\", \"subject_version\", \"subject_sha256\", \"verification_sha256\"}\n"
+        },
+        {
+          "end": 6903,
+          "start": 6742,
+          "text": "        and accepted[\"reviewer\"] != verified[\"verifier\"]\n"
+        },
+        {
+          "end": 7329,
+          "start": 7153,
+          "text": "    require(ACCEPTED_DEPENDENCY_ADMISSIONS.get(accepted[\"review_id\"]) == model.digest(accepted),\n"
+        },
+        {
+          "end": 7864,
+          "start": 7581,
+          "text": "         verified[\"verified_at\"], accepted[\"accepted_at\"], p[\"source_review\"][\"acceptance\"][\"accepted_at\"], inference_at)]\n"
+        },
+        {
+          "end": 10126,
+          "start": 10065,
+          "text": ""
+        },
+        {
+          "end": 10223,
+          "start": 10161,
+          "text": "def check_chronology(p, inference_at):\n"
+        },
+        {
+          "end": 10614,
+          "start": 10274,
+          "text": "    require(isinstance(review, dict) and set(review) == {\"version\", \"terms_review\", \"quote_observation\", \"offer_verification\", \"acceptance\"}\n            and review[\"version\"] == REVIEW_VERSION, \"NCAAF_CHRONOLOGY_SCHEMA\")\n"
+        },
+        {
+          "end": 10814,
+          "start": 10676,
+          "text": "        (\"terms_review\", \"quote_observation\", \"offer_verification\", \"acceptance\")]\n"
+        },
+        {
+          "end": 11655,
+          "start": 11465,
+          "text": "    require(ACCEPTED_TERMS_REVIEWS.get(terms[\"review_id\"]) == model.digest(terms), \"NCAAF_ADVANCE_TERMS_NOT_ACCEPTED\")\n"
+        },
+        {
+          "end": 12229,
+          "start": 12057,
+          "text": "    require(terms[\"permitted_uses\"] == [\"collection\", \"private_retention\", \"research\", \"public_derived_output\"],\n"
+        },
+        {
+          "end": 13663,
+          "start": 13477,
+          "text": "    require(isinstance(accepted, dict) and set(accepted) == {\"review_id\", \"reviewer\", \"accepted_at\", \"subject_version\", \"subject_sha256\"}\n"
+        },
+        {
+          "end": 14361,
+          "start": 13746,
+          "text": "        and accepted[\"reviewer\"] != verified[\"verifier\"], \"NCAAF_INDEPENDENT_ACCEPTANCE_CONFLICT\")\n    require(accepted[\"subject_version\"] == VERSION and accepted[\"subject_sha256\"] == subject_hash(p), \"NCAAF_ADMISSION_SUBJECT_CONFLICT\")\n    require(ACCEPTED_ADMISSIONS.get(accepted[\"review_id\"]) == model.digest(accepted), \"NCAAF_INDEPENDENT_ACCEPTANCE_NOT_TRUSTED\")\n"
+        },
+        {
+          "end": 14636,
+          "start": 14460,
+          "text": "        (q.get(\"recorded_at\"), observed[\"observed_at\"], verified[\"verified_at\"], accepted[\"accepted_at\"], terms[\"reviewed_at\"],\n"
+        },
+        {
+          "end": 15993,
+          "start": 15940,
+          "text": "def read_observation(packet):\n"
+        },
+        {
+          "end": 16476,
+          "start": 16308,
+          "text": "    require(p.get(\"version\") == VERSION and p.get(\"evidence_label\") in {\"RETAINED\", \"SYNTHETIC\"},\n"
+        },
+        {
+          "end": 17145,
+          "start": 16993,
+          "text": "    game = observation.check_mapping(p.get(\"event\"), p.get(\"schedule\"), p.get(\"crosswalk\"),\n"
+        },
+        {
+          "end": 21009,
+          "start": 20944,
+          "text": "    check_chronology(p, p[\"as_of\"])\n"
+        }
+      ]
+    },
+    "app_core/ncaaf_response_custody.py": {
+      "after_sha256": "04ec9796e78f08d5fbbb7d0326c6e145507f8774f04d90c6b9f5c9e8ffadd142",
+      "before_sha256": "75469cf0f4bdd9c06d61076cb2365eb8994f98c02a5e2730c2bfaa47622cce54",
+      "reverse_patches": [
+        {
+          "end": 7737,
+          "start": 7673,
+          "text": "def _project_quote(rows,meta,q,terms):\n"
+        },
+        {
+          "end": 10390,
+          "start": 10175,
+          "text": "                        declarations[key]=dict(value=q[key],source_paths=[path+'.'+key for path,_ in present] or ['independently_accepted_terms_review.'+key])\n"
+        },
+        {
+          "end": 11296,
+          "start": 11206,
+          "text": "def capture(raw,metadata,*,native_batch=None,quote=None,terms=None):\n"
+        },
+        {
+          "end": 11809,
+          "start": 11717,
+          "text": "        projection=_project_quote(rows,metadata,quote,terms)\n"
+        },
+        {
+          "end": 12196,
+          "start": 12155,
+          "text": "def load(packet):\n"
+        },
+        {
+          "end": 12631,
+          "start": 12462,
+          "text": "        and p['version']==VERSION and p['evidence_label'] in {'SYNTHETIC','RETAINED'}, 'NCAAF_CUSTODY_SCHEMA')\n"
+        },
+        {
+          "end": 13256,
+          "start": 12808,
+          "text": "        and p['native_packet']['payload'].get('version')==native.SUCCESSOR_VERSION, 'NCAAF_CUSTODY_SCHEMA')\n    n=native.load(p['native_packet'])\n    require(n['payload']['version']==native.SUCCESSOR_VERSION and n['payload']['evidence_label']==p['evidence_label'], 'NCAAF_CUSTODY_SCHEMA')\n"
+        },
+        {
+          "end": 14772,
+          "start": 14596,
+          "text": "def verify(packet,approval,at):\n    p=load(packet)['payload'];n=p['native_packet'];o=n['payload']['observation']['payload']\n"
+        },
+        {
+          "end": 15099,
+          "start": 14857,
+          "text": "    dependency_review=native.accepted_dependencies(n,approval,at)\n    native.checked_observation(n,at)\n    _,index=native.objects(n,history.timestamp(at))\n"
+        },
+        {
+          "end": 17745,
+          "start": 17624,
+          "text": "            computed=_project_quote(rows,meta,o['quote'],terms);quote_count+=1\n"
+        },
+        {
+          "end": 18863,
+          "start": 18489,
+          "text": "    require(isinstance(r,dict) and set(r)=={'version','verification','acceptance'} and r['version']==ADMISSION_VERSION, 'NCAAF_CUSTODY_ADMISSION_CONFLICT')\n    v,a=r['verification'],r['acceptance']\n"
+        },
+        {
+          "end": 19846,
+          "start": 19448,
+          "text": "    require(isinstance(a,dict) and set(a)==set('review_id reviewer accepted_at subject_version subject_sha256 verification_sha256'.split())\n        and all(isinstance(value,str) and value.strip() for value in a.values()) and a['reviewer']!=v['verifier']\n"
+        },
+        {
+          "end": 20369,
+          "start": 20032,
+          "text": "    require(ACCEPTED_ADMISSIONS.get(a['review_id'])==model.digest(a), 'NCAAF_CUSTODY_ADMISSION_NOT_TRUSTED')\n    vt,accepted,checkpoint,inference=[history.timestamp(x) for x in (v['verified_at'],a['accepted_at'],o['as_of'],at)]\n"
+        },
+        {
+          "end": 21049,
+          "start": 21004,
+          "text": "def infer(packet,at):\n"
+        },
+        {
+          "end": 21535,
+          "start": 21107,
+          "text": "    verified=verify(packet,accepted(packet),at)\n    checked,center,win,computation=native.infer(packet['payload']['native_packet'],at)\n    receipt=dict(version=RESULT_VERSION,input_sha256=packet['sha256'],custody_subject_sha256=subject_hash(packet),\n"
+        },
+        {
+          "end": 21882,
+          "start": 21822,
+          "text": "def inspect_result(packet,saved,at):\n"
+        },
+        {
+          "end": 22156,
+          "start": 22022,
+          "text": "    verified=verify(packet,accepted(packet),at)\n"
+        },
+        {
+          "end": 22760,
+          "start": 22560,
+          "text": "        and r['version']==RESULT_VERSION and r['input_sha256']==packet['sha256'] and r['custody_subject_sha256']==subject_hash(packet)\n"
+        },
+        {
+          "end": 23145,
+          "start": 23017,
+          "text": "    checked,n=native.inspect_result(packet['payload']['native_packet'],r['native_computation'],at)\n"
+        }
+      ]
+    },
+    "app_core/per_game_boards.py": {
+      "after_sha256": "9a254bbaee1623f0bf9ebe7ffb2df1055e401183bd7b4ce139a3491c50840225",
+      "before_sha256": "56293292483d3eed2f10b5ec16a2564e9f1f41e5d06da3b61260cd672fd23992",
+      "reverse_patches": [
+        {
+          "end": 8451,
+          "start": 8275,
+          "text": "def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False):\n"
+        },
+        {
+          "end": 25431,
+          "start": 25159,
+          "text": ""
+        },
+        {
+          "end": 31346,
+          "start": 31226,
+          "text": "        display=from_export(exported, source=source, source_field=probability_field)\n"
+        }
+      ]
+    },
+    "app_core/public_board.py": {
+      "after_sha256": "6e3c3cb4ed26d27c73559d70600a2be00509711823e1c0a8f9d1efde884b8fa9",
+      "before_sha256": "ef67550b4aa29fb2acd6e274695ef92549bcf11386e2f5fdb3d95456ddb85bcf",
+      "reverse_patches": [
+        {
+          "end": 9673,
+          "start": 9122,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/research_display.py": {
+      "after_sha256": "c3dc61115e559dcd751cfb8f7df8dc6b4ea2f10f8341deea820b12d3988a5d1f",
+      "before_sha256": "c47dcba27cf3f956cc5383d121a98481f529da4062e6b665cc0550313049d9a9",
+      "reverse_patches": [
+        {
+          "end": 32609,
+          "start": 32515,
+          "text": "def from_export(row, *, source=None, source_field=\"win_probability\"):\n"
+        },
+        {
+          "end": 33263,
+          "start": 32884,
+          "text": ""
+        },
+        {
+          "end": 33646,
+          "start": 33519,
+          "text": ""
+        },
+        {
+          "end": 38924,
+          "start": 38720,
+          "text": ""
+        }
+      ]
+    },
+    "pytest.ini": {
+      "after_sha256": "d20cce65b3124d879cdc2f53c1cc8fe10cd20a854411d5c328109df8a7f4fa81",
+      "before_sha256": "e099b0f48f53b187a3b071a24acd65a57872147d171f4c56278a4546062b832e",
+      "reverse_patches": [
+        {
+          "end": 226,
+          "start": 175,
+          "text": ""
+        }
+      ]
+    },
+    "streamlit_app.py": {
+      "after_sha256": "109954f8ae0d4ff5559cbd81dc2fb99ff2a34046b2bcc0e61832332e6a9916f9",
+      "before_sha256": "2883ffc1000166992209a4612dcdaf28ff1f68bc55eaa50ccd6ead5c045ec076",
+      "reverse_patches": [
+        {
+          "end": 18563,
+          "start": 18502,
+          "text": ""
+        },
+        {
+          "end": 49845,
+          "start": 49629,
+          "text": "    with selected_source_evidence(controls.get(\"source_evidence_refs\", ())), selected_ncaaf_research(controls.get(\"ncaaf_research_packets\", ())):\n"
+        },
+        {
+          "end": 99888,
+          "start": 99787,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

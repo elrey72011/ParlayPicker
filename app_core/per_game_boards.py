@@ -184,7 +184,7 @@ def _compatible_ncaaf_research(row):
         return False
 
 
-def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False):
+def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False, private_research=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     from app_core.coverage_presentation import CoverageBindingConflict, decision_for, verify, original_descriptors
     if isinstance(board, pd.DataFrame) and board.attrs.get('coverage_binding_failures'):
@@ -393,6 +393,11 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
             if approved and (quality or not positive):
                 approved = False
                 approval_reason = quality or 'No verified positive estimated edge at the quoted price'
+        from app_core.ncaaf_owner_research import is_private_source
+        if source is not None and is_private_source(source):
+            approved = False
+            trial = False
+            approval_reason = 'OWNER_REVIEWED / PRIVATE_RESEARCH; PASS with zero stake'
         from app_core.total_signal_quality import public_fields as total_quality_fields
         exported={**(total_quality_fields(source) if source is not None else {}), 'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
                      'candidate_id':text(source,'candidate_id') if source is not None else '',
@@ -454,7 +459,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         from app_core.research_display import from_export
         from app_core.research_estimate_trace import boundary_trace
         import json
-        display=from_export(exported, source=source, source_field=probability_field)
+        display=from_export(exported, source=source, source_field=probability_field, private_research=private_research)
         exported['research_display']=json.dumps(display, allow_nan=False, sort_keys=True, separators=(',',':'))
         # Owner export only: public_board's allowlist never publishes this trace.
         exported['research_estimate_trace']=boundary_trace(source,exported,display)

@@ -123,7 +123,7 @@ def _project_cfbd(rows,meta,batch):
     require(all(type(r['game_id']) is int for r in locators) and len({r['game_id'] for r in locators})==len(locators), 'NCAAF_CUSTODY_PROJECTION_CONFLICT')
     return dict(native_sha256=hashlib.sha256(model.encode(batch)).hexdigest(),projected_at=batch['retrieved_at'],record_locators=locators)
 
-def _project_quote(rows,meta,q,terms):
+def _project_quote(rows,meta,q,terms, *, owner_reviewed=False):
     """Exact raw locator plus independently reviewed missing listing declarations.
 
     No rule, listing or product defaults. Missing feed declarations must resolve
@@ -156,7 +156,7 @@ def _project_quote(rows,meta,q,terms):
                         require(q.get(key) and terms.get(key)==q[key], 'NCAAF_CUSTODY_QUOTE_CONFLICT')
                         present=[(path,value[key]) for path,value in (('book',b),('market',m),('outcome',o)) if key in value]
                         require(all(value==q[key] for _,value in present), 'NCAAF_CUSTODY_QUOTE_CONFLICT')
-                        declarations[key]=dict(value=q[key],source_paths=[path+'.'+key for path,_ in present] or ['independently_accepted_terms_review.'+key])
+                        declarations[key]=dict(value=q[key],source_paths=[path+'.'+key for path,_ in present] or [('owner_reviewed_terms_review.' if owner_reviewed else 'independently_accepted_terms_review.')+key])
                     matches.append(dict(event_index=i,book_index=j,market_index=k,outcome_index=l,
                         provider_clock_path=('market.last_update' if m.get('last_update') else 'book.last_update'),
                         quote_sha256=model.digest(q),terms_sha256=model.digest(terms),listing_declarations=declarations))
@@ -167,7 +167,7 @@ def _project_quote(rows,meta,q,terms):
         and ('spreads' if q['market_type'].startswith('spread') else 'totals') in req['markets'].split(','), 'NCAAF_CUSTODY_SCOPE_CONFLICT')
     return matches[0]
 
-def capture(raw,metadata,*,native_batch=None,quote=None,terms=None):
+def capture(raw,metadata,*,native_batch=None,quote=None,terms=None,owner_reviewed=False):
     """Receive actual decoded body bytes; caller must supply genuine receipts.
 
     This performs no transport, persistence, permission or acceptance operation.
@@ -178,22 +178,22 @@ def capture(raw,metadata,*,native_batch=None,quote=None,terms=None):
         projection=_project_cfbd(rows,metadata,native_batch)
     else:
         require(isinstance(quote,dict) and isinstance(terms,dict), 'NCAAF_CUSTODY_QUOTE_CONFLICT')
-        projection=_project_quote(rows,metadata,quote,terms)
+        projection=_project_quote(rows,metadata,quote,terms, owner_reviewed=owner_reviewed)
     p=dict(version=OBJECT_VERSION,metadata=deepcopy(metadata),body_b64=base64.b64encode(raw).decode('ascii'),
         body_bytes=len(raw),body_sha256=hashlib.sha256(raw).hexdigest(),projection_version=PROJECTION_VERSION,
         projection_implementation=implementation(),projection=projection)
     return dict(payload=p,sha256=model.digest(p))
 
-def load(packet):
+def load(packet, *, review_policy=None):
     require(isinstance(packet,dict) and set(packet)=={'payload','sha256'} and isinstance(packet['payload'],dict), 'NCAAF_CUSTODY_SCHEMA')
     p=packet['payload']
     require(set(p)=={'version','evidence_label','native_packet','response_objects','custody_admission'}
-        and p['version']==VERSION and p['evidence_label'] in {'SYNTHETIC','RETAINED'}, 'NCAAF_CUSTODY_SCHEMA')
+        and p['version']==(review_policy.VERSION if review_policy is not None else VERSION) and p['evidence_label'] in {'SYNTHETIC','RETAINED'}, 'NCAAF_CUSTODY_SCHEMA')
     require(model.digest(p)==packet['sha256'], 'NCAAF_CUSTODY_INTEGRITY')
     require(isinstance(p['native_packet'],dict) and isinstance(p['native_packet'].get('payload'),dict)
-        and p['native_packet']['payload'].get('version')==native.SUCCESSOR_VERSION, 'NCAAF_CUSTODY_SCHEMA')
-    n=native.load(p['native_packet'])
-    require(n['payload']['version']==native.SUCCESSOR_VERSION and n['payload']['evidence_label']==p['evidence_label'], 'NCAAF_CUSTODY_SCHEMA')
+        and p['native_packet']['payload'].get('version')==(review_policy.NATIVE_VERSION if review_policy is not None else native.SUCCESSOR_VERSION), 'NCAAF_CUSTODY_SCHEMA')
+    n=native.load(p['native_packet'], review_policy=review_policy)
+    require(n['payload']['version']==(review_policy.NATIVE_VERSION if review_policy is not None else native.SUCCESSOR_VERSION) and n['payload']['evidence_label']==p['evidence_label'], 'NCAAF_CUSTODY_SCHEMA')
     require(isinstance(p['response_objects'],list) and bool(p['response_objects']), 'NCAAF_ORIGINAL_RESPONSE_UNAVAILABLE')
     require(len(p['response_objects']) <= MAX_OBJECTS, 'NCAAF_CUSTODY_LIMIT')
     # Never stage credential-bearing originals for later rejection retention.
@@ -217,12 +217,12 @@ def subject_hash(packet):
     return model.digest(dict(version=SUBJECT_VERSION,native_subject_sha256=chronology.dependency_subject_hash(p['native_packet']),
         evidence_label=p['evidence_label'],response_objects=p['response_objects']))
 
-def verify(packet,approval,at):
-    p=load(packet)['payload'];n=p['native_packet'];o=n['payload']['observation']['payload']
+def verify(packet,approval,at, *, review_policy=None):
+    p=load(packet, review_policy=review_policy)['payload'];n=p['native_packet'];o=n['payload']['observation']['payload']
     # Preserves every #2407 check, including exact native subjects and availability.
-    dependency_review=native.accepted_dependencies(n,approval,at)
-    native.checked_observation(n,at)
-    _,index=native.objects(n,history.timestamp(at))
+    dependency_review=native.accepted_dependencies(n,approval,at, review_policy=review_policy)
+    native.checked_observation(n,at, review_policy=review_policy)
+    _,index=native.objects(n,history.timestamp(at), review_policy=review_policy)
     bodies=[];hashes=set();consumed=set();quote_count=0;total=0;clocks=[]
     terms=o['source_review']['terms_review'];permission=dependency_review['permissions_review']
     for item in p['response_objects']:
@@ -254,7 +254,7 @@ def verify(packet,approval,at):
             require(reviewed<receipt and start<=receipt<end and now<end, 'NCAAF_CUSTODY_PERMISSION_CLOCK_CONFLICT')
             clocks.append(projection_at)
         else:
-            computed=_project_quote(rows,meta,o['quote'],terms);quote_count+=1
+            computed=_project_quote(rows,meta,o['quote'],terms, owner_reviewed=review_policy is not None);quote_count+=1
             quote,observed=[history.timestamp(x) for x in (o['quote']['recorded_at'],o['source_review']['quote_observation']['observed_at'])]
             require(quote<=receipt<=observed, 'NCAAF_CUSTODY_CLOCK_CONFLICT')
             reviewed,start,end=[history.timestamp(terms[k]) for k in ('reviewed_at','effective_from','effective_until')]
@@ -264,19 +264,19 @@ def verify(packet,approval,at):
         clocks.append(receipt);bodies.append(raw)
     require(consumed==set(index) and quote_count==1, 'NCAAF_ORIGINAL_RESPONSE_UNAVAILABLE')
     r=p['custody_admission']
-    require(isinstance(r,dict) and set(r)=={'version','verification','acceptance'} and r['version']==ADMISSION_VERSION, 'NCAAF_CUSTODY_ADMISSION_CONFLICT')
-    v,a=r['verification'],r['acceptance']
+    require(isinstance(r,dict) and set(r)=={'version','verification','owner_verification' if review_policy is not None else 'acceptance'} and r['version']==(review_policy.CUSTODY_VERSION if review_policy is not None else ADMISSION_VERSION), 'NCAAF_CUSTODY_ADMISSION_CONFLICT')
+    v,a=r['verification'],r['owner_verification' if review_policy is not None else 'acceptance']
     require(isinstance(v,dict) and set(v)==set('verified_at verifier subject_version subject_sha256 permissions_sha256 terms_sha256 native_verification_sha256'.split())
         and v['subject_version']==SUBJECT_VERSION and v['subject_sha256']==subject_hash(packet)
         and v['permissions_sha256']==model.digest(permission) and v['terms_sha256']==model.digest(terms)
         and v['native_verification_sha256']==model.digest(dependency_review['dependency_verification'])
         and isinstance(v['verifier'],str) and bool(v['verifier'].strip()), 'NCAAF_CUSTODY_ADMISSION_CONFLICT')
-    require(isinstance(a,dict) and set(a)==set('review_id reviewer accepted_at subject_version subject_sha256 verification_sha256'.split())
-        and all(isinstance(value,str) and value.strip() for value in a.values()) and a['reviewer']!=v['verifier']
+    require(isinstance(a,dict) and set(a)==set(('review_id reviewer '+('reviewed_at' if review_policy is not None else 'accepted_at')+' subject_version subject_sha256 verification_sha256').split())
+        and all(isinstance(value,str) and value.strip() for value in a.values()) and (a['reviewer']==v['verifier']==review_policy.OWNER if review_policy is not None else a['reviewer']!=v['verifier'])
         and a['subject_version']==SUBJECT_VERSION and a['subject_sha256']==v['subject_sha256']
         and a['verification_sha256']==model.digest(v), 'NCAAF_CUSTODY_ADMISSION_CONFLICT')
-    require(ACCEPTED_ADMISSIONS.get(a['review_id'])==model.digest(a), 'NCAAF_CUSTODY_ADMISSION_NOT_TRUSTED')
-    vt,accepted,checkpoint,inference=[history.timestamp(x) for x in (v['verified_at'],a['accepted_at'],o['as_of'],at)]
+    require((review_policy.custody(a) if review_policy is not None else ACCEPTED_ADMISSIONS.get(a['review_id'])==model.digest(a)), 'NCAAF_CUSTODY_ADMISSION_NOT_TRUSTED')
+    vt,accepted,checkpoint,inference=[history.timestamp(x) for x in (v['verified_at'],a['reviewed_at' if review_policy is not None else 'accepted_at'],o['as_of'],at)]
     clocks.append(history.timestamp(dependency_review['dependency_verification']['verified_at']))
     require(vt is not None and all(clocks) and all(t<=vt for t in clocks), 'NCAAF_CUSTODY_SUBJECT_FUTURE_FACT')
     require(all((accepted,checkpoint,inference)) and vt<=accepted<=checkpoint<inference, 'NCAAF_CUSTODY_CLOCK_CONFLICT')
@@ -285,25 +285,25 @@ def verify(packet,approval,at):
 
 def accepted_dependencies(packet,approval,at): return verify(packet,approval,at)
 
-def infer(packet,at):
+def infer(packet,at, *, review_policy=None):
     from app_core.ncaaf_pipeline_evidence import accepted
-    verified=verify(packet,accepted(packet),at)
-    checked,center,win,computation=native.infer(packet['payload']['native_packet'],at)
-    receipt=dict(version=RESULT_VERSION,input_sha256=packet['sha256'],custody_subject_sha256=subject_hash(packet),
+    verified=verify(packet,review_policy.approval if review_policy is not None else accepted(packet),at, review_policy=review_policy)
+    checked,center,win,computation=native.infer(packet['payload']['native_packet'],at, review_policy=review_policy)
+    receipt=dict(version=review_policy.RESULT_VERSION if review_policy is not None else RESULT_VERSION,input_sha256=packet['sha256'],custody_subject_sha256=subject_hash(packet),
         verification=verified,native_computation=computation,raw_probability=win,inference_time=at,
         scientific_acceptance=False,probability_calibration=False,wagering_authority=False,live_stake=0)
     return checked,center,win,dict(payload=receipt,sha256=model.digest(receipt))
 
-def inspect_result(packet,saved,at):
+def inspect_result(packet,saved,at, *, review_policy=None):
     """Static byte/link checks only; numerical historical replay is forbidden."""
     from app_core.ncaaf_pipeline_evidence import accepted
-    verified=verify(packet,accepted(packet),at)
+    verified=verify(packet,review_policy.approval if review_policy is not None else accepted(packet),at, review_policy=review_policy)
     require(isinstance(saved,dict) and set(saved)=={'payload','sha256'} and model.digest(saved['payload'])==saved['sha256'], 'NCAAF_CUSTODY_COMPUTATION_CONFLICT')
     r=saved['payload']
     require(set(r)==set('version input_sha256 custody_subject_sha256 verification native_computation raw_probability inference_time scientific_acceptance probability_calibration wagering_authority live_stake'.split())
-        and r['version']==RESULT_VERSION and r['input_sha256']==packet['sha256'] and r['custody_subject_sha256']==subject_hash(packet)
+        and r['version']==(review_policy.RESULT_VERSION if review_policy is not None else RESULT_VERSION) and r['input_sha256']==packet['sha256'] and r['custody_subject_sha256']==subject_hash(packet)
         and r['verification']==verified and r['inference_time']==at and r['scientific_acceptance'] is False
         and r['probability_calibration'] is False and r['wagering_authority'] is False and r['live_stake']==0, 'NCAAF_CUSTODY_COMPUTATION_CONFLICT')
-    checked,n=native.inspect_result(packet['payload']['native_packet'],r['native_computation'],at)
+    checked,n=native.inspect_result(packet['payload']['native_packet'],r['native_computation'],at, review_policy=review_policy)
     require(r['raw_probability']==n['raw_probability'], 'NCAAF_CUSTODY_COMPUTATION_CONFLICT')
     return checked,deepcopy(r)
