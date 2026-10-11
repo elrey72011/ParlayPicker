@@ -447,6 +447,7 @@ def _analysis_input_signature(controls: dict[str, Any] | None) -> tuple[Any, ...
         tuple(sorted(str(r) for r in controls.get("source_evidence_refs", ()))),
         tuple(sorted(str(p.get("sha256", "")) for p in controls.get("ncaaf_research_packets", ()))),
         bool(controls.get("ncaaf_private_research", False)),
+        tuple(sorted(str(p.get("sha256", "")) for p in controls.get("nfl_private_packets", ()))),
     )
 
 
@@ -725,6 +726,8 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
 
     from app_core.nfl_inference_evidence import retain_ui_reblend
     retain_ui_reblend(df, out, nfl_ui_inputs)
+    from app_core.nfl_owner_research import retain_ui_refresh
+    retain_ui_refresh(df, out, nfl_ui_inputs)
     return out
 
 def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.DataFrame) -> pd.DataFrame:
@@ -1036,7 +1039,8 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     timer.start("Fetch odds, team statistics and model predictions")
     from app_core.source_evidence_intake import selected as selected_source_evidence
     from app_core.ncaaf_pipeline_evidence import selected as selected_ncaaf_research
-    with selected_source_evidence(controls.get("source_evidence_refs", ())), selected_ncaaf_research(controls.get("ncaaf_research_packets", ()), private_research=bool(controls.get("ncaaf_private_research", False))):
+    from app_core.nfl_owner_research import selected as selected_nfl_private
+    with selected_source_evidence(controls.get("source_evidence_refs", ())), selected_ncaaf_research(controls.get("ncaaf_research_packets", ()), private_research=bool(controls.get("ncaaf_private_research", False))), selected_nfl_private(controls.get("nfl_private_packets", ())):
         analysis_df, pipeline_best_picks_df, diagnostics = run_analysis_pipeline(
             sports=controls["sports"],
             max_rows=10_000,
@@ -1884,6 +1888,7 @@ def main() -> None:
     controls["source_evidence_refs"] = list(st.session_state.get("source_evidence_refs", ()))
     controls["ncaaf_research_packets"] = list(st.session_state.get("ncaaf_research_packets", ()))
     controls["ncaaf_private_research"] = bool(st.session_state.get("ncaaf_private_research", False))
+    controls["nfl_private_packets"] = list(st.session_state.get("nfl_private_packets", ()))
 
     run_counter = int(controls.get("run_analysis_counter", 0))
     should_run = _should_run_pipeline(st.session_state, run_counter, controls)
