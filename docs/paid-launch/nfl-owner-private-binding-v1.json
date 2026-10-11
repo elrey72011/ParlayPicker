@@ -1,0 +1,215 @@
+{
+  "approval_reference": "Robert Velarde explicitly authorized separate owner-reviewed private NFL research implementation and draft PR; no independent/source/scientific/wagering acceptance.",
+  "base": "d4b73dcc05b45abb1d57dc995571ce892d4cd5cf",
+  "base_tree": "38b45381561b0d4d4c9b1c3a4464064c32cd4be4",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app/ui/nfl_private_research.py",
+    "app/ui/publish_panel.py",
+    "app_core/market_probability_model.py",
+    "app_core/nfl_owner_research.py",
+    "app_core/nfl_response_custody.py",
+    "app_core/per_game_boards.py",
+    "app_core/public_board.py",
+    "app_core/research_display.py",
+    "app_core/research_replay.py",
+    "app_core/slate_coverage.py",
+    "core/live_wager_contract.py",
+    "core/streamlit_pipeline.py",
+    "docs/paid-launch/nfl-owner-private-binding-v1.json",
+    "docs/paid-launch/nfl-owner-reviewed-private-v1.md",
+    "pytest.ini",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_owner_scope.py",
+    "scripts/nfl_private_synthetic_clock.py",
+    "streamlit_app.py",
+    "tests/test_nfl_owner_research.py",
+    "tests/test_nfl_owner_scope.py"
+  ],
+  "previous_guard_sha256": "8df5b4b619e220d2884f8f395562ab356d41e247e3729a72774d4e0b79cc4d00",
+  "reviewed_blobs": {
+    "app/ui/nfl_private_research.py": "3d32c6059cda9494f87649787ea295ac6446fd6f",
+    "app/ui/publish_panel.py": "880d46e5c0c690ed8f714d8861ef5c0e902303c8",
+    "app_core/market_probability_model.py": "4e872e27d5ba8f46de85f9c2e74dc22aae76f205",
+    "app_core/nfl_owner_research.py": "ff4181af6bfead03f644479aa3d467d2a6d11d2a",
+    "app_core/nfl_response_custody.py": "aeede680cfb766ca03b69151a7b56beba81f5668",
+    "app_core/per_game_boards.py": "fdf32f9decef04ccaffb2020eca371bbf722293f",
+    "app_core/public_board.py": "ee11e9621bfd60efc27cf10070d1e33648998af2",
+    "app_core/research_display.py": "506e76af0a48149f43bc1bb764ecb0f72febb0b1",
+    "app_core/research_replay.py": "ba8b0f7dceb36b6d7e4d55f970c319899a8739b1",
+    "app_core/slate_coverage.py": "15508f0e1f85966c6b4f4af265018fcd0ffacd57",
+    "core/live_wager_contract.py": "43a4e6eef07c297d38e87825f66c12f66ad256d6",
+    "core/streamlit_pipeline.py": "6259f371fd8c68529d706269cec52ce038cd20cc",
+    "docs/paid-launch/nfl-owner-reviewed-private-v1.md": "594876f401b59338e757beebde5e3835d9dcecb6",
+    "pytest.ini": "80416be10e6392d35168c7583c4f7921be5cc6fd",
+    "scripts/nfl_owner_scope.py": "57408bf1a8f8005ab6661cb9aae43b9cc26a43c3",
+    "scripts/nfl_private_synthetic_clock.py": "452dbf25e8da61bcf9d8bbfd7d64709cab876944",
+    "streamlit_app.py": "955757cbd31600e8f9db6e900c4ef42448878c98",
+    "tests/test_nfl_owner_research.py": "a9f8b4066715603c6cf0895a527c9a14650d089b",
+    "tests/test_nfl_owner_scope.py": "7c0831f206758879cf2cd725be6fb2a3481777c0"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app/ui/publish_panel.py": {
+      "after_sha256": "7b0908e5cf3933b49b2f6d7c924cb2757821f2dd9a517c7d6ad48d9e636d52f1",
+      "before_sha256": "505e9f3e24bf00339c3a099eff830490d58ab21935b9756d2f6b8a8b845341af",
+      "reverse_patches": [
+        {
+          "end": 3377,
+          "start": 3269,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/market_probability_model.py": {
+      "after_sha256": "b5dd12343b67c78b094696c46f8b6e2d148d9fec882007f3154652554726de26",
+      "before_sha256": "00cf094ef50a559d87fc9ce1fd426e4e9c454b5607db495dfb6ed4ca4517217a",
+      "reverse_patches": [
+        {
+          "end": 4611,
+          "start": 4464,
+          "text": ""
+        },
+        {
+          "end": 6447,
+          "start": 6035,
+          "text": ""
+        },
+        {
+          "end": 13080,
+          "start": 12912,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/per_game_boards.py": {
+      "after_sha256": "b664ed76e4d6118a8f00c7f7297141e8bed1d1c9c4b8cd868dea77f418528780",
+      "before_sha256": "56293292483d3eed2f10b5ec16a2564e9f1f41e5d06da3b61260cd672fd23992",
+      "reverse_patches": [
+        {
+          "end": 8437,
+          "start": 8275,
+          "text": ""
+        },
+        {
+          "end": 14002,
+          "start": 13756,
+          "text": ""
+        },
+        {
+          "end": 31825,
+          "start": 31535,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/public_board.py": {
+      "after_sha256": "df52874159449b9bf9d3aa02124796213ced41af8868d11728a920a0f554564f",
+      "before_sha256": "ef67550b4aa29fb2acd6e274695ef92549bcf11386e2f5fdb3d95456ddb85bcf",
+      "reverse_patches": [
+        {
+          "end": 11078,
+          "start": 10104,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/research_display.py": {
+      "after_sha256": "736584007f815416ff2e642efb7630f7c08a24fce016398a7eb826a57fe5846b",
+      "before_sha256": "c47dcba27cf3f956cc5383d121a98481f529da4062e6b665cc0550313049d9a9",
+      "reverse_patches": [
+        {
+          "end": 33056,
+          "start": 32643,
+          "text": ""
+        },
+        {
+          "end": 38579,
+          "start": 38338,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/research_replay.py": {
+      "after_sha256": "b718be5a03e76942959d8a77da8dce9c6f1e3bd270f9b8d00dfe5fb0b9b0b4e8",
+      "before_sha256": "1271c936720f2d512936756d6e3b7c58ad90127bf5797429177e7ecd9c5f5d86",
+      "reverse_patches": [
+        {
+          "end": 614,
+          "start": 454,
+          "text": "REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + \"\"\"ml_feature_eligible stats_resolution_status football_feature_receipt\n"
+        }
+      ]
+    },
+    "app_core/slate_coverage.py": {
+      "after_sha256": "70d3b5da09f49981616b25188fd3da503fd136509a83ea0d30ce48b637386bbe",
+      "before_sha256": "f2b1fbcbf6967d66214934ce1b409bd5bd98f28eb3a282940df44b0abbe84bbe",
+      "reverse_patches": [
+        {
+          "end": 22258,
+          "start": 21947,
+          "text": ""
+        }
+      ]
+    },
+    "core/live_wager_contract.py": {
+      "after_sha256": "1780a953a1ce491b6e0982c4b633d4b09f2f146b27a23dbf9614f7e0922709b9",
+      "before_sha256": "385c2175be7926a8e01cc49aed10e14024b3a9f50cd24726c277b4271dbc4fc8",
+      "reverse_patches": [
+        {
+          "end": 18237,
+          "start": 17958,
+          "text": ""
+        }
+      ]
+    },
+    "core/streamlit_pipeline.py": {
+      "after_sha256": "06a6f3cdfdeb0215bba70f0c37307a775126cfc6b039ca2dd736e9ebacf16ab3",
+      "before_sha256": "af757e2e3a7a878f445573f0dc3feeeb95bf1789629ca2a5c6e023e688b017b7",
+      "reverse_patches": [
+        {
+          "end": 585833,
+          "start": 585724,
+          "text": ""
+        }
+      ]
+    },
+    "pytest.ini": {
+      "after_sha256": "7e01a2ddb2315fa10661d1250ccffe77cbb0b1817702a4149790fa9f3dbdac39",
+      "before_sha256": "e099b0f48f53b187a3b071a24acd65a57872147d171f4c56278a4546062b832e",
+      "reverse_patches": [
+        {
+          "end": 224,
+          "start": 175,
+          "text": ""
+        }
+      ]
+    },
+    "streamlit_app.py": {
+      "after_sha256": "4cb6e30aaf7cf87bd1d0e8830f79828bef693f90af12b1629616bd5f59473e2f",
+      "before_sha256": "2883ffc1000166992209a4612dcdaf28ff1f68bc55eaa50ccd6ead5c045ec076",
+      "reverse_patches": [
+        {
+          "end": 18600,
+          "start": 18502,
+          "text": ""
+        },
+        {
+          "end": 32787,
+          "start": 32679,
+          "text": ""
+        },
+        {
+          "end": 50060,
+          "start": 49774,
+          "text": "    with selected_source_evidence(controls.get(\"source_evidence_refs\", ())), selected_ncaaf_research(controls.get(\"ncaaf_research_packets\", ())):\n"
+        },
+        {
+          "end": 100094,
+          "start": 100002,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

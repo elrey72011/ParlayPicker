@@ -182,6 +182,19 @@ def pick_record(row, *, prop=False, as_of=None):
         record['coverage_decision'] = deepcopy(row['coverage_decision'])
         if coverage_only:
             record['record_kind'] = 'coverage_only_no_inference'
+    if not prop and "OWNER_REVIEWED / PRIVATE_RESEARCH" in str(row.get('research_display', '')):
+        # Preserve the scheduled coverage row, excluding all private numeric aliases.
+        record.update(status='PASS', pick='', odds=None, win_estimate=None, ev=None,
+                      quote_source='Unavailable', quote_time=None, quote_reason='Private research; public offer/output permission not established')
+        for field in (*PUBLIC_NFL_CONTEXT_FIELDS, 'conservative_ev'):
+            record.pop(field, None)
+        record.pop('price_push_probability', None)
+        record.update(display(None, record['odds'], None, push_probability=None))
+        record.pop('wager_contract', None)
+        record.pop('controlled_trial_contract', None)
+        from app_core.research_display import _empty, _identity
+        safe = dict(league=record['sport'], market_type=record['market'], start=record['start'])
+        record['research_display'] = _empty(_identity(safe))
     return record
 
 

@@ -580,6 +580,11 @@ def legacy_unrecorded_display(export):
 
 def from_export(row, *, source=None, source_field="win_probability"):
     actual_source = source if source is not None else row
+    from app_core.nfl_owner_research import private as nfl_private
+    if nfl_private(actual_source):
+        # Preserve the public v1 schema/readers. The separate versioned private
+        # display is emitted by per_game_boards after exact static diagnosis.
+        return _empty(_identity(row), "", "OWNER_REVIEWED / PRIVATE_RESEARCH; see versioned private display", reason="ESTIMATE_PROVENANCE_NOT_RECORDED")
     try:
         ncaaf_origin = json.loads(actual_source.get("ml_estimate_metadata", ""))
         if "ncaaf_inputs" in ncaaf_origin:
@@ -658,6 +663,9 @@ def from_export(row, *, source=None, source_field="win_probability"):
 
 
 def public_display(export, row):
+    # Private owner review is never public derived-output permission.
+    if "OWNER_REVIEWED / PRIVATE_RESEARCH" in str(export.get("research_display", "")):
+        return _empty(_identity(export), reason="ESTIMATE_PROVENANCE_NOT_RECORDED")
     saved=export.get("research_display")
     if isinstance(saved,str):
         try:

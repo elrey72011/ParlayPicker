@@ -366,6 +366,10 @@ def _market(event, market, providers, candidates, finals, audit, at, run, health
         incompatible = any(k in model_code for k in ('RUNTIME_MISMATCH', 'MODEL_SCHEMA', 'ARTIFACT_READER', 'TARGET_CONFLICT', 'INCOMPATIBLE'))
         model = gate('model_evidence', 'FAIL' if incompatible or status in {'unavailable', 'failed', 'error'} else 'UNKNOWN',
             'MODEL_INCOMPATIBLE' if incompatible else 'MODEL_INFERENCE_UNAVAILABLE' if status in {'unavailable', 'failed', 'error'} else 'MODEL_EVIDENCE_MISSING')
+        if text(candidate, 'league', 'League').upper() == 'NFL' and status in {'unavailable', 'failed', 'error'}:
+            from app_core.nfl_owner_research import private, REASONS
+            if private(candidate) and model_code in REASONS:
+                model = gate('model_evidence', 'FAIL', model_code)
         if text(candidate, 'league', 'League').upper() == 'NCAAF' and status in {'unavailable', 'failed', 'error'}:
             from app_core.ncaaf_pipeline_evidence import RESULT_VERSIONS
             from app_core.ncaaf_pipeline_evidence import PUBLIC_REASONS

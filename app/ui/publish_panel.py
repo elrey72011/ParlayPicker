@@ -68,6 +68,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
     render_source_evidence()
     from app.ui.ncaaf_pipeline_research import render as render_ncaaf_pipeline_research
     render_ncaaf_pipeline_research()
+    from app.ui.nfl_private_research import render as render_nfl_private
+    render_nfl_private(candidates)
     from app.ui.activation_panel import render as render_activation
     render_activation(games)
     from app.ui.public_results import render_history

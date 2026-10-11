@@ -12,7 +12,7 @@ import pandas as pd
 from app_core.research_estimate_trace import SOURCE_FIELDS, EXPORT_FIELDS
 from app_core.total_signal_quality import FIELDS as TOTAL_QUALITY_FIELDS
 
-REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + """ml_feature_eligible stats_resolution_status football_feature_receipt
+REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + """nfl_private_research_display ml_feature_eligible stats_resolution_status football_feature_receipt
 provider_quotes
 home_team away_team game_date game_time_est Home Away Local Date Commence (Local)
 quote_timestamp sportsbook book opposing_odds_source quote_binding_verified
