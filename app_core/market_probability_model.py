@@ -110,6 +110,8 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
     nhl_research_selected = selection_requested()
     from app_core.ncaaf_pipeline_evidence import selection_requested as ncaaf_selection_requested
     ncaaf_research_selected = ncaaf_selection_requested()
+    from app_core.nfl_owner_research import selection_requested as nfl_private_selected
+    nfl_private_research_selected = nfl_private_selected()
     league = _text(frame, "League").str.upper().str.strip()
     league = league.where(league.ne(""), _text(frame, "league").str.upper().str.strip())
     market_type = _text(frame, "market_type").str.lower().str.strip()
@@ -136,6 +138,13 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
     for idx in frame.index:
         lg = str(league.loc[idx])
         mt = str(market_type.loc[idx])
+        if lg == "NFL" and nfl_private_research_selected:
+            from app_core.nfl_owner_research import predict as predict_nfl_private
+            for field, value in predict_nfl_private(frame.loc[idx]).items():
+                if field not in result:
+                    result[field] = pd.Series(pd.NA, index=result.index, dtype=object)
+                result.at[idx, field] = value
+            continue
         if lg == "NCAAF" and ncaaf_research_selected:
             from app_core.ncaaf_pipeline_evidence import predict as predict_ncaaf
             for field, value in predict_ncaaf(frame.loc[idx], inventory=frame.attrs.get("ncaaf_schedule")).items():
@@ -251,6 +260,8 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
     from app_core.research_estimate_trace import origin_metadata, generated_time
     generated = generated_time()
     for idx in frame.index:
+        if str(league.loc[idx]) == "NFL" and nfl_private_research_selected:
+            continue  # Separate private contract; old NFL reader/packets remain unchanged.
         if str(league.loc[idx]) == "NCAAF" and ncaaf_research_selected:
             continue  # The selected native target retains its own inference clock and packet.
         if str(league.loc[idx]) == "NHL" and nhl_research_selected:
