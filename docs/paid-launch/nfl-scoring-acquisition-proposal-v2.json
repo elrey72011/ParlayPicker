@@ -1,0 +1,87 @@
+{
+  "payload": {
+    "authorization_ref": "NFL-SCORING-V2-ROBERT-EXACT-APPROVAL-REQUIRED",
+    "custody_id": "NFL-SCORING-V2-VERIFIED-PRIVATE-CUSTODY",
+    "evidence_label": "PROPOSAL",
+    "limits": {
+      "connect_seconds": 10,
+      "max_aggregate_bytes": 6291456,
+      "max_attempts": 2,
+      "max_body_bytes": 4194304,
+      "max_header_bytes": 16384,
+      "max_objects": 1,
+      "max_packet_bytes": 12582912,
+      "max_wire_bytes": 4194304,
+      "read_seconds": 10,
+      "total_seconds": 60
+    },
+    "permission": null,
+    "profile": "nflverse-schedules-scoring-4m-v1",
+    "redirect": {
+      "filename": "games.csv",
+      "host": "release-assets.githubusercontent.com",
+      "max_hops": 1,
+      "query_keys": [
+        "jwt",
+        "response-content-disposition",
+        "response-content-type",
+        "rscd",
+        "rsct",
+        "se",
+        "sig",
+        "ske",
+        "skoid",
+        "sks",
+        "skt",
+        "sktid",
+        "skv",
+        "sp",
+        "spr",
+        "sr",
+        "sv"
+      ],
+      "repository_path": "/github-production-release-asset/452908115/",
+      "sas_protocol": "https_only_if_declared",
+      "status": 302
+    },
+    "requests": [
+      {
+        "endpoint": "/nflverse/nflverse-data/releases/download/schedules/games.csv",
+        "host": "github.com",
+        "id": "scores_release",
+        "max_attempts": 1,
+        "method": "GET",
+        "params": {}
+      }
+    ],
+    "source": {
+      "asset_name": "games.csv",
+      "attribution": "NFL game/schedule data maintained by Lee Sharpe; distributed by nflverse/nflverse-data.",
+      "endpoint": "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv",
+      "license": "CC-BY-4.0",
+      "license_url": "https://github.com/nflverse/nflverse-data/blob/a78da18ca93f167bd0a2af274df48f539fa4153c/LICENSE.md",
+      "modifications": "Original CSV unchanged; separately identified projections and derived features.",
+      "publisher_availability": "UNKNOWN",
+      "release_tag": "schedules",
+      "repository": "nflverse/nflverse-data",
+      "repository_id": 452908115
+    },
+    "target": {
+      "purpose": "prospective_original_scoring_snapshot",
+      "season": 2026
+    },
+    "unresolved": [
+      "OWNER_ADVANCE_CC_BY_PRIVATE_SCOPE_REVIEW_REQUIRED",
+      "EXACT_FINAL_PLAN_AND_COLLECTION_AUTHORIZATION_REQUIRED",
+      "CONTROLLED_CONFIGURATION_REVIEW_AND_LOCAL_APPLICATION_REQUIRED",
+      "REVALIDATE_FUTURE_WINDOW_AND_UNCHANGED_ACCESS"
+    ],
+    "version": "nfl-scoring-original-plan-v2",
+    "window": {
+      "expires_at": "2026-10-18T15:31:30Z",
+      "not_after": "2026-10-18T15:31:00Z",
+      "not_before": "2026-10-18T15:30:00Z"
+    }
+  },
+  "sha256": "ef5a72f1a6d5dd3f29cca5f5c6b39c9064a54def4b66e66eea9493d4df79c684"
+}

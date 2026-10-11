@@ -1,0 +1,49 @@
+{
+  "payload": {
+    "application": {
+      "applied": false,
+      "method": "Exclusive new private JSON file after exact review; process-local ContextVar entries only; no persistent catalogs.",
+      "owner": "Robert Velarde",
+      "permitted_entries": [
+        "collections",
+        "permissions",
+        "roots"
+      ],
+      "receipt": "Byte SHA256 and payload SHA256 read-back required; runtime private ACL/EFS/no-reparse checks unchanged.",
+      "review_scope": "NFL scoring acquisition bindings only; no source acceptance.",
+      "review_subject": "Exact finalized configuration excluding review; actual review clock before execution.",
+      "source_acceptance_catalogs": "UNCHANGED"
+    },
+    "configuration_file": "C:\\Users\\Robert\\AppData\\Local\\ParlayPicker\\ncaaf-pilot\\custody\\nfl-scoring-v2-controlled-bindings.json",
+    "configuration_version": "nfl-scoring-controlled-bindings-v1",
+    "entries": {
+      "authorization": null,
+      "custody": {
+        "id": "NFL-SCORING-V2-VERIFIED-PRIVATE-CUSTODY",
+        "root": "C:\\Users\\Robert\\AppData\\Local\\ParlayPicker\\ncaaf-pilot\\custody",
+        "storage_receipt_sha256": "1562cf1bc9f224c411af83ec0e1e51f743ff3639c4dd9e25a73eb29cee3e7ccd"
+      },
+      "permission": {
+        "basis": "Published nflverse-data schedules CC BY 4.0; owner review pending, not an approval receipt.",
+        "effective_from": null,
+        "effective_until": null,
+        "private_research_use": true,
+        "private_retention": true,
+        "reference": "NFL-SCORING-V2-ROBERT-CC-BY-ADVANCE-REVIEW",
+        "requests_sha256": "0d3da04a82d875c83b40ce5bd96be62898bdd6bbef5ec7ce5174638e10b1c6b5",
+        "reviewed_at": null,
+        "reviewer": "Robert Velarde",
+        "source_sha256": "7d7704637f58f2e2c3cf1b2fbd611b8d6612917b23437dca9cb15817644fb5a7"
+      }
+    },
+    "plan_sha256": "ef5a72f1a6d5dd3f29cca5f5c6b39c9064a54def4b66e66eea9493d4df79c684",
+    "remaining": [
+      "Actual advance review clocks and conclusions",
+      "Exact finalized plan hash and separate collection authorization",
+      "Exact configuration subject review and file creation approval"
+    ],
+    "status": "UNREVIEWED_NON_EXECUTABLE",
+    "version": "nfl-scoring-binding-application-proposal-v1"
+  },
+  "sha256": "b2ab2bca416c6c1a3bc9017628a1b6010ce7df267b3037ba70faf36367c0eba4"
+}
