@@ -49,13 +49,14 @@ def dependency_subject_hash(packet):
     p = deepcopy(packet["payload"])
     original = p["observation"]["payload"]
     original["source_review"].pop("acceptance", None)
+    original["source_review"].pop("owner_verification", None)
     original.pop("as_of", None)
     return model.digest(dict(version=DEPENDENCY_SUBJECT_VERSION,
         input_version=p["version"], evidence_label=p["evidence_label"],
         observation=original, dependency_objects=p["dependency_objects"]))
 
 
-def check_dependency_admission(packet, review, index, inference_at):
+def check_dependency_admission(packet, review, index, inference_at, *, review_policy=None):
     """Separate immutable advance permission from later exact native-byte review.
 
     Only the explicit successor uses this contract. The permission contains no
@@ -64,10 +65,11 @@ def check_dependency_admission(packet, review, index, inference_at):
     default. Processing never creates a review or acceptance.
     """
     require(isinstance(review, dict) and set(review) == {
-        "version", "permissions_review", "dependency_verification", "acceptance"}
-        and review["version"] == DEPENDENCY_REVIEW_VERSION, "NCAAF_DEPENDENCY_ADMISSION_SCHEMA")
+        "version", "permissions_review", "dependency_verification",
+        "owner_verification" if review_policy is not None else "acceptance"}
+        and review["version"] == (review_policy.DEPENDENCY_VERSION if review_policy is not None else DEPENDENCY_REVIEW_VERSION), "NCAAF_DEPENDENCY_ADMISSION_SCHEMA")
     permission, verified, accepted = [review[k] for k in
-        ("permissions_review", "dependency_verification", "acceptance")]
+        ("permissions_review", "dependency_verification", "owner_verification" if review_policy is not None else "acceptance")]
     p = packet["payload"]["observation"]["payload"]
     require(isinstance(permission, dict) and set(permission) == {
         "review_id", "reviewer", "reviewed_at", "provider", "endpoints", "season",
@@ -82,11 +84,12 @@ def check_dependency_admission(packet, review, index, inference_at):
         and all(c in "0123456789abcdef" for c in permission["rights_document_sha256"]),
         "NCAAF_DEPENDENCY_PERMISSION_SCOPE_CONFLICT")
     require(permission["permitted_uses"] == ["collection", "private_retention",
-        "prospective_research_features", "public_derived_output"], "NCAAF_DEPENDENCY_PERMISSION_UNAVAILABLE")
+        "prospective_research_features", "private_derived_output" if review_policy is not None else "public_derived_output"], "NCAAF_DEPENDENCY_PERMISSION_UNAVAILABLE")
     require(permission["capture_clock_field"] == "retrieved_at"
         and permission["capture_clock_meaning"] == "local_native_batch_capture",
         "NCAAF_DEPENDENCY_CLOCK_MEANING_UNAVAILABLE")
-    require(ACCEPTED_DEPENDENCY_PERMISSIONS.get(permission["review_id"]) == model.digest(permission),
+    require((review_policy.permission(permission) if review_policy is not None else
+        ACCEPTED_DEPENDENCY_PERMISSIONS.get(permission["review_id"]) == model.digest(permission)),
         "NCAAF_DEPENDENCY_PERMISSIONS_NOT_TRUSTED")
     require(isinstance(verified, dict) and set(verified) == {
         "verified_at", "verifier", "subject_version", "subject_sha256", "permissions_sha256", "dependency_hashes"}
@@ -97,17 +100,19 @@ def check_dependency_admission(packet, review, index, inference_at):
         and verified["dependency_hashes"] == [v["sha256"] for v in packet["payload"]["dependency_objects"]]
         and set(verified["dependency_hashes"]) == set(index), "NCAAF_DEPENDENCY_VERIFICATION_CONFLICT")
     require(isinstance(accepted, dict) and set(accepted) == {
-        "review_id", "reviewer", "accepted_at", "subject_version", "subject_sha256", "verification_sha256"}
+        "review_id", "reviewer", "reviewed_at" if review_policy is not None else "accepted_at", "subject_version", "subject_sha256", "verification_sha256"}
         and all(isinstance(v, str) and bool(v.strip()) for v in accepted.values())
-        and accepted["reviewer"] != verified["verifier"]
+        and (accepted["reviewer"] == verified["verifier"] == review_policy.OWNER if review_policy is not None else accepted["reviewer"] != verified["verifier"])
         and accepted["subject_version"] == DEPENDENCY_SUBJECT_VERSION
         and accepted["subject_sha256"] == verified["subject_sha256"]
         and accepted["verification_sha256"] == model.digest(verified), "NCAAF_DEPENDENCY_ACCEPTANCE_CONFLICT")
-    require(ACCEPTED_DEPENDENCY_ADMISSIONS.get(accepted["review_id"]) == model.digest(accepted),
+    require((review_policy.dependency(accepted) if review_policy is not None else
+        ACCEPTED_DEPENDENCY_ADMISSIONS.get(accepted["review_id"]) == model.digest(accepted)),
         "NCAAF_DEPENDENCY_ACCEPTANCE_NOT_TRUSTED")
     advance, start, end, vt, accepted_at, quote_accepted_at, inference = [history.timestamp(v) for v in
         (permission["reviewed_at"], permission["effective_from"], permission["effective_until"],
-         verified["verified_at"], accepted["accepted_at"], p["source_review"]["acceptance"]["accepted_at"], inference_at)]
+         verified["verified_at"], accepted["reviewed_at" if review_policy is not None else "accepted_at"],
+         p["source_review"]["owner_verification" if review_policy is not None else "acceptance"]["reviewed_at" if review_policy is not None else "accepted_at"], inference_at)]
     captured = [history.timestamp(batch["retrieved_at"]) for batch in index.values()]
     require(advance is not None and bool(captured) and all(captured)
         and all(advance < clock for clock in captured), "NCAAF_DEPENDENCY_ADVANCE_PERMISSION_CLOCK_CONFLICT")
@@ -141,27 +146,29 @@ def subject_hash(payload):
     """
     subject = deepcopy(payload)
     subject["source_review"].pop("acceptance", None)
+    subject["source_review"].pop("owner_verification", None)
     return model.digest(subject)
 
 
-def check_chronology(p, inference_at):
+def check_chronology(p, inference_at, *, review_policy=None):
     q, review = p["quote"], p.get("source_review")
-    require(isinstance(review, dict) and set(review) == {"version", "terms_review", "quote_observation", "offer_verification", "acceptance"}
-            and review["version"] == REVIEW_VERSION, "NCAAF_CHRONOLOGY_SCHEMA")
+    require(isinstance(review, dict) and set(review) == {"version", "terms_review", "quote_observation", "offer_verification", "owner_verification" if review_policy is not None else "acceptance"}
+            and review["version"] == (review_policy.OFFER_VERSION if review_policy is not None else REVIEW_VERSION), "NCAAF_CHRONOLOGY_SCHEMA")
     terms, observed, verified, accepted = [review[k] for k in
-        ("terms_review", "quote_observation", "offer_verification", "acceptance")]
+        ("terms_review", "quote_observation", "offer_verification", "owner_verification" if review_policy is not None else "acceptance")]
     require(isinstance(terms, dict) and set(terms) == set("review_id reviewer reviewed_at effective_from effective_until operator product listing_id period settlement rule_edition rules_document_sha256 rights_document_sha256 permitted_uses provider_clock_field provider_clock_meaning".split()),
             "NCAAF_CHRONOLOGY_SCHEMA")
     require(all(isinstance(terms[k], str) and terms[k].strip() for k in terms if k != "permitted_uses"), "NCAAF_CHRONOLOGY_SCHEMA")
     require(all(len(terms[k]) == 64 and all(c in "0123456789abcdef" for c in terms[k])
         for k in ("rules_document_sha256", "rights_document_sha256")), "NCAAF_CHRONOLOGY_SCHEMA")
-    require(ACCEPTED_TERMS_REVIEWS.get(terms["review_id"]) == model.digest(terms), "NCAAF_ADVANCE_TERMS_NOT_ACCEPTED")
+    require((review_policy.terms(terms) if review_policy is not None else
+        ACCEPTED_TERMS_REVIEWS.get(terms["review_id"]) == model.digest(terms)), "NCAAF_ADVANCE_TERMS_NOT_ACCEPTED")
     require(all(terms[k] == q.get(k) for k in ("operator", "product", "listing_id", "period"))
         and terms["operator"] == q["book"] and not q["book"].lower().startswith("novig")
         and terms["period"] == "full_game" and q["rules"] == terms["settlement"]
         and terms["settlement"] == "full_game_including_overtime_binary_win_push_loss",
         "NCAAF_ADVANCE_TERMS_IDENTITY_CONFLICT")
-    require(terms["permitted_uses"] == ["collection", "private_retention", "research", "public_derived_output"],
+    require(terms["permitted_uses"] == ["collection", "private_retention", "research", "private_derived_output" if review_policy is not None else "public_derived_output"],
             "NCAAF_ADVANCE_PERMISSIONS_UNAVAILABLE")
     require(terms["provider_clock_field"] == "recorded_at"
         and terms["provider_clock_meaning"] == "provider_market_last_update", "NCAAF_QUOTE_CLOCK_MEANING_UNAVAILABLE")
@@ -174,13 +181,14 @@ def check_chronology(p, inference_at):
         and verified["quote_sha256"] == model.digest(q) and verified["observation_sha256"] == model.digest(observed)
         and verified["terms_sha256"] == model.digest(terms) and verified["mapping_sha256"] == model.digest(p["mapping_review"])
         and verified["rule_edition"] == terms["rule_edition"], "NCAAF_EXACT_OFFER_VERIFICATION_CONFLICT")
-    require(isinstance(accepted, dict) and set(accepted) == {"review_id", "reviewer", "accepted_at", "subject_version", "subject_sha256"}
+    require(isinstance(accepted, dict) and set(accepted) == {"review_id", "reviewer", "reviewed_at" if review_policy is not None else "accepted_at", "subject_version", "subject_sha256"}
         and all(isinstance(v, str) and bool(v.strip()) for v in accepted.values())
-        and accepted["reviewer"] != verified["verifier"], "NCAAF_INDEPENDENT_ACCEPTANCE_CONFLICT")
-    require(accepted["subject_version"] == VERSION and accepted["subject_sha256"] == subject_hash(p), "NCAAF_ADMISSION_SUBJECT_CONFLICT")
-    require(ACCEPTED_ADMISSIONS.get(accepted["review_id"]) == model.digest(accepted), "NCAAF_INDEPENDENT_ACCEPTANCE_NOT_TRUSTED")
+        and (accepted["reviewer"] == verified["verifier"] == review_policy.OWNER if review_policy is not None else accepted["reviewer"] != verified["verifier"]), "NCAAF_INDEPENDENT_ACCEPTANCE_CONFLICT")
+    require(accepted["subject_version"] == (review_policy.OBSERVATION_VERSION if review_policy is not None else VERSION) and accepted["subject_sha256"] == subject_hash(p), "NCAAF_ADMISSION_SUBJECT_CONFLICT")
+    require((review_policy.offer(accepted) if review_policy is not None else
+        ACCEPTED_ADMISSIONS.get(accepted["review_id"]) == model.digest(accepted)), "NCAAF_INDEPENDENT_ACCEPTANCE_NOT_TRUSTED")
     qt, ot, vt, at, rt, start, end, checkpoint, inference, mapped = [history.timestamp(v) for v in
-        (q.get("recorded_at"), observed["observed_at"], verified["verified_at"], accepted["accepted_at"], terms["reviewed_at"],
+        (q.get("recorded_at"), observed["observed_at"], verified["verified_at"], accepted["reviewed_at" if review_policy is not None else "accepted_at"], terms["reviewed_at"],
          terms["effective_from"], terms["effective_until"], p["as_of"], inference_at, p["mapping_review"].get("reviewed_at"))]
     require(ot is not None and qt is not None and qt <= ot, "NCAAF_QUOTE_OBSERVATION_MISSING_OR_CONFLICT")
     require(rt is not None and rt < ot, "NCAAF_ADVANCE_REVIEW_CLOCK_CONFLICT")
@@ -198,13 +206,13 @@ def check_chronology(p, inference_at):
     return deepcopy(review)
 
 
-def read_observation(packet):
+def read_observation(packet, *, review_policy=None):
     """Static checks only; original data/clock missingness is never repaired."""
     require = model.require
     require(isinstance(packet, dict) and set(packet) == {"payload", "sha256"}
             and model.digest(packet["payload"]) == packet["sha256"], "NCAAF_COMPAT_PACKET_INTEGRITY")
     p = packet["payload"]
-    require(p.get("version") == VERSION and p.get("evidence_label") in {"RETAINED", "SYNTHETIC"},
+    require(p.get("version") == (review_policy.OBSERVATION_VERSION if review_policy is not None else VERSION) and p.get("evidence_label") in {"RETAINED", "SYNTHETIC"},
             "NCAAF_COMPAT_OBSERVATION_SCHEMA")
     require(p.get("source_acceptance") is False and p.get("scientific_qualification") is False
             and p.get("probability_calibration") is False and p.get("wagering_authority") is False
@@ -213,7 +221,7 @@ def read_observation(packet):
     checked = model.load_model(p["model"])
     as_of = history.timestamp(p.get("as_of"))
     require(as_of is not None, "NCAAF_COMPAT_AS_OF_MISSING")
-    game = observation.check_mapping(p.get("event"), p.get("schedule"), p.get("crosswalk"),
+    game = (observation.check_mapping if review_policy is None else review_policy.check_mapping)(p.get("event"), p.get("schedule"), p.get("crosswalk"),
         p.get("mapping_review"), as_of=as_of)
     require(type(game.get("season")) is int and game["season"] > research.PROTOCOL["evaluate"],
             "NCAAF_EVALUATED_HOLDOUT_CONTAMINATION")
@@ -263,7 +271,7 @@ def read_observation(packet):
         counts["home" if r["team_id"] == game["homeId"] else "away"][r["kind"]].add(r["game_id"])
     require(all(len(games) >= research.PROTOCOL["minimum_prior_games"]
                 for side in counts.values() for games in side.values()), "NCAAF_COMPAT_MINIMUM_HISTORY_MISSING")
-    check_chronology(p, p["as_of"])
+    check_chronology(p, p["as_of"], review_policy=review_policy)
     return dict(status="COMPATIBLE_INPUT_READER", model=checked, target=target,
         fit=deepcopy(checked["artifact"]["models"]["ridge"]["margin" if target["family"] == "spread" else "total"]),
         ordered_features=deepcopy(features["values"]), original_packet=deepcopy(packet),

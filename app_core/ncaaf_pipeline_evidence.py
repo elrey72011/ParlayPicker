@@ -18,21 +18,24 @@ from app_core import ncaaf_research_contract as contract, ncaaf_research as rese
 from app_core import producer_provenance as producer
 from app_core import ncaaf_compatible_pipeline as compatible
 from app_core import ncaaf_response_custody as custody
+from app_core import ncaaf_owner_research as owner
 from app_core.research_estimate_trace import encode, fact, origin_metadata, generated_time
 
 VERSION = "ncaaf-normal-pipeline-inputs-v1"
 MAX_BYTES = 8 * 1024 * 1024
 MAX_PACKETS = 4
 MAX_SELECTED_BYTES = 16 * 1024 * 1024
+_PRIVATE = ContextVar("ncaaf_owner_private_selected", default=False)
 _SELECTED = ContextVar("ncaaf_explicit_research_packets", default=())
 # Independently accepted exact packet/review and PUBLIC derived-output permission.
 # Owner upload/selection never writes this catalog. It is empty in production.
 ACCEPTED_PACKETS = {}
-INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION}
-RESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION}
+INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION}
+RESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION}
 
 
 def _reader(packet):
+    if packet['payload']['version'] == owner.VERSION: return owner
     return custody if packet['payload']['version'] == custody.VERSION else compatible
 PUBLIC_REASONS = frozenset("""NCAAF_ORIGINAL_PACKET_NOT_SELECTED NCAAF_EXACT_OFFER_NOT_SELECTED
 NCAAF_PACKET_AMBIGUOUS NCAAF_PACKET_INTEGRITY NCAAF_PACKET_SCHEMA NCAAF_INTEGER_PUSH_MODEL_UNVALIDATED
@@ -45,7 +48,7 @@ NCAAF_EXACT_SOURCE_REVIEW_MISSING_OR_CONFLICT NCAAF_SOURCE_REVIEW_CLOCK_CONFLICT
 NCAAF_CANONICAL_EVENT_CONFLICT NCAAF_EVENT_AMBIGUOUS NCAAF_EXACT_OFFER_AMBIGUOUS_OR_MISSING
 NCAAF_ALTERED_ORDERED_FEATURES NCAAF_EVALUATED_HOLDOUT_CONTAMINATION NCAAF_RUNTIME_BINDING_CONFLICT
 NCAAF_PROBABILITY_BINDING_CONFLICT NCAAF_AUTHORITY_FORBIDDEN NCAAF_SCHEDULE_RECEIPT_MISSING
-NCAAF_SCHEDULE_RECEIPT_CONFLICT""".split()) | compatible.REASONS | custody.REASONS
+NCAAF_SCHEDULE_RECEIPT_CONFLICT""".split()) | compatible.REASONS | custody.REASONS | owner.REASONS
 
 
 def digest(value):
@@ -74,16 +77,24 @@ def load(raw, *, owner_upload=False):
 
 
 @contextmanager
-def selected(packets=()):
+def selected(packets=(), *, private_research=False):
     require(isinstance(packets, (list, tuple)) and len(packets) <= MAX_PACKETS, "NCAAF_PACKET_SCHEMA")
     packets = tuple(load(encode(p).encode()) for p in packets)
     require(len(packets) <= MAX_PACKETS and sum(len(encode(p).encode()) for p in packets) <= MAX_SELECTED_BYTES,
             "NCAAF_PACKET_SCHEMA")
+    require(type(private_research) is bool, "NCAAF_OWNER_MODE_CONFLICT")
+    require(private_research or not any(p["payload"]["version"] == owner.VERSION for p in packets), "NCAAF_PRIVATE_RESEARCH_NOT_SELECTED")
+    private_token = _PRIVATE.set(private_research)
     token = _SELECTED.set(deepcopy(packets))
     try:
         yield
     finally:
         _SELECTED.reset(token)
+        _PRIVATE.reset(private_token)
+
+
+def private_research_selected():
+    return _PRIVATE.get()
 
 
 def selection_requested():
@@ -101,6 +112,9 @@ def reader_binding():
 
 
 def accepted(packet):
+    if packet["payload"]["version"] == owner.VERSION:
+        owner.load(packet)
+        return deepcopy(owner.ReviewPolicy(packet).approval)
     approval = ACCEPTED_PACKETS.get(packet["sha256"])
     require(isinstance(approval, dict) and approval.get("source_review_sha256") ==
             digest(_transport(packet)["source_review"]), "NCAAF_SOURCE_REVIEW_NOT_ACCEPTED")
@@ -302,9 +316,18 @@ def compatible_reader_binding(packet=None):
     if packet is not None and packet["payload"]["version"] == compatible.SUCCESSOR_VERSION:
         binding["chronology_reader"] = dict(version=compatible.chronology.VERSION, sha256=hashlib.sha256(
             Path(compatible.chronology.__file__).read_bytes().replace(b"\r\n", b"\n")).hexdigest())
-    if packet is not None and packet['payload']['version'] == custody.VERSION:
-        binding['custody_reader'] = dict(version=custody.VERSION, components=custody.implementation(),
+    if packet is not None and packet['payload']['version'] in {custody.VERSION, owner.ReviewPolicy.VERSION}:
+        binding['custody_reader'] = dict(version=packet['payload']['version'], components=custody.implementation(),
             native_reader=compatible_reader_binding(packet['payload']['native_packet']))
+    if packet is not None and packet['payload']['version'] == owner.ReviewPolicy.NATIVE_VERSION:
+        from app_core import ncaaf_owner_mapping
+        binding['private_components'] = {module.__name__: hashlib.sha256(
+            Path(module.__file__).read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+            for module in (compatible.chronology, ncaaf_owner_mapping)}
+    if packet is not None and packet["payload"]["version"] == owner.VERSION:
+        binding["owner_reader"] = dict(version=owner.VERSION, sha256=hashlib.sha256(
+            Path(owner.__file__).read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
+            custody_reader=compatible_reader_binding(packet["payload"]["custody_packet"]))
     return binding
 
 

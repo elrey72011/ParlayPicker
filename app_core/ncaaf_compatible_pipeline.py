@@ -63,35 +63,36 @@ def view(packet):
         price=q["price"], event_id=q["provider_event_id"], model_name="ridge"), source_review=p["source_review"])
 
 
-def load(packet):
+def load(packet, *, review_policy=None):
     require(set(packet) == {"payload", "sha256"} and model.digest(packet["payload"]) == packet["sha256"],
             "NCAAF_COMPAT_PACKET_INTEGRITY")
     p = packet["payload"]
     require(set(p) == {"version", "evidence_label", "observation", "dependency_objects"}
-        and p["version"] in INPUT_VERSIONS and p["evidence_label"] in {"RETAINED", "SYNTHETIC"},
+        and p["version"] in (INPUT_VERSIONS if review_policy is None else {review_policy.NATIVE_VERSION}) and p["evidence_label"] in {"RETAINED", "SYNTHETIC"},
         "NCAAF_COMPAT_OBSERVATION_SCHEMA")
     original = p["observation"]
     require(set(original) == {"payload", "sha256"} and model.digest(original["payload"]) == original["sha256"],
             "NCAAF_COMPAT_PACKET_INTEGRITY")
     o = original["payload"]
     require(set(o) == set("version evidence_label model event schedule crosswalk mapping_review quote as_of features feature_dependencies source_review original_inference_time source_acceptance scientific_qualification probability_calibration wagering_authority wager_action live_stake".split())
-        and o["version"] == (chronology.VERSION if p["version"] == SUCCESSOR_VERSION else observation.VERSION) and o["evidence_label"] == p["evidence_label"],
+        and o["version"] == (review_policy.OBSERVATION_VERSION if review_policy is not None else chronology.VERSION if p["version"] == SUCCESSOR_VERSION else observation.VERSION) and o["evidence_label"] == p["evidence_label"],
         "NCAAF_COMPAT_OBSERVATION_SCHEMA")
     require(isinstance(p["dependency_objects"], list) and 0 < len(p["dependency_objects"]) <= MAX_OBJECTS,
             "NCAAF_COMPAT_DEPENDENCY_BYTES_MISSING")
     return packet
 
 
-def result_version(packet):
+def result_version(packet, *, review_policy=None):
+    if review_policy is not None: return review_policy.NATIVE_RESULT_VERSION
     return SUCCESSOR_RESULT_VERSION if packet["payload"]["version"] == SUCCESSOR_VERSION else RESULT_VERSION
 
 
-def checked_observation(packet, at):
+def checked_observation(packet, at, *, review_policy=None):
     original = packet["payload"]["observation"]
-    if packet["payload"]["version"] == SUCCESSOR_VERSION:
-        checked = chronology.read_observation(original)
-        chronology.check_chronology(original["payload"], at)
-        require(history.timestamp(original["payload"]["source_review"]["acceptance"]["accepted_at"]) < history.timestamp(at),
+    if review_policy is not None or packet["payload"]["version"] == SUCCESSOR_VERSION:
+        checked = chronology.read_observation(original, review_policy=review_policy)
+        chronology.check_chronology(original["payload"], at, review_policy=review_policy)
+        require(history.timestamp(original["payload"]["source_review"]["owner_verification" if review_policy is not None else "acceptance"]["reviewed_at" if review_policy is not None else "accepted_at"]) < history.timestamp(at),
                 "NCAAF_ACCEPTANCE_CLOCK_CONFLICT")
         return checked
     return observation.read_observation(original)
@@ -105,9 +106,9 @@ def _unique(pairs):
     return result
 
 
-def objects(packet, at):
+def objects(packet, at, *, review_policy=None):
     """Verify original bytes and allowlisted native shapes, without mathematics."""
-    p = load(packet)["payload"]
+    p = load(packet, review_policy=review_policy)["payload"]
     season = p["observation"]["payload"]["schedule"][0]["season"]
     batches, index = [], {}
     for item in p["dependency_objects"]:
@@ -130,7 +131,7 @@ def objects(packet, at):
     return state, index
 
 
-def fresh(packet, at):
+def fresh(packet, at, *, review_policy=None):
     p = packet["payload"]["observation"]["payload"]
     now, observed, quote, start = [history.timestamp(v) for v in
         (at, p["as_of"], p["quote"].get("recorded_at"), p["event"].get("start_utc"))]
@@ -141,18 +142,18 @@ def fresh(packet, at):
     return now
 
 
-def accepted_dependencies(packet, approval, at):
+def accepted_dependencies(packet, approval, at, *, review_policy=None):
     """Exact trusted packet review must cover the native feature sources too.
 
     This consumes the existing independent packet catalog; no upload creates a
     review. A quote's permissions do not imply feature-provider permissions.
     """
     review = approval.get("dependency_source_review")
-    if packet["payload"]["version"] == SUCCESSOR_VERSION:
+    if review_policy is not None or packet["payload"]["version"] == SUCCESSOR_VERSION:
         now = history.timestamp(at)
         require(now is not None, "NCAAF_DEPENDENCY_ACCEPTANCE_CLOCK_CONFLICT")
-        _, index = objects(packet, now)
-        return chronology.check_dependency_admission(packet, review, index, at)
+        _, index = objects(packet, now, review_policy=review_policy)
+        return chronology.check_dependency_admission(packet, review, index, at, review_policy=review_policy)
     require(isinstance(review, dict) and set(review) == {"provider", "endpoints", "dependency_hashes",
         "permitted_use", "public_derived_output", "rights_document", "reviewed_at", "effective_until"}
         and review["provider"] == "cfbd" and review["endpoints"] == ["games", "games/teams"]
@@ -166,11 +167,11 @@ def accepted_dependencies(packet, approval, at):
     return deepcopy(review)
 
 
-def derive(packet, checked, at):
+def derive(packet, checked, at, *, review_policy=None):
     """NEW caller only: verify exact native dependencies, then unchanged math."""
     p = packet["payload"]["observation"]["payload"]
-    state, index = objects(packet, at)
-    game = observation.check_mapping(p["event"], p["schedule"], p["crosswalk"], p["mapping_review"], as_of=at)
+    state, index = objects(packet, at, review_policy=review_policy)
+    game = (observation.check_mapping if review_policy is None else review_policy.check_mapping)(p["event"], p["schedule"], p["crosswalk"], p["mapping_review"], as_of=at)
     cutoff = history.timestamp(game["startDate"])-timedelta(days=7)
     historical = state["batches"][0]
     require(historical["request"]["kind"] == "games", "NCAAF_COMPAT_DEPENDENCY_SCHEMA")
@@ -250,16 +251,16 @@ def verified_model_bytes(packet):
             raise ValueError("NCAAF_COMPAT_RECORD_SCHEMA") from None
 
 
-def infer(packet, at):
-    now = fresh(load(packet), at)  # Historical/stale inputs rejected before computation.
+def infer(packet, at, *, review_policy=None):
+    now = fresh(load(packet, review_policy=review_policy), at, review_policy=review_policy)  # Historical/stale inputs rejected before computation.
     verified_model_bytes(packet)
-    checked = checked_observation(packet, at)
+    checked = checked_observation(packet, at, review_policy=review_policy)
     p = packet["payload"]["observation"]["payload"]
     if packet["payload"]["version"] == VERSION:
         require(p["quote"]["rules"] == p["source_review"]["settlement"], "NCAAF_COMPAT_SOURCE_REVIEW_MISSING_OR_CONFLICT")
         require(now < history.timestamp(packet["payload"]["observation"]["payload"]["source_review"]["effective_until"]),
                 "NCAAF_COMPAT_SOURCE_REVIEW_CLOCK_CONFLICT")
-    features = derive(packet, checked, now)
+    features = derive(packet, checked, now, review_policy=review_policy)
     target = checked["target"]
     kind = packet["payload"]["observation"]["payload"]["quote"]["market_type"]
     line, family = target["signed_line"], target["family"]
@@ -269,7 +270,7 @@ def infer(packet, at):
     mass = research.probabilities(center, checked["fit"]["sigma"], threshold, total=family == "total")
     win = mass["over" if kind in {"spread_home", "total_over"} else "under"]
     require(mass["push"] == 0 and math.isfinite(win) and 0 <= win <= 1, "NCAAF_PROBABILITY_BINDING_CONFLICT")
-    receipt = dict(version=result_version(packet), input_sha256=packet["sha256"],
+    receipt = dict(version=result_version(packet, review_policy=review_policy), input_sha256=packet["sha256"],
         observation_sha256=packet["payload"]["observation"]["sha256"], inference_time=at,
         ordered_features=list(features.values()), feature_order=list(features), target=target,
         dependency_hashes=[v["sha256"] for v in packet["payload"]["dependency_objects"]],
@@ -278,20 +279,20 @@ def infer(packet, at):
         model_record_sha256=hashlib.sha256(checked["model"]["original_bytes"]).hexdigest(),
         compatibility=deepcopy(checked["model"]["compatibility"]),
         scientific_acceptance=False, probability_calibration=False, wagering_authority=False, live_stake=0)
-    if packet["payload"]["version"] == SUCCESSOR_VERSION:
-        receipt["admission_receipts"] = chronology.check_chronology(p, at)
+    if review_policy is not None or packet["payload"]["version"] == SUCCESSOR_VERSION:
+        receipt["admission_receipts"] = chronology.check_chronology(p, at, review_policy=review_policy)
     return checked, center, win, dict(payload=receipt, sha256=model.digest(receipt))
 
 
-def inspect_result(packet, saved, at):
+def inspect_result(packet, saved, at, *, review_policy=None):
     """Static authentic packet inspection: no feature derivation or inference."""
-    now = fresh(load(packet), at)
+    now = fresh(load(packet, review_policy=review_policy), at, review_policy=review_policy)
     verified_model_bytes(packet)
-    checked = checked_observation(packet, at)
-    objects(packet, now)
+    checked = checked_observation(packet, at, review_policy=review_policy)
+    objects(packet, now, review_policy=review_policy)
     r = saved["payload"]
     require(set(saved) == {"payload", "sha256"} and model.digest(r) == saved["sha256"]
-        and r["version"] == result_version(packet) and r["input_sha256"] == packet["sha256"]
+        and r["version"] == result_version(packet, review_policy=review_policy) and r["input_sha256"] == packet["sha256"]
         and r["observation_sha256"] == packet["payload"]["observation"]["sha256"]
         and r["inference_time"] == at and r["ordered_features"] == checked["ordered_features"]
         and r["feature_order"] == list(research.FEATURES) and r["target"] == checked["target"]
@@ -303,7 +304,7 @@ def inspect_result(packet, saved, at):
         and r["scientific_acceptance"] is False and r["probability_calibration"] is False
         and r["wagering_authority"] is False and r["live_stake"] == 0,
         "NCAAF_COMPAT_COMPUTATION_RECEIPT_CONFLICT")
-    if packet["payload"]["version"] == SUCCESSOR_VERSION:
-        require(r.get("admission_receipts") == chronology.check_chronology(packet["payload"]["observation"]["payload"], at),
+    if review_policy is not None or packet["payload"]["version"] == SUCCESSOR_VERSION:
+        require(r.get("admission_receipts") == chronology.check_chronology(packet["payload"]["observation"]["payload"], at, review_policy=review_policy),
                 "NCAAF_COMPAT_COMPUTATION_RECEIPT_CONFLICT")
     return checked, r

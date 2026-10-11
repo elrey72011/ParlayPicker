@@ -578,15 +578,21 @@ def legacy_unrecorded_display(export):
     return True
 
 
-def from_export(row, *, source=None, source_field="win_probability"):
+def from_export(row, *, source=None, source_field="win_probability", private_research=False):
     actual_source = source if source is not None else row
     try:
         ncaaf_origin = json.loads(actual_source.get("ml_estimate_metadata", ""))
         if "ncaaf_inputs" in ncaaf_origin:
             from app_core.ncaaf_pipeline_evidence import diagnose as diagnose_ncaaf
+            from app_core import ncaaf_owner_research as owner
+            owner_mode = ncaaf_origin["ncaaf_inputs"]["payload"].get("version") == owner.RESULT_VERSION
+            if owner_mode and not private_research:
+                return _empty(_identity(row), "ml_probability", "PRIVATE_RESEARCH; OWNER_REVIEWED; private display only", reason="NCAAF_PRIVATE_RESEARCH_ONLY")
             assessment = diagnose_ncaaf(actual_source, ncaaf_origin)
             identity = _identity(row)
             result = _empty(identity, "ml_probability", "Frozen native NCAAF model; uncalibrated research probability", reason=assessment["reason"])
+            if owner_mode:
+                result["basis"] += "; OWNER_REVIEWED; PRIVATE_RESEARCH; not independent acceptance"
             if assessment["status"] != "COMPLETE":
                 return result
             if not _complete(identity) or not _source_identity_matches(actual_source, identity):
@@ -665,6 +671,8 @@ def public_display(export, row):
         except ValueError:
             return _empty(_identity(export),reason="ESTIMATE_PROVENANCE_NOT_RECORDED")
     if isinstance(saved,dict):
+        if "PRIVATE_RESEARCH" in str(saved.get("basis", "")):
+            return _empty(_identity(export), "ml_probability", "PRIVATE_RESEARCH; owner-only estimate", reason="NCAAF_PRIVATE_RESEARCH_ONLY")
         result=deepcopy(saved)
         validate(result)
         if result["identity"] != _identity(export):
