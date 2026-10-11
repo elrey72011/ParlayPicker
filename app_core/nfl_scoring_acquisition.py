@@ -14,6 +14,7 @@ from urllib.parse import parse_qsl, urlsplit
 import zlib
 from app_core import nfl_scoring_profile as profile, nfl_scoring_custody as custody
 from app_core import nfl_bounded_acquisition as previous
+from app_core import nfl_acquisition_diagnostics as diagnostics
 from app_core.ncaaf_pilot import _timed, _append
 from app_core.nfl_source_projection import seal
 from app_core.producer_provenance import clock
@@ -151,28 +152,37 @@ class HttpsTransport:
         if request!=PRIMARY:
             actual,safe=redirect_request('https://'+request['host']+request['endpoint'])
             require(actual==request, 'NFL_ACQUIRE_ENDPOINT_NOT_APPROVED')
-        conn=http.client.HTTPSConnection(request['host'],timeout=min(limits['connect_seconds'],max(.001,deadline-monotonic())))
-        conn.auto_open=False; cancelled=threading.Event()
+        started=monotonic(); phase='CONNECTION_SETUP'; received_status=diagnostics.UNKNOWN
+        conn=None; cancelled=threading.Event()
         try:
+            conn=http.client.HTTPSConnection(request['host'],timeout=min(limits['connect_seconds'],max(.001,deadline-monotonic())))
+            conn.auto_open=False; phase='HTTPS_CONNECT'
             _timed(conn.connect,min(deadline,monotonic()+limits['connect_seconds']),monotonic,cancelled,conn.close)
+            phase='REQUEST_SEND'
             conn.sock.settimeout(min(limits['read_seconds'],max(.001,deadline-monotonic())))
             _timed(lambda:conn.request('GET',request['endpoint'],headers={'Accept':'text/csv','Accept-Encoding':'identity'}),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)
+            phase='RESPONSE_RECEIVE'
             response=_timed(conn.getresponse,min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)
+            received_status=diagnostics.status(response.status); phase='RESPONSE_HEADERS'
             response_headers=checked_headers(response.getheaders())
         except Exception as exc:
-            conn.close()
-            if isinstance(exc,ValueError) and str(exc) in {'NFL_ACQUIRE_HEADER_CONFLICT','NFL_ACQUIRE_HEADER_LIMIT','NFL_ACQUIRE_REDIRECT_OR_PAGINATION'}:raise
-            raise ValueError('NFL_ACQUIRE_TRANSPORT_FAILURE') from None
+            if conn is not None: conn.close()
+            code=(rejection_code(exc) if phase=='CONNECTION_SETUP' else
+                str(exc) if isinstance(exc,ValueError) and str(exc) in {'NFL_ACQUIRE_HEADER_CONFLICT','NFL_ACQUIRE_HEADER_LIMIT','NFL_ACQUIRE_REDIRECT_OR_PAGINATION'} else 'NFL_ACQUIRE_TRANSPORT_FAILURE')
+            raise diagnostics.Failure(code,diagnostics.facts(exc,phase=phase,http_status=received_status,started=started,ended=monotonic())) from None
         class Stream:
             status=response.status
             headers=response_headers
             def chunks(self):
-                while True:
-                    require(monotonic()<deadline,'NFL_ACQUIRE_DEADLINE')
-                    conn.sock.settimeout(min(limits['read_seconds'],max(.001,deadline-monotonic())))
-                    block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)
-                    if not block: break
-                    yield block
+                try:
+                    while True:
+                        require(monotonic()<deadline,'NFL_ACQUIRE_DEADLINE')
+                        conn.sock.settimeout(min(limits['read_seconds'],max(.001,deadline-monotonic())))
+                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)
+                        if not block: break
+                        yield block
+                except Exception as exc:
+                    raise diagnostics.Failure(rejection_code(exc),diagnostics.facts(exc,phase='BODY_READ',http_status=received_status,started=started,ended=monotonic())) from None
             def close(self): conn.close()
         return Stream()
 
@@ -212,32 +222,56 @@ def read(stream,limits,deadline,monotonic):
     return bytes(body),dict(wire_bytes=wire,wire_sha256=wire_hash.hexdigest(),encoding=encoding)
 
 
+def rejection_code(exc):
+    text=str(exc)
+    return text if text.startswith(('NFL_ACQUIRE_','NFL_PRIVATE_')) and re.fullmatch('[A-Z_]+',text) else 'NFL_ACQUIRE_STOPPED'
+
+
+def execution_report(bundle):
+    """Private CLI report; successful and historical result fields stay unchanged."""
+    require(isinstance(bundle,dict) and set(bundle)=={'payload','sha256'} and digest(bundle['payload'])==bundle['sha256'],'NFL_ACQUIRE_PRIVATE_READBACK')
+    p=bundle['payload']; report={k:p[k] for k in ('status','reason','attempted')}
+    if 'failure_diagnostics' in p:
+        require(p['status']=='INCOMPLETE','NFL_ACQUIRE_DIAGNOSTICS_INVALID')
+        report['failure_diagnostics']=diagnostics.checked(p['failure_diagnostics'])
+    return report
+
+
 def acquire(plan,authorization,*,root,transport,wall=previous.utc,monotonic=time.monotonic):
     p=authorize(plan,authorization,wall(),root); root=Path(root)
     try: journal=(root/(plan['sha256']+'.nfl-scoring-attempts.jsonl')).open('xb')
     except FileExistsError: raise ValueError('NFL_ACQUIRE_ALREADY_ATTEMPTED_NO_RESUME') from None
-    deadline=monotonic()+p['limits']['total_seconds']; obj=None; reason=None; attempted=0; chain=[]
+    began=monotonic(); deadline=began+p['limits']['total_seconds']; obj=None; reason=None; attempted=0; chain=[]
+    failure=None; phase='JOURNAL'; received_status=diagnostics.UNKNOWN
     try:
         with journal:
             _append(journal,dict(plan_sha256=plan['sha256'],authorization_sha256=authorization['sha256'],custody_id=p['custody_id']))
             request=safe=deepcopy(PRIMARY)
             while True:
+                phase='AUTHORIZATION'
                 authorize(plan,authorization,wall(),root)
                 require(monotonic()<deadline and attempted<p['limits']['max_attempts'], 'NFL_ACQUIRE_BUDGET_EXHAUSTED')
                 started=wall(); attempted+=1
+                began=monotonic(); phase='JOURNAL'; received_status=diagnostics.UNKNOWN
                 _append(journal,dict(attempt=attempted,request=safe,requested_at=started))
                 stream=None; location=None
                 try:
+                    phase='TRANSPORT'
                     stream=transport(deepcopy(request),deepcopy(p['limits']),deadline,monotonic)
+                    received_status=diagnostics.status(stream.status); phase='RESPONSE_HEADERS'
                     h=headers(stream)
+                    phase='RESPONSE_VALIDATION'
                     if stream.status==302 and attempted==1:
                         location=h.get('location'); next_request,next_safe=redirect_request(location)
                         body=None; transfer=None
-                    else: body,transfer=read(stream,p['limits'],deadline,monotonic)
+                    else:
+                        phase='BODY_VALIDATION'
+                        body,transfer=read(stream,p['limits'],deadline,monotonic)
                     received=wall()
                 finally:
                     if stream is not None: stream.close()
                 require(monotonic()<deadline,'NFL_ACQUIRE_DEADLINE')
+                phase='AUTHORIZATION'
                 authorize(plan,authorization,received,root)
                 step=dict(attempt=attempted,request=safe,started_at=started,received_at=received,status=stream.status,
                     location_sha256=hashlib.sha256(location.encode()).hexdigest() if location else None)
@@ -246,17 +280,22 @@ def acquire(plan,authorization,*,root,transport,wall=previous.utc,monotonic=time
                     request,safe=next_request,next_safe
                     continue
                 transfer['requests']=chain
+                phase='CUSTODY'
                 obj=custody.retained_score(body,receipt=dict(source_id=profile.SOURCE_ID,endpoint=profile.ENDPOINT,format='csv',evidence_label=p['evidence_label'],
                     request_started_at=chain[0]['started_at'],received_at=received,observed_at=received,
                     observation_meaning='actual_local_first_observation_of_complete_decoded_body',provider_clock_meaning='publisher_availability_unknown'),transfer=transfer)
                 _append(journal,dict(received_at=received,body_sha256=obj['body_sha256']))
                 break
     except Exception as exc:
-        text=str(exc)
-        reason=text if text.startswith(('NFL_ACQUIRE_','NFL_PRIVATE_')) and re.fullmatch('[A-Z_]+',text) else 'NFL_ACQUIRE_STOPPED'
-    bundle=seal(dict(version='nfl-unaccepted-scoring-body-v2',profile=profile.PROFILE,plan=plan,authorization_sha256=authorization['sha256'],
+        reason=rejection_code(exc)
+        if reason in {'NFL_ACQUIRE_HTTP_STATUS','NFL_ACQUIRE_CONTENT_TYPE','NFL_ACQUIRE_CONTENT_ENCODING'}:
+            phase='RESPONSE_VALIDATION'
+        failure=diagnostics.checked(exc.diagnostic) if isinstance(exc,diagnostics.Failure) else diagnostics.facts(exc,phase=phase,http_status=received_status,started=began,ended=monotonic())
+    payload=dict(version='nfl-unaccepted-scoring-body-v2',profile=profile.PROFILE,plan=plan,authorization_sha256=authorization['sha256'],
         attempted=attempted,status='INCOMPLETE' if reason else 'CAPTURED_UNREVIEWED',reason=reason,object=obj,
-        owner_reviewed=False,inference=False,source_acceptance=False,wagering_authority=False))
+        owner_reviewed=False,inference=False,source_acceptance=False,wagering_authority=False)
+    if failure is not None: payload['failure_diagnostics']=failure
+    bundle=seal(payload)
     raw=custody.encode(bundle).encode()
     require(len(raw)<=profile.MAX_PACKET,'NFL_ACQUIRE_SERIALIZED_LIMIT')
     path=root/(plan['sha256']+'.nfl-scoring-unreviewed.json')

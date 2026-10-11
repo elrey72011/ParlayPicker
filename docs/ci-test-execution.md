@@ -46,6 +46,17 @@ counts and durations must be reported separately. Redistribution does not reduce
 the number of tests, total test work or runner cost; added job setup and aggregate
 reconciliation may increase cost.
 
+The October 11 revision 2 refresh uses completed current-main/#2416 XML costs
+with a labelled 15% advisory variance estimate, and separately labelled
+incomplete cancellation observations. The scheduler/schema, fallback, whole-file
+order and three-job workflow are unchanged. See
+[the exact evidence and phase breakdown](paid-launch/ci-timing-profile-v2.md).
+Revision 3 also uses the first refresh's completed same-code shards and explicitly
+estimated cancelled inter-outcome intervals; all-node progress is not completed
+JUnit evidence. Earlier results remain separate from final-head execution.
+Final readiness requires three fresh executed manifests under the same sealed
+head/profile; older passed shards under another assignment do not count.
+
 ## Local verification
 
 Install the same application dependencies as CI, plus pytest:
