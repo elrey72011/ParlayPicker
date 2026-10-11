@@ -1,0 +1,45 @@
+{
+  "payload": {
+    "authorization_ref": "NFL-FUTURE-OWNER-APPROVAL-REQUIRED",
+    "custody_id": "NFL-VERIFIED-PRIVATE-CUSTODY-BINDING-REQUIRED",
+    "evidence_label": "PROPOSAL",
+    "limits": {
+      "connect_seconds": 10,
+      "max_aggregate_bytes": 2097152,
+      "max_attempts": 1,
+      "max_body_bytes": 524288,
+      "max_objects": 1,
+      "read_seconds": 10,
+      "total_seconds": 30
+    },
+    "permission": null,
+    "requests": [
+      {
+        "endpoint": "/nflverse/nfldata/master/data/games.csv",
+        "host": "raw.githubusercontent.com",
+        "id": "scores",
+        "max_attempts": 1,
+        "method": "GET",
+        "params": {}
+      }
+    ],
+    "target": {
+      "canonical_event_id": null,
+      "season": 2026
+    },
+    "unresolved": [
+      "FULL_GAMES_CSV_METADATA_2_08_MB_EXCEEDS_512_KIB",
+      "COMPATIBLE_BOUNDED_SOURCE_NOT_ESTABLISHED",
+      "APPLICABLE_DATA_PERMISSION_NOT_REVIEWED",
+      "EXACT_TARGET_AND_WINDOW_NOT_ADMITTED",
+      "NFL_CUSTODY_AND_AUTHORIZATION_NOT_APPLIED"
+    ],
+    "version": "nfl-original-body-plan-v1",
+    "window": {
+      "expires_at": "2026-10-18T15:31:30Z",
+      "not_after": "2026-10-18T15:31:00Z",
+      "not_before": "2026-10-18T15:30:00Z"
+    }
+  },
+  "sha256": "e2ed09debd64d94b9a6ca1cc84ac332569a75045f0f3d8e571aba571e80437c0"
+}

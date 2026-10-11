@@ -185,7 +185,7 @@ def _compatible_ncaaf_research(row):
 
 
 def _complete_nfl_private(row):
-    from app_core.nfl_owner_research import private, diagnose
+    from app_core.nfl_private_routes import private, diagnose
     return private(row) and diagnose(row)['status'] == 'COMPLETE'
 
 
@@ -468,7 +468,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         import json
         display=from_export(exported, source=source, source_field=probability_field, private_research=private_research)
         exported['research_display']=json.dumps(display, allow_nan=False, sort_keys=True, separators=(',',':'))
-        from app_core.nfl_owner_research import private as nfl_private, private_display
+        from app_core.nfl_private_routes import private as nfl_private, private_display
         if source is not None and nfl_private(source):
             exported['nfl_private_research_display'] = json.dumps(private_display(source), allow_nan=False, sort_keys=True, separators=(',', ':'))
         # Owner export only: public_board's allowlist never publishes this trace.

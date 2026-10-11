@@ -367,7 +367,7 @@ def _market(event, market, providers, candidates, finals, audit, at, run, health
         model = gate('model_evidence', 'FAIL' if incompatible or status in {'unavailable', 'failed', 'error'} else 'UNKNOWN',
             'MODEL_INCOMPATIBLE' if incompatible else 'MODEL_INFERENCE_UNAVAILABLE' if status in {'unavailable', 'failed', 'error'} else 'MODEL_EVIDENCE_MISSING')
         if text(candidate, 'league', 'League').upper() == 'NFL' and status in {'unavailable', 'failed', 'error'}:
-            from app_core.nfl_owner_research import private, REASONS
+            from app_core.nfl_private_routes import private, REASONS
             if private(candidate) and model_code in REASONS:
                 model = gate('model_evidence', 'FAIL', model_code)
         if text(candidate, 'league', 'League').upper() == 'NCAAF' and status in {'unavailable', 'failed', 'error'}:
