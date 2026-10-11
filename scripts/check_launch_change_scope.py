@@ -21593,6 +21593,177 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
         source = _discovery_parent_guard_source(source)
     return _discovery_boot_pilot_raw(source, reviewed)
 
+
+NCAAF_CLOUD_BACKUP_BOOTSTRAP = True
+CLOUD_REVIEWED_GUARD_SHA256 = "04688d10809114dee705beafa212238c4179a30ec4de972a346111361423dd4e"
+CLOUD_BOOT_PREVIOUS_TAIL = (b'_ncaaf_pilot_seeded_custody_parent = _ncaaf_custody_predecessor()\n\nfor _ncaaf_pilot_name'
+ b', _ncaaf_pilot_method in list(globals().items()):\n    if callable(_ncaaf_pilot_method) a'
+ b'nd _ncaaf_pilot_name.endswith(("_previous_guard_source", "_previous_main_source", "_parent_g'
+ b'uard_source", "_parent_main_source")) and not _ncaaf_pilot_name.startswith("_ncaaf_pilot_"):'
+ b'\n        globals()[_ncaaf_pilot_name] = _ncaaf_pilot_wrap_previous(_ncaaf_pilot_name)\n\n\n'
+ b'def _dfs_guard_matches(source, reviewed):\n    if b"\\nNCAAF_PILOT_POLICY_PATH =" in sourc'
+ b'e:\n        if reviewed == NCAAF_PILOT_BINDINGS["successor_guard_sha256"]:\n            re'
+ b'turn _ncaaf_pilot_raw_guard_matches(source, reviewed)\n        if not _ncaaf_pilot_raw_gu'
+ b'ard_matches(source, NCAAF_PILOT_BINDINGS["successor_guard_sha256"]):\n            return '
+ b'False\n        source = _ncaaf_pilot_parent_guard_source(source)\n    return _ncaaf_pilot_'
+ b"predecessor()._dfs_guard_matches(source, reviewed)\n\n\n# Keep the predecessor's assertions"
+ b' meaningful for the newly reviewed source:\n# compose exact reverse edits; no assertion i'
+ b's removed or relaxed.\nfor _ncaaf_pilot_group in ("NCAAF_CUSTODY_PRIOR_SOURCE_RECONSTRUCT'
+ b'IONS", "NCAAF_CHRONOLOGY_PRIOR_SOURCE_RECONSTRUCTIONS", "PREVIEW_BINDING_PRIOR_SOURCE_RECONS'
+ b'TRUCTIONS", "NCAAF_NORMAL_PRIOR_SOURCE_RECONSTRUCTIONS", "SLATE_AUDIT_PRIOR_SOURCE_RECONSTRU'
+ b'CTIONS", "FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS", "NCAAF_COMPAT_PRIOR_SOURCE_RECONS'
+ b'TRUCTIONS"):\n    _ncaaf_pilot_map = {p: dict(v) for p,v in globals()[_ncaaf_pilot_group]'
+ b'.items()}\n    globals()[_ncaaf_pilot_group] = _ncaaf_pilot_map\n    for _ncaaf_pilot_path'
+ b', _ncaaf_pilot_receipt in NCAAF_PILOT_PRIOR_SOURCE_RECONSTRUCTIONS.items():\n        if _'
+ b'ncaaf_pilot_path in _ncaaf_pilot_map:\n            _ncaaf_pilot_prior = _ncaaf_pilot_map['
+ b'_ncaaf_pilot_path]\n            _require(_ncaaf_pilot_prior["after_sha256"] == _ncaaf_pil'
+ b'ot_receipt["sha256"], "PRIOR_ASSERTIONS_CHANGED")\n            _ncaaf_pilot_prior["after_'
+ b'sha256"] = _ncaaf_pilot_receipt["after_sha256"]\n            _ncaaf_pilot_prior["edits"] '
+ b'= _ncaaf_pilot_prior["edits"] + _ncaaf_pilot_receipt["edits"]\n\n\n\ndef _run_ncaaf_pilot_in'
+ b'tegrated(manifest_path, base, binding):\n    import importlib.util\n    path = ROOT / "scr'
+ b'ipts/ncaaf_pilot_scope.py"\n    _require(hashlib.sha256(path.read_bytes().replace(b"\\r\\n"'
+ b', b"\\n")).hexdigest() == binding["scope_module_sha256"], "SUCCESSOR_SCOPE_MODULE_CHANGED'
+ b'")\n    spec = importlib.util.spec_from_file_location("parlaypicker_ncaaf_pilot_scope", p'
+ b'ath)\n    module = importlib.util.module_from_spec(spec)\n    spec.loader.exec_module(modu'
+ b'le)\n    return module.run(sys.modules[__name__], manifest_path, base, binding)\n\nNCAAF_DI'
+ b'SCOVERY_POLICY_PATH = "docs/paid-launch/launch-scope-policy-ncaaf-discovery-v1.json"\nDIS'
+ b'COVERY_BINDING_PATH = "docs/paid-launch/ncaaf-pilot-discovery-binding-v1.json"\nDISCOVERY'
+ b'_BINDING_SHA256 = "ba3593a5b8dd60e3b26641522a35dd7f8b4f135a6b06c8f3aacd68b43c769342"\n\n# '
+ b"The inherited pilot's historical-wrapper loop ran during bootstrap. Restore\n# this succe"
+ b"ssor's exact peeling method before installing its own wrappers.\ndef _discovery_parent_gu"
+ b"ard_source(source):\n    if b'\\nNCAAF_DISCOVERY_BOOTSTRAP =' not in source:\n        retur"
+ b"n source\n    _require(_discovery_guard_matches(source), 'SUCCESSOR_GUARD_REVIEWED_BYTES_"
+ b"CHANGED')\n    return source.split(b'\\nNCAAF_DISCOVERY_BOOTSTRAP =', 1)[0] + DISCOVERY_BO"
+ b'OT_PREVIOUS_TAIL\n\n_discovery_seed_pilot_parent = _ncaaf_pilot_predecessor()\n_discovery_f'
+ b'rozen_module = None\ndef _discovery_predecessor():\n    global _discovery_frozen_module\n  '
+ b'  if _discovery_frozen_module is None:\n        import types\n        current = Path(__fil'
+ b"e__).read_bytes().replace(b'\\r\\n', b'\\n')\n        previous = _discovery_parent_guard_sou"
+ b"rce(current)\n        module = types.ModuleType('exact_discovery_predecessor')\n        mo"
+ b'dule.__file__ = __file__\n        # Reuse the already verified custody bootstrap instead '
+ b'of re-reading\n        # the successor file while instantiating exact historical function'
+ b"s.\n        module._discovery_seed = _ncaaf_pilot_seeded_custody_parent\n        seed = b'"
+ b"_ncaaf_pilot_seeded_custody_parent = _ncaaf_custody_predecessor()'\n        _require(prev"
+ b"ious.count(seed) == 1, 'PREVIOUS_GUARD_LOGIC_CHANGED')\n        exec(previous.replace(see"
+ b"d, b'_ncaaf_pilot_seeded_custody_parent = _discovery_seed'), module.__dict__)\n        mo"
+ b'dule._ncaaf_pilot_frozen_module = _discovery_seed_pilot_parent\n        module._ncaaf_cus'
+ b'tody_frozen_module = _ncaaf_pilot_seeded_custody_parent\n        _discovery_frozen_module'
+ b' = module\n    _discovery_frozen_module.ROOT = ROOT\n    return _discovery_frozen_module\n\n'
+ b'def _discovery_wrap_reader(name):\n    def wrapped(*args, **kwargs):\n        method = get'
+ b"attr(_discovery_predecessor(), name)\n        if name.endswith(('_previous_main_source', "
+ b"'_parent_main_source')):\n            path, source, *rest = args\n            if path == G"
+ b'UARD_PATH: source = _discovery_parent_guard_source(source)\n            return method(pat'
+ b'h, source, *rest, **kwargs)\n        source, *rest = args\n        return method(_discover'
+ b'y_parent_guard_source(source), *rest, **kwargs)\n    return wrapped\n\nfor _discovery_name,'
+ b' _discovery_method in list(globals().items()):\n    if callable(_discovery_method) and no'
+ b"t _discovery_name.startswith('_discovery_') and (\n        _discovery_name.endswith(('_pr"
+ b"evious_guard_source', '_parent_guard_source', '_previous_main_source', '_parent_main_source'"
+ b", '_raw_guard_matches'))):\n        globals()[_discovery_name] = _discovery_wrap_reader(_"
+ b"discovery_name)\n\ndef _dfs_guard_matches(source, reviewed):\n    if b'\\nNCAAF_DISCOVERY_BO"
+ b"OTSTRAP =' in source:\n        if reviewed == DISCOVERY_REVIEWED_GUARD_SHA256: return _di"
+ b'scovery_guard_matches(source)\n        if not _discovery_guard_matches(source): return Fa'
+ b'lse\n        source = _discovery_parent_guard_source(source)\n    return _discovery_predec'
+ b'essor()._dfs_guard_matches(source, reviewed)\n\ndef _run_discovery_integrated(manifest_pat'
+ b'h, base):\n    import importlib.util\n    raw = (ROOT/DISCOVERY_BINDING_PATH).read_bytes()'
+ b".replace(b'\\r\\n', b'\\n')\n    _require(hashlib.sha256(raw).hexdigest() == DISCOVERY_BINDI"
+ b"NG_SHA256, 'REVIEWED_BINDINGS_CHANGED')\n    binding = json.loads(raw)\n    path = ROOT/'s"
+ b"cripts/ncaaf_discovery_scope.py'\n    content = path.read_bytes().replace(b'\\r\\n', b'\\n')"
+ b"\n    expected = binding['reviewed_blobs']['scripts/ncaaf_discovery_scope.py']\n    actual"
+ b" = hashlib.sha1(b'blob '+str(len(content)).encode()+b'\\0'+content).hexdigest()\n    _requ"
+ b"ire(actual == expected, 'SUCCESSOR_SCOPE_MODULE_CHANGED')\n    spec = importlib.util.spec"
+ b"_from_file_location('parlaypicker_discovery_scope', path)\n    module = importlib.util.mo"
+ b'dule_from_spec(spec); spec.loader.exec_module(module)\n    return module.run(sys.modules['
+ b'__name__], manifest_path, base, binding)\n\n\ndef main() -> int:\n    parser = argparse.Argu'
+ b'mentParser()\n    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)\n'
+ b'    parser.add_argument("--base")\n    parser.add_argument("--json-output", type=Path)\n  '
+ b'  args = parser.parse_args()\n    try:\n        if exists_at("HEAD", NCAAF_DISCOVERY_POLIC'
+ b'Y_PATH):\n            code, report = _run_discovery_integrated(args.manifest, args.base)\n'
+ b'        elif exists_at("HEAD", NCAAF_PILOT_POLICY_PATH):\n            code, report = _run'
+ b'_ncaaf_pilot_integrated(args.manifest, args.base, NCAAF_PILOT_BINDINGS)\n        elif exi'
+ b'sts_at("HEAD", NCAAF_CUSTODY_POLICY_PATH):\n            code, report = _run_ncaaf_custody'
+ b'_integrated(args.manifest, args.base, NCAAF_CUSTODY_BINDINGS)\n        elif exists_at("HE'
+ b'AD", NCAAF_CHRONOLOGY_POLICY_PATH):\n            code, report = _run_ncaaf_chronology_int'
+ b'egrated(args.manifest, args.base, NCAAF_CHRONOLOGY_BINDINGS)\n        elif exists_at("HEA'
+ b'D", PREVIEW_BINDING_POLICY_PATH):\n            code, report = _run_preview_binding_integr'
+ b'ated(args.manifest, args.base, PREVIEW_BINDING_BINDINGS)\n        elif exists_at("HEAD", '
+ b'NCAAF_NORMAL_POLICY_PATH):\n            code, report = _run_ncaaf_normal_integrated(args.'
+ b'manifest, args.base, NCAAF_NORMAL_BINDINGS)\n        elif exists_at("HEAD", READINESS_DAS'
+ b'HBOARD_POLICY_PATH):\n            code, report = _run_readiness_dashboard_integrated(args'
+ b'.manifest, args.base, READINESS_DASHBOARD_BINDINGS)\n        elif exists_at("HEAD", NCAAF'
+ b'_COMPAT_POLICY_PATH):\n            code, report = _run_ncaaf_compatibility_integrated(arg'
+ b's.manifest, args.base, NCAAF_COMPAT_BINDINGS)\n        elif exists_at("HEAD", CI_SCHEDULI'
+ b'NG_POLICY_PATH):\n            code, report = _run_ci_scheduling_integrated(args.manifest,'
+ b' args.base, CI_SCHEDULING_BINDINGS)\n        elif exists_at("HEAD", SLATE_AUDIT_POLICY_PA'
+ b'TH):\n            code, report = _run_slate_audit_integrated(args.manifest, args.base, SL'
+ b'ATE_AUDIT_BINDINGS)\n        elif exists_at("HEAD", FOOTBALL_RESEARCH_POLICY_PATH):\n     '
+ b'       code, report = _run_football_research_integrated(args.manifest, args.base, FOOTBALL_R'
+ b'ESEARCH_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CONTINUATION_POLICY_PATH):\n     '
+ b'       code, report = _run_remote_continuation_integrated(args.manifest, args.base, REMOTE_C'
+ b'ONTINUATION_BINDINGS)\n        elif exists_at("HEAD", REMOTE_CANONICAL_POLICY_PATH):\n    '
+ b'        code, report = _run_remote_canonical_integrated(args.manifest, args.base, REMOTE_CAN'
+ b'ONICAL_BINDINGS)\n        elif exists_at("HEAD", CANONICAL_DOWNLOAD_POLICY_PATH):\n       '
+ b'     code, report = _run_canonical_download_integrated(args.manifest, args.base, CANONICAL_D'
+ b'OWNLOAD_BINDINGS)\n        elif exists_at("HEAD", NCAAF_RESEARCH_POLICY_PATH):\n          '
+ b'  code, report = _run_ncaaf_research_integrated(args.manifest, args.base, NCAAF_RESEARCH_BIN'
+ b'DINGS)\n        elif exists_at("HEAD", MLB_NHL_RESEARCH_POLICY_PATH):\n            code, r'
+ b'eport = _run_mlb_nhl_research_integrated(args.manifest, args.base, MLB_NHL_RESEARCH_BINDINGS'
+ b')\n        elif exists_at("HEAD", FOOTBALL_CATALOG_POLICY_PATH):\n            code, report'
+ b' = _run_football_catalog_integrated(args.manifest, args.base, FOOTBALL_CATALOG_BINDINGS)'
+ b'\n        elif exists_at("HEAD", NHL_PUCK_LINE_POLICY_PATH):\n            code, report = _'
+ b'run_nhl_puck_line_integrated(args.manifest, args.base, NHL_PUCK_LINE_BINDINGS)\n        e'
+ b'lif exists_at("HEAD", NFL_CALIBRATION_POLICY_PATH):\n            code, report = _run_nfl_'
+ b'calibration_integrated(args.manifest, args.base, NFL_CALIBRATION_BINDINGS)\n        elif '
+ b'exists_at("HEAD", SOURCE_INTAKE_POLICY_PATH):\n            code, report = _run_source_int'
+ b'ake_integrated(args.manifest, args.base, SOURCE_INTAKE_BINDINGS)\n        elif exists_at('
+ b'"HEAD", NFL_UI_POLICY_PATH):\n            code, report = _run_nfl_ui_integrated(args.mani'
+ b'fest, args.base, NFL_UI_BINDINGS)\n        elif exists_at("HEAD", PICK_BOARD_POLICY_PATH)'
+ b':\n            code, report = _run_pick_board_integrated(args.manifest, args.base, PICK_B'
+ b'OARD_BINDINGS)\n        elif exists_at("HEAD", NFL_NATIVE_POLICY_PATH):\n            code,'
+ b' report = _run_nfl_native_integrated(args.manifest, args.base, NFL_NATIVE_BINDINGS)\n    '
+ b'    elif exists_at("HEAD", NFL_ADMISSION_POLICY_PATH):\n            code, report = _run_n'
+ b'fl_admission_integrated(args.manifest, args.base, NFL_ADMISSION_BINDINGS)\n        elif e'
+ b'xists_at("HEAD", NFL_INPUTS_POLICY_PATH):\n            code, report = _run_nfl_inputs_int'
+ b'egrated(args.manifest, args.base, NFL_INPUTS_BINDINGS)\n        elif exists_at("HEAD", SO'
+ b'URCE_CONTRACT_POLICY_PATH):\n            code, report = _run_source_contract_integrated(a'
+ b'rgs.manifest, args.base, SOURCE_CONTRACT_BINDINGS)\n        elif exists_at("HEAD", PROVEN'
+ b'ANCE_POLICY_PATH):\n            code, report = _run_producer_integrated(args.manifest, ar'
+ b'gs.base, PROVENANCE_BINDINGS)\n        elif exists_at("HEAD", HOME_POLICY_PATH):\n        '
+ b'    code, report = _run_home_integrated(args.manifest, args.base, HOME_BINDINGS)\n       '
+ b' elif exists_at("HEAD", NFL_POLICY_PATH):\n            code, report = _run_nfl_integrated'
+ b'(args.manifest, args.base, NFL_BINDINGS)\n        elif exists_at("HEAD", ESTIMATE_POLICY_'
+ b'PATH):\n            code, report = _run_estimate_integrated(args.manifest, args.base, EST'
+ b'IMATE_BINDINGS)\n        elif exists_at("HEAD", DRIVE_POLICY_PATH):\n            code, rep'
+ b'ort = _run_drive_integrated(args.manifest, args.base, DRIVE_BINDINGS)\n        elif exist'
+ b's_at("HEAD", V4_POLICY_PATH):\n            code, report = _run_dfs_integrated(args.manife'
+ b'st, args.base, DFS_BINDINGS)\n        elif exists_at("HEAD", COVERAGE_POLICY_PATH):\n     '
+ b'       code, report = _run_coverage_integrated(args.manifest, args.base, COVERAGE_BINDIN'
+ b'GS)\n        elif exists_at("HEAD", SCHEDULE_POLICY_PATH):\n            code, report = _ru'
+ b'n_schedule_integrated(args.manifest, args.base, SCHEDULE_BINDINGS)\n        elif exists_a'
+ b't("HEAD", V3_POLICY_PATH):\n            code, report = _run_provider_integrated(args.mani'
+ b'fest, args.base, PROVIDER_BINDINGS)\n        else:\n            code, report = _run_integr'
+ b'ated(args.manifest, args.base, PRODUCTION_BINDINGS)\n    except Exception as exc:\n       '
+ b' report = {"schema_version": 1, "status": "ERROR", "reason_codes": ["GUARD_EXECUTION_ERROR"]'
+ b', "error": str(exc)}\n        code = 2\n    rendered = json.dumps(report, indent=2, sort_k'
+ b'eys=True)\n    if args.json_output:\n        args.json_output.parent.mkdir(parents=True, e'
+ b'xist_ok=True)\n        args.json_output.write_text(rendered + "\\n", encoding="utf-8")\n   '
+ b' print(rendered)\n    return code\n\n\nif __name__ == "__main__":\n    raise SystemExit(m'
+ b'ain())\n')
+
+def _cloud_guard_matches(source):
+    reviewed = CLOUD_REVIEWED_GUARD_SHA256.encode('ascii')
+    return source.count(reviewed) == 1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest() == CLOUD_REVIEWED_GUARD_SHA256
+
+def _cloud_peel_exact_guard(source):
+    if b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =' not in source: return source
+    _require(_cloud_guard_matches(source), 'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    return source.split(b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =',1)[0] + CLOUD_BOOT_PREVIOUS_TAIL
+
+_cloud_boot_pilot_raw = _ncaaf_pilot_raw_guard_matches
+def _ncaaf_pilot_raw_guard_matches(source, reviewed):
+    if b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =' in source:
+        if not _cloud_guard_matches(source): return False
+        source = _cloud_peel_exact_guard(source)
+    return _cloud_boot_pilot_raw(source, reviewed)
+
 _ncaaf_pilot_seeded_custody_parent = _ncaaf_custody_predecessor()
 
 for _ncaaf_pilot_name, _ncaaf_pilot_method in list(globals().items()):
@@ -21644,6 +21815,14 @@ def _discovery_parent_guard_source(source):
         return source
     _require(_discovery_guard_matches(source), 'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return source.split(b'\nNCAAF_DISCOVERY_BOOTSTRAP =', 1)[0] + DISCOVERY_BOOT_PREVIOUS_TAIL
+
+
+# Restore cloud peeling before the inherited discovery seed invokes pilot.
+def _cloud_peel_exact_guard(source):
+    if b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =' not in source: return source
+    _require(_cloud_guard_matches(source), 'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    return source.split(b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =',1)[0] + CLOUD_BOOT_PREVIOUS_TAIL
+
 
 _discovery_seed_pilot_parent = _ncaaf_pilot_predecessor()
 _discovery_frozen_module = None
@@ -21705,6 +21884,79 @@ def _run_discovery_integrated(manifest_path, base):
     return module.run(sys.modules[__name__], manifest_path, base, binding)
 
 
+NCAAF_CLOUD_BACKUP_POLICY_PATH = "docs/paid-launch/launch-scope-policy-ncaaf-cloud-backup-v1.json"
+CLOUD_BINDING_PATH = "docs/paid-launch/ncaaf-cloud-backup-binding-v1.json"
+CLOUD_BINDING_SHA256 = "afc6a973a246079e699b80d82e84d6c50ef4283256a838f733743bd04cbb28f6"
+
+# Restore exact peeling after inherited historical bootstrap wrappers.
+def _cloud_peel_exact_guard(source):
+    if b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =' not in source: return source
+    _require(_cloud_guard_matches(source), 'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    return source.split(b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =',1)[0] + CLOUD_BOOT_PREVIOUS_TAIL
+
+_cloud_inherited_discovery_parent = _discovery_parent_guard_source
+def _discovery_parent_guard_source(source):
+    return _cloud_inherited_discovery_parent(_cloud_peel_exact_guard(source))
+
+_cloud_seed_discovery_parent = _discovery_predecessor()
+_cloud_frozen_module = None
+def _cloud_predecessor():
+    global _cloud_frozen_module
+    if _cloud_frozen_module is None:
+        import types
+        previous = _cloud_peel_exact_guard(Path(__file__).read_bytes().replace(b'\r\n',b'\n'))
+        module = types.ModuleType('exact_cloud_predecessor'); module.__file__ = __file__
+        module._cloud_seed_custody = _ncaaf_pilot_seeded_custody_parent
+        module._cloud_seed_pilot = _discovery_seed_pilot_parent
+        seed = b'_ncaaf_pilot_seeded_custody_parent = _ncaaf_custody_predecessor()'
+        seed2 = b'_discovery_seed_pilot_parent = _ncaaf_pilot_predecessor()'
+        seed=b'\n'+seed+b'\n';seed2=b'\n'+seed2+b'\n'
+        _require(previous.count(seed)==1 and previous.count(seed2)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        previous = previous.replace(seed,b'\n_ncaaf_pilot_seeded_custody_parent = _cloud_seed_custody\n').replace(seed2,b'\n_discovery_seed_pilot_parent = _cloud_seed_pilot\n')
+        exec(previous,module.__dict__)
+        module._ncaaf_pilot_frozen_module = _discovery_seed_pilot_parent
+        module._ncaaf_custody_frozen_module = _ncaaf_pilot_seeded_custody_parent
+        module._discovery_frozen_module = _cloud_seed_discovery_parent
+        _cloud_frozen_module = module
+    _cloud_frozen_module.ROOT=ROOT
+    return _cloud_frozen_module
+
+def _cloud_wrap_reader(name):
+    def wrapped(*args,**kwargs):
+        method=getattr(_cloud_predecessor(),name)
+        if name.endswith(('_previous_main_source','_parent_main_source')):
+            path,source,*rest=args
+            if path==GUARD_PATH: source=_cloud_peel_exact_guard(source)
+            return method(path,source,*rest,**kwargs)
+        source,*rest=args
+        return method(_cloud_peel_exact_guard(source),*rest,**kwargs)
+    return wrapped
+
+for _cloud_name,_cloud_method in list(globals().items()):
+    if callable(_cloud_method) and not _cloud_name.startswith('_cloud_') and (
+        _cloud_name.endswith(('_previous_guard_source','_parent_guard_source','_previous_main_source','_parent_main_source','_raw_guard_matches'))):
+        globals()[_cloud_name]=_cloud_wrap_reader(_cloud_name)
+
+def _dfs_guard_matches(source,reviewed):
+    if b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =' in source:
+        if reviewed==CLOUD_REVIEWED_GUARD_SHA256:return _cloud_guard_matches(source)
+        if not _cloud_guard_matches(source):return False
+        source=_cloud_peel_exact_guard(source)
+    return _cloud_predecessor()._dfs_guard_matches(source,reviewed)
+
+def _run_cloud_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/CLOUD_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==CLOUD_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/ncaaf_cloud_backup_scope.py'
+    content=path.read_bytes().replace(b'\r\n',b'\n')
+    actual=hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()
+    _require(actual==binding['reviewed_blobs']['scripts/ncaaf_cloud_backup_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('parlaypicker_cloud_scope',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -21712,7 +21964,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NCAAF_DISCOVERY_POLICY_PATH):
+        if exists_at("HEAD", NCAAF_CLOUD_BACKUP_POLICY_PATH):
+            code, report = _run_cloud_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", NCAAF_DISCOVERY_POLICY_PATH):
             code, report = _run_discovery_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NCAAF_PILOT_POLICY_PATH):
             code, report = _run_ncaaf_pilot_integrated(args.manifest, args.base, NCAAF_PILOT_BINDINGS)

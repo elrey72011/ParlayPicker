@@ -1,0 +1,28 @@
+{
+  "base": "d4b73dcc05b45abb1d57dc995571ce892d4cd5cf",
+  "base_tree": "38b45381561b0d4d4c9b1c3a4464064c32cd4be4",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "previous_guard_sha256": "8df5b4b619e220d2884f8f395562ab356d41e247e3729a72774d4e0b79cc4d00",
+  "paths": [
+    "scripts/check_launch_change_scope.py",
+    "app_core/ncaaf_cloud_backup.py",
+    "scripts/ncaaf_cloud_backup.py",
+    "scripts/ncaaf_cloud_backup_scope.py",
+    "tests/test_ncaaf_cloud_backup.py",
+    "tests/test_ncaaf_cloud_backup_scope.py",
+    "tests/test_ncaaf_pilot.py",
+    "docs/paid-launch/ncaaf-private-cloud-backup-v1.md",
+    "docs/paid-launch/ncaaf-cloud-backup-binding-v1.json"
+  ],
+  "preserved_original_proposal_blob": "60090c5924bb48cc3fe1bedafa5a7f82c678170b",
+  "approval_reference": "Owner authorizes preparation of the Google Drive backup option, exact private destination/file review before any upload, and the smallest explicitly versioned change needed from local-only setup. Separate local cloud-v2 preparation, encrypted complete DB/custody/journal snapshots, fresh authenticated cloud read-back and isolated non-operational recovery. No upload authorization, collection, acceptance, inference, publication, deployment, merge or financial authority. Preserve local v1, all originals, model/scientific/wagering contracts, protected files/tests, prior baselines and policies. Owner authorizes draft-PR and required CI delivery followed by protected local setup. A reproduced unchanged-main synthetic-clock fixture defect is corrected only in test setup; all original assertions and application clocks remain unchanged. Shallow-checkout scope tests retain exact base identities without external fetches. Private evidence/Drive identities remain local.",
+  "reviewed_blobs": {
+    "app_core/ncaaf_cloud_backup.py": "b0e7dbbe8b29e3bba3faec8c1a72c88432fe0ea9",
+    "scripts/ncaaf_cloud_backup.py": "330b2391635fb86156412905613bc47084191582",
+    "scripts/ncaaf_cloud_backup_scope.py": "d8e509831030e6ac4e2e892b1dce62a7a208cd02",
+    "tests/test_ncaaf_cloud_backup.py": "c7e5147072b7203e1ce3b724c70a3aaae4068d1f",
+    "tests/test_ncaaf_cloud_backup_scope.py": "b76470e58a73cca717aab9ddf5f6bccd6c4d9067",
+    "tests/test_ncaaf_pilot.py": "5d9fbf404f8b3319f962347677ee2728c382a115",
+    "docs/paid-launch/ncaaf-private-cloud-backup-v1.md": "9f8e24d3a05dd9623439c9c7b53892af23d5966e"
+  }
+}
