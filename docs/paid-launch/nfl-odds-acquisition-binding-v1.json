@@ -1,0 +1,29 @@
+{
+  "approval_reference": "Robert Velarde authorized a separate bounded one-attempt NFL Odds API us_ex/novig/spreads acquisition v1, original unreviewed custody, corrected isolated runtime, network-blocked synthetic validation and draft PR/CI. No authentic acquisition, inference, catalog activation, Drive, publication, wagering, deployment or merge. Historical/scenario/NCAAF readers and all frozen protections are preserved.",
+  "base": "457a7f3e43abfbd95de64e4d9c79e2ca82bdfb21",
+  "base_tree": "8855ee498787d8a8ac3f80cb47e61e9ed611e095",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/nfl_odds_acquisition.py",
+    "docs/paid-launch/nfl-odds-acquisition-binding-v1.json",
+    "docs/paid-launch/nfl-odds-acquisition-v1.md",
+    "docs/paid-launch/nfl-odds-example-plan-v1.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_odds_acquisition.py",
+    "scripts/nfl_odds_scope.py",
+    "tests/test_nfl_odds_acquisition.py",
+    "tests/test_nfl_odds_scope.py"
+  ],
+  "previous_guard_sha256": "f1c7b5b6d7e0666cae23c14192860bc59dd3174321677b679eba7ba9ccd1b153",
+  "reviewed_blobs": {
+    "app_core/nfl_odds_acquisition.py": "3055934a1d47a2e1ea7029a9228bae45acd156bb",
+    "docs/paid-launch/nfl-odds-acquisition-v1.md": "ada5d9032b114cbfd45a47cec0ec028be3534b7c",
+    "docs/paid-launch/nfl-odds-example-plan-v1.json": "e9fcce2aa2384886ea83456c0a5faf1d6e1d1aac",
+    "scripts/nfl_odds_acquisition.py": "0190b5c8f8fe022e516aaae2e29957e597d13aa1",
+    "scripts/nfl_odds_scope.py": "c889098fa3f62f4cf599a4fb7a59f6eee440cecb",
+    "tests/test_nfl_odds_acquisition.py": "7e009a6182a35b52621bf0609653e09e7f6d26dc",
+    "tests/test_nfl_odds_scope.py": "984fb69640a897f0b0beada4403b8d1f058e3e3a"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}

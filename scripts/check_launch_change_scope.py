@@ -21765,6 +21765,33 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+NFL_ODDS_BOOTSTRAP = True
+NFL_ODDS_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-odds-acquisition-v1.json'
+NFL_ODDS_BINDING_PATH = 'docs/paid-launch/nfl-odds-acquisition-binding-v1.json'
+NFL_ODDS_BINDING_SHA256 = '2457643fb978484ccf49113cb90f2e4b8fb5f7e2a41e0ff63b18b383f03b29f5'
+NFL_ODDS_REVIEWED_GUARD_SHA256 = 'c0379e12aaaaf6e12373c706c1ea3265c0502871c36ce7859580b6632ea2fc3c'
+NFL_ODDS_SOURCE_RECONSTRUCTIONS = {}
+from functools import lru_cache as _odds_lru_cache
+@_odds_lru_cache(maxsize=2)
+def _nfl_odds_guard_matches(source):
+    reviewed=NFL_ODDS_REVIEWED_GUARD_SHA256.encode('ascii')
+    return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==NFL_ODDS_REVIEWED_GUARD_SHA256
+@_odds_lru_cache(maxsize=8)
+def _nfl_odds_base_source(source):
+    if b'\nNFL_ODDS_BOOTSTRAP =' not in source:return source
+    _require(_nfl_odds_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    prefix,own=source.split(b'\nNFL_ODDS_BOOTSTRAP =',1)
+    previous=prefix+b'\nNFL_SCENARIO_BOOTSTRAP ='+own.split(b'\nNFL_SCENARIO_BOOTSTRAP =',1)[1]
+    start=previous.index(b'\n_odds_early_match =');end=previous.index(b'\n_scenario_boot_match =',start)
+    previous=previous[:start]+previous[end:]
+    start=previous.index(b'\ndef _nfl_odds_binding():');end=previous.index(b'\ndef main() -> int:',start)
+    previous=previous[:start]+previous[end:]
+    dispatch=b'if exists_at("HEAD", NFL_ODDS_POLICY_PATH):\n            code, report = _run_nfl_odds_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_SCENARIO_POLICY_PATH):'
+    _require(previous.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    previous=previous.replace(dispatch,b'if exists_at("HEAD", NFL_SCENARIO_POLICY_PATH):',1)
+    _require(hashlib.sha256(previous).hexdigest()=='f1c7b5b6d7e0666cae23c14192860bc59dd3174321677b679eba7ba9ccd1b153','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return previous
+
 NFL_SCENARIO_BOOTSTRAP = True
 NFL_SCENARIO_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-scenario-v1.json'
 NFL_SCENARIO_BINDING_PATH = 'docs/paid-launch/nfl-scenario-binding-v1.json'
@@ -21875,6 +21902,13 @@ def _nfl_owner_base_source(source):
     previous = source.split(b'\nNFL_OWNER_BOOTSTRAP =', 1)[0] + NFL_OWNER_PREVIOUS_TAIL
     _require(hashlib.sha256(previous).hexdigest() == '0ab2edd3f3a246fde7aa25c81a6e00bceb4a41621f2fb2ea276392725e29cb6b', 'PREVIOUS_GUARD_LOGIC_CHANGED')
     return previous
+
+_odds_early_match = _nfl_scenario_guard_matches
+_odds_early_base = _nfl_scenario_base_source
+def _nfl_scenario_guard_matches(source):return _odds_early_match(_nfl_odds_base_source(source))
+def _nfl_scenario_base_source(source):return _odds_early_base(_nfl_odds_base_source(source))
+_nfl_scenario_base_source.cache_clear = _odds_early_base.cache_clear
+_nfl_scenario_base_source.cache_info = _odds_early_base.cache_info
 
 _scenario_boot_match = _ci_timing_guard_matches
 _scenario_boot_base = _ci_timing_base_source
@@ -22645,6 +22679,38 @@ def _run_nfl_scenario_integrated(manifest_path,base):
     spec=importlib.util.spec_from_file_location('nfl_scenario_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+def _nfl_odds_binding():
+    raw=(ROOT/NFL_ODDS_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==NFL_ODDS_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    return json.loads(raw)
+def _nfl_odds_wrap(name,method):
+    def wrapped(*args,**kwargs):
+        if name.endswith(('_previous_main_source','_parent_main_source','_previous_source')):
+            path,source,*rest=args
+            return method(path,_nfl_odds_base_source(source) if path==GUARD_PATH else source,*rest,**kwargs)
+        source,*rest=args
+        return method(_nfl_odds_base_source(source),*rest,**kwargs)
+    for attr in ('cache_clear','cache_info'):
+        if hasattr(method,attr):setattr(wrapped,attr,getattr(method,attr))
+    return wrapped
+for _odds_name,_odds_method in list(globals().items()):
+    if callable(_odds_method) and not _odds_name.startswith('_nfl_odds_') and (
+        _odds_name.endswith(('_previous_guard_source','_parent_guard_source','_previous_main_source','_parent_main_source','_raw_guard_matches')) or
+        _odds_name in {'_discovery_guard_matches','_cloud_guard_matches','_cloud_peel_exact_guard','_owner_guard_matches','_owner_base_source','_owner_previous_source','_nfl_owner_guard_matches','_nfl_owner_base_source','_nfl_owner_previous_source','_nfl_observed_guard_matches','_nfl_observed_base_source','_nfl_observed_previous_source','_nfl_scoring_guard_matches','_nfl_scoring_base_source','_nfl_scoring_previous_source','_nfl_diagnostics_guard_matches','_nfl_diagnostics_base_source','_nfl_diagnostics_previous_source','_ci_timing_guard_matches','_ci_timing_base_source','_ci_timing_previous_source','_nfl_scenario_guard_matches','_nfl_scenario_base_source','_nfl_scenario_previous_source'}):
+        globals()[_odds_name]=_nfl_odds_wrap(_odds_name,_odds_method)
+_odds_original_dfs_guard_matches=_dfs_guard_matches
+def _dfs_guard_matches(source,reviewed):
+    if reviewed==NFL_ODDS_REVIEWED_GUARD_SHA256:return _nfl_odds_guard_matches(source)
+    try:return _odds_original_dfs_guard_matches(_nfl_odds_base_source(source),reviewed)
+    except ValueError:return False
+def _run_nfl_odds_integrated(manifest_path,base):
+    import importlib.util
+    binding=_nfl_odds_binding();path=ROOT/'scripts/nfl_odds_scope.py'
+    raw=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==binding['reviewed_blobs']['scripts/nfl_odds_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_odds_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -22652,7 +22718,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_SCENARIO_POLICY_PATH):
+        if exists_at("HEAD", NFL_ODDS_POLICY_PATH):
+            code, report = _run_nfl_odds_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", NFL_SCENARIO_POLICY_PATH):
             code, report = _run_nfl_scenario_integrated(args.manifest, args.base)
         elif exists_at("HEAD", CI_TIMING_POLICY_PATH):
             code, report = _run_ci_timing_integrated(args.manifest, args.base)
