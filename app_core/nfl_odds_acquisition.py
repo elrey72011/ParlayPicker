@@ -23,6 +23,10 @@ from app_core.producer_provenance import clock
 VERSION = 'nfl-odds-acquisition-plan-v1'
 AUTH_VERSION = 'nfl-odds-acquisition-authorization-v1'
 CONFIG_VERSION = 'nfl-odds-controlled-bindings-v1'
+LISTING_VERSION = 'nfl-odds-acquisition-plan-v2'
+LISTING_AUTH_VERSION = 'nfl-odds-acquisition-authorization-v2'
+LISTING_CONFIG_VERSION = 'nfl-odds-controlled-bindings-v2'
+LISTING_FLAGS = frozenset({'includeSids', 'includeLinks'})
 SOURCE = dict(provider='the-odds-api', host='api.the-odds-api.com',
               endpoint='/v4/sports/americanfootball_nfl/odds', method='GET')
 PARAMS = dict(regions='us_ex', bookmakers='novig', markets='spreads', oddsFormat='american', dateFormat='iso')
@@ -72,11 +76,15 @@ def utc_instant(value):
     return isinstance(value, str) and re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', value) and clock(value)
 
 
-def check_request(r):
+def check_request(r, *, version=VERSION):
     params=r.get('params',{})
+    require(version in {VERSION, LISTING_VERSION}, 'NFL_ACQUIRE_PLAN_SCHEMA')
+    flags=set(params)&LISTING_FLAGS if version==LISTING_VERSION else set()
+    require(version!=LISTING_VERSION or flags, 'NFL_ACQUIRE_ENDPOINT_NOT_APPROVED')
     require(set(r)==set(SOURCE)|{'params'} and all(r[k]==v for k,v in SOURCE.items())
-            and set(params)==set(PARAMS)|{'commenceTimeFrom','commenceTimeTo'}
-            and all(params[k]==v for k,v in PARAMS.items()), 'NFL_ACQUIRE_ENDPOINT_NOT_APPROVED')
+            and set(params)==set(PARAMS)|{'commenceTimeFrom','commenceTimeTo'}|flags
+            and all(params[k]==v for k,v in PARAMS.items())
+            and all(type(params[k]) is str and params[k] in {'true','false'} for k in flags), 'NFL_ACQUIRE_ENDPOINT_NOT_APPROVED')
     require(all(utc_instant(params[k]) for k in ('commenceTimeFrom','commenceTimeTo'))
             and clock(params['commenceTimeFrom'])<=clock(params['commenceTimeTo']), 'NFL_ACQUIRE_REQUEST_WINDOW')
 
@@ -88,8 +96,8 @@ def validate(plan, *, executable=False):
     try: _credentials(p)
     except ValueError: raise ValueError('NFL_ACQUIRE_CREDENTIAL_FORBIDDEN') from None
     require(set(p)==set('version evidence_label target request limits window permission authorization_ref custody_id unresolved'.split())
-            and p['version']==VERSION and p['evidence_label'] in {'SYNTHETIC','PROPOSAL','RETAINED'}, 'NFL_ACQUIRE_PLAN_SCHEMA')
-    r=p['request']; check_request(r); params=r['params']
+            and p['version'] in {VERSION,LISTING_VERSION} and p['evidence_label'] in {'SYNTHETIC','PROPOSAL','RETAINED'}, 'NFL_ACQUIRE_PLAN_SCHEMA')
+    r=p['request']; check_request(r,version=p['version']); params=r['params']
     t=p['target']
     from core.nfl_teams import NFL_TEAMS
     require(set(t)==set('canonical_event_id home away kickoff season neutral_site schedule_evidence_sha256'.split())
@@ -124,7 +132,8 @@ def authorize(plan, authorization, at, root):
     roots=c['roots'] if c else AUTHORIZED_CUSTODY_ROOTS
     a=authorization['payload']
     require(set(a)==set('version reference plan_sha256 custody_id owner authorized_at expires_at maximum_additional_spend maximum_odds_credits'.split())
-            and a['version']==AUTH_VERSION and a['reference']==p['authorization_ref'] and a['plan_sha256']==plan['sha256']
+            and a['version']==(LISTING_AUTH_VERSION if p['version']==LISTING_VERSION else AUTH_VERSION)
+            and a['reference']==p['authorization_ref'] and a['plan_sha256']==plan['sha256']
             and a['custody_id']==p['custody_id'] and a['owner']=='Robert Velarde' and a['maximum_additional_spend']==0 and a['maximum_odds_credits']==1
             and collections.get(a['reference'])==authorization['sha256'], 'NFL_ACQUIRE_AUTHORIZATION_UNTRUSTED')
     require(clock(a['authorized_at']) and clock(a['expires_at']) and clock(a['authorized_at'])<=now<clock(a['expires_at'])<=clock(w['expires_at']), 'NFL_ACQUIRE_AUTHORIZATION_EXPIRED')
@@ -145,6 +154,7 @@ def authorize(plan, authorization, at, root):
 
 @contextmanager
 def controlled(plan, raw, expected_hash, *, root, wall=utc, security=None):
+    plan_payload=validate(plan)
     require(isinstance(raw,bytes) and 0<len(raw)<=128*1024 and hashlib.sha256(raw).hexdigest()==expected_hash, 'NFL_ACQUIRE_CONFIGURATION_INTEGRITY')
     c=json.loads(raw,object_pairs_hook=custody.unique)
     from app_core.ncaaf_response_custody import _credentials
@@ -155,7 +165,8 @@ def controlled(plan, raw, expected_hash, *, root, wall=utc, security=None):
     except ValueError: raise ValueError('NFL_ACQUIRE_CREDENTIAL_FORBIDDEN') from None
     require(set(c)=={'payload','sha256'} and digest(c['payload'])==c['sha256'], 'NFL_ACQUIRE_CONFIGURATION_INTEGRITY')
     p=c['payload']
-    require(set(p)==set('version plan_sha256 permission authorization custody account target_review review'.split()) and p['version']==CONFIG_VERSION
+    require(set(p)==set('version plan_sha256 permission authorization custody account target_review review'.split())
+            and p['version']==(LISTING_CONFIG_VERSION if plan_payload['version']==LISTING_VERSION else CONFIG_VERSION)
             and p['plan_sha256']==plan['sha256'] and p['permission']==plan['payload']['permission'], 'NFL_ACQUIRE_CONFIGURATION_CONFLICT')
     r=p['review']; now=clock(wall())
     require(set(r)=={'reviewer','reviewed_at','subject_sha256','status','scope'} and r['reviewer']=='Robert Velarde'
@@ -190,10 +201,11 @@ def controlled(plan, raw, expected_hash, *, root, wall=utc, security=None):
 
 class HttpsTransport:
     """Real HTTPSConnection/_timed; no library downloads, redirects or retries."""
-    def __init__(self, credentials): self.credentials=credentials; self._secret=None
+    def __init__(self, credentials, *, version=VERSION):
+        self.credentials=credentials; self._secret=None; self.version=version
 
     def __call__(self, request, limits, deadline, monotonic):
-        check_request(request)
+        check_request(request,version=self.version)
         require(limits==LIMITS, 'NFL_ACQUIRE_LIMITS')
         started=monotonic(); phase='CONNECTION_SETUP'; status=diagnostics.UNKNOWN
         conn=None; cancelled=threading.Event()
@@ -294,6 +306,32 @@ def target_findings(events, target):
                 provider_event_id=e['id'],offers=deepcopy(offers))
 
 
+def listing_references(obj, findings):
+    """Pointers into original bytes only. No URL access or semantic acceptance."""
+    _, events=custody.read(obj)
+    result=[]
+    def record(node, pointer, core):
+        names=sorted(set(node)-core)
+        def escape(value): return value.replace('~','~0').replace('/','~1')
+        result.append(dict(body_sha256=obj['body_sha256'],json_pointer=pointer,
+            optional_fields_state='PRESENT_UNREVIEWED' if names else 'UNKNOWN',
+            fields=[dict(name=k,json_pointer=pointer+'/'+escape(k)) for k in names],
+            trusted=False))
+    for index, event in enumerate(events):
+        if event['id']!=findings['provider_event_id']: continue
+        pointer='/'+str(index)
+        record(event,pointer,set('id sport_key sport_title commence_time home_team away_team bookmakers'.split()))
+        for bi, book in enumerate(event.get('bookmakers',[])):
+            bp=pointer+'/bookmakers/'+str(bi)
+            record(book,bp,set('key title last_update markets'.split()))
+            for mi, market in enumerate(book.get('markets',[])):
+                mp=bp+'/markets/'+str(mi)
+                record(market,mp,set('key last_update outcomes'.split()))
+                for oi, outcome in enumerate(market.get('outcomes',[])):
+                    record(outcome,mp+'/outcomes/'+str(oi),set('name description point price'.split()))
+    return result
+
+
 def acquire(plan, authorization, *, root, transport, wall=utc, monotonic=time.monotonic):
     p=authorize(plan,authorization,wall(),root); root=Path(root)
     journal_path=root/(plan['sha256']+'.nfl-odds-attempts.jsonl')
@@ -327,12 +365,14 @@ def acquire(plan, authorization, *, root, transport, wall=utc, monotonic=time.mo
                 observation_meaning='actual_local_first_observation_of_complete_decoded_body',provider_clock_meaning='provider_market_last_update'))
             _append(journal,dict(received_at=received,http_status=status,body_sha256=obj['body_sha256'],body_bytes=len(body)))
             findings=target_findings(custody.read(obj)[1],p['target']); reason=findings['reason']
+            if p['version']==LISTING_VERSION:
+                findings['listing_references']=listing_references(obj,findings)
             require(monotonic()<deadline,'NFL_ACQUIRE_DEADLINE')
     except (Exception, KeyboardInterrupt) as exc:
         reason=rejection_code(exc)
         failure=diagnostics.checked(exc.diagnostic) if isinstance(exc,diagnostics.Failure) else diagnostics.facts(exc,phase=phase,http_status=status,started=start,ended=monotonic())
     # Original valid bytes remain in an incomplete bundle when matching fails.
-    payload=dict(version='nfl-unaccepted-odds-body-v1',plan=plan,authorization_sha256=authorization['sha256'],attempted=attempted,
+    payload=dict(version='nfl-unaccepted-odds-body-v2' if p['version']==LISTING_VERSION else 'nfl-unaccepted-odds-body-v1',plan=plan,authorization_sha256=authorization['sha256'],attempted=attempted,
                  status='INCOMPLETE' if reason else 'CAPTURED_UNREVIEWED',reason=reason,object=obj,transfer=transfer,findings=findings,
                  journal_sha256=hashlib.sha256(journal_path.read_bytes()).hexdigest(),owner_reviewed=False,source_acceptance=False,
                  inference=False,public_export=False,qualified=False,action='PASS',stake=0)
@@ -356,11 +396,16 @@ def read_back(path, journal_path):
     require(rows and rows[0]==dict(plan_sha256=p['plan']['sha256'],authorization_sha256=p['authorization_sha256'],custody_id=p['plan']['payload']['custody_id']), 'NFL_ACQUIRE_PRIVATE_READBACK')
     spent=[r for r in rows if 'attempt' in r]
     require(len(spent)==p['attempted'] and (not spent or spent[0]['attempt']==1 and spent[0]['request']==p['plan']['payload']['request']), 'NFL_ACQUIRE_PRIVATE_READBACK')
-    require(p['version']=='nfl-unaccepted-odds-body-v1' and p['attempted'] in {0,1}
+    expected_version='nfl-unaccepted-odds-body-v2' if p['plan']['payload']['version']==LISTING_VERSION else 'nfl-unaccepted-odds-body-v1'
+    require(p['version']==expected_version and p['attempted'] in {0,1}
             and p['journal_sha256']==hashlib.sha256(Path(journal_path).read_bytes()).hexdigest()
             and all(p[k] is False for k in ('owner_reviewed','source_acceptance','inference','public_export','qualified'))
             and p['action']=='PASS' and p['stake']==0, 'NFL_ACQUIRE_PRIVATE_READBACK')
     if p['object']: custody.read(p['object'])
+    if expected_version=='nfl-unaccepted-odds-body-v2' and p['findings'] is not None:
+        expected=target_findings(custody.read(p['object'])[1],p['plan']['payload']['target'])
+        expected['listing_references']=listing_references(p['object'],expected)
+        require(p['findings']==expected,'NFL_ACQUIRE_PRIVATE_READBACK')
     if 'failure_diagnostics' in p: diagnostics.checked(p['failure_diagnostics'])
     return bundle
 

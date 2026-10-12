@@ -21765,6 +21765,44 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+NFL_LISTING_BOOTSTRAP = True
+NFL_LISTING_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-odds-listing-v2.json'
+NFL_LISTING_BINDING_PATH = 'docs/paid-launch/nfl-odds-listing-binding-v2.json'
+NFL_LISTING_BINDING_SHA256 = 'a0c949cd81af10ca31dfceff3d10640841b8a83ccbd5cd579aecc2cba761f820'
+NFL_LISTING_REVIEWED_GUARD_SHA256 = '297d3d8641238b784f4392f897de245d280c3d1cdc0e9c748503a8b417a3d79f'
+NFL_LISTING_PREVIOUS_GUARD_SHA256 = 'b63f46aae79f065de82c6df4378a7cdd04b93b7ad670c2590366d59340a69ac7'
+NFL_LISTING_SOURCE_RECONSTRUCTIONS = {}
+from functools import lru_cache as _listing_lru_cache
+
+def _nfl_listing_guard_matches(source):
+    reviewed=NFL_LISTING_REVIEWED_GUARD_SHA256.encode('ascii')
+    return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==NFL_LISTING_REVIEWED_GUARD_SHA256
+
+@_listing_lru_cache(maxsize=2)
+def _nfl_listing_cached_base_source(source,reviewed,parent):
+    if b'\nNFL_LISTING_BOOTSTRAP =' not in source:return source
+    _require(reviewed==NFL_LISTING_REVIEWED_GUARD_SHA256 and parent==NFL_LISTING_PREVIOUS_GUARD_SHA256 and _nfl_listing_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    prefix,own=source.split(b'\nNFL_LISTING_BOOTSTRAP =',1)
+    previous=prefix+b'\nGUARD_MEMO_BOOTSTRAP ='+own.split(b'\nGUARD_MEMO_BOOTSTRAP =',1)[1]
+    start=previous.index(b'\n_listing_previous_memo_match=')
+    end=previous.index(b'\nGUARD_READS_BOOTSTRAP =',start)
+    previous=previous[:start]+previous[end:]
+    start=previous.index(b'\n_listing_previous_dfs_match=')
+    end=previous.index(b'\ndef main() -> int:',start)
+    previous=previous[:start]+previous[end:]
+    dispatch=b'if exists_at("HEAD", NFL_LISTING_POLICY_PATH):\n            code, report = _run_nfl_listing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", GUARD_MEMO_POLICY_PATH):'
+    _require(previous.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    previous=previous.replace(dispatch,b'if exists_at("HEAD", GUARD_MEMO_POLICY_PATH):',1)
+    _require(hashlib.sha256(previous).hexdigest()==parent,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    return previous
+
+def _nfl_listing_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    return _nfl_listing_cached_base_source(source,NFL_LISTING_REVIEWED_GUARD_SHA256,NFL_LISTING_PREVIOUS_GUARD_SHA256)
+_nfl_listing_base_source.cache_clear=_nfl_listing_cached_base_source.cache_clear
+_nfl_listing_base_source.cache_info=_nfl_listing_cached_base_source.cache_info
+
+
 GUARD_MEMO_BOOTSTRAP = True
 GUARD_MEMO_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ci-guard-memo-v1.json'
 GUARD_MEMO_BINDING_PATH = 'docs/paid-launch/ci-guard-memo-binding-v1.json'
@@ -21796,6 +21834,16 @@ def _guard_memo_base_source(source):
     return _guard_memo_cached_base_source(source,GUARD_MEMO_REVIEWED_GUARD_SHA256,GUARD_MEMO_PREVIOUS_GUARD_SHA256)
 def _guard_memo_previous_source(path,source):
     return _guard_memo_base_source(source) if path==GUARD_PATH else source
+
+_listing_previous_memo_match=_guard_memo_guard_matches
+_listing_previous_memo_base=_guard_memo_base_source
+
+def _guard_memo_guard_matches(source):
+    return _listing_previous_memo_match(_nfl_listing_base_source(source))
+
+def _guard_memo_base_source(source):
+    return _listing_previous_memo_base(_nfl_listing_base_source(source))
+
 
 GUARD_READS_BOOTSTRAP = True
 GUARD_READS_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ci-guard-reads-v1.json'
@@ -23197,6 +23245,27 @@ for _memo_entry_name,_memo_entry_method in list(globals().items()):
     if _memo_entry_name.startswith('_run_') and _memo_entry_name.endswith('_integrated') and callable(_memo_entry_method):
         globals()[_memo_entry_name]=_memo_lazy_entry(_memo_entry_method)
 
+_listing_previous_dfs_match=_dfs_guard_matches
+def _dfs_guard_matches(source,reviewed):
+    if reviewed==NFL_LISTING_REVIEWED_GUARD_SHA256:return _nfl_listing_guard_matches(source)
+    try:return _listing_previous_dfs_match(_nfl_listing_base_source(source),reviewed)
+    except ValueError:return False
+
+def _nfl_listing_binding():
+    raw=(ROOT/NFL_LISTING_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==NFL_LISTING_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    return json.loads(raw)
+
+def _run_nfl_listing_integrated(manifest_path,base):
+    import importlib.util
+    binding=_nfl_listing_binding();path=ROOT/'scripts/nfl_odds_listing_scope.py'
+    raw=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==binding['reviewed_blobs']['scripts/nfl_odds_listing_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_odds_listing_scope',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -23204,7 +23273,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", GUARD_MEMO_POLICY_PATH):
+        if exists_at("HEAD", NFL_LISTING_POLICY_PATH):
+            code, report = _run_nfl_listing_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", GUARD_MEMO_POLICY_PATH):
             code, report = _run_guard_memo_integrated(args.manifest, args.base)
         elif exists_at("HEAD", GUARD_READS_POLICY_PATH):
             code, report = _run_guard_reads_integrated(args.manifest, args.base)

@@ -1,0 +1,31 @@
+{
+  "approval_reference": "Robert Velarde authorized narrowly versioned includeSids/includeLinks support for bounded NFL Novig odds acquisition, offline synthetic validation, separate draft PR and CI. No acquisition, source acceptance, inference, changed limits, model rules, workflows, scheduler/timing changes or wagering. Original v1 behavior, assertions, baseline, predecessor bindings and private evidence preserved.",
+  "base": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+  "base_tree": "6d4bc6f72f8ed1d67c3f655a5965bc7f2d1275f6",
+  "main_base": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+  "main_tree": "6d4bc6f72f8ed1d67c3f655a5965bc7f2d1275f6",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/nfl_odds_acquisition.py",
+    "docs/paid-launch/nfl-odds-example-plan-v2.json",
+    "docs/paid-launch/nfl-odds-listing-binding-v2.json",
+    "docs/paid-launch/nfl-odds-listing-v2.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_odds_acquisition.py",
+    "scripts/nfl_odds_listing_scope.py",
+    "tests/test_nfl_odds_listing_acquisition.py",
+    "tests/test_nfl_odds_listing_scope.py"
+  ],
+  "previous_guard_sha256": "b63f46aae79f065de82c6df4378a7cdd04b93b7ad670c2590366d59340a69ac7",
+  "reviewed_blobs": {
+    "app_core/nfl_odds_acquisition.py": "bc70f14db57f4f57635214e01bbebde9857df87b",
+    "docs/paid-launch/nfl-odds-example-plan-v2.json": "252e24d0720524c2cd9906722246c6b75d4063e7",
+    "docs/paid-launch/nfl-odds-listing-v2.md": "dfca44b5e8b0c72a0d3ac28717b923dd3b4f14fa",
+    "scripts/nfl_odds_acquisition.py": "b7bef461973445889df4d0450c3be63c32c831ed",
+    "scripts/nfl_odds_listing_scope.py": "7c725f593a96b1c5485d69b11a867f1d7021d262",
+    "tests/test_nfl_odds_listing_acquisition.py": "8916d7a2544e374aa08e61b9a61c4cca7fae1971",
+    "tests/test_nfl_odds_listing_scope.py": "5d2c5aacc901e8508497f843e78c163e6420f5f6"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}
