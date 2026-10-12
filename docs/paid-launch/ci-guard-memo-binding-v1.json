@@ -1,0 +1,40 @@
+{
+  "approval_reference": "Owner-authorized measured Ubuntu CI correction: bounded exact-content source reconstruction memo only; frozen source logic, mutable decisions, all assertions, scheduler/profile and required workflows unchanged.",
+  "base": "a561e6a1018d2106c33f934b879ff2169f50e7e7",
+  "base_tree": "d76d9ce4ffac571a4d7d46760076728f6de7394f",
+  "completed_measurements": [
+    {
+      "path": "scope-profile-pr-final-live-reads-v1.json",
+      "sha256": "c9ea1d155207aa76e50003015aa13b16b37337f4ba310d2027b165b29fea4405"
+    },
+    {
+      "path": "scope-profile-pr-final-pure-memo-v2.json",
+      "sha256": "fd9897ad2dabc8543e18b0636ead4f3df00f6ef5e2761bb3f0913db096158a12"
+    },
+    {
+      "path": "scope-profile-pr-final-pure-memo-v3.json",
+      "sha256": "e70f845d283b25b7ea858c20522144a61c7c60651ee24f9e3ba051caf25e0f0b"
+    }
+  ],
+  "frozen_profile_sha256": "853cc63b00da2e764741ad4d9db48d35e11c7c93024bdf285a71485304b9eb53",
+  "main_base": "457a7f3e43abfbd95de64e4d9c79e2ca82bdfb21",
+  "main_tree": "8855ee498787d8a8ac3f80cb47e61e9ed611e095",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/ci-guard-memo-binding-v1.json",
+    "docs/paid-launch/ci-guard-memo.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/guard_memo_scope.py",
+    "scripts/scope_reconstruction.py",
+    "tests/test_scope_reconstruction_memo.py"
+  ],
+  "previous_guard_sha256": "f83716bf6eaa9f0e9684c2c254dfa0130aae22d9b08f16bd4193f7e784619837",
+  "reviewed_blobs": {
+    "docs/paid-launch/ci-guard-memo.md": "7b807f643355e5932fef4bfec9214d9fe727124e",
+    "scripts/guard_memo_scope.py": "30899998d08ab704cd064d226ffd99d597a5fa15",
+    "scripts/scope_reconstruction.py": "efa69e2f228f0c44f2a5084e3becdd181a6e831d",
+    "tests/test_scope_reconstruction_memo.py": "1964a790830316d2e0ba53b935174f86631f90a5"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}

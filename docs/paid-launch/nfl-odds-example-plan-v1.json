@@ -1,0 +1,66 @@
+{
+  "payload": {
+    "authorization_ref": "SYNTHETIC-collection",
+    "custody_id": "SYNTHETIC-private",
+    "evidence_label": "PROPOSAL",
+    "limits": {
+      "connect_seconds": 10,
+      "max_attempts": 1,
+      "max_body_bytes": 524288,
+      "max_header_bytes": 16384,
+      "max_objects": 1,
+      "max_packet_bytes": 2097152,
+      "max_wire_bytes": 524288,
+      "read_seconds": 10,
+      "total_seconds": 60
+    },
+    "permission": {
+      "basis": "SYNTHETIC owner advance private acquisition/retention review, not authentic permission",
+      "effective_from": "2030-10-18T12:00:00Z",
+      "effective_until": "2030-10-20T12:00:00Z",
+      "private_acquisition": true,
+      "private_retention": true,
+      "reference": "SYNTHETIC-permission",
+      "request_sha256": "4dd144d47393beb4a1f60df7248b4055071ff618b8977d33a438101437dec297",
+      "reviewed_at": "2030-10-18T12:00:00Z",
+      "reviewer": "Robert Velarde"
+    },
+    "request": {
+      "endpoint": "/v4/sports/americanfootball_nfl/odds",
+      "host": "api.the-odds-api.com",
+      "method": "GET",
+      "params": {
+        "bookmakers": "novig",
+        "commenceTimeFrom": "2030-10-19T20:00:00Z",
+        "commenceTimeTo": "2030-10-19T20:00:01Z",
+        "dateFormat": "iso",
+        "markets": "spreads",
+        "oddsFormat": "american",
+        "regions": "us_ex"
+      },
+      "provider": "the-odds-api"
+    },
+    "target": {
+      "away": "Buffalo Bills",
+      "canonical_event_id": "SYNTHETIC-2030-BUF-LAR",
+      "home": "Los Angeles Rams",
+      "kickoff": "2030-10-19T20:00:00Z",
+      "neutral_site": false,
+      "schedule_evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "season": 2030
+    },
+    "unresolved": [
+      "SYNTHETIC target and clocks only; no authentic target verified",
+      "No exact owner collection authorization",
+      "No actual account balance/reset receipt",
+      "No applied exact controlled configuration"
+    ],
+    "version": "nfl-odds-acquisition-plan-v1",
+    "window": {
+      "expires_at": "2030-10-19T12:15:30Z",
+      "not_after": "2030-10-19T12:15:00Z",
+      "not_before": "2030-10-19T12:00:00Z"
+    }
+  },
+  "sha256": "ac0c4ecf721b23664d88c1230b513009df8757ba01e790dd494bab6b8a3abec8"
+}

@@ -1,0 +1,40 @@
+{
+  "approval_reference": "Authorized measured guard performance optimization: fresh traversal, exact-source policy constructor streams and lazy dispatch; frozen modules, assertions and all previous bindings unchanged.",
+  "base": "c4b385344b4d3d68d2e174e122e65f0f1f8f8772",
+  "base_tree": "d34bb38c96a22e9cc3bdd0efeed4788799661293",
+  "completed_measurements": [
+    {
+      "path": "scope-profile-live-transport-before-v1.json",
+      "sha256": "018e7f77c1bd7c2c2a0f5bfc2082ed873c8d489a063b0ff84b3d5aba28ce7349"
+    },
+    {
+      "path": "scope-profile-live-prototype-after-v1.json",
+      "sha256": "4d8fc11d640a2310f3acba526284cd72d57cc5f58c09b4307cf0aed3f47a4f09"
+    },
+    {
+      "path": "scope-profile-live-policy-prototype-after-v1.json",
+      "sha256": "5fc2682e26333f2acca347b457c0e716bae3d3dbbae59cf180e7dc7a4049b1b3"
+    }
+  ],
+  "frozen_profile_sha256": "853cc63b00da2e764741ad4d9db48d35e11c7c93024bdf285a71485304b9eb53",
+  "main_base": "457a7f3e43abfbd95de64e4d9c79e2ca82bdfb21",
+  "main_tree": "8855ee498787d8a8ac3f80cb47e61e9ed611e095",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/ci-guard-reads-binding-v1.json",
+    "docs/paid-launch/ci-guard-reads.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/guard_reads_scope.py",
+    "scripts/scope_git_reads.py",
+    "tests/test_scope_git_reads.py"
+  ],
+  "previous_guard_sha256": "5c71873e08a8b5873aa14583e82ee1b16e086567f6af32153ac2df6a76b1bbf8",
+  "reviewed_blobs": {
+    "docs/paid-launch/ci-guard-reads.md": "d65c4700b39b7be39d2abde67adab8f817b43472",
+    "scripts/guard_reads_scope.py": "ce1bb33551aa4ea33822f69ff88e516033698060",
+    "scripts/scope_git_reads.py": "1f3895604cab0880cbc27ecd8504179f96d2e42a",
+    "tests/test_scope_git_reads.py": "230e0cf3455971235e6fa064c71dd3b32a1aef9a"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}

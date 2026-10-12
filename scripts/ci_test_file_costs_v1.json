@@ -7897,6 +7897,54 @@
       "variance_multiplier": 1.15
     },
     {
+      "advisory_basis_seconds": 0.73,
+      "basis": "Completed exact-file JUnit testcase total plus existing 15% advisory variance. Per-test phases are combined; install, collection, session reporting and upload are excluded.",
+      "completed_measurements": [
+        {
+          "count": 63,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.73,
+          "source": "nfl-odds-completed-3"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "original_measured_seconds": 0.73,
+      "path": "tests/test_nfl_odds_acquisition.py",
+      "profiled_tests": 63,
+      "references": [
+        "nfl-odds-completed-3"
+      ],
+      "seconds": 0.8395,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 2.998,
+      "basis": "Completed exact-file JUnit testcase total plus existing 15% advisory variance. Per-test phases are combined; install, collection, session reporting and upload are excluded.",
+      "completed_measurements": [
+        {
+          "count": 14,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.998,
+          "source": "nfl-odds-completed-1"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "original_measured_seconds": 2.998,
+      "path": "tests/test_nfl_odds_scope.py",
+      "profiled_tests": 14,
+      "references": [
+        "nfl-odds-completed-1"
+      ],
+      "seconds": 3.4477,
+      "variance_multiplier": 1.15
+    },
+    {
       "advisory_basis_seconds": 36.203983,
       "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
       "completed_measurements": [
@@ -14772,6 +14820,86 @@
       "run": 37766230269,
       "total_file_runtime": "UNKNOWN",
       "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/37766230269/job/113286178523"
+    },
+    "nfl-odds-completed-1": {
+      "artifact_id": 11753905824,
+      "assignment_manifest_sha256": "7ab8d6e3b633620ac40f18fcb4bef002ba4dee9b1458b350586060ffa4480e17",
+      "attempt": 1,
+      "checkout_commit": "f93c23ba99f5eff16b2bdd60eab145c89e8d49d6",
+      "collection_identity": "2364a30260dd6be4c33adeffc826c7ac77c3561e9a6ce4e3ca873656627dc930",
+      "completed_cases": 2518,
+      "excludes": "Dependency installation, collection, session reporting and artifact upload are not added to file cost.",
+      "head": "6bb9734b8dd07418a8bedb97be479e68821154b9",
+      "job": 114848276484,
+      "job_phases": [
+        {
+          "completedAt": "2026-10-12T14:04:35Z",
+          "conclusion": "success",
+          "name": "Install dependencies",
+          "startedAt": "2026-10-12T14:03:59Z"
+        },
+        {
+          "completedAt": "2026-10-12T14:26:01Z",
+          "conclusion": "success",
+          "name": "Run application test shard",
+          "startedAt": "2026-10-12T14:04:35Z"
+        },
+        {
+          "completedAt": "2026-10-12T14:26:02Z",
+          "conclusion": "success",
+          "name": "Upload full-suite test report",
+          "startedAt": "2026-10-12T14:26:01Z"
+        }
+      ],
+      "junit_name": "full-suite-1.xml",
+      "junit_sha256": "96cb6f23dab1fed0315756793fd6aa1b3fcf38ac5754db13b1d48c5dac06e6e5",
+      "junit_testcase_semantics": "pytest default total: per-test setup/call/teardown combined; individual phase split UNKNOWN",
+      "kind": "completed_junit",
+      "profile_sha256": "12033e024795d25841e7a122b2cd15a6df37f9436d5cefc7a24c528f68d44ec4",
+      "run": 38259971316,
+      "run_conclusion": "cancelled; another shard timed out",
+      "shard_conclusion": "success",
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/38259971316/job/114848276484"
+    },
+    "nfl-odds-completed-3": {
+      "artifact_id": 11753655974,
+      "assignment_manifest_sha256": "216c5069a7556767ee1299fe15150de9b2332a667114889ed4f809ca45f9270d",
+      "attempt": 1,
+      "checkout_commit": "f93c23ba99f5eff16b2bdd60eab145c89e8d49d6",
+      "collection_identity": "2364a30260dd6be4c33adeffc826c7ac77c3561e9a6ce4e3ca873656627dc930",
+      "completed_cases": 2245,
+      "excludes": "Dependency installation, collection, session reporting and artifact upload are not added to file cost.",
+      "head": "6bb9734b8dd07418a8bedb97be479e68821154b9",
+      "job": 114848276513,
+      "job_phases": [
+        {
+          "completedAt": "2026-10-12T14:04:32Z",
+          "conclusion": "success",
+          "name": "Install dependencies",
+          "startedAt": "2026-10-12T14:03:56Z"
+        },
+        {
+          "completedAt": "2026-10-12T14:24:13Z",
+          "conclusion": "success",
+          "name": "Run application test shard",
+          "startedAt": "2026-10-12T14:04:32Z"
+        },
+        {
+          "completedAt": "2026-10-12T14:24:14Z",
+          "conclusion": "success",
+          "name": "Upload full-suite test report",
+          "startedAt": "2026-10-12T14:24:13Z"
+        }
+      ],
+      "junit_name": "full-suite-3.xml",
+      "junit_sha256": "c93d5072a4451c78d986bd413bd68fa878e83fd2e6130cdcee0b236431a588b8",
+      "junit_testcase_semantics": "pytest default total: per-test setup/call/teardown combined; individual phase split UNKNOWN",
+      "kind": "completed_junit",
+      "profile_sha256": "12033e024795d25841e7a122b2cd15a6df37f9436d5cefc7a24c528f68d44ec4",
+      "run": 38259971316,
+      "run_conclusion": "cancelled; another shard timed out",
+      "shard_conclusion": "success",
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/38259971316/job/114848276513"
     },
     "oct11-main-1": {
       "artifact_id": 11707376086,

@@ -1,0 +1,31 @@
+{
+  "approval_reference": "Authorized bounded guard performance correction. Completed final-head CI and unchanged offline regression reproduce isolated predecessor import failure; defer helper loading without weakening any validation.",
+  "base": "39296ffa0b35891d48168e7c85ef14220c2f7c7b",
+  "base_tree": "791b617bb96b536ad8b46077de545e1c06d06d63",
+  "failure_source": {
+    "head": "39296ffa0b35891d48168e7c85ef14220c2f7c7b",
+    "job": 114949335954,
+    "offline_xml_sha256": "39a658eb9d576e2828d7992c5b7e4fabff131cbf71f352d011947345188206f1",
+    "run": 38290375140,
+    "test": "tests/test_nfl_observed_scope.py::test_legacy_bootstrap_needs_no_successor_binding"
+  },
+  "frozen_profile_sha256": "853cc63b00da2e764741ad4d9db48d35e11c7c93024bdf285a71485304b9eb53",
+  "main_base": "457a7f3e43abfbd95de64e4d9c79e2ca82bdfb21",
+  "main_tree": "8855ee498787d8a8ac3f80cb47e61e9ed611e095",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/ci-guard-bootstrap-binding-v1.json",
+    "docs/paid-launch/ci-guard-bootstrap.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/guard_bootstrap_scope.py",
+    "tests/test_scope_guard_bootstrap.py"
+  ],
+  "previous_guard_sha256": "51b9508d3e054821e20aa1a6ccb48f16f7b57444e23c4bb26e0862d951141d34",
+  "reviewed_blobs": {
+    "docs/paid-launch/ci-guard-bootstrap.md": "80223d6fbcc129377fab2d7c0d140ea123d2c7f1",
+    "scripts/guard_bootstrap_scope.py": "72dcd43832b331a8bda4b32bdb233bac082894d4",
+    "tests/test_scope_guard_bootstrap.py": "0e52728521d3c7d0012455c7f243dc47ed9636c9"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}
