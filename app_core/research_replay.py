@@ -211,3 +211,97 @@ def download_bundle(receipt, *, expected_package_hash, path=None):
             info.compress_type = ZIP_DEFLATED
             archive.writestr(info, raw)
     return output.getvalue(), verified
+
+
+def _scenario_path(path):
+    from app_core.prediction_evidence import database_path
+    return Path(path or database_path()).resolve()
+
+
+def _scenario_schema(db):
+    # No setup/repair/migration here. Explicit scenario execution requires the
+    # already provisioned private store and its original append-only protections.
+    for table, columns in (('research_source_intakes', ('reference', 'payload', 'payload_hash')),
+                           ('research_replay_exports', ('export_id', 'package_hash', 'payload'))):
+        row = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+        if not row:
+            raise ValueError('NFL_SCENARIO_STORE_UNAVAILABLE')
+        expected_columns = tuple((name, 'TEXT', 0 if i == 0 else 1, None, 1 if i == 0 else 0)
+                                 for i, name in enumerate(columns))
+        if tuple(tuple(r[1:]) for r in db.execute('PRAGMA table_info(' + table + ')')) != expected_columns:
+            raise ValueError('NFL_SCENARIO_STORE_UNAVAILABLE')
+        for action in ('UPDATE', 'DELETE'):
+            name = 'immutable_' + table + '_' + action
+            trigger = db.execute("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?", (name,)).fetchone()
+            expected = f"CREATE TRIGGER {name} BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT, 'research replay is append-only'); END"
+            if not trigger or trigger[0] != expected:
+                raise ValueError('NFL_SCENARIO_STORE_PROTECTION_MISSING')
+
+
+def scenario_store_ready(*, path=None):
+    try:
+        with closing(sqlite3.connect(_scenario_path(path).as_uri() + '?mode=ro', uri=True)) as db:
+            _scenario_schema(db)
+    except sqlite3.Error:
+        raise ValueError('NFL_SCENARIO_STORE_UNAVAILABLE') from None
+
+
+def retain_scenario(result, *, path=None):
+    """Private version dispatch in existing tables; never a public package."""
+    from app_core import nfl_scenario_research as scenario
+    p = scenario.read_result(result)
+    source = p['input']; source_raw = encode(source); raw = encode(result)
+    reference = 'nfl-scenario-input:' + source['sha256']
+    export_id = 'nfl-scenario-result:' + result['sha256']
+    scenario_store_ready(path=path)
+    with closing(sqlite3.connect(_scenario_path(path).as_uri() + '?mode=rw', uri=True)) as db, db:
+        _scenario_schema(db)
+        existing = db.execute('SELECT payload,payload_hash FROM research_source_intakes WHERE reference=?', (reference,)).fetchone()
+        if existing and existing != (source_raw, digest(source_raw)):
+            raise ValueError('NFL_SCENARIO_INTEGRITY')
+        db.execute('INSERT OR IGNORE INTO research_source_intakes VALUES (?,?,?)', (reference, source_raw, digest(source_raw)))
+        existing = db.execute('SELECT package_hash,payload FROM research_replay_exports WHERE export_id=?', (export_id,)).fetchone()
+        if existing and existing != (source['sha256'], raw):
+            raise ValueError('NFL_SCENARIO_INTEGRITY')
+        db.execute('INSERT OR IGNORE INTO research_replay_exports VALUES (?,?,?)', (export_id, source['sha256'], raw))
+    return dict(version='nfl-private-scenario-capture-v1', export_id=export_id,
+                result_sha256=result['sha256'], input_sha256=source['sha256'])
+
+
+def read_scenario(receipt, *, path=None):
+    """Reopen and verify actual captured facts without numerical reconstruction."""
+    from app_core import nfl_scenario_research as scenario
+    import re
+    scenario.require(isinstance(receipt, dict) and set(receipt) == {'version', 'export_id', 'result_sha256', 'input_sha256'}
+        and receipt['version'] == 'nfl-private-scenario-capture-v1'
+        and all(isinstance(receipt[k], str) and re.fullmatch('[0-9a-f]{64}', receipt[k]) for k in ('result_sha256', 'input_sha256'))
+        and receipt['export_id'] == 'nfl-scenario-result:' + receipt['result_sha256'], 'NFL_SCENARIO_ROUTE_CONFLICT')
+    scenario_store_ready(path=path)
+    with closing(sqlite3.connect(_scenario_path(path).as_uri() + '?mode=ro', uri=True)) as db:
+        row = db.execute('SELECT package_hash,payload FROM research_replay_exports WHERE export_id=?', (receipt['export_id'],)).fetchone()
+        source = db.execute('SELECT payload,payload_hash FROM research_source_intakes WHERE reference=?', ('nfl-scenario-input:' + receipt['input_sha256'],)).fetchone()
+    scenario.require(row is not None and source is not None and row[0] == receipt['input_sha256']
+                     and digest(source[0]) == source[1], 'NFL_SCENARIO_INTEGRITY')
+    result = json.loads(row[1]); original = scenario.load(source[0].encode())
+    scenario.require(result['sha256'] == receipt['result_sha256'] and original['sha256'] == receipt['input_sha256']
+                     and result['payload']['input'] == original, 'NFL_SCENARIO_INTEGRITY')
+    scenario.read_result(result)
+    return result
+
+
+def download_scenario(receipt, *, path=None):
+    """Owner-only ZIP; no public-board/package construction or offer aliases."""
+    from io import BytesIO
+    from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
+    result = read_scenario(receipt, path=path)
+    files = {'scenario-result.json': encode(result).encode(), 'private-receipt.json': encode(receipt).encode()}
+    manifest = dict(version='nfl-private-scenario-export-v1', purpose='PRIVATE_RESEARCH',
+                    files={name: hashlib.sha256(raw).hexdigest() for name, raw in files.items()})
+    files['manifest.json'] = encode(manifest).encode()
+    output = BytesIO()
+    with ZipFile(output, 'w') as archive:
+        for name, raw in sorted(files.items()):
+            info = ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = ZIP_DEFLATED
+            archive.writestr(info, raw)
+    return output.getvalue(), manifest

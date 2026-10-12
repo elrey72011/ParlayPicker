@@ -1,0 +1,1063 @@
+{
+  "approval_reference": "Robert Velarde authorized a separate explicitly selected owner-reviewed sporting-scenario v1, unchanged native NFL mathematics, existing private capture/export/replay/display, blocked-network synthetic tests and draft PR/CI only; no acquisition, authentic inference, review fabrication, public output, wagering, deployment or merge.",
+  "base": "7cfb7db96a905ec304dd9a5c591728c6419adc0c",
+  "base_tree": "1a37b239f4d9bca61256186837d13ba7e9758130",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app/ui/nfl_private_research.py",
+    "app_core/nfl_scenario_research.py",
+    "app_core/research_replay.py",
+    "docs/paid-launch/nfl-owner-sporting-scenario-v1.md",
+    "docs/paid-launch/nfl-scenario-binding-v1.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_scenario_scope.py",
+    "tests/test_nfl_scenario_research.py",
+    "tests/test_nfl_scenario_scope.py"
+  ],
+  "predecessor_scope_composition": {
+    "_nfl_observed_binding": {
+      "app/ui/nfl_private_research.py": {
+        "after_sha256": "056a2ff2313f112a94aaad3293cb9edb4a90464f71932847bbc4515b365ac2d8",
+        "before_sha256": "230feca0032911f2c3963fc0078aa2457aaf9b8767b1e48551d4331b213047d3",
+        "reverse_patches": [
+          {
+            "end": 79,
+            "start": 0,
+            "text": "\"\"\"Token-gated static staging and private browser; no acquisition or inference.\"\"\"\n"
+          },
+          {
+            "end": 154,
+            "start": 102,
+            "text": "from app_core import nfl_owner_research as evidence\n"
+          },
+          {
+            "end": 2939,
+            "start": 2631,
+            "text": ""
+          },
+          {
+            "end": 6360,
+            "start": 3049,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/market_probability_model.py": {
+        "after_sha256": "5cd25936548870df4bca01b929d4c2df72c7c905b4f32f6f7d7efe07c1c3cd63",
+        "before_sha256": "b5dd12343b67c78b094696c46f8b6e2d148d9fec882007f3154652554726de26",
+        "reverse_patches": [
+          {
+            "end": 4552,
+            "start": 4464,
+            "text": "    from app_core.nfl_owner_research import selection_requested as nfl_private_selected\n"
+          },
+          {
+            "end": 6176,
+            "start": 6093,
+            "text": "            from app_core.nfl_owner_research import predict as predict_nfl_private\n"
+          }
+        ]
+      },
+      "app_core/per_game_boards.py": {
+        "after_sha256": "46fcb8187eb95e6afd01e320219291f57374f592738a448c79f461a06d48b1a4",
+        "before_sha256": "ae42f02b93ad243ebe94372a2d175855eda436c2d3af390fc10b1c71b7b6eda3",
+        "reverse_patches": [
+          {
+            "end": 8369,
+            "start": 8307,
+            "text": "    from app_core.nfl_owner_research import private, diagnose\n"
+          },
+          {
+            "end": 31954,
+            "start": 31866,
+            "text": "        from app_core.nfl_owner_research import private as nfl_private, private_display\n"
+          }
+        ]
+      },
+      "app_core/research_display.py": {
+        "after_sha256": "499ee85a34e8ae45546b9ff119b5b73f68315d113502feab32c50710b2317796",
+        "before_sha256": "601d23ed84a7eb00a1df18f804b1b20126f9405a261b935dd334ede4473c86b5",
+        "reverse_patches": [
+          {
+            "end": 32734,
+            "start": 32667,
+            "text": "    from app_core.nfl_owner_research import private as nfl_private\n"
+          }
+        ]
+      },
+      "app_core/slate_coverage.py": {
+        "after_sha256": "46edafde463eb5df2a8d0bb1790caffcff382a0768ef87179c8384bbdfd2a6f9",
+        "before_sha256": "70d3b5da09f49981616b25188fd3da503fd136509a83ea0d30ce48b637386bbe",
+        "reverse_patches": [
+          {
+            "end": 22130,
+            "start": 22061,
+            "text": "            from app_core.nfl_owner_research import private, REASONS\n"
+          }
+        ]
+      },
+      "core/live_wager_contract.py": {
+        "after_sha256": "944acf3bfcfa3faf8463516b03b850a1b37bf20e2b7b2bd2558e7387bab545fd",
+        "before_sha256": "1780a953a1ce491b6e0982c4b633d4b09f2f146b27a23dbf9614f7e0922709b9",
+        "reverse_patches": [
+          {
+            "end": 18035,
+            "start": 17958,
+            "text": "        from app_core.nfl_owner_research import private as nfl_owner_private\n"
+          }
+        ]
+      },
+      "core/streamlit_pipeline.py": {
+        "after_sha256": "5328daddfee9c32e470deaa3bdfb7d3c603aa0e421c0e66f5e05441a7edf816e",
+        "before_sha256": "06a6f3cdfdeb0215bba70f0c37307a775126cfc6b039ca2dd736e9ebacf16ab3",
+        "reverse_patches": [
+          {
+            "end": 585797,
+            "start": 585724,
+            "text": "    from app_core.nfl_owner_research import finish as finish_nfl_private\n"
+          }
+        ]
+      },
+      "streamlit_app.py": {
+        "after_sha256": "5bdd5063634a9d2db0356fdb7f145039669b7e63fe4865870e4c9be4a0347629",
+        "before_sha256": "f4297f6035e882d54a7cf560b9d6c19acdc4f2fe9c2b433d57dde9ce42585580",
+        "reverse_patches": [
+          {
+            "end": 32802,
+            "start": 32740,
+            "text": "    from app_core.nfl_owner_research import retain_ui_refresh\n"
+          },
+          {
+            "end": 49912,
+            "start": 49835,
+            "text": "    from app_core.nfl_owner_research import selected as selected_nfl_private\n"
+          }
+        ]
+      }
+    },
+    "_nfl_owner_binding": {
+      "app/ui/publish_panel.py": {
+        "after_sha256": "c7dc708e0a0313b70cf59e309d9642651d9a04300dd44084358d0fe69cb6c08b",
+        "before_sha256": "9a6b08a06298befbe4664dee1366f15366ab33134822a1a8d60609bc264d3dfa",
+        "reverse_patches": [
+          {
+            "end": 3452,
+            "start": 3344,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/market_probability_model.py": {
+        "after_sha256": "5cd25936548870df4bca01b929d4c2df72c7c905b4f32f6f7d7efe07c1c3cd63",
+        "before_sha256": "00cf094ef50a559d87fc9ce1fd426e4e9c454b5607db495dfb6ed4ca4517217a",
+        "reverse_patches": [
+          {
+            "end": 4611,
+            "start": 4464,
+            "text": ""
+          },
+          {
+            "end": 6447,
+            "start": 6035,
+            "text": ""
+          },
+          {
+            "end": 13080,
+            "start": 12912,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/per_game_boards.py": {
+        "after_sha256": "46fcb8187eb95e6afd01e320219291f57374f592738a448c79f461a06d48b1a4",
+        "before_sha256": "9a254bbaee1623f0bf9ebe7ffb2df1055e401183bd7b4ce139a3491c50840225",
+        "reverse_patches": [
+          {
+            "end": 8437,
+            "start": 8275,
+            "text": ""
+          },
+          {
+            "end": 14026,
+            "start": 13780,
+            "text": ""
+          },
+          {
+            "end": 32156,
+            "start": 31866,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/public_board.py": {
+        "after_sha256": "1cdbbdc59326bbc290d3f9981d063ca2aea64598d3acc83a54eb46324bc7de96",
+        "before_sha256": "6e3c3cb4ed26d27c73559d70600a2be00509711823e1c0a8f9d1efde884b8fa9",
+        "reverse_patches": [
+          {
+            "end": 11629,
+            "start": 10655,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/research_display.py": {
+        "after_sha256": "499ee85a34e8ae45546b9ff119b5b73f68315d113502feab32c50710b2317796",
+        "before_sha256": "c3dc61115e559dcd751cfb8f7df8dc6b4ea2f10f8341deea820b12d3988a5d1f",
+        "reverse_patches": [
+          {
+            "end": 33080,
+            "start": 32667,
+            "text": ""
+          },
+          {
+            "end": 39109,
+            "start": 38868,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/research_replay.py": {
+        "after_sha256": "c2899015295a146b0e5cd8682549146fce6c4023ea30e6149718b63cbd898f93",
+        "before_sha256": "1271c936720f2d512936756d6e3b7c58ad90127bf5797429177e7ecd9c5f5d86",
+        "reverse_patches": [
+          {
+            "end": 614,
+            "start": 454,
+            "text": "REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + \"\"\"ml_feature_eligible stats_resolution_status football_feature_receipt\n"
+          },
+          {
+            "end": 18090,
+            "start": 12273,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/slate_coverage.py": {
+        "after_sha256": "46edafde463eb5df2a8d0bb1790caffcff382a0768ef87179c8384bbdfd2a6f9",
+        "before_sha256": "f2b1fbcbf6967d66214934ce1b409bd5bd98f28eb3a282940df44b0abbe84bbe",
+        "reverse_patches": [
+          {
+            "end": 22258,
+            "start": 21947,
+            "text": ""
+          }
+        ]
+      },
+      "core/live_wager_contract.py": {
+        "after_sha256": "944acf3bfcfa3faf8463516b03b850a1b37bf20e2b7b2bd2558e7387bab545fd",
+        "before_sha256": "385c2175be7926a8e01cc49aed10e14024b3a9f50cd24726c277b4271dbc4fc8",
+        "reverse_patches": [
+          {
+            "end": 18237,
+            "start": 17958,
+            "text": ""
+          }
+        ]
+      },
+      "core/streamlit_pipeline.py": {
+        "after_sha256": "5328daddfee9c32e470deaa3bdfb7d3c603aa0e421c0e66f5e05441a7edf816e",
+        "before_sha256": "af757e2e3a7a878f445573f0dc3feeeb95bf1789629ca2a5c6e023e688b017b7",
+        "reverse_patches": [
+          {
+            "end": 585833,
+            "start": 585724,
+            "text": ""
+          }
+        ]
+      },
+      "streamlit_app.py": {
+        "after_sha256": "5bdd5063634a9d2db0356fdb7f145039669b7e63fe4865870e4c9be4a0347629",
+        "before_sha256": "109954f8ae0d4ff5559cbd81dc2fb99ff2a34046b2bcc0e61832332e6a9916f9",
+        "reverse_patches": [
+          {
+            "end": 18661,
+            "start": 18563,
+            "text": ""
+          },
+          {
+            "end": 32848,
+            "start": 32740,
+            "text": ""
+          },
+          {
+            "end": 50191,
+            "start": 49835,
+            "text": "    with selected_source_evidence(controls.get(\"source_evidence_refs\", ())), selected_ncaaf_research(controls.get(\"ncaaf_research_packets\", ()), private_research=bool(controls.get(\"ncaaf_private_research\", False))):\n"
+          },
+          {
+            "end": 100326,
+            "start": 100234,
+            "text": ""
+          }
+        ]
+      }
+    },
+    "_nfl_scoring_binding": {
+      "app/ui/nfl_private_research.py": {
+        "after_sha256": "056a2ff2313f112a94aaad3293cb9edb4a90464f71932847bbc4515b365ac2d8",
+        "before_sha256": "5904166795680eb0941263f305a22c75463046f0d44d2f7064c8facd11b4e97a",
+        "reverse_patches": [
+          {
+            "end": 79,
+            "start": 0,
+            "text": "\"\"\"Token-gated static staging and private browser; no acquisition or inference.\"\"\"\n"
+          },
+          {
+            "end": 2771,
+            "start": 2631,
+            "text": "                    if evidence.saved_route(row).VERSION == 'nfl-owner-observed-private-inputs-v2':\n"
+          },
+          {
+            "end": 6360,
+            "start": 3049,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/nfl_private_routes.py": {
+        "after_sha256": "3ac525c0744e66968f80c377f81c737eb8c1cc097665deb47f4888272f5977ef",
+        "before_sha256": "4f0978f39e395cee110faf24230e96dac31de9e6d94e97ff0c4b2f06aeca3810",
+        "reverse_patches": [
+          {
+            "end": 237,
+            "start": 134,
+            "text": "from app_core import nfl_owner_research as v1, nfl_observed_research as v2\n"
+          },
+          {
+            "end": 285,
+            "start": 238,
+            "text": "REASONS = v1.REASONS | v2.REASONS\n"
+          },
+          {
+            "end": 687,
+            "start": 530,
+            "text": "    v1.require(version in {v1.VERSION, v2.VERSION}, 'NFL_PRIVATE_PACKET_SCHEMA')\n    return v1 if version == v1.VERSION else v2\n"
+          },
+          {
+            "end": 829,
+            "start": 727,
+            "text": "    v1.require(isinstance(raw, bytes) and 0 < len(raw) <= v1.MAX_PACKET, 'NFL_PRIVATE_PACKET_SCHEMA')\n"
+          },
+          {
+            "end": 1446,
+            "start": 1278,
+            "text": "    with v1.selected([p for p in packets if route(p) is v1]), v2.selected([p for p in packets if route(p) is v2]):\n"
+          },
+          {
+            "end": 1717,
+            "start": 1567,
+            "text": "    return not (v1.IN_NATIVE.get() or v2.IN_NATIVE.get()) and bool(v1.SELECTED.get() or v2.SELECTED.get())\n"
+          },
+          {
+            "end": 1855,
+            "start": 1783,
+            "text": "    packets = v1.SELECTED.get() + v2.SELECTED.get()\n"
+          },
+          {
+            "end": 2640,
+            "start": 2559,
+            "text": "        return v2 if p.get('version') == v2.RESULT else v1\n"
+          }
+        ]
+      }
+    },
+    "_owner_binding": {
+      "app/ui/ncaaf_pipeline_research.py": {
+        "after_sha256": "a74709863ca1fe2aabc9d26f562de24cca994ce63ca27a06bc7c83d1d1ef4fcd",
+        "before_sha256": "f2d7ddb9d3abd4917e317930888ff005beb4b06873ae0694f8a0bbc32bc300f6",
+        "reverse_patches": [
+          {
+            "end": 215,
+            "start": 164,
+            "text": ""
+          },
+          {
+            "end": 258,
+            "start": 217,
+            "text": "def render():\n"
+          },
+          {
+            "end": 478,
+            "start": 338,
+            "text": ""
+          },
+          {
+            "end": 1429,
+            "start": 549,
+            "text": "        st.caption(\"Select an existing native v1 or compatible recovered-model prospective packet for a future explicitly requested analysis. Staging inspects bounded JSON and hashes only; it does not verify features or run analysis. The compatible caller separately verifies original dependency bytes, event mapping, derived features and accepted public-output rights before computation. Stale inputs and unaccepted reviews remain unavailable. No fitting or collection occurs here.\")\n"
+          },
+          {
+            "end": 2919,
+            "start": 2697,
+            "text": ""
+          },
+          {
+            "end": 3003,
+            "start": 2932,
+            "text": "            with evidence.selected(packets):\n"
+          },
+          {
+            "end": 4961,
+            "start": 3469,
+            "text": ""
+          }
+        ]
+      },
+      "app/ui/publish_panel.py": {
+        "after_sha256": "c7dc708e0a0313b70cf59e309d9642651d9a04300dd44084358d0fe69cb6c08b",
+        "before_sha256": "505e9f3e24bf00339c3a099eff830490d58ab21935b9756d2f6b8a8b845341af",
+        "reverse_patches": [
+          {
+            "end": 3307,
+            "start": 3232,
+            "text": ""
+          },
+          {
+            "end": 3452,
+            "start": 3344,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/market_probability_model.py": {
+        "after_sha256": "5cd25936548870df4bca01b929d4c2df72c7c905b4f32f6f7d7efe07c1c3cd63",
+        "before_sha256": "00cf094ef50a559d87fc9ce1fd426e4e9c454b5607db495dfb6ed4ca4517217a",
+        "reverse_patches": [
+          {
+            "end": 4611,
+            "start": 4464,
+            "text": ""
+          },
+          {
+            "end": 6447,
+            "start": 6035,
+            "text": ""
+          },
+          {
+            "end": 13080,
+            "start": 12912,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/ncaaf_compatible_pipeline.py": {
+        "after_sha256": "880711e4ade7d890f6cc7cab25c49074f7d8832e09f14b35b49793a41dba50a5",
+        "before_sha256": "7bc5acc34725a4dd53a0ab157cbd2d8cb3617550aee46f0cdef5a28c3ed49f7a",
+        "reverse_patches": [
+          {
+            "end": 3932,
+            "start": 3891,
+            "text": "def load(packet):\n"
+          },
+          {
+            "end": 4358,
+            "start": 4198,
+            "text": "        and p[\"version\"] in INPUT_VERSIONS and p[\"evidence_label\"] in {\"RETAINED\", \"SYNTHETIC\"},\n"
+          },
+          {
+            "end": 5141,
+            "start": 4914,
+            "text": "        and o[\"version\"] == (chronology.VERSION if p[\"version\"] == SUCCESSOR_VERSION else observation.VERSION) and o[\"evidence_label\"] == p[\"evidence_label\"],\n"
+          },
+          {
+            "end": 5492,
+            "start": 5364,
+            "text": "def result_version(packet):\n"
+          },
+          {
+            "end": 5663,
+            "start": 5603,
+            "text": "def checked_observation(packet, at):\n"
+          },
+          {
+            "end": 6202,
+            "start": 5711,
+            "text": "    if packet[\"payload\"][\"version\"] == SUCCESSOR_VERSION:\n        checked = chronology.read_observation(original)\n        chronology.check_chronology(original[\"payload\"], at)\n        require(history.timestamp(original[\"payload\"][\"source_review\"][\"acceptance\"][\"accepted_at\"]) < history.timestamp(at),\n"
+          },
+          {
+            "end": 6558,
+            "start": 6510,
+            "text": "def objects(packet, at):\n"
+          },
+          {
+            "end": 6703,
+            "start": 6642,
+            "text": "    p = load(packet)[\"payload\"]\n"
+          },
+          {
+            "end": 7832,
+            "start": 7786,
+            "text": "def fresh(packet, at):\n"
+          },
+          {
+            "end": 8433,
+            "start": 8361,
+            "text": "def accepted_dependencies(packet, approval, at):\n"
+          },
+          {
+            "end": 8817,
+            "start": 8730,
+            "text": "    if packet[\"payload\"][\"version\"] == SUCCESSOR_VERSION:\n"
+          },
+          {
+            "end": 9110,
+            "start": 8932,
+            "text": "        _, index = objects(packet, now)\n        return chronology.check_dependency_admission(packet, review, index, at)\n"
+          },
+          {
+            "end": 10179,
+            "start": 10123,
+            "text": "def derive(packet, checked, at):\n"
+          },
+          {
+            "end": 10552,
+            "start": 10313,
+            "text": "    state, index = objects(packet, at)\n    game = observation.check_mapping(p[\"event\"], p[\"schedule\"], p[\"crosswalk\"], p[\"mapping_review\"], as_of=at)\n"
+          },
+          {
+            "end": 15699,
+            "start": 15505,
+            "text": "def infer(packet, at):\n    now = fresh(load(packet), at)  # Historical/stale inputs rejected before computation.\n"
+          },
+          {
+            "end": 15807,
+            "start": 15732,
+            "text": "    checked = checked_observation(packet, at)\n"
+          },
+          {
+            "end": 16286,
+            "start": 16213,
+            "text": "    features = derive(packet, checked, now)\n"
+          },
+          {
+            "end": 17045,
+            "start": 16934,
+            "text": "    receipt = dict(version=result_version(packet), input_sha256=packet[\"sha256\"],\n"
+          },
+          {
+            "end": 17954,
+            "start": 17763,
+            "text": "    if packet[\"payload\"][\"version\"] == SUCCESSOR_VERSION:\n        receipt[\"admission_receipts\"] = chronology.check_chronology(p, at)\n"
+          },
+          {
+            "end": 18103,
+            "start": 18041,
+            "text": "def inspect_result(packet, saved, at):\n"
+          },
+          {
+            "end": 18277,
+            "start": 18185,
+            "text": "    now = fresh(load(packet), at)\n"
+          },
+          {
+            "end": 18439,
+            "start": 18310,
+            "text": "    checked = checked_observation(packet, at)\n    objects(packet, now)\n"
+          },
+          {
+            "end": 18673,
+            "start": 18551,
+            "text": "        and r[\"version\"] == result_version(packet) and r[\"input_sha256\"] == packet[\"sha256\"]\n"
+          },
+          {
+            "end": 19851,
+            "start": 19610,
+            "text": "    if packet[\"payload\"][\"version\"] == SUCCESSOR_VERSION:\n        require(r.get(\"admission_receipts\") == chronology.check_chronology(packet[\"payload\"][\"observation\"][\"payload\"], at),\n"
+          }
+        ]
+      },
+      "app_core/ncaaf_pipeline_evidence.py": {
+        "after_sha256": "640048b019803eed38276a0ad2860933d868a0ab2b3300d1e95380c4c0cd1b1f",
+        "before_sha256": "7fdb9d01149f2e9ee19ee4092ed342ad11107d6cbca570450f964b6df2f9f49a",
+        "reverse_patches": [
+          {
+            "end": 869,
+            "start": 818,
+            "text": ""
+          },
+          {
+            "end": 1156,
+            "start": 1087,
+            "text": ""
+          },
+          {
+            "end": 1582,
+            "start": 1410,
+            "text": "INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION}\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION}\n"
+          },
+          {
+            "end": 1672,
+            "start": 1605,
+            "text": ""
+          },
+          {
+            "end": 2877,
+            "start": 2778,
+            "text": "NCAAF_SCHEDULE_RECEIPT_CONFLICT\"\"\".split()) | compatible.REASONS | custody.REASONS\n"
+          },
+          {
+            "end": 3955,
+            "start": 3902,
+            "text": "def selected(packets=()):\n"
+          },
+          {
+            "end": 4532,
+            "start": 4269,
+            "text": ""
+          },
+          {
+            "end": 4743,
+            "start": 4644,
+            "text": ""
+          },
+          {
+            "end": 5616,
+            "start": 5474,
+            "text": ""
+          },
+          {
+            "end": 19124,
+            "start": 18899,
+            "text": "    if packet is not None and packet['payload']['version'] == custody.VERSION:\n        binding['custody_reader'] = dict(version=custody.VERSION, components=custody.implementation(),\n"
+          },
+          {
+            "end": 19926,
+            "start": 19213,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/ncaaf_prospective_chronology.py": {
+        "after_sha256": "105dc2e42188f918baa8644f56904e663714a64a14998417ad856cce07927597",
+        "before_sha256": "a4c9075e85bd977955cd654f85909101a5b327adc81639fe08f729912a26a2af",
+        "reverse_patches": [
+          {
+            "end": 2759,
+            "start": 2697,
+            "text": ""
+          },
+          {
+            "end": 3097,
+            "start": 3005,
+            "text": "def check_dependency_admission(packet, review, index, inference_at):\n"
+          },
+          {
+            "end": 3882,
+            "start": 3571,
+            "text": "        \"version\", \"permissions_review\", \"dependency_verification\", \"acceptance\"}\n        and review[\"version\"] == DEPENDENCY_REVIEW_VERSION, \"NCAAF_DEPENDENCY_ADMISSION_SCHEMA\")\n"
+          },
+          {
+            "end": 4067,
+            "start": 3939,
+            "text": "        (\"permissions_review\", \"dependency_verification\", \"acceptance\")]\n"
+          },
+          {
+            "end": 5314,
+            "start": 5145,
+            "text": "        \"prospective_research_features\", \"public_derived_output\"], \"NCAAF_DEPENDENCY_PERMISSION_UNAVAILABLE\")\n"
+          },
+          {
+            "end": 5696,
+            "start": 5513,
+            "text": "    require(ACCEPTED_DEPENDENCY_PERMISSIONS.get(permission[\"review_id\"]) == model.digest(permission),\n"
+          },
+          {
+            "end": 6659,
+            "start": 6503,
+            "text": "        \"review_id\", \"reviewer\", \"accepted_at\", \"subject_version\", \"subject_sha256\", \"verification_sha256\"}\n"
+          },
+          {
+            "end": 6903,
+            "start": 6742,
+            "text": "        and accepted[\"reviewer\"] != verified[\"verifier\"]\n"
+          },
+          {
+            "end": 7329,
+            "start": 7153,
+            "text": "    require(ACCEPTED_DEPENDENCY_ADMISSIONS.get(accepted[\"review_id\"]) == model.digest(accepted),\n"
+          },
+          {
+            "end": 7864,
+            "start": 7581,
+            "text": "         verified[\"verified_at\"], accepted[\"accepted_at\"], p[\"source_review\"][\"acceptance\"][\"accepted_at\"], inference_at)]\n"
+          },
+          {
+            "end": 10126,
+            "start": 10065,
+            "text": ""
+          },
+          {
+            "end": 10223,
+            "start": 10161,
+            "text": "def check_chronology(p, inference_at):\n"
+          },
+          {
+            "end": 10614,
+            "start": 10274,
+            "text": "    require(isinstance(review, dict) and set(review) == {\"version\", \"terms_review\", \"quote_observation\", \"offer_verification\", \"acceptance\"}\n            and review[\"version\"] == REVIEW_VERSION, \"NCAAF_CHRONOLOGY_SCHEMA\")\n"
+          },
+          {
+            "end": 10814,
+            "start": 10676,
+            "text": "        (\"terms_review\", \"quote_observation\", \"offer_verification\", \"acceptance\")]\n"
+          },
+          {
+            "end": 11655,
+            "start": 11465,
+            "text": "    require(ACCEPTED_TERMS_REVIEWS.get(terms[\"review_id\"]) == model.digest(terms), \"NCAAF_ADVANCE_TERMS_NOT_ACCEPTED\")\n"
+          },
+          {
+            "end": 12229,
+            "start": 12057,
+            "text": "    require(terms[\"permitted_uses\"] == [\"collection\", \"private_retention\", \"research\", \"public_derived_output\"],\n"
+          },
+          {
+            "end": 13663,
+            "start": 13477,
+            "text": "    require(isinstance(accepted, dict) and set(accepted) == {\"review_id\", \"reviewer\", \"accepted_at\", \"subject_version\", \"subject_sha256\"}\n"
+          },
+          {
+            "end": 14361,
+            "start": 13746,
+            "text": "        and accepted[\"reviewer\"] != verified[\"verifier\"], \"NCAAF_INDEPENDENT_ACCEPTANCE_CONFLICT\")\n    require(accepted[\"subject_version\"] == VERSION and accepted[\"subject_sha256\"] == subject_hash(p), \"NCAAF_ADMISSION_SUBJECT_CONFLICT\")\n    require(ACCEPTED_ADMISSIONS.get(accepted[\"review_id\"]) == model.digest(accepted), \"NCAAF_INDEPENDENT_ACCEPTANCE_NOT_TRUSTED\")\n"
+          },
+          {
+            "end": 14636,
+            "start": 14460,
+            "text": "        (q.get(\"recorded_at\"), observed[\"observed_at\"], verified[\"verified_at\"], accepted[\"accepted_at\"], terms[\"reviewed_at\"],\n"
+          },
+          {
+            "end": 15993,
+            "start": 15940,
+            "text": "def read_observation(packet):\n"
+          },
+          {
+            "end": 16476,
+            "start": 16308,
+            "text": "    require(p.get(\"version\") == VERSION and p.get(\"evidence_label\") in {\"RETAINED\", \"SYNTHETIC\"},\n"
+          },
+          {
+            "end": 17145,
+            "start": 16993,
+            "text": "    game = observation.check_mapping(p.get(\"event\"), p.get(\"schedule\"), p.get(\"crosswalk\"),\n"
+          },
+          {
+            "end": 21009,
+            "start": 20944,
+            "text": "    check_chronology(p, p[\"as_of\"])\n"
+          }
+        ]
+      },
+      "app_core/ncaaf_response_custody.py": {
+        "after_sha256": "04ec9796e78f08d5fbbb7d0326c6e145507f8774f04d90c6b9f5c9e8ffadd142",
+        "before_sha256": "75469cf0f4bdd9c06d61076cb2365eb8994f98c02a5e2730c2bfaa47622cce54",
+        "reverse_patches": [
+          {
+            "end": 7737,
+            "start": 7673,
+            "text": "def _project_quote(rows,meta,q,terms):\n"
+          },
+          {
+            "end": 10390,
+            "start": 10175,
+            "text": "                        declarations[key]=dict(value=q[key],source_paths=[path+'.'+key for path,_ in present] or ['independently_accepted_terms_review.'+key])\n"
+          },
+          {
+            "end": 11296,
+            "start": 11206,
+            "text": "def capture(raw,metadata,*,native_batch=None,quote=None,terms=None):\n"
+          },
+          {
+            "end": 11809,
+            "start": 11717,
+            "text": "        projection=_project_quote(rows,metadata,quote,terms)\n"
+          },
+          {
+            "end": 12196,
+            "start": 12155,
+            "text": "def load(packet):\n"
+          },
+          {
+            "end": 12631,
+            "start": 12462,
+            "text": "        and p['version']==VERSION and p['evidence_label'] in {'SYNTHETIC','RETAINED'}, 'NCAAF_CUSTODY_SCHEMA')\n"
+          },
+          {
+            "end": 13256,
+            "start": 12808,
+            "text": "        and p['native_packet']['payload'].get('version')==native.SUCCESSOR_VERSION, 'NCAAF_CUSTODY_SCHEMA')\n    n=native.load(p['native_packet'])\n    require(n['payload']['version']==native.SUCCESSOR_VERSION and n['payload']['evidence_label']==p['evidence_label'], 'NCAAF_CUSTODY_SCHEMA')\n"
+          },
+          {
+            "end": 14772,
+            "start": 14596,
+            "text": "def verify(packet,approval,at):\n    p=load(packet)['payload'];n=p['native_packet'];o=n['payload']['observation']['payload']\n"
+          },
+          {
+            "end": 15099,
+            "start": 14857,
+            "text": "    dependency_review=native.accepted_dependencies(n,approval,at)\n    native.checked_observation(n,at)\n    _,index=native.objects(n,history.timestamp(at))\n"
+          },
+          {
+            "end": 17745,
+            "start": 17624,
+            "text": "            computed=_project_quote(rows,meta,o['quote'],terms);quote_count+=1\n"
+          },
+          {
+            "end": 18863,
+            "start": 18489,
+            "text": "    require(isinstance(r,dict) and set(r)=={'version','verification','acceptance'} and r['version']==ADMISSION_VERSION, 'NCAAF_CUSTODY_ADMISSION_CONFLICT')\n    v,a=r['verification'],r['acceptance']\n"
+          },
+          {
+            "end": 19846,
+            "start": 19448,
+            "text": "    require(isinstance(a,dict) and set(a)==set('review_id reviewer accepted_at subject_version subject_sha256 verification_sha256'.split())\n        and all(isinstance(value,str) and value.strip() for value in a.values()) and a['reviewer']!=v['verifier']\n"
+          },
+          {
+            "end": 20369,
+            "start": 20032,
+            "text": "    require(ACCEPTED_ADMISSIONS.get(a['review_id'])==model.digest(a), 'NCAAF_CUSTODY_ADMISSION_NOT_TRUSTED')\n    vt,accepted,checkpoint,inference=[history.timestamp(x) for x in (v['verified_at'],a['accepted_at'],o['as_of'],at)]\n"
+          },
+          {
+            "end": 21049,
+            "start": 21004,
+            "text": "def infer(packet,at):\n"
+          },
+          {
+            "end": 21535,
+            "start": 21107,
+            "text": "    verified=verify(packet,accepted(packet),at)\n    checked,center,win,computation=native.infer(packet['payload']['native_packet'],at)\n    receipt=dict(version=RESULT_VERSION,input_sha256=packet['sha256'],custody_subject_sha256=subject_hash(packet),\n"
+          },
+          {
+            "end": 21882,
+            "start": 21822,
+            "text": "def inspect_result(packet,saved,at):\n"
+          },
+          {
+            "end": 22156,
+            "start": 22022,
+            "text": "    verified=verify(packet,accepted(packet),at)\n"
+          },
+          {
+            "end": 22760,
+            "start": 22560,
+            "text": "        and r['version']==RESULT_VERSION and r['input_sha256']==packet['sha256'] and r['custody_subject_sha256']==subject_hash(packet)\n"
+          },
+          {
+            "end": 23145,
+            "start": 23017,
+            "text": "    checked,n=native.inspect_result(packet['payload']['native_packet'],r['native_computation'],at)\n"
+          }
+        ]
+      },
+      "app_core/per_game_boards.py": {
+        "after_sha256": "46fcb8187eb95e6afd01e320219291f57374f592738a448c79f461a06d48b1a4",
+        "before_sha256": "56293292483d3eed2f10b5ec16a2564e9f1f41e5d06da3b61260cd672fd23992",
+        "reverse_patches": [
+          {
+            "end": 8613,
+            "start": 8275,
+            "text": "def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False, nfl_fallback=False, research_fallback=False):\n"
+          },
+          {
+            "end": 14026,
+            "start": 13780,
+            "text": ""
+          },
+          {
+            "end": 25839,
+            "start": 25567,
+            "text": ""
+          },
+          {
+            "end": 31754,
+            "start": 31634,
+            "text": "        display=from_export(exported, source=source, source_field=probability_field)\n"
+          },
+          {
+            "end": 32156,
+            "start": 31866,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/public_board.py": {
+        "after_sha256": "1cdbbdc59326bbc290d3f9981d063ca2aea64598d3acc83a54eb46324bc7de96",
+        "before_sha256": "ef67550b4aa29fb2acd6e274695ef92549bcf11386e2f5fdb3d95456ddb85bcf",
+        "reverse_patches": [
+          {
+            "end": 9673,
+            "start": 9122,
+            "text": ""
+          },
+          {
+            "end": 11629,
+            "start": 10655,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/research_display.py": {
+        "after_sha256": "499ee85a34e8ae45546b9ff119b5b73f68315d113502feab32c50710b2317796",
+        "before_sha256": "c47dcba27cf3f956cc5383d121a98481f529da4062e6b665cc0550313049d9a9",
+        "reverse_patches": [
+          {
+            "end": 32609,
+            "start": 32515,
+            "text": "def from_export(row, *, source=None, source_field=\"win_probability\"):\n"
+          },
+          {
+            "end": 33080,
+            "start": 32667,
+            "text": ""
+          },
+          {
+            "end": 33676,
+            "start": 33297,
+            "text": ""
+          },
+          {
+            "end": 34059,
+            "start": 33932,
+            "text": ""
+          },
+          {
+            "end": 39109,
+            "start": 38868,
+            "text": ""
+          },
+          {
+            "end": 39578,
+            "start": 39374,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/research_replay.py": {
+        "after_sha256": "c2899015295a146b0e5cd8682549146fce6c4023ea30e6149718b63cbd898f93",
+        "before_sha256": "1271c936720f2d512936756d6e3b7c58ad90127bf5797429177e7ecd9c5f5d86",
+        "reverse_patches": [
+          {
+            "end": 614,
+            "start": 454,
+            "text": "REPLAY_COLUMNS = frozenset(SOURCE_FIELDS + EXPORT_FIELDS + \"\"\"ml_feature_eligible stats_resolution_status football_feature_receipt\n"
+          },
+          {
+            "end": 18090,
+            "start": 12273,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/slate_coverage.py": {
+        "after_sha256": "46edafde463eb5df2a8d0bb1790caffcff382a0768ef87179c8384bbdfd2a6f9",
+        "before_sha256": "f2b1fbcbf6967d66214934ce1b409bd5bd98f28eb3a282940df44b0abbe84bbe",
+        "reverse_patches": [
+          {
+            "end": 22258,
+            "start": 21947,
+            "text": ""
+          }
+        ]
+      },
+      "core/live_wager_contract.py": {
+        "after_sha256": "944acf3bfcfa3faf8463516b03b850a1b37bf20e2b7b2bd2558e7387bab545fd",
+        "before_sha256": "385c2175be7926a8e01cc49aed10e14024b3a9f50cd24726c277b4271dbc4fc8",
+        "reverse_patches": [
+          {
+            "end": 18237,
+            "start": 17958,
+            "text": ""
+          }
+        ]
+      },
+      "core/streamlit_pipeline.py": {
+        "after_sha256": "5328daddfee9c32e470deaa3bdfb7d3c603aa0e421c0e66f5e05441a7edf816e",
+        "before_sha256": "af757e2e3a7a878f445573f0dc3feeeb95bf1789629ca2a5c6e023e688b017b7",
+        "reverse_patches": [
+          {
+            "end": 585833,
+            "start": 585724,
+            "text": ""
+          }
+        ]
+      },
+      "pytest.ini": {
+        "after_sha256": "d20cce65b3124d879cdc2f53c1cc8fe10cd20a854411d5c328109df8a7f4fa81",
+        "before_sha256": "e099b0f48f53b187a3b071a24acd65a57872147d171f4c56278a4546062b832e",
+        "reverse_patches": [
+          {
+            "end": 226,
+            "start": 175,
+            "text": ""
+          }
+        ]
+      },
+      "streamlit_app.py": {
+        "after_sha256": "5bdd5063634a9d2db0356fdb7f145039669b7e63fe4865870e4c9be4a0347629",
+        "before_sha256": "2883ffc1000166992209a4612dcdaf28ff1f68bc55eaa50ccd6ead5c045ec076",
+        "reverse_patches": [
+          {
+            "end": 18661,
+            "start": 18502,
+            "text": ""
+          },
+          {
+            "end": 32848,
+            "start": 32740,
+            "text": ""
+          },
+          {
+            "end": 50191,
+            "start": 49835,
+            "text": "    with selected_source_evidence(controls.get(\"source_evidence_refs\", ())), selected_ncaaf_research(controls.get(\"ncaaf_research_packets\", ())):\n"
+          },
+          {
+            "end": 100326,
+            "start": 100133,
+            "text": ""
+          }
+        ]
+      }
+    }
+  },
+  "previous_guard_sha256": "567db2a959bceef6136c7dc8adedbe753e4664282fecfec3d00328522e53e26f",
+  "reviewed_blobs": {
+    "app/ui/nfl_private_research.py": "c3ea7bbe84de56f023bb9b3992bd15796887ca3d",
+    "app_core/nfl_scenario_research.py": "3742b67519aca02593ec22bdb042107ceac51d03",
+    "app_core/research_replay.py": "723b45769f11278970c1cb53e1eec7c76991c73f",
+    "docs/paid-launch/nfl-owner-sporting-scenario-v1.md": "9830af9a965ec2c535b66dfd8b9d5bfa9812ed1f",
+    "scripts/nfl_scenario_scope.py": "cc2d4cd5c20d5b91858d61e08f4812f8542ff40c",
+    "tests/test_nfl_scenario_research.py": "96113a30e9b87751116509231660534fb0e023ae",
+    "tests/test_nfl_scenario_scope.py": "23a530ec995ad1b7639048a465c1f7b8699de892"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app/ui/nfl_private_research.py": {
+      "after_sha256": "056a2ff2313f112a94aaad3293cb9edb4a90464f71932847bbc4515b365ac2d8",
+      "before_sha256": "a961966deae0682dae1f27ba15f0a9133fcc6dea0fbc7f1bec1f9f0699c78692",
+      "reverse_patches": [
+        {
+          "end": 79,
+          "start": 0,
+          "text": "\"\"\"Token-gated static staging and private browser; no acquisition or inference.\"\"\"\n"
+        },
+        {
+          "end": 6360,
+          "start": 3049,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/research_replay.py": {
+      "after_sha256": "c2899015295a146b0e5cd8682549146fce6c4023ea30e6149718b63cbd898f93",
+      "before_sha256": "b718be5a03e76942959d8a77da8dce9c6f1e3bd270f9b8d00dfe5fb0b9b0b4e8",
+      "reverse_patches": [
+        {
+          "end": 18090,
+          "start": 12273,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

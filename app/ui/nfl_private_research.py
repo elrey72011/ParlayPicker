@@ -1,4 +1,4 @@
-"""Token-gated static staging and private browser; no acquisition or inference."""
+"""Token-gated staging/browser and explicit retained-input scenario action."""
 import streamlit as st
 from app_core import nfl_private_routes as evidence
 
@@ -39,3 +39,44 @@ def render(candidates=None):
                         st.caption('Prospective first-observation evidence; publisher first-publication time UNKNOWN. This supplies no historical availability claim.')
                 else:
                     st.write('Private NFL estimate unavailable: ' + assessed['reason'])
+    render_scenario()
+
+
+def render_scenario():
+    """Same owner-token panel, separate explicit action; no general live analysis."""
+    from app_core import nfl_scenario_research as scenario, research_replay
+    with st.expander('Private NFL sporting scenario', expanded=False):
+        enabled = st.checkbox('Enable user-specified NFL scenario', value=False, key='nfl_scenario_enabled')
+        st.caption('Full-game final points including overtime, conditional on a completed sporting result. No observed offer, price, EV, edge or blend. Integer handicaps unavailable. Staging creates no owner review. Execution is a separate explicit action using retained inputs only.')
+        upload = st.file_uploader('Existing owner-reviewed sporting-scenario packet', type=['json'], key='nfl_scenario_upload')
+        if st.button('Stage scenario packet', disabled=not enabled or upload is None, key='nfl_scenario_stage'):
+            try:
+                packet = scenario.load(upload.getvalue(), owner_upload=True)
+                st.session_state['nfl_scenario_staged'] = packet
+                st.session_state['nfl_scenario_confirmed'] = False
+                st.session_state.pop('nfl_scenario_receipt', None)
+            except (ValueError, TypeError, KeyError) as exc:
+                st.error(scenario.reason(exc))
+        packet = st.session_state.get('nfl_scenario_staged') if enabled else None
+        if packet is not None:
+            assumptions = packet['payload']['scenario']
+            st.write('User-specified assumption: ' + str(assumptions.get('selected_team')) + ' ' + str(assumptions.get('signed_handicap')))
+        confirmed = st.checkbox('Use this exact staged team and signed half-point assumption', value=False, key='nfl_scenario_confirmed', disabled=packet is None)
+        if st.button('Run and privately capture reviewed scenario', disabled=not enabled or packet is None or not confirmed, key='nfl_scenario_run'):
+            try:
+                st.session_state['nfl_scenario_receipt'] = scenario.run(packet)
+            except (ValueError, TypeError, KeyError, OSError) as exc:
+                st.session_state.pop('nfl_scenario_receipt', None)
+                st.error(scenario.reason(exc))
+        receipt = st.session_state.get('nfl_scenario_receipt') if enabled else None
+        if receipt is not None:
+            try:
+                result = research_replay.read_scenario(receipt)
+                p = scenario.read_result(result)
+                st.write('OWNER_REVIEWED / PRIVATE_RESEARCH / USER-SPECIFIED SCENARIO')
+                st.metric('Uncalibrated NFL model estimate', f"{p['probability']:.2%}")
+                st.caption('Conditional on a completed full game including overtime. PASS — zero stake. Publisher first availability UNKNOWN; original observation and actual inference clocks are preserved. No operator verification, market blend, calibration or qualification.')
+                archive, _ = research_replay.download_scenario(receipt)
+                st.download_button('Download private scenario evidence', data=archive, file_name=receipt['result_sha256'] + '.private-scenario.zip', mime='application/zip', key='nfl_scenario_download')
+            except (ValueError, TypeError, KeyError, OSError) as exc:
+                st.error(scenario.reason(exc))
