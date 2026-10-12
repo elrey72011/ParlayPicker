@@ -21765,6 +21765,41 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+GUARD_BOOTSTRAP_BOOTSTRAP = True
+GUARD_BOOTSTRAP_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ci-guard-bootstrap-v1.json'
+GUARD_BOOTSTRAP_BINDING_PATH = 'docs/paid-launch/ci-guard-bootstrap-binding-v1.json'
+GUARD_BOOTSTRAP_BINDING_SHA256 = '5aa0823c53a69dab2162a220ad3bf582ce25d55ab6d20bb6981a20f15d6205ff'
+GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256 = '697203c10e6028ee3a01002157a707b2845c217ff53ebec0d7cb8d40f9c8f308'
+GUARD_BOOTSTRAP_PREVIOUS_GUARD_SHA256 = '51b9508d3e054821e20aa1a6ccb48f16f7b57444e23c4bb26e0862d951141d34'
+GUARD_BOOTSTRAP_SOURCE_RECONSTRUCTIONS = {}
+from functools import lru_cache as _bootstrap_lru_cache
+def _guard_bootstrap_guard_matches(source):
+    reviewed=GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256.encode('ascii')
+    return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256
+@_bootstrap_lru_cache(maxsize=2)
+def _guard_bootstrap_cached_base_source(source,reviewed,parent):
+    if b'\nGUARD_BOOTSTRAP_BOOTSTRAP =' not in source:return source
+    _require(reviewed==GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256 and parent==GUARD_BOOTSTRAP_PREVIOUS_GUARD_SHA256 and _guard_bootstrap_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    prefix,own=source.split(b'\nGUARD_BOOTSTRAP_BOOTSTRAP =',1)
+    previous=prefix+b'\nGUARD_SCAN_BOOTSTRAP ='+own.split(b'\nGUARD_SCAN_BOOTSTRAP =',1)[1]
+    start=previous.index(b'\n_bootstrap_early_match =');end=previous.index(b'\n_scan_early_v1_match =',start)
+    previous=previous[:start]+previous[end:]
+    _require(previous.count(b"\n_scope_git_batch_runtime = None\ndef _scope_git_batch_for_validation():\n    global _scope_git_batch_runtime\n    path=Path(__file__).resolve().parent/'scope_git_batch.py'\n    raw=path.read_bytes().replace(b'\\r\\n',b'\\n')\n    _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\\0'+raw).hexdigest()=='f73781788db53c2c21d1f8f7a0676629976fd66b','SUCCESSOR_SCOPE_MODULE_CHANGED')\n    if _scope_git_batch_runtime is None:\n        module=_performance_types.ModuleType('reviewed_scope_git_batch')\n        module.__file__=str(path)\n        exec(compile(raw,str(path),'exec'),module.__dict__)\n        module.install(sys.modules[__name__]);_scope_git_batch_runtime=module\n    return _scope_git_batch_runtime\n")==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    previous=previous.replace(b"\n_scope_git_batch_runtime = None\ndef _scope_git_batch_for_validation():\n    global _scope_git_batch_runtime\n    path=Path(__file__).resolve().parent/'scope_git_batch.py'\n    raw=path.read_bytes().replace(b'\\r\\n',b'\\n')\n    _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\\0'+raw).hexdigest()=='f73781788db53c2c21d1f8f7a0676629976fd66b','SUCCESSOR_SCOPE_MODULE_CHANGED')\n    if _scope_git_batch_runtime is None:\n        module=_performance_types.ModuleType('reviewed_scope_git_batch')\n        module.__file__=str(path)\n        exec(compile(raw,str(path),'exec'),module.__dict__)\n        module.install(sys.modules[__name__]);_scope_git_batch_runtime=module\n    return _scope_git_batch_runtime\n",b"\n_performance_batch_path=Path(__file__).resolve().parent/'scope_git_batch.py'\n_performance_batch_raw=_performance_batch_path.read_bytes().replace(b'\\r\\n',b'\\n')\n_require(hashlib.sha1(b'blob '+str(len(_performance_batch_raw)).encode()+b'\\0'+_performance_batch_raw).hexdigest()=='f73781788db53c2c21d1f8f7a0676629976fd66b','SUCCESSOR_SCOPE_MODULE_CHANGED')\n_scope_git_batch_runtime=_performance_types.ModuleType('reviewed_scope_git_batch')\n_scope_git_batch_runtime.__file__=str(_performance_batch_path)\nexec(compile(_performance_batch_raw,str(_performance_batch_path),'exec'),_scope_git_batch_runtime.__dict__)\n_scope_git_batch_runtime.install(sys.modules[__name__])\n",1)
+    previous=previous.replace(b'with _scope_git_batch_for_validation().validation_stream(ROOT):',b'with _scope_git_batch_runtime.validation_stream(ROOT):')
+    start=previous.index(b'\ndef _guard_bootstrap_binding():');end=previous.index(b'\ndef main() -> int:',start)
+    previous=previous[:start]+previous[end:]
+    dispatch=b'if exists_at("HEAD", GUARD_BOOTSTRAP_POLICY_PATH):\n            code, report = _run_guard_bootstrap_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", GUARD_SCAN_POLICY_PATH):'
+    _require(previous.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    previous=previous.replace(dispatch,b'if exists_at("HEAD", GUARD_SCAN_POLICY_PATH):',1)
+    _require(hashlib.sha256(previous).hexdigest()==parent,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    return previous
+def _guard_bootstrap_base_source(source):
+    _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    return _guard_bootstrap_cached_base_source(source,GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256,GUARD_BOOTSTRAP_PREVIOUS_GUARD_SHA256)
+def _guard_bootstrap_previous_source(path,source):
+    return _guard_bootstrap_base_source(source) if path==GUARD_PATH else source
+
 GUARD_SCAN_BOOTSTRAP = True
 GUARD_SCAN_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ci-guard-scan-v1.json'
 GUARD_SCAN_BINDING_PATH = 'docs/paid-launch/ci-guard-scan-binding-v1.json'
@@ -22003,6 +22038,11 @@ def _nfl_owner_base_source(source):
     previous = source.split(b'\nNFL_OWNER_BOOTSTRAP =', 1)[0] + NFL_OWNER_PREVIOUS_TAIL
     _require(hashlib.sha256(previous).hexdigest() == '0ab2edd3f3a246fde7aa25c81a6e00bceb4a41621f2fb2ea276392725e29cb6b', 'PREVIOUS_GUARD_LOGIC_CHANGED')
     return previous
+
+_bootstrap_early_match = _guard_scan_guard_matches
+_bootstrap_early_base = _guard_scan_base_source
+def _guard_scan_guard_matches(source):return _bootstrap_early_match(_guard_bootstrap_base_source(source))
+def _guard_scan_base_source(source):return _bootstrap_early_base(_guard_bootstrap_base_source(source))
 
 _scan_early_v1_match = _guard_performance_guard_matches
 def _guard_performance_guard_matches(source):return _scan_early_v1_match(_guard_scan_base_source(source))
@@ -22902,13 +22942,18 @@ def _run_guard_performance_integrated(manifest_path,base):
 # The helper is loaded from the consumed guard location, not a mutable fixture ROOT.
 # Its exact source bytes are verified before execution; no mutable result is cached.
 import types as _performance_types
-_performance_batch_path=Path(__file__).resolve().parent/'scope_git_batch.py'
-_performance_batch_raw=_performance_batch_path.read_bytes().replace(b'\r\n',b'\n')
-_require(hashlib.sha1(b'blob '+str(len(_performance_batch_raw)).encode()+b'\0'+_performance_batch_raw).hexdigest()=='f73781788db53c2c21d1f8f7a0676629976fd66b','SUCCESSOR_SCOPE_MODULE_CHANGED')
-_scope_git_batch_runtime=_performance_types.ModuleType('reviewed_scope_git_batch')
-_scope_git_batch_runtime.__file__=str(_performance_batch_path)
-exec(compile(_performance_batch_raw,str(_performance_batch_path),'exec'),_scope_git_batch_runtime.__dict__)
-_scope_git_batch_runtime.install(sys.modules[__name__])
+_scope_git_batch_runtime = None
+def _scope_git_batch_for_validation():
+    global _scope_git_batch_runtime
+    path=Path(__file__).resolve().parent/'scope_git_batch.py'
+    raw=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()=='f73781788db53c2c21d1f8f7a0676629976fd66b','SUCCESSOR_SCOPE_MODULE_CHANGED')
+    if _scope_git_batch_runtime is None:
+        module=_performance_types.ModuleType('reviewed_scope_git_batch')
+        module.__file__=str(path)
+        exec(compile(raw,str(path),'exec'),module.__dict__)
+        module.install(sys.modules[__name__]);_scope_git_batch_runtime=module
+    return _scope_git_batch_runtime
 
 def _guard_scan_binding():
     raw=(ROOT/GUARD_SCAN_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
@@ -22940,7 +22985,40 @@ def _run_guard_scan_integrated(manifest_path,base):
     raw=path.read_bytes().replace(b'\r\n',b'\n')
     _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==binding['reviewed_blobs']['scripts/guard_scan_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
     spec=importlib.util.spec_from_file_location('guard_scan_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    with _scope_git_batch_runtime.validation_stream(ROOT):
+    with _scope_git_batch_for_validation().validation_stream(ROOT):
+        return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+def _guard_bootstrap_binding():
+    raw=(ROOT/GUARD_BOOTSTRAP_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==GUARD_BOOTSTRAP_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    return json.loads(raw)
+def _guard_bootstrap_wrap(name,method):
+    def wrapped(*args,**kwargs):
+        if name.endswith(('_previous_main_source','_parent_main_source','_previous_source')):
+            path,source,*rest=args
+            return method(path,_guard_bootstrap_previous_source(path,source),*rest,**kwargs)
+        source,*rest=args
+        return method(_guard_bootstrap_base_source(source),*rest,**kwargs)
+    for attr in ('cache_clear','cache_info'):
+        if hasattr(method,attr):setattr(wrapped,attr,getattr(method,attr))
+    return wrapped
+for _bootstrap_name,_bootstrap_method in list(globals().items()):
+    if callable(_bootstrap_method) and not _bootstrap_name.startswith('_guard_bootstrap_') and _bootstrap_name not in {'_guard_performance_base_source','_guard_scan_base_source','_guard_scan_guard_matches'} and (
+        _bootstrap_name.endswith(('_previous_guard_source','_parent_guard_source','_previous_main_source','_parent_main_source','_raw_guard_matches')) or
+        _bootstrap_name in {'_discovery_guard_matches','_cloud_guard_matches','_cloud_peel_exact_guard','_owner_guard_matches','_owner_base_source','_owner_previous_source','_nfl_owner_guard_matches','_nfl_owner_base_source','_nfl_owner_previous_source','_nfl_observed_guard_matches','_nfl_observed_base_source','_nfl_observed_previous_source','_nfl_scoring_guard_matches','_nfl_scoring_base_source','_nfl_scoring_previous_source','_nfl_diagnostics_guard_matches','_nfl_diagnostics_base_source','_nfl_diagnostics_previous_source','_ci_timing_guard_matches','_ci_timing_base_source','_ci_timing_previous_source','_nfl_scenario_guard_matches','_nfl_scenario_base_source','_nfl_scenario_previous_source','_nfl_odds_guard_matches','_nfl_odds_base_source','_nfl_odds_timing_guard_matches','_nfl_odds_timing_base_source','_guard_performance_guard_matches','_guard_performance_previous_source','_guard_scan_previous_source'}):
+        globals()[_bootstrap_name]=_guard_bootstrap_wrap(_bootstrap_name,_bootstrap_method)
+_bootstrap_original_dfs_guard_matches=_dfs_guard_matches
+def _dfs_guard_matches(source,reviewed):
+    if reviewed==GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256:return _guard_bootstrap_guard_matches(source)
+    try:return _bootstrap_original_dfs_guard_matches(_guard_bootstrap_base_source(source),reviewed)
+    except ValueError:return False
+def _run_guard_bootstrap_integrated(manifest_path,base):
+    import importlib.util
+    binding=_guard_bootstrap_binding();path=ROOT/'scripts/guard_bootstrap_scope.py'
+    raw=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==binding['reviewed_blobs']['scripts/guard_bootstrap_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('guard_bootstrap_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    with _scope_git_batch_for_validation().validation_stream(ROOT):
         return module.run(sys.modules[__name__],manifest_path,base,binding)
 
 def main() -> int:
@@ -22950,7 +23028,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", GUARD_SCAN_POLICY_PATH):
+        if exists_at("HEAD", GUARD_BOOTSTRAP_POLICY_PATH):
+            code, report = _run_guard_bootstrap_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", GUARD_SCAN_POLICY_PATH):
             code, report = _run_guard_scan_integrated(args.manifest, args.base)
         elif exists_at("HEAD", GUARD_PERFORMANCE_POLICY_PATH):
             code, report = _run_guard_performance_integrated(args.manifest, args.base)
