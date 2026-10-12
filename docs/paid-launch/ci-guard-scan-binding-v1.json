@@ -1,0 +1,33 @@
+{
+  "approval_reference": "Robert Velarde authorized measured CI optimization with bounded exact-content reconstruction and all predecessor bindings/assertions preserved. Completed profile reproduced the first performance shim marker-scan overhead; this correction changes only that immutable scan boundary.",
+  "base": "bb677f9a08cf0aa66a240ba359e0ade6891c368b",
+  "base_tree": "4cadede423914b768080d476001668103e930d01",
+  "frozen_profile_sha256": "853cc63b00da2e764741ad4d9db48d35e11c7c93024bdf285a71485304b9eb53",
+  "main_base": "457a7f3e43abfbd95de64e4d9c79e2ca82bdfb21",
+  "main_tree": "8855ee498787d8a8ac3f80cb47e61e9ed611e095",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "measured_source": {
+    "cases": 9,
+    "elapsed_seconds": 440.0658173999982,
+    "git_launches": 3852,
+    "marker_scan_calls": 213533,
+    "marker_scan_self_seconds": 250.0146578,
+    "receipt_sha256": "3ffa5b225c5e089165fce363e2a5636ddf0c73e6440443f8ad09698f9c411025",
+    "revision": "bb677f9a08cf0aa66a240ba359e0ade6891c368b"
+  },
+  "paths": [
+    "docs/paid-launch/ci-guard-scan-binding-v1.json",
+    "docs/paid-launch/ci-guard-scan.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/guard_scan_scope.py",
+    "tests/test_scope_guard_scan.py"
+  ],
+  "previous_guard_sha256": "2813a741dbde591363ad64b2c6aebbb3ceec8dacdf38b6351fc6e5c19133d0a4",
+  "reviewed_blobs": {
+    "docs/paid-launch/ci-guard-scan.md": "41e881bcb3b83a113b1aaaa988f43e48b7248a0a",
+    "scripts/guard_scan_scope.py": "58afb28ffd23e9e5d02c80df27cabe0feed59d03",
+    "tests/test_scope_guard_scan.py": "4e1cb84cbe9c00357cdc9bbda928077cafda8407"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}

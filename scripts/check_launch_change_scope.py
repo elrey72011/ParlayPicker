@@ -21765,6 +21765,38 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+GUARD_SCAN_BOOTSTRAP = True
+GUARD_SCAN_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ci-guard-scan-v1.json'
+GUARD_SCAN_BINDING_PATH = 'docs/paid-launch/ci-guard-scan-binding-v1.json'
+GUARD_SCAN_BINDING_SHA256 = 'e12b52a2bba69f0d048df6d0038b74f3fdf24ad8ed67ddbf83c9bc5b039ec205'
+GUARD_SCAN_REVIEWED_GUARD_SHA256 = 'e75881a4a9fbef578589901dfefa13932cac8e6092a3ee7d4933599decb7aebe'
+GUARD_SCAN_PREVIOUS_GUARD_SHA256 = '2813a741dbde591363ad64b2c6aebbb3ceec8dacdf38b6351fc6e5c19133d0a4'
+GUARD_SCAN_SOURCE_RECONSTRUCTIONS = {}
+from functools import lru_cache as _scan_lru_cache
+def _guard_scan_guard_matches(source):
+    reviewed=GUARD_SCAN_REVIEWED_GUARD_SHA256.encode('ascii')
+    return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_SCAN_REVIEWED_GUARD_SHA256
+@_scan_lru_cache(maxsize=2)
+def _guard_scan_cached_base_source(source,reviewed,parent):
+    if b'\nGUARD_SCAN_BOOTSTRAP =' not in source:return source
+    _require(reviewed==GUARD_SCAN_REVIEWED_GUARD_SHA256 and parent==GUARD_SCAN_PREVIOUS_GUARD_SHA256 and _guard_scan_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    prefix,own=source.split(b'\nGUARD_SCAN_BOOTSTRAP =',1)
+    previous=prefix+b'\nGUARD_PERFORMANCE_BOOTSTRAP ='+own.split(b'\nGUARD_PERFORMANCE_BOOTSTRAP =',1)[1]
+    start=previous.index(b'\n_scan_early_v1_match =');end=previous.index(b'\n_performance_early_match =',start)
+    previous=previous[:start]+previous[end:]
+    start=previous.index(b'\ndef _guard_scan_binding():');end=previous.index(b'\ndef main() -> int:',start)
+    previous=previous[:start]+previous[end:]
+    dispatch=b'if exists_at("HEAD", GUARD_SCAN_POLICY_PATH):\n            code, report = _run_guard_scan_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", GUARD_PERFORMANCE_POLICY_PATH):'
+    _require(previous.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    previous=previous.replace(dispatch,b'if exists_at("HEAD", GUARD_PERFORMANCE_POLICY_PATH):',1)
+    _require(hashlib.sha256(previous).hexdigest()==parent,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    return previous
+def _guard_scan_base_source(source):
+    _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    return _guard_scan_cached_base_source(source,GUARD_SCAN_REVIEWED_GUARD_SHA256,GUARD_SCAN_PREVIOUS_GUARD_SHA256)
+def _guard_scan_previous_source(path,source):
+    return _guard_scan_base_source(source) if path==GUARD_PATH else source
+
 GUARD_PERFORMANCE_BOOTSTRAP = True
 GUARD_PERFORMANCE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ci-guard-performance-v1.json'
 GUARD_PERFORMANCE_BINDING_PATH = 'docs/paid-launch/ci-guard-performance-binding-v1.json'
@@ -21971,6 +22003,16 @@ def _nfl_owner_base_source(source):
     previous = source.split(b'\nNFL_OWNER_BOOTSTRAP =', 1)[0] + NFL_OWNER_PREVIOUS_TAIL
     _require(hashlib.sha256(previous).hexdigest() == '0ab2edd3f3a246fde7aa25c81a6e00bceb4a41621f2fb2ea276392725e29cb6b', 'PREVIOUS_GUARD_LOGIC_CHANGED')
     return previous
+
+_scan_early_v1_match = _guard_performance_guard_matches
+def _guard_performance_guard_matches(source):return _scan_early_v1_match(_guard_scan_base_source(source))
+@_scan_lru_cache(maxsize=2)
+def _guard_scan_v1_presence(source,reviewed,parent):
+    if b'\nGUARD_PERFORMANCE_BOOTSTRAP =' not in source:return source
+    return _guard_performance_cached_base_source(source,reviewed,parent)
+def _guard_performance_base_source(source):
+    source=_guard_scan_base_source(source)
+    return _guard_scan_v1_presence(source,GUARD_PERFORMANCE_REVIEWED_GUARD_SHA256,GUARD_PERFORMANCE_PREVIOUS_GUARD_SHA256)
 
 _performance_early_match = _nfl_odds_timing_guard_matches
 _performance_early_base = _nfl_odds_timing_base_source
@@ -22868,6 +22910,39 @@ _scope_git_batch_runtime.__file__=str(_performance_batch_path)
 exec(compile(_performance_batch_raw,str(_performance_batch_path),'exec'),_scope_git_batch_runtime.__dict__)
 _scope_git_batch_runtime.install(sys.modules[__name__])
 
+def _guard_scan_binding():
+    raw=(ROOT/GUARD_SCAN_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==GUARD_SCAN_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    return json.loads(raw)
+def _guard_scan_wrap(name,method):
+    def wrapped(*args,**kwargs):
+        if name.endswith(('_previous_main_source','_parent_main_source','_previous_source')):
+            path,source,*rest=args
+            return method(path,_guard_scan_previous_source(path,source),*rest,**kwargs)
+        source,*rest=args
+        return method(_guard_scan_base_source(source),*rest,**kwargs)
+    for attr in ('cache_clear','cache_info'):
+        if hasattr(method,attr):setattr(wrapped,attr,getattr(method,attr))
+    return wrapped
+for _scan_name,_scan_method in list(globals().items()):
+    if callable(_scan_method) and not _scan_name.startswith('_guard_scan_') and _scan_name != '_guard_performance_base_source' and (
+        _scan_name.endswith(('_previous_guard_source','_parent_guard_source','_previous_main_source','_parent_main_source','_raw_guard_matches')) or
+        _scan_name in {'_discovery_guard_matches','_cloud_guard_matches','_cloud_peel_exact_guard','_owner_guard_matches','_owner_base_source','_owner_previous_source','_nfl_owner_guard_matches','_nfl_owner_base_source','_nfl_owner_previous_source','_nfl_observed_guard_matches','_nfl_observed_base_source','_nfl_observed_previous_source','_nfl_scoring_guard_matches','_nfl_scoring_base_source','_nfl_scoring_previous_source','_nfl_diagnostics_guard_matches','_nfl_diagnostics_base_source','_nfl_diagnostics_previous_source','_ci_timing_guard_matches','_ci_timing_base_source','_ci_timing_previous_source','_nfl_scenario_guard_matches','_nfl_scenario_base_source','_nfl_scenario_previous_source','_nfl_odds_guard_matches','_nfl_odds_base_source','_nfl_odds_timing_guard_matches','_nfl_odds_timing_base_source','_guard_performance_guard_matches','_guard_performance_previous_source'}):
+        globals()[_scan_name]=_guard_scan_wrap(_scan_name,_scan_method)
+_scan_original_dfs_guard_matches=_dfs_guard_matches
+def _dfs_guard_matches(source,reviewed):
+    if reviewed==GUARD_SCAN_REVIEWED_GUARD_SHA256:return _guard_scan_guard_matches(source)
+    try:return _scan_original_dfs_guard_matches(_guard_scan_base_source(source),reviewed)
+    except ValueError:return False
+def _run_guard_scan_integrated(manifest_path,base):
+    import importlib.util
+    binding=_guard_scan_binding();path=ROOT/'scripts/guard_scan_scope.py'
+    raw=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==binding['reviewed_blobs']['scripts/guard_scan_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('guard_scan_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    with _scope_git_batch_runtime.validation_stream(ROOT):
+        return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -22875,7 +22950,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", GUARD_PERFORMANCE_POLICY_PATH):
+        if exists_at("HEAD", GUARD_SCAN_POLICY_PATH):
+            code, report = _run_guard_scan_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", GUARD_PERFORMANCE_POLICY_PATH):
             code, report = _run_guard_performance_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NFL_ODDS_TIMING_POLICY_PATH):
             code, report = _run_nfl_odds_timing_integrated(args.manifest, args.base)
