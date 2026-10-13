@@ -1,0 +1,385 @@
+{
+  "approval_reference": "Robert authorized CI closure: reproduced fixture-isolation correction, completed-evidence-only advisory scope costs, preserved five shards/scheduler/workflows/30-minute gates, exact ordered original implementation and fixture commits followed by final implementation and policy-only seal. No new validation decision cache; original PDF acquisition/reader semantics unchanged. Robert previously authorized a necessary explicitly versioned original-PDF evidence adapter after actual v4 reproduction, synthetic full private-path validation and a separate draft PR. Preserve all original readers, clocks, source/review/model/wagering gates, response limits, frozen predecessor bindings, tests and five-shard CI. No collection or authentic inference.",
+  "approved_existing_test_changes": {
+    "tests/test_mlb_nhl_research_scope.py": "Exact fixture Git helper only: synchronous gc.autoDetach=false and maintenance.auto=false. Original assertions and isolated mutable copies unchanged.",
+    "tests/test_nfl_listing_metadata_scope.py": "Only two frozen metadata-transition tests receive the exact hash-bound predecessor profile in an isolated repository. All historical assertions unchanged; actual scheduler and successor costs tested separately."
+  },
+  "base": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+  "base_tree": "7de06f6fb602faf3b1485a90a9c3edb11f3a4635",
+  "implementation_ancestors": [
+    "f2ea50b77e63554abf0f6aeed55845b326ce6e9b",
+    "f4dba70c768757a3c6c9c31998a9140786de0806"
+  ],
+  "main_base": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+  "main_tree": "7de06f6fb602faf3b1485a90a9c3edb11f3a4635",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app/ui/nfl_private_research.py",
+    "app_core/nfl_pdf_evidence.py",
+    "app_core/nfl_pdf_interpretation.py",
+    "app_core/nfl_pdf_research.py",
+    "app_core/nfl_private_routes.py",
+    "docs/paid-launch/nfl-pdf-ci-closure-v1.md",
+    "docs/paid-launch/nfl-pdf-evidence-binding-v1.json",
+    "docs/paid-launch/nfl-pdf-evidence-v1.md",
+    "requirements.txt",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/nfl_pdf_scope.py",
+    "tests/test_mlb_nhl_research_scope.py",
+    "tests/test_nfl_listing_metadata_scope.py",
+    "tests/test_nfl_pdf_ci_scope.py",
+    "tests/test_nfl_pdf_evidence.py",
+    "tests/test_nfl_pdf_scope.py",
+    "tests/test_scope_fixture_isolation.py"
+  ],
+  "previous_guard_sha256": "bfe64f0312f7d5c4eddbc9273f715406bb3132d420ed0f6f414717469d4a1c6c",
+  "reconstruction_json_sha256": "65d2c349e508e0bb277dbe4cb469b97ff14928cb726581699a87e63969cd93eb",
+  "reviewed_blobs": {
+    "app/ui/nfl_private_research.py": "5d68beb06a41279f35009d476af96e2f0c3d4019",
+    "app_core/nfl_pdf_evidence.py": "d565db90532f1cdea65fa6465bdd0d0edba501a6",
+    "app_core/nfl_pdf_interpretation.py": "e68395eba9af7c63f5a5804bda7c7b2ce18039c4",
+    "app_core/nfl_pdf_research.py": "d001f8d07f8564f80b94fba330d79d78d7b3f598",
+    "app_core/nfl_private_routes.py": "83fcc691d7d2c08ef8cf234551a7ee922a4d3fe6",
+    "docs/paid-launch/nfl-pdf-ci-closure-v1.md": "c59df5a1b4b1ba0ace137a71c4ba329afe5f80e8",
+    "docs/paid-launch/nfl-pdf-evidence-v1.md": "4247ea421fc67e777473950023f1bbcd72d088eb",
+    "requirements.txt": "f32801835ded3636b6e431cade936a3431d15d31",
+    "scripts/ci_test_file_costs_v1.json": "fe5c9bf532e562ddab652d32231c2c5542347cf6",
+    "scripts/nfl_pdf_scope.py": "8410e9d9da10646af250eed5b73ef04bd90d842b",
+    "tests/test_mlb_nhl_research_scope.py": "98e70e86928274ba3d044bbfc57e8470e6c0c935",
+    "tests/test_nfl_listing_metadata_scope.py": "358a9c9e01ea916c930fe84193b959c7defa136b",
+    "tests/test_nfl_pdf_ci_scope.py": "7ca6e47f55b1f9a4470851eea38991f7970cd146",
+    "tests/test_nfl_pdf_evidence.py": "c04b2f94fb0dacf983c5a2af374139841fe6135f",
+    "tests/test_nfl_pdf_scope.py": "fc4835579f5aaa6afb73cdc14965dd8cfe1c0a6e",
+    "tests/test_scope_fixture_isolation.py": "7b51c2b16e21cc8710be427154f573ac50307e95"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app/ui/nfl_private_research.py": {
+      "after_sha256": "3fb921b1bc8d8f1262700bd512961af4d45a574d40c7488c25321d6186d25f09",
+      "before_sha256": "f34fbb1ce8cd184d79cecfc62d7cb58adacc3b661e5963a8754c0dd657909d53",
+      "reverse_patches": [
+        {
+          "end": 2847,
+          "start": 2631,
+          "text": "                    if evidence.saved_route(row).VERSION in {'nfl-owner-observed-private-inputs-v2','nfl-owner-scoring-private-inputs-v3','nfl-owner-interpreted-private-inputs-v4'}:\n"
+        },
+        {
+          "end": 3154,
+          "start": 3015,
+          "text": "                    if evidence.saved_route(row).VERSION == 'nfl-owner-interpreted-private-inputs-v4':\n"
+        },
+        {
+          "end": 3799,
+          "start": 3521,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/nfl_private_routes.py": {
+      "after_sha256": "c99dd86c667319a3b4edcffcd44e0107c209fc6503733bcdd57e22360fe47df8",
+      "before_sha256": "03fb6ab692cdee57418faac252fb282c08398bbbd2ff66a35d03392471ef95f6",
+      "reverse_patches": [
+        {
+          "end": 293,
+          "start": 134,
+          "text": "from app_core import nfl_owner_research as v1, nfl_observed_research as v2, nfl_scoring_research as v3, nfl_interpreted_research as v4\n"
+        },
+        {
+          "end": 367,
+          "start": 294,
+          "text": "REASONS = v1.REASONS | v2.REASONS | v3.REASONS | v4.REASONS\n"
+        },
+        {
+          "end": 821,
+          "start": 612,
+          "text": "    v1.require(version in {v1.VERSION, v2.VERSION, v3.VERSION, v4.VERSION}, 'NFL_PRIVATE_PACKET_SCHEMA')\n    return {v1.VERSION:v1,v2.VERSION:v2,v3.VERSION:v3,v4.VERSION:v4}[version]\n"
+        },
+        {
+          "end": 1686,
+          "start": 1412,
+          "text": "    with v1.selected([p for p in packets if route(p) is v1]), v2.selected([p for p in packets if route(p) is v2]), v3.selected([p for p in packets if route(p) is v3]), v4.selected([p for p in packets if route(p) is v4]):\n"
+        },
+        {
+          "end": 2043,
+          "start": 1807,
+          "text": "    return not (v1.IN_NATIVE.get() or v2.IN_NATIVE.get() or v3.IN_NATIVE.get() or v4.IN_NATIVE.get()) and bool(v1.SELECTED.get() or v2.SELECTED.get() or v3.SELECTED.get() or v4.SELECTED.get())\n"
+        },
+        {
+          "end": 2221,
+          "start": 2109,
+          "text": "    packets = v1.SELECTED.get() + v2.SELECTED.get() + v3.SELECTED.get() + v4.SELECTED.get()\n"
+        },
+        {
+          "end": 3032,
+          "start": 2925,
+          "text": "        return {v1.RESULT:v1,v2.RESULT:v2,v3.RESULT:v3,v4.RESULT:v4}.get(p.get('version'),v1)\n"
+        }
+      ]
+    },
+    "requirements.txt": {
+      "after_sha256": "8d40c306dd66255c64311c2e6ddac51023a4e61906d9cc86f0d449a3bded8a09",
+      "before_sha256": "b463b22c68f81a63cf41e5372764add4231041a9bb5d19b567e4f1c688e5863e",
+      "reverse_patches": [
+        {
+          "end": 927,
+          "start": 822,
+          "text": ""
+        }
+      ]
+    },
+    "scripts/ci_test_file_costs_v1.json": {
+      "after_sha256": "ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d",
+      "before_sha256": "0abad088b63a2d40f862854326c262603b2944550156dbfa5ea9707a2790ec00",
+      "reverse_patches": [
+        {
+          "end": 36110,
+          "start": 35142,
+          "text": ""
+        },
+        {
+          "end": 36287,
+          "start": 36260,
+          "text": "      \"seconds\": 267.053,\n"
+        },
+        {
+          "end": 65624,
+          "start": 64642,
+          "text": ""
+        },
+        {
+          "end": 65824,
+          "start": 65796,
+          "text": "      \"seconds\": 85.123,\n"
+        },
+        {
+          "end": 99659,
+          "start": 98691,
+          "text": ""
+        },
+        {
+          "end": 99871,
+          "start": 99843,
+          "text": "      \"seconds\": 138.4738,\n"
+        },
+        {
+          "end": 107875,
+          "start": 106917,
+          "text": ""
+        },
+        {
+          "end": 108075,
+          "start": 108047,
+          "text": "      \"seconds\": 251.68095,\n"
+        },
+        {
+          "end": 188939,
+          "start": 187957,
+          "text": ""
+        },
+        {
+          "end": 189138,
+          "start": 189111,
+          "text": "      \"seconds\": 198.78785,\n"
+        },
+        {
+          "end": 216377,
+          "start": 215411,
+          "text": ""
+        },
+        {
+          "end": 216588,
+          "start": 216561,
+          "text": "      \"seconds\": 47.84,\n"
+        },
+        {
+          "end": 222530,
+          "start": 221546,
+          "text": ""
+        },
+        {
+          "end": 222743,
+          "start": 222715,
+          "text": "      \"seconds\": 354.2598,\n"
+        },
+        {
+          "end": 227392,
+          "start": 226402,
+          "text": ""
+        },
+        {
+          "end": 227602,
+          "start": 227574,
+          "text": "      \"seconds\": 76.3025,\n"
+        },
+        {
+          "end": 251703,
+          "start": 250723,
+          "text": ""
+        },
+        {
+          "end": 251912,
+          "start": 251885,
+          "text": "      \"seconds\": 243.1721,\n"
+        },
+        {
+          "end": 256257,
+          "start": 255277,
+          "text": ""
+        },
+        {
+          "end": 256432,
+          "start": 256405,
+          "text": "      \"seconds\": 31.1259,\n"
+        },
+        {
+          "end": 264733,
+          "start": 263765,
+          "text": ""
+        },
+        {
+          "end": 264981,
+          "start": 264954,
+          "text": "      \"seconds\": 140.81175,\n"
+        },
+        {
+          "end": 269218,
+          "start": 268236,
+          "text": ""
+        },
+        {
+          "end": 269394,
+          "start": 269366,
+          "text": "      \"seconds\": 102.6076,\n"
+        },
+        {
+          "end": 276298,
+          "start": 275330,
+          "text": ""
+        },
+        {
+          "end": 276474,
+          "start": 276446,
+          "text": "      \"seconds\": 158.41365,\n"
+        },
+        {
+          "end": 283020,
+          "start": 282038,
+          "text": ""
+        },
+        {
+          "end": 283195,
+          "start": 283168,
+          "text": "      \"seconds\": 63.08325,\n"
+        },
+        {
+          "end": 305424,
+          "start": 304442,
+          "text": ""
+        },
+        {
+          "end": 305633,
+          "start": 305606,
+          "text": "      \"seconds\": 70.6859,\n"
+        },
+        {
+          "end": 310200,
+          "start": 309220,
+          "text": ""
+        },
+        {
+          "end": 310411,
+          "start": 310384,
+          "text": "      \"seconds\": 155.618,\n"
+        },
+        {
+          "end": 342336,
+          "start": 341354,
+          "text": ""
+        },
+        {
+          "end": 342570,
+          "start": 342542,
+          "text": "      \"seconds\": 121.9851,\n"
+        },
+        {
+          "end": 427263,
+          "start": 426299,
+          "text": ""
+        },
+        {
+          "end": 427472,
+          "start": 427447,
+          "text": "      \"seconds\": 97.0738,\n"
+        },
+        {
+          "end": 439710,
+          "start": 438754,
+          "text": ""
+        },
+        {
+          "end": 439943,
+          "start": 439916,
+          "text": "      \"seconds\": 108.52205,\n"
+        },
+        {
+          "end": 442157,
+          "start": 441189,
+          "text": ""
+        },
+        {
+          "end": 442367,
+          "start": 442339,
+          "text": "      \"seconds\": 171.72145,\n"
+        },
+        {
+          "end": 478409,
+          "start": 477439,
+          "text": ""
+        },
+        {
+          "end": 478620,
+          "start": 478592,
+          "text": "      \"seconds\": 416.10105,\n"
+        },
+        {
+          "end": 487788,
+          "start": 486820,
+          "text": ""
+        },
+        {
+          "end": 487998,
+          "start": 487970,
+          "text": "      \"seconds\": 143.60855,\n"
+        },
+        {
+          "end": 563058,
+          "start": 537872,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_mlb_nhl_research_scope.py": {
+      "after_sha256": "7087911d6a1bc83ecbce0d021af25b857c127333f3276a434ceb1d1c4b6712b1",
+      "before_sha256": "b5976466071344efadb653869024c7607acc989c404b9347edfce6850a19b42e",
+      "reverse_patches": [
+        {
+          "end": 620,
+          "start": 389,
+          "text": "def git(repo,*a):return subprocess.check_output([\"git\",*a],cwd=repo).decode().strip()\n"
+        }
+      ]
+    },
+    "tests/test_nfl_listing_metadata_scope.py": {
+      "after_sha256": "5059f8354a8c4f4d757d0ec3e15c68ae8f30b437d09226a8c26f45e987ed4c3b",
+      "before_sha256": "62cf26f12f0f5dc479e5159497e67b8877bb765f07af001538929319860a5b55",
+      "reverse_patches": [
+        {
+          "end": 1488,
+          "start": 309,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

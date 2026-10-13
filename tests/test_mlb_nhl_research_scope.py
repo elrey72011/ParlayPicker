@@ -8,7 +8,9 @@ from scripts.benchmark_drive_history_loading import blocked_network
 SOURCE=Path(__file__).resolve().parents[1]
 
 
-def git(repo,*a):return subprocess.check_output(["git",*a],cwd=repo).decode().strip()
+def git(repo,*a):
+ # Synthetic fixture copies require quiescent housekeeping; all assertions unchanged.
+ return subprocess.check_output(["git","-c","gc.autoDetach=false","-c","maintenance.auto=false",*a],cwd=repo).decode().strip()
 def raw(repo,rev,path):return subprocess.check_output(["git","show",rev+":"+path],cwd=repo)
 def write(repo,path,data):
  p=repo/path;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)

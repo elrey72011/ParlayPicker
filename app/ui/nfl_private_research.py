@@ -35,11 +35,13 @@ def render(candidates=None):
                     st.write('OWNER_REVIEWED / PRIVATE_RESEARCH — ' + str(row.get('best_pick', row.get('market_type', ''))))
                     st.metric('Raw NFL research probability', f"{assessed['probability']:.2%}")
                     st.caption('Uncalibrated; EV/edge unavailable. PASS — zero stake. Private evidence is excluded from public packages.')
-                    if evidence.saved_route(row).VERSION in {'nfl-owner-observed-private-inputs-v2','nfl-owner-scoring-private-inputs-v3','nfl-owner-interpreted-private-inputs-v4'}:
+                    if evidence.saved_route(row).VERSION in {'nfl-owner-observed-private-inputs-v2','nfl-owner-scoring-private-inputs-v3','nfl-owner-interpreted-private-inputs-v4','nfl-owner-pdf-private-inputs-v5'}:
                         st.caption('Prospective first-observation evidence; publisher first-publication time UNKNOWN. This supplies no historical availability claim.')
-                    if evidence.saved_route(row).VERSION == 'nfl-owner-interpreted-private-inputs-v4':
+                    if evidence.saved_route(row).VERSION in {'nfl-owner-interpreted-private-inputs-v4','nfl-owner-pdf-private-inputs-v5'}:
                         listing = evidence.private_display(row)['interpreted_listing']
                         st.caption('Owner-reviewed source interpretation; external edition: ' + listing['rule_edition'] + '. Conditional on a decided full-game result; FVS is not an automatic refund. Original provider-market observation clock retained; operator update UNKNOWN.')
+                        if evidence.saved_route(row).VERSION == 'nfl-owner-pdf-private-inputs-v5':
+                            st.caption('Original PDF bytes and pinned page-located extraction retained separately. Extraction creates no owner review or contract applicability.')
                 else:
                     st.write('Private NFL estimate unavailable: ' + assessed['reason'])
     render_scenario()

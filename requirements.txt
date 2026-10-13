@@ -45,3 +45,6 @@ google-auth>=2.0,<3
 
 # Direct cPanel publication over pinned SSH
 paramiko>=3.5,<5
+
+# Explicit bounded original-PDF evidence extraction; version and package bytes are bound.
+pypdf==6.20.0
