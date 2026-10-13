@@ -1,8 +1,8 @@
-name: Scope performance probe (one authorized run)
+name: NFL listing scope comparison (bounded)
 
 on:
   push:
-    branches: [codex/scope-performance-probe]
+    branches: [codex/nfl-listing-performance-probe]
 
 permissions:
   contents: read
@@ -15,11 +15,9 @@ jobs:
       matrix:
         include:
           - label: main
-            revision: 457a7f3e43abfbd95de64e4d9c79e2ca82bdfb21
-          - label: pre-optimization
-            revision: 732e179b8ae976c9d87f963998635909978810d3
-          - label: implementation
-            revision: a561e6a1018d2106c33f934b879ff2169f50e7e7
+            revision: e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c
+          - label: listing
+            revision: 028080969ed341e5d92b7445352deac8ba2ae288
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

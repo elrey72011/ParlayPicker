@@ -17,11 +17,11 @@ import threading
 import time
 
 FILES = ["tests/test_slate_audit_scope.py", "tests/test_canonical_download_scope.py",
-         "tests/test_football_research_scope.py", "tests/test_ncaaf_compatibility_scope.py"]
+         "tests/test_football_research_scope.py", "tests/test_nfl_inputs_scope.py"]
 SELECTION = ("exact_seal_and_ci_merge_preserve_predecessor or "
              "(dirty_staged_committed_resealed_changes_reject and core/protected.py) or "
              "(mutated_policy_rejects and implementation_changes) or "
-             "exact_predecessor_source_reconstruction")
+             "exact_predecessor_source_reconstruction or test_nfl_inputs_scope")
 
 
 def main():
@@ -60,6 +60,9 @@ def main():
         for name, module in list(sys.modules.items()):
             if module is None: continue
             for key, value in list(vars(module).items()):
+                memo=getattr(value,"reconstruction_memo",None)
+                if memo is not None:
+                    found[name+":"+key+":pure"] = dict(hits=memo.hits,misses=memo.misses,entries=len(memo.entries),retained_bytes=memo.retained_bytes,fields=value.reconstruction_context_fields)
                 if callable(value) and callable(getattr(value, "cache_info", None)):
                     try:
                         info = value.cache_info()
