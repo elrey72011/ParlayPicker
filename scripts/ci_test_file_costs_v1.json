@@ -1048,13 +1048,33 @@
       "measurement_complete": true,
       "original_measured_seconds": 237.008,
       "path": "tests/test_canonical_download_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 68,
+        "junit_sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 328.782,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:696a4f0e0905b8fa7004ac6d3a05a26a555d701bb41098652b26a81707437ad5",
+          "artifact_id": 11815624752,
+          "assignment_manifest_sha256": "392bf8375b0661cc142e451c984ad5880ee4a918ec0344c10c1de302a107a739",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 328.782,
+          "xml_tests": 68
+        }
+      },
       "profiled_tests": 68,
       "references": [
         "oct11-main-1",
         "refresh1-completed-2",
         "listing-completed-main-3"
       ],
-      "seconds": 267.053,
+      "seconds": 378.0993,
       "variance_multiplier": 1.15
     },
     {
@@ -1907,6 +1927,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 51.646,
       "path": "tests/test_dfs_scope_policy.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 60,
+        "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "retained_source": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 147.507,
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 147.507,
+          "xml_tests": 60
+        }
+      },
       "profiled_tests": 60,
       "references": [
         "oct11-main-3",
@@ -1914,7 +1954,7 @@
         "refresh1-completed-3",
         "listing-completed-main-1"
       ],
-      "seconds": 85.123,
+      "seconds": 169.63305,
       "variance_multiplier": 1.15
     },
     {
@@ -2915,6 +2955,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 107.537,
       "path": "tests/test_football_catalog_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 49,
+        "junit_sha256": "4119012e05a1eb46b54ee23727a75e98c50cbf010f212cf0881da9687effef3c",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 222.559,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:e4e75c31588d847ed1be6471bdc0610588ec136dbf1f9285ac594b73c43ec6ea",
+          "artifact_id": 11815794067,
+          "assignment_manifest_sha256": "977be399694a33fadc441dbc521550e530149abc28c3aebe811da40d51bb57a8",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "4119012e05a1eb46b54ee23727a75e98c50cbf010f212cf0881da9687effef3c",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 222.559,
+          "xml_tests": 49
+        }
+      },
       "profiled_tests": 49,
       "references": [
         "oct11-main-1",
@@ -2922,7 +2982,7 @@
         "listing-completed-main-1",
         "listing-completed-pr-1"
       ],
-      "seconds": 138.4738,
+      "seconds": 255.94285,
       "variance_multiplier": 1.15
     },
     {
@@ -3135,6 +3195,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 231.204,
       "path": "tests/test_football_research_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 75,
+        "junit_sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+        "retained_source": "nfl-pdf-ci-main-9ace",
+        "seconds": 305.121,
+        "source_identity": {
+          "api_head": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "artifact_digest": "sha256:1e538fbf543beca16ffb1be90b4befce0b96cec7f26a0c4b0f3405bdd6d581dc",
+          "artifact_id": 11807816727,
+          "assignment_manifest_sha256": "40f82f2daaad347e4403a408ae5a40184cddb71b5de9adca0e9397507019af7b",
+          "attempt": 1,
+          "checkout_commit": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "completed": true,
+          "junit_sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+          "run_id": 38387365489,
+          "testcase_sum_seconds": 305.121,
+          "xml_tests": 75
+        }
+      },
       "profiled_tests": 75,
       "references": [
         "oct11-main-3",
@@ -3142,7 +3222,7 @@
         "refresh1-completed-3",
         "listing-completed-main-3"
       ],
-      "seconds": 251.68095,
+      "seconds": 350.88915,
       "variance_multiplier": 1.15
     },
     {
@@ -5572,6 +5652,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 178.741,
       "path": "tests/test_mlb_nhl_research_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 56,
+        "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "retained_source": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 271.864,
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 271.864,
+          "xml_tests": 56
+        }
+      },
       "profiled_tests": 56,
       "references": [
         "oct11-main-3",
@@ -5579,7 +5679,7 @@
         "refresh1-completed-3",
         "listing-completed-main-3"
       ],
-      "seconds": 198.78785,
+      "seconds": 312.6436,
       "variance_multiplier": 1.15
     },
     {
@@ -6371,6 +6471,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 21.113,
       "path": "tests/test_ncaaf_chronology_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 15,
+        "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 73.403,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 73.403,
+          "xml_tests": 15
+        }
+      },
       "profiled_tests": 15,
       "references": [
         "oct11-main-3",
@@ -6378,7 +6498,7 @@
         "listing-completed-main-2",
         "listing-completed-pr-1"
       ],
-      "seconds": 47.84,
+      "seconds": 84.41345,
       "variance_multiplier": 1.15
     },
     {
@@ -6525,6 +6645,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 364.92,
       "path": "tests/test_ncaaf_compatibility_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 118,
+        "junit_sha256": "fadb6815f74bfc335128bab7d9ec15b4851e3b5c9cfca5b741033f9e3ed857ea",
+        "retained_source": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 583.735,
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:beeefdc95850191f6e27409f7da217fc8205cbcedf9656fbc6ecc8c54f910694",
+          "artifact_id": 11796004214,
+          "assignment_manifest_sha256": "a5da7fb370531b66de6ad664e0e6141efc49cd7fcb3d3b5049ec01340984f1b4",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "fadb6815f74bfc335128bab7d9ec15b4851e3b5c9cfca5b741033f9e3ed857ea",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 583.735,
+          "xml_tests": 118
+        }
+      },
       "profiled_tests": 118,
       "references": [
         "oct11-main-1",
@@ -6532,7 +6672,7 @@
         "listing-completed-main-1",
         "listing-completed-pr-1"
       ],
-      "seconds": 354.2598,
+      "seconds": 671.29525,
       "variance_multiplier": 1.15
     },
     {
@@ -6643,6 +6783,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 41.77,
       "path": "tests/test_ncaaf_coverage_scope_policy.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 47,
+        "junit_sha256": "4119012e05a1eb46b54ee23727a75e98c50cbf010f212cf0881da9687effef3c",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 127.31700000000001,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:e4e75c31588d847ed1be6471bdc0610588ec136dbf1f9285ac594b73c43ec6ea",
+          "artifact_id": 11815794067,
+          "assignment_manifest_sha256": "977be399694a33fadc441dbc521550e530149abc28c3aebe811da40d51bb57a8",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "4119012e05a1eb46b54ee23727a75e98c50cbf010f212cf0881da9687effef3c",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 127.31700000000001,
+          "xml_tests": 47
+        }
+      },
       "profiled_tests": 47,
       "references": [
         "oct11-pr-2",
@@ -6650,7 +6810,7 @@
         "listing-completed-main-1",
         "listing-completed-pr-1"
       ],
-      "seconds": 76.3025,
+      "seconds": 146.41455,
       "variance_multiplier": 1.15
     },
     {
@@ -7352,6 +7512,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 154.982,
       "path": "tests/test_ncaaf_research_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 61,
+        "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "retained_source": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 305.65,
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 305.65,
+          "xml_tests": 61
+        }
+      },
       "profiled_tests": 61,
       "references": [
         "oct11-pr-2",
@@ -7359,7 +7539,7 @@
         "listing-completed-main-2",
         "listing-completed-pr-2"
       ],
-      "seconds": 243.1721,
+      "seconds": 351.4975,
       "variance_multiplier": 1.15
     },
     {
@@ -7462,13 +7642,33 @@
       "measurement_complete": true,
       "original_measured_seconds": 22.651,
       "path": "tests/test_ncaaf_schedule_scope_policy.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 26,
+        "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "retained_source": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 55.019,
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 55.019,
+          "xml_tests": 26
+        }
+      },
       "profiled_tests": 26,
       "references": [
         "oct11-pr-3",
         "refresh1-completed-3",
         "listing-completed-main-1"
       ],
-      "seconds": 31.1259,
+      "seconds": 63.27185,
       "variance_multiplier": 1.15
     },
     {
@@ -7691,6 +7891,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 113.508,
       "path": "tests/test_nfl_admission_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 48,
+        "junit_sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 170.996,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:696a4f0e0905b8fa7004ac6d3a05a26a555d701bb41098652b26a81707437ad5",
+          "artifact_id": 11815624752,
+          "assignment_manifest_sha256": "392bf8375b0661cc142e451c984ad5880ee4a918ec0344c10c1de302a107a739",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 170.996,
+          "xml_tests": 48
+        }
+      },
       "profiled_tests": 48,
       "references": [
         "oct11-main-cancel-2",
@@ -7699,7 +7919,7 @@
         "refresh1-completed-2",
         "listing-completed-main-3"
       ],
-      "seconds": 140.81175,
+      "seconds": 196.6454,
       "variance_multiplier": 1.15
     },
     {
@@ -7797,13 +8017,33 @@
       "measurement_complete": true,
       "original_measured_seconds": 64.768,
       "path": "tests/test_nfl_calibration_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 35,
+        "junit_sha256": "fadb6815f74bfc335128bab7d9ec15b4851e3b5c9cfca5b741033f9e3ed857ea",
+        "retained_source": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 125.047,
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:beeefdc95850191f6e27409f7da217fc8205cbcedf9656fbc6ecc8c54f910694",
+          "artifact_id": 11796004214,
+          "assignment_manifest_sha256": "a5da7fb370531b66de6ad664e0e6141efc49cd7fcb3d3b5049ec01340984f1b4",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "fadb6815f74bfc335128bab7d9ec15b4851e3b5c9cfca5b741033f9e3ed857ea",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 125.047,
+          "xml_tests": 35
+        }
+      },
       "profiled_tests": 35,
       "references": [
         "oct11-pr-2",
         "refresh1-cancelled-1",
         "listing-completed-main-2"
       ],
-      "seconds": 102.6076,
+      "seconds": 143.80405,
       "variance_multiplier": 1.15
     },
     {
@@ -7980,13 +8220,33 @@
       "measurement_complete": true,
       "original_measured_seconds": 122.329,
       "path": "tests/test_nfl_inputs_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 51,
+        "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 210.847,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 210.847,
+          "xml_tests": 51
+        }
+      },
       "profiled_tests": 51,
       "references": [
         "oct11-pr-3",
         "refresh1-completed-3",
         "listing-completed-main-3"
       ],
-      "seconds": 158.41365,
+      "seconds": 242.47405,
       "variance_multiplier": 1.15
     },
     {
@@ -8155,13 +8415,33 @@
       "measurement_complete": true,
       "original_measured_seconds": 73.443,
       "path": "tests/test_nfl_native_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 32,
+        "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "retained_source": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 122.304,
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 122.304,
+          "xml_tests": 32
+        }
+      },
       "profiled_tests": 32,
       "references": [
         "oct11-pr-3",
         "refresh1-cancelled-1",
         "listing-completed-main-1"
       ],
-      "seconds": 63.08325,
+      "seconds": 140.6496,
       "variance_multiplier": 1.15
     },
     {
@@ -8792,6 +9072,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 79.727,
       "path": "tests/test_nfl_ui_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 34,
+        "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "retained_source": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 137.538,
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 137.538,
+          "xml_tests": 34
+        }
+      },
       "profiled_tests": 34,
       "references": [
         "oct11-pr-3",
@@ -8799,7 +9099,7 @@
         "listing-completed-main-1",
         "listing-completed-pr-1"
       ],
-      "seconds": 70.6859,
+      "seconds": 158.1687,
       "variance_multiplier": 1.15
     },
     {
@@ -8907,6 +9207,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 96.313,
       "path": "tests/test_nhl_puck_line_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 43,
+        "junit_sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+        "retained_source": "nfl-pdf-ci-main-9ace",
+        "seconds": 178.18200000000002,
+        "source_identity": {
+          "api_head": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "artifact_digest": "sha256:1e538fbf543beca16ffb1be90b4befce0b96cec7f26a0c4b0f3405bdd6d581dc",
+          "artifact_id": 11807816727,
+          "assignment_manifest_sha256": "40f82f2daaad347e4403a408ae5a40184cddb71b5de9adca0e9397507019af7b",
+          "attempt": 1,
+          "checkout_commit": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "completed": true,
+          "junit_sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+          "run_id": 38387365489,
+          "testcase_sum_seconds": 178.18200000000002,
+          "xml_tests": 43
+        }
+      },
       "profiled_tests": 43,
       "references": [
         "oct11-main-1",
@@ -8914,7 +9234,7 @@
         "listing-completed-main-1",
         "listing-completed-pr-2"
       ],
-      "seconds": 155.618,
+      "seconds": 204.9093,
       "variance_multiplier": 1.15
     },
     {
@@ -9855,6 +10175,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 77.22,
       "path": "tests/test_pick_board_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 38,
+        "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "retained_source": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 170.157,
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 170.157,
+          "xml_tests": 38
+        }
+      },
       "profiled_tests": 38,
       "references": [
         "oct11-main-1",
@@ -9863,7 +10203,7 @@
         "listing-completed-main-2",
         "listing-completed-pr-1"
       ],
-      "seconds": 121.9851,
+      "seconds": 195.68055,
       "variance_multiplier": 1.15
     },
     {
@@ -12401,6 +12741,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 29.752,
       "path": "tests/test_readiness_dashboard_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 54,
+        "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 124.2,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 124.2,
+          "xml_tests": 54
+        }
+      },
       "profiled_tests": 54,
       "references": [
         "oct11-main-1",
@@ -12408,7 +12768,7 @@
         "listing-completed-main-3",
         "listing-completed-pr-2"
       ],
-      "seconds": 97.0738,
+      "seconds": 142.83,
       "variance_multiplier": 1.15
     },
     {
@@ -12750,6 +13110,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 139.755,
       "path": "tests/test_remote_canonical_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 44,
+        "junit_sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+        "retained_source": "nfl-pdf-ci-main-9ace",
+        "seconds": 186.97,
+        "source_identity": {
+          "api_head": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "artifact_digest": "sha256:1e538fbf543beca16ffb1be90b4befce0b96cec7f26a0c4b0f3405bdd6d581dc",
+          "artifact_id": 11807816727,
+          "assignment_manifest_sha256": "40f82f2daaad347e4403a408ae5a40184cddb71b5de9adca0e9397507019af7b",
+          "attempt": 1,
+          "checkout_commit": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "completed": true,
+          "junit_sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+          "run_id": 38387365489,
+          "testcase_sum_seconds": 186.97,
+          "xml_tests": 44
+        }
+      },
       "profiled_tests": 44,
       "references": [
         "oct11-main-3",
@@ -12758,7 +13138,7 @@
         "listing-completed-main-1",
         "listing-completed-pr-1"
       ],
-      "seconds": 108.52205,
+      "seconds": 215.0155,
       "variance_multiplier": 1.15
     },
     {
@@ -12795,6 +13175,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 148.01,
       "path": "tests/test_remote_continuation_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 46,
+        "junit_sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 193.803,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:696a4f0e0905b8fa7004ac6d3a05a26a555d701bb41098652b26a81707437ad5",
+          "artifact_id": 11815624752,
+          "assignment_manifest_sha256": "392bf8375b0661cc142e451c984ad5880ee4a918ec0344c10c1de302a107a739",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 193.803,
+          "xml_tests": 46
+        }
+      },
       "profiled_tests": 46,
       "references": [
         "oct11-pr-2",
@@ -12802,7 +13202,7 @@
         "listing-completed-main-2",
         "listing-completed-pr-2"
       ],
-      "seconds": 171.72145,
+      "seconds": 222.87345,
       "variance_multiplier": 1.15
     },
     {
@@ -13856,6 +14256,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 387.74,
       "path": "tests/test_slate_audit_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 110,
+        "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 515.891,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 515.891,
+          "xml_tests": 110
+        }
+      },
       "profiled_tests": 110,
       "references": [
         "oct11-pr-2",
@@ -13863,7 +14283,7 @@
         "listing-completed-main-2",
         "listing-completed-pr-2"
       ],
-      "seconds": 416.10105,
+      "seconds": 593.27465,
       "variance_multiplier": 1.15
     },
     {
@@ -14109,6 +14529,26 @@
       "measurement_complete": true,
       "original_measured_seconds": 84.165,
       "path": "tests/test_source_intake_scope.py",
+      "pdf_ci_completed_basis": {
+        "advisory_variance_multiplier": 1.15,
+        "count": 42,
+        "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "retained_source": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 186.071,
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 186.071,
+          "xml_tests": 42
+        }
+      },
       "profiled_tests": 42,
       "references": [
         "oct11-pr-2",
@@ -14116,7 +14556,7 @@
         "listing-completed-main-2",
         "listing-completed-pr-2"
       ],
-      "seconds": 143.60855,
+      "seconds": 213.98165,
       "variance_multiplier": 1.15
     },
     {
@@ -15603,6 +16043,560 @@
   ],
   "nfl_listing_cost_basis": "Measured listing follow-up: 55 inherited scope files plus two new listing files; completed main/#2419 JUnit only, maximum compatible completed testcase cost plus unchanged 15% advisory margin. All prior sources and interrupted observations remain retained. Other file entries, scheduler, fallback, tests and workflows unchanged.",
   "nfl_listing_cost_revision": 1,
+  "nfl_pdf_ci_cost_basis": "Existing scope files only: completed exact-count Ubuntu JUnit sums with >=30-second demonstrated advisory underestimate, plus unchanged 15% advisory variance. No cancelled span is used as a completed measurement; excludes installation, collection, reporting and artifact upload. Prior frozen revision and successor metadata preserved.",
+  "nfl_pdf_ci_cost_provenance": [
+    {
+      "before_seconds": 267.053,
+      "completed": {
+        "count": 68,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 328.782,
+        "sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:696a4f0e0905b8fa7004ac6d3a05a26a555d701bb41098652b26a81707437ad5",
+          "artifact_id": 11815624752,
+          "assignment_manifest_sha256": "392bf8375b0661cc142e451c984ad5880ee4a918ec0344c10c1de302a107a739",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 328.782,
+          "xml_tests": 68
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11815624752\\full-suite-3.xml"
+      },
+      "path": "tests/test_canonical_download_scope.py",
+      "proposed_seconds": 378.0993
+    },
+    {
+      "before_seconds": 138.4738,
+      "completed": {
+        "count": 49,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 222.559,
+        "sha256": "4119012e05a1eb46b54ee23727a75e98c50cbf010f212cf0881da9687effef3c",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:e4e75c31588d847ed1be6471bdc0610588ec136dbf1f9285ac594b73c43ec6ea",
+          "artifact_id": 11815794067,
+          "assignment_manifest_sha256": "977be399694a33fadc441dbc521550e530149abc28c3aebe811da40d51bb57a8",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "4119012e05a1eb46b54ee23727a75e98c50cbf010f212cf0881da9687effef3c",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 222.559,
+          "xml_tests": 49
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11815794067\\full-suite-5.xml"
+      },
+      "path": "tests/test_football_catalog_scope.py",
+      "proposed_seconds": 255.94285
+    },
+    {
+      "before_seconds": 171.72145,
+      "completed": {
+        "count": 46,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 193.803,
+        "sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:696a4f0e0905b8fa7004ac6d3a05a26a555d701bb41098652b26a81707437ad5",
+          "artifact_id": 11815624752,
+          "assignment_manifest_sha256": "392bf8375b0661cc142e451c984ad5880ee4a918ec0344c10c1de302a107a739",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 193.803,
+          "xml_tests": 46
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11815624752\\full-suite-3.xml"
+      },
+      "path": "tests/test_remote_continuation_scope.py",
+      "proposed_seconds": 222.87345
+    },
+    {
+      "before_seconds": 140.81175,
+      "completed": {
+        "count": 48,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 170.996,
+        "sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:696a4f0e0905b8fa7004ac6d3a05a26a555d701bb41098652b26a81707437ad5",
+          "artifact_id": 11815624752,
+          "assignment_manifest_sha256": "392bf8375b0661cc142e451c984ad5880ee4a918ec0344c10c1de302a107a739",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "ff5a7036f306a3f622a823770a10d3d46f8242d39eeeb5174639faeca833234d",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 170.996,
+          "xml_tests": 48
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11815624752\\full-suite-3.xml"
+      },
+      "path": "tests/test_nfl_admission_scope.py",
+      "proposed_seconds": 196.6454
+    },
+    {
+      "before_seconds": 158.41365,
+      "completed": {
+        "count": 51,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 210.847,
+        "sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 210.847,
+          "xml_tests": 51
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11819220171\\full-suite-1.xml"
+      },
+      "path": "tests/test_nfl_inputs_scope.py",
+      "proposed_seconds": 242.47405
+    },
+    {
+      "before_seconds": 416.10105,
+      "completed": {
+        "count": 110,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 515.891,
+        "sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 515.891,
+          "xml_tests": 110
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11819220171\\full-suite-1.xml"
+      },
+      "path": "tests/test_slate_audit_scope.py",
+      "proposed_seconds": 593.27465
+    },
+    {
+      "before_seconds": 251.68095,
+      "completed": {
+        "count": 75,
+        "root": "nfl-pdf-ci-main-9ace",
+        "seconds": 305.121,
+        "sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+        "source_identity": {
+          "api_head": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "artifact_digest": "sha256:1e538fbf543beca16ffb1be90b4befce0b96cec7f26a0c4b0f3405bdd6d581dc",
+          "artifact_id": 11807816727,
+          "assignment_manifest_sha256": "40f82f2daaad347e4403a408ae5a40184cddb71b5de9adca0e9397507019af7b",
+          "attempt": 1,
+          "checkout_commit": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "completed": true,
+          "junit_sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+          "run_id": 38387365489,
+          "testcase_sum_seconds": 305.121,
+          "xml_tests": 75
+        },
+        "xml": "nfl-pdf-ci-main-9ace\\38387365489\\11807816727\\full-suite-4.xml"
+      },
+      "path": "tests/test_football_research_scope.py",
+      "proposed_seconds": 350.88915
+    },
+    {
+      "before_seconds": 47.84,
+      "completed": {
+        "count": 15,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 73.403,
+        "sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 73.403,
+          "xml_tests": 15
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11819220171\\full-suite-1.xml"
+      },
+      "path": "tests/test_ncaaf_chronology_scope.py",
+      "proposed_seconds": 84.41345
+    },
+    {
+      "before_seconds": 155.618,
+      "completed": {
+        "count": 43,
+        "root": "nfl-pdf-ci-main-9ace",
+        "seconds": 178.18200000000002,
+        "sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+        "source_identity": {
+          "api_head": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "artifact_digest": "sha256:1e538fbf543beca16ffb1be90b4befce0b96cec7f26a0c4b0f3405bdd6d581dc",
+          "artifact_id": 11807816727,
+          "assignment_manifest_sha256": "40f82f2daaad347e4403a408ae5a40184cddb71b5de9adca0e9397507019af7b",
+          "attempt": 1,
+          "checkout_commit": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "completed": true,
+          "junit_sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+          "run_id": 38387365489,
+          "testcase_sum_seconds": 178.18200000000002,
+          "xml_tests": 43
+        },
+        "xml": "nfl-pdf-ci-main-9ace\\38387365489\\11807816727\\full-suite-4.xml"
+      },
+      "path": "tests/test_nhl_puck_line_scope.py",
+      "proposed_seconds": 204.9093
+    },
+    {
+      "before_seconds": 97.0738,
+      "completed": {
+        "count": 54,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 124.2,
+        "sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 124.2,
+          "xml_tests": 54
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11819220171\\full-suite-1.xml"
+      },
+      "path": "tests/test_readiness_dashboard_scope.py",
+      "proposed_seconds": 142.83
+    },
+    {
+      "before_seconds": 108.52205,
+      "completed": {
+        "count": 44,
+        "root": "nfl-pdf-ci-main-9ace",
+        "seconds": 186.97,
+        "sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+        "source_identity": {
+          "api_head": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "artifact_digest": "sha256:1e538fbf543beca16ffb1be90b4befce0b96cec7f26a0c4b0f3405bdd6d581dc",
+          "artifact_id": 11807816727,
+          "assignment_manifest_sha256": "40f82f2daaad347e4403a408ae5a40184cddb71b5de9adca0e9397507019af7b",
+          "attempt": 1,
+          "checkout_commit": "9aceef16d9f79fdb95c9a910b5411e3cd449e5ce",
+          "completed": true,
+          "junit_sha256": "bbe4378b696497dbadb0f7b300c827f9cfacd43d1dfa1e49c77f2919bb54b124",
+          "run_id": 38387365489,
+          "testcase_sum_seconds": 186.97,
+          "xml_tests": 44
+        },
+        "xml": "nfl-pdf-ci-main-9ace\\38387365489\\11807816727\\full-suite-4.xml"
+      },
+      "path": "tests/test_remote_canonical_scope.py",
+      "proposed_seconds": 215.0155
+    },
+    {
+      "before_seconds": 85.123,
+      "completed": {
+        "count": 60,
+        "root": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 147.507,
+        "sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 147.507,
+          "xml_tests": 60
+        },
+        "xml": "nfl-listing-ci-interpret-length-app-complete\\11796188990\\full-suite-5.xml"
+      },
+      "path": "tests/test_dfs_scope_policy.py",
+      "proposed_seconds": 169.63305
+    },
+    {
+      "before_seconds": 198.78785,
+      "completed": {
+        "count": 56,
+        "root": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 271.864,
+        "sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 271.864,
+          "xml_tests": 56
+        },
+        "xml": "nfl-listing-ci-interpret-length-app-complete\\11796188990\\full-suite-5.xml"
+      },
+      "path": "tests/test_mlb_nhl_research_scope.py",
+      "proposed_seconds": 312.6436
+    },
+    {
+      "before_seconds": 243.1721,
+      "completed": {
+        "count": 61,
+        "root": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 305.65,
+        "sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 305.65,
+          "xml_tests": 61
+        },
+        "xml": "nfl-listing-ci-interpret-length-app-complete\\11796188990\\full-suite-5.xml"
+      },
+      "path": "tests/test_ncaaf_research_scope.py",
+      "proposed_seconds": 351.4975
+    },
+    {
+      "before_seconds": 31.1259,
+      "completed": {
+        "count": 26,
+        "root": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 55.019,
+        "sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 55.019,
+          "xml_tests": 26
+        },
+        "xml": "nfl-listing-ci-interpret-length-app-complete\\11796188990\\full-suite-5.xml"
+      },
+      "path": "tests/test_ncaaf_schedule_scope_policy.py",
+      "proposed_seconds": 63.27185
+    },
+    {
+      "before_seconds": 63.08325,
+      "completed": {
+        "count": 32,
+        "root": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 122.304,
+        "sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 122.304,
+          "xml_tests": 32
+        },
+        "xml": "nfl-listing-ci-interpret-length-app-complete\\11796188990\\full-suite-5.xml"
+      },
+      "path": "tests/test_nfl_native_scope.py",
+      "proposed_seconds": 140.6496
+    },
+    {
+      "before_seconds": 70.6859,
+      "completed": {
+        "count": 34,
+        "root": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 137.538,
+        "sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 137.538,
+          "xml_tests": 34
+        },
+        "xml": "nfl-listing-ci-interpret-length-app-complete\\11796188990\\full-suite-5.xml"
+      },
+      "path": "tests/test_nfl_ui_scope.py",
+      "proposed_seconds": 158.1687
+    },
+    {
+      "before_seconds": 121.9851,
+      "completed": {
+        "count": 38,
+        "root": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 170.157,
+        "sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:9b6cb24ef6487e58225dc05ca04bc44183c5d43d4db629343dfc7d306b5997d9",
+          "artifact_id": 11796188990,
+          "assignment_manifest_sha256": "81366d89bc71c85b990233b8afe0734046742e73c8795cc54b71e3600a85ad29",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "15e3d733bd1225e52b3565ab66aaf6ed4bfb7736f85eeeee0e841999458d40c8",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 170.157,
+          "xml_tests": 38
+        },
+        "xml": "nfl-listing-ci-interpret-length-app-complete\\11796188990\\full-suite-5.xml"
+      },
+      "path": "tests/test_pick_board_scope.py",
+      "proposed_seconds": 195.68055
+    },
+    {
+      "before_seconds": 76.3025,
+      "completed": {
+        "count": 47,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 127.31700000000001,
+        "sha256": "4119012e05a1eb46b54ee23727a75e98c50cbf010f212cf0881da9687effef3c",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:e4e75c31588d847ed1be6471bdc0610588ec136dbf1f9285ac594b73c43ec6ea",
+          "artifact_id": 11815794067,
+          "assignment_manifest_sha256": "977be399694a33fadc441dbc521550e530149abc28c3aebe811da40d51bb57a8",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "4119012e05a1eb46b54ee23727a75e98c50cbf010f212cf0881da9687effef3c",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 127.31700000000001,
+          "xml_tests": 47
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11815794067\\full-suite-5.xml"
+      },
+      "path": "tests/test_ncaaf_coverage_scope_policy.py",
+      "proposed_seconds": 146.41455
+    },
+    {
+      "before_seconds": 102.6076,
+      "completed": {
+        "count": 35,
+        "root": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 125.047,
+        "sha256": "fadb6815f74bfc335128bab7d9ec15b4851e3b5c9cfca5b741033f9e3ed857ea",
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:beeefdc95850191f6e27409f7da217fc8205cbcedf9656fbc6ecc8c54f910694",
+          "artifact_id": 11796004214,
+          "assignment_manifest_sha256": "a5da7fb370531b66de6ad664e0e6141efc49cd7fcb3d3b5049ec01340984f1b4",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "fadb6815f74bfc335128bab7d9ec15b4851e3b5c9cfca5b741033f9e3ed857ea",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 125.047,
+          "xml_tests": 35
+        },
+        "xml": "nfl-listing-ci-interpret-length-app-complete\\11796004214\\full-suite-2.xml"
+      },
+      "path": "tests/test_nfl_calibration_scope.py",
+      "proposed_seconds": 143.80405
+    },
+    {
+      "before_seconds": 143.60855,
+      "completed": {
+        "count": 42,
+        "root": "nfl-pdf-ci-final-complete-0596",
+        "seconds": 186.071,
+        "sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+        "source_identity": {
+          "api_head": "0596b245e5832c7b776808bd1f508f42ef5758fe",
+          "artifact_digest": "sha256:5a071efb5149a9d8b5b95a3f8ffa23fd97eac8b27310fc00f9a99774369aad3a",
+          "artifact_id": 11819220171,
+          "assignment_manifest_sha256": "ea7aa645106a8471aa9febc51c9355f4eb2dd059ee6a28f2c98c3883642ba661",
+          "attempt": 1,
+          "checkout_commit": "e5ca3cc2ee9069440e9f26e93d225baad6293721",
+          "completed": true,
+          "junit_sha256": "927e58391fd0dcf64c28b1225ddfdc525316378d0d50e4664bfd458238767f54",
+          "run_id": 38401018393,
+          "testcase_sum_seconds": 186.071,
+          "xml_tests": 42
+        },
+        "xml": "nfl-pdf-ci-final-complete-0596\\38401018393\\11819220171\\full-suite-1.xml"
+      },
+      "path": "tests/test_source_intake_scope.py",
+      "proposed_seconds": 213.98165
+    },
+    {
+      "before_seconds": 354.2598,
+      "completed": {
+        "count": 118,
+        "root": "nfl-listing-ci-interpret-length-app-complete",
+        "seconds": 583.735,
+        "sha256": "fadb6815f74bfc335128bab7d9ec15b4851e3b5c9cfca5b741033f9e3ed857ea",
+        "source_identity": {
+          "api_head": "5bb03b70c929ef404a3f6d1958af2dda1f83ea10",
+          "artifact_digest": "sha256:beeefdc95850191f6e27409f7da217fc8205cbcedf9656fbc6ecc8c54f910694",
+          "artifact_id": 11796004214,
+          "assignment_manifest_sha256": "a5da7fb370531b66de6ad664e0e6141efc49cd7fcb3d3b5049ec01340984f1b4",
+          "attempt": 1,
+          "checkout_commit": "7227bded120be8ad850672f4f0b32b30ebc5aa67",
+          "completed": true,
+          "junit_sha256": "fadb6815f74bfc335128bab7d9ec15b4851e3b5c9cfca5b741033f9e3ed857ea",
+          "run_id": 38362211297,
+          "testcase_sum_seconds": 583.735,
+          "xml_tests": 118
+        },
+        "xml": "nfl-listing-ci-interpret-length-app-complete\\11796004214\\full-suite-2.xml"
+      },
+      "path": "tests/test_ncaaf_compatibility_scope.py",
+      "proposed_seconds": 671.29525
+    }
+  ],
+  "nfl_pdf_ci_cost_revision": 1,
   "predecessor_hash_encoding": "Repository Git blob bytes (LF); retained Windows checkout hash is recorded separately.",
   "predecessor_profile_sha256": "7e91ba1167ef610a4c93290b0ae3fabb8fe2b0cdf6d7d7a7cebdb880723a6c00",
   "prior_advisory_candidate_sha256": "5a68842e0c1b3701849a1eee8cc713e7430cf847630284f7e0d54068bd502114",

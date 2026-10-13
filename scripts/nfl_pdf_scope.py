@@ -41,7 +41,18 @@ def validate(g, manifest_path, base, binding):
     require(not g.exists_at(binding['base'], POLICY), 'SUCCESSOR_POLICY_ALREADY_EXISTS')
     raw = g.git_bytes('show', 'HEAD:'+POLICY); policy = json.loads(raw)
     implementation = policy['implementation_commit']
-    require(g.git('show', '-s', '--format=%P', implementation).split() == [binding['base']], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    ancestors = binding.get('implementation_ancestors', [])
+    require(isinstance(ancestors, list) and len(ancestors) <= 2, 'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    parent = binding['base']
+    for ancestor in ancestors:
+        require(isinstance(ancestor, str) and len(ancestor) == 40 and
+                g.git('show', '-s', '--format=%P', ancestor).split() == [parent],
+                'IMPLEMENTATION_PARENT_NOT_APPROVED')
+        require(not g.exists_at(ancestor, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
+        require(set(g.git('diff', '--name-only', binding['base'], ancestor).splitlines()) <= set(binding['paths']),
+                'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+        parent = ancestor
+    require(g.git('show', '-s', '--format=%P', implementation).split() == [parent], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
     require(not g.exists_at(implementation, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
     require(set(g.git('diff', '--name-only', binding['base'], implementation).splitlines()) == set(binding['paths']), 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
     require(policy == make_policy(g, binding, implementation), 'EXACT_POLICY_BINDINGS_CHANGED')

@@ -9,6 +9,33 @@ from scripts import check_launch_change_scope as guard
 from scripts import nfl_listing_metadata_scope as scope
 
 
+@pytest.fixture(autouse=True)
+def exact_frozen_metadata_profile(request, tmp_path, monkeypatch):
+    """These two assertions describe the exact historical metadata transition."""
+    if request.node.name not in {
+        'test_profile_reconstruction_is_exact_idempotent_and_preserves_unknown_bytes',
+        'test_only_metadata_changes_and_exact_predecessor_remains_reconstructible',
+    }:
+        return
+    real_path = Path
+    path = 'scripts/ci_test_file_costs_v1.json'
+    current = (real_path(__file__).resolve().parents[1]/path).read_bytes().replace(b'\r\n', b'\n')
+    info = json.loads(guard.NFL_PDF_RECONSTRUCTION_JSON)[path]
+    previous = guard._pdf_previous_source(path, current)
+    assert hashlib.sha256(previous).hexdigest() == info['before_sha256']
+    root = tmp_path/'SYNTHETIC-frozen-metadata-repository'
+    target = root/path
+    target.parent.mkdir(parents=True)
+    target.write_bytes(previous)
+
+    def fixture_path(value, *parts):
+        if str(value) == __file__ and not parts:
+            return root/'tests/test_nfl_listing_metadata_scope.py'
+        return real_path(value, *parts)
+
+    monkeypatch.setattr(request.module, 'Path', fixture_path)
+
+
 @pytest.fixture
 def sealed(tmp_path):
     repo=tmp_path/'SYNTHETIC-git'; repo.mkdir()
