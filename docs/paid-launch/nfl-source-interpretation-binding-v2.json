@@ -1,0 +1,102 @@
+{
+  "approval_reference": "Robert authorized bounded explicit NFL owner-reviewed source interpretation, offline synthetic pipeline validation and separate draft PR; preserve historical readers, exact external editions, all freshness/source/model/wagering gates and five-shard CI. No collection or authentic inference.",
+  "base": "d88f28054fd0ff68e1b9672ac24446c194799661",
+  "base_tree": "4df92dac7118bee67cd2a4062fce05dc10a100cf",
+  "main_base": "d88f28054fd0ff68e1b9672ac24446c194799661",
+  "main_tree": "4df92dac7118bee67cd2a4062fce05dc10a100cf",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app/ui/nfl_private_research.py",
+    "app_core/nfl_interpreted_research.py",
+    "app_core/nfl_private_routes.py",
+    "app_core/nfl_source_interpretation.py",
+    "docs/paid-launch/nfl-source-interpretation-binding-v2.json",
+    "docs/paid-launch/nfl-source-interpretation-v2.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_interpretation_scope.py",
+    "tests/test_nfl_interpretation_scope.py",
+    "tests/test_nfl_source_interpretation.py"
+  ],
+  "previous_guard_sha256": "7554b9f11f0a410ecc88bc33b6faae8a05b33212e763f7fd9bbba5007c92d1fa",
+  "reconstruction_json_sha256": "ea12bb9d87cd16333d5b76419eb5c64a16dc867da99d3204ef87046748223db0",
+  "reviewed_blobs": {
+    "app/ui/nfl_private_research.py": "d04dca38afaa90cbe8fa73a6c58633e95b8cb446",
+    "app_core/nfl_interpreted_research.py": "71cfab9ab82dc2b4c802d4aac9f6500df40e0cca",
+    "app_core/nfl_private_routes.py": "1ac3806353dd35ba614f16254d81eeeaefb8aad7",
+    "app_core/nfl_source_interpretation.py": "81fcc055a72ccd35b8b10d508ae9f9f6694b68d8",
+    "docs/paid-launch/nfl-source-interpretation-v2.md": "a49e724e228e57726b006051b2229f9b3abcfb08",
+    "scripts/nfl_interpretation_scope.py": "fed1004b066f78356f5b4f2bca4524ffe07b040c",
+    "tests/test_nfl_interpretation_scope.py": "9a3cc3d1f11198fb86457a457c18621c6bd1eb1c",
+    "tests/test_nfl_source_interpretation.py": "a759f9a2218ffc66fdd131434716b3acd9ca15c2"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app/ui/nfl_private_research.py": {
+      "after_sha256": "f34fbb1ce8cd184d79cecfc62d7cb58adacc3b661e5963a8754c0dd657909d53",
+      "before_sha256": "056a2ff2313f112a94aaad3293cb9edb4a90464f71932847bbc4515b365ac2d8",
+      "reverse_patches": [
+        {
+          "end": 2810,
+          "start": 2768,
+          "text": ""
+        },
+        {
+          "end": 3447,
+          "start": 2977,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/nfl_private_routes.py": {
+      "after_sha256": "03fb6ab692cdee57418faac252fb282c08398bbbd2ff66a35d03392471ef95f6",
+      "before_sha256": "3ac525c0744e66968f80c377f81c737eb8c1cc097665deb47f4888272f5977ef",
+      "reverse_patches": [
+        {
+          "end": 268,
+          "start": 236,
+          "text": ""
+        },
+        {
+          "end": 321,
+          "start": 308,
+          "text": ""
+        },
+        {
+          "end": 648,
+          "start": 636,
+          "text": ""
+        },
+        {
+          "end": 747,
+          "start": 733,
+          "text": ""
+        },
+        {
+          "end": 1568,
+          "start": 1515,
+          "text": ""
+        },
+        {
+          "end": 1791,
+          "start": 1769,
+          "text": ""
+        },
+        {
+          "end": 1867,
+          "start": 1846,
+          "text": ""
+        },
+        {
+          "end": 2026,
+          "start": 2006,
+          "text": ""
+        },
+        {
+          "end": 2813,
+          "start": 2800,
+          "text": ""
+        }
+      ]
+    }
+  }
+}
