@@ -1,0 +1,24 @@
+{
+  "approval_reference": "Measured immutable-reconstruction optimization within Robert Velarde authorized #2419 CI bottleneck scope. Exact source bytes and live mutable validation preserved. No scheduler/profile/workflow/timeout/acquisition/model/storage/qualification changes; no acquisition, inference, trust activation, merge, deployment or wagering.",
+  "base": "faa92abe832e14a049b0f6b3299f0525e4d6e58a",
+  "base_tree": "4ec03f2f869fceee4d7ae84c3a336aecdb4f4bdd",
+  "main_base": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+  "main_tree": "6d4bc6f72f8ed1d67c3f655a5965bc7f2d1275f6",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/nfl-listing-immutable-binding-v1.json",
+    "docs/paid-launch/nfl-listing-immutable-reconstruction-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_listing_immutable_scope.py",
+    "tests/test_nfl_listing_immutable_scope.py"
+  ],
+  "previous_guard_sha256": "d169d43cf04b8292ae8d4ee527b4c2470ca90cb0135c2818d6a36f11f356793d",
+  "reconstruction_json_sha256": "e083d8c9f943dd7b375b8dce0da67a1a46a3da29327408927256c35948b7d377",
+  "reviewed_blobs": {
+    "docs/paid-launch/nfl-listing-immutable-reconstruction-v1.md": "ac20a50356cd134edfe9950cbfdd1328ce7da86e",
+    "scripts/nfl_listing_immutable_scope.py": "9e79e80c41664143674557f1c046eff274088207",
+    "tests/test_nfl_listing_immutable_scope.py": "47d46058afca0d8357da2d51dac4162a1a9abfa6"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}
