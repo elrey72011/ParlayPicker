@@ -19,11 +19,11 @@ import types
 import functools
 
 FILES = ["tests/test_slate_audit_scope.py", "tests/test_canonical_download_scope.py",
-         "tests/test_football_research_scope.py", "tests/test_nfl_inputs_scope.py"]
+         "tests/test_ncaaf_compatibility_scope.py", "tests/test_remote_continuation_scope.py"]
 SELECTION = ("exact_seal_and_ci_merge_preserve_predecessor or "
              "(dirty_staged_committed_resealed_changes_reject and core/protected.py) or "
              "(mutated_policy_rejects and implementation_changes) or "
-             "exact_predecessor_source_reconstruction or test_nfl_inputs_scope")
+             "exact_predecessor_source_reconstruction")
 
 
 def main():
