@@ -35,7 +35,7 @@ def render(candidates=None):
                     st.write('OWNER_REVIEWED / PRIVATE_RESEARCH — ' + str(row.get('best_pick', row.get('market_type', ''))))
                     st.metric('Raw NFL research probability', f"{assessed['probability']:.2%}")
                     st.caption('Uncalibrated; EV/edge unavailable. PASS — zero stake. Private evidence is excluded from public packages.')
-                    if evidence.saved_route(row).VERSION == 'nfl-owner-document-private-inputs-v6':
+                    if evidence.saved_route(row).VERSION in {'nfl-owner-document-private-inputs-v6','nfl-owner-public-document-private-inputs-v7'}:
                         st.caption('Original document wire bytes, decoded bytes and retrieval receipts retained. Extraction, interpreted applicability and owner review remain separate. Publisher publication time UNKNOWN; provider-market freshness unchanged.')
                     if evidence.saved_route(row).VERSION in {'nfl-owner-observed-private-inputs-v2','nfl-owner-scoring-private-inputs-v3','nfl-owner-interpreted-private-inputs-v4','nfl-owner-pdf-private-inputs-v5'}:
                         st.caption('Prospective first-observation evidence; publisher first-publication time UNKNOWN. This supplies no historical availability claim.')

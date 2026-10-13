@@ -32,6 +32,45 @@ def review(p):
         subject_sha256=reader.subject(p),conclusion='VERIFIED_ORIGINAL_RETRIEVAL_LINKAGE',basis='SYNTHETIC substantive review of exact original wire, decoded bytes, receipts and extracted object linkage; fixture only.')
 
 
+def test_v2_public_guide_actual_caller_capture_replay_and_display(monkeypatch,tmp_path):
+    from app_core import nfl_public_document_research as successor
+    from test_nfl_document_acquisition import capture_guide
+    from test_nfl_owner_research import actual_pipeline,private_app
+    from test_source_contract_pipeline import exported
+    from app_core import research_replay
+    from streamlit.testing.v1 import AppTest
+    packet,baseline=original_fixture(monkeypatch);p=packet['payload']
+    _,text=acquisition.custody.read(p['objects']['clock_document'])
+    text=text.replace('https://synthetic.invalid/provider-guide',acquisition.GUIDE_URL)
+    text='<html><body>'+text+'\nSYNTHETIC published example: apiKey=YOUR_API_KEY</body></html>'
+    capture,_,calls=capture_guide(tmp_path,text.encode())
+    obj=acquisition.project(capture,'clock');p['objects']['clock_document']=obj
+    p['permissions']['clock_document'].update(source_id=obj['receipt']['source_id'],endpoint=obj['receipt']['endpoint'])
+    projection=p['projections']['clock_document']['payload'];projection['values']['source_reference']=acquisition.GUIDE_URL
+    for fact in projection['facts'].values():
+        for support in fact['supports']:
+            exact=support['text']['exact'].replace('https://synthetic.invalid/provider-guide',acquisition.GUIDE_URL)
+            start=text.index(exact);support['text']=dict(start=start,end=start+len(exact),exact=exact)
+    resign(p)
+    outer=dict(version=successor.VERSION,evidence_label='SYNTHETIC',event=deepcopy(p['event']),quote=deepcopy(p['quote']),packet=acquisition.seal(p),document_captures=dict(clock_document=dict(bundle=capture,document_id='clock')),owner_review={})
+    review(outer);outer['owner_review']['subject_sha256']=successor.subject(outer);selected=acquisition.seal(outer)
+    with routes.selected([selected]):frame=actual_pipeline(monkeypatch)
+    assert frame.iloc[0].ml_inference_status=='success'
+    assert frame.iloc[0].ml_probability==pytest.approx(baseline.iloc[0].ml_probability,abs=1e-12)
+    retained=exported(monkeypatch,tmp_path,frame)
+    receipt=research_replay.retain_export(retained['frames'],retained['package'],retained['card'],retained['captured'],path=retained['db'])
+    saved,sources=research_replay.read_export(receipt['export_id'],path=retained['db'])
+    replay=research_replay.frame_from_payload(next(iter(sources.values()))['original']['producer'])
+    shown=routes.private_display(replay.iloc[0])
+    assert shown['raw_probability']==frame.iloc[0].ml_probability and shown['stake']==0 and shown['wager_action']=='PASS'
+    app=AppTest.from_function(private_app);app.session_state['private_candidates']=replay;app.run()
+    assert not app.exception and any(m.value==f'{frame.iloc[0].ml_probability:.2%}' for m in app.metric)
+    assert calls==[acquisition.GUIDE_URL] and 'YOUR_API_KEY' not in json.dumps(shown)
+    old=deepcopy(outer);old['version']=reader.VERSION
+    old['owner_review']['subject_sha256']=reader.subject(old)
+    with pytest.raises(ValueError,match='NFL_PRIVATE_CUSTODY_MISSING'):reader.checked(acquisition.seal(old),INFERENCE)
+
+
 @pytest.mark.parametrize('away,reference_away',[(False,False),(False,True),(True,False),(True,True)])
 def test_actual_retrieval_caller_export_replay_browser(monkeypatch,tmp_path,away,reference_away):
     from app_core import research_replay

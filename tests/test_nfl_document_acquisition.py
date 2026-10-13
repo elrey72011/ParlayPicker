@@ -248,3 +248,69 @@ def test_configuration_secret_rejects_before_journal(tmp_path):
     with pytest.raises(ValueError,match='DOCUMENT_CONFIGURATION'):
         with lane.controlled(p,c,hashlib.sha256(c).hexdigest(),root=tmp_path,wall=lambda:NOW,security=security):pass
     assert not list(tmp_path.iterdir())
+
+
+def guide_fixture(root,*,version=lane.VERSION_V2,url=lane.GUIDE_URL):
+    p,a,c=fixture(root,format='html');v=p['payload']
+    v['version']=version
+    v['documents'][0].update(id='clock',source_id='clock',url=url,destination='clock.original')
+    v['permission']['documents_sha256']=lane.digest(v['documents']);p=lane.seal(v)
+    a=lane.seal(dict(a['payload'],plan_sha256=p['sha256']))
+    config=lane.envelope(json.loads(c));config.update(plan_sha256=p['sha256'],permission=v['permission'],authorization=a)
+    config['review']['subject_sha256']=lane.digest({k:v for k,v in config.items() if k!='review'})
+    return p,a,lane.custody.encode(lane.seal(config)).encode()
+
+
+def capture_guide(root,raw,*,version=lane.VERSION_V2,url=lane.GUIDE_URL):
+    p,a,c=guide_fixture(root,version=version,url=url);calls=[]
+    def transport(target,*args):
+        calls.append(target)
+        return Stream(raw,headers=[('content-type','text/html'),('content-length',str(len(raw)))])
+    with lane.controlled(p,c,hashlib.sha256(c).hexdigest(),root=root,wall=lambda:NOW,security=security):
+        result=lane.acquire(p,a,root=root,transport=transport,wall=lambda:NOW)
+    return result,p,calls
+
+
+@pytest.mark.parametrize('literal',['YOUR_API_KEY','{apiKey}'])
+@pytest.mark.parametrize('version',[lane.VERSION,lane.VERSION_V2])
+def test_explicit_public_guide_literals_preserve_original_bytes_and_v1_rejection(tmp_path,literal,version):
+    raw=('<html><body>SYNTHETIC provider clock prose. <a href="https://api.the-odds-api.com/v4/sports/?apiKey='+literal+'">Published noncredential example</a></body></html>').encode()
+    result,p,calls=capture_guide(tmp_path,raw,version=version)
+    assert calls==[lane.GUIDE_URL] and result['payload']['attempted']==1
+    if version==lane.VERSION:
+        assert result['payload']['status']=='INCOMPLETE' and result['payload']['reason']=='DOCUMENT_CREDENTIAL_BODY'
+    else:
+        assert result['payload']['status']=='CAPTURED_UNREVIEWED' and result['payload']['version']==lane.BUNDLE_V2
+        assert lane.read_bundle(result)['clock'][0]==raw
+        from app_core import nfl_public_guide_custody as guide
+        projected=lane.project(result,'clock')
+        assert guide.read(projected)[0]==raw
+        with pytest.raises(ValueError,match='NFL_PRIVATE_CUSTODY_MISSING'):lane.custody.read(projected)
+        assert lane.read_back(tmp_path/(p['sha256']+'.documents-unreviewed.json'),tmp_path/(p['sha256']+'.documents-attempts.jsonl'))==result
+        changed=deepcopy(result['payload']);changed['version']=lane.BUNDLE
+        with pytest.raises(ValueError,match='DOCUMENT_READBACK'):lane.read_bundle(lane.seal(changed))
+        before=(tmp_path/(p['sha256']+'.documents-attempts.jsonl')).read_bytes()
+        with pytest.raises(ValueError,match='DOCUMENT_SPENT_NO_RESUME'):capture_guide(tmp_path,raw,version=version)
+        assert (tmp_path/(p['sha256']+'.documents-attempts.jsonl')).read_bytes()==before
+    assert result['payload']['source_acceptance'] is False and result['payload']['inference'] is False and result['payload']['stake']==0
+
+
+@pytest.mark.parametrize('query',['apiKey=SECRET_CANARY','apiKey=YOUR_API_KEY_SECRET_CANARY','apiKey={apiKey}SECRET_CANARY','apiKey=YOUR_API_KEY&apiKey=SECRET_CANARY','password=SECRET_CANARY','authorization: SECRET_CANARY'])
+def test_public_examples_never_mask_real_or_unrecognized_secret_patterns(tmp_path,query):
+    raw=('<html><body>SYNTHETIC '+query+'</body></html>').encode()
+    result,_,calls=capture_guide(tmp_path,raw)
+    assert result['payload']['reason']=='DOCUMENT_CREDENTIAL_BODY' and len(calls)==1
+    assert 'SECRET_CANARY' not in json.dumps(result) and result['payload']['objects']==[]
+
+
+def test_public_examples_are_scoped_to_exact_guide_and_new_authorization(tmp_path):
+    raw=b'<html>SYNTHETIC apiKey=YOUR_API_KEY</html>'
+    result,_,_=capture_guide(tmp_path,raw,url='https://support.novig.com/en/SYNTHETIC')
+    assert result['payload']['reason']=='DOCUMENT_CREDENTIAL_BODY'
+    child=tmp_path/'new';child.mkdir();p,a,c=guide_fixture(child)
+    old,old_auth,_=guide_fixture(child,version=lane.VERSION)
+    assert old['sha256']!=p['sha256']
+    with lane.controlled(p,c,hashlib.sha256(c).hexdigest(),root=child,wall=lambda:NOW,security=security):
+        with pytest.raises(ValueError,match='DOCUMENT_AUTHORIZATION'):
+            lane.acquire(p,old_auth,root=child,transport=lambda *a:pytest.fail('OLD APPROVAL DISPATCHED'),wall=lambda:NOW)
+    assert not list(child.iterdir())

@@ -46,6 +46,9 @@ def retained(body, *, receipt):
 
 
 def read(obj):
+    from app_core import nfl_public_guide_custody as guide
+    if guide.ACTIVE.get() and isinstance(obj,dict) and obj.get('version')==guide.VERSION:
+        return guide.read(obj)
     require(isinstance(obj, dict) and set(obj) == {'version', 'body_sha256', 'bytes_base64', 'receipt'}
             and obj['version'] == VERSION, 'NFL_PRIVATE_CUSTODY_MISSING')
     try:
