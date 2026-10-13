@@ -15601,14 +15601,16 @@
       "variance_multiplier": 1.15
     }
   ],
+  "nfl_listing_cost_basis": "Measured listing follow-up: 55 inherited scope files plus two new listing files; completed main/#2419 JUnit only, maximum compatible completed testcase cost plus unchanged 15% advisory margin. All prior sources and interrupted observations remain retained. Other file entries, scheduler, fallback, tests and workflows unchanged.",
+  "nfl_listing_cost_revision": 1,
   "predecessor_hash_encoding": "Repository Git blob bytes (LF); retained Windows checkout hash is recorded separately.",
   "predecessor_profile_sha256": "7e91ba1167ef610a4c93290b0ae3fabb8fe2b0cdf6d7d7a7cebdb880723a6c00",
   "prior_advisory_candidate_sha256": "5a68842e0c1b3701849a1eee8cc713e7430cf847630284f7e0d54068bd502114",
   "profiled_tests_definition": "Collection size covered by this advisory cost. Estimate rows do not establish completed test measurements.",
   "purpose": "Advisory CI assignment only. No tests excluded, runtime guarantee, predictive-quality claim or wagering authority.",
   "retained_windows_predecessor_sha256": "23d55c6f65e13e3a79aa269e6c89dad7ab8ddaa92eef10f259c808b0a5c12e7e",
-  "revision": 4,
-  "revision_basis": "Measured listing follow-up: 55 inherited scope files plus two new listing files; completed main/#2419 JUnit only, maximum compatible completed testcase cost plus unchanged 15% advisory margin. All prior sources and interrupted observations remain retained. Other file entries, scheduler, fallback, tests and workflows unchanged.",
+  "revision": 3,
+  "revision_basis": "October 11 current-main and PR #2416 attempt 1 completed JUnit; cancelled attempts 1/2 retained separately as incomplete observations. Scheduling only; no exclusions or changes to tests, scheduler, workflows or limits. Revision3 incorporates same-code completed refresh1 shards2/3 and all-node cancelled shard1 as explicitly estimated inter-outcome intervals; no cancelled outcome is a completed JUnit measurement.",
   "schema": "parlaypicker/ci-file-costs-v1",
   "sources": {
     "listing-completed-main-1": {

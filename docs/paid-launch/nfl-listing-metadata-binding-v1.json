@@ -1,0 +1,38 @@
+{
+  "approval_reference": "Robert Velarde explicitly authorized completing the metadata-only correction preserving frozen revision 3 and recording successor metadata separately, unchanged assertions and costs. Necessary exact successor scope plumbing only. No full-suite launch without a specific measured correction; no acquisition, inference, merge or deployment.",
+  "base": "2e659169ea955b700288daf0f682abf0a7972fc1",
+  "base_tree": "dfb439242a6ee37bab88269bdc174fb4c8d766c3",
+  "main_base": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+  "main_tree": "6d4bc6f72f8ed1d67c3f655a5965bc7f2d1275f6",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/nfl-listing-metadata-binding-v1.json",
+    "docs/paid-launch/nfl-listing-metadata-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/nfl_listing_metadata_scope.py",
+    "tests/test_nfl_listing_metadata_scope.py"
+  ],
+  "previous_guard_sha256": "50047c4c194a36c340301ded75c5a8b2914df05c725a7f656e14f5dbe10991f0",
+  "reviewed_blobs": {
+    "docs/paid-launch/nfl-listing-metadata-v1.md": "a83fdabd0eb6298a3dfb4064d8f6669e55cd7ff0",
+    "scripts/ci_test_file_costs_v1.json": "0cc4a74cbe74b72cb37901b34781b4081e188957",
+    "scripts/nfl_listing_metadata_scope.py": "f3237f2d17d616f42cf0fb8bf8dbf321ce539c55",
+    "tests/test_nfl_listing_metadata_scope.py": "9b29a834a2781d6c145296585cd3b1b2c6bc314e"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "scripts/ci_test_file_costs_v1.json": {
+      "after_sha256": "0abad088b63a2d40f862854326c262603b2944550156dbfa5ea9707a2790ec00",
+      "before_sha256": "68f78301fad782324767aa216d0a8db5830999dbe25e435cd0929ecb52c596d1",
+      "remove_fields": [
+        "nfl_listing_cost_revision",
+        "nfl_listing_cost_basis"
+      ],
+      "restore_fields": {
+        "revision": 4,
+        "revision_basis": "Measured listing follow-up: 55 inherited scope files plus two new listing files; completed main/#2419 JUnit only, maximum compatible completed testcase cost plus unchanged 15% advisory margin. All prior sources and interrupted observations remain retained. Other file entries, scheduler, fallback, tests and workflows unchanged."
+      }
+    }
+  }
+}

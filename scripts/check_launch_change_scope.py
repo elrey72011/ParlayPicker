@@ -21765,6 +21765,52 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+LISTING_METADATA_BOOTSTRAP = True
+LISTING_METADATA_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-listing-metadata-v1.json'
+LISTING_METADATA_BINDING_PATH = 'docs/paid-launch/nfl-listing-metadata-binding-v1.json'
+LISTING_METADATA_BINDING_SHA256 = '0d6ae68f9c28651d6ccb40e9d8eb12b092be130fedc34801d60f1329dbec2173'
+LISTING_METADATA_REVIEWED_GUARD_SHA256 = '76fc3e8a774ac0b2ce27d5250e2c977a9ba358068675e988f944d858b201afd4'
+LISTING_METADATA_PREVIOUS_GUARD_SHA256 = '50047c4c194a36c340301ded75c5a8b2914df05c725a7f656e14f5dbe10991f0'
+LISTING_METADATA_SOURCE_RECONSTRUCTIONS = {'scripts/ci_test_file_costs_v1.json': {'after_sha256': '0abad088b63a2d40f862854326c262603b2944550156dbfa5ea9707a2790ec00', 'before_sha256': '68f78301fad782324767aa216d0a8db5830999dbe25e435cd0929ecb52c596d1', 'restore_fields': {'revision': 4, 'revision_basis': 'Measured listing follow-up: 55 inherited scope files plus two new listing files; completed main/#2419 JUnit only, maximum compatible completed testcase cost plus unchanged 15% advisory margin. All prior sources and interrupted observations remain retained. Other file entries, scheduler, fallback, tests and workflows unchanged.'}, 'remove_fields': ['nfl_listing_cost_revision', 'nfl_listing_cost_basis']}}
+from functools import lru_cache as _metadata_lru_cache
+
+def _listing_metadata_guard_matches(source):
+    reviewed=LISTING_METADATA_REVIEWED_GUARD_SHA256.encode('ascii')
+    return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==LISTING_METADATA_REVIEWED_GUARD_SHA256
+
+@_metadata_lru_cache(maxsize=2)
+def _listing_metadata_cached_base_source(source,reviewed,parent):
+    if b'\nLISTING_METADATA_BOOTSTRAP =' not in source:return source
+    _require(reviewed==LISTING_METADATA_REVIEWED_GUARD_SHA256 and parent==LISTING_METADATA_PREVIOUS_GUARD_SHA256 and _listing_metadata_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    prefix,own=source.split(b'\nLISTING_METADATA_BOOTSTRAP =',1)
+    previous=prefix+b'\nCOST_IMMUTABLE_BOOTSTRAP ='+own.split(b'\nCOST_IMMUTABLE_BOOTSTRAP =',1)[1]
+    start=previous.index(b'\n_metadata_previous_match=');end=previous.index(b'\nLISTING_COST_BOOTSTRAP =',start)
+    previous=previous[:start]+previous[end:]
+    start=previous.index(b'\n_metadata_previous_dfs_match=');end=previous.index(b'\ndef main() -> int:',start)
+    previous=previous[:start]+previous[end:]
+    dispatch=b'if exists_at("HEAD", LISTING_METADATA_POLICY_PATH):\n            code, report = _run_listing_metadata_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", COST_IMMUTABLE_POLICY_PATH):'
+    _require(previous.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    previous=previous.replace(dispatch,b'if exists_at("HEAD", COST_IMMUTABLE_POLICY_PATH):',1)
+    _require(hashlib.sha256(previous).hexdigest()==parent,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    return previous
+
+def _listing_metadata_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    return _listing_metadata_cached_base_source(source,LISTING_METADATA_REVIEWED_GUARD_SHA256,LISTING_METADATA_PREVIOUS_GUARD_SHA256)
+_listing_metadata_base_source.cache_clear=_listing_metadata_cached_base_source.cache_clear
+_listing_metadata_base_source.cache_info=_listing_metadata_cached_base_source.cache_info
+
+def _listing_metadata_previous_source(path,source):
+    if path==GUARD_PATH:return _listing_metadata_base_source(source)
+    info=LISTING_METADATA_SOURCE_RECONSTRUCTIONS.get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=json.loads(source)
+    for key in info['remove_fields']:value.pop(key)
+    value.update(info['restore_fields'])
+    result=(json.dumps(value,sort_keys=True,indent=2)+'\n').encode()
+    _require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 COST_IMMUTABLE_BOOTSTRAP = True
 COST_IMMUTABLE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-listing-immutable-v1.json'
 COST_IMMUTABLE_BINDING_PATH = 'docs/paid-launch/nfl-listing-immutable-binding-v1.json'
@@ -21798,6 +21844,15 @@ def _cost_immutable_base_source(source):
     return _cost_immutable_cached_base_source(source,COST_IMMUTABLE_REVIEWED_GUARD_SHA256,COST_IMMUTABLE_PREVIOUS_GUARD_SHA256)
 _cost_immutable_base_source.cache_clear=_cost_immutable_cached_base_source.cache_clear
 _cost_immutable_base_source.cache_info=_cost_immutable_cached_base_source.cache_info
+
+_metadata_previous_match=_cost_immutable_guard_matches
+_metadata_previous_base=_cost_immutable_base_source
+
+def _cost_immutable_guard_matches(source):return _metadata_previous_match(_listing_metadata_base_source(source))
+
+def _cost_immutable_base_source(source):return _metadata_previous_base(_listing_metadata_base_source(source))
+_cost_immutable_base_source.cache_clear=_metadata_previous_base.cache_clear
+_cost_immutable_base_source.cache_info=_metadata_previous_base.cache_info
 
 LISTING_COST_BOOTSTRAP = True
 LISTING_COST_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-listing-cost-v1.json'
@@ -23414,6 +23469,30 @@ def _run_cost_immutable_integrated(manifest_path,base):
     _scope_reconstruction_for_validation()
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+_metadata_previous_dfs_match=_dfs_guard_matches
+
+def _dfs_guard_matches(source,reviewed):
+    if reviewed==LISTING_METADATA_REVIEWED_GUARD_SHA256:return _listing_metadata_guard_matches(source)
+    try:return _metadata_previous_dfs_match(_listing_metadata_base_source(source),reviewed)
+    except ValueError:return False
+_metadata_previous_profile=_listing_cost_previous_source
+
+def _listing_cost_previous_source(path,source):return _metadata_previous_profile(path,_listing_metadata_previous_source(path,source))
+
+def _listing_metadata_binding():
+    raw=(ROOT/LISTING_METADATA_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==LISTING_METADATA_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    return json.loads(raw)
+
+def _run_listing_metadata_integrated(manifest_path,base):
+    import importlib.util
+    binding=_listing_metadata_binding();path=ROOT/'scripts/nfl_listing_metadata_scope.py'
+    raw=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==binding['reviewed_blobs']['scripts/nfl_listing_metadata_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_listing_metadata_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -23421,7 +23500,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", COST_IMMUTABLE_POLICY_PATH):
+        if exists_at("HEAD", LISTING_METADATA_POLICY_PATH):
+            code, report = _run_listing_metadata_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", COST_IMMUTABLE_POLICY_PATH):
             code, report = _run_cost_immutable_integrated(args.manifest, args.base)
         elif exists_at("HEAD", LISTING_COST_POLICY_PATH):
             code, report = _run_listing_cost_integrated(args.manifest, args.base)
