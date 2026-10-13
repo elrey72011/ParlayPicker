@@ -1,0 +1,24 @@
+{
+  "approval_reference": "Robert authorized exact successor bindings and preservation of unchanged historical assertions. Final-head CI reproduced an absent NFL metadata linkage for newly changed NCAAF paths; append only exact in-memory source reconstruction entries, preserving all frozen files and current acquisition implementation. A standard Connection-close response failed through the actual transport; retain the detached body socket and unchanged boundaries. Preserve prior document/NCAAF implementations and their seals. The actual original caller rejects standard Odds prose/shape missing internal period/rules declarations. This successor binds them only to exact substantive owner-reviewed applicable terms, preserving originals, old defaults, history, lag, clock, model and wagering gates. No acquisition or authentic inference. Preserve all original readers, clocks, source/review/model/wagering gates, response limits, frozen predecessor bindings, tests and five-shard CI. No collection or authentic inference.",
+  "base": "006468faf4c098e62cfaca4ee03c57670d5db28d",
+  "base_tree": "ad6664675d9aaa376d1ac6bcbe397a120e4a40f9",
+  "main_base": "4b89179e40f48cb555b00e3f9e440f20f96647be",
+  "main_tree": "6b5bb0e707ac743d34f482b6279a4b0c0dd41bac",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/football-document-metadata-binding-v2.json",
+    "docs/paid-launch/football-document-metadata-v2.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_metadata_scope.py",
+    "tests/test_football_document_metadata_scope.py"
+  ],
+  "previous_guard_sha256": "c99e3bc5beb02811faff87a21f4986af5595ef1b6be94a806975a4ddbda7f036",
+  "reconstruction_json_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-metadata-v2.md": "75f28e3a945cd6f81916b17c89ba9f6c84f0b34f",
+    "scripts/football_document_metadata_scope.py": "daa72c8d749ee60f8490462878562d6f2b69f359",
+    "tests/test_football_document_metadata_scope.py": "42ff8418d07320d04c96a4ba4139ced001d08b42"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}
