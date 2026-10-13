@@ -1,0 +1,67 @@
+name: NFL PDF CI scope comparison (bounded)
+
+on:
+  push:
+    branches: [codex/nfl-pdf-ci-probe]
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - label: main
+            revision: 9aceef16d9f79fdb95c9a910b5411e3cd449e5ce
+          - label: pdf
+            revision: 0596b245e5832c7b776808bd1f508f42ef5758fe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: diagnostic
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.revision }}
+          fetch-depth: 0
+          path: target
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.15'
+      - name: Install identical pinned diagnostic dependencies
+        timeout-minutes: 6
+        run: |
+          mkdir -p reports
+          python -m pip install 'pip==26.2.1' 'pytest==9.1.1' 'numpy==2.2.6' 'pandas==2.2.3' 'requests==2.34.2' 'iniconfig==2.3.0' 'packaging==26.3' 'pluggy==1.6.0' 'pygments==2.21.0' 'python-dateutil==2.9.0.post0' 'pytz==2026.5' 'tzdata==2026.5' 'six==1.17.0' 'charset-normalizer==3.5.2' 'idna==3.20' 'urllib3==2.8.0' 'certifi==2026.7.22'
+          python -m pip freeze --all > reports/environment.lock
+          python --version > reports/runtime.txt
+          git --version >> reports/runtime.txt
+          sha256sum "$(command -v git)" >> reports/runtime.txt
+          cat /etc/os-release >> reports/runtime.txt
+          echo "DIAGNOSTIC_LOCK_SHA256=$(sha256sum reports/environment.lock | cut -d' ' -f1)" >> "$GITHUB_ENV"
+      - name: Bounded unchanged-test comparison
+        timeout-minutes: 23
+        env:
+          LABEL: ${{ matrix.label }}
+          REVISION: ${{ matrix.revision }}
+          PYTHONHASHSEED: '0'
+        run: |
+          python diagnostic/scripts/profile_scope_validation.py --repo target --output reports/probe --revision "$REVISION" --label "$LABEL" --timeout-seconds 1200
+      - name: Upload complete or partial diagnostic records
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: scope-performance-${{ matrix.label }}
+          path: |
+            reports/environment.lock
+            reports/runtime.txt
+            reports/probe/progress.jsonl
+            reports/probe/receipt.json
+            reports/probe/results.xml
+            reports/probe/profile.pstats
+          retention-days: 14
+          if-no-files-found: error
