@@ -21765,6 +21765,53 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+NFL_INTERPRETATION_BOOTSTRAP = True
+NFL_INTERPRETATION_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-interpretation-v2.json'
+NFL_INTERPRETATION_BINDING_PATH = 'docs/paid-launch/nfl-source-interpretation-binding-v2.json'
+NFL_INTERPRETATION_BINDING_SHA256 = '3216d44a6be817c7d0d4e628423df3a62d8ed5cf5628c0d07a6888b2f3d35b7b'
+NFL_INTERPRETATION_REVIEWED_GUARD_SHA256 = 'e805f6fc200ad69469d422108ac5c7879330e8299851bb37e50089bfdf82645e'
+NFL_INTERPRETATION_PREVIOUS_GUARD_SHA256 = '7554b9f11f0a410ecc88bc33b6faae8a05b33212e763f7fd9bbba5007c92d1fa'
+NFL_INTERPRETATION_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"after_sha256":"f34fbb1ce8cd184d79cecfc62d7cb58adacc3b661e5963a8754c0dd657909d53","before_sha256":"056a2ff2313f112a94aaad3293cb9edb4a90464f71932847bbc4515b365ac2d8","reverse_patches":[{"end":2810,"start":2768,"text":""},{"end":3447,"start":2977,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"03fb6ab692cdee57418faac252fb282c08398bbbd2ff66a35d03392471ef95f6","before_sha256":"3ac525c0744e66968f80c377f81c737eb8c1cc097665deb47f4888272f5977ef","reverse_patches":[{"end":268,"start":236,"text":""},{"end":321,"start":308,"text":""},{"end":648,"start":636,"text":""},{"end":747,"start":733,"text":""},{"end":1568,"start":1515,"text":""},{"end":1791,"start":1769,"text":""},{"end":1867,"start":1846,"text":""},{"end":2026,"start":2006,"text":""},{"end":2813,"start":2800,"text":""}]}}'
+from functools import lru_cache as _interpret_lru
+
+def _interpret_guard_matches(source):
+    identity=NFL_INTERPRETATION_REVIEWED_GUARD_SHA256.encode()
+    return source.count(identity)==1 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==NFL_INTERPRETATION_REVIEWED_GUARD_SHA256
+
+@_interpret_lru(maxsize=2)
+def _interpret_cached_base(source,reviewed,parent):
+    if hashlib.sha256(source).hexdigest()==parent:return source
+    if b'\nNFL_INTERPRETATION_BOOTSTRAP =' not in source:return source
+    _require(_interpret_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nNFL_INTERPRETATION_BOOTSTRAP =');end=source.index(b'\nLISTING_CAPACITY_BOOTSTRAP =',begin)
+    prior=source[:begin]+source[end:]
+    begin=prior.index(b'\n_interpret_parent_capacity_base=');end=prior.index(b'\nLISTING_METADATA_BOOTSTRAP =',begin)
+    prior=prior[:begin]+prior[end:]
+    begin=prior.index(b'\n_interpret_parent_dfs=');end=prior.index(b'\ndef main() -> int:',begin)
+    prior=prior[:begin]+prior[end:]
+    dispatch=b'if exists_at("HEAD", NFL_INTERPRETATION_POLICY_PATH):\n            code, report = _run_interpret_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", LISTING_CAPACITY_POLICY_PATH):'
+    _require(prior.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    prior=prior.replace(dispatch,b'if exists_at("HEAD", LISTING_CAPACITY_POLICY_PATH):',1)
+    _require(hashlib.sha256(prior).hexdigest()==parent,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    return prior
+
+def _interpret_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=5577215:return source
+    return _interpret_cached_base(source,NFL_INTERPRETATION_REVIEWED_GUARD_SHA256,NFL_INTERPRETATION_PREVIOUS_GUARD_SHA256)
+_interpret_base_source.cache_info=_interpret_cached_base.cache_info
+_interpret_base_source.cache_clear=_interpret_cached_base.cache_clear
+
+def _interpret_previous_source(path,source):
+    if path==GUARD_PATH:return _interpret_base_source(source)
+    info=json.loads(NFL_INTERPRETATION_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode()
+    _require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 LISTING_CAPACITY_BOOTSTRAP = True
 LISTING_CAPACITY_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-listing-capacity-v1.json'
 LISTING_CAPACITY_BINDING_PATH = 'docs/paid-launch/nfl-listing-capacity-binding-v1.json'
@@ -21810,6 +21857,27 @@ def _listing_capacity_previous_source(path,source):
     result=value.encode('utf-8')
     _require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
     return result
+
+_interpret_parent_capacity_base=_listing_capacity_base_source
+def _listing_capacity_base_source(source):
+    # Keep the existing bounded reconstruction graph below its unchanged limit.
+    # This adapter makes no cached validation decision; it checks metadata live.
+    if len(source)==5577215:
+        identity=NFL_INTERPRETATION_REVIEWED_GUARD_SHA256.encode()
+        _require(source.count(identity)==1 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==NFL_INTERPRETATION_REVIEWED_GUARD_SHA256,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_INTERPRETATION_BOOTSTRAP =');end=source.index(b'\nLISTING_CAPACITY_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        begin=source.index(b'\n_interpret_parent_capacity_base=');end=source.index(b'\nLISTING_METADATA_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        begin=source.index(b'\n_interpret_parent_dfs=');end=source.index(b'\ndef main() -> int:',begin)
+        source=source[:begin]+source[end:]
+        dispatch=b'if exists_at("HEAD", NFL_INTERPRETATION_POLICY_PATH):\n            code, report = _run_interpret_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", LISTING_CAPACITY_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", LISTING_CAPACITY_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()==NFL_INTERPRETATION_PREVIOUS_GUARD_SHA256,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    return _interpret_parent_capacity_base(source)
+_listing_capacity_base_source.cache_info=_interpret_parent_capacity_base.cache_info
+_listing_capacity_base_source.cache_clear=_interpret_parent_capacity_base.cache_clear
 
 LISTING_METADATA_BOOTSTRAP = True
 LISTING_METADATA_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-listing-metadata-v1.json'
@@ -23572,6 +23640,32 @@ def _run_listing_capacity_integrated(manifest_path,base):
     _scope_reconstruction_for_validation()
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+_interpret_parent_dfs=_dfs_guard_matches
+def _dfs_guard_matches(source,reviewed):
+    if reviewed==NFL_INTERPRETATION_REVIEWED_GUARD_SHA256:return _interpret_guard_matches(source)
+    try:return _interpret_parent_dfs(_interpret_base_source(source),reviewed)
+    except ValueError:return False
+_interpret_parent_previous=_listing_capacity_previous_source
+def _listing_capacity_previous_source(path,source):
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_INTERPRETATION_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode()
+            _require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return _interpret_parent_previous(path,source)
+
+def _run_interpret_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/NFL_INTERPRETATION_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==NFL_INTERPRETATION_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/nfl_interpretation_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/nfl_interpretation_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_interpretation_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -23579,7 +23673,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", LISTING_CAPACITY_POLICY_PATH):
+        if exists_at("HEAD", NFL_INTERPRETATION_POLICY_PATH):
+            code, report = _run_interpret_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", LISTING_CAPACITY_POLICY_PATH):
             code, report = _run_listing_capacity_integrated(args.manifest, args.base)
         elif exists_at("HEAD", LISTING_METADATA_POLICY_PATH):
             code, report = _run_listing_metadata_integrated(args.manifest, args.base)
