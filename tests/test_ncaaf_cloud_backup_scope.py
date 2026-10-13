@@ -29,6 +29,7 @@ def test_frozen_setup_and_protected_files_unmodified():
         'app_core/public_history.py','app_core/stage_timing.py','app_core/performance_spans.py',
         'tests/test_ncaaf_pilot_setup.py','.github/workflows/ci.yml']:
         current=(ROOT/path).read_bytes().replace(b'\r\n',b'\n')
+        current=guard._listing_capacity_previous_source(path,current)
         blob=hashlib.sha1(b'blob '+str(len(current)).encode()+b'\0'+current).hexdigest()
         assert blob==policy['unchanged_bindings'][path]
 

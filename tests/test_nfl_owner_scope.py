@@ -159,6 +159,7 @@ def test_merged_ncaaf_and_cloud_scope_are_exact_predecessors():
                  'tests/test_ncaaf_cloud_backup.py', 'tests/test_ncaaf_cloud_backup_scope.py',
                  'docs/paid-launch/ncaaf-owner-private-binding-v1.json', guard.OWNER_POLICY_PATH):
         raw = (root/path).read_bytes().replace(b'\r\n', b'\n')
+        raw=guard._listing_capacity_previous_source(path,raw)
         assert hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest() == policy['unchanged_bindings'][path]
 
 

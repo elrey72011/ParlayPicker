@@ -60,7 +60,8 @@ def main(argv=None):
         auth=bounded_json(args.authorization)
         with lane.controlled(plan,raw,args.bindings_sha256,root=args.custody_root) as approved:
             lane.require(auth==approved,'NFL_ACQUIRE_CONFIGURATION_CONFLICT')
-            result=lane.acquire(plan,auth,root=args.custody_root,transport=lane.HttpsTransport(private_credential))
+            result=lane.acquire(plan,auth,root=args.custody_root,
+                                transport=lane.HttpsTransport(private_credential,version=plan['payload']['version']))
         print(json.dumps(lane.execution_report(result),sort_keys=True))
         return 0 if result['payload']['status']=='CAPTURED_UNREVIEWED' else 1
     except (ValueError,KeyError,TypeError,OSError) as exc:

@@ -1021,8 +1021,8 @@
       "seconds": 4.05648
     },
     {
-      "advisory_basis_seconds": 237.008,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 232.22,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 68,
@@ -1035,18 +1035,26 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 237.008,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 68,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 232.22,
+          "source": "listing-completed-main-3"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 237.008,
       "path": "tests/test_canonical_download_scope.py",
       "profiled_tests": 68,
       "references": [
         "oct11-main-1",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-3"
       ],
-      "seconds": 272.5592,
+      "seconds": 267.053,
       "variance_multiplier": 1.15
     },
     {
@@ -1137,8 +1145,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 57.462,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 46.387,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 20,
@@ -1151,18 +1159,26 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 57.462,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 20,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 46.387,
+          "source": "listing-completed-main-3"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 57.462,
       "path": "tests/test_ci_scheduling_scope.py",
       "profiled_tests": 20,
       "references": [
         "oct11-pr-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-3"
       ],
-      "seconds": 66.0813,
+      "seconds": 53.34505,
       "variance_multiplier": 1.15
     },
     {
@@ -1216,29 +1232,45 @@
       "seconds": 0.26565
     },
     {
-      "advisory_basis_seconds": 1.212,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 2.918,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 13,
           "kind": "completed_junit_testcase_sum",
           "seconds": 1.212,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 13,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.918,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 13,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.51,
+          "source": "listing-completed-pr-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 1.212,
       "path": "tests/test_ci_timing_scope.py",
       "profiled_tests": 13,
       "references": [
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-2",
+        "listing-completed-pr-1"
       ],
-      "seconds": 1.3938
+      "seconds": 3.3557,
+      "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 17.399,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 34.132,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 21,
@@ -1251,18 +1283,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 17.399,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 21,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 32.418,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 21,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 34.132,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 17.399,
       "path": "tests/test_clock_scope_exception_proposal.py",
       "profiled_tests": 21,
       "references": [
         "oct11-main-1",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-2",
+        "listing-completed-pr-2"
       ],
-      "seconds": 20.00885,
+      "seconds": 39.2518,
       "variance_multiplier": 1.15
     },
     {
@@ -1827,8 +1874,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 51.646,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 74.02,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 60,
@@ -1847,19 +1894,27 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 47.182,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 60,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 74.02,
+          "source": "listing-completed-main-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 51.646,
       "path": "tests/test_dfs_scope_policy.py",
       "profiled_tests": 60,
       "references": [
         "oct11-main-3",
         "oct11-pr-2",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-1"
       ],
-      "seconds": 59.3929,
+      "seconds": 85.123,
       "variance_multiplier": 1.15
     },
     {
@@ -2026,8 +2081,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 31.836,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 9.267,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 37,
@@ -2046,19 +2101,27 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 28.734,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 37,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 9.267,
+          "source": "listing-completed-main-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 31.836,
       "path": "tests/test_drive_history_scope_policy.py",
       "profiled_tests": 37,
       "references": [
         "oct11-main-1",
         "oct11-pr-2",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-1"
       ],
-      "seconds": 36.6114,
+      "seconds": 10.65705,
       "variance_multiplier": 1.15
     },
     {
@@ -2337,8 +2400,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 38.053,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 15.888,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 37,
@@ -2357,19 +2420,27 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 29.195,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 37,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 15.888,
+          "source": "listing-completed-main-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 38.053,
       "path": "tests/test_estimate_scope_policy.py",
       "profiled_tests": 37,
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-2"
       ],
-      "seconds": 43.76095,
+      "seconds": 18.2712,
       "variance_multiplier": 1.15
     },
     {
@@ -2510,14 +2581,26 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 0.075,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 0.168,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 9,
           "kind": "completed_junit_testcase_sum",
           "seconds": 0.075,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 9,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.168,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 9,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.087,
+          "source": "listing-completed-pr-1"
         }
       ],
       "incomplete_observations": [
@@ -2539,7 +2622,7 @@
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
-      "measurement_complete": false,
+      "measurement_complete": true,
       "original_measured_seconds": 0.075,
       "path": "tests/test_export_scope.py",
       "profiled_tests": 9,
@@ -2547,9 +2630,12 @@
         "oct11-main-cancel-2",
         "oct11-pr-cancel-1",
         "oct11-pr-retry-cancel-1",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-2",
+        "listing-completed-pr-1"
       ],
-      "seconds": 0.08625
+      "seconds": 0.1932,
+      "variance_multiplier": 1.15
     },
     {
       "advisory_basis_seconds": 0.014277,
@@ -2794,14 +2880,26 @@
       "seconds": 1.717394
     },
     {
-      "advisory_basis_seconds": 150.168988,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 120.412,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 49,
           "kind": "completed_junit_testcase_sum",
           "seconds": 107.537,
           "source": "main-1"
+        },
+        {
+          "count": 49,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 99.643,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 49,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 120.412,
+          "source": "listing-completed-pr-1"
         }
       ],
       "incomplete_observations": [
@@ -2813,15 +2911,18 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 107.537,
       "path": "tests/test_football_catalog_scope.py",
       "profiled_tests": 49,
       "references": [
         "oct11-main-1",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-1",
+        "listing-completed-pr-1"
       ],
-      "seconds": 172.694336,
+      "seconds": 138.4738,
       "variance_multiplier": 1.15
     },
     {
@@ -3001,8 +3102,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 231.204,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 218.853,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 75,
@@ -3021,19 +3122,27 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 177.259,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 75,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 218.853,
+          "source": "listing-completed-main-3"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 231.204,
       "path": "tests/test_football_research_scope.py",
       "profiled_tests": 75,
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-3"
       ],
-      "seconds": 265.8846,
+      "seconds": 251.68095,
       "variance_multiplier": 1.15
     },
     {
@@ -3649,8 +3758,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 63.220984,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 15.357,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 52,
@@ -3663,6 +3772,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 43.037,
           "source": "pr-2"
+        },
+        {
+          "count": 52,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 15.357,
+          "source": "listing-completed-main-1"
         }
       ],
       "incomplete_observations": [
@@ -3674,16 +3789,18 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 51.599,
       "path": "tests/test_home_runline_scope_policy.py",
       "profiled_tests": 52,
       "references": [
         "oct11-main-3",
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-1"
       ],
-      "seconds": 72.704132,
+      "seconds": 17.66055,
       "variance_multiplier": 1.15
     },
     {
@@ -4526,8 +4643,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 7.903,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 6.575,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 23,
@@ -4540,18 +4657,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 7.903,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 23,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 5.418,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 23,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 6.575,
+          "source": "listing-completed-pr-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 7.903,
       "path": "tests/test_launch_scope_integration.py",
       "profiled_tests": 23,
       "references": [
         "oct11-pr-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-1",
+        "listing-completed-pr-1"
       ],
-      "seconds": 9.08845,
+      "seconds": 7.56125,
       "variance_multiplier": 1.15
     },
     {
@@ -5407,8 +5539,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 178.741,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 172.859,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 56,
@@ -5427,19 +5559,27 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 134.062,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 56,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 172.859,
+          "source": "listing-completed-main-3"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 178.741,
       "path": "tests/test_mlb_nhl_research_scope.py",
       "profiled_tests": 56,
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-3"
       ],
-      "seconds": 205.55215,
+      "seconds": 198.78785,
       "variance_multiplier": 1.15
     },
     {
@@ -6198,8 +6338,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 21.113,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 41.6,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 15,
@@ -6212,18 +6352,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 21.113,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 41.6,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 34.948,
+          "source": "listing-completed-pr-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 21.113,
       "path": "tests/test_ncaaf_chronology_scope.py",
       "profiled_tests": 15,
       "references": [
         "oct11-main-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-2",
+        "listing-completed-pr-1"
       ],
-      "seconds": 24.27995,
+      "seconds": 47.84,
       "variance_multiplier": 1.15
     },
     {
@@ -6296,14 +6451,20 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 0.302536,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 0.97,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 3,
           "kind": "completed_junit_testcase_sum",
           "seconds": 0.294,
           "source": "pr-2"
+        },
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.97,
+          "source": "listing-completed-main-2"
         }
       ],
       "incomplete_observations": [
@@ -6315,26 +6476,40 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 0.294,
       "path": "tests/test_ncaaf_cloud_backup_scope.py",
       "profiled_tests": 3,
       "references": [
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-2"
       ],
-      "seconds": 0.347916,
+      "seconds": 1.1155,
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 502.829401,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 308.052,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 118,
           "kind": "completed_junit_testcase_sum",
           "seconds": 364.92,
           "source": "main-1"
+        },
+        {
+          "count": 118,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 260.732,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 118,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 308.052,
+          "source": "listing-completed-pr-1"
         }
       ],
       "incomplete_observations": [
@@ -6346,15 +6521,18 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 364.92,
       "path": "tests/test_ncaaf_compatibility_scope.py",
       "profiled_tests": 118,
       "references": [
         "oct11-main-1",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-1",
+        "listing-completed-pr-1"
       ],
-      "seconds": 578.253811,
+      "seconds": 354.2598,
       "variance_multiplier": 1.15
     },
     {
@@ -6432,8 +6610,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 41.77,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 66.35,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 47,
@@ -6446,23 +6624,38 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 34.417,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 47,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 63.003,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 47,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 66.35,
+          "source": "listing-completed-pr-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 41.77,
       "path": "tests/test_ncaaf_coverage_scope_policy.py",
       "profiled_tests": 47,
       "references": [
         "oct11-pr-2",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-1",
+        "listing-completed-pr-1"
       ],
-      "seconds": 48.0355,
+      "seconds": 76.3025,
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 21.28883,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 51.016,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 15,
@@ -6475,6 +6668,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 18.117,
           "source": "pr-2"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 41.734,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 51.016,
+          "source": "listing-completed-pr-2"
         }
       ],
       "incomplete_observations": [
@@ -6486,16 +6691,19 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 18.117,
       "path": "tests/test_ncaaf_custody_scope.py",
       "profiled_tests": 15,
       "references": [
         "oct11-main-3",
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-2",
+        "listing-completed-pr-2"
       ],
-      "seconds": 24.482155,
+      "seconds": 58.6684,
       "variance_multiplier": 1.15
     },
     {
@@ -6669,14 +6877,20 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 21.133826,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 41.182,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 15,
           "kind": "completed_junit_testcase_sum",
           "seconds": 20.01,
           "source": "pr-3"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 41.182,
+          "source": "listing-completed-main-3"
         }
       ],
       "incomplete_observations": [
@@ -6688,15 +6902,17 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 20.01,
       "path": "tests/test_ncaaf_normal_scope.py",
       "profiled_tests": 15,
       "references": [
         "oct11-pr-3",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-3"
       ],
-      "seconds": 24.3039,
+      "seconds": 47.3593,
       "variance_multiplier": 1.15
     },
     {
@@ -6731,8 +6947,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 3.909,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 9.646,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 17,
@@ -6745,18 +6961,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 3.909,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 17,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 8.513,
+          "source": "listing-completed-main-3"
+        },
+        {
+          "count": 17,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 9.646,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 3.909,
       "path": "tests/test_ncaaf_owner_scope.py",
       "profiled_tests": 17,
       "references": [
         "oct11-main-1",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-3",
+        "listing-completed-pr-2"
       ],
-      "seconds": 4.49535,
+      "seconds": 11.0929,
       "variance_multiplier": 1.15
     },
     {
@@ -6832,8 +7063,22 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 10.430669,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 25.404,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "completed_measurements": [
+        {
+          "count": 12,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 23.761,
+          "source": "listing-completed-main-3"
+        },
+        {
+          "count": 12,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 25.404,
+          "source": "listing-completed-pr-2"
+        }
+      ],
       "incomplete_observations": [
         {
           "observed_nodeids": 12,
@@ -6858,21 +7103,24 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
-      "measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "path": "tests/test_ncaaf_pilot_discovery_scope.py",
       "profiled_tests": 12,
       "references": [
         "oct11-main-cancel-2",
         "oct11-pr-cancel-1",
         "oct11-pr-retry-cancel-1",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-3",
+        "listing-completed-pr-2"
       ],
-      "seconds": 11.995269
+      "seconds": 29.2146,
+      "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 15.567,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 41.64,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 15,
@@ -6885,18 +7133,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 15.567,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 41.64,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 31.073,
+          "source": "listing-completed-pr-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 15.567,
       "path": "tests/test_ncaaf_pilot_scope.py",
       "profiled_tests": 15,
       "references": [
         "oct11-main-1",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-2",
+        "listing-completed-pr-1"
       ],
-      "seconds": 17.90205,
+      "seconds": 47.886,
       "variance_multiplier": 1.15
     },
     {
@@ -7054,14 +7317,26 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 203.495011,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 211.454,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 61,
           "kind": "completed_junit_testcase_sum",
           "seconds": 154.982,
           "source": "pr-2"
+        },
+        {
+          "count": 61,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 195.744,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 61,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 211.454,
+          "source": "listing-completed-pr-2"
         }
       ],
       "incomplete_observations": [
@@ -7073,15 +7348,18 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 154.982,
       "path": "tests/test_ncaaf_research_scope.py",
       "profiled_tests": 61,
       "references": [
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-2",
+        "listing-completed-pr-2"
       ],
-      "seconds": 234.019263,
+      "seconds": 243.1721,
       "variance_multiplier": 1.15
     },
     {
@@ -7157,8 +7435,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 22.651,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 27.066,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 26,
@@ -7171,18 +7449,26 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 17.494,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 26,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 27.066,
+          "source": "listing-completed-main-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 22.651,
       "path": "tests/test_ncaaf_schedule_scope_policy.py",
       "profiled_tests": 26,
       "references": [
         "oct11-pr-3",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-1"
       ],
-      "seconds": 26.04865,
+      "seconds": 31.1259,
       "variance_multiplier": 1.15
     },
     {
@@ -7367,14 +7653,20 @@
       "seconds": 19.95595
     },
     {
-      "advisory_basis_seconds": 113.508,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 122.445,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 48,
           "kind": "completed_junit_testcase_sum",
           "seconds": 113.508,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 48,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 122.445,
+          "source": "listing-completed-main-3"
         }
       ],
       "incomplete_observations": [
@@ -7396,7 +7688,7 @@
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
-      "measurement_complete": false,
+      "measurement_complete": true,
       "original_measured_seconds": 113.508,
       "path": "tests/test_nfl_admission_scope.py",
       "profiled_tests": 48,
@@ -7404,9 +7696,11 @@
         "oct11-main-cancel-2",
         "oct11-pr-cancel-1",
         "oct11-pr-retry-cancel-1",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-3"
       ],
-      "seconds": 130.5342
+      "seconds": 140.81175,
+      "variance_multiplier": 1.15
     },
     {
       "advisory_basis_seconds": 0.418,
@@ -7474,14 +7768,20 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 89.830768,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 89.224,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 35,
           "kind": "completed_junit_testcase_sum",
           "seconds": 64.768,
           "source": "pr-2"
+        },
+        {
+          "count": 35,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 89.224,
+          "source": "listing-completed-main-2"
         }
       ],
       "incomplete_observations": [
@@ -7493,15 +7793,17 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 64.768,
       "path": "tests/test_nfl_calibration_scope.py",
       "profiled_tests": 35,
       "references": [
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-2"
       ],
-      "seconds": 103.305383,
+      "seconds": 102.6076,
       "variance_multiplier": 1.15
     },
     {
@@ -7547,8 +7849,8 @@
       "seconds": 0.2024
     },
     {
-      "advisory_basis_seconds": 1.189,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 2.295,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 13,
@@ -7561,18 +7863,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 0.931,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 13,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.107,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 13,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.295,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 1.189,
       "path": "tests/test_nfl_diagnostics_scope.py",
       "profiled_tests": 13,
       "references": [
         "oct11-pr-3",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-2",
+        "listing-completed-pr-2"
       ],
-      "seconds": 1.36735,
+      "seconds": 2.63925,
       "variance_multiplier": 1.15
     },
     {
@@ -7636,8 +7953,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 122.329,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 137.751,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 51,
@@ -7650,18 +7967,26 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 92.805,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 51,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 137.751,
+          "source": "listing-completed-main-3"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 122.329,
       "path": "tests/test_nfl_inputs_scope.py",
       "profiled_tests": 51,
       "references": [
         "oct11-pr-3",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-3"
       ],
-      "seconds": 140.67835,
+      "seconds": 158.41365,
       "variance_multiplier": 1.15
     },
     {
@@ -7801,14 +8126,20 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 75.014987,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 54.855,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 32,
           "kind": "completed_junit_testcase_sum",
           "seconds": 73.443,
           "source": "pr-3"
+        },
+        {
+          "count": 32,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 54.855,
+          "source": "listing-completed-main-1"
         }
       ],
       "incomplete_observations": [
@@ -7820,15 +8151,17 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 73.443,
       "path": "tests/test_nfl_native_scope.py",
       "profiled_tests": 32,
       "references": [
         "oct11-pr-3",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-1"
       ],
-      "seconds": 86.267235,
+      "seconds": 63.08325,
       "variance_multiplier": 1.15
     },
     {
@@ -7861,8 +8194,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 3.066,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 8.071,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 15,
@@ -7881,19 +8214,34 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 2.65,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 7.381,
+          "source": "listing-completed-main-3"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 8.071,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 3.066,
       "path": "tests/test_nfl_observed_scope.py",
       "profiled_tests": 15,
       "references": [
         "oct11-main-3",
         "oct11-pr-2",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-3",
+        "listing-completed-pr-2"
       ],
-      "seconds": 3.5259,
+      "seconds": 9.28165,
       "variance_multiplier": 1.15
     },
     {
@@ -7921,14 +8269,66 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 2.998,
-      "basis": "Completed exact-file JUnit testcase total plus existing 15% advisory variance. Per-test phases are combined; install, collection, session reporting and upload are excluded.",
+      "advisory_basis_seconds": 0.309,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "completed_measurements": [
+        {
+          "count": 36,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.309,
+          "source": "listing-completed-pr-1"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "path": "tests/test_nfl_odds_listing_acquisition.py",
+      "profiled_tests": 36,
+      "references": [
+        "listing-completed-pr-1"
+      ],
+      "seconds": 0.35535,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 9.674,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "completed_measurements": [
+        {
+          "count": 14,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 9.674,
+          "source": "listing-completed-pr-1"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "path": "tests/test_nfl_odds_listing_scope.py",
+      "profiled_tests": 14,
+      "references": [
+        "listing-completed-pr-1"
+      ],
+      "seconds": 11.1251,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 11.49,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 14,
           "kind": "completed_junit_testcase_sum",
           "seconds": 2.998,
           "source": "nfl-odds-completed-1"
+        },
+        {
+          "count": 14,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 11.49,
+          "source": "listing-completed-main-3"
         }
       ],
       "incomplete_observations": [],
@@ -7939,9 +8339,10 @@
       "path": "tests/test_nfl_odds_scope.py",
       "profiled_tests": 14,
       "references": [
-        "nfl-odds-completed-1"
+        "nfl-odds-completed-1",
+        "listing-completed-main-3"
       ],
-      "seconds": 3.4477,
+      "seconds": 13.2135,
       "variance_multiplier": 1.15
     },
     {
@@ -7976,8 +8377,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 3.821358,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 7.971,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 19,
@@ -7990,6 +8391,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 3.072,
           "source": "pr-2"
+        },
+        {
+          "count": 19,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 7.971,
+          "source": "listing-completed-main-2"
         }
       ],
       "incomplete_observations": [
@@ -8001,16 +8408,18 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 3.072,
       "path": "tests/test_nfl_owner_scope.py",
       "profiled_tests": 19,
       "references": [
         "oct11-main-1",
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-2"
       ],
-      "seconds": 4.394562,
+      "seconds": 9.16665,
       "variance_multiplier": 1.15
     },
     {
@@ -8045,8 +8454,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 43.487338,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 17.841,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 38,
@@ -8059,6 +8468,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 25.865,
           "source": "pr-2"
+        },
+        {
+          "count": 38,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 17.604,
+          "source": "listing-completed-main-3"
+        },
+        {
+          "count": 38,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 17.841,
+          "source": "listing-completed-pr-2"
         }
       ],
       "incomplete_observations": [
@@ -8070,16 +8491,19 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 35.517,
       "path": "tests/test_nfl_provenance_scope.py",
       "profiled_tests": 38,
       "references": [
         "oct11-main-1",
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-3",
+        "listing-completed-pr-2"
       ],
-      "seconds": 50.010439,
+      "seconds": 20.51715,
       "variance_multiplier": 1.15
     },
     {
@@ -8123,6 +8547,29 @@
         "refresh1-completed-2"
       ],
       "seconds": 29.5688
+    },
+    {
+      "advisory_basis_seconds": 11.978,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "completed_measurements": [
+        {
+          "count": 14,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 11.978,
+          "source": "listing-completed-main-2"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "path": "tests/test_nfl_scenario_scope.py",
+      "profiled_tests": 14,
+      "references": [
+        "listing-completed-main-2"
+      ],
+      "seconds": 13.7747,
+      "variance_multiplier": 1.15
     },
     {
       "advisory_basis_seconds": 1.572,
@@ -8194,8 +8641,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 3.639,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 5.791,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 15,
@@ -8208,18 +8655,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 3.639,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 4.853,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 5.791,
+          "source": "listing-completed-pr-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 3.639,
       "path": "tests/test_nfl_scoring_scope.py",
       "profiled_tests": 15,
       "references": [
         "oct11-pr-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-1",
+        "listing-completed-pr-1"
       ],
-      "seconds": 4.18485,
+      "seconds": 6.65965,
       "variance_multiplier": 1.15
     },
     {
@@ -8297,8 +8759,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 79.727,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 61.466,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 34,
@@ -8311,18 +8773,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 61.072,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 34,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 58.509,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 34,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 61.466,
+          "source": "listing-completed-pr-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 79.727,
       "path": "tests/test_nfl_ui_scope.py",
       "profiled_tests": 34,
       "references": [
         "oct11-pr-3",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-1",
+        "listing-completed-pr-1"
       ],
-      "seconds": 91.68605,
+      "seconds": 70.6859,
       "variance_multiplier": 1.15
     },
     {
@@ -8397,8 +8874,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 96.313,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 135.32,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 43,
@@ -8411,18 +8888,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 96.313,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 85.734,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 135.32,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 96.313,
       "path": "tests/test_nhl_puck_line_scope.py",
       "profiled_tests": 43,
       "references": [
         "oct11-main-1",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-1",
+        "listing-completed-pr-2"
       ],
-      "seconds": 110.75995,
+      "seconds": 155.618,
       "variance_multiplier": 1.15
     },
     {
@@ -9213,8 +9705,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 0.012151,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 0.006,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 2,
@@ -9227,6 +9719,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 0.011,
           "source": "pr-3"
+        },
+        {
+          "count": 2,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.006,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 2,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.006,
+          "source": "listing-completed-pr-1"
         }
       ],
       "incomplete_observations": [
@@ -9238,16 +9742,19 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 0.011,
       "path": "tests/test_performance_recap_scope.py",
       "profiled_tests": 2,
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-1",
+        "listing-completed-pr-1"
       ],
-      "seconds": 0.013974,
+      "seconds": 0.0069,
       "variance_multiplier": 1.15
     },
     {
@@ -9309,8 +9816,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 77.22,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 106.074,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 38,
@@ -9329,19 +9836,34 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 77.22,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 38,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 106.074,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 38,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 77.975,
+          "source": "listing-completed-pr-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 77.22,
       "path": "tests/test_pick_board_scope.py",
       "profiled_tests": 38,
       "references": [
         "oct11-main-1",
         "oct11-pr-2",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-2",
+        "listing-completed-pr-1"
       ],
-      "seconds": 88.803,
+      "seconds": 121.9851,
       "variance_multiplier": 1.15
     },
     {
@@ -10135,8 +10657,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 15.887,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 44.481,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 15,
@@ -10149,18 +10671,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 15.887,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 29.067,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 44.481,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 15.887,
       "path": "tests/test_preview_binding_scope.py",
       "profiled_tests": 15,
       "references": [
         "oct11-main-1",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-1",
+        "listing-completed-pr-2"
       ],
-      "seconds": 18.27005,
+      "seconds": 51.15315,
       "variance_multiplier": 1.15
     },
     {
@@ -10446,8 +10983,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 68.269,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 28.333,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 50,
@@ -10466,19 +11003,34 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 67.475,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 50,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 27.868,
+          "source": "listing-completed-main-3"
+        },
+        {
+          "count": 50,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 28.333,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 68.269,
       "path": "tests/test_producer_provenance_scope.py",
       "profiled_tests": 50,
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-3",
+        "listing-completed-pr-2"
       ],
-      "seconds": 78.50935,
+      "seconds": 32.58295,
       "variance_multiplier": 1.15
     },
     {
@@ -11149,8 +11701,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 19.865,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 16.429,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 48,
@@ -11163,18 +11715,26 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 18.276,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 48,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 16.429,
+          "source": "listing-completed-main-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 19.865,
       "path": "tests/test_provider_health_scope_policy.py",
       "profiled_tests": 48,
       "references": [
         "oct11-main-1",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-1"
       ],
-      "seconds": 22.84475,
+      "seconds": 18.89335,
       "variance_multiplier": 1.15
     },
     {
@@ -11808,8 +12368,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 29.752,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 84.412,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 54,
@@ -11822,18 +12382,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 29.752,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 54,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 78.423,
+          "source": "listing-completed-main-3"
+        },
+        {
+          "count": 54,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 84.412,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 29.752,
       "path": "tests/test_readiness_dashboard_scope.py",
       "profiled_tests": 54,
       "references": [
         "oct11-main-1",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "listing-completed-main-3",
+        "listing-completed-pr-2"
       ],
-      "seconds": 34.2148,
+      "seconds": 97.0738,
       "variance_multiplier": 1.15
     },
     {
@@ -12136,8 +12711,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 139.755,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 94.367,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 44,
@@ -12156,24 +12731,39 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 139.755,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 44,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 91.599,
+          "source": "listing-completed-main-1"
+        },
+        {
+          "count": 44,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 94.367,
+          "source": "listing-completed-pr-1"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 139.755,
       "path": "tests/test_remote_canonical_scope.py",
       "profiled_tests": 44,
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-1",
+        "listing-completed-pr-1"
       ],
-      "seconds": 160.71825,
+      "seconds": 108.52205,
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 148.01,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 149.323,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 46,
@@ -12186,18 +12776,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 148.01,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 46,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 127.753,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 46,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 149.323,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 148.01,
       "path": "tests/test_remote_continuation_scope.py",
       "profiled_tests": 46,
       "references": [
         "oct11-pr-2",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-2",
+        "listing-completed-pr-2"
       ],
-      "seconds": 170.2115,
+      "seconds": 171.72145,
       "variance_multiplier": 1.15
     },
     {
@@ -12849,6 +13454,149 @@
       "seconds": 7.231019
     },
     {
+      "advisory_basis_seconds": 0.617,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "completed_measurements": [
+        {
+          "count": 17,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.617,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 17,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.537,
+          "source": "listing-completed-pr-1"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "path": "tests/test_scope_git_batch.py",
+      "profiled_tests": 17,
+      "references": [
+        "listing-completed-main-2",
+        "listing-completed-pr-1"
+      ],
+      "seconds": 0.70955,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 0.422,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "completed_measurements": [
+        {
+          "count": 19,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.422,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 19,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.332,
+          "source": "listing-completed-pr-1"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "path": "tests/test_scope_git_reads.py",
+      "profiled_tests": 19,
+      "references": [
+        "listing-completed-main-2",
+        "listing-completed-pr-1"
+      ],
+      "seconds": 0.4853,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 5.469,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "completed_measurements": [
+        {
+          "count": 2,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 5.08,
+          "source": "listing-completed-main-3"
+        },
+        {
+          "count": 2,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 5.469,
+          "source": "listing-completed-pr-2"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "path": "tests/test_scope_guard_bootstrap.py",
+      "profiled_tests": 2,
+      "references": [
+        "listing-completed-main-3",
+        "listing-completed-pr-2"
+      ],
+      "seconds": 6.28935,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 0.117,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "completed_measurements": [
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.117,
+          "source": "listing-completed-main-1"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "path": "tests/test_scope_guard_scan.py",
+      "profiled_tests": 3,
+      "references": [
+        "listing-completed-main-1"
+      ],
+      "seconds": 0.13455,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 0.08,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "completed_measurements": [
+        {
+          "count": 10,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.08,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 10,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.066,
+          "source": "listing-completed-pr-1"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
+      "path": "tests/test_scope_reconstruction_memo.py",
+      "profiled_tests": 10,
+      "references": [
+        "listing-completed-main-2",
+        "listing-completed-pr-1"
+      ],
+      "seconds": 0.092,
+      "variance_multiplier": 1.15
+    },
+    {
       "advisory_basis_seconds": 0.01,
       "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
       "completed_measurements": [
@@ -13075,8 +13823,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 387.74,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 361.827,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 110,
@@ -13089,18 +13837,33 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 387.74,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 110,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 332.385,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 110,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 361.827,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 387.74,
       "path": "tests/test_slate_audit_scope.py",
       "profiled_tests": 110,
       "references": [
         "oct11-pr-2",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-2",
+        "listing-completed-pr-2"
       ],
-      "seconds": 445.901,
+      "seconds": 416.10105,
       "variance_multiplier": 1.15
     },
     {
@@ -13231,8 +13994,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 77.353,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 30.467,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 51,
@@ -13251,19 +14014,34 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 75.213,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 51,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 30.224,
+          "source": "listing-completed-main-3"
+        },
+        {
+          "count": 51,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 30.467,
+          "source": "listing-completed-pr-2"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 77.353,
       "path": "tests/test_source_contract_scope.py",
       "profiled_tests": 51,
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "listing-completed-main-3",
+        "listing-completed-pr-2"
       ],
-      "seconds": 88.95595,
+      "seconds": 35.03705,
       "variance_multiplier": 1.15
     },
     {
@@ -13296,14 +14074,26 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 120.951149,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 124.877,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 42,
           "kind": "completed_junit_testcase_sum",
           "seconds": 84.165,
           "source": "pr-2"
+        },
+        {
+          "count": 42,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 121.431,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 42,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 124.877,
+          "source": "listing-completed-pr-2"
         }
       ],
       "incomplete_observations": [
@@ -13315,15 +14105,18 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 84.165,
       "path": "tests/test_source_intake_scope.py",
       "profiled_tests": 42,
       "references": [
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-2",
+        "listing-completed-pr-2"
       ],
-      "seconds": 139.093821,
+      "seconds": 143.60855,
       "variance_multiplier": 1.15
     },
     {
@@ -13742,14 +14535,26 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 0.376968,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 0.384,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 3,
           "kind": "completed_junit_testcase_sum",
           "seconds": 0.223,
           "source": "main-3"
+        },
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.357,
+          "source": "listing-completed-main-2"
+        },
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.384,
+          "source": "listing-completed-pr-2"
         }
       ],
       "incomplete_observations": [
@@ -13761,15 +14566,18 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 0.223,
       "path": "tests/test_sweet_spot_export_scope.py",
       "profiled_tests": 3,
       "references": [
         "oct11-main-3",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-2",
+        "listing-completed-pr-2"
       ],
-      "seconds": 0.433513,
+      "seconds": 0.4416,
       "variance_multiplier": 1.15
     },
     {
@@ -13921,14 +14729,20 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 0.01359,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 0.012,
+      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
       "completed_measurements": [
         {
           "count": 3,
           "kind": "completed_junit_testcase_sum",
           "seconds": 0.008,
           "source": "pr-2"
+        },
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.012,
+          "source": "listing-completed-main-2"
         }
       ],
       "incomplete_observations": [
@@ -13940,15 +14754,17 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 0.008,
       "path": "tests/test_theover_fade_scope.py",
       "profiled_tests": 3,
       "references": [
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "listing-completed-main-2"
       ],
-      "seconds": 0.015629,
+      "seconds": 0.0138,
       "variance_multiplier": 1.15
     },
     {
@@ -14785,6 +15601,8 @@
       "variance_multiplier": 1.15
     }
   ],
+  "nfl_listing_cost_basis": "Measured listing follow-up: 55 inherited scope files plus two new listing files; completed main/#2419 JUnit only, maximum compatible completed testcase cost plus unchanged 15% advisory margin. All prior sources and interrupted observations remain retained. Other file entries, scheduler, fallback, tests and workflows unchanged.",
+  "nfl_listing_cost_revision": 1,
   "predecessor_hash_encoding": "Repository Git blob bytes (LF); retained Windows checkout hash is recorded separately.",
   "predecessor_profile_sha256": "7e91ba1167ef610a4c93290b0ae3fabb8fe2b0cdf6d7d7a7cebdb880723a6c00",
   "prior_advisory_candidate_sha256": "5a68842e0c1b3701849a1eee8cc713e7430cf847630284f7e0d54068bd502114",
@@ -14795,6 +15613,216 @@
   "revision_basis": "October 11 current-main and PR #2416 attempt 1 completed JUnit; cancelled attempts 1/2 retained separately as incomplete observations. Scheduling only; no exclusions or changes to tests, scheduler, workflows or limits. Revision3 incorporates same-code completed refresh1 shards2/3 and all-node cancelled shard1 as explicitly estimated inter-outcome intervals; no cancelled outcome is a completed JUnit measurement.",
   "schema": "parlaypicker/ci-file-costs-v1",
   "sources": {
+    "listing-completed-main-1": {
+      "artifact_id": 11779417039,
+      "artifact_zip_sha256": "e2dd6b92d01e9f3762d019e130a2635245127650c6e66b48a5424343d69eec86",
+      "assignment_manifest_sha256": "7277c8e40054fb79b62aea49cecbd714053027df3424c53524eb326b16b8b67e",
+      "attempt": 2,
+      "checkout_commit": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+      "collection_identity": "a034589149ab07a9a09bcba7f705e4ecb706e65876f728884558eb0b0fc009fd",
+      "completed_cases": 2537,
+      "excludes": "Dependency installation, collection, session reporting and artifact upload are not added to file cost.",
+      "head": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+      "job": 115049120926,
+      "job_phases": [
+        {
+          "completed_at": "2026-10-12T23:15:24Z",
+          "conclusion": "success",
+          "name": "Install dependencies",
+          "started_at": "2026-10-12T23:14:54Z"
+        },
+        {
+          "completed_at": "2026-10-12T23:34:25Z",
+          "conclusion": "success",
+          "name": "Run application test shard",
+          "started_at": "2026-10-12T23:15:24Z"
+        },
+        {
+          "completed_at": "2026-10-12T23:34:26Z",
+          "conclusion": "success",
+          "name": "Upload full-suite test report",
+          "started_at": "2026-10-12T23:34:25Z"
+        }
+      ],
+      "junit_name": "full-suite-1.xml",
+      "junit_sha256": "748536ab491f176957ab281ce58ef11b96879fdd9dfe69b9d78ce1ef3f87b34e",
+      "junit_testcase_semantics": "pytest total: setup/call/teardown; phase split UNKNOWN in XML. Collection/session reporting/upload excluded.",
+      "kind": "completed_junit",
+      "latest_job_copy": 115049120926,
+      "retained_success_not_rerun": false,
+      "run": 38316289647,
+      "run_conclusion": "success",
+      "shard_conclusion": "success",
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/38316289647/job/115049120926"
+    },
+    "listing-completed-main-2": {
+      "artifact_id": 11777444262,
+      "artifact_zip_sha256": "ecd1f1b424ea16c830b9afe07dc84601662663c6e2f6c0d5a801b061564f3dfe",
+      "assignment_manifest_sha256": "5b3f1963872a64640922405b53e66516205f7c64aa319c33ea505ccf887f629e",
+      "attempt": 1,
+      "checkout_commit": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+      "collection_identity": "a034589149ab07a9a09bcba7f705e4ecb706e65876f728884558eb0b0fc009fd",
+      "completed_cases": 2194,
+      "excludes": "Dependency installation, collection, session reporting and artifact upload are not added to file cost.",
+      "head": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+      "job": 115033589043,
+      "job_phases": [
+        {
+          "completed_at": "2026-10-12T22:23:24Z",
+          "conclusion": "success",
+          "name": "Install dependencies",
+          "started_at": "2026-10-12T22:22:45Z"
+        },
+        {
+          "completed_at": "2026-10-12T22:47:23Z",
+          "conclusion": "success",
+          "name": "Run application test shard",
+          "started_at": "2026-10-12T22:23:24Z"
+        },
+        {
+          "completed_at": "2026-10-12T22:47:24Z",
+          "conclusion": "success",
+          "name": "Upload full-suite test report",
+          "started_at": "2026-10-12T22:47:23Z"
+        }
+      ],
+      "junit_name": "full-suite-2.xml",
+      "junit_sha256": "27311f5ade302ed89c9aa0db61d1ed9efb5155b92d886497e797b0e0fde35e29",
+      "junit_testcase_semantics": "pytest total: setup/call/teardown; phase split UNKNOWN in XML. Collection/session reporting/upload excluded.",
+      "kind": "completed_junit",
+      "latest_job_copy": 115049122360,
+      "retained_success_not_rerun": true,
+      "run": 38316289647,
+      "run_conclusion": "success",
+      "shard_conclusion": "success",
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/38316289647/job/115033589043"
+    },
+    "listing-completed-main-3": {
+      "artifact_id": 11779673150,
+      "artifact_zip_sha256": "ad60c4bfc81679370e67ad2ae143959846c72740f3f8924be4faf9834a215b89",
+      "assignment_manifest_sha256": "0471e7427330ac6b99a2ac337c2359def1e0ae5e84b5e3dec40cc1a71fdfa622",
+      "attempt": 2,
+      "checkout_commit": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+      "collection_identity": "a034589149ab07a9a09bcba7f705e4ecb706e65876f728884558eb0b0fc009fd",
+      "completed_cases": 2296,
+      "excludes": "Dependency installation, collection, session reporting and artifact upload are not added to file cost.",
+      "head": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+      "job": 115049121218,
+      "job_phases": [
+        {
+          "completed_at": "2026-10-12T23:15:33Z",
+          "conclusion": "success",
+          "name": "Install dependencies",
+          "started_at": "2026-10-12T23:14:53Z"
+        },
+        {
+          "completed_at": "2026-10-12T23:44:24Z",
+          "conclusion": "success",
+          "name": "Run application test shard",
+          "started_at": "2026-10-12T23:15:33Z"
+        },
+        {
+          "completed_at": "2026-10-12T23:44:25Z",
+          "conclusion": "success",
+          "name": "Upload full-suite test report",
+          "started_at": "2026-10-12T23:44:24Z"
+        }
+      ],
+      "junit_name": "full-suite-3.xml",
+      "junit_sha256": "dc05b84f7d5b689ce7c8a5a9c332941d125e7a6f165d7959b93c4a7e5ea75d91",
+      "junit_testcase_semantics": "pytest total: setup/call/teardown; phase split UNKNOWN in XML. Collection/session reporting/upload excluded.",
+      "kind": "completed_junit",
+      "latest_job_copy": 115049121218,
+      "retained_success_not_rerun": false,
+      "run": 38316289647,
+      "run_conclusion": "success",
+      "shard_conclusion": "success",
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/38316289647/job/115049121218"
+    },
+    "listing-completed-pr-1": {
+      "artifact_id": 11779912801,
+      "artifact_zip_sha256": "2e286bc41cd5b03131251f62d0c80c32b47e577df9bfea164cd84d8aeb87cad4",
+      "assignment_manifest_sha256": "790d796f9a136edd663626545014f65ccf602fa51cbf75725b6ec30c888f3554",
+      "attempt": 1,
+      "checkout_commit": "0a22bc0433784eb0f62b59d6764b9a28ef90d46f",
+      "collection_identity": "d56cc022c9f96934a64d353a20c66624364cc74ebfba10bdbda8549514e5fa51",
+      "completed_cases": 2747,
+      "excludes": "Dependency installation, collection, session reporting and artifact upload are not added to file cost.",
+      "head": "028080969ed341e5d92b7445352deac8ba2ae288",
+      "job": 115052602681,
+      "job_phases": [
+        {
+          "completed_at": "2026-10-12T23:27:47Z",
+          "conclusion": "success",
+          "name": "Install dependencies",
+          "started_at": "2026-10-12T23:27:17Z"
+        },
+        {
+          "completed_at": "2026-10-12T23:46:02Z",
+          "conclusion": "success",
+          "name": "Run application test shard",
+          "started_at": "2026-10-12T23:27:47Z"
+        },
+        {
+          "completed_at": "2026-10-12T23:46:04Z",
+          "conclusion": "success",
+          "name": "Upload full-suite test report",
+          "started_at": "2026-10-12T23:46:02Z"
+        }
+      ],
+      "junit_name": "full-suite-1.xml",
+      "junit_sha256": "818729e9ec8aff95186a28259d98d5ed50aee8ac07c9126471de4383d65cccdb",
+      "junit_testcase_semantics": "pytest total: setup/call/teardown; phase split UNKNOWN in XML. Collection/session reporting/upload excluded.",
+      "kind": "completed_junit",
+      "latest_job_copy": 115052602681,
+      "retained_success_not_rerun": false,
+      "run": 38322189449,
+      "run_conclusion": "failure; shard 3 cancelled",
+      "shard_conclusion": "success",
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/38322189449/job/115052602681"
+    },
+    "listing-completed-pr-2": {
+      "artifact_id": 11779719873,
+      "artifact_zip_sha256": "27697c7423daa8c074a295832148c6555ef19cffaeaeba8ff82ac4f6f6c0714d",
+      "assignment_manifest_sha256": "05d50b2eabfa5f99e02faf06c0c03a57a296dd26dd82d352c8df21d1cbf07d70",
+      "attempt": 1,
+      "checkout_commit": "0a22bc0433784eb0f62b59d6764b9a28ef90d46f",
+      "collection_identity": "d56cc022c9f96934a64d353a20c66624364cc74ebfba10bdbda8549514e5fa51",
+      "completed_cases": 2189,
+      "excludes": "Dependency installation, collection, session reporting and artifact upload are not added to file cost.",
+      "head": "028080969ed341e5d92b7445352deac8ba2ae288",
+      "job": 115052602647,
+      "job_phases": [
+        {
+          "completed_at": "2026-10-12T23:28:01Z",
+          "conclusion": "success",
+          "name": "Install dependencies",
+          "started_at": "2026-10-12T23:27:21Z"
+        },
+        {
+          "completed_at": "2026-10-12T23:57:02Z",
+          "conclusion": "success",
+          "name": "Run application test shard",
+          "started_at": "2026-10-12T23:28:01Z"
+        },
+        {
+          "completed_at": "2026-10-12T23:57:03Z",
+          "conclusion": "success",
+          "name": "Upload full-suite test report",
+          "started_at": "2026-10-12T23:57:02Z"
+        }
+      ],
+      "junit_name": "full-suite-2.xml",
+      "junit_sha256": "42c6fcae45e288a6631f7bf8a6ad6db6f98fc1cab905ccf8395ca388d0e6da36",
+      "junit_testcase_semantics": "pytest total: setup/call/teardown; phase split UNKNOWN in XML. Collection/session reporting/upload excluded.",
+      "kind": "completed_junit",
+      "latest_job_copy": 115052602647,
+      "retained_success_not_rerun": false,
+      "run": 38322189449,
+      "run_conclusion": "failure; shard 3 cancelled",
+      "shard_conclusion": "success",
+      "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/38322189449/job/115052602647"
+    },
     "main-full2": {
       "artifact_id": 11548407673,
       "artifact_sha256": "2527800eb56d045a6e6d14d51d68b11959104b21fa52e2af23599a0d6ab20d53",

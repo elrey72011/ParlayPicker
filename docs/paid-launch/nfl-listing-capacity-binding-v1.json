@@ -1,0 +1,288 @@
+{
+  "approval_reference": "Robert Velarde explicitly approved the prepared five-shard capacity change and completed metadata correction. Necessary workflow/count/cardinality change from three to five only; preserve every identity/assertion/network blocker, 30-minute timeout and strict five-way executed reconciliation. No acquisition, inference, merge or deployment.",
+  "approved_existing_test_changes": {
+    "tests/test_ci_test_shards.py": "Only exact matrix cardinality expectation [1,2,3] -> [1,2,3,4,5]; all substantive assertion expressions and test identities retained.",
+    "tests/test_ci_timing_scope.py": "Keep original hash assertions unchanged; supply exact hash-bound predecessor workflow bytes only. Unknown edits remain unreconstructed and fail.",
+    "tests/test_ncaaf_cloud_backup_scope.py": "Keep original hash assertions unchanged; supply exact hash-bound predecessor workflow bytes only. Unknown edits remain unreconstructed and fail.",
+    "tests/test_ncaaf_owner_scope.py": "Keep every original assertion/identity unchanged; hash exact predecessor test bytes through the reviewed successor reconstruction. Unknown edits remain unreconstructed and fail.",
+    "tests/test_nfl_diagnostics_scope.py": "Keep original hash assertions unchanged; supply exact hash-bound predecessor workflow bytes only. Unknown edits remain unreconstructed and fail.",
+    "tests/test_nfl_listing_cost_scope.py": "Keep original hash assertions unchanged; supply exact hash-bound predecessor workflow bytes only. Unknown edits remain unreconstructed and fail.",
+    "tests/test_nfl_listing_immutable_scope.py": "Keep original hash assertions unchanged; supply exact hash-bound predecessor workflow bytes only. Unknown edits remain unreconstructed and fail.",
+    "tests/test_nfl_listing_metadata_scope.py": "Keep original hash assertions unchanged; supply exact hash-bound predecessor workflow bytes only. Unknown edits remain unreconstructed and fail.",
+    "tests/test_nfl_odds_listing_scope.py": "Keep original hash assertions unchanged; supply exact hash-bound predecessor workflow bytes only. Unknown edits remain unreconstructed and fail.",
+    "tests/test_nfl_odds_scope.py": "Keep original hash assertions unchanged; supply exact hash-bound predecessor workflow bytes only. Unknown edits remain unreconstructed and fail.",
+    "tests/test_nfl_owner_scope.py": "Keep every original assertion/identity unchanged; hash exact predecessor test bytes through the reviewed successor reconstruction. Unknown edits remain unreconstructed and fail.",
+    "tests/test_nfl_scenario_scope.py": "Keep original hash assertions unchanged; supply exact hash-bound predecessor workflow bytes only. Unknown edits remain unreconstructed and fail."
+  },
+  "base": "a9039a5537699e72d740972f5f2c52452c957eb3",
+  "base_tree": "fbeb407eae7c12bcf3ef2ee995c842fd4c22e9e1",
+  "main_base": "e7f3d6ac8ddd8a38a8bc082809e823bcef16c42c",
+  "main_tree": "6d4bc6f72f8ed1d67c3f655a5965bc7f2d1275f6",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    ".github/workflows/ci.yml",
+    "docs/ci-test-execution.md",
+    "docs/paid-launch/nfl-listing-capacity-binding-v1.json",
+    "docs/paid-launch/nfl-listing-capacity-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_listing_capacity_scope.py",
+    "tests/test_ci_five_shards.py",
+    "tests/test_ci_test_shards.py",
+    "tests/test_ci_timing_scope.py",
+    "tests/test_ncaaf_cloud_backup_scope.py",
+    "tests/test_ncaaf_owner_scope.py",
+    "tests/test_nfl_diagnostics_scope.py",
+    "tests/test_nfl_listing_capacity_scope.py",
+    "tests/test_nfl_listing_cost_scope.py",
+    "tests/test_nfl_listing_immutable_scope.py",
+    "tests/test_nfl_listing_metadata_scope.py",
+    "tests/test_nfl_odds_listing_scope.py",
+    "tests/test_nfl_odds_scope.py",
+    "tests/test_nfl_owner_scope.py",
+    "tests/test_nfl_scenario_scope.py"
+  ],
+  "previous_guard_sha256": "19d939e3ee3a8241deed891e57847394bb22a639b19a0c233d7025c62dec50d6",
+  "reconstruction_json_sha256": "8c728e2a451382308eda178f61b5a919957fc46f2acf420a894b86d20e00fcf0",
+  "reviewed_blobs": {
+    ".github/workflows/ci.yml": "a3ae79dbcc04e010d776f685b93a1688ae23edd8",
+    "docs/ci-test-execution.md": "3126eb088703b4b141cb64f2ef75021794bc69d6",
+    "docs/paid-launch/nfl-listing-capacity-v1.md": "1bcb6a0dde19aec83f335b6fe2716b286bb4407f",
+    "scripts/nfl_listing_capacity_scope.py": "e67fc315863df4f3ae222bf3999a7dadd8a004b9",
+    "tests/test_ci_five_shards.py": "ccb258b585260dd6bcc37c5c465841bfb18258be",
+    "tests/test_ci_test_shards.py": "9b36a0ea7d10a57e1d1746508167e8fbd57f560b",
+    "tests/test_ci_timing_scope.py": "8b89ebc5d24dea57579a5afcdbbd00f5319c2aa7",
+    "tests/test_ncaaf_cloud_backup_scope.py": "3f2fa7a3478dbd1277e18a257f200429f85d3898",
+    "tests/test_ncaaf_owner_scope.py": "efdf485e092bf0bb96e1c0dfd33aa32c58e7bad5",
+    "tests/test_nfl_diagnostics_scope.py": "de78775acd8db590fcc865f91b8c88cb7fedcb9b",
+    "tests/test_nfl_listing_capacity_scope.py": "0c9cdf541fc81f59536330468dd0b40a12093626",
+    "tests/test_nfl_listing_cost_scope.py": "5ff8a0fe0df76ff44b1850fa797b7fcf5ef57a48",
+    "tests/test_nfl_listing_immutable_scope.py": "d9e143f0cb136432adf30da0f903eb1f6ab603d1",
+    "tests/test_nfl_listing_metadata_scope.py": "0fe6570549f1ea337b5ae52f9cbdc423a96f5b08",
+    "tests/test_nfl_odds_listing_scope.py": "2f8461f2717a745a0c295d6eca72e82197ab4fc6",
+    "tests/test_nfl_odds_scope.py": "20beb8ed8d8f837cf4c287a57a7f3031bf72b68e",
+    "tests/test_nfl_owner_scope.py": "0c99182521914a1e6d802a05e220becd82f8d4ec",
+    "tests/test_nfl_scenario_scope.py": "738ce3a52eef28320c27c0262c03abb633daa48e"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    ".github/workflows/ci.yml": {
+      "after_sha256": "c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431",
+      "before_sha256": "56bcb780ee76b8bc57ce2559759d4c37121dcc7eddd9e40b624892d3956a8ea1",
+      "reverse_patches": [
+        {
+          "end": 3566,
+          "start": 3560,
+          "text": ""
+        },
+        {
+          "end": 4060,
+          "start": 4059,
+          "text": "3"
+        },
+        {
+          "end": 5467,
+          "start": 5464,
+          "text": "thre"
+        },
+        {
+          "end": 5530,
+          "start": 5529,
+          "text": "3"
+        }
+      ]
+    },
+    "docs/ci-test-execution.md": {
+      "after_sha256": "729752109ea2bbc9a875796e4acbf202be0cf5264ae3e91b274d046665d4b4e6",
+      "before_sha256": "79cb7de7a43dfdf02f5901cc2bbfc6f505045ea61837b3e84b418101ea7d755b",
+      "reverse_patches": [
+        {
+          "end": 177,
+          "start": 174,
+          "text": "thre"
+        },
+        {
+          "end": 477,
+          "start": 474,
+          "text": "thre"
+        },
+        {
+          "end": 3271,
+          "start": 3268,
+          "text": "thre"
+        },
+        {
+          "end": 4413,
+          "start": 4410,
+          "text": "thre"
+        },
+        {
+          "end": 5214,
+          "start": 5213,
+          "text": "3"
+        },
+        {
+          "end": 5395,
+          "start": 5394,
+          "text": "3"
+        },
+        {
+          "end": 5576,
+          "start": 5575,
+          "text": "3"
+        },
+        {
+          "end": 5754,
+          "start": 5744,
+          "text": ""
+        },
+        {
+          "end": 5843,
+          "start": 5756,
+          "text": ""
+        },
+        {
+          "end": 6109,
+          "start": 5844,
+          "text": ""
+        },
+        {
+          "end": 8406,
+          "start": 6736,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ci_test_shards.py": {
+      "after_sha256": "8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44",
+      "before_sha256": "1cba33a376726ff07e0ef0ff5475e73a9221c8ec7695e1478ee561bc60dac562",
+      "reverse_patches": [
+        {
+          "end": 13641,
+          "start": 13631,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ci_timing_scope.py": {
+      "after_sha256": "81b561e6d2a60df1a4db5e048ab9d7ede655e0495623a9405b69ec2c721ddc88",
+      "before_sha256": "e257ec23ec53dbe45510a482df7f25024dc74871955d0e2cad37a7eaf8c6a3de",
+      "reverse_patches": [
+        {
+          "end": 5469,
+          "start": 5399,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ncaaf_cloud_backup_scope.py": {
+      "after_sha256": "20ddc97bdf8dd779492ca19be592ae076473181c4c9f1dc9ebacc39e3ff3eb4e",
+      "before_sha256": "a64af9b767622cce1656906df9407283e142b5d5999c718ce9a1c5db99e0a244",
+      "reverse_patches": [
+        {
+          "end": 1754,
+          "start": 1684,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ncaaf_owner_scope.py": {
+      "after_sha256": "44e3efa2fbe89dd867248f09fe5fde9586dcb675c6fef9abc6d6d3f8847e8d09",
+      "before_sha256": "76ea13b14439b7fafe8a91499a9da8bb46eb0c012da2157658542d98963cbea4",
+      "reverse_patches": [
+        {
+          "end": 9831,
+          "start": 9769,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_diagnostics_scope.py": {
+      "after_sha256": "6f4df9c32764b96ce908db89fb7f7e47865bdec040bcffbc5261abe098d98fc8",
+      "before_sha256": "07320c279487a846233a9300197d7c5bd07e6398ffebc629d8cefa59b673e23a",
+      "reverse_patches": [
+        {
+          "end": 5484,
+          "start": 5414,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_listing_cost_scope.py": {
+      "after_sha256": "2a9dbb4d8a5e93677f7fba00f272a4f90ac77910124132df6ded634c2fb94184",
+      "before_sha256": "e2e3447f8dfdc43353ee1b4daf146a97410b10e765391d635feee364532d83d9",
+      "reverse_patches": [
+        {
+          "end": 5533,
+          "start": 5463,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_listing_immutable_scope.py": {
+      "after_sha256": "27c1d4ab3bafc24c7873326951d1509cad53f975f3c933d5aada457428a96297",
+      "before_sha256": "7aafd64cb17fab22ef8fbc7c90039e8c701ec30af789ed57199854f1b205f2a3",
+      "reverse_patches": [
+        {
+          "end": 5961,
+          "start": 5891,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_listing_metadata_scope.py": {
+      "after_sha256": "62cf26f12f0f5dc479e5159497e67b8877bb765f07af001538929319860a5b55",
+      "before_sha256": "25fe7c00b7dbc694be0c57b9d87547dc725fcaa5cb9de18d85d7a7e5e26bf771",
+      "reverse_patches": [
+        {
+          "end": 5558,
+          "start": 5488,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_odds_listing_scope.py": {
+      "after_sha256": "129784d4cfb9df9c9d25fbde6b1cd1447e1ffc502158f4c18b6ce96bca364b5c",
+      "before_sha256": "120bc9c0ab6c5d340463bf0ff40db8bd4f69e068ca3c6bfad55f1472f9e23b7e",
+      "reverse_patches": [
+        {
+          "end": 5527,
+          "start": 5457,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_odds_scope.py": {
+      "after_sha256": "e12cf2726778caf78238543b65a7f43bb0e3bf95e923d297b30451037f3cc611",
+      "before_sha256": "6706f32e580f39d3d6a298a2dc552770054c79d392cc298b9c5850685c7e9d2b",
+      "reverse_patches": [
+        {
+          "end": 5459,
+          "start": 5389,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_owner_scope.py": {
+      "after_sha256": "328346b11bf181f4ae27849878ae88853da578059511b1bc9a884cb451535681",
+      "before_sha256": "1aa319d7f3f9e123d8a64ac54378c70154022217d27809a48d5a11f30e3f30e2",
+      "reverse_patches": [
+        {
+          "end": 10080,
+          "start": 10018,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_scenario_scope.py": {
+      "after_sha256": "786dba68cd83f57e6b3a1a32cf289755fc211425e06a0a868e9fef658ff918be",
+      "before_sha256": "28031518f54997b1d061759ec617173097c533ecb9df71c0a30bb041dbf8f66d",
+      "reverse_patches": [
+        {
+          "end": 5466,
+          "start": 5396,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

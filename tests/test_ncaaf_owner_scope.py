@@ -158,4 +158,5 @@ def test_merged_cloud_guard_and_bindings_are_preserved():
                  'tests/test_ncaaf_cloud_backup_scope.py','tests/test_ncaaf_pilot.py',
                  'docs/paid-launch/ncaaf-cloud-backup-binding-v1.json',cloud_policy):
         raw=(root/path).read_bytes().replace(b'\r\n',b'\n')
+        raw=guard._listing_capacity_previous_source(path,raw)
         assert hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==policy['unchanged_bindings'][path]
