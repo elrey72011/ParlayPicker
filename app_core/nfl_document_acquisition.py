@@ -126,6 +126,11 @@ def authorize(plan, authorization, at, root):
 def controlled(plan, raw, expected_hash, *, root, wall=utc, security=None):
     validate(plan);require(isinstance(raw,bytes) and 0<len(raw)<=128*1024 and sha(raw)==expected_hash,'DOCUMENT_CONFIGURATION')
     c=envelope(json.loads(raw,object_pairs_hook=custody.unique))
+    from app_core.ncaaf_response_custody import _credentials
+    try:
+        _credentials({k:v for k,v in c.items() if k!='authorization'})
+        _credentials(c.get('authorization',{}))
+    except ValueError:raise ValueError('DOCUMENT_CONFIGURATION') from None
     require(set(c)==set('version plan_sha256 permission authorization custody review'.split()) and c['version']==CONFIG
         and c['plan_sha256']==plan['sha256'] and c['permission']==plan['payload']['permission'],'DOCUMENT_CONFIGURATION')
     d=c['custody'];require(set(d)=={'id','root','storage_receipt_sha256'} and re.fullmatch('[0-9a-f]{64}',d['storage_receipt_sha256']), 'DOCUMENT_CUSTODY')
@@ -164,8 +169,11 @@ class HttpsTransport:
             conn.sock.settimeout(min(limits['read_seconds'],max(.001,deadline-monotonic())))
             phase='REQUEST_SEND'
             _timed(lambda:conn.request('GET',u.path,headers={'Accept':'application/pdf,text/html,text/plain','Accept-Encoding':'identity'}),deadline,monotonic,cancel,close)
-            phase='RESPONSE_RECEIVE';response=_timed(conn.getresponse,deadline,monotonic,cancel,close)
-            return Response(conn,response,cancel,deadline,monotonic,limits,started)
+            # HTTPConnection detaches its socket on Connection: close while
+            # HTTPResponse still owns the readable body. Retain that exact socket.
+            read_socket=conn.sock
+            phase='RESPONSE_RECEIVE';response=_timed(conn.getresponse,min(deadline,monotonic()+limits['read_seconds']),monotonic,cancel,close)
+            return Response(conn,response,read_socket,cancel,deadline,monotonic,limits,started)
         except BaseException as exc:
             if conn is not None:conn.close()
             code=str(exc) if isinstance(exc,ValueError) and str(exc) in {'DOCUMENT_PRIVATE_ADDRESS','DOCUMENT_DEADLINE','DOCUMENT_URL'} else 'DOCUMENT_TRANSPORT_FAILURE'
@@ -173,19 +181,26 @@ class HttpsTransport:
 
 
 class Response:
-    def __init__(self,conn,response,cancel,deadline,monotonic,limits,started):
-        self.conn=conn;self.response=response;self.cancel=cancel;self.deadline=deadline;self.monotonic=monotonic;self.limits=limits;self.started=started
+    def __init__(self,conn,response,read_socket,cancel,deadline,monotonic,limits,started):
+        self.conn=conn;self.response=response;self.read_socket=read_socket;self.cancel=cancel;self.deadline=deadline;self.monotonic=monotonic;self.limits=limits;self.started=started
         self.status=response.status;self.headers=response.getheaders()
     def chunks(self):
         while True:
             try:
-                self.conn.sock.settimeout(min(self.limits['read_seconds'],max(.001,self.deadline-self.monotonic())))
+                self.read_socket.settimeout(min(self.limits['read_seconds'],max(.001,self.deadline-self.monotonic())))
                 block=_timed(lambda:self.response.read(8192),min(self.deadline,self.monotonic()+self.limits['read_seconds']),self.monotonic,self.cancel,self.close)
             except BaseException as exc:
                 raise diagnostics.Failure('DOCUMENT_READ_FAILURE',diagnostics.facts(exc,phase='BODY_READ',http_status=self.status,started=self.started,ended=self.monotonic())) from None
             if not block:return
             yield block
-    def close(self):self.conn.close()
+    def close(self):
+        # Interrupt a detached body's pending read before closing its file; do
+        # not wait on a buffered-reader lock with an otherwise live socket.
+        shutdown=getattr(self.read_socket,'shutdown',None)
+        if shutdown is not None:
+            try:shutdown(socket.SHUT_RDWR)
+            except OSError:pass
+        self.response.close();self.conn.close()
 
 
 def headers(items):
@@ -238,7 +253,12 @@ def acquire(plan, authorization, *, root, transport=None, wall=utc, monotonic=ti
     root=Path(root);p=authorize(plan,authorization,wall(),root);stem=plan['sha256']
     journal=root/(stem+'.documents-attempts.jsonl');output=root/(stem+'.documents-unreviewed.json')
     require(not journal.exists() and not output.exists(),'DOCUMENT_SPENT_NO_RESUME')
-    start=monotonic();deadline=start+p['limits']['total_seconds'];transport=transport or HttpsTransport()
+    start=monotonic()
+    # A timed connection worker cannot outlive the exact collection expiry.
+    expires=datetime.fromisoformat(checked_clock(authorization['payload']['expires_at']))
+    current=datetime.fromisoformat(checked_clock(wall()))
+    remaining=(expires-current).total_seconds();require(remaining>0,'DOCUMENT_WINDOW_EXPIRED')
+    deadline=start+min(p['limits']['total_seconds'],remaining);transport=transport or HttpsTransport()
     entries=[];objects=[];reason=None;diagnostic=None;aggregate_wire=aggregate_decoded=0;status=diagnostics.UNKNOWN;phase='JOURNAL'
     # Reserve even a zero-attempt crash; reruns never spend silently again.
     write_exclusive(journal,b'')

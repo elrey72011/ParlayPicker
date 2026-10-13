@@ -1,0 +1,146 @@
+{
+  "approval_reference": "Robert authorized bounded original-document retrieval and offline reproduction/correction of necessary software blockers. A standard Connection-close response failed through the actual transport; retain the detached body socket and unchanged boundaries. Preserve prior document/NCAAF implementations and their seals. The actual original caller rejects standard Odds prose/shape missing internal period/rules declarations. This successor binds them only to exact substantive owner-reviewed applicable terms, preserving originals, old defaults, history, lag, clock, model and wagering gates. No acquisition or authentic inference. Preserve all original readers, clocks, source/review/model/wagering gates, response limits, frozen predecessor bindings, tests and five-shard CI. No collection or authentic inference.",
+  "base": "31da1b3791ddfc83ab8235a0307552586c38bef3",
+  "base_tree": "05f0aceb93f27f222ddc387b1996839c95117e42",
+  "main_base": "4b89179e40f48cb555b00e3f9e440f20f96647be",
+  "main_tree": "6b5bb0e707ac743d34f482b6279a4b0c0dd41bac",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/nfl_document_acquisition.py",
+    "docs/paid-launch/football-document-connection-close.md",
+    "docs/paid-launch/football-document-io-binding-v1.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_io_scope.py",
+    "tests/test_football_document_io_scope.py",
+    "tests/test_nfl_document_acquisition.py"
+  ],
+  "previous_guard_sha256": "42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616",
+  "reconstruction_json_sha256": "e8f4afe326264b8e8fc32a759e8f9da2137bc173bceb92388bb96561847ee01a",
+  "reviewed_blobs": {
+    "app_core/nfl_document_acquisition.py": "75de6d8345bbd935f53e962fa5a608bb869a99ef",
+    "docs/paid-launch/football-document-connection-close.md": "e90ce737df823ddba83425975f66ada7016c34be",
+    "scripts/football_document_io_scope.py": "45de9351ed5740f292d8ad7fb12cbbd08f22d668",
+    "tests/test_football_document_io_scope.py": "1a32c8ed10c780e73bcd3698234dc3138b7efba4",
+    "tests/test_nfl_document_acquisition.py": "083a0444f7e683ef9dd887a43cbd3c63d61e8823"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app_core/nfl_document_acquisition.py": {
+      "after_sha256": "daa3977589f4aedbd790f39369c740fae677eac285c5a357beb37551e22d61eb",
+      "before_sha256": "12c44950ca00bba83bb005a8d110650c16f8e2f3b5c0f1d0635d628f9accfcf6",
+      "reverse_patches": [
+        {
+          "end": 7882,
+          "start": 7618,
+          "text": ""
+        },
+        {
+          "end": 11210,
+          "start": 11017,
+          "text": ""
+        },
+        {
+          "end": 11272,
+          "start": 11268,
+          "text": ""
+        },
+        {
+          "end": 11316,
+          "start": 11280,
+          "text": ""
+        },
+        {
+          "end": 11394,
+          "start": 11382,
+          "text": ""
+        },
+        {
+          "end": 11878,
+          "start": 11866,
+          "text": ""
+        },
+        {
+          "end": 11995,
+          "start": 11966,
+          "text": ""
+        },
+        {
+          "end": 12259,
+          "start": 12254,
+          "text": "conn."
+        },
+        {
+          "end": 12265,
+          "start": 12263,
+          "text": ""
+        },
+        {
+          "end": 13172,
+          "start": 12819,
+          "text": ""
+        },
+        {
+          "end": 16216,
+          "start": 15944,
+          "text": ""
+        },
+        {
+          "end": 16268,
+          "start": 16217,
+          "text": ""
+        },
+        {
+          "end": 16287,
+          "start": 16283,
+          "text": ""
+        },
+        {
+          "end": 16326,
+          "start": 16315,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_document_acquisition.py": {
+      "after_sha256": "09276d78ec542cab2225a46ebcd51db5dac1c98fca32e947a98fb2fabd9de786",
+      "before_sha256": "5888253fed933f998a96a85e942e3262f5d8f6e89d9073406271331222e0e590",
+      "reverse_patches": [
+        {
+          "end": 1519,
+          "start": 1518,
+          "text": "25:"
+        },
+        {
+          "end": 1521,
+          "start": 1520,
+          "text": "2.1"
+        },
+        {
+          "end": 1553,
+          "start": 1552,
+          "text": "25:"
+        },
+        {
+          "end": 1556,
+          "start": 1554,
+          "text": "2.15"
+        },
+        {
+          "end": 9050,
+          "start": 9025,
+          "text": ""
+        },
+        {
+          "end": 9518,
+          "start": 9458,
+          "text": ""
+        },
+        {
+          "end": 16985,
+          "start": 15988,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

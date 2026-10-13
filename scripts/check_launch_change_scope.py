@@ -21765,6 +21765,51 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+FOOTBALL_DOCIO_BOOTSTRAP = True
+FOOTBALL_DOCIO_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-io-v1.json'
+FOOTBALL_DOCIO_BINDING_PATH = 'docs/paid-launch/football-document-io-binding-v1.json'
+FOOTBALL_DOCIO_BINDING_SHA256 = '263009438d7365c58ef2fe4307be075514ca327e02483d605a0055f213c6df3d'
+FOOTBALL_DOCIO_REVIEWED_GUARD_SHA256 = '11ced84d03185d4387f6d2e7537ab413a98d720f6cd02e472869df44a3d137e7'
+FOOTBALL_DOCIO_PREVIOUS_GUARD_SHA256 = '42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616'
+FOOTBALL_DOCIO_RECONSTRUCTION_JSON = b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"daa3977589f4aedbd790f39369c740fae677eac285c5a357beb37551e22d61eb","before_sha256":"12c44950ca00bba83bb005a8d110650c16f8e2f3b5c0f1d0635d628f9accfcf6","reverse_patches":[{"end":7882,"start":7618,"text":""},{"end":11210,"start":11017,"text":""},{"end":11272,"start":11268,"text":""},{"end":11316,"start":11280,"text":""},{"end":11394,"start":11382,"text":""},{"end":11878,"start":11866,"text":""},{"end":11995,"start":11966,"text":""},{"end":12259,"start":12254,"text":"conn."},{"end":12265,"start":12263,"text":""},{"end":13172,"start":12819,"text":""},{"end":16216,"start":15944,"text":""},{"end":16268,"start":16217,"text":""},{"end":16287,"start":16283,"text":""},{"end":16326,"start":16315,"text":""}]},"tests/test_nfl_document_acquisition.py":{"after_sha256":"09276d78ec542cab2225a46ebcd51db5dac1c98fca32e947a98fb2fabd9de786","before_sha256":"5888253fed933f998a96a85e942e3262f5d8f6e89d9073406271331222e0e590","reverse_patches":[{"end":1519,"start":1518,"text":"25:"},{"end":1521,"start":1520,"text":"2.1"},{"end":1553,"start":1552,"text":"25:"},{"end":1556,"start":1554,"text":"2.15"},{"end":9050,"start":9025,"text":""},{"end":9518,"start":9458,"text":""},{"end":16985,"start":15988,"text":""}]}}'
+from functools import lru_cache as _docio_lru
+
+def _docio_guard_matches(source):
+    value=FOOTBALL_DOCIO_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==7 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCIO_REVIEWED_GUARD_SHA256
+
+@_docio_lru(maxsize=2)
+def _docio_cached_base(source,reviewed,parent):
+    _require(_docio_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =');end=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCIO_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCIO_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCIO_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCIO_POLICY_PATH):\n            code, report = _run_docio_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docio_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=5681232:return source
+    return _docio_cached_base(source,FOOTBALL_DOCIO_REVIEWED_GUARD_SHA256,FOOTBALL_DOCIO_PREVIOUS_GUARD_SHA256)
+_docio_base_source.cache_info=_docio_cached_base.cache_info
+_docio_base_source.cache_clear=_docio_cached_base.cache_clear
+
+def _docio_previous_source(path,source):
+    if path==GUARD_PATH:return _docio_base_source(source)
+    info=json.loads(FOOTBALL_DOCIO_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 NCAAF_TERMS_BOOTSTRAP = True
 NCAAF_TERMS_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ncaaf-terms-v2.json'
 NCAAF_TERMS_BINDING_PATH = 'docs/paid-launch/ncaaf-owner-terms-binding-v2.json'
@@ -21795,6 +21840,23 @@ def _terms_cached_base(source,reviewed,parent):
     return source
 
 def _terms_base_source(source):
+    # FOOTBALL_DOCIO_TERMS_BEGIN
+    if len(source)==5681232:
+        identity=b'11ced84d03185d4387f6d2e7537ab413a98d720f6cd02e472869df44a3d137e7'
+        _require(source.count(identity)==7 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =');end=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCIO_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCIO_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCIO_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCIO_POLICY_PATH):\n            code, report = _run_docio_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCIO_TERMS_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=5651019:return source
     return _terms_cached_base(source,NCAAF_TERMS_REVIEWED_GUARD_SHA256,NCAAF_TERMS_PREVIOUS_GUARD_SHA256)
@@ -21802,6 +21864,14 @@ _terms_base_source.cache_info=_terms_cached_base.cache_info
 _terms_base_source.cache_clear=_terms_cached_base.cache_clear
 
 def _terms_previous_source(path,source):
+    # FOOTBALL_DOCIO_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"daa3977589f4aedbd790f39369c740fae677eac285c5a357beb37551e22d61eb","before_sha256":"12c44950ca00bba83bb005a8d110650c16f8e2f3b5c0f1d0635d628f9accfcf6","reverse_patches":[{"end":7882,"start":7618,"text":""},{"end":11210,"start":11017,"text":""},{"end":11272,"start":11268,"text":""},{"end":11316,"start":11280,"text":""},{"end":11394,"start":11382,"text":""},{"end":11878,"start":11866,"text":""},{"end":11995,"start":11966,"text":""},{"end":12259,"start":12254,"text":"conn."},{"end":12265,"start":12263,"text":""},{"end":13172,"start":12819,"text":""},{"end":16216,"start":15944,"text":""},{"end":16268,"start":16217,"text":""},{"end":16287,"start":16283,"text":""},{"end":16326,"start":16315,"text":""}]},"tests/test_nfl_document_acquisition.py":{"after_sha256":"09276d78ec542cab2225a46ebcd51db5dac1c98fca32e947a98fb2fabd9de786","before_sha256":"5888253fed933f998a96a85e942e3262f5d8f6e89d9073406271331222e0e590","reverse_patches":[{"end":1519,"start":1518,"text":"25:"},{"end":1521,"start":1520,"text":"2.1"},{"end":1553,"start":1552,"text":"25:"},{"end":1556,"start":1554,"text":"2.15"},{"end":9050,"start":9025,"text":""},{"end":9518,"start":9458,"text":""},{"end":16985,"start":15988,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCIO_TPREVIOUS_END
     if path==GUARD_PATH:return _terms_base_source(source)
     info=json.loads(NCAAF_TERMS_RECONSTRUCTION_JSON).get(path)
     if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
@@ -21840,6 +21910,23 @@ def _document_cached_base(source,reviewed,parent):
     return source
 
 def _document_base_source(source):
+    # FOOTBALL_DOCIO_DOCUMENT_BEGIN
+    if len(source)==5681232:
+        identity=b'11ced84d03185d4387f6d2e7537ab413a98d720f6cd02e472869df44a3d137e7'
+        _require(source.count(identity)==7 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =');end=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCIO_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCIO_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCIO_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCIO_POLICY_PATH):\n            code, report = _run_docio_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCIO_DOCUMENT_END
     # NCAAF_TERMS_DOCUMENT_BEGIN
     if len(source)==5651019:
         identity=b'5dd2865e7871d8cb839d5c7d1343ec2d8945a1e068354cfc4a376e264978f763'
@@ -21864,6 +21951,14 @@ _document_base_source.cache_info=_document_cached_base.cache_info
 _document_base_source.cache_clear=_document_cached_base.cache_clear
 
 def _document_previous_source(path,source):
+    # FOOTBALL_DOCIO_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"daa3977589f4aedbd790f39369c740fae677eac285c5a357beb37551e22d61eb","before_sha256":"12c44950ca00bba83bb005a8d110650c16f8e2f3b5c0f1d0635d628f9accfcf6","reverse_patches":[{"end":7882,"start":7618,"text":""},{"end":11210,"start":11017,"text":""},{"end":11272,"start":11268,"text":""},{"end":11316,"start":11280,"text":""},{"end":11394,"start":11382,"text":""},{"end":11878,"start":11866,"text":""},{"end":11995,"start":11966,"text":""},{"end":12259,"start":12254,"text":"conn."},{"end":12265,"start":12263,"text":""},{"end":13172,"start":12819,"text":""},{"end":16216,"start":15944,"text":""},{"end":16268,"start":16217,"text":""},{"end":16287,"start":16283,"text":""},{"end":16326,"start":16315,"text":""}]},"tests/test_nfl_document_acquisition.py":{"after_sha256":"09276d78ec542cab2225a46ebcd51db5dac1c98fca32e947a98fb2fabd9de786","before_sha256":"5888253fed933f998a96a85e942e3262f5d8f6e89d9073406271331222e0e590","reverse_patches":[{"end":1519,"start":1518,"text":"25:"},{"end":1521,"start":1520,"text":"2.1"},{"end":1553,"start":1552,"text":"25:"},{"end":1556,"start":1554,"text":"2.15"},{"end":9050,"start":9025,"text":""},{"end":9518,"start":9458,"text":""},{"end":16985,"start":15988,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCIO_DPREVIOUS_END
     # NCAAF_TERMS_DPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","before_sha256":"a74709863ca1fe2aabc9d26f562de24cca994ce63ca27a06bc7c83d1d1ef4fcd","reverse_patches":[{"end":277,"start":214,"text":""},{"end":2817,"start":2815,"text":"=="},{"end":2819,"start":2818,"text":""},{"end":2853,"start":2832,"text":""}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","before_sha256":"9a0a9a13ee3b2a6fa30cd3cec9a53d10fcb06b22c23269bcb10488e9567821dd","reverse_patches":[{"end":10204,"start":10202,"text":"=="},{"end":10206,"start":10205,"text":""},{"end":10262,"start":10220,"text":""}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","before_sha256":"640048b019803eed38276a0ad2860933d868a0ab2b3300d1e95380c4c0cd1b1f","reverse_patches":[{"end":945,"start":882,"text":""},{"end":1570,"start":1549,"text":""},{"end":1692,"start":1664,"text":""},{"end":1795,"start":1716,"text":""},{"end":4599,"start":4597,"text":"=="},{"end":4601,"start":4600,"text":""},{"end":4635,"start":4614,"text":""},{"end":5846,"start":5686,"text":""},{"end":7200,"start":7075,"text":""},{"end":14343,"start":14130,"text":""},{"end":14377,"start":14370,"text":""},{"end":14462,"start":14455,"text":""},{"end":19764,"start":19730,"text":""},{"end":20033,"start":20031,"text":"=="},{"end":20035,"start":20034,"text":""},{"end":20109,"start":20068,"text":""},{"end":21135,"start":20723,"text":""},{"end":23524,"start":23388,"text":""},{"end":23561,"start":23554,"text":""}]},"app_core/research_display.py":{"after_sha256":"4a9b8458e1480203f5ca1bf3789b9b5aaa72dee6672a750bdbda51af23e0d204","before_sha256":"499ee85a34e8ae45546b9ff119b5b73f68315d113502feab32c50710b2317796","reverse_patches":[{"end":33385,"start":33385,"text":"ncaaf_origin[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") == "},{"end":33393,"start":33391,"text":"RESULT"},{"end":33423,"start":33394,"text":"VERSION"}]},"app_core/source_contract.py":{"after_sha256":"e113477b02c91f4c2f059fb93fdc400f2a637639eb3c0e39ceeebf05e6f67050","before_sha256":"6fa72f302a27b29f8284d3d78f261d0294b97a1ae4e631a180fccedeccbbb707","reverse_patches":[{"end":8182,"start":7936,"text":""}]}}').get(path)
@@ -21910,6 +22005,23 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    # FOOTBALL_DOCIO_PDF_BEGIN
+    if len(source)==5681232:
+        identity=b'11ced84d03185d4387f6d2e7537ab413a98d720f6cd02e472869df44a3d137e7'
+        _require(source.count(identity)==7 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =');end=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCIO_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCIO_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCIO_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCIO_POLICY_PATH):\n            code, report = _run_docio_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCIO_PDF_END
     # NCAAF_TERMS_PDF_BEGIN
     if len(source)==5651019:
         identity=b'5dd2865e7871d8cb839d5c7d1343ec2d8945a1e068354cfc4a376e264978f763'
@@ -21951,6 +22063,14 @@ _pdf_base_source.cache_info=_pdf_cached_base.cache_info
 _pdf_base_source.cache_clear=_pdf_cached_base.cache_clear
 
 def _pdf_previous_source(path,source):
+    # FOOTBALL_DOCIO_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"daa3977589f4aedbd790f39369c740fae677eac285c5a357beb37551e22d61eb","before_sha256":"12c44950ca00bba83bb005a8d110650c16f8e2f3b5c0f1d0635d628f9accfcf6","reverse_patches":[{"end":7882,"start":7618,"text":""},{"end":11210,"start":11017,"text":""},{"end":11272,"start":11268,"text":""},{"end":11316,"start":11280,"text":""},{"end":11394,"start":11382,"text":""},{"end":11878,"start":11866,"text":""},{"end":11995,"start":11966,"text":""},{"end":12259,"start":12254,"text":"conn."},{"end":12265,"start":12263,"text":""},{"end":13172,"start":12819,"text":""},{"end":16216,"start":15944,"text":""},{"end":16268,"start":16217,"text":""},{"end":16287,"start":16283,"text":""},{"end":16326,"start":16315,"text":""}]},"tests/test_nfl_document_acquisition.py":{"after_sha256":"09276d78ec542cab2225a46ebcd51db5dac1c98fca32e947a98fb2fabd9de786","before_sha256":"5888253fed933f998a96a85e942e3262f5d8f6e89d9073406271331222e0e590","reverse_patches":[{"end":1519,"start":1518,"text":"25:"},{"end":1521,"start":1520,"text":"2.1"},{"end":1553,"start":1552,"text":"25:"},{"end":1556,"start":1554,"text":"2.15"},{"end":9050,"start":9025,"text":""},{"end":9518,"start":9458,"text":""},{"end":16985,"start":15988,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCIO_PPREVIOUS_END
     # NCAAF_TERMS_PPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","before_sha256":"a74709863ca1fe2aabc9d26f562de24cca994ce63ca27a06bc7c83d1d1ef4fcd","reverse_patches":[{"end":277,"start":214,"text":""},{"end":2817,"start":2815,"text":"=="},{"end":2819,"start":2818,"text":""},{"end":2853,"start":2832,"text":""}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","before_sha256":"9a0a9a13ee3b2a6fa30cd3cec9a53d10fcb06b22c23269bcb10488e9567821dd","reverse_patches":[{"end":10204,"start":10202,"text":"=="},{"end":10206,"start":10205,"text":""},{"end":10262,"start":10220,"text":""}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","before_sha256":"640048b019803eed38276a0ad2860933d868a0ab2b3300d1e95380c4c0cd1b1f","reverse_patches":[{"end":945,"start":882,"text":""},{"end":1570,"start":1549,"text":""},{"end":1692,"start":1664,"text":""},{"end":1795,"start":1716,"text":""},{"end":4599,"start":4597,"text":"=="},{"end":4601,"start":4600,"text":""},{"end":4635,"start":4614,"text":""},{"end":5846,"start":5686,"text":""},{"end":7200,"start":7075,"text":""},{"end":14343,"start":14130,"text":""},{"end":14377,"start":14370,"text":""},{"end":14462,"start":14455,"text":""},{"end":19764,"start":19730,"text":""},{"end":20033,"start":20031,"text":"=="},{"end":20035,"start":20034,"text":""},{"end":20109,"start":20068,"text":""},{"end":21135,"start":20723,"text":""},{"end":23524,"start":23388,"text":""},{"end":23561,"start":23554,"text":""}]},"app_core/research_display.py":{"after_sha256":"4a9b8458e1480203f5ca1bf3789b9b5aaa72dee6672a750bdbda51af23e0d204","before_sha256":"499ee85a34e8ae45546b9ff119b5b73f68315d113502feab32c50710b2317796","reverse_patches":[{"end":33385,"start":33385,"text":"ncaaf_origin[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") == "},{"end":33393,"start":33391,"text":"RESULT"},{"end":33423,"start":33394,"text":"VERSION"}]},"app_core/source_contract.py":{"after_sha256":"e113477b02c91f4c2f059fb93fdc400f2a637639eb3c0e39ceeebf05e6f67050","before_sha256":"6fa72f302a27b29f8284d3d78f261d0294b97a1ae4e631a180fccedeccbbb707","reverse_patches":[{"end":8182,"start":7936,"text":""}]}}').get(path)
@@ -22006,6 +22126,23 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    # FOOTBALL_DOCIO_INTERPRET_BEGIN
+    if len(source)==5681232:
+        identity=b'11ced84d03185d4387f6d2e7537ab413a98d720f6cd02e472869df44a3d137e7'
+        _require(source.count(identity)==7 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =');end=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCIO_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCIO_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCIO_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCIO_POLICY_PATH):\n            code, report = _run_docio_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCIO_INTERPRET_END
     # NCAAF_TERMS_INTERPRET_BEGIN
     if len(source)==5651019:
         identity=b'5dd2865e7871d8cb839d5c7d1343ec2d8945a1e068354cfc4a376e264978f763'
@@ -22064,6 +22201,14 @@ _interpret_base_source.cache_info=_interpret_cached_base.cache_info
 _interpret_base_source.cache_clear=_interpret_cached_base.cache_clear
 
 def _interpret_previous_source(path,source):
+    # FOOTBALL_DOCIO_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"daa3977589f4aedbd790f39369c740fae677eac285c5a357beb37551e22d61eb","before_sha256":"12c44950ca00bba83bb005a8d110650c16f8e2f3b5c0f1d0635d628f9accfcf6","reverse_patches":[{"end":7882,"start":7618,"text":""},{"end":11210,"start":11017,"text":""},{"end":11272,"start":11268,"text":""},{"end":11316,"start":11280,"text":""},{"end":11394,"start":11382,"text":""},{"end":11878,"start":11866,"text":""},{"end":11995,"start":11966,"text":""},{"end":12259,"start":12254,"text":"conn."},{"end":12265,"start":12263,"text":""},{"end":13172,"start":12819,"text":""},{"end":16216,"start":15944,"text":""},{"end":16268,"start":16217,"text":""},{"end":16287,"start":16283,"text":""},{"end":16326,"start":16315,"text":""}]},"tests/test_nfl_document_acquisition.py":{"after_sha256":"09276d78ec542cab2225a46ebcd51db5dac1c98fca32e947a98fb2fabd9de786","before_sha256":"5888253fed933f998a96a85e942e3262f5d8f6e89d9073406271331222e0e590","reverse_patches":[{"end":1519,"start":1518,"text":"25:"},{"end":1521,"start":1520,"text":"2.1"},{"end":1553,"start":1552,"text":"25:"},{"end":1556,"start":1554,"text":"2.15"},{"end":9050,"start":9025,"text":""},{"end":9518,"start":9458,"text":""},{"end":16985,"start":15988,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCIO_IPREVIOUS_END
     # NCAAF_TERMS_IPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","before_sha256":"a74709863ca1fe2aabc9d26f562de24cca994ce63ca27a06bc7c83d1d1ef4fcd","reverse_patches":[{"end":277,"start":214,"text":""},{"end":2817,"start":2815,"text":"=="},{"end":2819,"start":2818,"text":""},{"end":2853,"start":2832,"text":""}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","before_sha256":"9a0a9a13ee3b2a6fa30cd3cec9a53d10fcb06b22c23269bcb10488e9567821dd","reverse_patches":[{"end":10204,"start":10202,"text":"=="},{"end":10206,"start":10205,"text":""},{"end":10262,"start":10220,"text":""}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","before_sha256":"640048b019803eed38276a0ad2860933d868a0ab2b3300d1e95380c4c0cd1b1f","reverse_patches":[{"end":945,"start":882,"text":""},{"end":1570,"start":1549,"text":""},{"end":1692,"start":1664,"text":""},{"end":1795,"start":1716,"text":""},{"end":4599,"start":4597,"text":"=="},{"end":4601,"start":4600,"text":""},{"end":4635,"start":4614,"text":""},{"end":5846,"start":5686,"text":""},{"end":7200,"start":7075,"text":""},{"end":14343,"start":14130,"text":""},{"end":14377,"start":14370,"text":""},{"end":14462,"start":14455,"text":""},{"end":19764,"start":19730,"text":""},{"end":20033,"start":20031,"text":"=="},{"end":20035,"start":20034,"text":""},{"end":20109,"start":20068,"text":""},{"end":21135,"start":20723,"text":""},{"end":23524,"start":23388,"text":""},{"end":23561,"start":23554,"text":""}]},"app_core/research_display.py":{"after_sha256":"4a9b8458e1480203f5ca1bf3789b9b5aaa72dee6672a750bdbda51af23e0d204","before_sha256":"499ee85a34e8ae45546b9ff119b5b73f68315d113502feab32c50710b2317796","reverse_patches":[{"end":33385,"start":33385,"text":"ncaaf_origin[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") == "},{"end":33393,"start":33391,"text":"RESULT"},{"end":33423,"start":33394,"text":"VERSION"}]},"app_core/source_contract.py":{"after_sha256":"e113477b02c91f4c2f059fb93fdc400f2a637639eb3c0e39ceeebf05e6f67050","before_sha256":"6fa72f302a27b29f8284d3d78f261d0294b97a1ae4e631a180fccedeccbbb707","reverse_patches":[{"end":8182,"start":7936,"text":""}]}}').get(path)
@@ -22145,6 +22290,23 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    # FOOTBALL_DOCIO_CAPACITY_BEGIN
+    if len(source)==5681232:
+        identity=b'11ced84d03185d4387f6d2e7537ab413a98d720f6cd02e472869df44a3d137e7'
+        _require(source.count(identity)==7 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =');end=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCIO_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCIO_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCIO_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCIO_POLICY_PATH):\n            code, report = _run_docio_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCIO_CAPACITY_END
     # NCAAF_TERMS_CAPACITY_BEGIN
     if len(source)==5651019:
         identity=b'5dd2865e7871d8cb839d5c7d1343ec2d8945a1e068354cfc4a376e264978f763'
@@ -23986,6 +24148,25 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    # FOOTBALL_DOCIO_DFS_BEGIN
+    if reviewed=='11ced84d03185d4387f6d2e7537ab413a98d720f6cd02e472869df44a3d137e7':
+        return source.count(reviewed.encode())==7 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==5681232:
+        identity=FOOTBALL_DOCIO_REVIEWED_GUARD_SHA256.encode()
+        if source.count(identity)!=7 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =');end=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCIO_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCIO_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCIO_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCIO_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCIO_POLICY_PATH):\n            code, report = _run_docio_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCIO_DFS_END
     # NCAAF_TERMS_DFS_BEGIN
     if reviewed=='5dd2865e7871d8cb839d5c7d1343ec2d8945a1e068354cfc4a376e264978f763':
         return source.count(reviewed.encode())==6 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
@@ -24048,6 +24229,14 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _interpret_parent_previous=_listing_capacity_previous_source
 def _listing_capacity_previous_source(path,source):
+    # FOOTBALL_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"daa3977589f4aedbd790f39369c740fae677eac285c5a357beb37551e22d61eb","before_sha256":"12c44950ca00bba83bb005a8d110650c16f8e2f3b5c0f1d0635d628f9accfcf6","reverse_patches":[{"end":7882,"start":7618,"text":""},{"end":11210,"start":11017,"text":""},{"end":11272,"start":11268,"text":""},{"end":11316,"start":11280,"text":""},{"end":11394,"start":11382,"text":""},{"end":11878,"start":11866,"text":""},{"end":11995,"start":11966,"text":""},{"end":12259,"start":12254,"text":"conn."},{"end":12265,"start":12263,"text":""},{"end":13172,"start":12819,"text":""},{"end":16216,"start":15944,"text":""},{"end":16268,"start":16217,"text":""},{"end":16287,"start":16283,"text":""},{"end":16326,"start":16315,"text":""}]},"tests/test_nfl_document_acquisition.py":{"after_sha256":"09276d78ec542cab2225a46ebcd51db5dac1c98fca32e947a98fb2fabd9de786","before_sha256":"5888253fed933f998a96a85e942e3262f5d8f6e89d9073406271331222e0e590","reverse_patches":[{"end":1519,"start":1518,"text":"25:"},{"end":1521,"start":1520,"text":"2.1"},{"end":1553,"start":1552,"text":"25:"},{"end":1556,"start":1554,"text":"2.15"},{"end":9050,"start":9025,"text":""},{"end":9518,"start":9458,"text":""},{"end":16985,"start":15988,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCIO_PREVIOUS_END
     # NCAAF_TERMS_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","before_sha256":"a74709863ca1fe2aabc9d26f562de24cca994ce63ca27a06bc7c83d1d1ef4fcd","reverse_patches":[{"end":277,"start":214,"text":""},{"end":2817,"start":2815,"text":"=="},{"end":2819,"start":2818,"text":""},{"end":2853,"start":2832,"text":""}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","before_sha256":"9a0a9a13ee3b2a6fa30cd3cec9a53d10fcb06b22c23269bcb10488e9567821dd","reverse_patches":[{"end":10204,"start":10202,"text":"=="},{"end":10206,"start":10205,"text":""},{"end":10262,"start":10220,"text":""}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","before_sha256":"640048b019803eed38276a0ad2860933d868a0ab2b3300d1e95380c4c0cd1b1f","reverse_patches":[{"end":945,"start":882,"text":""},{"end":1570,"start":1549,"text":""},{"end":1692,"start":1664,"text":""},{"end":1795,"start":1716,"text":""},{"end":4599,"start":4597,"text":"=="},{"end":4601,"start":4600,"text":""},{"end":4635,"start":4614,"text":""},{"end":5846,"start":5686,"text":""},{"end":7200,"start":7075,"text":""},{"end":14343,"start":14130,"text":""},{"end":14377,"start":14370,"text":""},{"end":14462,"start":14455,"text":""},{"end":19764,"start":19730,"text":""},{"end":20033,"start":20031,"text":"=="},{"end":20035,"start":20034,"text":""},{"end":20109,"start":20068,"text":""},{"end":21135,"start":20723,"text":""},{"end":23524,"start":23388,"text":""},{"end":23561,"start":23554,"text":""}]},"app_core/research_display.py":{"after_sha256":"4a9b8458e1480203f5ca1bf3789b9b5aaa72dee6672a750bdbda51af23e0d204","before_sha256":"499ee85a34e8ae45546b9ff119b5b73f68315d113502feab32c50710b2317796","reverse_patches":[{"end":33385,"start":33385,"text":"ncaaf_origin[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") == "},{"end":33393,"start":33391,"text":"RESULT"},{"end":33423,"start":33394,"text":"VERSION"}]},"app_core/source_contract.py":{"after_sha256":"e113477b02c91f4c2f059fb93fdc400f2a637639eb3c0e39ceeebf05e6f67050","before_sha256":"6fa72f302a27b29f8284d3d78f261d0294b97a1ae4e631a180fccedeccbbb707","reverse_patches":[{"end":8182,"start":7936,"text":""}]}}').get(path)
@@ -24127,6 +24316,39 @@ def _run_terms_integrated(manifest_path,base):
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 # NCAAF_TERMS_RUN_END
 
+# FOOTBALL_DOCIO_RUN_BEGIN
+def _run_docio_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCIO_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCIO_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_io_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_io_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docio_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# In-memory successor metadata only; every historical preimage/file stays exact.
+for _docio_group_name,_docio_group in list(globals().items()):
+    if _docio_group_name.endswith('_PRIOR_SOURCE_RECONSTRUCTIONS') and isinstance(_docio_group,dict):
+        for _docio_path,_docio_info in json.loads(NCAAF_TERMS_RECONSTRUCTION_JSON).items():
+            if _docio_path in _docio_group and 'after_sha256' in _docio_group[_docio_path]:
+                _require(_docio_group[_docio_path]['after_sha256']==_docio_info['before_sha256'],'PRIOR_ASSERTIONS_CHANGED')
+                _docio_group[_docio_path]=dict(_docio_group[_docio_path],after_sha256=_docio_info['after_sha256'])
+
+def _docio_metadata_view(method,changes):
+    def current():
+        import copy
+        view=copy.deepcopy(method())
+        for path,info in changes.items():
+            _require(view['source_reconstructions'][path]['before_sha256']==info['before_sha256'],'PRIOR_ASSERTIONS_CHANGED')
+            view['source_reconstructions'][path]=copy.deepcopy(info)
+        return view
+    current.__docio_original__=method
+    return current
+for _docio_name,_docio_changes in json.loads(__import__('base64').b64decode('eyJfbmZsX29ic2VydmVkX2JpbmRpbmciOnsiYXBwX2NvcmUvcmVzZWFyY2hfZGlzcGxheS5weSI6eyJhZnRlcl9zaGEyNTYiOiI0YTliODQ1OGUxNDgwMjAzZjVjYTFiZjM3ODliOWI1YWFhNzJkZWU2NjcyYTc1MGJkYmRhNTFhZjIzZTBkMjA0IiwiYmVmb3JlX3NoYTI1NiI6IjYwMWQyM2VkODRhN2ViMDBhMWRmMThmODA0YjFiMjAxMjZmOTQwNWEyNjFiOTM1ZGQzMzRlZGU0NDczYzg2YjUiLCJyZXZlcnNlX3BhdGNoZXMiOlt7ImVuZCI6MzI2OTAsInN0YXJ0IjozMjY4OSwidGV4dCI6Im93bmUifSx7ImVuZCI6MzI2OTYsInN0YXJ0IjozMjY5MSwidGV4dCI6IiJ9LHsiZW5kIjozMjcwMSwic3RhcnQiOjMyNjk4LCJ0ZXh0IjoiIn0seyJlbmQiOjMyNzAzLCJzdGFydCI6MzI3MDMsInRleHQiOiJlYXJjaCJ9LHsiZW5kIjozMzM4NSwic3RhcnQiOjMzMzg1LCJ0ZXh0IjoibmNhYWZfb3JpZ2luW1wibmNhYWZfaW5wdXRzXCJdW1wicGF5bG9hZFwiXS5nZXQoXCJ2ZXJzaW9uXCIpID09ICJ9LHsiZW5kIjozMzM5Mywic3RhcnQiOjMzMzkxLCJ0ZXh0IjoiUkVTVUxUIn0seyJlbmQiOjMzNDIzLCJzdGFydCI6MzMzOTQsInRleHQiOiJWRVJTSU9OIn1dfX0sIl9uZmxfb3duZXJfYmluZGluZyI6eyJhcHBfY29yZS9yZXNlYXJjaF9kaXNwbGF5LnB5Ijp7ImFmdGVyX3NoYTI1NiI6IjRhOWI4NDU4ZTE0ODAyMDNmNWNhMWJmMzc4OWI5YjVhYWE3MmRlZTY2NzJhNzUwYmRiZGE1MWFmMjNlMGQyMDQiLCJiZWZvcmVfc2hhMjU2IjoiYzNkYzYxMTE1ZTU1OWRjZDc1MWNmYjhmN2RmOGRjNmI0ZWEyZjEwZjgzNDFkZWVhODIwYjEyZDM5ODhhNWQxZiIsInJldmVyc2VfcGF0Y2hlcyI6W3siZW5kIjozMzA4NCwic3RhcnQiOjMyNjcxLCJ0ZXh0IjoiIn0seyJlbmQiOjMzMzg1LCJzdGFydCI6MzMzODUsInRleHQiOiJuY2FhZl9vcmlnaW5bXCJuY2FhZl9pbnB1dHNcIl1bXCJwYXlsb2FkXCJdLmdldChcInZlcnNpb25cIikgPT0gIn0seyJlbmQiOjMzMzkzLCJzdGFydCI6MzMzOTEsInRleHQiOiJSRVNVTFQifSx7ImVuZCI6MzM0MjMsInN0YXJ0IjozMzM5NCwidGV4dCI6IlZFUlNJT04ifSx7ImVuZCI6MzkwNjgsInN0YXJ0IjozODgyNywidGV4dCI6IiJ9XX19LCJfb3duZXJfYmluZGluZyI6eyJhcHAvdWkvbmNhYWZfcGlwZWxpbmVfcmVzZWFyY2gucHkiOnsiYWZ0ZXJfc2hhMjU2IjoiMzNjZmIwOGZiNDUzMWZhMjBjN2IzNGY0NmZiMmE5MmY3YTlmN2IyOGE0ZmZiNTFjMGU5NWE5NDg3ZTQ5ZjNlYyIsImJlZm9yZV9zaGEyNTYiOiJmMmQ3ZGRiOWQzYWJkNDkxN2UzMTc5MzA4ODhmZjAwNWJlYjRiMDY4NzNhZTA2OTRmOGEwYmJjMzJiYzMwMGY2IiwicmV2ZXJzZV9wYXRjaGVzIjpbeyJlbmQiOjI3OCwic3RhcnQiOjE2NCwidGV4dCI6IiJ9LHsiZW5kIjozMTgsInN0YXJ0IjoyOTEsInRleHQiOiIifSx7ImVuZCI6NTQwLCJzdGFydCI6NDAwLCJ0ZXh0IjoiIn0seyJlbmQiOjg1MSwic3RhcnQiOjg1MSwidGV4dCI6Im9tcGF0aWJsZSBjIn0seyJlbmQiOjk0Miwic3RhcnQiOjk0MCwidGV4dCI6ImFjYyJ9LHsiZW5kIjo5NDksInN0YXJ0Ijo5NDMsInRleHQiOiJwIn0seyJlbmQiOjk1NSwic3RhcnQiOjk1MywidGV4dCI6InAifSx7ImVuZCI6OTY0LCJzdGFydCI6OTU2LCJ0ZXh0IjoiYiJ9LHsiZW5kIjo5NzIsInN0YXJ0Ijo5NjcsInRleHQiOiItIn0seyJlbmQiOjEwMjcsInN0YXJ0IjoxMDA2LCJ0ZXh0IjoiUyJ9LHsiZW5kIjoxMDM3LCJzdGFydCI6MTAzNywidGV4dCI6InMgYW5kIHVuYWNjZXB0ZWQgcmV2aWV3In0seyJlbmQiOjE0ODgsInN0YXJ0IjoxMDk1LCJ0ZXh0IjoiIn0seyJlbmQiOjMwMTIsInN0YXJ0IjoyNzY4LCJ0ZXh0IjoiIn0seyJlbmQiOjMwODUsInN0YXJ0IjozMDU5LCJ0ZXh0IjoiIn0seyJlbmQiOjUwNDYsInN0YXJ0IjozNTU0LCJ0ZXh0IjoiIn1dfSwiYXBwX2NvcmUvbmNhYWZfcGlwZWxpbmVfZXZpZGVuY2UucHkiOnsiYWZ0ZXJfc2hhMjU2IjoiOWM4ODNlMjZhY2IzNmQxNzNiMDQ5NmYzZmUzMzMyMTgzNGU0MzAyNzJiOGNkYjkyNzFiYjQ4MGE1ZTNjMDliYyIsImJlZm9yZV9zaGEyNTYiOiI3ZmRiOWQwMTE0OWYyZTllZTE5ZWU0MDkyZWQzNDJhZDExMTA3ZDZjYmNhNTcwNDUwZjk2NGI2ZGYyZjlmNDlhIiwicmV2ZXJzZV9wYXRjaGVzIjpbeyJlbmQiOjk0NSwic3RhcnQiOjgzMSwidGV4dCI6IiJ9LHsiZW5kIjoxMjE4LCJzdGFydCI6MTE0OSwidGV4dCI6IiJ9LHsiZW5kIjoxNTcwLCJzdGFydCI6MTUzNCwidGV4dCI6IiJ9LHsiZW5kIjoxNjkyLCJzdGFydCI6MTY0MiwidGV4dCI6IiJ9LHsiZW5kIjoxODYyLCJzdGFydCI6MTcxNiwidGV4dCI6IiJ9LHsiZW5kIjozMDY3LCJzdGFydCI6MzA1MSwidGV4dCI6IiJ9LHsiZW5kIjo0MTQzLCJzdGFydCI6NDExNiwidGV4dCI6IiJ9LHsiZW5kIjo0NzQ5LCJzdGFydCI6NDQ2NCwidGV4dCI6IiJ9LHsiZW5kIjo0OTU0LCJzdGFydCI6NDg1NSwidGV4dCI6IiJ9LHsiZW5kIjo1OTg4LCJzdGFydCI6NTY4NiwidGV4dCI6IiJ9LHsiZW5kIjo3MjAwLCJzdGFydCI6NzA3NSwidGV4dCI6IiJ9LHsiZW5kIjoxNDM0Mywic3RhcnQiOjE0MTMwLCJ0ZXh0IjoiIn0seyJlbmQiOjE0Mzc3LCJzdGFydCI6MTQzNzAsInRleHQiOiIifSx7ImVuZCI6MTQ0NjIsInN0YXJ0IjoxNDQ1NSwidGV4dCI6IiJ9LHsiZW5kIjoxOTY4NSwic3RhcnQiOjE5NjgzLCJ0ZXh0IjoiPT0ifSx7ImVuZCI6MTk2ODcsInN0YXJ0IjoxOTY4NiwidGV4dCI6IiJ9LHsiZW5kIjoxOTc2NSwic3RhcnQiOjE5NzAyLCJ0ZXh0IjoiIn0seyJlbmQiOjE5ODE4LCJzdGFydCI6MTk4MTYsInRleHQiOiIifSx7ImVuZCI6MTk4MjEsInN0YXJ0IjoxOTgxOSwidGV4dCI6InVzIn0seyJlbmQiOjE5ODI2LCJzdGFydCI6MTk4MjIsInRleHQiOiJvZCJ9LHsiZW5kIjoxOTg0NCwic3RhcnQiOjE5ODI3LCJ0ZXh0IjoiLlZFUlNJT04ifSx7ImVuZCI6MjExMjcsInN0YXJ0IjoxOTk2MCwidGV4dCI6IiJ9LHsiZW5kIjoyMzUyNCwic3RhcnQiOjIzMzg4LCJ0ZXh0IjoiIn0seyJlbmQiOjIzNTYxLCJzdGFydCI6MjM1NTQsInRleHQiOiIifV19LCJhcHBfY29yZS9yZXNlYXJjaF9kaXNwbGF5LnB5Ijp7ImFmdGVyX3NoYTI1NiI6IjRhOWI4NDU4ZTE0ODAyMDNmNWNhMWJmMzc4OWI5YjVhYWE3MmRlZTY2NzJhNzUwYmRiZGE1MWFmMjNlMGQyMDQiLCJiZWZvcmVfc2hhMjU2IjoiYzQ3ZGNiYTI3Y2YzZjk1NmNjNTM4M2QxMjFhOTg0ODFmNTI5ZGE0MDYyZTZiNjY1Y2MwNTUwMzEzMDQ5ZDlhOSIsInJldmVyc2VfcGF0Y2hlcyI6W3siZW5kIjozMjYwNiwic3RhcnQiOjMyNTgyLCJ0ZXh0IjoiIn0seyJlbmQiOjMzMDc5LCJzdGFydCI6MzI2NjYsInRleHQiOiIifSx7ImVuZCI6MzM2MzUsInN0YXJ0IjozMzI5NiwidGV4dCI6IiJ9LHsiZW5kIjozNDAxOCwic3RhcnQiOjMzODkxLCJ0ZXh0IjoiIn0seyJlbmQiOjM5MDczLCJzdGFydCI6Mzg4MzIsInRleHQiOiIifSx7ImVuZCI6Mzk1MzcsInN0YXJ0IjozOTMzMywidGV4dCI6IiJ9XX19fQ==')).items():
+    globals()[_docio_name]=_docio_metadata_view(globals()[_docio_name],_docio_changes)
+# FOOTBALL_DOCIO_RUN_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -24134,7 +24356,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):
+        if exists_at("HEAD", FOOTBALL_DOCIO_POLICY_PATH):
+            code, report = _run_docio_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", NCAAF_TERMS_POLICY_PATH):
             code, report = _run_terms_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NFL_DOCUMENT_POLICY_PATH):
             code, report = _run_document_integrated(args.manifest, args.base)

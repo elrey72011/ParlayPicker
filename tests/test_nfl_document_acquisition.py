@@ -29,7 +29,7 @@ def fixture(root,*,format='pdf',redirect=False):
     permission=dict(reviewer='Robert Velarde',reviewed_at='2026-10-05T12:00:00Z',effective_from='2026-10-05T00:00:00Z',effective_until='2026-10-07T00:00:00Z',
         documents_sha256=lane.digest(docs),private_acquisition=True,private_retention=True,basis='SYNTHETIC advance terms and permissions reviewed; fixture only')
     plan=lane.seal(dict(version=lane.VERSION,evidence_label='SYNTHETIC',documents=docs,limits=deepcopy(lane.LIMITS),
-        window=dict(not_before=NOW,not_after='2026-10-06T19:25:02.100Z',expires_at='2026-10-06T19:25:02.150Z'),permission=permission,
+        window=dict(not_before=NOW,not_after='2026-10-06T19:40:00Z',expires_at='2026-10-06T19:40:30Z'),permission=permission,
         authorization_ref='SYNTHETIC-auth',custody_id='SYNTHETIC-private',unresolved=[]))
     auth=lane.seal(dict(version=lane.AUTH,reference='SYNTHETIC-auth',plan_sha256=plan['sha256'],custody_id='SYNTHETIC-private',owner='Robert Velarde',
         authorized_at='2026-10-06T19:00:00Z',expires_at=plan['payload']['window']['expires_at'],maximum_attempts=2 if redirect else 1,maximum_additional_spend=0))
@@ -133,7 +133,7 @@ def test_gates_before_first_attempt(tmp_path,attack):
     assert list(tmp_path.iterdir())==[]
 
 
-def socket_boundary(monkeypatch,raw):
+def socket_boundary(monkeypatch,raw,*,connection_close=False):
     """Use real HTTPSConnection and worker; fake only DNS/TCP/TLS boundary."""
     sent=[]
     class Sock:
@@ -141,7 +141,7 @@ def socket_boundary(monkeypatch,raw):
         def setsockopt(self,*a):pass
         def connect(self,address):assert address[0]=='93.184.216.34'
         def sendall(self,data):sent.append(data)
-        def makefile(self,*a,**k):return io.BytesIO(b'HTTP/1.1 200 OK\r\nContent-Type: application/pdf\r\nContent-Length: '+str(len(raw)).encode()+b'\r\n\r\n'+raw)
+        def makefile(self,*a,**k):return io.BytesIO(b'HTTP/1.1 200 OK\r\nContent-Type: application/pdf\r\n'+(b'Connection: close\r\n' if connection_close else b'')+b'Content-Length: '+str(len(raw)).encode()+b'\r\n\r\n'+raw)
         def close(self):pass
     monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**k:[(socket.AF_INET,socket.SOCK_STREAM,6,'',('93.184.216.34',443))])
     monkeypatch.setattr(socket,'socket',lambda *a,**k:Sock())
@@ -232,3 +232,19 @@ def test_embedded_links_and_headers_remain_inert(tmp_path):
     assert result['payload']['status']=='CAPTURED_UNREVIEWED' and calls==[URL]
     assert lane.read_bundle(result)['rules'][0]==raw and CANARY not in json.dumps(result)
     assert result['payload']['objects'][0]['response_metadata']['http_date']=='UNKNOWN'
+
+
+def test_real_tls_worker_supports_complete_connection_close_response(monkeypatch,tmp_path):
+    p,a,c=fixture(tmp_path);raw=pdf();sent=socket_boundary(monkeypatch,raw,connection_close=True)
+    with lane.controlled(p,c,hashlib.sha256(c).hexdigest(),root=tmp_path,wall=lambda:NOW,security=security):
+        result=lane.acquire(p,a,root=tmp_path,wall=lambda:NOW)
+    assert result['payload']['status']=='CAPTURED_UNREVIEWED',lane.report(result)
+    assert len(sent)==result['payload']['attempted']==1 and lane.read_bundle(result)['rules'][0]==raw
+
+
+def test_configuration_secret_rejects_before_journal(tmp_path):
+    p,a,c=fixture(tmp_path);v=json.loads(c)['payload'];v['review']['basis']='SYNTHETIC apiKey=PRIVATE_SECRET'
+    c=lane.custody.encode(lane.seal(v)).encode()
+    with pytest.raises(ValueError,match='DOCUMENT_CONFIGURATION'):
+        with lane.controlled(p,c,hashlib.sha256(c).hexdigest(),root=tmp_path,wall=lambda:NOW,security=security):pass
+    assert not list(tmp_path.iterdir())
