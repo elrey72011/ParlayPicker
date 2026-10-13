@@ -80,6 +80,7 @@ def test_predecessor_files_preserved_without_git_history(monkeypatch):
                  'app_core/candidate_chronology.py','app_core/quote_freshness.py','tests/conftest.py',
                  '.github/workflows/ci.yml','scripts/nfl_scoring_scope.py'):
         content=(root/path).read_bytes().replace(b'\r\n',b'\n')
+        content=guard._listing_capacity_previous_source(path,content)
         assert hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==policy['unchanged_bindings'][path]
 
 

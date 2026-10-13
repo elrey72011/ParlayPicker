@@ -1,6 +1,6 @@
 # CI test execution
 
-The CI workflow keeps `production-safety` as a focused check and `full-suite` as the required gate for all application tests. The complete suite runs in three separate GitHub jobs, each with its own checkout and runner filesystem. `scripts/run_ci_tests.py` partitions whole collected files deterministically using the versioned advisory timing profile and retains collection order within each file. Every collected test belongs to exactly one shard. All three jobs must succeed; a failure, cancellation, missing result or unexpectedly empty shard prevents the existing `full-suite` gate from passing. The 30-minute application-job limit and production-safety selection remain unchanged.
+The CI workflow keeps `production-safety` as a focused check and `full-suite` as the required gate for all application tests. The complete suite runs in five separate GitHub jobs, each with its own checkout and runner filesystem. `scripts/run_ci_tests.py` partitions whole collected files deterministically using the versioned advisory timing profile and retains collection order within each file. Every collected test belongs to exactly one shard. All five jobs must succeed; a failure, cancellation, missing result or unexpectedly empty shard prevents the existing `full-suite` gate from passing. The 30-minute application-job limit and production-safety selection remain unchanged.
 
 New commits cancel superseded runs on the same pull request. Pushes to main retain separate runs. The scheduled research/grade workflow is independent and unchanged.
 
@@ -36,7 +36,7 @@ they cannot exclude tests, alter assertions or create scientific/wagering author
 
 Every manifest records profile and assignment hashes, all collected node/file
 assignments, selected/deselected counts, timing labels, completion identities and
-exit status. The aggregate gate requires matching manifests from all three
+exit status. The aggregate gate requires matching manifests from all five
 shards, nonempty selections, an exact disjoint/complete node partition, complete
 outcomes and matching successful JUnit identities in original order. Collection-only
 reports are useful diagnostics and cannot satisfy the execution gate.
@@ -54,7 +54,7 @@ order and three-job workflow are unchanged. See
 Revision 3 also uses the first refresh's completed same-code shards and explicitly
 estimated cancelled inter-outcome intervals; all-node progress is not completed
 JUnit evidence. Earlier results remain separate from final-head execution.
-Final readiness requires three fresh executed manifests under the same sealed
+Final readiness requires five fresh executed manifests under the same sealed
 head/profile; older passed shards under another assignment do not count.
 
 ## Local verification
@@ -77,12 +77,22 @@ maintained pytest suite correctly.
 To reproduce the CI partitions:
 
 ```sh
-python scripts/run_ci_tests.py --shard 1 --shards 3 --assignment-manifest test-results/full-suite-1-assignment.json -v tests --durations=30 --junitxml=test-results/full-suite-1.xml
-python scripts/run_ci_tests.py --shard 2 --shards 3 --assignment-manifest test-results/full-suite-2-assignment.json -v tests --durations=30 --junitxml=test-results/full-suite-2.xml
-python scripts/run_ci_tests.py --shard 3 --shards 3 --assignment-manifest test-results/full-suite-3-assignment.json -v tests --durations=30 --junitxml=test-results/full-suite-3.xml
-python scripts/run_ci_tests.py --shards 3 --reconcile-manifests test-results
+python scripts/run_ci_tests.py --shard 1 --shards 5 --assignment-manifest test-results/full-suite-1-assignment.json -v tests --durations=30 --junitxml=test-results/full-suite-1.xml
+python scripts/run_ci_tests.py --shard 2 --shards 5 --assignment-manifest test-results/full-suite-2-assignment.json -v tests --durations=30 --junitxml=test-results/full-suite-2.xml
+python scripts/run_ci_tests.py --shard 3 --shards 5 --assignment-manifest test-results/full-suite-3-assignment.json -v tests --durations=30 --junitxml=test-results/full-suite-3.xml
+python scripts/run_ci_tests.py --shard 4 --shards 5 --assignment-manifest test-results/full-suite-4-assignment.json -v tests --durations=30 --junitxml=test-results/full-suite-4.xml
+python scripts/run_ci_tests.py --shard 5 --shards 5 --assignment-manifest test-results/full-suite-5-assignment.json -v tests --durations=30 --junitxml=test-results/full-suite-5.xml
+python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results
 ```
 
 Run local shards sequentially unless they have separate working directories; some application tests use repository-relative paths. GitHub shards have separate runners.
 
 The September 12 baseline ran 1,764 tests in 237 seconds on GitHub; repository checkout took only one second. Local profiling found distributed test cost rather than one long-running test. Warnings remain visible: DataFrame fragmentation and deprecation warnings require separate behavior-preserving fixes, not blanket suppression. Repo history or saved research does not need deletion to obtain this CI improvement.
+
+## Five-shard capacity successor
+
+The owner approved five jobs after the retained #2419 three-shard timeouts and the matched 16-test Ubuntu comparison (run 38336966477). This changes capacity only: the scheduler, whole-file order, advisory file costs, network blocking, production safety, other workflows and 30-minute per-job limit remain unchanged. The existing exact matrix cardinality assertion now requires five entries; no test identity or rejection assertion is removed.
+
+Every one of the five jobs must upload its own JUnit and assignment manifest. The existing full-suite gate rejects failure, cancellation, absent or empty results and mismatched identities/profile/assignments. Old three-shard synthetic regressions continue running. New five-shard regressions exercise the actual CLI and fail-closed reconciliation. Readiness requires all five final-head executed reports and all other required checks; previous-head passes and collection-only previews cannot satisfy it.
+
+The completed metadata correction preserves frozen revision 3 and records successor metadata separately. It fixes an assertion failure and provides no runtime savings. The reviewed capacity estimate was 112.92 aggregate application runner minutes and worst job 26m28s with about 3m32s headroom, using compatible completed historical costs plus a 15% margin and 100s per-job overhead. New regression identities require a fresh assignment preview. These projections are not demonstrated performance; actual final-head test/job/upload times must be retained separately. More jobs do not reduce total test work and introduce extra setup/report overhead. Earlier failures remain preserved.

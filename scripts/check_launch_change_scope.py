@@ -21765,6 +21765,52 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+LISTING_CAPACITY_BOOTSTRAP = True
+LISTING_CAPACITY_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-listing-capacity-v1.json'
+LISTING_CAPACITY_BINDING_PATH = 'docs/paid-launch/nfl-listing-capacity-binding-v1.json'
+LISTING_CAPACITY_BINDING_SHA256 = 'dad8c3a50f338592976d0e96c24724cdd21c891cd93f3bc9072a7c61cb401a6a'
+LISTING_CAPACITY_REVIEWED_GUARD_SHA256 = 'db05695a820de90e9946e0f9a4a80379461de07355e0c5563bfe7887ee845032'
+LISTING_CAPACITY_PREVIOUS_GUARD_SHA256 = '19d939e3ee3a8241deed891e57847394bb22a639b19a0c233d7025c62dec50d6'
+LISTING_CAPACITY_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","before_sha256":"56bcb780ee76b8bc57ce2559759d4c37121dcc7eddd9e40b624892d3956a8ea1","reverse_patches":[{"end":3566,"start":3560,"text":""},{"end":4060,"start":4059,"text":"3"},{"end":5467,"start":5464,"text":"thre"},{"end":5530,"start":5529,"text":"3"}]},"docs/ci-test-execution.md":{"after_sha256":"729752109ea2bbc9a875796e4acbf202be0cf5264ae3e91b274d046665d4b4e6","before_sha256":"79cb7de7a43dfdf02f5901cc2bbfc6f505045ea61837b3e84b418101ea7d755b","reverse_patches":[{"end":177,"start":174,"text":"thre"},{"end":477,"start":474,"text":"thre"},{"end":3271,"start":3268,"text":"thre"},{"end":4413,"start":4410,"text":"thre"},{"end":5214,"start":5213,"text":"3"},{"end":5395,"start":5394,"text":"3"},{"end":5576,"start":5575,"text":"3"},{"end":5754,"start":5744,"text":""},{"end":5843,"start":5756,"text":""},{"end":6109,"start":5844,"text":""},{"end":8406,"start":6736,"text":""}]},"tests/test_ci_test_shards.py":{"after_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","before_sha256":"1cba33a376726ff07e0ef0ff5475e73a9221c8ec7695e1478ee561bc60dac562","reverse_patches":[{"end":13641,"start":13631,"text":""}]},"tests/test_ci_timing_scope.py":{"after_sha256":"81b561e6d2a60df1a4db5e048ab9d7ede655e0495623a9405b69ec2c721ddc88","before_sha256":"e257ec23ec53dbe45510a482df7f25024dc74871955d0e2cad37a7eaf8c6a3de","reverse_patches":[{"end":5469,"start":5399,"text":""}]},"tests/test_ncaaf_cloud_backup_scope.py":{"after_sha256":"20ddc97bdf8dd779492ca19be592ae076473181c4c9f1dc9ebacc39e3ff3eb4e","before_sha256":"a64af9b767622cce1656906df9407283e142b5d5999c718ce9a1c5db99e0a244","reverse_patches":[{"end":1754,"start":1684,"text":""}]},"tests/test_ncaaf_owner_scope.py":{"after_sha256":"44e3efa2fbe89dd867248f09fe5fde9586dcb675c6fef9abc6d6d3f8847e8d09","before_sha256":"76ea13b14439b7fafe8a91499a9da8bb46eb0c012da2157658542d98963cbea4","reverse_patches":[{"end":9831,"start":9769,"text":""}]},"tests/test_nfl_diagnostics_scope.py":{"after_sha256":"6f4df9c32764b96ce908db89fb7f7e47865bdec040bcffbc5261abe098d98fc8","before_sha256":"07320c279487a846233a9300197d7c5bd07e6398ffebc629d8cefa59b673e23a","reverse_patches":[{"end":5484,"start":5414,"text":""}]},"tests/test_nfl_listing_cost_scope.py":{"after_sha256":"2a9dbb4d8a5e93677f7fba00f272a4f90ac77910124132df6ded634c2fb94184","before_sha256":"e2e3447f8dfdc43353ee1b4daf146a97410b10e765391d635feee364532d83d9","reverse_patches":[{"end":5533,"start":5463,"text":""}]},"tests/test_nfl_listing_immutable_scope.py":{"after_sha256":"27c1d4ab3bafc24c7873326951d1509cad53f975f3c933d5aada457428a96297","before_sha256":"7aafd64cb17fab22ef8fbc7c90039e8c701ec30af789ed57199854f1b205f2a3","reverse_patches":[{"end":5961,"start":5891,"text":""}]},"tests/test_nfl_listing_metadata_scope.py":{"after_sha256":"62cf26f12f0f5dc479e5159497e67b8877bb765f07af001538929319860a5b55","before_sha256":"25fe7c00b7dbc694be0c57b9d87547dc725fcaa5cb9de18d85d7a7e5e26bf771","reverse_patches":[{"end":5558,"start":5488,"text":""}]},"tests/test_nfl_odds_listing_scope.py":{"after_sha256":"129784d4cfb9df9c9d25fbde6b1cd1447e1ffc502158f4c18b6ce96bca364b5c","before_sha256":"120bc9c0ab6c5d340463bf0ff40db8bd4f69e068ca3c6bfad55f1472f9e23b7e","reverse_patches":[{"end":5527,"start":5457,"text":""}]},"tests/test_nfl_odds_scope.py":{"after_sha256":"e12cf2726778caf78238543b65a7f43bb0e3bf95e923d297b30451037f3cc611","before_sha256":"6706f32e580f39d3d6a298a2dc552770054c79d392cc298b9c5850685c7e9d2b","reverse_patches":[{"end":5459,"start":5389,"text":""}]},"tests/test_nfl_owner_scope.py":{"after_sha256":"328346b11bf181f4ae27849878ae88853da578059511b1bc9a884cb451535681","before_sha256":"1aa319d7f3f9e123d8a64ac54378c70154022217d27809a48d5a11f30e3f30e2","reverse_patches":[{"end":10080,"start":10018,"text":""}]},"tests/test_nfl_scenario_scope.py":{"after_sha256":"786dba68cd83f57e6b3a1a32cf289755fc211425e06a0a868e9fef658ff918be","before_sha256":"28031518f54997b1d061759ec617173097c533ecb9df71c0a30bb041dbf8f66d","reverse_patches":[{"end":5466,"start":5396,"text":""}]}}\n'
+from functools import lru_cache as _capacity_lru_cache
+
+def _listing_capacity_guard_matches(source):
+    reviewed=LISTING_CAPACITY_REVIEWED_GUARD_SHA256.encode('ascii')
+    return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==LISTING_CAPACITY_REVIEWED_GUARD_SHA256
+
+@_capacity_lru_cache(maxsize=2)
+def _listing_capacity_cached_base_source(source,reviewed,parent):
+    if b'\nLISTING_CAPACITY_BOOTSTRAP =' not in source:return source
+    _require(reviewed==LISTING_CAPACITY_REVIEWED_GUARD_SHA256 and parent==LISTING_CAPACITY_PREVIOUS_GUARD_SHA256 and _listing_capacity_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    prefix,own=source.split(b'\nLISTING_CAPACITY_BOOTSTRAP =',1)
+    previous=prefix+b'\nLISTING_METADATA_BOOTSTRAP ='+own.split(b'\nLISTING_METADATA_BOOTSTRAP =',1)[1]
+    start=previous.index(b'\n_capacity_previous_match=');end=previous.index(b'\nCOST_IMMUTABLE_BOOTSTRAP =',start)
+    previous=previous[:start]+previous[end:]
+    start=previous.index(b'\n_capacity_previous_dfs_match=');end=previous.index(b'\ndef main() -> int:',start)
+    previous=previous[:start]+previous[end:]
+    dispatch=b'if exists_at("HEAD", LISTING_CAPACITY_POLICY_PATH):\n            code, report = _run_listing_capacity_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", LISTING_METADATA_POLICY_PATH):'
+    _require(previous.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    previous=previous.replace(dispatch,b'if exists_at("HEAD", LISTING_METADATA_POLICY_PATH):',1)
+    _require(hashlib.sha256(previous).hexdigest()==parent,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    return previous
+
+def _listing_capacity_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    return _listing_capacity_cached_base_source(source,LISTING_CAPACITY_REVIEWED_GUARD_SHA256,LISTING_CAPACITY_PREVIOUS_GUARD_SHA256)
+_listing_capacity_base_source.cache_clear=_listing_capacity_cached_base_source.cache_clear
+_listing_capacity_base_source.cache_info=_listing_capacity_cached_base_source.cache_info
+
+def _listing_capacity_previous_source(path,source):
+    if path==GUARD_PATH:return _listing_capacity_base_source(source)
+    if path not in ('.github/workflows/ci.yml', 'docs/ci-test-execution.md', 'tests/test_ci_test_shards.py', 'tests/test_ci_timing_scope.py', 'tests/test_ncaaf_cloud_backup_scope.py', 'tests/test_nfl_diagnostics_scope.py', 'tests/test_nfl_listing_cost_scope.py', 'tests/test_nfl_listing_immutable_scope.py', 'tests/test_nfl_listing_metadata_scope.py', 'tests/test_nfl_odds_listing_scope.py', 'tests/test_nfl_odds_scope.py', 'tests/test_nfl_scenario_scope.py', 'tests/test_ncaaf_owner_scope.py', 'tests/test_nfl_owner_scope.py'):return source
+    info=json.loads(LISTING_CAPACITY_RECONSTRUCTION_JSON)[path]
+    if hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode('utf-8')
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode('utf-8')
+    _require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 LISTING_METADATA_BOOTSTRAP = True
 LISTING_METADATA_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-listing-metadata-v1.json'
 LISTING_METADATA_BINDING_PATH = 'docs/paid-launch/nfl-listing-metadata-binding-v1.json'
@@ -21810,6 +21856,15 @@ def _listing_metadata_previous_source(path,source):
     result=(json.dumps(value,sort_keys=True,indent=2)+'\n').encode()
     _require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
     return result
+
+_capacity_previous_match=_listing_metadata_guard_matches
+_capacity_previous_base=_listing_metadata_base_source
+
+def _listing_metadata_guard_matches(source):return _capacity_previous_match(_listing_capacity_base_source(source))
+
+def _listing_metadata_base_source(source):return _capacity_previous_base(_listing_capacity_base_source(source))
+_listing_metadata_base_source.cache_clear=_capacity_previous_base.cache_clear
+_listing_metadata_base_source.cache_info=_capacity_previous_base.cache_info
 
 COST_IMMUTABLE_BOOTSTRAP = True
 COST_IMMUTABLE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-listing-immutable-v1.json'
@@ -23493,6 +23548,30 @@ def _run_listing_metadata_integrated(manifest_path,base):
     _scope_reconstruction_for_validation()
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+_capacity_previous_dfs_match=_dfs_guard_matches
+
+def _dfs_guard_matches(source,reviewed):
+    if reviewed==LISTING_CAPACITY_REVIEWED_GUARD_SHA256:return _listing_capacity_guard_matches(source)
+    try:return _capacity_previous_dfs_match(_listing_capacity_base_source(source),reviewed)
+    except ValueError:return False
+_capacity_previous_source=_listing_cost_previous_source
+
+def _listing_cost_previous_source(path,source):return _capacity_previous_source(path,_listing_capacity_previous_source(path,source))
+
+def _listing_capacity_binding():
+    raw=(ROOT/LISTING_CAPACITY_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==LISTING_CAPACITY_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    return json.loads(raw)
+
+def _run_listing_capacity_integrated(manifest_path,base):
+    import importlib.util
+    binding=_listing_capacity_binding();path=ROOT/'scripts/nfl_listing_capacity_scope.py'
+    raw=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==binding['reviewed_blobs']['scripts/nfl_listing_capacity_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_listing_capacity_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -23500,7 +23579,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", LISTING_METADATA_POLICY_PATH):
+        if exists_at("HEAD", LISTING_CAPACITY_POLICY_PATH):
+            code, report = _run_listing_capacity_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", LISTING_METADATA_POLICY_PATH):
             code, report = _run_listing_metadata_integrated(args.manifest, args.base)
         elif exists_at("HEAD", COST_IMMUTABLE_POLICY_PATH):
             code, report = _run_cost_immutable_integrated(args.manifest, args.base)
