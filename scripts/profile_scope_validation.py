@@ -15,6 +15,8 @@ import subprocess
 import sys
 import threading
 import time
+import types
+import functools
 
 FILES = ["tests/test_slate_audit_scope.py", "tests/test_canonical_download_scope.py",
          "tests/test_football_research_scope.py", "tests/test_nfl_inputs_scope.py"]
@@ -58,9 +60,10 @@ def main():
     def cache_snapshot():
         found = {}
         for name, module in list(sys.modules.items()):
-            if module is None: continue
+            if module is None or name != "scripts.check_launch_change_scope": continue
             for key, value in list(vars(module).items()):
-                memo=getattr(value,"reconstruction_memo",None)
+                if not isinstance(value, (types.FunctionType, functools._lru_cache_wrapper)): continue
+                memo=vars(value).get("reconstruction_memo")
                 if memo is not None:
                     found[name+":"+key+":pure"] = dict(hits=memo.hits,misses=memo.misses,entries=len(memo.entries),retained_bytes=memo.retained_bytes,fields=value.reconstruction_context_fields)
                 if callable(value) and callable(getattr(value, "cache_info", None)):
