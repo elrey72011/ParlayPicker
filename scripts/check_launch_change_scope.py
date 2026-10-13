@@ -21765,6 +21765,51 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+NFL_DOCUMENT_BOOTSTRAP = True
+NFL_DOCUMENT_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-documents-v1.json'
+NFL_DOCUMENT_BINDING_PATH = 'docs/paid-launch/football-document-retrieval-binding-v1.json'
+NFL_DOCUMENT_BINDING_SHA256 = '15f574f3bf179ea6a71ae28271eeaffbb34dcaacd1bc4be199ac910c193f5a50'
+NFL_DOCUMENT_REVIEWED_GUARD_SHA256 = 'd0579c4359e4c8d3d64fda551bd7998582a2b3969363cc1483208cdf523a2649'
+NFL_DOCUMENT_PREVIOUS_GUARD_SHA256 = '3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d'
+NFL_DOCUMENT_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"after_sha256":"80e7ed46e3678b539f7bb5bf45f01bf8e1ec265ba1f89d720b043bf8b8bee5df","before_sha256":"3fb921b1bc8d8f1262700bd512961af4d45a574d40c7488c25321d6186d25f09","reverse_patches":[{"end":2987,"start":2627,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"fd17cf7af3f182f9d3daaffc2d2c59ebd2eca3b594cc06909a90ffa01cfc928f","before_sha256":"c99dd86c667319a3b4edcffcd44e0107c209fc6503733bcdd57e22360fe47df8","reverse_patches":[{"end":342,"start":293,"text":""},{"end":420,"start":407,"text":""},{"end":771,"start":759,"text":""},{"end":898,"start":884,"text":""},{"end":1825,"start":1772,"text":""},{"end":2203,"start":2182,"text":""},{"end":2387,"start":2367,"text":""},{"end":3200,"start":3187,"text":""}]}}'
+from functools import lru_cache as _document_lru
+
+def _document_guard_matches(source):
+    value=NFL_DOCUMENT_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==5 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==NFL_DOCUMENT_REVIEWED_GUARD_SHA256
+
+@_document_lru(maxsize=2)
+def _document_cached_base(source,reviewed,parent):
+    _require(_document_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nNFL_DOCUMENT_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS'):
+     begin=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# NFL_DOCUMENT_RUN_BEGIN\n');end=source.index(b'\n# NFL_DOCUMENT_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# NFL_DOCUMENT_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", NFL_DOCUMENT_POLICY_PATH):\n            code, report = _run_document_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _document_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=5625281:return source
+    return _document_cached_base(source,NFL_DOCUMENT_REVIEWED_GUARD_SHA256,NFL_DOCUMENT_PREVIOUS_GUARD_SHA256)
+_document_base_source.cache_info=_document_cached_base.cache_info
+_document_base_source.cache_clear=_document_cached_base.cache_clear
+
+def _document_previous_source(path,source):
+    if path==GUARD_PATH:return _document_base_source(source)
+    info=json.loads(NFL_DOCUMENT_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 NFL_PDF_BOOTSTRAP = True
 NFL_PDF_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-pdf-v1.json'
 NFL_PDF_BINDING_PATH = 'docs/paid-launch/nfl-pdf-evidence-binding-v1.json'
@@ -21795,6 +21840,23 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    # NFL_DOCUMENT_PDF_BEGIN
+    if len(source)==5625281:
+        identity=b'd0579c4359e4c8d3d64fda551bd7998582a2b3969363cc1483208cdf523a2649'
+        _require(source.count(identity)==5 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_DOCUMENT_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS'):
+         begin=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_DOCUMENT_RUN_BEGIN\n');end=source.index(b'\n# NFL_DOCUMENT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_DOCUMENT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_DOCUMENT_POLICY_PATH):\n            code, report = _run_document_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_DOCUMENT_PDF_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=5610170:return source
     return _pdf_cached_base(source,NFL_PDF_REVIEWED_GUARD_SHA256,NFL_PDF_PREVIOUS_GUARD_SHA256)
@@ -21802,6 +21864,14 @@ _pdf_base_source.cache_info=_pdf_cached_base.cache_info
 _pdf_base_source.cache_clear=_pdf_cached_base.cache_clear
 
 def _pdf_previous_source(path,source):
+    # NFL_DOCUMENT_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app/ui/nfl_private_research.py":{"after_sha256":"80e7ed46e3678b539f7bb5bf45f01bf8e1ec265ba1f89d720b043bf8b8bee5df","before_sha256":"3fb921b1bc8d8f1262700bd512961af4d45a574d40c7488c25321d6186d25f09","reverse_patches":[{"end":2987,"start":2627,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"fd17cf7af3f182f9d3daaffc2d2c59ebd2eca3b594cc06909a90ffa01cfc928f","before_sha256":"c99dd86c667319a3b4edcffcd44e0107c209fc6503733bcdd57e22360fe47df8","reverse_patches":[{"end":342,"start":293,"text":""},{"end":420,"start":407,"text":""},{"end":771,"start":759,"text":""},{"end":898,"start":884,"text":""},{"end":1825,"start":1772,"text":""},{"end":2203,"start":2182,"text":""},{"end":2387,"start":2367,"text":""},{"end":3200,"start":3187,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_DOCUMENT_PPREVIOUS_END
     if path==GUARD_PATH:return _pdf_base_source(source)
     info=json.loads(NFL_PDF_RECONSTRUCTION_JSON).get(path)
     if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
@@ -21841,6 +21911,23 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    # NFL_DOCUMENT_INTERPRET_BEGIN
+    if len(source)==5625281:
+        identity=b'd0579c4359e4c8d3d64fda551bd7998582a2b3969363cc1483208cdf523a2649'
+        _require(source.count(identity)==5 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_DOCUMENT_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS'):
+         begin=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_DOCUMENT_RUN_BEGIN\n');end=source.index(b'\n# NFL_DOCUMENT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_DOCUMENT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_DOCUMENT_POLICY_PATH):\n            code, report = _run_document_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_DOCUMENT_INTERPRET_END
     # NFL_PDF_INTERPRET_BEGIN
     if len(source)==5610170:
         identity=b'6f6a40fb7245cacf0128a0073ec1e805616eef9824c9d1293d43ea6fce764678'
@@ -21865,6 +21952,14 @@ _interpret_base_source.cache_info=_interpret_cached_base.cache_info
 _interpret_base_source.cache_clear=_interpret_cached_base.cache_clear
 
 def _interpret_previous_source(path,source):
+    # NFL_DOCUMENT_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app/ui/nfl_private_research.py":{"after_sha256":"80e7ed46e3678b539f7bb5bf45f01bf8e1ec265ba1f89d720b043bf8b8bee5df","before_sha256":"3fb921b1bc8d8f1262700bd512961af4d45a574d40c7488c25321d6186d25f09","reverse_patches":[{"end":2987,"start":2627,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"fd17cf7af3f182f9d3daaffc2d2c59ebd2eca3b594cc06909a90ffa01cfc928f","before_sha256":"c99dd86c667319a3b4edcffcd44e0107c209fc6503733bcdd57e22360fe47df8","reverse_patches":[{"end":342,"start":293,"text":""},{"end":420,"start":407,"text":""},{"end":771,"start":759,"text":""},{"end":898,"start":884,"text":""},{"end":1825,"start":1772,"text":""},{"end":2203,"start":2182,"text":""},{"end":2387,"start":2367,"text":""},{"end":3200,"start":3187,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_DOCUMENT_IPREVIOUS_END
     # NFL_PDF_IPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app/ui/nfl_private_research.py":{"after_sha256":"3fb921b1bc8d8f1262700bd512961af4d45a574d40c7488c25321d6186d25f09","before_sha256":"f34fbb1ce8cd184d79cecfc62d7cb58adacc3b661e5963a8754c0dd657909d53","reverse_patches":[{"end":2847,"start":2631,"text":"                    if evidence.saved_route(row).VERSION in {\'nfl-owner-observed-private-inputs-v2\',\'nfl-owner-scoring-private-inputs-v3\',\'nfl-owner-interpreted-private-inputs-v4\'}:\\n"},{"end":3154,"start":3015,"text":"                    if evidence.saved_route(row).VERSION == \'nfl-owner-interpreted-private-inputs-v4\':\\n"},{"end":3799,"start":3521,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"c99dd86c667319a3b4edcffcd44e0107c209fc6503733bcdd57e22360fe47df8","before_sha256":"03fb6ab692cdee57418faac252fb282c08398bbbd2ff66a35d03392471ef95f6","reverse_patches":[{"end":293,"start":134,"text":"from app_core import nfl_owner_research as v1, nfl_observed_research as v2, nfl_scoring_research as v3, nfl_interpreted_research as v4\\n"},{"end":367,"start":294,"text":"REASONS = v1.REASONS | v2.REASONS | v3.REASONS | v4.REASONS\\n"},{"end":821,"start":612,"text":"    v1.require(version in {v1.VERSION, v2.VERSION, v3.VERSION, v4.VERSION}, \'NFL_PRIVATE_PACKET_SCHEMA\')\\n    return {v1.VERSION:v1,v2.VERSION:v2,v3.VERSION:v3,v4.VERSION:v4}[version]\\n"},{"end":1686,"start":1412,"text":"    with v1.selected([p for p in packets if route(p) is v1]), v2.selected([p for p in packets if route(p) is v2]), v3.selected([p for p in packets if route(p) is v3]), v4.selected([p for p in packets if route(p) is v4]):\\n"},{"end":2043,"start":1807,"text":"    return not (v1.IN_NATIVE.get() or v2.IN_NATIVE.get() or v3.IN_NATIVE.get() or v4.IN_NATIVE.get()) and bool(v1.SELECTED.get() or v2.SELECTED.get() or v3.SELECTED.get() or v4.SELECTED.get())\\n"},{"end":2221,"start":2109,"text":"    packets = v1.SELECTED.get() + v2.SELECTED.get() + v3.SELECTED.get() + v4.SELECTED.get()\\n"},{"end":3032,"start":2925,"text":"        return {v1.RESULT:v1,v2.RESULT:v2,v3.RESULT:v3,v4.RESULT:v4}.get(p.get(\'version\'),v1)\\n"}]},"requirements.txt":{"after_sha256":"8d40c306dd66255c64311c2e6ddac51023a4e61906d9cc86f0d449a3bded8a09","before_sha256":"b463b22c68f81a63cf41e5372764add4231041a9bb5d19b567e4f1c688e5863e","reverse_patches":[{"end":927,"start":822,"text":""}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","before_sha256":"0abad088b63a2d40f862854326c262603b2944550156dbfa5ea9707a2790ec00","reverse_patches":[{"end":36110,"start":35142,"text":""},{"end":36287,"start":36260,"text":"      \\"seconds\\": 267.053,\\n"},{"end":65624,"start":64642,"text":""},{"end":65824,"start":65796,"text":"      \\"seconds\\": 85.123,\\n"},{"end":99659,"start":98691,"text":""},{"end":99871,"start":99843,"text":"      \\"seconds\\": 138.4738,\\n"},{"end":107875,"start":106917,"text":""},{"end":108075,"start":108047,"text":"      \\"seconds\\": 251.68095,\\n"},{"end":188939,"start":187957,"text":""},{"end":189138,"start":189111,"text":"      \\"seconds\\": 198.78785,\\n"},{"end":216377,"start":215411,"text":""},{"end":216588,"start":216561,"text":"      \\"seconds\\": 47.84,\\n"},{"end":222530,"start":221546,"text":""},{"end":222743,"start":222715,"text":"      \\"seconds\\": 354.2598,\\n"},{"end":227392,"start":226402,"text":""},{"end":227602,"start":227574,"text":"      \\"seconds\\": 76.3025,\\n"},{"end":251703,"start":250723,"text":""},{"end":251912,"start":251885,"text":"      \\"seconds\\": 243.1721,\\n"},{"end":256257,"start":255277,"text":""},{"end":256432,"start":256405,"text":"      \\"seconds\\": 31.1259,\\n"},{"end":264733,"start":263765,"text":""},{"end":264981,"start":264954,"text":"      \\"seconds\\": 140.81175,\\n"},{"end":269218,"start":268236,"text":""},{"end":269394,"start":269366,"text":"      \\"seconds\\": 102.6076,\\n"},{"end":276298,"start":275330,"text":""},{"end":276474,"start":276446,"text":"      \\"seconds\\": 158.41365,\\n"},{"end":283020,"start":282038,"text":""},{"end":283195,"start":283168,"text":"      \\"seconds\\": 63.08325,\\n"},{"end":305424,"start":304442,"text":""},{"end":305633,"start":305606,"text":"      \\"seconds\\": 70.6859,\\n"},{"end":310200,"start":309220,"text":""},{"end":310411,"start":310384,"text":"      \\"seconds\\": 155.618,\\n"},{"end":342336,"start":341354,"text":""},{"end":342570,"start":342542,"text":"      \\"seconds\\": 121.9851,\\n"},{"end":427263,"start":426299,"text":""},{"end":427472,"start":427447,"text":"      \\"seconds\\": 97.0738,\\n"},{"end":439710,"start":438754,"text":""},{"end":439943,"start":439916,"text":"      \\"seconds\\": 108.52205,\\n"},{"end":442157,"start":441189,"text":""},{"end":442367,"start":442339,"text":"      \\"seconds\\": 171.72145,\\n"},{"end":478409,"start":477439,"text":""},{"end":478620,"start":478592,"text":"      \\"seconds\\": 416.10105,\\n"},{"end":487788,"start":486820,"text":""},{"end":487998,"start":487970,"text":"      \\"seconds\\": 143.60855,\\n"},{"end":563058,"start":537872,"text":""}]},"tests/test_mlb_nhl_research_scope.py":{"after_sha256":"7087911d6a1bc83ecbce0d021af25b857c127333f3276a434ceb1d1c4b6712b1","before_sha256":"b5976466071344efadb653869024c7607acc989c404b9347edfce6850a19b42e","reverse_patches":[{"end":620,"start":389,"text":"def git(repo,*a):return subprocess.check_output([\\"git\\",*a],cwd=repo).decode().strip()\\n"}]},"tests/test_nfl_listing_metadata_scope.py":{"after_sha256":"5059f8354a8c4f4d757d0ec3e15c68ae8f30b437d09226a8c26f45e987ed4c3b","before_sha256":"62cf26f12f0f5dc479e5159497e67b8877bb765f07af001538929319860a5b55","reverse_patches":[{"end":1488,"start":309,"text":""}]}}').get(path)
@@ -21930,6 +22025,23 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    # NFL_DOCUMENT_CAPACITY_BEGIN
+    if len(source)==5625281:
+        identity=b'd0579c4359e4c8d3d64fda551bd7998582a2b3969363cc1483208cdf523a2649'
+        _require(source.count(identity)==5 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_DOCUMENT_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS'):
+         begin=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_DOCUMENT_RUN_BEGIN\n');end=source.index(b'\n# NFL_DOCUMENT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_DOCUMENT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_DOCUMENT_POLICY_PATH):\n            code, report = _run_document_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_DOCUMENT_CAPACITY_END
     # NFL_PDF_CAPACITY_BEGIN
     if len(source)==5610170:
         identity=b'6f6a40fb7245cacf0128a0073ec1e805616eef9824c9d1293d43ea6fce764678'
@@ -23737,6 +23849,25 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    # NFL_DOCUMENT_DFS_BEGIN
+    if reviewed=='d0579c4359e4c8d3d64fda551bd7998582a2b3969363cc1483208cdf523a2649':
+        return source.count(reviewed.encode())==5 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==5625281:
+        identity=NFL_DOCUMENT_REVIEWED_GUARD_SHA256.encode()
+        if source.count(identity)!=5 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nNFL_DOCUMENT_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS'):
+         begin=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_DOCUMENT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_DOCUMENT_RUN_BEGIN\n');end=source.index(b'\n# NFL_DOCUMENT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_DOCUMENT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_DOCUMENT_POLICY_PATH):\n            code, report = _run_document_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_DOCUMENT_DFS_END
     # NFL_PDF_DFS_BEGIN
     if reviewed=='6f6a40fb7245cacf0128a0073ec1e805616eef9824c9d1293d43ea6fce764678':
         return source.count(reviewed.encode())==4 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
@@ -23761,6 +23892,14 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _interpret_parent_previous=_listing_capacity_previous_source
 def _listing_capacity_previous_source(path,source):
+    # NFL_DOCUMENT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app/ui/nfl_private_research.py":{"after_sha256":"80e7ed46e3678b539f7bb5bf45f01bf8e1ec265ba1f89d720b043bf8b8bee5df","before_sha256":"3fb921b1bc8d8f1262700bd512961af4d45a574d40c7488c25321d6186d25f09","reverse_patches":[{"end":2987,"start":2627,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"fd17cf7af3f182f9d3daaffc2d2c59ebd2eca3b594cc06909a90ffa01cfc928f","before_sha256":"c99dd86c667319a3b4edcffcd44e0107c209fc6503733bcdd57e22360fe47df8","reverse_patches":[{"end":342,"start":293,"text":""},{"end":420,"start":407,"text":""},{"end":771,"start":759,"text":""},{"end":898,"start":884,"text":""},{"end":1825,"start":1772,"text":""},{"end":2203,"start":2182,"text":""},{"end":2387,"start":2367,"text":""},{"end":3200,"start":3187,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_DOCUMENT_PREVIOUS_END
     # NFL_PDF_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app/ui/nfl_private_research.py":{"after_sha256":"3fb921b1bc8d8f1262700bd512961af4d45a574d40c7488c25321d6186d25f09","before_sha256":"f34fbb1ce8cd184d79cecfc62d7cb58adacc3b661e5963a8754c0dd657909d53","reverse_patches":[{"end":2847,"start":2631,"text":"                    if evidence.saved_route(row).VERSION in {\'nfl-owner-observed-private-inputs-v2\',\'nfl-owner-scoring-private-inputs-v3\',\'nfl-owner-interpreted-private-inputs-v4\'}:\\n"},{"end":3154,"start":3015,"text":"                    if evidence.saved_route(row).VERSION == \'nfl-owner-interpreted-private-inputs-v4\':\\n"},{"end":3799,"start":3521,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"c99dd86c667319a3b4edcffcd44e0107c209fc6503733bcdd57e22360fe47df8","before_sha256":"03fb6ab692cdee57418faac252fb282c08398bbbd2ff66a35d03392471ef95f6","reverse_patches":[{"end":293,"start":134,"text":"from app_core import nfl_owner_research as v1, nfl_observed_research as v2, nfl_scoring_research as v3, nfl_interpreted_research as v4\\n"},{"end":367,"start":294,"text":"REASONS = v1.REASONS | v2.REASONS | v3.REASONS | v4.REASONS\\n"},{"end":821,"start":612,"text":"    v1.require(version in {v1.VERSION, v2.VERSION, v3.VERSION, v4.VERSION}, \'NFL_PRIVATE_PACKET_SCHEMA\')\\n    return {v1.VERSION:v1,v2.VERSION:v2,v3.VERSION:v3,v4.VERSION:v4}[version]\\n"},{"end":1686,"start":1412,"text":"    with v1.selected([p for p in packets if route(p) is v1]), v2.selected([p for p in packets if route(p) is v2]), v3.selected([p for p in packets if route(p) is v3]), v4.selected([p for p in packets if route(p) is v4]):\\n"},{"end":2043,"start":1807,"text":"    return not (v1.IN_NATIVE.get() or v2.IN_NATIVE.get() or v3.IN_NATIVE.get() or v4.IN_NATIVE.get()) and bool(v1.SELECTED.get() or v2.SELECTED.get() or v3.SELECTED.get() or v4.SELECTED.get())\\n"},{"end":2221,"start":2109,"text":"    packets = v1.SELECTED.get() + v2.SELECTED.get() + v3.SELECTED.get() + v4.SELECTED.get()\\n"},{"end":3032,"start":2925,"text":"        return {v1.RESULT:v1,v2.RESULT:v2,v3.RESULT:v3,v4.RESULT:v4}.get(p.get(\'version\'),v1)\\n"}]},"requirements.txt":{"after_sha256":"8d40c306dd66255c64311c2e6ddac51023a4e61906d9cc86f0d449a3bded8a09","before_sha256":"b463b22c68f81a63cf41e5372764add4231041a9bb5d19b567e4f1c688e5863e","reverse_patches":[{"end":927,"start":822,"text":""}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","before_sha256":"0abad088b63a2d40f862854326c262603b2944550156dbfa5ea9707a2790ec00","reverse_patches":[{"end":36110,"start":35142,"text":""},{"end":36287,"start":36260,"text":"      \\"seconds\\": 267.053,\\n"},{"end":65624,"start":64642,"text":""},{"end":65824,"start":65796,"text":"      \\"seconds\\": 85.123,\\n"},{"end":99659,"start":98691,"text":""},{"end":99871,"start":99843,"text":"      \\"seconds\\": 138.4738,\\n"},{"end":107875,"start":106917,"text":""},{"end":108075,"start":108047,"text":"      \\"seconds\\": 251.68095,\\n"},{"end":188939,"start":187957,"text":""},{"end":189138,"start":189111,"text":"      \\"seconds\\": 198.78785,\\n"},{"end":216377,"start":215411,"text":""},{"end":216588,"start":216561,"text":"      \\"seconds\\": 47.84,\\n"},{"end":222530,"start":221546,"text":""},{"end":222743,"start":222715,"text":"      \\"seconds\\": 354.2598,\\n"},{"end":227392,"start":226402,"text":""},{"end":227602,"start":227574,"text":"      \\"seconds\\": 76.3025,\\n"},{"end":251703,"start":250723,"text":""},{"end":251912,"start":251885,"text":"      \\"seconds\\": 243.1721,\\n"},{"end":256257,"start":255277,"text":""},{"end":256432,"start":256405,"text":"      \\"seconds\\": 31.1259,\\n"},{"end":264733,"start":263765,"text":""},{"end":264981,"start":264954,"text":"      \\"seconds\\": 140.81175,\\n"},{"end":269218,"start":268236,"text":""},{"end":269394,"start":269366,"text":"      \\"seconds\\": 102.6076,\\n"},{"end":276298,"start":275330,"text":""},{"end":276474,"start":276446,"text":"      \\"seconds\\": 158.41365,\\n"},{"end":283020,"start":282038,"text":""},{"end":283195,"start":283168,"text":"      \\"seconds\\": 63.08325,\\n"},{"end":305424,"start":304442,"text":""},{"end":305633,"start":305606,"text":"      \\"seconds\\": 70.6859,\\n"},{"end":310200,"start":309220,"text":""},{"end":310411,"start":310384,"text":"      \\"seconds\\": 155.618,\\n"},{"end":342336,"start":341354,"text":""},{"end":342570,"start":342542,"text":"      \\"seconds\\": 121.9851,\\n"},{"end":427263,"start":426299,"text":""},{"end":427472,"start":427447,"text":"      \\"seconds\\": 97.0738,\\n"},{"end":439710,"start":438754,"text":""},{"end":439943,"start":439916,"text":"      \\"seconds\\": 108.52205,\\n"},{"end":442157,"start":441189,"text":""},{"end":442367,"start":442339,"text":"      \\"seconds\\": 171.72145,\\n"},{"end":478409,"start":477439,"text":""},{"end":478620,"start":478592,"text":"      \\"seconds\\": 416.10105,\\n"},{"end":487788,"start":486820,"text":""},{"end":487998,"start":487970,"text":"      \\"seconds\\": 143.60855,\\n"},{"end":563058,"start":537872,"text":""}]},"tests/test_mlb_nhl_research_scope.py":{"after_sha256":"7087911d6a1bc83ecbce0d021af25b857c127333f3276a434ceb1d1c4b6712b1","before_sha256":"b5976466071344efadb653869024c7607acc989c404b9347edfce6850a19b42e","reverse_patches":[{"end":620,"start":389,"text":"def git(repo,*a):return subprocess.check_output([\\"git\\",*a],cwd=repo).decode().strip()\\n"}]},"tests/test_nfl_listing_metadata_scope.py":{"after_sha256":"5059f8354a8c4f4d757d0ec3e15c68ae8f30b437d09226a8c26f45e987ed4c3b","before_sha256":"62cf26f12f0f5dc479e5159497e67b8877bb765f07af001538929319860a5b55","reverse_patches":[{"end":1488,"start":309,"text":""}]}}').get(path)
@@ -23800,6 +23939,18 @@ def _run_pdf_integrated(manifest_path,base):
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 # NFL_PDF_RUN_END
 
+# NFL_DOCUMENT_RUN_BEGIN
+def _run_document_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/NFL_DOCUMENT_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==NFL_DOCUMENT_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/nfl_document_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/nfl_document_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_document_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+# NFL_DOCUMENT_RUN_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -23807,7 +23958,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_PDF_POLICY_PATH):
+        if exists_at("HEAD", NFL_DOCUMENT_POLICY_PATH):
+            code, report = _run_document_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", NFL_PDF_POLICY_PATH):
             code, report = _run_pdf_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NFL_INTERPRETATION_POLICY_PATH):
             code, report = _run_interpret_integrated(args.manifest, args.base)
