@@ -23699,6 +23699,90 @@ def _owner_base_source(source):
 _owner_peel = _owner_base_source
 
 
+# WNBA_SCENARIO_BEGIN
+WNBA_SCENARIO_BOOTSTRAP = True
+WNBA_SCENARIO_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-wnba-scenario-v1.json'
+WNBA_SCENARIO_BINDING_PATH = 'docs/paid-launch/wnba-scenario-binding-v1.json'
+WNBA_SCENARIO_BINDING_SHA256 = '45757a9f6a18edb9796c6a5a007cecd9ada89d1787fa457761085b537438dfeb'
+WNBA_SCENARIO_REVIEWED_GUARD_SHA256 = '34de15cf6f5192733fc50d285f303b2346a2cde690c717486517c332f0af01dc'
+WNBA_SCENARIO_PREVIOUS_GUARD_SHA256 = 'e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec'
+WNBA_SCENARIO_RECONSTRUCTION_JSON = b'{"app/ui/publish_panel.py":{"after_sha256":"b4818e5a826d1df20accb3e09e2e2277a0c345e39b5cef6ed1c790984bf3d515","before_sha256":"c7dc708e0a0313b70cf59e309d9642651d9a04300dd44084358d0fe69cb6c08b","reverse_patches":[{"end":3553,"start":3450,"text":""}]}}'
+from functools import lru_cache as _wnba_lru, wraps as _wnba_wraps
+
+def _wnba_guard_matches(source):
+    value=WNBA_SCENARIO_REVIEWED_GUARD_SHA256.encode()
+    return isinstance(source,bytes) and len(source)<=8*1024*1024 and source.count(value)==1 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==value.decode()
+
+@_wnba_lru(maxsize=2)
+def _wnba_cached_base(source,reviewed,parent):
+    _require(_wnba_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\n# WNBA_SCENARIO_BEGIN\n');end=source.index(b'# WNBA_SCENARIO_END\n',begin)
+    source=source[:begin]+source[end+len(b'# WNBA_SCENARIO_END\n'):]
+    begin=source.index(b'\n# WNBA_SCENARIO_LATE_BEGIN\n');end=source.index(b'# WNBA_SCENARIO_LATE_END\n',begin)
+    source=source[:begin]+source[end+len(b'# WNBA_SCENARIO_LATE_END\n'):]
+    dispatch=b'if exists_at("HEAD", WNBA_SCENARIO_POLICY_PATH):\n            code, report = _run_wnba_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()==parent,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _wnba_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if b'\n# WNBA_SCENARIO_BEGIN\n' not in source:return source
+    return _wnba_cached_base(source,WNBA_SCENARIO_REVIEWED_GUARD_SHA256,WNBA_SCENARIO_PREVIOUS_GUARD_SHA256)
+_wnba_base_source.cache_info=_wnba_cached_base.cache_info
+_wnba_base_source.cache_clear=_wnba_cached_base.cache_clear
+
+def _wnba_previous_source(path,source):
+    if path==GUARD_PATH:return _wnba_base_source(source)
+    info=json.loads(WNBA_SCENARIO_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return source
+
+def _wnba_preserve_predecessor(fn,name):
+    # Only immutable content reconstruction is shared. Original validators still
+    # run on every call, using their current repository/index/commit state.
+    parameters=fn.__code__.co_varnames[:fn.__code__.co_argcount]
+    index=parameters.index('source')
+    @_wnba_wraps(fn)
+    def wrapped(*args,**kwargs):
+        values=list(args);source=values[index] if index<len(values) else kwargs['source']
+        if name=='_dfs_guard_matches':
+            reviewed=values[1] if len(values)>1 else kwargs.get('reviewed')
+            if reviewed==WNBA_SCENARIO_REVIEWED_GUARD_SHA256:return _wnba_guard_matches(source)
+        try:
+            if 'path' in parameters:
+                path=values[parameters.index('path')] if parameters.index('path')<len(values) else kwargs['path']
+                source=_wnba_previous_source(path,source)
+            else:source=_wnba_base_source(source)
+        except ValueError:
+            if name.endswith('guard_matches'):return False
+            raise
+        if index<len(values):values[index]=source
+        else:kwargs=dict(kwargs,source=source)
+        return fn(*values,**kwargs)
+    return wrapped
+
+def _wnba_install_predecessor():
+    for name,fn in tuple(globals().items()):
+        if not name.startswith('_wnba_') and name.endswith(('_base_source','_previous_source','guard_matches')) and callable(fn) and hasattr(fn,'__code__') and 'source' in fn.__code__.co_varnames[:fn.__code__.co_argcount]:
+            globals()[name]=_wnba_preserve_predecessor(fn,name)
+_wnba_install_predecessor()
+
+def _run_wnba_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/WNBA_SCENARIO_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==WNBA_SCENARIO_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/wnba_scenario_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/wnba_scenario_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('wnba_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+# WNBA_SCENARIO_END
+
 _ncaaf_pilot_seeded_custody_parent = _ncaaf_custody_predecessor()
 
 for _ncaaf_pilot_name, _ncaaf_pilot_method in list(globals().items()):
@@ -25118,6 +25202,10 @@ def _run_doclife_integrated(manifest_path,base):
 
 # FOOTBALL_DOCLIFE_RUN_END
 
+# WNBA_SCENARIO_LATE_BEGIN
+_wnba_install_predecessor()
+# WNBA_SCENARIO_LATE_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -25125,7 +25213,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):
+        if exists_at("HEAD", WNBA_SCENARIO_POLICY_PATH):
+            code, report = _run_wnba_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):
             code, report = _run_doclife_integrated(args.manifest, args.base)
         elif exists_at("HEAD", FOOTBALL_DOCWORDS_POLICY_PATH):
             code, report = _run_docwords_integrated(args.manifest, args.base)
