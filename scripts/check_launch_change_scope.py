@@ -21765,6 +21765,51 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+FOOTBALL_DOCPRED_BOOTSTRAP = True
+FOOTBALL_DOCPRED_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-predecessor-fixture-v1.json'
+FOOTBALL_DOCPRED_BINDING_PATH = 'docs/paid-launch/football-document-predecessor-fixture-binding-v1.json'
+FOOTBALL_DOCPRED_BINDING_SHA256 = 'a854e9394ffca1df4e524c9f85467c7e4232d902c9c7398a5c551962dfba2754'
+FOOTBALL_DOCPRED_REVIEWED_GUARD_SHA256 = 'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+FOOTBALL_DOCPRED_PREVIOUS_GUARD_SHA256 = '021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6'
+FOOTBALL_DOCPRED_RECONSTRUCTION_JSON = b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}'
+from functools import lru_cache as _docpred_lru
+
+def _docpred_guard_matches(source):
+    value=FOOTBALL_DOCPRED_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==16 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCPRED_REVIEWED_GUARD_SHA256
+
+@_docpred_lru(maxsize=2)
+def _docpred_cached_base(source,reviewed,parent):
+    _require(_docpred_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docpred_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=5995127:return source
+    return _docpred_cached_base(source,FOOTBALL_DOCPRED_REVIEWED_GUARD_SHA256,FOOTBALL_DOCPRED_PREVIOUS_GUARD_SHA256)
+_docpred_base_source.cache_info=_docpred_cached_base.cache_info
+_docpred_base_source.cache_clear=_docpred_cached_base.cache_clear
+
+def _docpred_previous_source(path,source):
+    if path==GUARD_PATH:return _docpred_base_source(source)
+    info=json.loads(FOOTBALL_DOCPRED_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 FOOTBALL_DOCSIX_BOOTSTRAP = True
 FOOTBALL_DOCSIX_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-six-capacity-v1.json'
 FOOTBALL_DOCSIX_BINDING_PATH = 'docs/paid-launch/football-document-six-capacity-binding-v1.json'
@@ -21795,6 +21840,23 @@ def _docsix_cached_base(source,reviewed,parent):
     return source
 
 def _docsix_base_source(source):
+    # FOOTBALL_DOCPRED_DOCSIX_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCSIX_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=5950188:return source
     return _docsix_cached_base(source,FOOTBALL_DOCSIX_REVIEWED_GUARD_SHA256,FOOTBALL_DOCSIX_PREVIOUS_GUARD_SHA256)
@@ -21802,6 +21864,14 @@ _docsix_base_source.cache_info=_docsix_cached_base.cache_info
 _docsix_base_source.cache_clear=_docsix_cached_base.cache_clear
 
 def _docsix_previous_source(path,source):
+    # FOOTBALL_DOCPRED_DOCSIX_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCSIX_PREVIOUS_END
     if path==GUARD_PATH:return _docsix_base_source(source)
     info=json.loads(FOOTBALL_DOCSIX_RECONSTRUCTION_JSON).get(path)
     if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
@@ -21840,6 +21910,23 @@ def _docreport_cached_base(source,reviewed,parent):
     return source
 
 def _docreport_base_source(source):
+    # FOOTBALL_DOCPRED_DOCREPORT_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCREPORT_END
     # FOOTBALL_DOCSIX_DOCREPORT_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -21864,6 +21951,14 @@ _docreport_base_source.cache_info=_docreport_cached_base.cache_info
 _docreport_base_source.cache_clear=_docreport_cached_base.cache_clear
 
 def _docreport_previous_source(path,source):
+    # FOOTBALL_DOCPRED_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCREPORT_PREVIOUS_END
     # FOOTBALL_DOCSIX_DOCREPORT_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -21910,6 +22005,23 @@ def _docfixture_cached_base(source,reviewed,parent):
     return source
 
 def _docfixture_base_source(source):
+    # FOOTBALL_DOCPRED_DOCFIXTURE_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCFIXTURE_END
     # FOOTBALL_DOCSIX_DOCFIXTURE_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -21951,6 +22063,14 @@ _docfixture_base_source.cache_info=_docfixture_cached_base.cache_info
 _docfixture_base_source.cache_clear=_docfixture_cached_base.cache_clear
 
 def _docfixture_previous_source(path,source):
+    # FOOTBALL_DOCPRED_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCFIXTURE_PREVIOUS_END
     # FOOTBALL_DOCSIX_DOCFIXTURE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -22005,6 +22125,23 @@ def _docanchor_cached_base(source,reviewed,parent):
     return source
 
 def _docanchor_base_source(source):
+    # FOOTBALL_DOCPRED_DOCANCHOR_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCANCHOR_END
     # FOOTBALL_DOCSIX_DOCANCHOR_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -22063,6 +22200,14 @@ _docanchor_base_source.cache_info=_docanchor_cached_base.cache_info
 _docanchor_base_source.cache_clear=_docanchor_cached_base.cache_clear
 
 def _docanchor_previous_source(path,source):
+    # FOOTBALL_DOCPRED_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCANCHOR_PREVIOUS_END
     # FOOTBALL_DOCSIX_DOCANCHOR_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -22125,6 +22270,23 @@ def _doclife_cached_base(source,reviewed,parent):
     return source
 
 def _doclife_base_source(source):
+    # FOOTBALL_DOCPRED_DOCLIFE_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCLIFE_END
     # FOOTBALL_DOCSIX_DOCLIFE_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -22200,6 +22362,14 @@ _doclife_base_source.cache_info=_doclife_cached_base.cache_info
 _doclife_base_source.cache_clear=_doclife_cached_base.cache_clear
 
 def _doclife_previous_source(path,source):
+    # FOOTBALL_DOCPRED_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCLIFE_PREVIOUS_END
     # FOOTBALL_DOCSIX_DOCLIFE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -22270,6 +22440,23 @@ def _docwords_cached_base(source,reviewed,parent):
     return source
 
 def _docwords_base_source(source):
+    # FOOTBALL_DOCPRED_DOCWORDS_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCWORDS_END
     # FOOTBALL_DOCSIX_DOCWORDS_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -22362,6 +22549,14 @@ _docwords_base_source.cache_info=_docwords_cached_base.cache_info
 _docwords_base_source.cache_clear=_docwords_cached_base.cache_clear
 
 def _docwords_previous_source(path,source):
+    # FOOTBALL_DOCPRED_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCWORDS_PREVIOUS_END
     # FOOTBALL_DOCSIX_DOCWORDS_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -22440,6 +22635,23 @@ def _docmeta_cached_base(source,reviewed,parent):
     return source
 
 def _docmeta_base_source(source):
+    # FOOTBALL_DOCPRED_DOCMETA_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCMETA_END
     # FOOTBALL_DOCSIX_DOCMETA_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -22549,6 +22761,14 @@ _docmeta_base_source.cache_info=_docmeta_cached_base.cache_info
 _docmeta_base_source.cache_clear=_docmeta_cached_base.cache_clear
 
 def _docmeta_previous_source(path,source):
+    # FOOTBALL_DOCPRED_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCMETA_PREVIOUS_END
     # FOOTBALL_DOCSIX_DOCMETA_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -22635,6 +22855,23 @@ def _docio_cached_base(source,reviewed,parent):
     return source
 
 def _docio_base_source(source):
+    # FOOTBALL_DOCPRED_DOCIO_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCIO_END
     # FOOTBALL_DOCSIX_DOCIO_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -22761,6 +22998,14 @@ _docio_base_source.cache_info=_docio_cached_base.cache_info
 _docio_base_source.cache_clear=_docio_cached_base.cache_clear
 
 def _docio_previous_source(path,source):
+    # FOOTBALL_DOCPRED_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCIO_PREVIOUS_END
     # FOOTBALL_DOCSIX_DOCIO_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -22855,6 +23100,23 @@ def _terms_cached_base(source,reviewed,parent):
     return source
 
 def _terms_base_source(source):
+    # FOOTBALL_DOCPRED_TERMS_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_TERMS_END
     # FOOTBALL_DOCSIX_TERMS_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -22998,6 +23260,14 @@ _terms_base_source.cache_info=_terms_cached_base.cache_info
 _terms_base_source.cache_clear=_terms_cached_base.cache_clear
 
 def _terms_previous_source(path,source):
+    # FOOTBALL_DOCPRED_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_TPREVIOUS_END
     # FOOTBALL_DOCSIX_TPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -23100,6 +23370,23 @@ def _document_cached_base(source,reviewed,parent):
     return source
 
 def _document_base_source(source):
+    # FOOTBALL_DOCPRED_DOCUMENT_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCUMENT_END
     # FOOTBALL_DOCSIX_DOCUMENT_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -23260,6 +23547,14 @@ _document_base_source.cache_info=_document_cached_base.cache_info
 _document_base_source.cache_clear=_document_cached_base.cache_clear
 
 def _document_previous_source(path,source):
+    # FOOTBALL_DOCPRED_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DPREVIOUS_END
     # FOOTBALL_DOCSIX_DPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -23370,6 +23665,23 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    # FOOTBALL_DOCPRED_PDF_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_PDF_END
     # FOOTBALL_DOCSIX_PDF_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -23547,6 +23859,14 @@ _pdf_base_source.cache_info=_pdf_cached_base.cache_info
 _pdf_base_source.cache_clear=_pdf_cached_base.cache_clear
 
 def _pdf_previous_source(path,source):
+    # FOOTBALL_DOCPRED_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_PPREVIOUS_END
     # FOOTBALL_DOCSIX_PPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -23666,6 +23986,23 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    # FOOTBALL_DOCPRED_INTERPRET_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_INTERPRET_END
     # FOOTBALL_DOCSIX_INTERPRET_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -23860,6 +24197,14 @@ _interpret_base_source.cache_info=_interpret_cached_base.cache_info
 _interpret_base_source.cache_clear=_interpret_cached_base.cache_clear
 
 def _interpret_previous_source(path,source):
+    # FOOTBALL_DOCPRED_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_IPREVIOUS_END
     # FOOTBALL_DOCSIX_IPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -24005,6 +24350,23 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    # FOOTBALL_DOCPRED_CAPACITY_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_CAPACITY_END
     # FOOTBALL_DOCSIX_CAPACITY_BEGIN
     if len(source)==5950188:
         identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
@@ -25982,6 +26344,25 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    # FOOTBALL_DOCPRED_DFS_BEGIN
+    if reviewed=='f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e':
+        return source.count(reviewed.encode())==16 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        if source.count(identity)!=16 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DFS_END
     # FOOTBALL_DOCSIX_DFS_BEGIN
     if reviewed=='bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83':
         return source.count(reviewed.encode())==15 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
@@ -26196,6 +26577,14 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _interpret_parent_previous=_listing_capacity_previous_source
 def _listing_capacity_previous_source(path,source):
+    # FOOTBALL_DOCPRED_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_PREVIOUS_END
     # FOOTBALL_DOCSIX_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
@@ -26476,6 +26865,19 @@ def _run_docsix_integrated(manifest_path,base):
 
 # FOOTBALL_DOCSIX_RUN_END
 
+# FOOTBALL_DOCPRED_RUN_BEGIN
+def _run_docpred_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCPRED_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCPRED_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_predecessor_fixture_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_predecessor_fixture_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docpred_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCPRED_RUN_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -26483,7 +26885,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):
+        if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):
+            code, report = _run_docpred_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):
             code, report = _run_docsix_integrated(args.manifest, args.base)
         elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):
             code, report = _run_docreport_integrated(args.manifest, args.base)

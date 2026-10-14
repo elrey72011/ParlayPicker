@@ -127,8 +127,8 @@ def test_mutable_rejections_are_not_cached(sealed,stage):
     assert assess(sealed)[0]!=0
 
 
-def test_exact_capacity_source_projection_and_unknown_bytes_preserved():
-    root=Path(__file__).resolve().parents[1]
+def test_exact_capacity_source_projection_and_unknown_bytes_preserved(historical_five_shard_source):
+    root=historical_five_shard_source
     info=json.loads(guard.LISTING_CAPACITY_RECONSTRUCTION_JSON)
     for path,record in info.items():
         source=(root/path).read_bytes().replace(b'\r\n',b'\n')
@@ -179,3 +179,31 @@ def test_transitive_frozen_test_preimages_remain_exact():
         changed=current+b'\nUNREVIEWED=True\n'
         assert guard._listing_capacity_previous_source(path,changed)==changed
         assert blob(changed)!=expected
+
+
+# Exact immutable input view for the historical five-shard assertion above.
+# Current six-shard gate tests keep reading the actual checkout.
+def _historical_five_shard_bytes(path, source):
+    record = json.loads(guard.FOOTBALL_DOCSIX_RECONSTRUCTION_JSON).get(path)
+    if record is None or hashlib.sha256(source).hexdigest() != record['after_sha256']:
+        return source
+    value = source.decode('utf-8')
+    for patch in reversed(record['reverse_patches']):
+        value = value[:patch['start']] + patch['text'] + value[patch['end']:]
+    result = value.encode('utf-8')
+    assert hashlib.sha256(result).hexdigest() == record['before_sha256']
+    return result
+
+
+@pytest.fixture
+def historical_five_shard_source(tmp_path):
+    original_root = Path(__file__).resolve().parents[1]
+    root = tmp_path/'SYNTHETIC-historical-five-shard-input'
+    paths = set(json.loads(guard.LISTING_CAPACITY_RECONSTRUCTION_JSON)) | {'tests/test_ci_test_shards.py'}
+    assert len(paths) <= 32
+    for path in sorted(paths):
+        source = (original_root/path).read_bytes().replace(b'\r\n', b'\n')
+        destination = root/path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(_historical_five_shard_bytes(path, source))
+    return root
