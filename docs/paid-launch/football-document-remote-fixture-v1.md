@@ -1,0 +1,11 @@
+# Stable remote-continuation synthetic Git template
+
+At sealed head 56da7ac6, the six-shard application run uploaded all artifacts and accounted for all 7,656 collected identities. It had 7,653 passes, two existing skips and one setup error; successful outcome accounting did not establish passing execution coverage. The remote-continuation template lost loose Git-object paths during `shutil.copytree`. The historical process responsible is UNKNOWN. No timeout occurred; the slowest completed shard had 1m47s of headroom, without any guarantee for a later run.
+
+A network-blocked probe used the actual fixture, real Git and `copy2`. Controlled synchronous Git packing between enumeration and copying reproduced missing-path errors while preserving HEAD and tree. This reproduces a vulnerable lifecycle, not the historical deleting process. Robert approved proposal c6ceafeb570312c41c3647579f76d6a5c98b8a8eb438811209ceb1302c398e2f and exact patch 5f8ec386fb971f2e324240e8c203a9edcf30f40e0b4f20ac13adde4edde78730.
+
+Only this synthetic template gains local `gc.auto=0`, `maintenance.auto=false` before commits, and synchronous `git gc --prune=never` before copies. This neither suppresses copying errors nor removes objects or coverage. Every original assertion and identity stays unchanged. Each test retains its own mutable copy and complete intended repository history. Focused checks cover HEAD/tree/integrity, source isolation and dirty/staged/committed/resealed rejection.
+
+The append-only schema-67 successor reconstructs the exact schema-66 guard and the exact original fixture bytes. Earlier policies, metadata, assertions and predecessor bindings stay frozen. Immutable reconstruction caching remains bounded and exact-content keyed; no mutable validation decisions are cached. Six-shard workflow, scheduler, advisory costs, 30-minute limit, network blocking, acquisition/readers, model mathematics and original evidence remain unchanged.
+
+The authorized fresh sealed-head CI run requires all 16 checks, six artifact uploads and successful exactly-once execution reconciliation. Preserve every earlier failure. No automatic retries, acquisition, storage/task changes, inference, trust activation, Drive access, merge or deployment are authorized.
