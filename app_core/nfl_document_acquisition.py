@@ -190,6 +190,11 @@ class Response:
     def chunks(self):
         while True:
             try:
+                require(not self.cancel.is_set() and self.monotonic()<self.deadline,'NCAAF_PILOT_DEADLINE')
+                # HTTPResponse closes its file (and the detached socket) after
+                # the final framed read. No further socket operation is needed;
+                # acquire still verifies the exact declared body length.
+                if self.response.isclosed():return
                 self.read_socket.settimeout(min(self.limits['read_seconds'],max(.001,self.deadline-self.monotonic())))
                 block=_timed(lambda:self.response.read(8192),min(self.deadline,self.monotonic()+self.limits['read_seconds']),self.monotonic,self.cancel,self.close)
             except BaseException as exc:
