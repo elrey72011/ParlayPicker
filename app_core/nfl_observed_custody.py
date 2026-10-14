@@ -46,6 +46,9 @@ def retained(body, *, receipt):
 
 
 def read(obj):
+    from app_core import nfl_html_guide_custody as html_guide
+    if html_guide.ACTIVE.get() and isinstance(obj,dict) and obj.get('version')==html_guide.VERSION:
+        return html_guide.read(obj)
     from app_core import nfl_public_guide_custody as guide
     if guide.ACTIVE.get() and isinstance(obj,dict) and obj.get('version')==guide.VERSION:
         return guide.read(obj)

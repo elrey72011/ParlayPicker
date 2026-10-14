@@ -26,8 +26,10 @@ from app_core.producer_provenance import clock
 
 VERSION = 'football-original-document-plan-v1'
 VERSION_V2 = 'football-original-document-plan-v2'
+VERSION_V3 = 'football-original-document-plan-v3'
 BUNDLE = 'football-original-document-unreviewed-v1'
 BUNDLE_V2 = 'football-original-document-unreviewed-v2'
+BUNDLE_V3 = 'football-original-document-unreviewed-v3'
 GUIDE_URL = 'https://the-odds-api.com/liveapi/guides/v4/'
 CONFIG = 'football-original-document-bindings-v1'
 AUTH = 'football-original-document-authorization-v1'
@@ -73,7 +75,7 @@ def validate(plan, executable=False):
     p=envelope(plan)
     require(len(custody.encode(plan).encode())<=128*1024,'DOCUMENT_PLAN')
     require(set(p)==set('version evidence_label documents limits window permission authorization_ref custody_id unresolved'.split())
-        and p['version'] in {VERSION,VERSION_V2} and p['evidence_label'] in {'PROPOSAL','SYNTHETIC','PROSPECTIVE'}, 'DOCUMENT_PLAN')
+        and p['version'] in {VERSION,VERSION_V2,VERSION_V3} and p['evidence_label'] in {'PROPOSAL','SYNTHETIC','PROSPECTIVE'}, 'DOCUMENT_PLAN')
     docs=p['documents'];require(isinstance(docs,list) and 0<len(docs)<=4, 'DOCUMENT_PLAN')
     ids=set();urls=set();destinations=set();attempts=0
     for d in docs:
@@ -243,11 +245,15 @@ def response_metadata(h, mime, encoding):
 
 
 def public_examples(plan, document):
-    return (plan['version']==VERSION_V2 and document['id']==document['source_id']=='clock'
+    return (plan['version'] in {VERSION_V2,VERSION_V3} and document['id']==document['source_id']=='clock'
         and document['url']==GUIDE_URL and document['format']=='html' and document['redirects']==[])
 
 
-def body_ok(raw, format, *, public_guide_examples=False):
+def body_ok(raw, format, *, public_guide_examples=False, html_syntax=False):
+    if html_syntax and format=='html':
+        from app_core.nfl_html_document_scan import checked
+        checked(raw,public_guide_examples=public_guide_examples)
+        return
     scan=raw
     if public_guide_examples:
         # Validation-only recognition of two exact published noncredential
@@ -310,7 +316,7 @@ def acquire(plan, authorization, *, root, transport=None, wall=utc, monotonic=ti
                         require(size<=p['limits']['wire_body_bytes'],'DOCUMENT_SIZE');parts.append(block)
                     wire=b''.join(parts)
                     require('content-length' not in h or (h['content-length'].isdigit() and int(h['content-length'])==len(wire)),'DOCUMENT_INCOMPLETE')
-                    phase='BODY_VALIDATION';encoding=h.get('content-encoding','identity').lower();raw=decode(wire,encoding,p['limits']['decoded_body_bytes']);body_ok(raw,d['format'],public_guide_examples=public_examples(p,d))
+                    phase='BODY_VALIDATION';encoding=h.get('content-encoding','identity').lower();raw=decode(wire,encoding,p['limits']['decoded_body_bytes']);body_ok(raw,d['format'],public_guide_examples=public_examples(p,d),html_syntax=p['version']==VERSION_V3)
                     aggregate_wire+=len(wire);aggregate_decoded+=len(raw)
                     require(aggregate_wire<=p['limits']['aggregate_wire_bytes'] and aggregate_decoded<=p['limits']['aggregate_decoded_bytes'],'DOCUMENT_AGGREGATE_SIZE')
                     received=wall();observed=wall();require(checked_clock(entry['request_started_at'])<=checked_clock(received)<=checked_clock(observed),'DOCUMENT_CLOCK')
@@ -328,7 +334,7 @@ def acquire(plan, authorization, *, root, transport=None, wall=utc, monotonic=ti
     except BaseException as exc:
         reason=str(exc) if isinstance(exc,ValueError) and str(exc) in CODES else 'DOCUMENT_TRANSPORT_FAILURE'
         diagnostic=getattr(exc,'diagnostic',diagnostics.facts(exc,phase=phase,http_status=status,started=start,ended=monotonic()))
-    result=seal(dict(version=BUNDLE_V2 if p['version']==VERSION_V2 else BUNDLE,plan=deepcopy(plan),authorization=deepcopy(authorization),status='CAPTURED_UNREVIEWED' if reason is None else 'INCOMPLETE',reason=reason,
+    result=seal(dict(version={VERSION:BUNDLE,VERSION_V2:BUNDLE_V2,VERSION_V3:BUNDLE_V3}[p['version']],plan=deepcopy(plan),authorization=deepcopy(authorization),status='CAPTURED_UNREVIEWED' if reason is None else 'INCOMPLETE',reason=reason,
         attempted=len(entries),journal_sha256=sha(journal.read_bytes()),entries=entries,objects=objects,diagnostics=diagnostic,
         configuration_bytes_base64=CONTROLLED.get()['configuration_bytes_base64'],configuration_file_sha256=CONTROLLED.get()['configuration_file_sha256'],
         source_acceptance=False,owner_reviewed=False,inference=False,publication=False,wager_action='PASS',stake=0))
@@ -340,9 +346,9 @@ CODES=frozenset('DOCUMENT_'+v for v in '''PRIVATE_ADDRESS DEADLINE URL TRANSPORT
 
 
 def read_bundle(bundle):
-    p=envelope(bundle);require(set(p)==set('version plan authorization status reason attempted journal_sha256 entries objects diagnostics configuration_bytes_base64 configuration_file_sha256 source_acceptance owner_reviewed inference publication wager_action stake'.split()) and p['version'] in {BUNDLE,BUNDLE_V2} and p['status'] in {'CAPTURED_UNREVIEWED','INCOMPLETE'},'DOCUMENT_READBACK')
+    p=envelope(bundle);require(set(p)==set('version plan authorization status reason attempted journal_sha256 entries objects diagnostics configuration_bytes_base64 configuration_file_sha256 source_acceptance owner_reviewed inference publication wager_action stake'.split()) and p['version'] in {BUNDLE,BUNDLE_V2,BUNDLE_V3} and p['status'] in {'CAPTURED_UNREVIEWED','INCOMPLETE'},'DOCUMENT_READBACK')
     plan=validate(p['plan']);require(envelope(p['authorization'])['plan_sha256']==p['plan']['sha256'],'DOCUMENT_READBACK')
-    require((p['version']==BUNDLE_V2)==(plan['version']==VERSION_V2),'DOCUMENT_READBACK')
+    require(p['version']=={VERSION:BUNDLE,VERSION_V2:BUNDLE_V2,VERSION_V3:BUNDLE_V3}[plan['version']],'DOCUMENT_READBACK')
     config_raw=base64.b64decode(p['configuration_bytes_base64'],validate=True)
     require(0<len(config_raw)<=128*1024 and sha(config_raw)==p['configuration_file_sha256'],'DOCUMENT_READBACK')
     c=envelope(json.loads(config_raw,object_pairs_hook=custody.unique))
@@ -377,7 +383,7 @@ def read_bundle(bundle):
         wire=base64.b64decode(obj['wire_bytes_base64'],validate=True);raw=base64.b64decode(obj['body_bytes_base64'],validate=True)
         require(sha(wire)==obj['wire_sha256'] and sha(raw)==obj['body_sha256'] and len(wire)<=plan['limits']['wire_body_bytes']
             and decode(wire,obj['response_metadata']['content_encoding'],plan['limits']['decoded_body_bytes'])==raw,'DOCUMENT_READBACK')
-        body_ok(raw,d['format'],public_guide_examples=public_examples(plan,d));total_wire+=len(wire);total_raw+=len(raw)
+        body_ok(raw,d['format'],public_guide_examples=public_examples(plan,d),html_syntax=plan['version']==VERSION_V3);total_wire+=len(wire);total_raw+=len(raw)
         r=obj['receipt'];times=[checked_clock(r[k]) for k in ('request_started_at','received_at','observed_at')]
         require(set(r)==set('source_id endpoint format evidence_label request_started_at received_at observed_at observation_meaning provider_clock_meaning'.split())
             and r['format']==('text' if d['format']=='html' else d['format']) and r['evidence_label']==('SYNTHETIC' if plan['evidence_label']=='SYNTHETIC' else 'RETAINED')
@@ -415,6 +421,9 @@ def project(bundle, identifier, *, prepared_at=None):
     raw,obj=read_bundle(bundle)[identifier];receipt=deepcopy(obj['receipt'])
     plan=bundle['payload']['plan']['payload'];document=next(d for d in plan['documents'] if d['id']==identifier)
     if public_examples(plan,document):
+        if plan['version']==VERSION_V3:
+            from app_core.nfl_html_guide_custody import retained
+            return retained(raw,receipt=receipt)
         from app_core.nfl_public_guide_custody import retained
         return retained(raw,receipt=receipt)
     if receipt['format']=='pdf':

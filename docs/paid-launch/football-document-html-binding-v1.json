@@ -1,0 +1,194 @@
+{
+  "approval_reference": "Robert authorized a narrowly versioned correction for a reproduced public HTML-anchor credential false positive, actual network-blocked transport/CLI/custody/read-back regressions, historical behavior preservation, exact successor bindings/seal, required CI and a non-executable remaining-three-document replacement proposal. Original bytes are never redacted; actual secrets remain rejected. Preserve the authentic UNKNOWN trigger, captured schedule, expired task/plan/configuration/report/journal, WNBA branch, model mathematics, original assertions and five-shard workflows. No acquisition, inference, configuration activation, Drive, publication, merge or deployment.",
+  "base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "base_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "main_base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "main_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/nfl_document_acquisition.py",
+    "app_core/nfl_html_document_research.py",
+    "app_core/nfl_html_document_scan.py",
+    "app_core/nfl_html_guide_custody.py",
+    "app_core/nfl_observed_custody.py",
+    "app_core/nfl_private_routes.py",
+    "docs/paid-launch/football-document-html-anchors-v1.md",
+    "docs/paid-launch/football-document-html-binding-v1.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_html_scope.py",
+    "tests/test_football_document_html_scope.py",
+    "tests/test_nfl_document_html_anchors.py",
+    "tests/test_nfl_document_html_pipeline.py"
+  ],
+  "previous_guard_sha256": "e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec",
+  "reconstruction_json_sha256": "7495a62ca19c34f4bd949750ad7acabff98b281450e93cd4e78eb13b43434ca0",
+  "reviewed_blobs": {
+    "app_core/nfl_document_acquisition.py": "5e7a7c8f8b0eb16acdfa68951f5e54582e26a80a",
+    "app_core/nfl_html_document_research.py": "4d994e92a7f670212a6e6908d48f421563dc1666",
+    "app_core/nfl_html_document_scan.py": "3f1bb5eead1d1a1b5f83fe8edfb46a260698c48d",
+    "app_core/nfl_html_guide_custody.py": "5a328878419a1df963c4e5dd88b509517f614fec",
+    "app_core/nfl_observed_custody.py": "62e67e39c985b54296918167f8ad1c5ebbd34920",
+    "app_core/nfl_private_routes.py": "16b85905c5cc38f1b14ade878f2456af75ac3d05",
+    "docs/paid-launch/football-document-html-anchors-v1.md": "9cf8253aa59f6668b25b8b40caf3c335728a8575",
+    "scripts/football_document_html_scope.py": "7e08ab8ee20c61a45c97d6cc1fc35a0ffb0f7e6d",
+    "tests/test_football_document_html_scope.py": "0100f5f824f518f4c6c1e9423f31f43bff0df0df",
+    "tests/test_nfl_document_html_anchors.py": "31e026c8f94e5257c607ef8b308f0bcc8f3919d6",
+    "tests/test_nfl_document_html_pipeline.py": "b2847717757b69c8b8e0afa3a3b09d96592f0409"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app_core/nfl_document_acquisition.py": {
+      "after_sha256": "2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205",
+      "before_sha256": "0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3",
+      "reverse_patches": [
+        {
+          "end": 925,
+          "start": 875,
+          "text": ""
+        },
+        {
+          "end": 1085,
+          "start": 1030,
+          "text": ""
+        },
+        {
+          "end": 3279,
+          "start": 3268,
+          "text": ""
+        },
+        {
+          "end": 15599,
+          "start": 15594,
+          "text": "=="
+        },
+        {
+          "end": 15621,
+          "start": 15609,
+          "text": ""
+        },
+        {
+          "end": 15850,
+          "start": 15831,
+          "text": ""
+        },
+        {
+          "end": 16031,
+          "start": 15852,
+          "text": ""
+        },
+        {
+          "end": 20698,
+          "start": 20661,
+          "text": ""
+        },
+        {
+          "end": 22595,
+          "start": 22568,
+          "text": ""
+        },
+        {
+          "end": 22627,
+          "start": 22604,
+          "text": " if "
+        },
+        {
+          "end": 22640,
+          "start": 22639,
+          "text": "==VERSION_V2 else BUNDLE"
+        },
+        {
+          "end": 24033,
+          "start": 24023,
+          "text": ""
+        },
+        {
+          "end": 24247,
+          "start": 24247,
+          "text": "("
+        },
+        {
+          "end": 24288,
+          "start": 24261,
+          "text": ""
+        },
+        {
+          "end": 24320,
+          "start": 24297,
+          "text": ")==("
+        },
+        {
+          "end": 24336,
+          "start": 24335,
+          "text": "==VERSION_V2)"
+        },
+        {
+          "end": 28564,
+          "start": 28524,
+          "text": ""
+        },
+        {
+          "end": 31970,
+          "start": 31816,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/nfl_observed_custody.py": {
+      "after_sha256": "ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda",
+      "before_sha256": "77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a",
+      "reverse_patches": [
+        {
+          "end": 1473,
+          "start": 1275,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/nfl_private_routes.py": {
+      "after_sha256": "7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989",
+      "before_sha256": "7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08",
+      "reverse_patches": [
+        {
+          "end": 452,
+          "start": 398,
+          "text": ""
+        },
+        {
+          "end": 556,
+          "start": 543,
+          "text": ""
+        },
+        {
+          "end": 931,
+          "start": 919,
+          "text": ""
+        },
+        {
+          "end": 1086,
+          "start": 1072,
+          "text": ""
+        },
+        {
+          "end": 2119,
+          "start": 2066,
+          "text": ""
+        },
+        {
+          "end": 2539,
+          "start": 2518,
+          "text": ""
+        },
+        {
+          "end": 2763,
+          "start": 2743,
+          "text": ""
+        },
+        {
+          "end": 3602,
+          "start": 3589,
+          "text": ""
+        }
+      ]
+    }
+  }
+}
