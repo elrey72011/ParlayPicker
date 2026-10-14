@@ -1,0 +1,64 @@
+{
+  "approval_reference": "Robert authorized one explicitly selected WNBA owner-reviewed half-point sporting scenario, retained original scoring and event evidence, unchanged native mathematics, actual private caller/capture/export/static replay/display, network-blocked synthetic validation, separate draft PR and exact successor bindings/seal. No acquisition, authentic inference, fitting, catalogs, scheduled task/runtime/custody changes, Drive, merge, deployment or wagering. Preserve all historical assertions and five-shard CI.",
+  "base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "base_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "main_base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "main_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app/ui/publish_panel.py",
+    "app/ui/wnba_private_scenario.py",
+    "app_core/wnba_scenario_custody.py",
+    "app_core/wnba_scenario_replay.py",
+    "app_core/wnba_scenario_research.py",
+    "docs/paid-launch/wnba-owner-sporting-scenario-v1.md",
+    "docs/paid-launch/wnba-scenario-binding-v1.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/wnba_private_scenario.py",
+    "scripts/wnba_scenario_scope.py",
+    "tests/test_wnba_scenario_research.py",
+    "tests/test_wnba_scenario_scope.py"
+  ],
+  "preserved_runtime_sha256": {
+    "app_core/feature_processing.py": "e04b1773c6ec60bb14973f0e10f3935dc50d2bde338598f3be5cfe144652cbdc",
+    "app_core/market_probability_model.py": "5cd25936548870df4bca01b929d4c2df72c7c905b4f32f6f7d7efe07c1c3cd63",
+    "app_core/ncaaf_compatible_observation.py": "4ff11ab2e229ee9d4868c32dec4a7f1ae2a6848865d55c8df3c23b490e061abf",
+    "app_core/ncaaf_model_compatibility.py": "5e250f699bafe694e496168d2b57b72123773fc44507262330e521c7716c380f",
+    "app_core/nfl_document_acquisition.py": "0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3",
+    "app_core/nfl_private_routes.py": "7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08",
+    "app_core/nfl_scenario_research.py": "8bb0eff5f336347b8df3cea6429163f16107f3cae5dc37b2957d3e33c0f73063",
+    "app_core/nfl_scoring_custody.py": "0bed81aa455f92c8aea9216ce215995477d5b621b997318844c5253e275f6401",
+    "app_core/nfl_scoring_research.py": "5f31d2a667be7c8782d6e0fbea500a0db7168ed1c6fb418d0dac3ebfcd500719",
+    "app_core/nfl_source_projection.py": "d16abf88f131b1101656378a08fb666d7c835c1bebef2fa3872dc2731d9459a6",
+    "app_core/research_replay.py": "c2899015295a146b0e5cd8682549146fce6c4023ea30e6149718b63cbd898f93",
+    "core/team_mapper.py": "885d6be816b337d67e4af08ba79d91e6b436d56138a770c15e35a944c048bd9f"
+  },
+  "previous_guard_sha256": "e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec",
+  "reconstruction_json_sha256": "89d11fb6001d2f82f2a7d8beb5df363c44650ab0cdc7ad3d93687b41d1df7665",
+  "reviewed_blobs": {
+    "app/ui/publish_panel.py": "4cd7dc17e1fbf485dd5f0368baaafcb8d88b2906",
+    "app/ui/wnba_private_scenario.py": "2b7df789e05da18197cdbe3758a840a700d299da",
+    "app_core/wnba_scenario_custody.py": "40be6417e62e10462dd8a5ba111fe36afcd0cbc7",
+    "app_core/wnba_scenario_replay.py": "5ed048d492d37aea754f32f835095ad1b5219ed2",
+    "app_core/wnba_scenario_research.py": "edbbfe9a985e55167af1a4535cba02c6e6bd7104",
+    "docs/paid-launch/wnba-owner-sporting-scenario-v1.md": "14157a9625bf3997049bbba190aa4745450ffc14",
+    "scripts/wnba_private_scenario.py": "6caf6d1c1c06e2d385af72d94f97508377f06ef3",
+    "scripts/wnba_scenario_scope.py": "875156e7e11d2553b6bf60d950fc082f4fc03a16",
+    "tests/test_wnba_scenario_research.py": "cb0194ccc91c2285f9f2794afe7c41f1ed9cf309",
+    "tests/test_wnba_scenario_scope.py": "b25622aae41f6f325545c69e87dcb558666c15cd"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app/ui/publish_panel.py": {
+      "after_sha256": "b4818e5a826d1df20accb3e09e2e2277a0c345e39b5cef6ed1c790984bf3d515",
+      "before_sha256": "c7dc708e0a0313b70cf59e309d9642651d9a04300dd44084358d0fe69cb6c08b",
+      "reverse_patches": [
+        {
+          "end": 3553,
+          "start": 3450,
+          "text": ""
+        }
+      ]
+    }
+  }
+}
