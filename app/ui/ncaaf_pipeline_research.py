@@ -2,6 +2,7 @@
 import streamlit as st
 from app_core import ncaaf_pipeline_evidence as evidence
 from app_core import ncaaf_owner_research as owner
+from app_core import ncaaf_owner_terms_research as owner_terms
 
 
 def render(games=None, candidates=None):
@@ -29,7 +30,7 @@ def render(games=None, candidates=None):
         chosen = st.multiselect("NCAAF packets for the next analysis", list(staged),
             default=[k for k in st.session_state.get("ncaaf_native_selected", ()) if k in staged], key="ncaaf_native_selected")
         packets = [staged[k] for k in chosen]
-        if not private and any(p["payload"]["version"] == owner.VERSION for p in packets):
+        if not private and any(p["payload"]["version"] in {owner.VERSION,owner_terms.VERSION} for p in packets):
             packets = []
             st.warning("Owner-reviewed packets require explicit private mode; no inference is selected.")
         try:

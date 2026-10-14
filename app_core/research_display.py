@@ -590,7 +590,7 @@ def from_export(row, *, source=None, source_field="win_probability", private_res
         if "ncaaf_inputs" in ncaaf_origin:
             from app_core.ncaaf_pipeline_evidence import diagnose as diagnose_ncaaf
             from app_core import ncaaf_owner_research as owner
-            owner_mode = ncaaf_origin["ncaaf_inputs"]["payload"].get("version") == owner.RESULT_VERSION
+            owner_mode = owner.is_private_source(actual_source)
             if owner_mode and not private_research:
                 return _empty(_identity(row), "ml_probability", "PRIVATE_RESEARCH; OWNER_REVIEWED; private display only", reason="NCAAF_PRIVATE_RESEARCH_ONLY")
             assessment = diagnose_ncaaf(actual_source, ncaaf_origin)

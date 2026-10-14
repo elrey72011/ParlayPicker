@@ -1,0 +1,234 @@
+{
+  "approval_reference": "Robert authorized supported complete original-document retrieval and the smallest necessary explicitly versioned correction for a reproduced blocker. Official public Odds V4 examples are noncredentials; V1 rejects them through acquisition/custody. V2 permits only two exact literals at the exact official guide, with separate original-text custody consumed only by explicit V7. Preserve real-secret rejection, old readers, source review, clocks, mathematics, all limits, five-shard CI and frozen predecessors. No acquisition, authentic inference or acceptance.",
+  "base": "e23923f8f1490f175d4465be164afc1f606f85c7",
+  "base_tree": "5aa2ccffc5011d446c249a50a10bc7d26f58350c",
+  "main_base": "4b89179e40f48cb555b00e3f9e440f20f96647be",
+  "main_tree": "6b5bb0e707ac743d34f482b6279a4b0c0dd41bac",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app/ui/nfl_private_research.py",
+    "app_core/nfl_document_acquisition.py",
+    "app_core/nfl_observed_custody.py",
+    "app_core/nfl_private_routes.py",
+    "app_core/nfl_public_document_research.py",
+    "app_core/nfl_public_guide_custody.py",
+    "docs/paid-launch/football-document-literals-binding-v2.json",
+    "docs/paid-launch/football-document-literals-v2.md",
+    "docs/paid-launch/football-original-documents-proposal-v2.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_literals_scope.py",
+    "tests/test_football_document_literals_scope.py",
+    "tests/test_nfl_document_acquisition.py",
+    "tests/test_nfl_document_pipeline.py"
+  ],
+  "previous_guard_sha256": "b2d607bbac7be5bc678abd5461e1e0fc15eecb49c535c581c3ae5e24dbbd28dd",
+  "reconstruction_json_sha256": "9adc726ce750f383bffeab9fc36564fe866c50ada54f1b14630f304143ca7b2e",
+  "reviewed_blobs": {
+    "app/ui/nfl_private_research.py": "53cbda609b33fa50cc054d35784045fa78117276",
+    "app_core/nfl_document_acquisition.py": "2659df2b8363fbc7064c3b35e68e4a33e4974ebe",
+    "app_core/nfl_observed_custody.py": "807be6221d86a81345c955b8243a7cbbc80aae0a",
+    "app_core/nfl_private_routes.py": "dedbbe44990046ccb2817297979aa1d670347c49",
+    "app_core/nfl_public_document_research.py": "eea7c8922ee14624d811756279e19cf524e34af7",
+    "app_core/nfl_public_guide_custody.py": "b1f7974dd44fd5f0a6999ba81892fec929d28151",
+    "docs/paid-launch/football-document-literals-v2.md": "a21eaa270ce71312e2f5950d7ec623b94a72b7d5",
+    "docs/paid-launch/football-original-documents-proposal-v2.json": "57c5fb65d268aef8541c5d980d0351a37c843b61",
+    "scripts/football_document_literals_scope.py": "88bb3bd67d3cdcfb1bdc29d9444844e9252c244d",
+    "tests/test_football_document_literals_scope.py": "fedb024e81f93e1d3607a9571c3c4143bb146bc3",
+    "tests/test_nfl_document_acquisition.py": "aa42dd4d9eafc14eaf1c71cb48765579dec06a73",
+    "tests/test_nfl_document_pipeline.py": "a5fcd600f0ca3dfbf6d7bfd98ae7b387f60d83a9"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app/ui/nfl_private_research.py": {
+      "after_sha256": "6ea82114252b3c3727b3ad056ed46cb366877dbe114966cced859b5a96943f66",
+      "before_sha256": "80e7ed46e3678b539f7bb5bf45f01bf8e1ec265ba1f89d720b043bf8b8bee5df",
+      "reverse_patches": [
+        {
+          "end": 2690,
+          "start": 2688,
+          "text": "=="
+        },
+        {
+          "end": 2692,
+          "start": 2691,
+          "text": ""
+        },
+        {
+          "end": 2777,
+          "start": 2730,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/nfl_document_acquisition.py": {
+      "after_sha256": "455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98",
+      "before_sha256": "daa3977589f4aedbd790f39369c740fae677eac285c5a357beb37551e22d61eb",
+      "reverse_patches": [
+        {
+          "end": 875,
+          "start": 825,
+          "text": ""
+        },
+        {
+          "end": 1038,
+          "start": 925,
+          "text": ""
+        },
+        {
+          "end": 3145,
+          "start": 3140,
+          "text": "=="
+        },
+        {
+          "end": 3164,
+          "start": 3152,
+          "text": ""
+        },
+        {
+          "end": 5069,
+          "start": 5057,
+          "text": "VERSION"
+        },
+        {
+          "end": 15258,
+          "start": 15027,
+          "text": ""
+        },
+        {
+          "end": 15309,
+          "start": 15277,
+          "text": ""
+        },
+        {
+          "end": 15699,
+          "start": 15311,
+          "text": ""
+        },
+        {
+          "end": 15816,
+          "start": 15814,
+          "text": "r"
+        },
+        {
+          "end": 15818,
+          "start": 15817,
+          "text": "w"
+        },
+        {
+          "end": 19941,
+          "start": 19898,
+          "text": ""
+        },
+        {
+          "end": 21860,
+          "start": 21817,
+          "text": ""
+        },
+        {
+          "end": 23227,
+          "start": 23222,
+          "text": "=="
+        },
+        {
+          "end": 23244,
+          "start": 23233,
+          "text": ""
+        },
+        {
+          "end": 23513,
+          "start": 23423,
+          "text": ""
+        },
+        {
+          "end": 27701,
+          "start": 27655,
+          "text": ""
+        },
+        {
+          "end": 31057,
+          "start": 30797,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/nfl_observed_custody.py": {
+      "after_sha256": "77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a",
+      "before_sha256": "4668b9ff7ba5ef115cf076994b28c2afeac628f07862aaf4ba913d11a541893a",
+      "reverse_patches": [
+        {
+          "end": 1455,
+          "start": 1275,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/nfl_private_routes.py": {
+      "after_sha256": "7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08",
+      "before_sha256": "fd17cf7af3f182f9d3daaffc2d2c59ebd2eca3b594cc06909a90ffa01cfc928f",
+      "reverse_patches": [
+        {
+          "end": 398,
+          "start": 342,
+          "text": ""
+        },
+        {
+          "end": 489,
+          "start": 476,
+          "text": ""
+        },
+        {
+          "end": 852,
+          "start": 840,
+          "text": ""
+        },
+        {
+          "end": 993,
+          "start": 979,
+          "text": ""
+        },
+        {
+          "end": 1973,
+          "start": 1920,
+          "text": ""
+        },
+        {
+          "end": 2372,
+          "start": 2351,
+          "text": ""
+        },
+        {
+          "end": 2576,
+          "start": 2556,
+          "text": ""
+        },
+        {
+          "end": 3402,
+          "start": 3389,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_document_acquisition.py": {
+      "after_sha256": "ae6d156531e40ba10b966bb995987a19b5e769c037411cd860a805668f462a4e",
+      "before_sha256": "09276d78ec542cab2225a46ebcd51db5dac1c98fca32e947a98fb2fabd9de786",
+      "reverse_patches": [
+        {
+          "end": 21462,
+          "start": 16985,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_document_pipeline.py": {
+      "after_sha256": "c853bc4cd94413f3b1a15932892d22c710fcedced4a14ddb147bf5966228cf57",
+      "before_sha256": "50e35053027bdc5986505ac504b4da1dcfe107015e19a2ebf53aff6d00ebb117",
+      "reverse_patches": [
+        {
+          "end": 4920,
+          "start": 1804,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

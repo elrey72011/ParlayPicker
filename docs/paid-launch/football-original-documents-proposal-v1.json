@@ -1,0 +1,72 @@
+{
+  "payload": {
+    "authorization_ref": "UNRESOLVED_NOT_AUTHORIZED",
+    "custody_id": "existing-verified-football-private-custody",
+    "documents": [
+      {
+        "destination": "schedule.original",
+        "format": "html",
+        "id": "schedule",
+        "purpose": "Authoritative Seattle at Denver schedule and named orientation",
+        "redirects": [],
+        "source_id": "schedule",
+        "url": "https://www.denverbroncos.com/schedule/"
+      },
+      {
+        "destination": "clock.original",
+        "format": "html",
+        "id": "clock",
+        "purpose": "Market last_update provider observation meaning",
+        "redirects": [],
+        "source_id": "clock",
+        "url": "https://the-odds-api.com/liveapi/guides/v4/"
+      },
+      {
+        "destination": "novig_rules.original",
+        "format": "pdf",
+        "id": "novig_rules",
+        "purpose": "Novig linked NFLSPR original generic contract; applicability unresolved",
+        "redirects": [],
+        "source_id": "novig_rules",
+        "url": "https://novig.intercom-attachments-1.com/i/o/y5ui11zw/2574338464/f744ef9d1696b3250c6628aa085f/NFL%2BSpread%2BSeries.pdf"
+      },
+      {
+        "destination": "ludlow_rules.original",
+        "format": "pdf",
+        "id": "ludlow_rules",
+        "purpose": "Ludlow newer NFL spread edition; effective applicability unresolved",
+        "redirects": [],
+        "source_id": "ludlow_rules",
+        "url": "https://ludlow-filings.s3.us-east-1.amazonaws.com/NFL-spread-anchor-2.0-a.pdf"
+      }
+    ],
+    "evidence_label": "PROPOSAL",
+    "limits": {
+      "aggregate_decoded_bytes": 2097152,
+      "aggregate_wire_bytes": 2097152,
+      "connect_seconds": 10,
+      "decoded_body_bytes": 524288,
+      "max_attempts": 4,
+      "max_documents": 4,
+      "read_seconds": 10,
+      "serialized_bundle_bytes": 6291456,
+      "total_seconds": 60,
+      "wire_body_bytes": 524288
+    },
+    "permission": null,
+    "unresolved": [
+      "Advance document permissions review",
+      "Exact collection authorization",
+      "Exact controlled configuration application",
+      "Final revision approval and required CI",
+      "Unknown complete HTML body size and supported content"
+    ],
+    "version": "football-original-document-plan-v1",
+    "window": {
+      "expires_at": "2026-10-14T14:15:30Z",
+      "not_after": "2026-10-14T14:15:00Z",
+      "not_before": "2026-10-14T14:00:00Z"
+    }
+  },
+  "sha256": "55df9db2d556fe0ad9a8f44382de1c6bbff5ff33ef8da7942e26baf32b317a6e"
+}

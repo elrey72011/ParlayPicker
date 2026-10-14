@@ -1,0 +1,40 @@
+{
+  "approval_reference": "Robert reported the exact sealed-head closed-socket lifecycle defect and authorized its narrow correction, realistic local-socket regressions, exact successor bindings/seal and final-head CI. Check actual HTTPResponse completion only after unchanged deadline/cancellation checks. Preserve truncation rejection, real socket error diagnostics, TLS, transport/attempt/byte bounds, historical readers, all predecessor files/assertions, model mathematics and five-shard CI. No acquisition or inference.",
+  "base": "5f9643c3df65f38f3ac2d993aefa116539d602e6",
+  "base_tree": "db63fa90022cdf3ea00c36ce54d881de13e299ab",
+  "main_base": "4b89179e40f48cb555b00e3f9e440f20f96647be",
+  "main_tree": "6b5bb0e707ac743d34f482b6279a4b0c0dd41bac",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/nfl_document_acquisition.py",
+    "docs/paid-launch/football-document-socket-binding-v1.json",
+    "docs/paid-launch/football-document-socket-lifecycle-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_socket_scope.py",
+    "tests/test_football_document_socket_scope.py",
+    "tests/test_nfl_document_socket_lifecycle.py"
+  ],
+  "previous_guard_sha256": "f666470988256968509f46df6ad1b30c0a1ed863eb47420480eb80272235910f",
+  "reconstruction_json_sha256": "126a23b6ee13d6131a28d9d81a25f3b752ac626b38589358fcfe8c071491581b",
+  "reviewed_blobs": {
+    "app_core/nfl_document_acquisition.py": "233978f5e796d35ea7b49065ea82e66d14f3eaf1",
+    "docs/paid-launch/football-document-socket-lifecycle-v1.md": "e680542ea29d1a13228a51649738b354ee4be3c2",
+    "scripts/football_document_socket_scope.py": "b877b7921e2ffee57af11f0cba8e373f08e5fb51",
+    "tests/test_football_document_socket_scope.py": "df7ad59b8e7a858b0cac274c9d055adf2724d830",
+    "tests/test_nfl_document_socket_lifecycle.py": "4392c92145d0ae38efd1e989ae3141d68d95b80e"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app_core/nfl_document_acquisition.py": {
+      "after_sha256": "0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3",
+      "before_sha256": "455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98",
+      "reverse_patches": [
+        {
+          "end": 12806,
+          "start": 12415,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

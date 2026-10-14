@@ -1,0 +1,100 @@
+{
+  "approval_reference": "Robert authorized bounded original-document retrieval after actual runner scope rejection, separately bound retrieval/extraction/review and complete synthetic private-path verification; NCAAF staging uses existing gates. No controlled acquisition or authentic inference. Preserve all original readers, clocks, source/review/model/wagering gates, response limits, frozen predecessor bindings, tests and five-shard CI. No collection or authentic inference.",
+  "base": "4b89179e40f48cb555b00e3f9e440f20f96647be",
+  "base_tree": "6b5bb0e707ac743d34f482b6279a4b0c0dd41bac",
+  "main_base": "4b89179e40f48cb555b00e3f9e440f20f96647be",
+  "main_tree": "6b5bb0e707ac743d34f482b6279a4b0c0dd41bac",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app/ui/nfl_private_research.py",
+    "app_core/nfl_document_acquisition.py",
+    "app_core/nfl_document_research.py",
+    "app_core/nfl_private_routes.py",
+    "docs/paid-launch/football-document-retrieval-binding-v1.json",
+    "docs/paid-launch/football-original-document-retrieval-v1.md",
+    "docs/paid-launch/football-original-documents-proposal-v1.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_document_acquisition.py",
+    "scripts/nfl_document_scope.py",
+    "tests/test_ncaaf_staged_document_discovery.py",
+    "tests/test_nfl_document_acquisition.py",
+    "tests/test_nfl_document_pipeline.py",
+    "tests/test_nfl_document_scope.py"
+  ],
+  "previous_guard_sha256": "3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d",
+  "reconstruction_json_sha256": "0bbedd1976c4377a104dfa9911fb2171cf6a944f012bd41a4d08dbbd18c17464",
+  "reviewed_blobs": {
+    "app/ui/nfl_private_research.py": "b2e88bab153b6076d374089cd148c4fbda93a724",
+    "app_core/nfl_document_acquisition.py": "039e9c8e64d12f56b95e285ea387746780049749",
+    "app_core/nfl_document_research.py": "87e74a9b17ea4f59417a851a21aa8d28ca1568f4",
+    "app_core/nfl_private_routes.py": "61b1f1c807172d80329dbf2e8023798b3531ad1d",
+    "docs/paid-launch/football-original-document-retrieval-v1.md": "b54bcde2a4a6b51838ba8b2b61bb80f9e7d6e73a",
+    "docs/paid-launch/football-original-documents-proposal-v1.json": "220a7b1f053e0643b8ce954e918f2d714acaab89",
+    "scripts/nfl_document_acquisition.py": "e7d20a502ae0eeecce21f757b0d747c73e046259",
+    "scripts/nfl_document_scope.py": "d2f104b8bfa28d7e6f5e3450828ea0ca3ef55ef2",
+    "tests/test_ncaaf_staged_document_discovery.py": "3ba1e57ae935fc859704263a35ff063d9d028b77",
+    "tests/test_nfl_document_acquisition.py": "2d653e6d2921f065b3851ba393e753fc56b69e74",
+    "tests/test_nfl_document_pipeline.py": "ce9d5a114d8c72a9283c001575dca1e307414cb7",
+    "tests/test_nfl_document_scope.py": "777f034ba0102e0c17825c7dc298e94051ce2262"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app/ui/nfl_private_research.py": {
+      "after_sha256": "80e7ed46e3678b539f7bb5bf45f01bf8e1ec265ba1f89d720b043bf8b8bee5df",
+      "before_sha256": "3fb921b1bc8d8f1262700bd512961af4d45a574d40c7488c25321d6186d25f09",
+      "reverse_patches": [
+        {
+          "end": 2987,
+          "start": 2627,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/nfl_private_routes.py": {
+      "after_sha256": "fd17cf7af3f182f9d3daaffc2d2c59ebd2eca3b594cc06909a90ffa01cfc928f",
+      "before_sha256": "c99dd86c667319a3b4edcffcd44e0107c209fc6503733bcdd57e22360fe47df8",
+      "reverse_patches": [
+        {
+          "end": 342,
+          "start": 293,
+          "text": ""
+        },
+        {
+          "end": 420,
+          "start": 407,
+          "text": ""
+        },
+        {
+          "end": 771,
+          "start": 759,
+          "text": ""
+        },
+        {
+          "end": 898,
+          "start": 884,
+          "text": ""
+        },
+        {
+          "end": 1825,
+          "start": 1772,
+          "text": ""
+        },
+        {
+          "end": 2203,
+          "start": 2182,
+          "text": ""
+        },
+        {
+          "end": 2387,
+          "start": 2367,
+          "text": ""
+        },
+        {
+          "end": 3200,
+          "start": 3187,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

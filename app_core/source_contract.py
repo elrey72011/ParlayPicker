@@ -130,6 +130,10 @@ def verify(ref, offer, *, inference_time=None):
 
 def adapt(game, book, market, outcome):
     """Retain prospective assessments; only the accepted NFL spread scope can verify."""
+    from app_core.ncaaf_owner_terms_projection import transport_facts
+    owner_scope = transport_facts(game, book, market, outcome)
+    if owner_scope is not None:
+        return owner_scope  # Explicit private-v2 interpretation, no acceptance.
     from app_core.source_evidence_intake import for_offer
     offer = identity(game, book, market, outcome)
     intake = for_offer(offer, reference=outcome.get("source_evidence_ref", market.get("source_evidence_ref")),

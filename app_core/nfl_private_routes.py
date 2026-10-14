@@ -2,8 +2,10 @@
 from contextlib import contextmanager
 import json
 from app_core import nfl_owner_research as v1, nfl_observed_research as v2, nfl_scoring_research as v3, nfl_interpreted_research as v4, nfl_pdf_research as v5
+from app_core import nfl_document_research as v6
+from app_core import nfl_public_document_research as v7
 
-REASONS = v1.REASONS | v2.REASONS | v3.REASONS | v4.REASONS | v5.REASONS
+REASONS = v1.REASONS | v2.REASONS | v3.REASONS | v4.REASONS | v5.REASONS | v6.REASONS | v7.REASONS
 require = v1.require
 MAX_PACKETS = v1.MAX_PACKETS
 private = v1.private
@@ -13,8 +15,8 @@ retain_ui_refresh = v1.retain_ui_refresh
 
 def route(packet):
     version = packet.get('payload', {}).get('version') if isinstance(packet, dict) else None
-    v1.require(version in {v1.VERSION, v2.VERSION, v3.VERSION, v4.VERSION, v5.VERSION}, 'NFL_PRIVATE_PACKET_SCHEMA')
-    return {v1.VERSION:v1,v2.VERSION:v2,v3.VERSION:v3,v4.VERSION:v4,v5.VERSION:v5}[version]
+    v1.require(version in {v1.VERSION, v2.VERSION, v3.VERSION, v4.VERSION, v5.VERSION, v6.VERSION, v7.VERSION}, 'NFL_PRIVATE_PACKET_SCHEMA')
+    return {v1.VERSION:v1,v2.VERSION:v2,v3.VERSION:v3,v4.VERSION:v4,v5.VERSION:v5,v6.VERSION:v6,v7.VERSION:v7}[version]
 
 
 def load(raw, *, owner_upload=False):
@@ -27,18 +29,18 @@ def load(raw, *, owner_upload=False):
 def selected(packets=()):
     v1.require(isinstance(packets, (list, tuple)) and len(packets) <= v1.MAX_PACKETS, 'NFL_PRIVATE_PACKET_SCHEMA')
     v1.require(sum(len(v1.encode(p).encode()) for p in packets) <= v1.MAX_SELECTED and len({p['sha256'] for p in packets}) == len(packets), 'NFL_PRIVATE_PACKET_AMBIGUOUS')
-    with v1.selected([p for p in packets if route(p) is v1]), v2.selected([p for p in packets if route(p) is v2]), v3.selected([p for p in packets if route(p) is v3]), v4.selected([p for p in packets if route(p) is v4]), v5.selected([p for p in packets if route(p) is v5]):
+    with v1.selected([p for p in packets if route(p) is v1]), v2.selected([p for p in packets if route(p) is v2]), v3.selected([p for p in packets if route(p) is v3]), v4.selected([p for p in packets if route(p) is v4]), v5.selected([p for p in packets if route(p) is v5]), v6.selected([p for p in packets if route(p) is v6]), v7.selected([p for p in packets if route(p) is v7]):
         yield
 
 
 def selection_requested():
     # Both recursion guards must block dispatch during unchanged mathematics.
-    return not (v1.IN_NATIVE.get() or v2.IN_NATIVE.get() or v3.IN_NATIVE.get() or v4.IN_NATIVE.get() or v5.IN_NATIVE.get()) and bool(v1.SELECTED.get() or v2.SELECTED.get() or v3.SELECTED.get() or v4.SELECTED.get() or v5.SELECTED.get())
+    return not (v1.IN_NATIVE.get() or v2.IN_NATIVE.get() or v3.IN_NATIVE.get() or v4.IN_NATIVE.get() or v5.IN_NATIVE.get()) and bool(v1.SELECTED.get() or v2.SELECTED.get() or v3.SELECTED.get() or v4.SELECTED.get() or v5.SELECTED.get() or v6.SELECTED.get() or v7.SELECTED.get())
 
 
 def predict(source):
     offered = v1.producer._matches(source)
-    packets = v1.SELECTED.get() + v2.SELECTED.get() + v3.SELECTED.get() + v4.SELECTED.get() + v5.SELECTED.get()
+    packets = v1.SELECTED.get() + v2.SELECTED.get() + v3.SELECTED.get() + v4.SELECTED.get() + v5.SELECTED.get() + v6.SELECTED.get() + v7.SELECTED.get()
     matching = [p for p in packets if p['payload']['quote']['market_type'] == source.get('market_type') and
         any(m.get('provider_event_id') == p['payload']['event']['provider_event_id'] and
             m.get('provider_namespace') == p['payload']['event']['provider_namespace'] for m in offered)]
@@ -53,7 +55,7 @@ def predict(source):
 def saved_route(source):
     try:
         p = json.loads(source['ml_estimate_metadata'])['nfl_private_inputs']['payload']
-        return {v1.RESULT:v1,v2.RESULT:v2,v3.RESULT:v3,v4.RESULT:v4,v5.RESULT:v5}.get(p.get('version'),v1)
+        return {v1.RESULT:v1,v2.RESULT:v2,v3.RESULT:v3,v4.RESULT:v4,v5.RESULT:v5,v6.RESULT:v6,v7.RESULT:v7}.get(p.get('version'),v1)
     except (KeyError, ValueError, TypeError): return v1
 
 
