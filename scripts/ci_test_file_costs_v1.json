@@ -8133,6 +8133,64 @@
       "variance_multiplier": 1.15
     },
     {
+      "advisory_basis_seconds": 2.032,
+      "basis": "Maximum retained completed JUnit testcase sum plus existing 15% advisory variance; excludes installation, collection, reporting and artifact upload; not a future runtime bound.",
+      "completed_measurements": [
+        {
+          "count": 50,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.032,
+          "source": "document-html-03a7209d-5"
+        },
+        {
+          "count": 50,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 1.856,
+          "source": "document-html-e6ee2d88-5"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "path": "tests/test_nfl_document_html_anchors.py",
+      "profiled_tests": 50,
+      "references": [
+        "document-html-03a7209d-5",
+        "document-html-e6ee2d88-5"
+      ],
+      "seconds": 2.3368,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 10.059,
+      "basis": "Maximum retained completed JUnit testcase sum plus existing 15% advisory variance; excludes installation, collection, reporting and artifact upload; not a future runtime bound.",
+      "completed_measurements": [
+        {
+          "count": 8,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 10.059,
+          "source": "document-html-03a7209d-4"
+        },
+        {
+          "count": 8,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 10.040000000000001,
+          "source": "document-html-e6ee2d88-4"
+        }
+      ],
+      "incomplete_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "path": "tests/test_nfl_document_html_pipeline.py",
+      "profiled_tests": 8,
+      "references": [
+        "document-html-03a7209d-4",
+        "document-html-e6ee2d88-4"
+      ],
+      "seconds": 11.56785,
+      "variance_multiplier": 1.15
+    },
+    {
       "advisory_basis_seconds": 17.373,
       "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
       "completed_measurements": [
@@ -16607,6 +16665,50 @@
   "revision_basis": "October 11 current-main and PR #2416 attempt 1 completed JUnit; cancelled attempts 1/2 retained separately as incomplete observations. Scheduling only; no exclusions or changes to tests, scheduler, workflows or limits. Revision3 incorporates same-code completed refresh1 shards2/3 and all-node cancelled shard1 as explicitly estimated inter-outcome intervals; no cancelled outcome is a completed JUnit measurement.",
   "schema": "parlaypicker/ci-file-costs-v1",
   "sources": {
+    "document-html-03a7209d-4": {
+      "artifact": "full-suite-test-results-4",
+      "checkout_commit": "f5b69c6cbd29125458d3a3e747e01c6408cf3ddf",
+      "head": "03a7209def2d77f7613517676e3d655d3e4af3d7",
+      "kind": "completed_junit_testcase_sum",
+      "note": "A complete testcase measurement is not a passing workflow claim. Final shard 4 hit the job limit after XML/upload; all original failures remain preserved.",
+      "run_attempt": 1,
+      "run_id": 38591884545,
+      "xml": "full-suite-4.xml",
+      "xml_sha256": "f52a571e8d9248dc10960c2d24077465527182ad87520d91e4b4f722add2dcda"
+    },
+    "document-html-03a7209d-5": {
+      "artifact": "full-suite-test-results-5",
+      "checkout_commit": "f5b69c6cbd29125458d3a3e747e01c6408cf3ddf",
+      "head": "03a7209def2d77f7613517676e3d655d3e4af3d7",
+      "kind": "completed_junit_testcase_sum",
+      "note": "A complete testcase measurement is not a passing workflow claim. Final shard 4 hit the job limit after XML/upload; all original failures remain preserved.",
+      "run_attempt": 1,
+      "run_id": 38591884545,
+      "xml": "full-suite-5.xml",
+      "xml_sha256": "8baffdb8bbc5538793e3d20e693ba0eff10b24eb2d6beb9d64a0d9c0660f22f8"
+    },
+    "document-html-e6ee2d88-4": {
+      "artifact": "full-suite-test-results-4",
+      "checkout_commit": "c618733fbf75989ec435c5a354aa33bf3e637124",
+      "head": "e6ee2d88eb4ce65f406c49eebb17155cbc7825eb",
+      "kind": "completed_junit_testcase_sum",
+      "note": "A complete testcase measurement is not a passing workflow claim. Final shard 4 hit the job limit after XML/upload; all original failures remain preserved.",
+      "run_attempt": 1,
+      "run_id": 38606041401,
+      "xml": "full-suite-4.xml",
+      "xml_sha256": "f36b7484575524c1ec9f0dc19952c8dd3e9c4c521bdf70665f72aba8b6977b3e"
+    },
+    "document-html-e6ee2d88-5": {
+      "artifact": "full-suite-test-results-5",
+      "checkout_commit": "c618733fbf75989ec435c5a354aa33bf3e637124",
+      "head": "e6ee2d88eb4ce65f406c49eebb17155cbc7825eb",
+      "kind": "completed_junit_testcase_sum",
+      "note": "A complete testcase measurement is not a passing workflow claim. Final shard 4 hit the job limit after XML/upload; all original failures remain preserved.",
+      "run_attempt": 1,
+      "run_id": 38606041401,
+      "xml": "full-suite-5.xml",
+      "xml_sha256": "b157d4f5f6bdc6b1261a3b87803f2661f4a958e204a673371b2284b9aeb4da39"
+    },
     "listing-completed-main-1": {
       "artifact_id": 11779417039,
       "artifact_zip_sha256": "e2dd6b92d01e9f3762d019e130a2635245127650c6e66b48a5424343d69eec86",

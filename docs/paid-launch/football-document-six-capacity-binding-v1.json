@@ -1,0 +1,108 @@
+{
+  "approval_reference": "Robert explicitly approved capacity proposal e3a9b0795ef409f3157cf0db2427b35e07766b2191b45b586cbb8ca70fee9ebd in call_bd5810544cc0480099a252d2c8887ccf: six whole-file shards, corresponding current-gate cardinality/artifact reconciliation, only two completed-XML cost entries and provenance, focused regressions and fresh bindings/seal. Preserve historical three/five synthetic behavior, substantive assertions, scheduler, network blocking, acquisition/math and 30-minute limits. Complete final-head CI once, no automatic retries. No acquisition/inference/storage/task changes/merge/deployment.",
+  "approved_existing_test_changes": {
+    "tests/test_ci_five_shards.py": "Owner-approved current-gate cardinality only; historical assertions reconstructed exactly.",
+    "tests/test_ci_test_shards.py": "Owner-approved current-gate cardinality only; historical assertions reconstructed exactly."
+  },
+  "base": "e6ee2d88eb4ce65f406c49eebb17155cbc7825eb",
+  "base_tree": "98ea8891a17009e49ba6e79dc1619c1d6d36361b",
+  "main_base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "main_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    ".github/workflows/ci.yml",
+    "docs/paid-launch/football-document-six-capacity-binding-v1.json",
+    "docs/paid-launch/football-document-six-capacity-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/football_document_six_capacity_scope.py",
+    "tests/test_ci_five_shards.py",
+    "tests/test_ci_six_shards.py",
+    "tests/test_ci_test_shards.py",
+    "tests/test_football_document_six_capacity_scope.py"
+  ],
+  "previous_guard_sha256": "4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321",
+  "reconstruction_json_sha256": "a6780e080a59a99a8dc7bae372bf1062b98a08ca7774b0a36cb28bc6bbbf30f7",
+  "reviewed_blobs": {
+    ".github/workflows/ci.yml": "52a233a19bb33a8c3db8e0b07241fde973f7730c",
+    "docs/paid-launch/football-document-six-capacity-v1.md": "15118fa8a6ffd33151ed1f19a30badcb936ec27c",
+    "scripts/ci_test_file_costs_v1.json": "ad252468493becf9e66e8e478dbc4af7d6d0048c",
+    "scripts/football_document_six_capacity_scope.py": "29cb1dc9ecc5ce343c776ee0cd7640eeb2083e71",
+    "tests/test_ci_five_shards.py": "fdf35569c8ebf8bf18fce00f56f5a7d15d5b604d",
+    "tests/test_ci_six_shards.py": "0465deee48cf76006f388f886342ee5ccba7c24b",
+    "tests/test_ci_test_shards.py": "99fc7b991132e49f62e5864b9c0ca5dba4a2ca1c",
+    "tests/test_football_document_six_capacity_scope.py": "3ba83e26d3184712d44b79acc5f447ade2e50a85"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    ".github/workflows/ci.yml": {
+      "after_sha256": "5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550",
+      "before_sha256": "c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431",
+      "reverse_patches": [
+        {
+          "end": 3571,
+          "start": 3537,
+          "text": "        shard: [1, 2, 3, 4, 5]\n"
+        },
+        {
+          "end": 4064,
+          "start": 3984,
+          "text": "          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\n"
+        },
+        {
+          "end": 5568,
+          "start": 5394,
+          "text": "      - name: Reconcile complete test identities and outcomes across all five shards\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\n"
+        }
+      ]
+    },
+    "scripts/ci_test_file_costs_v1.json": {
+      "after_sha256": "3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97",
+      "before_sha256": "ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d",
+      "reverse_patches": [
+        {
+          "end": 274167,
+          "start": 272192,
+          "text": ""
+        },
+        {
+          "end": 568679,
+          "start": 566255,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ci_five_shards.py": {
+      "after_sha256": "8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479",
+      "before_sha256": "0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66",
+      "reverse_patches": [
+        {
+          "end": 4077,
+          "start": 4001,
+          "text": "    assert shards['strategy']['matrix']['shard']==['1','2','3','4','5']\n"
+        },
+        {
+          "end": 4226,
+          "start": 4172,
+          "text": "    assert '--shards 5' in shards['steps'][-2]['run']\n"
+        },
+        {
+          "end": 4641,
+          "start": 4589,
+          "text": "    assert '--shards 5' in gate['steps'][-1]['run']\n"
+        }
+      ]
+    },
+    "tests/test_ci_test_shards.py": {
+      "after_sha256": "be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e",
+      "before_sha256": "8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44",
+      "reverse_patches": [
+        {
+          "end": 13648,
+          "start": 13547,
+          "text": "    assert jobs['full-suite-tests']['strategy']['matrix']['shard'] == ['1', '2', '3', '4', '5']\n"
+        }
+      ]
+    }
+  }
+}
