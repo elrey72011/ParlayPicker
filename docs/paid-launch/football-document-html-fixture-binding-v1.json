@@ -1,0 +1,94 @@
+{
+  "approval_reference": "Robert authorized required CI closure preserving original assertions, together with the retained bounded fixture-isolation scope. Correct only a reproduced new raw-context test lifecycle error and an independently reproduced loose-Git-object copy race: use a test-local restored raw-function inspection, synchronous non-pruning template packing and local automatic-maintenance prevention only in labelled synthetic template repositories. Existing dirty/staged/committed/resealed assertions, all production scanner/reader/math/transport code, frozen predecessor bindings, five-shard workflows, timing profile and timeouts remain unchanged. Preserve original CI failures and UNKNOWN deleting process. No acquisition, inference, storage/task/security changes, merge or deployment.",
+  "approved_existing_test_changes": {
+    "tests/test_canonical_download_scope.py": "Setup-only isolated synthetic fixture correction; every preexisting assertion unchanged.",
+    "tests/test_football_document_html_scope.py": "Setup-only isolated synthetic fixture correction; every preexisting assertion unchanged.",
+    "tests/test_source_intake_scope.py": "Setup-only isolated synthetic fixture correction; every preexisting assertion unchanged."
+  },
+  "base": "03a7209def2d77f7613517676e3d655d3e4af3d7",
+  "base_tree": "87abd1f4a667737baeeee8609ec2eb4d7d7e98cc",
+  "main_base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "main_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/football-document-html-fixture-binding-v1.json",
+    "docs/paid-launch/football-document-html-fixture-validation-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_html_fixture_scope.py",
+    "tests/test_canonical_download_scope.py",
+    "tests/test_football_document_html_fixture_scope.py",
+    "tests/test_football_document_html_scope.py",
+    "tests/test_source_intake_scope.py"
+  ],
+  "previous_guard_sha256": "fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f",
+  "reconstruction_json_sha256": "c379aeaea6cc39d39175ace2593eb29f9651b7ef9decc00ab992f1819be1335f",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-html-fixture-validation-v1.md": "328749d046b418b9915035e89783a62380703e77",
+    "scripts/football_document_html_fixture_scope.py": "e6119582510ad9b14d2d6b02b89eaef40100d4f4",
+    "tests/test_canonical_download_scope.py": "93d9a6ff4d5a4598ff787e12b4d4f1a0ce72708a",
+    "tests/test_football_document_html_fixture_scope.py": "892135d4b578608e17d30f93a4a690f23ea117a9",
+    "tests/test_football_document_html_scope.py": "2a3bc4c0c4388b3758383f2a7f8858e97ac3197b",
+    "tests/test_source_intake_scope.py": "5d1aedd5b8beb03c406b7c31be93fefe65525ce0"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "tests/test_canonical_download_scope.py": {
+      "after_sha256": "c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b",
+      "before_sha256": "6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0",
+      "reverse_patches": [
+        {
+          "end": 1554,
+          "start": 1471,
+          "text": ""
+        },
+        {
+          "end": 4313,
+          "start": 4280,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_football_document_html_scope.py": {
+      "after_sha256": "54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1",
+      "before_sha256": "7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb",
+      "reverse_patches": [
+        {
+          "end": 7585,
+          "start": 7219,
+          "text": ""
+        },
+        {
+          "end": 7673,
+          "start": 7659,
+          "text": ""
+        },
+        {
+          "end": 7700,
+          "start": 7675,
+          "text": ""
+        },
+        {
+          "end": 8745,
+          "start": 7914,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_source_intake_scope.py": {
+      "after_sha256": "dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f",
+      "before_sha256": "a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca",
+      "reverse_patches": [
+        {
+          "end": 1544,
+          "start": 1461,
+          "text": ""
+        },
+        {
+          "end": 4226,
+          "start": 4193,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

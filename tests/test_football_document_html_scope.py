@@ -108,8 +108,38 @@ def test_length_prefilter_never_grants_trust_or_cross_source_cache_reuse():
     assert guard._docanchor_base_source.cache_info().maxsize==2
 
 
-def test_predecessor_reconstruction_context_remains_supported_and_bounded():
+@pytest.fixture
+def pristine_guard():
+    """Inspect raw functions locally, then restore exact installed wrappers."""
+    import inspect
+    from scripts import scope_reconstruction as memo
+    with pytest.MonkeyPatch.context() as patch:
+        for name in memo.NAMES:
+            patch.setattr(guard,name,inspect.unwrap(getattr(guard,name)))
+        yield guard
+
+
+def test_predecessor_reconstruction_context_remains_supported_and_bounded(pristine_guard):
+    guard=pristine_guard
     from scripts import scope_reconstruction as memo
     for name in memo.NAMES:
         fields=memo._context_fields(getattr(guard,name))
         assert fields is not None and len(fields)<=memo.MAX_CONTEXT_FIELDS
+
+
+def test_pristine_fixture_preserves_bound_context_after_shared_memo_install(monkeypatch):
+    import inspect
+    from scripts import scope_reconstruction as memo
+    memo.install(guard)
+    wrappers={name:getattr(guard,name) for name in memo.NAMES}
+    for name in memo.NAMES:
+        shared=wrappers[name]
+        assert shared.reconstruction_context_fields<=memo.MAX_CONTEXT_FIELDS
+        assert shared.reconstruction_memo is not None
+    with monkeypatch.context() as patch:
+        for name in memo.NAMES:
+            patch.setattr(guard,name,inspect.unwrap(wrappers[name]))
+        for name in memo.NAMES:
+            fields=memo._context_fields(getattr(guard,name))
+            assert fields is not None and len(fields)<=memo.MAX_CONTEXT_FIELDS
+    assert all(getattr(guard,name) is wrappers[name] for name in memo.NAMES)
