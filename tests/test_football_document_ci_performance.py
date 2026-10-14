@@ -16,7 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def predecessor():
     binding = json.loads((ROOT/'docs/paid-launch/football-document-ci-performance-binding-v1.json').read_text())
     with blocked_network():
-        raw = subprocess.check_output(['git', 'show', binding['base']+':'+guard.GUARD_PATH], cwd=ROOT)
+        current = (ROOT/guard.GUARD_PATH).read_bytes().replace(b'\r\n', b'\n')
+        raw = guard._docperf_base_source(current)
+        assert hashlib.sha256(raw).hexdigest() == binding['previous_guard_sha256']
     tree = ast.parse(raw.decode())
     node = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_listing_capacity_base_source'][-1]
     environment = dict(guard.__dict__)
