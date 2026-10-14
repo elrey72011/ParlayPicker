@@ -2920,8 +2920,8 @@
       "seconds": 1.717394
     },
     {
-      "advisory_basis_seconds": 120.412,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 279.199,
+      "basis": "Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.",
       "completed_measurements": [
         {
           "count": 49,
@@ -2940,6 +2940,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 120.412,
           "source": "listing-completed-pr-1"
+        },
+        {
+          "count": 49,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 279.199,
+          "source": "document-ci-completed-56-shard6"
         }
       ],
       "incomplete_observations": [
@@ -2980,9 +2986,10 @@
         "oct11-main-1",
         "refresh1-cancelled-1",
         "listing-completed-main-1",
-        "listing-completed-pr-1"
+        "listing-completed-pr-1",
+        "document-ci-completed-56-shard6"
       ],
-      "seconds": 255.94285,
+      "seconds": 321.07885,
       "variance_multiplier": 1.15
     },
     {
@@ -5619,8 +5626,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 172.859,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 341.974,
+      "basis": "Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.",
       "completed_measurements": [
         {
           "count": 56,
@@ -5645,6 +5652,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 172.859,
           "source": "listing-completed-main-3"
+        },
+        {
+          "count": 56,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 341.974,
+          "source": "document-ci-completed-56-shard6"
         }
       ],
       "kind": "estimated",
@@ -5677,9 +5690,10 @@
         "oct11-main-3",
         "oct11-pr-3",
         "refresh1-completed-3",
-        "listing-completed-main-3"
+        "listing-completed-main-3",
+        "document-ci-completed-56-shard6"
       ],
-      "seconds": 312.6436,
+      "seconds": 393.2701,
       "variance_multiplier": 1.15
     },
     {
@@ -14552,8 +14566,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 124.877,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 228.344,
+      "basis": "Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.",
       "completed_measurements": [
         {
           "count": 42,
@@ -14572,6 +14586,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 124.877,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 42,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 228.344,
+          "source": "document-ci-completed-56-shard6"
         }
       ],
       "incomplete_observations": [
@@ -14612,9 +14632,10 @@
         "oct11-pr-2",
         "refresh1-cancelled-1",
         "listing-completed-main-2",
-        "listing-completed-pr-2"
+        "listing-completed-pr-2",
+        "document-ci-completed-56-shard6"
       ],
-      "seconds": 213.98165,
+      "seconds": 262.5956,
       "variance_multiplier": 1.15
     },
     {
@@ -16099,6 +16120,33 @@
       "variance_multiplier": 1.15
     }
   ],
+  "football_document_ci_cost_provenance": [
+    {
+      "after_seconds": 321.07885,
+      "before_seconds": 255.94285,
+      "completed_testcase_seconds": 279.199,
+      "count": 49,
+      "path": "tests/test_football_catalog_scope.py",
+      "test_source_sha256": "c603f49fd149040d14e72c9160d8dc6ad3bfadc93505a1dd445a02f184a327d1"
+    },
+    {
+      "after_seconds": 393.2701,
+      "before_seconds": 312.6436,
+      "completed_testcase_seconds": 341.974,
+      "count": 56,
+      "path": "tests/test_mlb_nhl_research_scope.py",
+      "test_source_sha256": "7087911d6a1bc83ecbce0d021af25b857c127333f3276a434ceb1d1c4b6712b1"
+    },
+    {
+      "after_seconds": 262.5956,
+      "before_seconds": 213.98165,
+      "completed_testcase_seconds": 228.344,
+      "count": 42,
+      "path": "tests/test_source_intake_scope.py",
+      "test_source_sha256": "dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f"
+    }
+  ],
+  "football_document_ci_cost_revision": 1,
   "nfl_listing_cost_basis": "Measured listing follow-up: 55 inherited scope files plus two new listing files; completed main/#2419 JUnit only, maximum compatible completed testcase cost plus unchanged 15% advisory margin. All prior sources and interrupted observations remain retained. Other file entries, scheduler, fallback, tests and workflows unchanged.",
   "nfl_listing_cost_revision": 1,
   "nfl_pdf_ci_cost_basis": "Existing scope files only: completed exact-count Ubuntu JUnit sums with >=30-second demonstrated advisory underestimate, plus unchanged 15% advisory variance. No cancelled span is used as a completed measurement; excludes installation, collection, reporting and artifact upload. Prior frozen revision and successor metadata preserved.",
@@ -16665,6 +16713,17 @@
   "revision_basis": "October 11 current-main and PR #2416 attempt 1 completed JUnit; cancelled attempts 1/2 retained separately as incomplete observations. Scheduling only; no exclusions or changes to tests, scheduler, workflows or limits. Revision3 incorporates same-code completed refresh1 shards2/3 and all-node cancelled shard1 as explicitly estimated inter-outcome intervals; no cancelled outcome is a completed JUnit measurement.",
   "schema": "parlaypicker/ci-file-costs-v1",
   "sources": {
+    "document-ci-completed-56-shard6": {
+      "artifact_digest": "sha256:8cd9dabc93a7da16ebeec1cf6039cdf2e5ba2da319b9f4453a2fa632086e6b13",
+      "artifact_id": 11926041783,
+      "assignment_manifest_sha256": "072dc0a230eceb54238c32f0380ef686ebf4e42642cecfab5a9b975279c112ee",
+      "attempt": 1,
+      "complete_for_target_files": true,
+      "head": "56da7ac68caccbba56d018d22de4dc3f211e019d",
+      "junit_sha256": "4853567917b0d5dc0427671c3b3fa31e4599f00df62782c46bccda8ff39949bf",
+      "unrelated_suite_failure_retained": true,
+      "workflow_run": 38626230037
+    },
     "document-html-03a7209d-4": {
       "artifact": "full-suite-test-results-4",
       "checkout_commit": "f5b69c6cbd29125458d3a3e747e01c6408cf3ddf",

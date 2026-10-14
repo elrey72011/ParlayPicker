@@ -21765,6 +21765,51 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+FOOTBALL_DOCPERF_BOOTSTRAP = True
+FOOTBALL_DOCPERF_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-ci-performance-v1.json'
+FOOTBALL_DOCPERF_BINDING_PATH = 'docs/paid-launch/football-document-ci-performance-binding-v1.json'
+FOOTBALL_DOCPERF_BINDING_SHA256 = '72d0c64f308fbb6a818dec6b64316b9168504b3b37bfd0220a4e40e86bcb52df'
+FOOTBALL_DOCPERF_REVIEWED_GUARD_SHA256 = 'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+FOOTBALL_DOCPERF_PREVIOUS_GUARD_SHA256 = '7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832'
+FOOTBALL_DOCPERF_RECONSTRUCTION_JSON = b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}'
+from functools import lru_cache as _docperf_lru
+
+def _docperf_guard_matches(source):
+    value=FOOTBALL_DOCPERF_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==18 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCPERF_REVIEWED_GUARD_SHA256
+
+@_docperf_lru(maxsize=2)
+def _docperf_cached_base(source,reviewed,parent):
+    _require(_docperf_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docperf_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=6118904:return source
+    return _docperf_cached_base(source,FOOTBALL_DOCPERF_REVIEWED_GUARD_SHA256,FOOTBALL_DOCPERF_PREVIOUS_GUARD_SHA256)
+_docperf_base_source.cache_info=_docperf_cached_base.cache_info
+_docperf_base_source.cache_clear=_docperf_cached_base.cache_clear
+
+def _docperf_previous_source(path,source):
+    if path==GUARD_PATH:return _docperf_base_source(source)
+    info=json.loads(FOOTBALL_DOCPERF_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 FOOTBALL_DOCREMOTE_BOOTSTRAP = True
 FOOTBALL_DOCREMOTE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-remote-fixture-v1.json'
 FOOTBALL_DOCREMOTE_BINDING_PATH = 'docs/paid-launch/football-document-remote-fixture-binding-v1.json'
@@ -21795,6 +21840,23 @@ def _docremote_cached_base(source,reviewed,parent):
     return source
 
 def _docremote_base_source(source):
+    # FOOTBALL_DOCPERF_DOCREMOTE_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCREMOTE_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=6042118:return source
     return _docremote_cached_base(source,FOOTBALL_DOCREMOTE_REVIEWED_GUARD_SHA256,FOOTBALL_DOCREMOTE_PREVIOUS_GUARD_SHA256)
@@ -21802,6 +21864,14 @@ _docremote_base_source.cache_info=_docremote_cached_base.cache_info
 _docremote_base_source.cache_clear=_docremote_cached_base.cache_clear
 
 def _docremote_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCREMOTE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCREMOTE_PREVIOUS_END
     if path==GUARD_PATH:return _docremote_base_source(source)
     info=json.loads(FOOTBALL_DOCREMOTE_RECONSTRUCTION_JSON).get(path)
     if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
@@ -21840,6 +21910,23 @@ def _docpred_cached_base(source,reviewed,parent):
     return source
 
 def _docpred_base_source(source):
+    # FOOTBALL_DOCPERF_DOCPRED_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCPRED_END
     # FOOTBALL_DOCREMOTE_DOCPRED_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -21864,6 +21951,14 @@ _docpred_base_source.cache_info=_docpred_cached_base.cache_info
 _docpred_base_source.cache_clear=_docpred_cached_base.cache_clear
 
 def _docpred_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCPRED_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCPRED_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_DOCPRED_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -21910,6 +22005,23 @@ def _docsix_cached_base(source,reviewed,parent):
     return source
 
 def _docsix_base_source(source):
+    # FOOTBALL_DOCPERF_DOCSIX_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCSIX_END
     # FOOTBALL_DOCREMOTE_DOCSIX_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -21951,6 +22063,14 @@ _docsix_base_source.cache_info=_docsix_cached_base.cache_info
 _docsix_base_source.cache_clear=_docsix_cached_base.cache_clear
 
 def _docsix_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCSIX_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCSIX_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_DOCSIX_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -22005,6 +22125,23 @@ def _docreport_cached_base(source,reviewed,parent):
     return source
 
 def _docreport_base_source(source):
+    # FOOTBALL_DOCPERF_DOCREPORT_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCREPORT_END
     # FOOTBALL_DOCREMOTE_DOCREPORT_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -22063,6 +22200,14 @@ _docreport_base_source.cache_info=_docreport_cached_base.cache_info
 _docreport_base_source.cache_clear=_docreport_cached_base.cache_clear
 
 def _docreport_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCREPORT_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_DOCREPORT_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -22125,6 +22270,23 @@ def _docfixture_cached_base(source,reviewed,parent):
     return source
 
 def _docfixture_base_source(source):
+    # FOOTBALL_DOCPERF_DOCFIXTURE_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCFIXTURE_END
     # FOOTBALL_DOCREMOTE_DOCFIXTURE_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -22200,6 +22362,14 @@ _docfixture_base_source.cache_info=_docfixture_cached_base.cache_info
 _docfixture_base_source.cache_clear=_docfixture_cached_base.cache_clear
 
 def _docfixture_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCFIXTURE_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_DOCFIXTURE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -22270,6 +22440,23 @@ def _docanchor_cached_base(source,reviewed,parent):
     return source
 
 def _docanchor_base_source(source):
+    # FOOTBALL_DOCPERF_DOCANCHOR_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCANCHOR_END
     # FOOTBALL_DOCREMOTE_DOCANCHOR_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -22362,6 +22549,14 @@ _docanchor_base_source.cache_info=_docanchor_cached_base.cache_info
 _docanchor_base_source.cache_clear=_docanchor_cached_base.cache_clear
 
 def _docanchor_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCANCHOR_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_DOCANCHOR_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -22440,6 +22635,23 @@ def _doclife_cached_base(source,reviewed,parent):
     return source
 
 def _doclife_base_source(source):
+    # FOOTBALL_DOCPERF_DOCLIFE_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCLIFE_END
     # FOOTBALL_DOCREMOTE_DOCLIFE_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -22549,6 +22761,14 @@ _doclife_base_source.cache_info=_doclife_cached_base.cache_info
 _doclife_base_source.cache_clear=_doclife_cached_base.cache_clear
 
 def _doclife_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCLIFE_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_DOCLIFE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -22635,6 +22855,23 @@ def _docwords_cached_base(source,reviewed,parent):
     return source
 
 def _docwords_base_source(source):
+    # FOOTBALL_DOCPERF_DOCWORDS_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCWORDS_END
     # FOOTBALL_DOCREMOTE_DOCWORDS_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -22761,6 +22998,14 @@ _docwords_base_source.cache_info=_docwords_cached_base.cache_info
 _docwords_base_source.cache_clear=_docwords_cached_base.cache_clear
 
 def _docwords_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCWORDS_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_DOCWORDS_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -22855,6 +23100,23 @@ def _docmeta_cached_base(source,reviewed,parent):
     return source
 
 def _docmeta_base_source(source):
+    # FOOTBALL_DOCPERF_DOCMETA_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCMETA_END
     # FOOTBALL_DOCREMOTE_DOCMETA_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -22998,6 +23260,14 @@ _docmeta_base_source.cache_info=_docmeta_cached_base.cache_info
 _docmeta_base_source.cache_clear=_docmeta_cached_base.cache_clear
 
 def _docmeta_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCMETA_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_DOCMETA_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -23100,6 +23370,23 @@ def _docio_cached_base(source,reviewed,parent):
     return source
 
 def _docio_base_source(source):
+    # FOOTBALL_DOCPERF_DOCIO_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCIO_END
     # FOOTBALL_DOCREMOTE_DOCIO_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -23260,6 +23547,14 @@ _docio_base_source.cache_info=_docio_cached_base.cache_info
 _docio_base_source.cache_clear=_docio_cached_base.cache_clear
 
 def _docio_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCIO_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_DOCIO_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -23370,6 +23665,23 @@ def _terms_cached_base(source,reviewed,parent):
     return source
 
 def _terms_base_source(source):
+    # FOOTBALL_DOCPERF_TERMS_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_TERMS_END
     # FOOTBALL_DOCREMOTE_TERMS_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -23547,6 +23859,14 @@ _terms_base_source.cache_info=_terms_cached_base.cache_info
 _terms_base_source.cache_clear=_terms_cached_base.cache_clear
 
 def _terms_previous_source(path,source):
+    # FOOTBALL_DOCPERF_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_TPREVIOUS_END
     # FOOTBALL_DOCREMOTE_TPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -23665,6 +23985,23 @@ def _document_cached_base(source,reviewed,parent):
     return source
 
 def _document_base_source(source):
+    # FOOTBALL_DOCPERF_DOCUMENT_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCUMENT_END
     # FOOTBALL_DOCREMOTE_DOCUMENT_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -23859,6 +24196,14 @@ _document_base_source.cache_info=_document_cached_base.cache_info
 _document_base_source.cache_clear=_document_cached_base.cache_clear
 
 def _document_previous_source(path,source):
+    # FOOTBALL_DOCPERF_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DPREVIOUS_END
     # FOOTBALL_DOCREMOTE_DPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -23985,6 +24330,23 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    # FOOTBALL_DOCPERF_PDF_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_PDF_END
     # FOOTBALL_DOCREMOTE_PDF_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -24196,6 +24558,14 @@ _pdf_base_source.cache_info=_pdf_cached_base.cache_info
 _pdf_base_source.cache_clear=_pdf_cached_base.cache_clear
 
 def _pdf_previous_source(path,source):
+    # FOOTBALL_DOCPERF_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_PPREVIOUS_END
     # FOOTBALL_DOCREMOTE_PPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -24331,6 +24701,23 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    # FOOTBALL_DOCPERF_INTERPRET_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_INTERPRET_END
     # FOOTBALL_DOCREMOTE_INTERPRET_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -24559,6 +24946,14 @@ _interpret_base_source.cache_info=_interpret_cached_base.cache_info
 _interpret_base_source.cache_clear=_interpret_cached_base.cache_clear
 
 def _interpret_previous_source(path,source):
+    # FOOTBALL_DOCPERF_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_IPREVIOUS_END
     # FOOTBALL_DOCREMOTE_IPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -24720,6 +25115,27 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    # FOOTBALL_DOCPERF_CAPACITY_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    if len(source)==6042118 and hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832':
+        source=b''.join((source[0:1913517],source[2230963:2233948],source[2256832:2257291],source[2282043:2290595],source[2313453:2318538],source[2324729:5960116],source[5985071:5985395],source[6010121:6011585],source[6030878:6031137],b'        if exists_at("HEAD", NFL_INTERPRETATION_POLICY_PATH):\n',source[6032997:6042118],))
+        _require(hashlib.sha256(source).hexdigest()=='bfe64f0312f7d5c4eddbc9273f715406bb3132d420ed0f6f414717469d4a1c6c','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_CAPACITY_END
     # FOOTBALL_DOCREMOTE_CAPACITY_BEGIN
     if len(source)==6042118:
         identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
@@ -26731,6 +27147,25 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    # FOOTBALL_DOCPERF_DFS_BEGIN
+    if reviewed=='eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d':
+        return source.count(reviewed.encode())==18 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        if source.count(identity)!=18 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DFS_END
     # FOOTBALL_DOCREMOTE_DFS_BEGIN
     if reviewed=='aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90':
         return source.count(reviewed.encode())==17 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
@@ -26983,6 +27418,14 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _interpret_parent_previous=_listing_capacity_previous_source
 def _listing_capacity_previous_source(path,source):
+    # FOOTBALL_DOCPERF_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_PREVIOUS_END
     # FOOTBALL_DOCREMOTE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
@@ -27305,6 +27748,19 @@ def _run_docremote_integrated(manifest_path,base):
 
 # FOOTBALL_DOCREMOTE_RUN_END
 
+# FOOTBALL_DOCPERF_RUN_BEGIN
+def _run_docperf_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCPERF_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCPERF_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_ci_performance_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_ci_performance_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docperf_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCPERF_RUN_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -27312,7 +27768,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):
+        if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):
+            code, report = _run_docperf_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):
             code, report = _run_docremote_integrated(args.manifest, args.base)
         elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):
             code, report = _run_docpred_integrated(args.manifest, args.base)
