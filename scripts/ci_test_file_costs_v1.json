@@ -1072,9 +1072,38 @@
       "references": [
         "oct11-main-1",
         "refresh1-completed-2",
-        "listing-completed-main-3"
+        "listing-completed-main-3",
+        "ncaaf-socket-ci-completed-reviewed2424-4",
+        "ncaaf-socket-ci-completed-main-4",
+        "ncaaf-socket-ci-completed-pr-4"
       ],
-      "seconds": 378.0993,
+      "seconds": 476.51515,
+      "successor_advisory_basis_seconds": 414.361,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 68,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 276.277,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-4",
+          "test_git_blob": "93d9a6ff4d5a4598ff787e12b4d4f1a0ce72708a"
+        },
+        {
+          "count": 68,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 414.361,
+          "source": "ncaaf-socket-ci-completed-main-4",
+          "test_git_blob": "93d9a6ff4d5a4598ff787e12b4d4f1a0ce72708a"
+        },
+        {
+          "count": 68,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 341.776,
+          "source": "ncaaf-socket-ci-completed-pr-4",
+          "test_git_blob": "93d9a6ff4d5a4598ff787e12b4d4f1a0ce72708a"
+        }
+      ],
+      "successor_variance_multiplier": 1.15,
       "variance_multiplier": 1.15
     },
     {
@@ -3227,9 +3256,38 @@
         "oct11-main-3",
         "oct11-pr-3",
         "refresh1-completed-3",
-        "listing-completed-main-3"
+        "listing-completed-main-3",
+        "ncaaf-socket-ci-completed-reviewed2424-6",
+        "ncaaf-socket-ci-completed-main-6",
+        "ncaaf-socket-ci-completed-pr-6"
       ],
-      "seconds": 350.88915,
+      "seconds": 484.0603,
+      "successor_advisory_basis_seconds": 420.922,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 75,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 410.902,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-6",
+          "test_git_blob": "8feb0d09dfc9b65d404baa35f5b12130684f8495"
+        },
+        {
+          "count": 75,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 388.583,
+          "source": "ncaaf-socket-ci-completed-main-6",
+          "test_git_blob": "8feb0d09dfc9b65d404baa35f5b12130684f8495"
+        },
+        {
+          "count": 75,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 420.922,
+          "source": "ncaaf-socket-ci-completed-pr-6",
+          "test_git_blob": "8feb0d09dfc9b65d404baa35f5b12130684f8495"
+        }
+      ],
+      "successor_variance_multiplier": 1.15,
       "variance_multiplier": 1.15
     },
     {
@@ -6684,9 +6742,38 @@
         "oct11-main-1",
         "refresh1-cancelled-1",
         "listing-completed-main-1",
-        "listing-completed-pr-1"
+        "listing-completed-pr-1",
+        "ncaaf-socket-ci-completed-reviewed2424-1",
+        "ncaaf-socket-ci-completed-main-1",
+        "ncaaf-socket-ci-completed-pr-1"
       ],
-      "seconds": 671.29525,
+      "seconds": 843.66185,
+      "successor_advisory_basis_seconds": 733.619,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 118,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 733.619,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-1",
+          "test_git_blob": "3003f6c306f27bea4140631019f02db459d7c029"
+        },
+        {
+          "count": 118,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 712.353,
+          "source": "ncaaf-socket-ci-completed-main-1",
+          "test_git_blob": "3003f6c306f27bea4140631019f02db459d7c029"
+        },
+        {
+          "count": 118,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 631.972,
+          "source": "ncaaf-socket-ci-completed-pr-1",
+          "test_git_blob": "3003f6c306f27bea4140631019f02db459d7c029"
+        }
+      ],
+      "successor_variance_multiplier": 1.15,
       "variance_multiplier": 1.15
     },
     {
@@ -7551,9 +7638,38 @@
         "oct11-pr-2",
         "refresh1-cancelled-1",
         "listing-completed-main-2",
-        "listing-completed-pr-2"
+        "listing-completed-pr-2",
+        "ncaaf-socket-ci-completed-reviewed2424-5",
+        "ncaaf-socket-ci-completed-main-5",
+        "ncaaf-socket-ci-completed-pr-5"
       ],
-      "seconds": 351.4975,
+      "seconds": 501.2574,
+      "successor_advisory_basis_seconds": 435.876,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 61,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 435.876,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-5",
+          "test_git_blob": "4727872f579c211d456d2a07a17915ddc5bb21dd"
+        },
+        {
+          "count": 61,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 356.204,
+          "source": "ncaaf-socket-ci-completed-main-5",
+          "test_git_blob": "4727872f579c211d456d2a07a17915ddc5bb21dd"
+        },
+        {
+          "count": 61,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 376.765,
+          "source": "ncaaf-socket-ci-completed-pr-5",
+          "test_git_blob": "4727872f579c211d456d2a07a17915ddc5bb21dd"
+        }
+      ],
+      "successor_variance_multiplier": 1.15,
       "variance_multiplier": 1.15
     },
     {
@@ -7722,6 +7838,48 @@
       ],
       "seconds": 1.034719,
       "variance_multiplier": 1.15
+    },
+    {
+      "kind": "estimated",
+      "path": "tests/test_ncaaf_socket_lifecycle.py",
+      "profiled_tests": 34,
+      "references": [
+        "ncaaf-socket-ci-completed-pr-6"
+      ],
+      "seconds": 2.1321,
+      "successor_advisory_basis_seconds": 1.854,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 34,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 1.854,
+          "source": "ncaaf-socket-ci-completed-pr-6",
+          "test_git_blob": "71c5755ed726e7f84cb9bf1793c0e9c5d51094c5"
+        }
+      ],
+      "successor_variance_multiplier": 1.15
+    },
+    {
+      "kind": "estimated",
+      "path": "tests/test_ncaaf_socket_scope.py",
+      "profiled_tests": 14,
+      "references": [
+        "ncaaf-socket-ci-completed-pr-6"
+      ],
+      "seconds": 1.3271,
+      "successor_advisory_basis_seconds": 1.154,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 14,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 1.154,
+          "source": "ncaaf-socket-ci-completed-pr-6",
+          "test_git_blob": "2ca8d6d4d61aabff50c7f2ac601e1b315d283a8c"
+        }
+      ],
+      "successor_variance_multiplier": 1.15
     },
     {
       "advisory_basis_seconds": 0.053,
@@ -8145,6 +8303,43 @@
       ],
       "seconds": 2.63925,
       "variance_multiplier": 1.15
+    },
+    {
+      "kind": "estimated",
+      "path": "tests/test_nfl_document_acquisition.py",
+      "profiled_tests": 59,
+      "references": [
+        "ncaaf-socket-ci-completed-reviewed2424-5",
+        "ncaaf-socket-ci-completed-main-5",
+        "ncaaf-socket-ci-completed-pr-5"
+      ],
+      "seconds": 1.1638,
+      "successor_advisory_basis_seconds": 1.012,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 59,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.76,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-5",
+          "test_git_blob": "aa42dd4d9eafc14eaf1c71cb48765579dec06a73"
+        },
+        {
+          "count": 59,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 1.012,
+          "source": "ncaaf-socket-ci-completed-main-5",
+          "test_git_blob": "aa42dd4d9eafc14eaf1c71cb48765579dec06a73"
+        },
+        {
+          "count": 59,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 0.915,
+          "source": "ncaaf-socket-ci-completed-pr-5",
+          "test_git_blob": "aa42dd4d9eafc14eaf1c71cb48765579dec06a73"
+        }
+      ],
+      "successor_variance_multiplier": 1.15
     },
     {
       "advisory_basis_seconds": 2.032,
@@ -8661,9 +8856,30 @@
       "path": "tests/test_nfl_odds_listing_scope.py",
       "profiled_tests": 14,
       "references": [
-        "listing-completed-pr-1"
+        "listing-completed-pr-1",
+        "ncaaf-socket-ci-completed-reviewed2424-1",
+        "ncaaf-socket-ci-completed-main-1"
       ],
-      "seconds": 11.1251,
+      "seconds": 76.85795,
+      "successor_advisory_basis_seconds": 66.833,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 14,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 63.158,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-1",
+          "test_git_blob": "2f8461f2717a745a0c295d6eca72e82197ab4fc6"
+        },
+        {
+          "count": 14,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 66.833,
+          "source": "ncaaf-socket-ci-completed-main-1",
+          "test_git_blob": "2f8461f2717a745a0c295d6eca72e82197ab4fc6"
+        }
+      ],
+      "successor_variance_multiplier": 1.15,
       "variance_multiplier": 1.15
     },
     {
@@ -8773,6 +8989,43 @@
       ],
       "seconds": 9.16665,
       "variance_multiplier": 1.15
+    },
+    {
+      "kind": "estimated",
+      "path": "tests/test_nfl_pdf_evidence.py",
+      "profiled_tests": 43,
+      "references": [
+        "ncaaf-socket-ci-completed-reviewed2424-3",
+        "ncaaf-socket-ci-completed-main-3",
+        "ncaaf-socket-ci-completed-pr-3"
+      ],
+      "seconds": 43.7437,
+      "successor_advisory_basis_seconds": 38.038,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 22.13,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-3",
+          "test_git_blob": "c04b2f94fb0dacf983c5a2af374139841fe6135f"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 38.038,
+          "source": "ncaaf-socket-ci-completed-main-3",
+          "test_git_blob": "c04b2f94fb0dacf983c5a2af374139841fe6135f"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 37.633,
+          "source": "ncaaf-socket-ci-completed-pr-3",
+          "test_git_blob": "c04b2f94fb0dacf983c5a2af374139841fe6135f"
+        }
+      ],
+      "successor_variance_multiplier": 1.15
     },
     {
       "advisory_basis_seconds": 0.050083,
@@ -8899,6 +9152,43 @@
         "refresh1-completed-2"
       ],
       "seconds": 29.5688
+    },
+    {
+      "kind": "estimated",
+      "path": "tests/test_nfl_scenario_research.py",
+      "profiled_tests": 43,
+      "references": [
+        "ncaaf-socket-ci-completed-reviewed2424-6",
+        "ncaaf-socket-ci-completed-main-6",
+        "ncaaf-socket-ci-completed-pr-6"
+      ],
+      "seconds": 2.57945,
+      "successor_advisory_basis_seconds": 2.243,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.218,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-6",
+          "test_git_blob": "96113a30e9b87751116509231660534fb0e023ae"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.113,
+          "source": "ncaaf-socket-ci-completed-main-6",
+          "test_git_blob": "96113a30e9b87751116509231660534fb0e023ae"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.243,
+          "source": "ncaaf-socket-ci-completed-pr-6",
+          "test_git_blob": "96113a30e9b87751116509231660534fb0e023ae"
+        }
+      ],
+      "successor_variance_multiplier": 1.15
     },
     {
       "advisory_basis_seconds": 11.978,
@@ -9071,6 +9361,43 @@
       ],
       "seconds": 0.0046,
       "variance_multiplier": 1.15
+    },
+    {
+      "kind": "estimated",
+      "path": "tests/test_nfl_source_interpretation.py",
+      "profiled_tests": 53,
+      "references": [
+        "ncaaf-socket-ci-completed-reviewed2424-6",
+        "ncaaf-socket-ci-completed-main-6",
+        "ncaaf-socket-ci-completed-pr-6"
+      ],
+      "seconds": 42.22455,
+      "successor_advisory_basis_seconds": 36.717,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 53,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 35.606,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-6",
+          "test_git_blob": "a759f9a2218ffc66fdd131434716b3acd9ca15c2"
+        },
+        {
+          "count": 53,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 34.764,
+          "source": "ncaaf-socket-ci-completed-main-6",
+          "test_git_blob": "a759f9a2218ffc66fdd131434716b3acd9ca15c2"
+        },
+        {
+          "count": 53,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 36.717,
+          "source": "ncaaf-socket-ci-completed-pr-6",
+          "test_git_blob": "a759f9a2218ffc66fdd131434716b3acd9ca15c2"
+        }
+      ],
+      "successor_variance_multiplier": 1.15
     },
     {
       "advisory_basis_seconds": 25.436149,
@@ -9304,9 +9631,38 @@
         "oct11-main-1",
         "refresh1-completed-3",
         "listing-completed-main-1",
-        "listing-completed-pr-2"
+        "listing-completed-pr-2",
+        "ncaaf-socket-ci-completed-reviewed2424-3",
+        "ncaaf-socket-ci-completed-main-3",
+        "ncaaf-socket-ci-completed-pr-3"
       ],
-      "seconds": 204.9093,
+      "seconds": 269.077,
+      "successor_advisory_basis_seconds": 233.98,
+      "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
+      "successor_completed_measurements": [
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 144.945,
+          "source": "ncaaf-socket-ci-completed-reviewed2424-3",
+          "test_git_blob": "04aea2838c24ae369eaf1041dfafd1b9a4038b72"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 233.98,
+          "source": "ncaaf-socket-ci-completed-main-3",
+          "test_git_blob": "04aea2838c24ae369eaf1041dfafd1b9a4038b72"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 228.288,
+          "source": "ncaaf-socket-ci-completed-pr-3",
+          "test_git_blob": "04aea2838c24ae369eaf1041dfafd1b9a4038b72"
+        }
+      ],
+      "successor_variance_multiplier": 1.15,
       "variance_multiplier": 1.15
     },
     {
@@ -16147,6 +16503,30 @@
     }
   ],
   "football_document_ci_cost_revision": 1,
+  "ncaaf_socket_ci_successor": {
+    "changed_paths": [
+      "tests/test_canonical_download_scope.py",
+      "tests/test_football_research_scope.py",
+      "tests/test_ncaaf_compatibility_scope.py",
+      "tests/test_ncaaf_research_scope.py",
+      "tests/test_ncaaf_socket_lifecycle.py",
+      "tests/test_ncaaf_socket_scope.py",
+      "tests/test_nfl_document_acquisition.py",
+      "tests/test_nfl_odds_listing_scope.py",
+      "tests/test_nfl_pdf_evidence.py",
+      "tests/test_nfl_scenario_research.py",
+      "tests/test_nfl_source_interpretation.py",
+      "tests/test_nhl_puck_line_scope.py"
+    ],
+    "completed_measurements_only": true,
+    "frozen_revision": 3,
+    "interrupted_attempt_preserved": "38673099731 attempt 1: shard 2 cancelled while progressing; no final manifest/XML; no completed timing inferred.",
+    "materiality": "Whole-file scheduler-cost difference at least 60 seconds, plus complete measured provenance for both new socket files. No microscopic timing adjustments.",
+    "predecessor_profile_sha256": "fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b",
+    "setup_reporting_allowance_is_estimate": true,
+    "setup_reporting_allowance_seconds": 100,
+    "version": 1
+  },
   "nfl_listing_cost_basis": "Measured listing follow-up: 55 inherited scope files plus two new listing files; completed main/#2419 JUnit only, maximum compatible completed testcase cost plus unchanged 15% advisory margin. All prior sources and interrupted observations remain retained. Other file entries, scheduler, fallback, tests and workflows unchanged.",
   "nfl_listing_cost_revision": 1,
   "nfl_pdf_ci_cost_basis": "Existing scope files only: completed exact-count Ubuntu JUnit sums with >=30-second demonstrated advisory underestimate, plus unchanged 15% advisory variance. No cancelled span is used as a completed measurement; excludes installation, collection, reporting and artifact upload. Prior frozen revision and successor metadata preserved.",
@@ -17006,6 +17386,201 @@
       "run": 37766230269,
       "total_file_runtime": "UNKNOWN",
       "url": "https://github.com/elrey72011/ParlayPicker/actions/runs/37766230269/job/113286178523"
+    },
+    "ncaaf-socket-ci-completed-main-1": {
+      "artifact_digest": "sha256:667060246466ad3735bb299e6db7c3d5352d026d7c9f8ddeac9761470bd576c1",
+      "artifact_id": 11939448012,
+      "assignment_manifest_sha256": "8de413ca66d49e7cd291f069ce22dadca0b21e07836cd06bbf6fda91cee75648",
+      "attempt": 1,
+      "completed_cases": 1561,
+      "head": "8f92728d7538afc1a9a6a842fbee5f172e241ec7",
+      "junit_sha256": "e8e37ec9136ede6efc762b48c94304b7593a2fb06e2f86d070b9f234ab66ee9a",
+      "kind": "completed_junit",
+      "run": 38660399457,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-main-3": {
+      "artifact_digest": "sha256:4ed70c11a7e6d097b3b6684e29f1c605a7a513f47f426bfaaf15ae44f76e32a6",
+      "artifact_id": 11939452592,
+      "assignment_manifest_sha256": "a536e0338e2304a75e91c4397e83e229daa63cc86c9c9efffa8129c7073639e5",
+      "attempt": 1,
+      "completed_cases": 1058,
+      "head": "8f92728d7538afc1a9a6a842fbee5f172e241ec7",
+      "junit_sha256": "6d007b2a2cbed4b736733e500f79698ca5c3177fb9e9bece615f43c9980834b9",
+      "kind": "completed_junit",
+      "run": 38660399457,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-main-4": {
+      "artifact_digest": "sha256:183b07266298ca361f59d5f3f7ec5776f61c85c00eb2628f4f3ca132732a4e6f",
+      "artifact_id": 11939299244,
+      "assignment_manifest_sha256": "772e3f0cdd06bb734be4a0b7fbdde5c0c9986287daba778418c90c12bc565d7a",
+      "attempt": 1,
+      "completed_cases": 1353,
+      "head": "8f92728d7538afc1a9a6a842fbee5f172e241ec7",
+      "junit_sha256": "8b60bc81f2e20f8e7b766200d4c3e684b1c158739535ba49929e147a3da37311",
+      "kind": "completed_junit",
+      "run": 38660399457,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-main-5": {
+      "artifact_digest": "sha256:b030cc7dad713e0d42e7deb96b4313f21d745e565623c8b26d65fcd7a5f85b02",
+      "artifact_id": 11939367402,
+      "assignment_manifest_sha256": "77163bcc00a48461f971839d9be929d87c370a8dd9eb3f4a90ce48794e855ce2",
+      "attempt": 1,
+      "completed_cases": 1364,
+      "head": "8f92728d7538afc1a9a6a842fbee5f172e241ec7",
+      "junit_sha256": "3d4ad0840146b5c8868c6e154c44eaa3b33d531d15e7faba2cd280ade33f27a2",
+      "kind": "completed_junit",
+      "run": 38660399457,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-main-6": {
+      "artifact_digest": "sha256:469b6e6267ca8231cfbcb0163e119fa97bcd1629928aca961e76fc5a2b64d42b",
+      "artifact_id": 11939322858,
+      "assignment_manifest_sha256": "58cdfd4a86ea84e60c776abffb034a192b75f564c029a0dfb7f2334af1b3cdcb",
+      "attempt": 1,
+      "completed_cases": 1238,
+      "head": "8f92728d7538afc1a9a6a842fbee5f172e241ec7",
+      "junit_sha256": "d7dc08699306ad43264444dd9b640a8cb26fdadb20a7f5d65a9a9960d8d2899a",
+      "kind": "completed_junit",
+      "run": 38660399457,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-pr-1": {
+      "artifact_digest": "sha256:3bb31f6edb5794c2a393f2d995c2bfa6096ee95bd9b2611a8a29cdeeb4a67153",
+      "artifact_id": 11946095317,
+      "assignment_manifest_sha256": "da1d6e19d5ceee4ef4e9f7347722901e450ec2bacd7f2e4edf7f4807c7d20755",
+      "attempt": 1,
+      "completed_cases": 1476,
+      "head": "2b3e65213d9f0870e45ac26cc078403de8e52211",
+      "junit_sha256": "496cb94e00f881769fa54572154c56ae8089753491a822fd3d08bab092e461c2",
+      "kind": "completed_junit",
+      "run": 38673099731,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-pr-3": {
+      "artifact_digest": "sha256:5fd0084b7a7d5dad3b9508e91ec65d4946293df69d9d50e4e98501abd7e0a485",
+      "artifact_id": 11945666999,
+      "assignment_manifest_sha256": "d2195d1c765ba7b45104c45abf94a9912e1574968d4b54c03f85b78d9d88a8e0",
+      "attempt": 1,
+      "completed_cases": 1368,
+      "head": "2b3e65213d9f0870e45ac26cc078403de8e52211",
+      "junit_sha256": "3ca8431d7d0660c324d1fa702598de910a140fcaaba1db246e56ad690ae80cb1",
+      "kind": "completed_junit",
+      "run": 38673099731,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-pr-4": {
+      "artifact_digest": "sha256:d5ea2129c0d182ecca78f680c5212d02a3bf1e6f82504f9aebe5453d7a1042f9",
+      "artifact_id": 11946045254,
+      "assignment_manifest_sha256": "b0319322803365e7926f1156b867b4538301953be9fa4b6f14530e96ab65c68e",
+      "attempt": 1,
+      "completed_cases": 1288,
+      "head": "2b3e65213d9f0870e45ac26cc078403de8e52211",
+      "junit_sha256": "9c8d5d847dd1508e5a84583f6a1e3b89706807a716d465ab8750bf9fc2533d39",
+      "kind": "completed_junit",
+      "run": 38673099731,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-pr-5": {
+      "artifact_digest": "sha256:ad1f53b330c3800f217152f30a7be5bbe587aeb35847953f4f72f223f25d0bb7",
+      "artifact_id": 11946380320,
+      "assignment_manifest_sha256": "dd0ebd068293c418ff1bdf76dfd28b5b18855c40c147ce85a3355f569d6b0e8b",
+      "attempt": 1,
+      "completed_cases": 1270,
+      "head": "2b3e65213d9f0870e45ac26cc078403de8e52211",
+      "junit_sha256": "2cd9b8afbe1fdca2e2ed58666c8aa97f31cfbda5493abef7f99097a17fd5f698",
+      "kind": "completed_junit",
+      "run": 38673099731,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-pr-6": {
+      "artifact_digest": "sha256:857d453622fbc1b5bc9994238a62834e123419d7d616bfffc2f1d025e3b24a05",
+      "artifact_id": 11945294444,
+      "assignment_manifest_sha256": "fc676b7e6c787dd693b95205746db4e3af536a8e0745830d47ac50dadf13cc97",
+      "attempt": 1,
+      "completed_cases": 1284,
+      "head": "2b3e65213d9f0870e45ac26cc078403de8e52211",
+      "junit_sha256": "47981e77bf0ec5d4d412f008b0805479783cc5c39842008ae1fe77ad57eeda52",
+      "kind": "completed_junit",
+      "run": 38673099731,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-reviewed2424-1": {
+      "artifact_digest": "sha256:a7b0556169a6a05cb5a08ffb49a08694e94f25a5326877ccfe19f4a7f035c0e3",
+      "artifact_id": 11938206729,
+      "assignment_manifest_sha256": "8de413ca66d49e7cd291f069ce22dadca0b21e07836cd06bbf6fda91cee75648",
+      "attempt": 1,
+      "completed_cases": 1561,
+      "head": "6b28849c19edce0c38e6f385a9b0037b08ad56a5",
+      "junit_sha256": "7fb2db3d01386c756ccf8a036035f1ae86b5256aed72464b82e002a48e39ea06",
+      "kind": "completed_junit",
+      "run": 38656250606,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-reviewed2424-3": {
+      "artifact_digest": "sha256:1330ac9005a973ba67f941068da86ab0af25bbab6f65c88a7035d54b8434643c",
+      "artifact_id": 11937462517,
+      "assignment_manifest_sha256": "a536e0338e2304a75e91c4397e83e229daa63cc86c9c9efffa8129c7073639e5",
+      "attempt": 1,
+      "completed_cases": 1058,
+      "head": "6b28849c19edce0c38e6f385a9b0037b08ad56a5",
+      "junit_sha256": "ce2ac22df5b459b7fb884cde8174ad216d47ec0aff4de6fe1bbd4a34935a08b7",
+      "kind": "completed_junit",
+      "run": 38656250606,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-reviewed2424-4": {
+      "artifact_digest": "sha256:995c7097d4b7a28b1eb3fa79a42a58d69b1764e830ef1c42e5b41b2d8f78359f",
+      "artifact_id": 11937223556,
+      "assignment_manifest_sha256": "772e3f0cdd06bb734be4a0b7fbdde5c0c9986287daba778418c90c12bc565d7a",
+      "attempt": 1,
+      "completed_cases": 1353,
+      "head": "6b28849c19edce0c38e6f385a9b0037b08ad56a5",
+      "junit_sha256": "769b8bbf1cdd653a492511e802afbb8b96989f5d13c4a30c108df397e462ef1e",
+      "kind": "completed_junit",
+      "run": 38656250606,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-reviewed2424-5": {
+      "artifact_digest": "sha256:fc966adcf8d6ac32c733ca0487f57114a698ce1ba511e754f013122ad279dceb",
+      "artifact_id": 11938315246,
+      "assignment_manifest_sha256": "77163bcc00a48461f971839d9be929d87c370a8dd9eb3f4a90ce48794e855ce2",
+      "attempt": 1,
+      "completed_cases": 1364,
+      "head": "6b28849c19edce0c38e6f385a9b0037b08ad56a5",
+      "junit_sha256": "25083fd1ac4c7c8e09a8576f38eb0c10223f0c985d121771bcba3f6042d44c1d",
+      "kind": "completed_junit",
+      "run": 38656250606,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-socket-ci-completed-reviewed2424-6": {
+      "artifact_digest": "sha256:dca336bcfe4e0d447bfc39a57996e54bff3a1bd5c715390294da2de5d93ccf38",
+      "artifact_id": 11937661831,
+      "assignment_manifest_sha256": "58cdfd4a86ea84e60c776abffb034a192b75f564c029a0dfb7f2334af1b3cdcb",
+      "attempt": 1,
+      "completed_cases": 1238,
+      "head": "6b28849c19edce0c38e6f385a9b0037b08ad56a5",
+      "junit_sha256": "160ecf0f181f237be81a33aa7c1e2b8be46dc832bf04986b5a99881150d1a580",
+      "kind": "completed_junit",
+      "run": 38656250606,
+      "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
+      "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
     },
     "nfl-odds-completed-1": {
       "artifact_id": 11753905824,
