@@ -1,0 +1,3361 @@
+{
+  "cache_added": false,
+  "capacity": {
+    "records": [
+      {
+        "after_bytes": 6483492,
+        "after_sha256": "aef9c85ad1ebbe64c766b87fdf4e5a564102cd40f5b9f566a7b36aaeecc28ce3",
+        "before_bytes": 6610124,
+        "before_sha256": "76774f2877bbd49c0005589b0e4ff0640711812bf0d77d3b063bca48ed716bc0",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1926840,
+            "start": 1920543
+          },
+          {
+            "end": 1929492,
+            "start": 1929019
+          },
+          {
+            "end": 1938318,
+            "start": 1933121
+          },
+          {
+            "end": 1943109,
+            "start": 1940499
+          },
+          {
+            "end": 1955346,
+            "start": 1946740
+          },
+          {
+            "end": 1962200,
+            "start": 1957523
+          },
+          {
+            "end": 1976891,
+            "start": 1965827
+          },
+          {
+            "end": 1985793,
+            "start": 1979072
+          },
+          {
+            "end": 2002893,
+            "start": 1989424
+          },
+          {
+            "end": 2013835,
+            "start": 2005072
+          },
+          {
+            "end": 2031230,
+            "start": 2017464
+          },
+          {
+            "end": 2044230,
+            "start": 2033413
+          },
+          {
+            "end": 2064172,
+            "start": 2047863
+          },
+          {
+            "end": 2079129,
+            "start": 2066351
+          },
+          {
+            "end": 2101228,
+            "start": 2082758
+          },
+          {
+            "end": 2118100,
+            "start": 2103405
+          },
+          {
+            "end": 2139356,
+            "start": 2121727
+          },
+          {
+            "end": 2158210,
+            "start": 2141539
+          },
+          {
+            "end": 2182837,
+            "start": 2161843
+          },
+          {
+            "end": 2203628,
+            "start": 2185022
+          },
+          {
+            "end": 2229467,
+            "start": 2207263
+          },
+          {
+            "end": 2252108,
+            "start": 2231650
+          },
+          {
+            "end": 2277926,
+            "start": 2255741
+          },
+          {
+            "end": 2302309,
+            "start": 2280105
+          },
+          {
+            "end": 2332533,
+            "start": 2305938
+          },
+          {
+            "end": 2358702,
+            "start": 2334714
+          },
+          {
+            "end": 2387207,
+            "start": 2362333
+          },
+          {
+            "end": 2415068,
+            "start": 2389386
+          },
+          {
+            "end": 2447729,
+            "start": 2418697
+          },
+          {
+            "end": 2477192,
+            "start": 2449904
+          },
+          {
+            "end": 2511292,
+            "start": 2480817
+          },
+          {
+            "end": 2542365,
+            "start": 2513467
+          },
+          {
+            "end": 2576553,
+            "start": 2545980
+          },
+          {
+            "end": 2609315,
+            "start": 2578734
+          },
+          {
+            "end": 2651135,
+            "start": 2612930
+          },
+          {
+            "end": 2685223,
+            "start": 2653306
+          },
+          {
+            "end": 2723517,
+            "start": 2688838
+          },
+          {
+            "end": 2759401,
+            "start": 2725700
+          },
+          {
+            "end": 2808952,
+            "start": 2763016
+          },
+          {
+            "end": 6491620,
+            "start": 2811133
+          },
+          {
+            "end": 6530472,
+            "start": 6493975
+          },
+          {
+            "end": 6597041,
+            "start": 6534085
+          },
+          {
+            "end": 6598287,
+            "start": 6598028
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20444f43554d454e545f5343414e5f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6610124,
+            "start": 6598492
+          }
+        ],
+        "preserved_input_check": "_require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='aef9c85ad1ebbe64c766b87fdf4e5a564102cd40f5b9f566a7b36aaeecc28ce3','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6356800,
+        "after_sha256": "779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419",
+        "before_bytes": 6483492,
+        "before_sha256": "aef9c85ad1ebbe64c766b87fdf4e5a564102cd40f5b9f566a7b36aaeecc28ce3",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1925484,
+            "start": 1920798
+          },
+          {
+            "end": 1928094,
+            "start": 1927605
+          },
+          {
+            "end": 1936700,
+            "start": 1932085
+          },
+          {
+            "end": 1941377,
+            "start": 1938817
+          },
+          {
+            "end": 1952441,
+            "start": 1945364
+          },
+          {
+            "end": 1959162,
+            "start": 1954562
+          },
+          {
+            "end": 1972631,
+            "start": 1963153
+          },
+          {
+            "end": 1981394,
+            "start": 1974750
+          },
+          {
+            "end": 1995160,
+            "start": 1985383
+          },
+          {
+            "end": 2005977,
+            "start": 1997283
+          },
+          {
+            "end": 2022286,
+            "start": 2009970
+          },
+          {
+            "end": 2035064,
+            "start": 2024405
+          },
+          {
+            "end": 2053534,
+            "start": 2039053
+          },
+          {
+            "end": 2068229,
+            "start": 2055651
+          },
+          {
+            "end": 2085858,
+            "start": 2072216
+          },
+          {
+            "end": 2102529,
+            "start": 2087981
+          },
+          {
+            "end": 2123523,
+            "start": 2106522
+          },
+          {
+            "end": 2142129,
+            "start": 2125648
+          },
+          {
+            "end": 2164333,
+            "start": 2146124
+          },
+          {
+            "end": 2184791,
+            "start": 2166456
+          },
+          {
+            "end": 2206976,
+            "start": 2188784
+          },
+          {
+            "end": 2229180,
+            "start": 2209095
+          },
+          {
+            "end": 2255775,
+            "start": 2233169
+          },
+          {
+            "end": 2279763,
+            "start": 2257896
+          },
+          {
+            "end": 2304637,
+            "start": 2283754
+          },
+          {
+            "end": 2330319,
+            "start": 2306756
+          },
+          {
+            "end": 2359351,
+            "start": 2334308
+          },
+          {
+            "end": 2386639,
+            "start": 2361466
+          },
+          {
+            "end": 2417114,
+            "start": 2390624
+          },
+          {
+            "end": 2446012,
+            "start": 2419229
+          },
+          {
+            "end": 2476585,
+            "start": 2449987
+          },
+          {
+            "end": 2507166,
+            "start": 2478706
+          },
+          {
+            "end": 2545371,
+            "start": 2511141
+          },
+          {
+            "end": 2577288,
+            "start": 2547482
+          },
+          {
+            "end": 2611967,
+            "start": 2581263
+          },
+          {
+            "end": 2645668,
+            "start": 2614090
+          },
+          {
+            "end": 2691604,
+            "start": 2649643
+          },
+          {
+            "end": 6372091,
+            "start": 2693725
+          },
+          {
+            "end": 6408588,
+            "start": 6374386
+          },
+          {
+            "end": 6470578,
+            "start": 6412561
+          },
+          {
+            "end": 6471803,
+            "start": 6471544
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c204e434141465f534f434b45545f43495f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6483492,
+            "start": 6472004
+          }
+        ],
+        "preserved_input_check": "_require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6266543,
+        "after_sha256": "34ece55058ba188d2170d3e339527a4fe4c78ce161fa334b4780cf8e03461ef1",
+        "before_bytes": 6356800,
+        "before_sha256": "779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1923307,
+            "start": 1919207
+          },
+          {
+            "end": 1925867,
+            "start": 1925402
+          },
+          {
+            "end": 1932944,
+            "start": 1928281
+          },
+          {
+            "end": 1937544,
+            "start": 1935043
+          },
+          {
+            "end": 1947022,
+            "start": 1939962
+          },
+          {
+            "end": 1953666,
+            "start": 1949119
+          },
+          {
+            "end": 1963443,
+            "start": 1956082
+          },
+          {
+            "end": 1972137,
+            "start": 1965544
+          },
+          {
+            "end": 1984453,
+            "start": 1974557
+          },
+          {
+            "end": 1995112,
+            "start": 1986550
+          },
+          {
+            "end": 2009593,
+            "start": 1997528
+          },
+          {
+            "end": 2022171,
+            "start": 2011688
+          },
+          {
+            "end": 2035813,
+            "start": 2024585
+          },
+          {
+            "end": 2050361,
+            "start": 2037914
+          },
+          {
+            "end": 2067362,
+            "start": 2052781
+          },
+          {
+            "end": 2083843,
+            "start": 2069465
+          },
+          {
+            "end": 2102052,
+            "start": 2086265
+          },
+          {
+            "end": 2120387,
+            "start": 2104153
+          },
+          {
+            "end": 2138579,
+            "start": 2122807
+          },
+          {
+            "end": 2158664,
+            "start": 2140676
+          },
+          {
+            "end": 2181270,
+            "start": 2161080
+          },
+          {
+            "end": 2203137,
+            "start": 2183369
+          },
+          {
+            "end": 2224020,
+            "start": 2205555
+          },
+          {
+            "end": 2247583,
+            "start": 2226117
+          },
+          {
+            "end": 2272626,
+            "start": 2249999
+          },
+          {
+            "end": 2297799,
+            "start": 2274719
+          },
+          {
+            "end": 2324289,
+            "start": 2300211
+          },
+          {
+            "end": 2351072,
+            "start": 2326382
+          },
+          {
+            "end": 2377670,
+            "start": 2353474
+          },
+          {
+            "end": 2406130,
+            "start": 2379769
+          },
+          {
+            "end": 2440360,
+            "start": 2408532
+          },
+          {
+            "end": 2470166,
+            "start": 2442449
+          },
+          {
+            "end": 2500870,
+            "start": 2472568
+          },
+          {
+            "end": 2532448,
+            "start": 2502971
+          },
+          {
+            "end": 2574409,
+            "start": 2534850
+          },
+          {
+            "end": 6252775,
+            "start": 2576508
+          },
+          {
+            "end": 6286977,
+            "start": 6255048
+          },
+          {
+            "end": 6344032,
+            "start": 6289377
+          },
+          {
+            "end": 6345253,
+            "start": 6344994
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c204e434141465f534f434b45545f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6356800,
+            "start": 6345455
+          }
+        ],
+        "preserved_input_check": "_require(source.count(identity)==21 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='34ece55058ba188d2170d3e339527a4fe4c78ce161fa334b4780cf8e03461ef1','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6191126,
+        "after_sha256": "0da8278a3c4239fc3f4a8b91c7608813e8602cd0712c4bdc389ea6559009da1b",
+        "before_bytes": 6266543,
+        "before_sha256": "34ece55058ba188d2170d3e339527a4fe4c78ce161fa334b4780cf8e03461ef1",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1922745,
+            "start": 1918591
+          },
+          {
+            "end": 1925246,
+            "start": 1924795
+          },
+          {
+            "end": 1932306,
+            "start": 1927146
+          },
+          {
+            "end": 1936853,
+            "start": 1934354
+          },
+          {
+            "end": 1944214,
+            "start": 1938751
+          },
+          {
+            "end": 1950807,
+            "start": 1946266
+          },
+          {
+            "end": 1960703,
+            "start": 1952709
+          },
+          {
+            "end": 1969265,
+            "start": 1962751
+          },
+          {
+            "end": 1981330,
+            "start": 1971163
+          },
+          {
+            "end": 1991813,
+            "start": 1983376
+          },
+          {
+            "end": 2003041,
+            "start": 1993709
+          },
+          {
+            "end": 2015488,
+            "start": 2005093
+          },
+          {
+            "end": 2030069,
+            "start": 2017390
+          },
+          {
+            "end": 2044447,
+            "start": 2032123
+          },
+          {
+            "end": 2060234,
+            "start": 2046351
+          },
+          {
+            "end": 2076468,
+            "start": 2062286
+          },
+          {
+            "end": 2092240,
+            "start": 2078370
+          },
+          {
+            "end": 2110228,
+            "start": 2094288
+          },
+          {
+            "end": 2130418,
+            "start": 2112126
+          },
+          {
+            "end": 2150186,
+            "start": 2132468
+          },
+          {
+            "end": 2168651,
+            "start": 2152086
+          },
+          {
+            "end": 2190117,
+            "start": 2170699
+          },
+          {
+            "end": 2212744,
+            "start": 2192015
+          },
+          {
+            "end": 2235824,
+            "start": 2214788
+          },
+          {
+            "end": 2259902,
+            "start": 2237718
+          },
+          {
+            "end": 2284592,
+            "start": 2261946
+          },
+          {
+            "end": 2308788,
+            "start": 2286476
+          },
+          {
+            "end": 2335149,
+            "start": 2310838
+          },
+          {
+            "end": 2366977,
+            "start": 2337033
+          },
+          {
+            "end": 2394694,
+            "start": 2369017
+          },
+          {
+            "end": 2422996,
+            "start": 2396578
+          },
+          {
+            "end": 2452473,
+            "start": 2425048
+          },
+          {
+            "end": 2492032,
+            "start": 2454357
+          },
+          {
+            "end": 6168299,
+            "start": 2494082
+          },
+          {
+            "end": 6200228,
+            "start": 6170523
+          },
+          {
+            "end": 6253942,
+            "start": 6202110
+          },
+          {
+            "end": 6255142,
+            "start": 6254883
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f43434c4f53455f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6266543,
+            "start": 6255343
+          }
+        ],
+        "preserved_input_check": "_require(source.count(identity)==20 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='0da8278a3c4239fc3f4a8b91c7608813e8602cd0712c4bdc389ea6559009da1b','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6118904,
+        "after_sha256": "5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321",
+        "before_bytes": 6191126,
+        "before_sha256": "0da8278a3c4239fc3f4a8b91c7608813e8602cd0712c4bdc389ea6559009da1b",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1923282,
+            "start": 1918632
+          },
+          {
+            "end": 1925781,
+            "start": 1925338
+          },
+          {
+            "end": 1931244,
+            "start": 1927712
+          },
+          {
+            "end": 1935785,
+            "start": 1933304
+          },
+          {
+            "end": 1943779,
+            "start": 1937720
+          },
+          {
+            "end": 1950293,
+            "start": 1945835
+          },
+          {
+            "end": 1960460,
+            "start": 1952224
+          },
+          {
+            "end": 1968897,
+            "start": 1962514
+          },
+          {
+            "end": 1978229,
+            "start": 1970826
+          },
+          {
+            "end": 1988624,
+            "start": 1980289
+          },
+          {
+            "end": 2001303,
+            "start": 1990559
+          },
+          {
+            "end": 2013627,
+            "start": 2003365
+          },
+          {
+            "end": 2027510,
+            "start": 2015564
+          },
+          {
+            "end": 2041692,
+            "start": 2029570
+          },
+          {
+            "end": 2055562,
+            "start": 2043627
+          },
+          {
+            "end": 2071502,
+            "start": 2057618
+          },
+          {
+            "end": 2089794,
+            "start": 2073433
+          },
+          {
+            "end": 2107512,
+            "start": 2091852
+          },
+          {
+            "end": 2124077,
+            "start": 2109445
+          },
+          {
+            "end": 2143495,
+            "start": 2126133
+          },
+          {
+            "end": 2164224,
+            "start": 2145426
+          },
+          {
+            "end": 2185260,
+            "start": 2166276
+          },
+          {
+            "end": 2207444,
+            "start": 2187187
+          },
+          {
+            "end": 2230090,
+            "start": 2209496
+          },
+          {
+            "end": 2252402,
+            "start": 2232007
+          },
+          {
+            "end": 2276713,
+            "start": 2254460
+          },
+          {
+            "end": 2306657,
+            "start": 2278630
+          },
+          {
+            "end": 2332334,
+            "start": 2308705
+          },
+          {
+            "end": 2358752,
+            "start": 2334251
+          },
+          {
+            "end": 2386177,
+            "start": 2360812
+          },
+          {
+            "end": 2423852,
+            "start": 2388094
+          },
+          {
+            "end": 6098069,
+            "start": 2425910
+          },
+          {
+            "end": 6127774,
+            "start": 6100301
+          },
+          {
+            "end": 6178616,
+            "start": 6129689
+          },
+          {
+            "end": 6179865,
+            "start": 6179606
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f43504552465f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6191126,
+            "start": 6180066
+          }
+        ],
+        "preserved_input_check": "_require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6042118,
+        "after_sha256": "7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832",
+        "before_bytes": 6118904,
+        "before_sha256": "5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1922142,
+            "start": 1919118
+          },
+          {
+            "end": 1924623,
+            "start": 1924164
+          },
+          {
+            "end": 1930682,
+            "start": 1927095
+          },
+          {
+            "end": 1935140,
+            "start": 1932700
+          },
+          {
+            "end": 1943376,
+            "start": 1937608
+          },
+          {
+            "end": 1949759,
+            "start": 1945392
+          },
+          {
+            "end": 1957162,
+            "start": 1952225
+          },
+          {
+            "end": 1965497,
+            "start": 1959184
+          },
+          {
+            "end": 1976241,
+            "start": 1967969
+          },
+          {
+            "end": 1986503,
+            "start": 1978265
+          },
+          {
+            "end": 1998449,
+            "start": 1988977
+          },
+          {
+            "end": 2010571,
+            "start": 2000471
+          },
+          {
+            "end": 2022506,
+            "start": 2013043
+          },
+          {
+            "end": 2036390,
+            "start": 2024524
+          },
+          {
+            "end": 2052751,
+            "start": 2038858
+          },
+          {
+            "end": 2068411,
+            "start": 2054771
+          },
+          {
+            "end": 2083043,
+            "start": 2070881
+          },
+          {
+            "end": 2100405,
+            "start": 2085061
+          },
+          {
+            "end": 2119203,
+            "start": 2102873
+          },
+          {
+            "end": 2138187,
+            "start": 2121217
+          },
+          {
+            "end": 2158444,
+            "start": 2140651
+          },
+          {
+            "end": 2179038,
+            "start": 2160458
+          },
+          {
+            "end": 2199433,
+            "start": 2181492
+          },
+          {
+            "end": 2221686,
+            "start": 2201453
+          },
+          {
+            "end": 2249713,
+            "start": 2224140
+          },
+          {
+            "end": 2273342,
+            "start": 2251723
+          },
+          {
+            "end": 2297843,
+            "start": 2275796
+          },
+          {
+            "end": 2323208,
+            "start": 2299865
+          },
+          {
+            "end": 2358966,
+            "start": 2325662
+          },
+          {
+            "end": 6031125,
+            "start": 2361604
+          },
+          {
+            "end": 6058598,
+            "start": 6033319
+          },
+          {
+            "end": 6106533,
+            "start": 6061050
+          },
+          {
+            "end": 6107784,
+            "start": 6107525
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f4352454d4f54455f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6118904,
+            "start": 6107985
+          }
+        ],
+        "preserved_input_check": "_require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      }
+    ],
+    "schema": "exact-byte-projection-derivation-v1",
+    "semantics": "No cache. Each exact source identity/count/hash check and output hash check remains live. Only repeated splice/index/replace work is one join. Legacy matcher and mutable validation still run.",
+    "source_sha256": "76774f2877bbd49c0005589b0e4ff0640711812bf0d77d3b063bca48ed716bc0",
+    "target_sha256": "7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832"
+  },
+  "dfs": {
+    "records": [
+      {
+        "after_bytes": 6483492,
+        "after_sha256": "aef9c85ad1ebbe64c766b87fdf4e5a564102cd40f5b9f566a7b36aaeecc28ce3",
+        "before_bytes": 6610124,
+        "before_sha256": "76774f2877bbd49c0005589b0e4ff0640711812bf0d77d3b063bca48ed716bc0",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1926840,
+            "start": 1920543
+          },
+          {
+            "end": 1929492,
+            "start": 1929019
+          },
+          {
+            "end": 1938318,
+            "start": 1933121
+          },
+          {
+            "end": 1943109,
+            "start": 1940499
+          },
+          {
+            "end": 1955346,
+            "start": 1946740
+          },
+          {
+            "end": 1962200,
+            "start": 1957523
+          },
+          {
+            "end": 1976891,
+            "start": 1965827
+          },
+          {
+            "end": 1985793,
+            "start": 1979072
+          },
+          {
+            "end": 2002893,
+            "start": 1989424
+          },
+          {
+            "end": 2013835,
+            "start": 2005072
+          },
+          {
+            "end": 2031230,
+            "start": 2017464
+          },
+          {
+            "end": 2044230,
+            "start": 2033413
+          },
+          {
+            "end": 2064172,
+            "start": 2047863
+          },
+          {
+            "end": 2079129,
+            "start": 2066351
+          },
+          {
+            "end": 2101228,
+            "start": 2082758
+          },
+          {
+            "end": 2118100,
+            "start": 2103405
+          },
+          {
+            "end": 2139356,
+            "start": 2121727
+          },
+          {
+            "end": 2158210,
+            "start": 2141539
+          },
+          {
+            "end": 2182837,
+            "start": 2161843
+          },
+          {
+            "end": 2203628,
+            "start": 2185022
+          },
+          {
+            "end": 2229467,
+            "start": 2207263
+          },
+          {
+            "end": 2252108,
+            "start": 2231650
+          },
+          {
+            "end": 2277926,
+            "start": 2255741
+          },
+          {
+            "end": 2302309,
+            "start": 2280105
+          },
+          {
+            "end": 2332533,
+            "start": 2305938
+          },
+          {
+            "end": 2358702,
+            "start": 2334714
+          },
+          {
+            "end": 2387207,
+            "start": 2362333
+          },
+          {
+            "end": 2415068,
+            "start": 2389386
+          },
+          {
+            "end": 2447729,
+            "start": 2418697
+          },
+          {
+            "end": 2477192,
+            "start": 2449904
+          },
+          {
+            "end": 2511292,
+            "start": 2480817
+          },
+          {
+            "end": 2542365,
+            "start": 2513467
+          },
+          {
+            "end": 2576553,
+            "start": 2545980
+          },
+          {
+            "end": 2609315,
+            "start": 2578734
+          },
+          {
+            "end": 2651135,
+            "start": 2612930
+          },
+          {
+            "end": 2685223,
+            "start": 2653306
+          },
+          {
+            "end": 2723517,
+            "start": 2688838
+          },
+          {
+            "end": 2759401,
+            "start": 2725700
+          },
+          {
+            "end": 2808952,
+            "start": 2763016
+          },
+          {
+            "end": 6491620,
+            "start": 2811133
+          },
+          {
+            "end": 6530472,
+            "start": 6493975
+          },
+          {
+            "end": 6597041,
+            "start": 6534085
+          },
+          {
+            "end": 6598287,
+            "start": 6598028
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20444f43554d454e545f5343414e5f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6610124,
+            "start": 6598492
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=23 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='aef9c85ad1ebbe64c766b87fdf4e5a564102cd40f5b9f566a7b36aaeecc28ce3','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6356800,
+        "after_sha256": "779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419",
+        "before_bytes": 6483492,
+        "before_sha256": "aef9c85ad1ebbe64c766b87fdf4e5a564102cd40f5b9f566a7b36aaeecc28ce3",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1925484,
+            "start": 1920798
+          },
+          {
+            "end": 1928094,
+            "start": 1927605
+          },
+          {
+            "end": 1936700,
+            "start": 1932085
+          },
+          {
+            "end": 1941377,
+            "start": 1938817
+          },
+          {
+            "end": 1952441,
+            "start": 1945364
+          },
+          {
+            "end": 1959162,
+            "start": 1954562
+          },
+          {
+            "end": 1972631,
+            "start": 1963153
+          },
+          {
+            "end": 1981394,
+            "start": 1974750
+          },
+          {
+            "end": 1995160,
+            "start": 1985383
+          },
+          {
+            "end": 2005977,
+            "start": 1997283
+          },
+          {
+            "end": 2022286,
+            "start": 2009970
+          },
+          {
+            "end": 2035064,
+            "start": 2024405
+          },
+          {
+            "end": 2053534,
+            "start": 2039053
+          },
+          {
+            "end": 2068229,
+            "start": 2055651
+          },
+          {
+            "end": 2085858,
+            "start": 2072216
+          },
+          {
+            "end": 2102529,
+            "start": 2087981
+          },
+          {
+            "end": 2123523,
+            "start": 2106522
+          },
+          {
+            "end": 2142129,
+            "start": 2125648
+          },
+          {
+            "end": 2164333,
+            "start": 2146124
+          },
+          {
+            "end": 2184791,
+            "start": 2166456
+          },
+          {
+            "end": 2206976,
+            "start": 2188784
+          },
+          {
+            "end": 2229180,
+            "start": 2209095
+          },
+          {
+            "end": 2255775,
+            "start": 2233169
+          },
+          {
+            "end": 2279763,
+            "start": 2257896
+          },
+          {
+            "end": 2304637,
+            "start": 2283754
+          },
+          {
+            "end": 2330319,
+            "start": 2306756
+          },
+          {
+            "end": 2359351,
+            "start": 2334308
+          },
+          {
+            "end": 2386639,
+            "start": 2361466
+          },
+          {
+            "end": 2417114,
+            "start": 2390624
+          },
+          {
+            "end": 2446012,
+            "start": 2419229
+          },
+          {
+            "end": 2476585,
+            "start": 2449987
+          },
+          {
+            "end": 2507166,
+            "start": 2478706
+          },
+          {
+            "end": 2545371,
+            "start": 2511141
+          },
+          {
+            "end": 2577288,
+            "start": 2547482
+          },
+          {
+            "end": 2611967,
+            "start": 2581263
+          },
+          {
+            "end": 2645668,
+            "start": 2614090
+          },
+          {
+            "end": 2691604,
+            "start": 2649643
+          },
+          {
+            "end": 6372091,
+            "start": 2693725
+          },
+          {
+            "end": 6408588,
+            "start": 6374386
+          },
+          {
+            "end": 6470578,
+            "start": 6412561
+          },
+          {
+            "end": 6471803,
+            "start": 6471544
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c204e434141465f534f434b45545f43495f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6483492,
+            "start": 6472004
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=22 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6266543,
+        "after_sha256": "34ece55058ba188d2170d3e339527a4fe4c78ce161fa334b4780cf8e03461ef1",
+        "before_bytes": 6356800,
+        "before_sha256": "779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1923307,
+            "start": 1919207
+          },
+          {
+            "end": 1925867,
+            "start": 1925402
+          },
+          {
+            "end": 1932944,
+            "start": 1928281
+          },
+          {
+            "end": 1937544,
+            "start": 1935043
+          },
+          {
+            "end": 1947022,
+            "start": 1939962
+          },
+          {
+            "end": 1953666,
+            "start": 1949119
+          },
+          {
+            "end": 1963443,
+            "start": 1956082
+          },
+          {
+            "end": 1972137,
+            "start": 1965544
+          },
+          {
+            "end": 1984453,
+            "start": 1974557
+          },
+          {
+            "end": 1995112,
+            "start": 1986550
+          },
+          {
+            "end": 2009593,
+            "start": 1997528
+          },
+          {
+            "end": 2022171,
+            "start": 2011688
+          },
+          {
+            "end": 2035813,
+            "start": 2024585
+          },
+          {
+            "end": 2050361,
+            "start": 2037914
+          },
+          {
+            "end": 2067362,
+            "start": 2052781
+          },
+          {
+            "end": 2083843,
+            "start": 2069465
+          },
+          {
+            "end": 2102052,
+            "start": 2086265
+          },
+          {
+            "end": 2120387,
+            "start": 2104153
+          },
+          {
+            "end": 2138579,
+            "start": 2122807
+          },
+          {
+            "end": 2158664,
+            "start": 2140676
+          },
+          {
+            "end": 2181270,
+            "start": 2161080
+          },
+          {
+            "end": 2203137,
+            "start": 2183369
+          },
+          {
+            "end": 2224020,
+            "start": 2205555
+          },
+          {
+            "end": 2247583,
+            "start": 2226117
+          },
+          {
+            "end": 2272626,
+            "start": 2249999
+          },
+          {
+            "end": 2297799,
+            "start": 2274719
+          },
+          {
+            "end": 2324289,
+            "start": 2300211
+          },
+          {
+            "end": 2351072,
+            "start": 2326382
+          },
+          {
+            "end": 2377670,
+            "start": 2353474
+          },
+          {
+            "end": 2406130,
+            "start": 2379769
+          },
+          {
+            "end": 2440360,
+            "start": 2408532
+          },
+          {
+            "end": 2470166,
+            "start": 2442449
+          },
+          {
+            "end": 2500870,
+            "start": 2472568
+          },
+          {
+            "end": 2532448,
+            "start": 2502971
+          },
+          {
+            "end": 2574409,
+            "start": 2534850
+          },
+          {
+            "end": 6252775,
+            "start": 2576508
+          },
+          {
+            "end": 6286977,
+            "start": 6255048
+          },
+          {
+            "end": 6344032,
+            "start": 6289377
+          },
+          {
+            "end": 6345253,
+            "start": 6344994
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c204e434141465f534f434b45545f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6356800,
+            "start": 6345455
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=21 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='34ece55058ba188d2170d3e339527a4fe4c78ce161fa334b4780cf8e03461ef1','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6191126,
+        "after_sha256": "0da8278a3c4239fc3f4a8b91c7608813e8602cd0712c4bdc389ea6559009da1b",
+        "before_bytes": 6266543,
+        "before_sha256": "34ece55058ba188d2170d3e339527a4fe4c78ce161fa334b4780cf8e03461ef1",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1922745,
+            "start": 1918591
+          },
+          {
+            "end": 1925246,
+            "start": 1924795
+          },
+          {
+            "end": 1932306,
+            "start": 1927146
+          },
+          {
+            "end": 1936853,
+            "start": 1934354
+          },
+          {
+            "end": 1944214,
+            "start": 1938751
+          },
+          {
+            "end": 1950807,
+            "start": 1946266
+          },
+          {
+            "end": 1960703,
+            "start": 1952709
+          },
+          {
+            "end": 1969265,
+            "start": 1962751
+          },
+          {
+            "end": 1981330,
+            "start": 1971163
+          },
+          {
+            "end": 1991813,
+            "start": 1983376
+          },
+          {
+            "end": 2003041,
+            "start": 1993709
+          },
+          {
+            "end": 2015488,
+            "start": 2005093
+          },
+          {
+            "end": 2030069,
+            "start": 2017390
+          },
+          {
+            "end": 2044447,
+            "start": 2032123
+          },
+          {
+            "end": 2060234,
+            "start": 2046351
+          },
+          {
+            "end": 2076468,
+            "start": 2062286
+          },
+          {
+            "end": 2092240,
+            "start": 2078370
+          },
+          {
+            "end": 2110228,
+            "start": 2094288
+          },
+          {
+            "end": 2130418,
+            "start": 2112126
+          },
+          {
+            "end": 2150186,
+            "start": 2132468
+          },
+          {
+            "end": 2168651,
+            "start": 2152086
+          },
+          {
+            "end": 2190117,
+            "start": 2170699
+          },
+          {
+            "end": 2212744,
+            "start": 2192015
+          },
+          {
+            "end": 2235824,
+            "start": 2214788
+          },
+          {
+            "end": 2259902,
+            "start": 2237718
+          },
+          {
+            "end": 2284592,
+            "start": 2261946
+          },
+          {
+            "end": 2308788,
+            "start": 2286476
+          },
+          {
+            "end": 2335149,
+            "start": 2310838
+          },
+          {
+            "end": 2366977,
+            "start": 2337033
+          },
+          {
+            "end": 2394694,
+            "start": 2369017
+          },
+          {
+            "end": 2422996,
+            "start": 2396578
+          },
+          {
+            "end": 2452473,
+            "start": 2425048
+          },
+          {
+            "end": 2492032,
+            "start": 2454357
+          },
+          {
+            "end": 6168299,
+            "start": 2494082
+          },
+          {
+            "end": 6200228,
+            "start": 6170523
+          },
+          {
+            "end": 6253942,
+            "start": 6202110
+          },
+          {
+            "end": 6255142,
+            "start": 6254883
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f43434c4f53455f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6266543,
+            "start": 6255343
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=20 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='0da8278a3c4239fc3f4a8b91c7608813e8602cd0712c4bdc389ea6559009da1b','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6118904,
+        "after_sha256": "5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321",
+        "before_bytes": 6191126,
+        "before_sha256": "0da8278a3c4239fc3f4a8b91c7608813e8602cd0712c4bdc389ea6559009da1b",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1923282,
+            "start": 1918632
+          },
+          {
+            "end": 1925781,
+            "start": 1925338
+          },
+          {
+            "end": 1931244,
+            "start": 1927712
+          },
+          {
+            "end": 1935785,
+            "start": 1933304
+          },
+          {
+            "end": 1943779,
+            "start": 1937720
+          },
+          {
+            "end": 1950293,
+            "start": 1945835
+          },
+          {
+            "end": 1960460,
+            "start": 1952224
+          },
+          {
+            "end": 1968897,
+            "start": 1962514
+          },
+          {
+            "end": 1978229,
+            "start": 1970826
+          },
+          {
+            "end": 1988624,
+            "start": 1980289
+          },
+          {
+            "end": 2001303,
+            "start": 1990559
+          },
+          {
+            "end": 2013627,
+            "start": 2003365
+          },
+          {
+            "end": 2027510,
+            "start": 2015564
+          },
+          {
+            "end": 2041692,
+            "start": 2029570
+          },
+          {
+            "end": 2055562,
+            "start": 2043627
+          },
+          {
+            "end": 2071502,
+            "start": 2057618
+          },
+          {
+            "end": 2089794,
+            "start": 2073433
+          },
+          {
+            "end": 2107512,
+            "start": 2091852
+          },
+          {
+            "end": 2124077,
+            "start": 2109445
+          },
+          {
+            "end": 2143495,
+            "start": 2126133
+          },
+          {
+            "end": 2164224,
+            "start": 2145426
+          },
+          {
+            "end": 2185260,
+            "start": 2166276
+          },
+          {
+            "end": 2207444,
+            "start": 2187187
+          },
+          {
+            "end": 2230090,
+            "start": 2209496
+          },
+          {
+            "end": 2252402,
+            "start": 2232007
+          },
+          {
+            "end": 2276713,
+            "start": 2254460
+          },
+          {
+            "end": 2306657,
+            "start": 2278630
+          },
+          {
+            "end": 2332334,
+            "start": 2308705
+          },
+          {
+            "end": 2358752,
+            "start": 2334251
+          },
+          {
+            "end": 2386177,
+            "start": 2360812
+          },
+          {
+            "end": 2423852,
+            "start": 2388094
+          },
+          {
+            "end": 6098069,
+            "start": 2425910
+          },
+          {
+            "end": 6127774,
+            "start": 6100301
+          },
+          {
+            "end": 6178616,
+            "start": 6129689
+          },
+          {
+            "end": 6179865,
+            "start": 6179606
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f43504552465f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6191126,
+            "start": 6180066
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=19 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 6042118,
+        "after_sha256": "7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832",
+        "before_bytes": 6118904,
+        "before_sha256": "5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1922142,
+            "start": 1919118
+          },
+          {
+            "end": 1924623,
+            "start": 1924164
+          },
+          {
+            "end": 1930682,
+            "start": 1927095
+          },
+          {
+            "end": 1935140,
+            "start": 1932700
+          },
+          {
+            "end": 1943376,
+            "start": 1937608
+          },
+          {
+            "end": 1949759,
+            "start": 1945392
+          },
+          {
+            "end": 1957162,
+            "start": 1952225
+          },
+          {
+            "end": 1965497,
+            "start": 1959184
+          },
+          {
+            "end": 1976241,
+            "start": 1967969
+          },
+          {
+            "end": 1986503,
+            "start": 1978265
+          },
+          {
+            "end": 1998449,
+            "start": 1988977
+          },
+          {
+            "end": 2010571,
+            "start": 2000471
+          },
+          {
+            "end": 2022506,
+            "start": 2013043
+          },
+          {
+            "end": 2036390,
+            "start": 2024524
+          },
+          {
+            "end": 2052751,
+            "start": 2038858
+          },
+          {
+            "end": 2068411,
+            "start": 2054771
+          },
+          {
+            "end": 2083043,
+            "start": 2070881
+          },
+          {
+            "end": 2100405,
+            "start": 2085061
+          },
+          {
+            "end": 2119203,
+            "start": 2102873
+          },
+          {
+            "end": 2138187,
+            "start": 2121217
+          },
+          {
+            "end": 2158444,
+            "start": 2140651
+          },
+          {
+            "end": 2179038,
+            "start": 2160458
+          },
+          {
+            "end": 2199433,
+            "start": 2181492
+          },
+          {
+            "end": 2221686,
+            "start": 2201453
+          },
+          {
+            "end": 2249713,
+            "start": 2224140
+          },
+          {
+            "end": 2273342,
+            "start": 2251723
+          },
+          {
+            "end": 2297843,
+            "start": 2275796
+          },
+          {
+            "end": 2323208,
+            "start": 2299865
+          },
+          {
+            "end": 2358966,
+            "start": 2325662
+          },
+          {
+            "end": 6031125,
+            "start": 2361604
+          },
+          {
+            "end": 6058598,
+            "start": 6033319
+          },
+          {
+            "end": 6106533,
+            "start": 6061050
+          },
+          {
+            "end": 6107784,
+            "start": 6107525
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f4352454d4f54455f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6118904,
+            "start": 6107985
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=18 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5995127,
+        "after_sha256": "d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b",
+        "before_bytes": 6042118,
+        "before_sha256": "7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1920587,
+            "start": 1917512
+          },
+          {
+            "end": 1923027,
+            "start": 1922584
+          },
+          {
+            "end": 1928795,
+            "start": 1923868
+          },
+          {
+            "end": 1933162,
+            "start": 1930790
+          },
+          {
+            "end": 1938099,
+            "start": 1934001
+          },
+          {
+            "end": 1944412,
+            "start": 1940100
+          },
+          {
+            "end": 1952684,
+            "start": 1945257
+          },
+          {
+            "end": 1960922,
+            "start": 1954687
+          },
+          {
+            "end": 1970394,
+            "start": 1961769
+          },
+          {
+            "end": 1980494,
+            "start": 1972395
+          },
+          {
+            "end": 1989957,
+            "start": 1981339
+          },
+          {
+            "end": 2001823,
+            "start": 1991954
+          },
+          {
+            "end": 2015716,
+            "start": 2002664
+          },
+          {
+            "end": 2029356,
+            "start": 2017715
+          },
+          {
+            "end": 2041518,
+            "start": 2030199
+          },
+          {
+            "end": 2056862,
+            "start": 2043515
+          },
+          {
+            "end": 2073192,
+            "start": 2057703
+          },
+          {
+            "end": 2090162,
+            "start": 2075185
+          },
+          {
+            "end": 2107955,
+            "start": 2090999
+          },
+          {
+            "end": 2126535,
+            "start": 2109948
+          },
+          {
+            "end": 2144476,
+            "start": 2127362
+          },
+          {
+            "end": 2164709,
+            "start": 2146475
+          },
+          {
+            "end": 2190282,
+            "start": 2165536
+          },
+          {
+            "end": 2211901,
+            "start": 2192271
+          },
+          {
+            "end": 2233948,
+            "start": 2212728
+          },
+          {
+            "end": 2257291,
+            "start": 2235949
+          },
+          {
+            "end": 2290595,
+            "start": 2258118
+          },
+          {
+            "end": 5960116,
+            "start": 2292594
+          },
+          {
+            "end": 5985395,
+            "start": 5962289
+          },
+          {
+            "end": 6029874,
+            "start": 5986220
+          },
+          {
+            "end": 6031137,
+            "start": 6030878
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f43505245445f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 6042118,
+            "start": 6031340
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=17 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5950188,
+        "after_sha256": "021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6",
+        "before_bytes": 5995127,
+        "before_sha256": "d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1921962,
+            "start": 1917543
+          },
+          {
+            "end": 1924334,
+            "start": 1923899
+          },
+          {
+            "end": 1928432,
+            "start": 1925294
+          },
+          {
+            "end": 1932744,
+            "start": 1930375
+          },
+          {
+            "end": 1940171,
+            "start": 1933710
+          },
+          {
+            "end": 1946406,
+            "start": 1942116
+          },
+          {
+            "end": 1955031,
+            "start": 1947374
+          },
+          {
+            "end": 1963130,
+            "start": 1956974
+          },
+          {
+            "end": 1971748,
+            "start": 1964096
+          },
+          {
+            "end": 1981617,
+            "start": 1973687
+          },
+          {
+            "end": 1994669,
+            "start": 1982579
+          },
+          {
+            "end": 2006310,
+            "start": 1996610
+          },
+          {
+            "end": 2017629,
+            "start": 2007274
+          },
+          {
+            "end": 2030976,
+            "start": 2019568
+          },
+          {
+            "end": 2046465,
+            "start": 2031938
+          },
+          {
+            "end": 2061442,
+            "start": 2048400
+          },
+          {
+            "end": 2078398,
+            "start": 2062400
+          },
+          {
+            "end": 2094985,
+            "start": 2080333
+          },
+          {
+            "end": 2112099,
+            "start": 2095933
+          },
+          {
+            "end": 2130333,
+            "start": 2114040
+          },
+          {
+            "end": 2155079,
+            "start": 2131281
+          },
+          {
+            "end": 2174709,
+            "start": 2157010
+          },
+          {
+            "end": 2195929,
+            "start": 2175657
+          },
+          {
+            "end": 2217271,
+            "start": 2197872
+          },
+          {
+            "end": 2249748,
+            "start": 2218219
+          },
+          {
+            "end": 5917270,
+            "start": 2251689
+          },
+          {
+            "end": 5940376,
+            "start": 5919385
+          },
+          {
+            "end": 5983028,
+            "start": 5941322
+          },
+          {
+            "end": 5984289,
+            "start": 5984030
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f435349585f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5995127,
+            "start": 5984487
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=16 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5890439,
+        "after_sha256": "4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321",
+        "before_bytes": 5950188,
+        "before_sha256": "021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1921509,
+            "start": 1918877
+          },
+          {
+            "end": 1923878,
+            "start": 1923419
+          },
+          {
+            "end": 1930339,
+            "start": 1926246
+          },
+          {
+            "end": 1934629,
+            "start": 1932251
+          },
+          {
+            "end": 1942286,
+            "start": 1936999
+          },
+          {
+            "end": 1948442,
+            "start": 1944196
+          },
+          {
+            "end": 1956094,
+            "start": 1950810
+          },
+          {
+            "end": 1964024,
+            "start": 1958000
+          },
+          {
+            "end": 1976114,
+            "start": 1966388
+          },
+          {
+            "end": 1985814,
+            "start": 1978022
+          },
+          {
+            "end": 1996169,
+            "start": 1988180
+          },
+          {
+            "end": 2007577,
+            "start": 1998075
+          },
+          {
+            "end": 2022104,
+            "start": 2009941
+          },
+          {
+            "end": 2035146,
+            "start": 2024006
+          },
+          {
+            "end": 2051144,
+            "start": 2037506
+          },
+          {
+            "end": 2065796,
+            "start": 2053046
+          },
+          {
+            "end": 2081962,
+            "start": 2068146
+          },
+          {
+            "end": 2098255,
+            "start": 2083870
+          },
+          {
+            "end": 2122053,
+            "start": 2100605
+          },
+          {
+            "end": 2139752,
+            "start": 2123951
+          },
+          {
+            "end": 2160024,
+            "start": 2142102
+          },
+          {
+            "end": 2179423,
+            "start": 2161934
+          },
+          {
+            "end": 2210952,
+            "start": 2181773
+          },
+          {
+            "end": 5876533,
+            "start": 2212860
+          },
+          {
+            "end": 5897524,
+            "start": 5878615
+          },
+          {
+            "end": 5938248,
+            "start": 5899872
+          },
+          {
+            "end": 5939489,
+            "start": 5939230
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f435245504f52545f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5950188,
+            "start": 5939688
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=15 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5856762,
+        "after_sha256": "ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361",
+        "before_bytes": 5890439,
+        "before_sha256": "4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1920701,
+            "start": 1917120
+          },
+          {
+            "end": 1923079,
+            "start": 1922612
+          },
+          {
+            "end": 1928366,
+            "start": 1923626
+          },
+          {
+            "end": 1932612,
+            "start": 1930275
+          },
+          {
+            "end": 1937896,
+            "start": 1933157
+          },
+          {
+            "end": 1943920,
+            "start": 1939801
+          },
+          {
+            "end": 1953646,
+            "start": 1944461
+          },
+          {
+            "end": 1961438,
+            "start": 1955553
+          },
+          {
+            "end": 1969427,
+            "start": 1961981
+          },
+          {
+            "end": 1978929,
+            "start": 1971332
+          },
+          {
+            "end": 1991092,
+            "start": 1979470
+          },
+          {
+            "end": 2002232,
+            "start": 1992993
+          },
+          {
+            "end": 2015870,
+            "start": 2002769
+          },
+          {
+            "end": 2028620,
+            "start": 2017771
+          },
+          {
+            "end": 2042436,
+            "start": 2029147
+          },
+          {
+            "end": 2056821,
+            "start": 2044343
+          },
+          {
+            "end": 2078269,
+            "start": 2057348
+          },
+          {
+            "end": 2094070,
+            "start": 2080166
+          },
+          {
+            "end": 2111992,
+            "start": 2094597
+          },
+          {
+            "end": 2129481,
+            "start": 2113901
+          },
+          {
+            "end": 2158660,
+            "start": 2130008
+          },
+          {
+            "end": 5822333,
+            "start": 2160567
+          },
+          {
+            "end": 5841242,
+            "start": 5824414
+          },
+          {
+            "end": 5878614,
+            "start": 5841767
+          },
+          {
+            "end": 5879877,
+            "start": 5879618
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f43464958545552455f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5890439,
+            "start": 5880083
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=14 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5815201,
+        "after_sha256": "fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f",
+        "before_bytes": 5856762,
+        "before_sha256": "ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1922305,
+            "start": 1918079
+          },
+          {
+            "end": 1924642,
+            "start": 1924183
+          },
+          {
+            "end": 1929381,
+            "start": 1926159
+          },
+          {
+            "end": 1933500,
+            "start": 1931255
+          },
+          {
+            "end": 1942685,
+            "start": 1935013
+          },
+          {
+            "end": 1948570,
+            "start": 1944561
+          },
+          {
+            "end": 1956016,
+            "start": 1950085
+          },
+          {
+            "end": 1963613,
+            "start": 1957890
+          },
+          {
+            "end": 1975235,
+            "start": 1965126
+          },
+          {
+            "end": 1984474,
+            "start": 1977105
+          },
+          {
+            "end": 1997575,
+            "start": 1985983
+          },
+          {
+            "end": 2008424,
+            "start": 1999445
+          },
+          {
+            "end": 2021713,
+            "start": 2009923
+          },
+          {
+            "end": 2034191,
+            "start": 2023589
+          },
+          {
+            "end": 2055112,
+            "start": 2035690
+          },
+          {
+            "end": 2069016,
+            "start": 2056978
+          },
+          {
+            "end": 2086411,
+            "start": 2070515
+          },
+          {
+            "end": 2101991,
+            "start": 2088289
+          },
+          {
+            "end": 2130643,
+            "start": 2103490
+          },
+          {
+            "end": 5792409,
+            "start": 2132519
+          },
+          {
+            "end": 5809237,
+            "start": 5794459
+          },
+          {
+            "end": 5845078,
+            "start": 5810734
+          },
+          {
+            "end": 5846343,
+            "start": 5846084
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f43414e43484f525f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5856762,
+            "start": 5846550
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=13 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5770511,
+        "after_sha256": "e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec",
+        "before_bytes": 5815201,
+        "before_sha256": "fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1921424,
+            "start": 1918714
+          },
+          {
+            "end": 1923669,
+            "start": 1923226
+          },
+          {
+            "end": 1931341,
+            "start": 1925919
+          },
+          {
+            "end": 1935350,
+            "start": 1933145
+          },
+          {
+            "end": 1941281,
+            "start": 1937602
+          },
+          {
+            "end": 1947004,
+            "start": 1943083
+          },
+          {
+            "end": 1957113,
+            "start": 1949254
+          },
+          {
+            "end": 1964482,
+            "start": 1958911
+          },
+          {
+            "end": 1976074,
+            "start": 1966728
+          },
+          {
+            "end": 1985053,
+            "start": 1977872
+          },
+          {
+            "end": 1996843,
+            "start": 1987289
+          },
+          {
+            "end": 2007445,
+            "start": 1998647
+          },
+          {
+            "end": 2026867,
+            "start": 2009681
+          },
+          {
+            "end": 2038905,
+            "start": 2028661
+          },
+          {
+            "end": 2054801,
+            "start": 2041141
+          },
+          {
+            "end": 2068503,
+            "start": 2056607
+          },
+          {
+            "end": 2095656,
+            "start": 2070739
+          },
+          {
+            "end": 5755546,
+            "start": 2097460
+          },
+          {
+            "end": 5770324,
+            "start": 5757524
+          },
+          {
+            "end": 5803684,
+            "start": 5772558
+          },
+          {
+            "end": 5804927,
+            "start": 5804668
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f434c4946455f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5815201,
+            "start": 5805130
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=12 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5743491,
+        "after_sha256": "f666470988256968509f46df6ad1b30c0a1ed863eb47420480eb80272235910f",
+        "before_bytes": 5770511,
+        "before_sha256": "e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1922092,
+            "start": 1917178
+          },
+          {
+            "end": 1924297,
+            "start": 1923846
+          },
+          {
+            "end": 1927976,
+            "start": 1925099
+          },
+          {
+            "end": 1931897,
+            "start": 1929728
+          },
+          {
+            "end": 1939756,
+            "start": 1932697
+          },
+          {
+            "end": 1945327,
+            "start": 1941504
+          },
+          {
+            "end": 1954673,
+            "start": 1946123
+          },
+          {
+            "end": 1961854,
+            "start": 1956421
+          },
+          {
+            "end": 1971408,
+            "start": 1962640
+          },
+          {
+            "end": 1980206,
+            "start": 1973162
+          },
+          {
+            "end": 1997392,
+            "start": 1980992
+          },
+          {
+            "end": 2007636,
+            "start": 1999136
+          },
+          {
+            "end": 2021296,
+            "start": 2008422
+          },
+          {
+            "end": 2033192,
+            "start": 2023052
+          },
+          {
+            "end": 2058109,
+            "start": 2033978
+          },
+          {
+            "end": 5716195,
+            "start": 2059863
+          },
+          {
+            "end": 5728995,
+            "start": 5718103
+          },
+          {
+            "end": 5759145,
+            "start": 5729779
+          },
+          {
+            "end": 5760380,
+            "start": 5760121
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f43574f5244535f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5770511,
+            "start": 5760580
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=10 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='f666470988256968509f46df6ad1b30c0a1ed863eb47420480eb80272235910f','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5701434,
+        "after_sha256": "b2d607bbac7be5bc678abd5461e1e0fc15eecb49c535c581c3ae5e24dbbd28dd",
+        "before_bytes": 5743491,
+        "before_sha256": "f666470988256968509f46df6ad1b30c0a1ed863eb47420480eb80272235910f",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1921759,
+            "start": 1919392
+          },
+          {
+            "end": 1923928,
+            "start": 1923485
+          },
+          {
+            "end": 1930987,
+            "start": 1926953
+          },
+          {
+            "end": 1934810,
+            "start": 1932709
+          },
+          {
+            "end": 1943360,
+            "start": 1937831
+          },
+          {
+            "end": 1948793,
+            "start": 1945082
+          },
+          {
+            "end": 1957561,
+            "start": 1951804
+          },
+          {
+            "end": 1964605,
+            "start": 1959289
+          },
+          {
+            "end": 1981005,
+            "start": 1967616
+          },
+          {
+            "end": 1989505,
+            "start": 1982723
+          },
+          {
+            "end": 2002379,
+            "start": 1992516
+          },
+          {
+            "end": 2012519,
+            "start": 2004109
+          },
+          {
+            "end": 2036650,
+            "start": 2015530
+          },
+          {
+            "end": 5692982,
+            "start": 2038378
+          },
+          {
+            "end": 5703874,
+            "start": 5694864
+          },
+          {
+            "end": 5732254,
+            "start": 5706883
+          },
+          {
+            "end": 5733499,
+            "start": 5733240
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f434d4554415f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5743491,
+            "start": 5733700
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=9 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='b2d607bbac7be5bc678abd5461e1e0fc15eecb49c535c581c3ae5e24dbbd28dd','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5681232,
+        "after_sha256": "c99e3bc5beb02811faff87a21f4986af5595ef1b6be94a806975a4ddbda7f036",
+        "before_bytes": 5701434,
+        "before_sha256": "b2d607bbac7be5bc678abd5461e1e0fc15eecb49c535c581c3ae5e24dbbd28dd",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1920361,
+            "start": 1916835
+          },
+          {
+            "end": 1922462,
+            "start": 1922035
+          },
+          {
+            "end": 1927991,
+            "start": 1922995
+          },
+          {
+            "end": 1931702,
+            "start": 1929665
+          },
+          {
+            "end": 1937459,
+            "start": 1932225
+          },
+          {
+            "end": 1942775,
+            "start": 1939139
+          },
+          {
+            "end": 1956164,
+            "start": 1943298
+          },
+          {
+            "end": 1962946,
+            "start": 1957834
+          },
+          {
+            "end": 1972809,
+            "start": 1963469
+          },
+          {
+            "end": 1981219,
+            "start": 1974491
+          },
+          {
+            "end": 2002339,
+            "start": 1981742
+          },
+          {
+            "end": 5656943,
+            "start": 2004019
+          },
+          {
+            "end": 5665953,
+            "start": 5658776
+          },
+          {
+            "end": 5689618,
+            "start": 5666474
+          },
+          {
+            "end": 5691583,
+            "start": 5691324
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c20464f4f5442414c4c5f444f43494f5f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5701434,
+            "start": 5691780
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=8 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='c99e3bc5beb02811faff87a21f4986af5595ef1b6be94a806975a4ddbda7f036','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5651019,
+        "after_sha256": "42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616",
+        "before_bytes": 5681232,
+        "before_sha256": "c99e3bc5beb02811faff87a21f4986af5595ef1b6be94a806975a4ddbda7f036",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1922466,
+            "start": 1917974
+          },
+          {
+            "end": 1924503,
+            "start": 1924082
+          },
+          {
+            "end": 1929737,
+            "start": 1926277
+          },
+          {
+            "end": 1933373,
+            "start": 1931359
+          },
+          {
+            "end": 1946239,
+            "start": 1935147
+          },
+          {
+            "end": 1951351,
+            "start": 1947851
+          },
+          {
+            "end": 1960691,
+            "start": 1953125
+          },
+          {
+            "end": 1967419,
+            "start": 1962315
+          },
+          {
+            "end": 1988016,
+            "start": 1969193
+          },
+          {
+            "end": 5640940,
+            "start": 1989638
+          },
+          {
+            "end": 5648117,
+            "start": 5642713
+          },
+          {
+            "end": 5664377,
+            "start": 5649889
+          },
+          {
+            "end": 5671520,
+            "start": 5671261
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c204e434141465f5445524d535f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5681232,
+            "start": 5671710
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=7 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5625281,
+        "after_sha256": "466e13fb68e51defc45cd13811f9c43544521ef77f2bff42001c79f0bc8d0f28",
+        "before_bytes": 5651019,
+        "before_sha256": "42f15b229b7461bd61e5d9cd85c210cb44290f6a4a4e24cae2381fddd816e616",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1921890,
+            "start": 1918931
+          },
+          {
+            "end": 1923904,
+            "start": 1923463
+          },
+          {
+            "end": 1934996,
+            "start": 1926720
+          },
+          {
+            "end": 1938496,
+            "start": 1936559
+          },
+          {
+            "end": 1946062,
+            "start": 1941312
+          },
+          {
+            "end": 1951166,
+            "start": 1947637
+          },
+          {
+            "end": 1969989,
+            "start": 1953982
+          },
+          {
+            "end": 5621291,
+            "start": 1971562
+          },
+          {
+            "end": 5626695,
+            "start": 5623012
+          },
+          {
+            "end": 5640258,
+            "start": 5629509
+          },
+          {
+            "end": 5641442,
+            "start": 5641183
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c204e464c5f444f43554d454e545f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5651019,
+            "start": 5641630
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=6 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='466e13fb68e51defc45cd13811f9c43544521ef77f2bff42001c79f0bc8d0f28','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5610170,
+        "after_sha256": "3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d",
+        "before_bytes": 5625281,
+        "before_sha256": "466e13fb68e51defc45cd13811f9c43544521ef77f2bff42001c79f0bc8d0f28",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1925193,
+            "start": 1917422
+          },
+          {
+            "end": 1927130,
+            "start": 1926729
+          },
+          {
+            "end": 1931880,
+            "start": 1928400
+          },
+          {
+            "end": 1935409,
+            "start": 1933428
+          },
+          {
+            "end": 1951416,
+            "start": 1936679
+          },
+          {
+            "end": 5601145,
+            "start": 1952962
+          },
+          {
+            "end": 5604828,
+            "start": 5602840
+          },
+          {
+            "end": 5614640,
+            "start": 5606096
+          },
+          {
+            "end": 5615836,
+            "start": 5615577
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c204e464c5f5044465f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5625281,
+            "start": 5616023
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=5 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      },
+      {
+        "after_bytes": 5577215,
+        "after_sha256": "bfe64f0312f7d5c4eddbc9273f715406bb3132d420ed0f6f414717469d4a1c6c",
+        "before_bytes": 5610170,
+        "before_sha256": "3b3b81be86aca8c3a107ccfd99231f97f731acabfd6c83b3b433fe58f61b837d",
+        "parts": [
+          {
+            "end": 1913517,
+            "start": 0
+          },
+          {
+            "end": 1925169,
+            "start": 1922184
+          },
+          {
+            "end": 1927150,
+            "start": 1926691
+          },
+          {
+            "end": 1941887,
+            "start": 1933335
+          },
+          {
+            "end": 1948492,
+            "start": 1943407
+          },
+          {
+            "end": 5590070,
+            "start": 1954683
+          },
+          {
+            "end": 5592058,
+            "start": 5591734
+          },
+          {
+            "end": 5599705,
+            "start": 5598241
+          },
+          {
+            "end": 5600861,
+            "start": 5600602
+          },
+          {
+            "literal_hex": "20202020202020206966206578697374735f6174282248454144222c204e464c5f494e544552505245544154494f4e5f504f4c4943595f50415448293a0a"
+          },
+          {
+            "end": 5610170,
+            "start": 5601049
+          }
+        ],
+        "preserved_input_check": "if source.count(identity)!=4 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False",
+        "preserved_output_check": "_require(hashlib.sha256(source).hexdigest()=='bfe64f0312f7d5c4eddbc9273f715406bb3132d420ed0f6f414717469d4a1c6c','PREVIOUS_GUARD_LOGIC_CHANGED')"
+      }
+    ],
+    "schema": "exact-byte-projection-derivation-v1",
+    "semantics": "No cache. Each exact source identity/count/hash check and output hash check remains live. Only repeated splice/index/replace work is one join. Legacy matcher and mutable validation still run.",
+    "source_sha256": "76774f2877bbd49c0005589b0e4ff0640711812bf0d77d3b063bca48ed716bc0",
+    "target_sha256": "bfe64f0312f7d5c4eddbc9273f715406bb3132d420ed0f6f414717469d4a1c6c"
+  },
+  "schema": "exact-document-context-projections-v1"
+}

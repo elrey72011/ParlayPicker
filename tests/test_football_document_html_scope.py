@@ -130,7 +130,7 @@ def test_predecessor_reconstruction_context_remains_supported_and_bounded(pristi
 def test_pristine_fixture_preserves_bound_context_after_shared_memo_install(monkeypatch):
     import inspect
     from scripts import scope_reconstruction as memo
-    memo.install(guard)
+    guard._scope_reconstruction_for_validation()
     wrappers={name:getattr(guard,name) for name in memo.NAMES}
     for name in memo.NAMES:
         shared=wrappers[name]

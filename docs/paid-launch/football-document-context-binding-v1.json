@@ -1,0 +1,45 @@
+{
+  "approval_reference": "Robert authorized the two reproduced PR 2426 CI blockers: exact Ubuntu shallow-checkout order and identical-dependency diagnostics, canonical reviewed-runtime installation in the synthetic HTML-scope test without assertion changes, measured redundant immutable reconstruction slicing changed to derived exact joins with every original input/output hash check retained live and no validation cache, focused order/equivalence/mutation/isolation regressions, fresh successor binding and policy-only seal. Preserve six whole-file shards, scheduler, release workflows, network blocking, 30-minute limits, all original identities/substantive assertions and dirty/staged/committed/resealed rejections. One complete final-head CI cycle only after combined validation and credible timing headroom; no retries. Preserve independent two-PDF task and all 22 pins, runtime/configuration/custody/security, WNBA, NFL/NCAAF, Rams, Army-FAU and journals. Scanner diagnostics only; authentic guide trigger UNKNOWN. No acquisition, inference, trust, task or Drive changes, merge, deployment or wagering",
+  "approved_existing_test_changes": {
+    "tests/test_football_document_html_scope.py": "Replace only the competing direct installer with the canonical reviewed-runtime installer. Every original assertion and identity unchanged."
+  },
+  "base": "a2380a97ca8dcb059241d6eb6e90a35cf125e455",
+  "base_tree": "0a3e252da3e30d882d8dcf7123fba8c7c3d26564",
+  "main_base": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+  "main_tree": "a2ddea9d1079f057795907777b6f6fc61183a2aa",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/football-document-context-binding-v1.json",
+    "docs/paid-launch/football-document-context-projection-v1.json",
+    "docs/paid-launch/football-document-context-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_context_scope.py",
+    "tests/test_document_context_regressions.py",
+    "tests/test_document_context_scope.py",
+    "tests/test_football_document_html_scope.py"
+  ],
+  "previous_guard_sha256": "76774f2877bbd49c0005589b0e4ff0640711812bf0d77d3b063bca48ed716bc0",
+  "reconstruction_json_sha256": "f3bf68ed88860792a31c6b48676297ca0c696f7f377ec638047bb2edfd6ee0f9",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-context-projection-v1.json": "3ff2adde94258d263347d6f467be1bf14b8ae03d",
+    "docs/paid-launch/football-document-context-v1.md": "ac21dd58ecb1094f986400c619df5f6b88273bf5",
+    "scripts/football_document_context_scope.py": "290b2f7ae44bb5215635612b030425834f1d7ee8",
+    "tests/test_document_context_regressions.py": "b7c69dcdabafa79e9109ed9a78b5b28927c0db5c",
+    "tests/test_document_context_scope.py": "64dd66fe12248870fc4eab853147290821704a23",
+    "tests/test_football_document_html_scope.py": "a0503e7f716fb4d010cf4ba9dc7330086b573c36"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "tests/test_football_document_html_scope.py": {
+      "after_sha256": "ad6d32c6f1c8e358ca3a02e165dbbfc087c0adfbfa32905ed99bf0699a19c4d8",
+      "before_sha256": "54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1",
+      "reverse_patches": [
+        {
+          "end": 8127,
+          "start": 8078,
+          "text": "    memo.install(guard)\n"
+        }
+      ]
+    }
+  }
+}
