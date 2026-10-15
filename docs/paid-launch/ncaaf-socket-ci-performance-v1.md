@@ -89,7 +89,35 @@ changed. Scope reconstruction binds the exact prior profile and guard; a later
 policy-only seal binds this implementation without circular hashes.
 
 The scheduled NFL document task, its checkout/runtime/dependencies/configuration,
-encrypted custody, WNBA work, Army–FAU authorization, originals and spent journals
+encrypted custody, WNBA work, Armyâ€“FAU authorization, originals and spent journals
 are read-only preservation subjects. No local intensive tests run during its
-October 15 10:00–10:15 Eastern window. No acquisition, inference, trust change,
+October 15 10:00â€“10:15 Eastern window. No acquisition, inference, trust change,
 Drive operation, scheduling, merge, deployment, publication or wagering is included.
+
+
+## Combined shallow-checkout provenance correction
+
+The first timing follow-up completed every shard within 30 minutes and uploaded
+all six application artifacts. It executed 7,786 identities exactly once:
+7,781 passed, two existing skips, three failures, zero setup errors. The failures
+were provenance/fixture assumptions, not socket failures or another timeout.
+
+| Failure | Exact correction | Existing #2424 precedent |
+| --- | --- | --- |
+| `test_retained_profile_distinguishes_branch_head_tested_checkout_and_estimates`: missing `checkout_commit` | Fifteen new source records now carry the actual checkout from retained checkout logs plus each log SHA-256. Head and tested merge remain distinct. No cost changes. | Document CI closure separately records head and observed checkout. |
+| `test_exact_twelve_advisory_rows_and_frozen_metadata_preserved`: `git show` cannot find base in depth-one checkout | Reconstruct exact predecessor profile from hash-bound current bytes, normalize Git text line endings, verify exact before hash. Original assertions unchanged. | Document CI performance fixture uses exact source reconstruction rather than Git history. |
+| `test_new_provenance_records_observed_checkout_without_rewriting_history`: current successor costs compared with frozen provenance-only predecessor | Only this historical test receives an isolated exact predecessor profile. Its identity and every assertion AST are preserved. Other tests and current gates read the current profile. | Historical PDF-cost and five-shard fixtures bind exact predecessor inputs without weakening assertions. |
+
+All 17 original follow-up identities were inspected for the same assumptions.
+Scope mutation fixtures create their own complete synthetic Git history; they do
+not require checkout ancestry. Four new regression identities cover history-free
+loading, changed source/binding rejection, and fixture isolation/substitution.
+No mutable validation result is cached. The 48 socket regressions are unchanged.
+
+The prior failed seal remains retained; the original timing implementation is an
+exact pre-policy ancestor. A new implementation and policy-only seal bind these
+corrections together. Required validation uses a fresh depth-one checkout and
+one complete new final-head CI cycle. Separate component passes are not closure.
+The profile weights and six-shard assignment algorithm are unchanged. Prior
+job headroom (two to eight minutes) describes the failed cycle only, not a future
+runtime guarantee. Final measured outcomes and artifact hashes are in the PR receipt.

@@ -38,8 +38,8 @@ def test_performance_fixture_needs_no_git_history(tmp_path, monkeypatch):
         assert guard._listing_capacity_base_source(raw) == reference(raw)
 
 
-def test_new_provenance_records_observed_checkout_without_rewriting_history():
-    source = (ROOT/PROFILE).read_bytes().replace(b'\r\n', b'\n')
+def test_new_provenance_records_observed_checkout_without_rewriting_history(historical_ci_closure_profile):
+    source = _verified_ci_closure_profile_bytes(historical_ci_closure_profile)
     current = json.loads(source)
     previous = json.loads(guard._docclose_previous_source(PROFILE, source))
     record = current['sources']['document-ci-completed-56-shard6']
@@ -133,3 +133,26 @@ def test_canonical_template_packing_preserves_isolated_history(tmp_path):
             assert remote.assess((second, *prepared[1:]))[0] == 0
     finally:
         guard.ROOT = saved
+
+
+# Explicit exact input for this historical provenance-only assertion. The current
+# six-shard/profile tests continue reading the actual checkout.
+@pytest.fixture
+def historical_ci_closure_profile(tmp_path):
+    original=(ROOT/PROFILE).read_bytes().replace(b'\r\n',b'\n')
+    binding=json.loads((ROOT/'docs/paid-launch/ncaaf-socket-ci-binding-v1.json').read_bytes())
+    record=binding['source_reconstructions'][PROFILE]
+    assert hashlib.sha256(original).hexdigest()==record['after_sha256']
+    prior=guard._ncaaf_socket_ci_previous_source(PROFILE,original)
+    assert hashlib.sha256(prior).hexdigest()==record['before_sha256']
+    root=tmp_path/'SYNTHETIC-exact-ci-closure-profile'
+    path=root/PROFILE;path.parent.mkdir(parents=True)
+    path.write_bytes(prior)
+    return root
+
+
+def _verified_ci_closure_profile_bytes(root):
+    source=(root/PROFILE).read_bytes().replace(b'\r\n',b'\n')
+    binding=json.loads((ROOT/'docs/paid-launch/ncaaf-socket-ci-binding-v1.json').read_bytes())
+    assert hashlib.sha256(source).hexdigest()==binding['source_reconstructions'][PROFILE]['before_sha256']
+    return source
