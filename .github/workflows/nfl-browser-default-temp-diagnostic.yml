@@ -1,0 +1,49 @@
+name: NFL browser default-temp diagnostic
+on:
+  push:
+    branches: [codex/nfl-browser-default-temp-diagnostic-v1]
+permissions:
+  contents: read
+jobs:
+  browser-default-temp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: tooling
+          persist-credentials: false
+      - name: Preserve diagnostic helper outside tested checkout
+        run: cp tooling/scripts/profile_nfl_browser_default_temp.py "$RUNNER_TEMP/profile_nfl_browser_default_temp.py"
+      - uses: actions/checkout@v5
+        with:
+          ref: 440bf5802085b6cd1b9c54dcfbf2c764f5d78927
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.15'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Validate exact IDs and prepare pinned constraints
+        run: |
+          python "$RUNNER_TEMP/profile_nfl_browser_default_temp.py" --self-test
+          python "$RUNNER_TEMP/profile_nfl_browser_default_temp.py" --constraints "$RUNNER_TEMP/nfl-constraints.txt"
+      - name: Install identical pinned dependencies
+        run: |
+          python -m pip install pip==26.2.1 -c "$RUNNER_TEMP/nfl-constraints.txt"
+          python -m pip install -r requirements.txt pytest==9.1.1 -c "$RUNNER_TEMP/nfl-constraints.txt"
+      - name: Observe supported browser version
+        run: google-chrome --version
+      - name: Execute exact prefix with default pytest temporary paths
+        run: >
+          python -B -X utf8 "$RUNNER_TEMP/profile_nfl_browser_default_temp.py"
+          --mode browser --repo . --output "$RUNNER_TEMP/nfl-default-temp-output"
+      - name: Retain complete or partial diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfl-browser-default-temp-diagnostic
+          path: ${{ runner.temp }}/nfl-default-temp-output
+          if-no-files-found: error
+          retention-days: 14
