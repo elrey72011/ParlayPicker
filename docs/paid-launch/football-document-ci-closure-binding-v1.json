@@ -1,0 +1,113 @@
+{
+  "approval_reference": "Robert authorized bounded fixture corrections, focused offline verification and exact successor bindings for PR #2424. This local successor corrects the newly reproduced shallow-history setup failure while preserving every assertion and identity. The previously authorized single final-head CI cycle is consumed; no additional CI, push-triggered execution, acquisition or inference authority is inferred. A separate exact CI-budget decision is pending.",
+  "approved_existing_test_changes": {
+    "tests/test_football_document_ci_performance.py": "History-free exact-hash fixture input only; all original test assertions and identities preserved.",
+    "tests/test_nfl_pdf_ci_scope.py": "Historical PDF cost revision receives an isolated exact-hash predecessor input; every original assertion unchanged.",
+    "tests/test_remote_canonical_scope.py": "Only local synthetic-template gc.auto=0, maintenance.auto=false and synchronous git gc --prune=never; all assertions unchanged."
+  },
+  "base": "0a5d76ae84519b8f9d2f437128e74410146ad058",
+  "base_tree": "a51eb06b98e2089c3770d32bf027a9f428ff8bf8",
+  "failure_reference": {
+    "causes": [
+      "Missing historical object in new regression fixture",
+      "Missing observed checkout_commit in new provenance",
+      "Historical PDF cost assertion consuming latest revision",
+      "Remote-canonical loose-object copy interleaving; historical deleting actor UNKNOWN"
+    ],
+    "jobs": [
+      116145447919,
+      116145447923,
+      116145448109
+    ],
+    "run": 38649785460
+  },
+  "main_base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "main_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/football-document-ci-closure-binding-v1.json",
+    "docs/paid-launch/football-document-ci-closure-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/football_document_ci_closure_scope.py",
+    "tests/test_football_document_ci_closure.py",
+    "tests/test_football_document_ci_closure_scope.py",
+    "tests/test_football_document_ci_performance.py",
+    "tests/test_nfl_pdf_ci_scope.py",
+    "tests/test_remote_canonical_scope.py"
+  ],
+  "previous_guard_sha256": "5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321",
+  "reconstruction_json_sha256": "40baeb2de66732ce2799fb3de852cbce2fabeebb05f7064b3651df27d301ed21",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-ci-closure-v1.md": "0d639dfc3d807946d20ade84e3c63885dab6a92e",
+    "scripts/ci_test_file_costs_v1.json": "5ce076d6422112746f2ebec7578bc0ac3212c374",
+    "scripts/football_document_ci_closure_scope.py": "71efe185dd4778d1f4dd3c543a3b9d22ef261014",
+    "tests/test_football_document_ci_closure.py": "2e4aac53286b9dcb0fa53485c231a26fafe04cb6",
+    "tests/test_football_document_ci_closure_scope.py": "1e40ad787e7ec162b7f35c0d51ac0fdd294d8c6f",
+    "tests/test_football_document_ci_performance.py": "5ae162db73e2331a37c966780c0953f1f85d4223",
+    "tests/test_nfl_pdf_ci_scope.py": "5e7fd2cc45a3a1c2d9bb154657f2c1b7caae4136",
+    "tests/test_remote_canonical_scope.py": "680183fd1dc21439d49c53273581eded03e2888d"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "scripts/ci_test_file_costs_v1.json": {
+      "after_sha256": "fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b",
+      "before_sha256": "d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160",
+      "reverse_patches": [
+        {
+          "end": 568534,
+          "start": 568243,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_football_document_ci_performance.py": {
+      "after_sha256": "da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba",
+      "before_sha256": "02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f",
+      "reverse_patches": [
+        {
+          "end": 751,
+          "start": 539,
+          "text": "        raw = subprocess.check_output(['git', 'show', binding['base']+':'+guard.GUARD_PATH], cwd=ROOT)\n"
+        }
+      ]
+    },
+    "tests/test_nfl_pdf_ci_scope.py": {
+      "after_sha256": "0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506",
+      "before_sha256": "d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4",
+      "reverse_patches": [
+        {
+          "end": 1795,
+          "start": 1699,
+          "text": "def test_successor_costs_and_frozen_metadata_are_separately_bound():\n"
+        },
+        {
+          "end": 1912,
+          "start": 1873,
+          "text": "    root = Path(__file__).resolve().parents[1]\n"
+        },
+        {
+          "end": 5100,
+          "start": 4047,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_remote_canonical_scope.py": {
+      "after_sha256": "da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d",
+      "before_sha256": "d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5",
+      "reverse_patches": [
+        {
+          "end": 1561,
+          "start": 1478,
+          "text": ""
+        },
+        {
+          "end": 4308,
+          "start": 4275,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

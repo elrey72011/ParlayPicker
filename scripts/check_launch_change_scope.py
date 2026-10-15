@@ -21765,6 +21765,1066 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+FOOTBALL_DOCCLOSE_BOOTSTRAP = True
+FOOTBALL_DOCCLOSE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-ci-closure-v1.json'
+FOOTBALL_DOCCLOSE_BINDING_PATH = 'docs/paid-launch/football-document-ci-closure-binding-v1.json'
+FOOTBALL_DOCCLOSE_BINDING_SHA256 = '44ecab060a474f832462dd265bc2c1dfc48c0453d3399d8f06fbf5df1ea0231c'
+FOOTBALL_DOCCLOSE_REVIEWED_GUARD_SHA256 = '9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+FOOTBALL_DOCCLOSE_PREVIOUS_GUARD_SHA256 = '5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321'
+FOOTBALL_DOCCLOSE_RECONSTRUCTION_JSON = b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}'
+from functools import lru_cache as _docclose_lru
+
+def _docclose_guard_matches(source):
+    value=FOOTBALL_DOCCLOSE_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==19 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCCLOSE_REVIEWED_GUARD_SHA256
+
+@_docclose_lru(maxsize=2)
+def _docclose_cached_base(source,reviewed,parent):
+    _require(_docclose_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docclose_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=6191126:return source
+    return _docclose_cached_base(source,FOOTBALL_DOCCLOSE_REVIEWED_GUARD_SHA256,FOOTBALL_DOCCLOSE_PREVIOUS_GUARD_SHA256)
+_docclose_base_source.cache_info=_docclose_cached_base.cache_info
+_docclose_base_source.cache_clear=_docclose_cached_base.cache_clear
+
+def _docclose_previous_source(path,source):
+    if path==GUARD_PATH:return _docclose_base_source(source)
+    info=json.loads(FOOTBALL_DOCCLOSE_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
+FOOTBALL_DOCPERF_BOOTSTRAP = True
+FOOTBALL_DOCPERF_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-ci-performance-v1.json'
+FOOTBALL_DOCPERF_BINDING_PATH = 'docs/paid-launch/football-document-ci-performance-binding-v1.json'
+FOOTBALL_DOCPERF_BINDING_SHA256 = '72d0c64f308fbb6a818dec6b64316b9168504b3b37bfd0220a4e40e86bcb52df'
+FOOTBALL_DOCPERF_REVIEWED_GUARD_SHA256 = 'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+FOOTBALL_DOCPERF_PREVIOUS_GUARD_SHA256 = '7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832'
+FOOTBALL_DOCPERF_RECONSTRUCTION_JSON = b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}'
+from functools import lru_cache as _docperf_lru
+
+def _docperf_guard_matches(source):
+    value=FOOTBALL_DOCPERF_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==18 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCPERF_REVIEWED_GUARD_SHA256
+
+@_docperf_lru(maxsize=2)
+def _docperf_cached_base(source,reviewed,parent):
+    _require(_docperf_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docperf_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCPERF_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCPERF_END
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=6118904:return source
+    return _docperf_cached_base(source,FOOTBALL_DOCPERF_REVIEWED_GUARD_SHA256,FOOTBALL_DOCPERF_PREVIOUS_GUARD_SHA256)
+_docperf_base_source.cache_info=_docperf_cached_base.cache_info
+_docperf_base_source.cache_clear=_docperf_cached_base.cache_clear
+
+def _docperf_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCPERF_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCPERF_PREVIOUS_END
+    if path==GUARD_PATH:return _docperf_base_source(source)
+    info=json.loads(FOOTBALL_DOCPERF_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
+FOOTBALL_DOCREMOTE_BOOTSTRAP = True
+FOOTBALL_DOCREMOTE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-remote-fixture-v1.json'
+FOOTBALL_DOCREMOTE_BINDING_PATH = 'docs/paid-launch/football-document-remote-fixture-binding-v1.json'
+FOOTBALL_DOCREMOTE_BINDING_SHA256 = '0a833856192ea8232342bf38b42c4f8b4d05d8011d6d62a372d67e403f64a02e'
+FOOTBALL_DOCREMOTE_REVIEWED_GUARD_SHA256 = 'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+FOOTBALL_DOCREMOTE_PREVIOUS_GUARD_SHA256 = 'd38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b'
+FOOTBALL_DOCREMOTE_RECONSTRUCTION_JSON = b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}'
+from functools import lru_cache as _docremote_lru
+
+def _docremote_guard_matches(source):
+    value=FOOTBALL_DOCREMOTE_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==17 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCREMOTE_REVIEWED_GUARD_SHA256
+
+@_docremote_lru(maxsize=2)
+def _docremote_cached_base(source,reviewed,parent):
+    _require(_docremote_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docremote_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCREMOTE_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCREMOTE_END
+    # FOOTBALL_DOCPERF_DOCREMOTE_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCREMOTE_END
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=6042118:return source
+    return _docremote_cached_base(source,FOOTBALL_DOCREMOTE_REVIEWED_GUARD_SHA256,FOOTBALL_DOCREMOTE_PREVIOUS_GUARD_SHA256)
+_docremote_base_source.cache_info=_docremote_cached_base.cache_info
+_docremote_base_source.cache_clear=_docremote_cached_base.cache_clear
+
+def _docremote_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCREMOTE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCREMOTE_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCREMOTE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCREMOTE_PREVIOUS_END
+    if path==GUARD_PATH:return _docremote_base_source(source)
+    info=json.loads(FOOTBALL_DOCREMOTE_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
+FOOTBALL_DOCPRED_BOOTSTRAP = True
+FOOTBALL_DOCPRED_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-predecessor-fixture-v1.json'
+FOOTBALL_DOCPRED_BINDING_PATH = 'docs/paid-launch/football-document-predecessor-fixture-binding-v1.json'
+FOOTBALL_DOCPRED_BINDING_SHA256 = 'a854e9394ffca1df4e524c9f85467c7e4232d902c9c7398a5c551962dfba2754'
+FOOTBALL_DOCPRED_REVIEWED_GUARD_SHA256 = 'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+FOOTBALL_DOCPRED_PREVIOUS_GUARD_SHA256 = '021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6'
+FOOTBALL_DOCPRED_RECONSTRUCTION_JSON = b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}'
+from functools import lru_cache as _docpred_lru
+
+def _docpred_guard_matches(source):
+    value=FOOTBALL_DOCPRED_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==16 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCPRED_REVIEWED_GUARD_SHA256
+
+@_docpred_lru(maxsize=2)
+def _docpred_cached_base(source,reviewed,parent):
+    _require(_docpred_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docpred_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCPRED_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCPRED_END
+    # FOOTBALL_DOCPERF_DOCPRED_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCPRED_END
+    # FOOTBALL_DOCREMOTE_DOCPRED_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCPRED_END
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=5995127:return source
+    return _docpred_cached_base(source,FOOTBALL_DOCPRED_REVIEWED_GUARD_SHA256,FOOTBALL_DOCPRED_PREVIOUS_GUARD_SHA256)
+_docpred_base_source.cache_info=_docpred_cached_base.cache_info
+_docpred_base_source.cache_clear=_docpred_cached_base.cache_clear
+
+def _docpred_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCPRED_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCPRED_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCPRED_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCPRED_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DOCPRED_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DOCPRED_PREVIOUS_END
+    if path==GUARD_PATH:return _docpred_base_source(source)
+    info=json.loads(FOOTBALL_DOCPRED_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
+FOOTBALL_DOCSIX_BOOTSTRAP = True
+FOOTBALL_DOCSIX_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-six-capacity-v1.json'
+FOOTBALL_DOCSIX_BINDING_PATH = 'docs/paid-launch/football-document-six-capacity-binding-v1.json'
+FOOTBALL_DOCSIX_BINDING_SHA256 = 'cad78264138f1486388418339cde46afb1d2feff5ba710f75fc23f3267cc92b3'
+FOOTBALL_DOCSIX_REVIEWED_GUARD_SHA256 = 'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+FOOTBALL_DOCSIX_PREVIOUS_GUARD_SHA256 = '4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321'
+FOOTBALL_DOCSIX_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}'
+from functools import lru_cache as _docsix_lru
+
+def _docsix_guard_matches(source):
+    value=FOOTBALL_DOCSIX_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==15 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCSIX_REVIEWED_GUARD_SHA256
+
+@_docsix_lru(maxsize=2)
+def _docsix_cached_base(source,reviewed,parent):
+    _require(_docsix_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docsix_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCSIX_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCSIX_END
+    # FOOTBALL_DOCPERF_DOCSIX_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCSIX_END
+    # FOOTBALL_DOCREMOTE_DOCSIX_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCSIX_END
+    # FOOTBALL_DOCPRED_DOCSIX_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCSIX_END
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=5950188:return source
+    return _docsix_cached_base(source,FOOTBALL_DOCSIX_REVIEWED_GUARD_SHA256,FOOTBALL_DOCSIX_PREVIOUS_GUARD_SHA256)
+_docsix_base_source.cache_info=_docsix_cached_base.cache_info
+_docsix_base_source.cache_clear=_docsix_cached_base.cache_clear
+
+def _docsix_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCSIX_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCSIX_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCSIX_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCSIX_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DOCSIX_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DOCSIX_PREVIOUS_END
+    # FOOTBALL_DOCPRED_DOCSIX_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCSIX_PREVIOUS_END
+    if path==GUARD_PATH:return _docsix_base_source(source)
+    info=json.loads(FOOTBALL_DOCSIX_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
+FOOTBALL_DOCREPORT_BOOTSTRAP = True
+FOOTBALL_DOCREPORT_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-fixture-report-v1.json'
+FOOTBALL_DOCREPORT_BINDING_PATH = 'docs/paid-launch/football-document-fixture-report-binding-v1.json'
+FOOTBALL_DOCREPORT_BINDING_SHA256 = '6274cf28b3a245817fcc9317fb8d3b8536452e093d3b59e1c8e28bb6082d9e19'
+FOOTBALL_DOCREPORT_REVIEWED_GUARD_SHA256 = '519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+FOOTBALL_DOCREPORT_PREVIOUS_GUARD_SHA256 = 'ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361'
+FOOTBALL_DOCREPORT_RECONSTRUCTION_JSON = b'{}'
+from functools import lru_cache as _docreport_lru
+
+def _docreport_guard_matches(source):
+    value=FOOTBALL_DOCREPORT_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==14 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCREPORT_REVIEWED_GUARD_SHA256
+
+@_docreport_lru(maxsize=2)
+def _docreport_cached_base(source,reviewed,parent):
+    _require(_docreport_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docreport_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCREPORT_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCREPORT_END
+    # FOOTBALL_DOCPERF_DOCREPORT_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCREPORT_END
+    # FOOTBALL_DOCREMOTE_DOCREPORT_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCREPORT_END
+    # FOOTBALL_DOCPRED_DOCREPORT_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCREPORT_END
+    # FOOTBALL_DOCSIX_DOCREPORT_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_DOCREPORT_END
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=5890439:return source
+    return _docreport_cached_base(source,FOOTBALL_DOCREPORT_REVIEWED_GUARD_SHA256,FOOTBALL_DOCREPORT_PREVIOUS_GUARD_SHA256)
+_docreport_base_source.cache_info=_docreport_cached_base.cache_info
+_docreport_base_source.cache_clear=_docreport_cached_base.cache_clear
+
+def _docreport_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCREPORT_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCREPORT_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DOCREPORT_PREVIOUS_END
+    # FOOTBALL_DOCPRED_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCREPORT_PREVIOUS_END
+    # FOOTBALL_DOCSIX_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_DOCREPORT_PREVIOUS_END
+    if path==GUARD_PATH:return _docreport_base_source(source)
+    info=json.loads(FOOTBALL_DOCREPORT_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
+FOOTBALL_DOCFIXTURE_BOOTSTRAP = True
+FOOTBALL_DOCFIXTURE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-html-fixtures-v1.json'
+FOOTBALL_DOCFIXTURE_BINDING_PATH = 'docs/paid-launch/football-document-html-fixture-binding-v1.json'
+FOOTBALL_DOCFIXTURE_BINDING_SHA256 = 'aca17df376910aff7f4b3fc67287c92183f51250fa02f031d0d6e6fbf6bcd7b9'
+FOOTBALL_DOCFIXTURE_REVIEWED_GUARD_SHA256 = 'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+FOOTBALL_DOCFIXTURE_PREVIOUS_GUARD_SHA256 = 'fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f'
+FOOTBALL_DOCFIXTURE_RECONSTRUCTION_JSON = b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}'
+from functools import lru_cache as _docfixture_lru
+
+def _docfixture_guard_matches(source):
+    value=FOOTBALL_DOCFIXTURE_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==13 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCFIXTURE_REVIEWED_GUARD_SHA256
+
+@_docfixture_lru(maxsize=2)
+def _docfixture_cached_base(source,reviewed,parent):
+    _require(_docfixture_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docfixture_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCFIXTURE_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCFIXTURE_END
+    # FOOTBALL_DOCPERF_DOCFIXTURE_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCFIXTURE_END
+    # FOOTBALL_DOCREMOTE_DOCFIXTURE_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCFIXTURE_END
+    # FOOTBALL_DOCPRED_DOCFIXTURE_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCFIXTURE_END
+    # FOOTBALL_DOCSIX_DOCFIXTURE_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_DOCFIXTURE_END
+    # FOOTBALL_DOCREPORT_DOCFIXTURE_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_DOCFIXTURE_END
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=5856762:return source
+    return _docfixture_cached_base(source,FOOTBALL_DOCFIXTURE_REVIEWED_GUARD_SHA256,FOOTBALL_DOCFIXTURE_PREVIOUS_GUARD_SHA256)
+_docfixture_base_source.cache_info=_docfixture_cached_base.cache_info
+_docfixture_base_source.cache_clear=_docfixture_cached_base.cache_clear
+
+def _docfixture_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCFIXTURE_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCFIXTURE_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DOCFIXTURE_PREVIOUS_END
+    # FOOTBALL_DOCPRED_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCFIXTURE_PREVIOUS_END
+    # FOOTBALL_DOCSIX_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_DOCFIXTURE_PREVIOUS_END
+    # FOOTBALL_DOCREPORT_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_DOCFIXTURE_PREVIOUS_END
+    if path==GUARD_PATH:return _docfixture_base_source(source)
+    info=json.loads(FOOTBALL_DOCFIXTURE_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
+FOOTBALL_DOCANCHOR_BOOTSTRAP = True
+FOOTBALL_DOCANCHOR_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-html-anchors-v1.json'
+FOOTBALL_DOCANCHOR_BINDING_PATH = 'docs/paid-launch/football-document-html-binding-v1.json'
+FOOTBALL_DOCANCHOR_BINDING_SHA256 = '641a477e227dcbece1b9d722d662406e2c7f3120a6b4fa1dafe3c6fd59a8621b'
+FOOTBALL_DOCANCHOR_REVIEWED_GUARD_SHA256 = 'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+FOOTBALL_DOCANCHOR_PREVIOUS_GUARD_SHA256 = 'e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec'
+FOOTBALL_DOCANCHOR_RECONSTRUCTION_JSON = b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}'
+from functools import lru_cache as _docanchor_lru
+
+def _docanchor_guard_matches(source):
+    value=FOOTBALL_DOCANCHOR_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==12 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==FOOTBALL_DOCANCHOR_REVIEWED_GUARD_SHA256
+
+@_docanchor_lru(maxsize=2)
+def _docanchor_cached_base(source,reviewed,parent):
+    _require(_docanchor_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+     begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _docanchor_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCANCHOR_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCANCHOR_END
+    # FOOTBALL_DOCPERF_DOCANCHOR_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCANCHOR_END
+    # FOOTBALL_DOCREMOTE_DOCANCHOR_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCANCHOR_END
+    # FOOTBALL_DOCPRED_DOCANCHOR_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCANCHOR_END
+    # FOOTBALL_DOCSIX_DOCANCHOR_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_DOCANCHOR_END
+    # FOOTBALL_DOCREPORT_DOCANCHOR_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_DOCANCHOR_END
+    # FOOTBALL_DOCFIXTURE_DOCANCHOR_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_DOCANCHOR_END
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=5815201:return source
+    return _docanchor_cached_base(source,FOOTBALL_DOCANCHOR_REVIEWED_GUARD_SHA256,FOOTBALL_DOCANCHOR_PREVIOUS_GUARD_SHA256)
+_docanchor_base_source.cache_info=_docanchor_cached_base.cache_info
+_docanchor_base_source.cache_clear=_docanchor_cached_base.cache_clear
+
+def _docanchor_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCANCHOR_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCANCHOR_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DOCANCHOR_PREVIOUS_END
+    # FOOTBALL_DOCPRED_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCANCHOR_PREVIOUS_END
+    # FOOTBALL_DOCSIX_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_DOCANCHOR_PREVIOUS_END
+    # FOOTBALL_DOCREPORT_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_DOCANCHOR_PREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_DOCANCHOR_PREVIOUS_END
+    if path==GUARD_PATH:return _docanchor_base_source(source)
+    info=json.loads(FOOTBALL_DOCANCHOR_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 FOOTBALL_DOCLIFE_BOOTSTRAP = True
 FOOTBALL_DOCLIFE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-football-document-socket-lifecycle-v1.json'
 FOOTBALL_DOCLIFE_BINDING_PATH = 'docs/paid-launch/football-document-socket-binding-v1.json'
@@ -21795,6 +22855,142 @@ def _doclife_cached_base(source,reviewed,parent):
     return source
 
 def _doclife_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCLIFE_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCLIFE_END
+    # FOOTBALL_DOCPERF_DOCLIFE_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCLIFE_END
+    # FOOTBALL_DOCREMOTE_DOCLIFE_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCLIFE_END
+    # FOOTBALL_DOCPRED_DOCLIFE_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCLIFE_END
+    # FOOTBALL_DOCSIX_DOCLIFE_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_DOCLIFE_END
+    # FOOTBALL_DOCREPORT_DOCLIFE_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_DOCLIFE_END
+    # FOOTBALL_DOCFIXTURE_DOCLIFE_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_DOCLIFE_END
+    # FOOTBALL_DOCANCHOR_DOCLIFE_BEGIN
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        _require(source.count(identity)==12 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_DOCLIFE_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=5770511:return source
     return _doclife_cached_base(source,FOOTBALL_DOCLIFE_REVIEWED_GUARD_SHA256,FOOTBALL_DOCLIFE_PREVIOUS_GUARD_SHA256)
@@ -21802,6 +22998,70 @@ _doclife_base_source.cache_info=_doclife_cached_base.cache_info
 _doclife_base_source.cache_clear=_doclife_cached_base.cache_clear
 
 def _doclife_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCLIFE_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCLIFE_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DOCLIFE_PREVIOUS_END
+    # FOOTBALL_DOCPRED_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCLIFE_PREVIOUS_END
+    # FOOTBALL_DOCSIX_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_DOCLIFE_PREVIOUS_END
+    # FOOTBALL_DOCREPORT_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_DOCLIFE_PREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_DOCLIFE_PREVIOUS_END
+    # FOOTBALL_DOCANCHOR_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCANCHOR_DOCLIFE_PREVIOUS_END
     if path==GUARD_PATH:return _doclife_base_source(source)
     info=json.loads(FOOTBALL_DOCLIFE_RECONSTRUCTION_JSON).get(path)
     if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
@@ -21840,6 +23100,142 @@ def _docwords_cached_base(source,reviewed,parent):
     return source
 
 def _docwords_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCWORDS_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCWORDS_END
+    # FOOTBALL_DOCPERF_DOCWORDS_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCWORDS_END
+    # FOOTBALL_DOCREMOTE_DOCWORDS_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCWORDS_END
+    # FOOTBALL_DOCPRED_DOCWORDS_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCWORDS_END
+    # FOOTBALL_DOCSIX_DOCWORDS_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_DOCWORDS_END
+    # FOOTBALL_DOCREPORT_DOCWORDS_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_DOCWORDS_END
+    # FOOTBALL_DOCFIXTURE_DOCWORDS_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_DOCWORDS_END
+    # FOOTBALL_DOCANCHOR_DOCWORDS_BEGIN
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        _require(source.count(identity)==12 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_DOCWORDS_END
     # FOOTBALL_DOCLIFE_DOCWORDS_BEGIN
     if len(source)==5770511:
         identity=b'9fd2f06cd5d42681c551d8ca6f0f5037ffc1f7a20ea1c7c159361236c1d0f09a'
@@ -21864,6 +23260,70 @@ _docwords_base_source.cache_info=_docwords_cached_base.cache_info
 _docwords_base_source.cache_clear=_docwords_cached_base.cache_clear
 
 def _docwords_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCWORDS_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCWORDS_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DOCWORDS_PREVIOUS_END
+    # FOOTBALL_DOCPRED_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCWORDS_PREVIOUS_END
+    # FOOTBALL_DOCSIX_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_DOCWORDS_PREVIOUS_END
+    # FOOTBALL_DOCREPORT_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_DOCWORDS_PREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_DOCWORDS_PREVIOUS_END
+    # FOOTBALL_DOCANCHOR_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCANCHOR_DOCWORDS_PREVIOUS_END
     # FOOTBALL_DOCLIFE_DOCWORDS_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","before_sha256":"455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98","reverse_patches":[{"end":12806,"start":12415,"text":""}]}}').get(path)
@@ -21910,6 +23370,142 @@ def _docmeta_cached_base(source,reviewed,parent):
     return source
 
 def _docmeta_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCMETA_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCMETA_END
+    # FOOTBALL_DOCPERF_DOCMETA_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCMETA_END
+    # FOOTBALL_DOCREMOTE_DOCMETA_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCMETA_END
+    # FOOTBALL_DOCPRED_DOCMETA_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCMETA_END
+    # FOOTBALL_DOCSIX_DOCMETA_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_DOCMETA_END
+    # FOOTBALL_DOCREPORT_DOCMETA_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_DOCMETA_END
+    # FOOTBALL_DOCFIXTURE_DOCMETA_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_DOCMETA_END
+    # FOOTBALL_DOCANCHOR_DOCMETA_BEGIN
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        _require(source.count(identity)==12 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_DOCMETA_END
     # FOOTBALL_DOCLIFE_DOCMETA_BEGIN
     if len(source)==5770511:
         identity=b'9fd2f06cd5d42681c551d8ca6f0f5037ffc1f7a20ea1c7c159361236c1d0f09a'
@@ -21951,6 +23547,70 @@ _docmeta_base_source.cache_info=_docmeta_cached_base.cache_info
 _docmeta_base_source.cache_clear=_docmeta_cached_base.cache_clear
 
 def _docmeta_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCMETA_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCMETA_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DOCMETA_PREVIOUS_END
+    # FOOTBALL_DOCPRED_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCMETA_PREVIOUS_END
+    # FOOTBALL_DOCSIX_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_DOCMETA_PREVIOUS_END
+    # FOOTBALL_DOCREPORT_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_DOCMETA_PREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_DOCMETA_PREVIOUS_END
+    # FOOTBALL_DOCANCHOR_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCANCHOR_DOCMETA_PREVIOUS_END
     # FOOTBALL_DOCLIFE_DOCMETA_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","before_sha256":"455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98","reverse_patches":[{"end":12806,"start":12415,"text":""}]}}').get(path)
@@ -22005,6 +23665,142 @@ def _docio_cached_base(source,reviewed,parent):
     return source
 
 def _docio_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCIO_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCIO_END
+    # FOOTBALL_DOCPERF_DOCIO_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCIO_END
+    # FOOTBALL_DOCREMOTE_DOCIO_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCIO_END
+    # FOOTBALL_DOCPRED_DOCIO_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCIO_END
+    # FOOTBALL_DOCSIX_DOCIO_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_DOCIO_END
+    # FOOTBALL_DOCREPORT_DOCIO_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_DOCIO_END
+    # FOOTBALL_DOCFIXTURE_DOCIO_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_DOCIO_END
+    # FOOTBALL_DOCANCHOR_DOCIO_BEGIN
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        _require(source.count(identity)==12 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_DOCIO_END
     # FOOTBALL_DOCLIFE_DOCIO_BEGIN
     if len(source)==5770511:
         identity=b'9fd2f06cd5d42681c551d8ca6f0f5037ffc1f7a20ea1c7c159361236c1d0f09a'
@@ -22063,6 +23859,70 @@ _docio_base_source.cache_info=_docio_cached_base.cache_info
 _docio_base_source.cache_clear=_docio_cached_base.cache_clear
 
 def _docio_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DOCIO_PREVIOUS_END
+    # FOOTBALL_DOCPERF_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DOCIO_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DOCIO_PREVIOUS_END
+    # FOOTBALL_DOCPRED_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DOCIO_PREVIOUS_END
+    # FOOTBALL_DOCSIX_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_DOCIO_PREVIOUS_END
+    # FOOTBALL_DOCREPORT_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_DOCIO_PREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_DOCIO_PREVIOUS_END
+    # FOOTBALL_DOCANCHOR_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCANCHOR_DOCIO_PREVIOUS_END
     # FOOTBALL_DOCLIFE_DOCIO_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","before_sha256":"455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98","reverse_patches":[{"end":12806,"start":12415,"text":""}]}}').get(path)
@@ -22125,6 +23985,142 @@ def _terms_cached_base(source,reviewed,parent):
     return source
 
 def _terms_base_source(source):
+    # FOOTBALL_DOCCLOSE_TERMS_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_TERMS_END
+    # FOOTBALL_DOCPERF_TERMS_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_TERMS_END
+    # FOOTBALL_DOCREMOTE_TERMS_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_TERMS_END
+    # FOOTBALL_DOCPRED_TERMS_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_TERMS_END
+    # FOOTBALL_DOCSIX_TERMS_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_TERMS_END
+    # FOOTBALL_DOCREPORT_TERMS_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_TERMS_END
+    # FOOTBALL_DOCFIXTURE_TERMS_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_TERMS_END
+    # FOOTBALL_DOCANCHOR_TERMS_BEGIN
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        _require(source.count(identity)==12 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_TERMS_END
     # FOOTBALL_DOCLIFE_TERMS_BEGIN
     if len(source)==5770511:
         identity=b'9fd2f06cd5d42681c551d8ca6f0f5037ffc1f7a20ea1c7c159361236c1d0f09a'
@@ -22200,6 +24196,70 @@ _terms_base_source.cache_info=_terms_cached_base.cache_info
 _terms_base_source.cache_clear=_terms_cached_base.cache_clear
 
 def _terms_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_TPREVIOUS_END
+    # FOOTBALL_DOCPERF_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_TPREVIOUS_END
+    # FOOTBALL_DOCREMOTE_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_TPREVIOUS_END
+    # FOOTBALL_DOCPRED_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_TPREVIOUS_END
+    # FOOTBALL_DOCSIX_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_TPREVIOUS_END
+    # FOOTBALL_DOCREPORT_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_TPREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_TPREVIOUS_END
+    # FOOTBALL_DOCANCHOR_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCANCHOR_TPREVIOUS_END
     # FOOTBALL_DOCLIFE_TPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","before_sha256":"455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98","reverse_patches":[{"end":12806,"start":12415,"text":""}]}}').get(path)
@@ -22270,6 +24330,142 @@ def _document_cached_base(source,reviewed,parent):
     return source
 
 def _document_base_source(source):
+    # FOOTBALL_DOCCLOSE_DOCUMENT_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DOCUMENT_END
+    # FOOTBALL_DOCPERF_DOCUMENT_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DOCUMENT_END
+    # FOOTBALL_DOCREMOTE_DOCUMENT_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DOCUMENT_END
+    # FOOTBALL_DOCPRED_DOCUMENT_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DOCUMENT_END
+    # FOOTBALL_DOCSIX_DOCUMENT_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_DOCUMENT_END
+    # FOOTBALL_DOCREPORT_DOCUMENT_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_DOCUMENT_END
+    # FOOTBALL_DOCFIXTURE_DOCUMENT_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_DOCUMENT_END
+    # FOOTBALL_DOCANCHOR_DOCUMENT_BEGIN
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        _require(source.count(identity)==12 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_DOCUMENT_END
     # FOOTBALL_DOCLIFE_DOCUMENT_BEGIN
     if len(source)==5770511:
         identity=b'9fd2f06cd5d42681c551d8ca6f0f5037ffc1f7a20ea1c7c159361236c1d0f09a'
@@ -22362,6 +24558,70 @@ _document_base_source.cache_info=_document_cached_base.cache_info
 _document_base_source.cache_clear=_document_cached_base.cache_clear
 
 def _document_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_DPREVIOUS_END
+    # FOOTBALL_DOCPERF_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_DPREVIOUS_END
+    # FOOTBALL_DOCREMOTE_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_DPREVIOUS_END
+    # FOOTBALL_DOCPRED_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_DPREVIOUS_END
+    # FOOTBALL_DOCSIX_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_DPREVIOUS_END
+    # FOOTBALL_DOCREPORT_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_DPREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_DPREVIOUS_END
+    # FOOTBALL_DOCANCHOR_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCANCHOR_DPREVIOUS_END
     # FOOTBALL_DOCLIFE_DPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","before_sha256":"455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98","reverse_patches":[{"end":12806,"start":12415,"text":""}]}}').get(path)
@@ -22440,6 +24700,142 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    # FOOTBALL_DOCCLOSE_PDF_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_PDF_END
+    # FOOTBALL_DOCPERF_PDF_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_PDF_END
+    # FOOTBALL_DOCREMOTE_PDF_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_PDF_END
+    # FOOTBALL_DOCPRED_PDF_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_PDF_END
+    # FOOTBALL_DOCSIX_PDF_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_PDF_END
+    # FOOTBALL_DOCREPORT_PDF_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_PDF_END
+    # FOOTBALL_DOCFIXTURE_PDF_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_PDF_END
+    # FOOTBALL_DOCANCHOR_PDF_BEGIN
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        _require(source.count(identity)==12 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_PDF_END
     # FOOTBALL_DOCLIFE_PDF_BEGIN
     if len(source)==5770511:
         identity=b'9fd2f06cd5d42681c551d8ca6f0f5037ffc1f7a20ea1c7c159361236c1d0f09a'
@@ -22549,6 +24945,70 @@ _pdf_base_source.cache_info=_pdf_cached_base.cache_info
 _pdf_base_source.cache_clear=_pdf_cached_base.cache_clear
 
 def _pdf_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_PPREVIOUS_END
+    # FOOTBALL_DOCPERF_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_PPREVIOUS_END
+    # FOOTBALL_DOCREMOTE_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_PPREVIOUS_END
+    # FOOTBALL_DOCPRED_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_PPREVIOUS_END
+    # FOOTBALL_DOCSIX_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_PPREVIOUS_END
+    # FOOTBALL_DOCREPORT_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_PPREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_PPREVIOUS_END
+    # FOOTBALL_DOCANCHOR_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCANCHOR_PPREVIOUS_END
     # FOOTBALL_DOCLIFE_PPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","before_sha256":"455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98","reverse_patches":[{"end":12806,"start":12415,"text":""}]}}').get(path)
@@ -22636,6 +25096,142 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    # FOOTBALL_DOCCLOSE_INTERPRET_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_INTERPRET_END
+    # FOOTBALL_DOCPERF_INTERPRET_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_INTERPRET_END
+    # FOOTBALL_DOCREMOTE_INTERPRET_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_INTERPRET_END
+    # FOOTBALL_DOCPRED_INTERPRET_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_INTERPRET_END
+    # FOOTBALL_DOCSIX_INTERPRET_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_INTERPRET_END
+    # FOOTBALL_DOCREPORT_INTERPRET_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_INTERPRET_END
+    # FOOTBALL_DOCFIXTURE_INTERPRET_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_INTERPRET_END
+    # FOOTBALL_DOCANCHOR_INTERPRET_BEGIN
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        _require(source.count(identity)==12 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_INTERPRET_END
     # FOOTBALL_DOCLIFE_INTERPRET_BEGIN
     if len(source)==5770511:
         identity=b'9fd2f06cd5d42681c551d8ca6f0f5037ffc1f7a20ea1c7c159361236c1d0f09a'
@@ -22762,6 +25358,70 @@ _interpret_base_source.cache_info=_interpret_cached_base.cache_info
 _interpret_base_source.cache_clear=_interpret_cached_base.cache_clear
 
 def _interpret_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_IPREVIOUS_END
+    # FOOTBALL_DOCPERF_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_IPREVIOUS_END
+    # FOOTBALL_DOCREMOTE_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_IPREVIOUS_END
+    # FOOTBALL_DOCPRED_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_IPREVIOUS_END
+    # FOOTBALL_DOCSIX_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_IPREVIOUS_END
+    # FOOTBALL_DOCREPORT_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_IPREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_IPREVIOUS_END
+    # FOOTBALL_DOCANCHOR_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCANCHOR_IPREVIOUS_END
     # FOOTBALL_DOCLIFE_IPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","before_sha256":"455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98","reverse_patches":[{"end":12806,"start":12415,"text":""}]}}').get(path)
@@ -22875,6 +25535,146 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    # FOOTBALL_DOCCLOSE_CAPACITY_BEGIN
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        _require(source.count(identity)==19 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_CAPACITY_END
+    # FOOTBALL_DOCPERF_CAPACITY_BEGIN
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        _require(source.count(identity)==18 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    if len(source)==6042118 and hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832':
+        source=b''.join((source[0:1913517],source[2230963:2233948],source[2256832:2257291],source[2282043:2290595],source[2313453:2318538],source[2324729:5960116],source[5985071:5985395],source[6010121:6011585],source[6030878:6031137],b'        if exists_at("HEAD", NFL_INTERPRETATION_POLICY_PATH):\n',source[6032997:6042118],))
+        _require(hashlib.sha256(source).hexdigest()=='bfe64f0312f7d5c4eddbc9273f715406bb3132d420ed0f6f414717469d4a1c6c','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_CAPACITY_END
+    # FOOTBALL_DOCREMOTE_CAPACITY_BEGIN
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        _require(source.count(identity)==17 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_CAPACITY_END
+    # FOOTBALL_DOCPRED_CAPACITY_BEGIN
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        _require(source.count(identity)==16 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_CAPACITY_END
+    # FOOTBALL_DOCSIX_CAPACITY_BEGIN
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        _require(source.count(identity)==15 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_CAPACITY_END
+    # FOOTBALL_DOCREPORT_CAPACITY_BEGIN
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        _require(source.count(identity)==14 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_CAPACITY_END
+    # FOOTBALL_DOCFIXTURE_CAPACITY_BEGIN
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        _require(source.count(identity)==13 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_CAPACITY_END
+    # FOOTBALL_DOCANCHOR_CAPACITY_BEGIN
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        _require(source.count(identity)==12 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_CAPACITY_END
     # FOOTBALL_DOCLIFE_CAPACITY_BEGIN
     if len(source)==5770511:
         identity=b'9fd2f06cd5d42681c551d8ca6f0f5037ffc1f7a20ea1c7c159361236c1d0f09a'
@@ -24784,6 +27584,158 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    # FOOTBALL_DOCCLOSE_DFS_BEGIN
+    if reviewed=='9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86':
+        return source.count(reviewed.encode())==19 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==6191126:
+        identity=b'9ec1219d8efd3394328b0ad12213510e4f28f3ca7054b7678c3ab676d8c1ae86'
+        if source.count(identity)!=19 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS', b'DOCPERF', b'DOCPERF_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCCLOSE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCCLOSE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):\n            code, report = _run_docclose_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='5f15baf3d7e3fc503b1aa22b9874ee24ad1ea94aa278d0e9459e455d22f24321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCCLOSE_DFS_END
+    # FOOTBALL_DOCPERF_DFS_BEGIN
+    if reviewed=='eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d':
+        return source.count(reviewed.encode())==18 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==6118904:
+        identity=b'eb4eca53dc19930dcb2724d7df50241866c19ddd067c4afbb2ba2d6456c1e72d'
+        if source.count(identity)!=18 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS', b'DOCREMOTE', b'DOCREMOTE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPERF_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPERF_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPERF_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPERF_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):\n            code, report = _run_docperf_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPERF_DFS_END
+    # FOOTBALL_DOCREMOTE_DFS_BEGIN
+    if reviewed=='aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90':
+        return source.count(reviewed.encode())==17 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==6042118:
+        identity=b'aad6430ce30a428ba486db9fa73e089815c152a7f94788d59695c2abfff07b90'
+        if source.count(identity)!=17 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS', b'DOCPRED', b'DOCPRED_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREMOTE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREMOTE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):\n            code, report = _run_docremote_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREMOTE_DFS_END
+    # FOOTBALL_DOCPRED_DFS_BEGIN
+    if reviewed=='f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e':
+        return source.count(reviewed.encode())==16 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==5995127:
+        identity=b'f1b5c6662076f2de5847a4f92a35e849883df841a9543e50a3653ae68787bf9e'
+        if source.count(identity)!=16 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS', b'DOCSIX', b'DOCSIX_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCPRED_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCPRED_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCPRED_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCPRED_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):\n            code, report = _run_docpred_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCPRED_DFS_END
+    # FOOTBALL_DOCSIX_DFS_BEGIN
+    if reviewed=='bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83':
+        return source.count(reviewed.encode())==15 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==5950188:
+        identity=b'bbb39099e6eb2bf45b0f73e98e1d6aea75b53d2534fd42c3a27d1e6d549a9c83'
+        if source.count(identity)!=15 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT', b'DOCREPORT_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCSIX_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCSIX_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCSIX_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCSIX_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):\n            code, report = _run_docsix_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='4dd09a1c470d19abf3ff502a50fb8ec499cbd26aa3ed23766fd1aea2f6744321','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCSIX_DFS_END
+    # FOOTBALL_DOCREPORT_DFS_BEGIN
+    if reviewed=='519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54':
+        return source.count(reviewed.encode())==14 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==5890439:
+        identity=b'519c19af181da64cb7c5b4a20472052d6ad2a6fe6e4b9e7b1f68c064f5feeb54'
+        if source.count(identity)!=14 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE', b'DOCFIXTURE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCREPORT_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCREPORT_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCREPORT_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):\n            code, report = _run_docreport_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCREPORT_DFS_END
+    # FOOTBALL_DOCFIXTURE_DFS_BEGIN
+    if reviewed=='ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc':
+        return source.count(reviewed.encode())==13 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==5856762:
+        identity=b'ad5b97261d95576519fdc19abf9bec9ead3b0bed1e612690c1e77d7580d6c2cc'
+        if source.count(identity)!=13 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'PREVIOUS', b'DFS', b'INTERPRET', b'IPREVIOUS', b'PDF', b'PPREVIOUS', b'DOCUMENT', b'DPREVIOUS', b'TERMS', b'TPREVIOUS', b'DOCIO', b'DOCIO_PREVIOUS', b'DOCMETA', b'DOCMETA_PREVIOUS', b'DOCWORDS', b'DOCWORDS_PREVIOUS', b'DOCLIFE', b'DOCLIFE_PREVIOUS', b'DOCANCHOR', b'DOCANCHOR_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCFIXTURE_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCFIXTURE_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):\n            code, report = _run_docfixture_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='fa9038befdf012357603f283c834f91304d59ced982af2f2e3772202032f747f','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCFIXTURE_DFS_END
+    # FOOTBALL_DOCANCHOR_DFS_BEGIN
+    if reviewed=='b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e':
+        return source.count(reviewed.encode())==12 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==5815201:
+        identity=b'b4ba53f65e9ec17559f66e35ae67d53bbdd8b93ab0438a6f86d37150d2178a4e'
+        if source.count(identity)!=12 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY',b'PREVIOUS',b'DFS',b'INTERPRET',b'IPREVIOUS',b'PDF',b'PPREVIOUS',b'DOCUMENT',b'DPREVIOUS',b'TERMS',b'TPREVIOUS',b'DOCIO',b'DOCIO_PREVIOUS',b'DOCMETA',b'DOCMETA_PREVIOUS',b'DOCWORDS',b'DOCWORDS_PREVIOUS',b'DOCLIFE',b'DOCLIFE_PREVIOUS'):
+         begin=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_BEGIN\n');end=source.index(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # FOOTBALL_DOCANCHOR_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_BEGIN\n');end=source.index(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# FOOTBALL_DOCANCHOR_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):\n            code, report = _run_docanchor_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='e8bb5ff4fce1ca58d062eae638d2280ba99fb33feedb1c0a157aec3d4f62c6ec','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # FOOTBALL_DOCANCHOR_DFS_END
     # FOOTBALL_DOCLIFE_DFS_BEGIN
     if reviewed=='9fd2f06cd5d42681c551d8ca6f0f5037ffc1f7a20ea1c7c159361236c1d0f09a':
         return source.count(reviewed.encode())==10 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
@@ -24922,6 +27874,70 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _interpret_parent_previous=_listing_capacity_previous_source
 def _listing_capacity_previous_source(path,source):
+    # FOOTBALL_DOCCLOSE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","before_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","reverse_patches":[{"end":568534,"start":568243,"text":""}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","before_sha256":"02f9bdac2a2b873d9d74f99b6413d8cdceef3237ae039a6a19048e9e6d0e6c7f","reverse_patches":[{"end":751,"start":539,"text":"        raw = subprocess.check_output([\'git\', \'show\', binding[\'base\']+\':\'+guard.GUARD_PATH], cwd=ROOT)\\n"}]},"tests/test_nfl_pdf_ci_scope.py":{"after_sha256":"0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506","before_sha256":"d353a4ef07887d11a2ce084909330fb0febca7aaf5cb3f040dadbae9d81e00a4","reverse_patches":[{"end":1795,"start":1699,"text":"def test_successor_costs_and_frozen_metadata_are_separately_bound():\\n"},{"end":1912,"start":1873,"text":"    root = Path(__file__).resolve().parents[1]\\n"},{"end":5100,"start":4047,"text":""}]},"tests/test_remote_canonical_scope.py":{"after_sha256":"da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d","before_sha256":"d027c457423aab49bc836a4d21c2d3e4021e630e4ef1fbb842076093b8bb1de5","reverse_patches":[{"end":1561,"start":1478,"text":""},{"end":4308,"start":4275,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCCLOSE_PREVIOUS_END
+    # FOOTBALL_DOCPERF_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160","before_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","reverse_patches":[{"end":97743,"start":97429,"text":"      \\"advisory_basis_seconds\\": 120.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":98436,"start":98258,"text":""},{"end":100074,"start":99998,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":100111,"start":100083,"text":"      \\"seconds\\": 255.94285,\\n"},{"end":187328,"start":187014,"text":"      \\"advisory_basis_seconds\\": 172.859,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":188171,"start":187993,"text":""},{"end":189582,"start":189504,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":189618,"start":189591,"text":"      \\"seconds\\": 312.6436,\\n"},{"end":488333,"start":488019,"text":"      \\"advisory_basis_seconds\\": 124.877,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":489024,"start":488846,"text":""},{"end":490656,"start":490580,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":490692,"start":490665,"text":"      \\"seconds\\": 213.98165,\\n"},{"end":541142,"start":540172,"text":""},{"end":568521,"start":567944,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPERF_PREVIOUS_END
+    # FOOTBALL_DOCREMOTE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_remote_continuation_scope.py":{"after_sha256":"429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449","before_sha256":"ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd","reverse_patches":[{"end":1567,"start":1484,"text":""},{"end":4333,"start":4300,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREMOTE_PREVIOUS_END
+    # FOOTBALL_DOCPRED_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_nfl_listing_capacity_scope.py":{"after_sha256":"42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57","before_sha256":"3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84","reverse_patches":[{"end":8496,"start":8357,"text":"def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\\n    root=Path(__file__).resolve().parents[1]\\n"},{"end":12508,"start":11233,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCPRED_PREVIOUS_END
+    # FOOTBALL_DOCSIX_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{".github/workflows/ci.yml":{"after_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","before_sha256":"c2e68466b0c1775fb3ec24f1c01f3e33b696bf9831b32b2c5543019f29b27431","reverse_patches":[{"end":3571,"start":3537,"text":"        shard: [1, 2, 3, 4, 5]\\n"},{"end":4064,"start":3984,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 5\\n"},{"end":5568,"start":5394,"text":"      - name: Reconcile complete test identities and outcomes across all five shards\\n        run: python scripts/run_ci_tests.py --shards 5 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97","before_sha256":"ac6575fd750ca63f4d46179882c8af1750330e8b48c0791bc7daa840fe067a0d","reverse_patches":[{"end":274167,"start":272192,"text":""},{"end":568679,"start":566255,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","before_sha256":"0603d1a4f5af799d4d714aee3bce89edfb9760797724224faa1d6d08f124cd66","reverse_patches":[{"end":4077,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\']\\n"},{"end":4226,"start":4172,"text":"    assert \'--shards 5\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4641,"start":4589,"text":"    assert \'--shards 5\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","before_sha256":"8476264da3d3b75ed71117bcb7c3011338197ba65df6a6af4b22fc613828ab44","reverse_patches":[{"end":13648,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\']\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCSIX_PREVIOUS_END
+    # FOOTBALL_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCREPORT_PREVIOUS_END
+    # FOOTBALL_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"tests/test_canonical_download_scope.py":{"after_sha256":"c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b","before_sha256":"6400c92cd64c93b22e862f8192345f4673142e5b575351aa7e8a3f10210730e0","reverse_patches":[{"end":1554,"start":1471,"text":""},{"end":4313,"start":4280,"text":""}]},"tests/test_football_document_html_scope.py":{"after_sha256":"54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1","before_sha256":"7e2b03c3ada0dd3c8ca05928819f3fb4b1b0fb59b79e9cfd3a0c65ce36c56fcb","reverse_patches":[{"end":7585,"start":7219,"text":""},{"end":7673,"start":7659,"text":""},{"end":7700,"start":7675,"text":""},{"end":8745,"start":7914,"text":""}]},"tests/test_source_intake_scope.py":{"after_sha256":"dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f","before_sha256":"a07e99b84f018416950c134e2e14d72496f8cacce3c1d0e56b2b59cbf8bbcfca","reverse_patches":[{"end":1544,"start":1461,"text":""},{"end":4226,"start":4193,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCFIXTURE_PREVIOUS_END
+    # FOOTBALL_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205","before_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","reverse_patches":[{"end":925,"start":875,"text":""},{"end":1085,"start":1030,"text":""},{"end":3279,"start":3268,"text":""},{"end":15599,"start":15594,"text":"=="},{"end":15621,"start":15609,"text":""},{"end":15850,"start":15831,"text":""},{"end":16031,"start":15852,"text":""},{"end":20698,"start":20661,"text":""},{"end":22595,"start":22568,"text":""},{"end":22627,"start":22604,"text":" if "},{"end":22640,"start":22639,"text":"==VERSION_V2 else BUNDLE"},{"end":24033,"start":24023,"text":""},{"end":24247,"start":24247,"text":"("},{"end":24288,"start":24261,"text":""},{"end":24320,"start":24297,"text":")==("},{"end":24336,"start":24335,"text":"==VERSION_V2)"},{"end":28564,"start":28524,"text":""},{"end":31970,"start":31816,"text":""}]},"app_core/nfl_observed_custody.py":{"after_sha256":"ea4d377a914bc7cc6aca7bf31d92cbe9bf65b3b1eab23e12e72b129ed8049cda","before_sha256":"77abb7ea1d5ba4b8a0526ecbc35fe403836d602835898e3d2bd6689a185af25a","reverse_patches":[{"end":1473,"start":1275,"text":""}]},"app_core/nfl_private_routes.py":{"after_sha256":"7210763c013ce7973da197943f94270387095caea3c9bb4dc3cf0b4b78d9a989","before_sha256":"7a9a5ce94380595bec11d6176de3a8190e4be75e72dddf625b6bc12d5b630e08","reverse_patches":[{"end":452,"start":398,"text":""},{"end":556,"start":543,"text":""},{"end":931,"start":919,"text":""},{"end":1086,"start":1072,"text":""},{"end":2119,"start":2066,"text":""},{"end":2539,"start":2518,"text":""},{"end":2763,"start":2743,"text":""},{"end":3602,"start":3589,"text":""}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # FOOTBALL_DOCANCHOR_PREVIOUS_END
     # FOOTBALL_DOCLIFE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_document_acquisition.py":{"after_sha256":"0f155b670080ab8bd484274143a611fa0cbea475be39211ec6eac5538c0b8ec3","before_sha256":"455f58917bed1717bb3ae8831be96c0a6a58dd8a063f87e3ada21158d56dac98","reverse_patches":[{"end":12806,"start":12415,"text":""}]}}').get(path)
@@ -25118,6 +28134,110 @@ def _run_doclife_integrated(manifest_path,base):
 
 # FOOTBALL_DOCLIFE_RUN_END
 
+# FOOTBALL_DOCANCHOR_RUN_BEGIN
+def _run_docanchor_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCANCHOR_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCANCHOR_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_html_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_html_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docanchor_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCANCHOR_RUN_END
+
+# FOOTBALL_DOCFIXTURE_RUN_BEGIN
+def _run_docfixture_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCFIXTURE_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCFIXTURE_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_html_fixture_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_html_fixture_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docfixture_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCFIXTURE_RUN_END
+
+# FOOTBALL_DOCREPORT_RUN_BEGIN
+def _run_docreport_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCREPORT_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCREPORT_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_fixture_report_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_fixture_report_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docreport_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCREPORT_RUN_END
+
+# FOOTBALL_DOCSIX_RUN_BEGIN
+def _run_docsix_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCSIX_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCSIX_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_six_capacity_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_six_capacity_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docsix_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCSIX_RUN_END
+
+# FOOTBALL_DOCPRED_RUN_BEGIN
+def _run_docpred_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCPRED_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCPRED_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_predecessor_fixture_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_predecessor_fixture_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docpred_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCPRED_RUN_END
+
+# FOOTBALL_DOCREMOTE_RUN_BEGIN
+def _run_docremote_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCREMOTE_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCREMOTE_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_remote_fixture_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_remote_fixture_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docremote_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCREMOTE_RUN_END
+
+# FOOTBALL_DOCPERF_RUN_BEGIN
+def _run_docperf_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCPERF_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCPERF_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_ci_performance_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_ci_performance_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docperf_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCPERF_RUN_END
+
+# FOOTBALL_DOCCLOSE_RUN_BEGIN
+def _run_docclose_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/FOOTBALL_DOCCLOSE_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FOOTBALL_DOCCLOSE_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_ci_closure_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_ci_closure_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_docclose_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
+# FOOTBALL_DOCCLOSE_RUN_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -25125,7 +28245,23 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):
+        if exists_at("HEAD", FOOTBALL_DOCCLOSE_POLICY_PATH):
+            code, report = _run_docclose_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCPERF_POLICY_PATH):
+            code, report = _run_docperf_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCREMOTE_POLICY_PATH):
+            code, report = _run_docremote_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCPRED_POLICY_PATH):
+            code, report = _run_docpred_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCSIX_POLICY_PATH):
+            code, report = _run_docsix_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCREPORT_POLICY_PATH):
+            code, report = _run_docreport_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCFIXTURE_POLICY_PATH):
+            code, report = _run_docfixture_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCANCHOR_POLICY_PATH):
+            code, report = _run_docanchor_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", FOOTBALL_DOCLIFE_POLICY_PATH):
             code, report = _run_doclife_integrated(args.manifest, args.base)
         elif exists_at("HEAD", FOOTBALL_DOCWORDS_POLICY_PATH):
             code, report = _run_docwords_integrated(args.manifest, args.base)

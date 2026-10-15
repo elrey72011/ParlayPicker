@@ -1,0 +1,48 @@
+{
+  "approval_reference": "Robert approved exact bounded correction proposal 977f0b5dd01aa0da8f1449a3125669596f7659b80fb7eac93d13233a97a71495, patch 50cb00f85f183eb9c6a1e52161ea09e901d21d7c5419fa053a443f22eca32380 in call_c81441c432784d779a0b1e13a7637014: isolated exact-hash five-shard predecessor input only to the unchanged historical test; preserve original assertions and identity, add focused isolation/tamper regressions, fresh exact successor bindings and policy-only seal, then one complete 16-check final-head CI run with no automatic retry. Workflow/scheduler/profile/timeouts/acquisition/model/network blocking/storage/tasks remain unchanged. No collection/inference/merge/deployment.",
+  "approved_existing_test_changes": {
+    "tests/test_nfl_listing_capacity_scope.py": "Owner-approved isolated immutable five-shard input fixture only; every original assertion/identity unchanged."
+  },
+  "base": "413a426f826b8d0222e8954aa940ba72ce698f7b",
+  "base_tree": "3214c8b9bef47b4ed95de3a1225c3379243e92db",
+  "main_base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "main_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/football-document-predecessor-fixture-binding-v1.json",
+    "docs/paid-launch/football-document-predecessor-fixture-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_predecessor_fixture_scope.py",
+    "tests/test_football_document_predecessor_fixture.py",
+    "tests/test_football_document_predecessor_fixture_scope.py",
+    "tests/test_nfl_listing_capacity_scope.py"
+  ],
+  "previous_guard_sha256": "021b74b33dc5ccc17d7249d50618fa94b0721f138f15c81263ada94a9e28f3a6",
+  "reconstruction_json_sha256": "55d8f2dbe2930a923dedcf747a36bf020c22857e4f9e0dedd953492a6e77ee13",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-predecessor-fixture-v1.md": "d1d8055f4b327f2c151f96830062a1dc501e5f75",
+    "scripts/football_document_predecessor_fixture_scope.py": "47203fd112ead8dd4125dbef34bbbac84560a639",
+    "tests/test_football_document_predecessor_fixture.py": "b92a2e471f336c4a833326f229bf399d60b70f73",
+    "tests/test_football_document_predecessor_fixture_scope.py": "2266e66da3a8806b81f6606dff455ea2ee989d06",
+    "tests/test_nfl_listing_capacity_scope.py": "d068e3490a6116c43e237aa722bd11a206098dca"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "tests/test_nfl_listing_capacity_scope.py": {
+      "after_sha256": "42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57",
+      "before_sha256": "3b58be5f526e369a34bbf4b4a8a39dceb2c85ceedc883bbd67ca0dfd970e4f84",
+      "reverse_patches": [
+        {
+          "end": 8496,
+          "start": 8357,
+          "text": "def test_exact_capacity_source_projection_and_unknown_bytes_preserved():\n    root=Path(__file__).resolve().parents[1]\n"
+        },
+        {
+          "end": 12508,
+          "start": 11233,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

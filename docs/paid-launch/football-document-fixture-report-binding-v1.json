@@ -1,0 +1,29 @@
+{
+  "approval_reference": "Robert authorized required CI closure preserving original assertions. Correct only the reproduced exact fixture-report metadata conflict after complete immutable policy validation; preserve the original predecessor report and separately expose the exact reviewed fixture adaptations. No application/test assertion/workflow/profile/timeout/storage/task/acceptance change. Preserve all earlier failed runs. No acquisition or inference.",
+  "approved_existing_test_changes": {
+    "tests/test_canonical_download_scope.py": "Setup-only isolated synthetic fixture correction; every preexisting assertion unchanged.",
+    "tests/test_football_document_html_scope.py": "Setup-only isolated synthetic fixture correction; every preexisting assertion unchanged.",
+    "tests/test_source_intake_scope.py": "Setup-only isolated synthetic fixture correction; every preexisting assertion unchanged."
+  },
+  "base": "6a78cd2260aebb5b7550a2a8eba5263f6744dd38",
+  "base_tree": "fac87ae3f4224e18f92e18584aced87a5e0998f6",
+  "main_base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "main_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/football-document-fixture-report-binding-v1.json",
+    "docs/paid-launch/football-document-fixture-report-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_fixture_report_scope.py",
+    "tests/test_football_document_fixture_report_scope.py"
+  ],
+  "previous_guard_sha256": "ed7290614115bf6ed093106c4d32d8b0a29c022bee1d3cf2d521d5a84ec2b361",
+  "reconstruction_json_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-fixture-report-v1.md": "5aeeeabaf29cf80cfd8b47a391964faff8ef5cae",
+    "scripts/football_document_fixture_report_scope.py": "fcebeac3275a17adcd7e0de1f22aa50682bc8d5e",
+    "tests/test_football_document_fixture_report_scope.py": "4187ee61a29e2c4066d65394f44490014aeb64ff"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}

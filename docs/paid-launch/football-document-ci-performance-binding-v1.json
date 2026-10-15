@@ -1,0 +1,158 @@
+{
+  "approval_reference": "Robert authorized measured diagnosis and a bounded CI correction for PR #2424: exact immutable reconstruction or compatible completed timing refresh only; preserve all original test identities/assertions, predecessor bindings and live validation. Keep six whole-file shards, scheduler, required workflows, network blocking, 30-minute timeouts and all acquisition/model/operational work unchanged. Add focused regressions, fresh exact bindings and policy-only seal; one final-head CI cycle, no automatic retries.",
+  "approved_existing_test_changes": {},
+  "base": "43925c920a07c475f50ccfec0b366ffd963cfb8c",
+  "base_tree": "04677844a51da6af54f73f92cc5ebb7375022ea3",
+  "main_base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "main_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/football-document-ci-performance-binding-v1.json",
+    "docs/paid-launch/football-document-ci-performance-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/football_document_ci_performance_scope.py",
+    "tests/test_football_document_ci_performance.py",
+    "tests/test_football_document_ci_performance_scope.py"
+  ],
+  "previous_guard_sha256": "7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832",
+  "projection_derivation": {
+    "input_bytes": 6042118,
+    "input_sha256": "7fc3b110224763bc8845e733be4e2bcd0aa4e9ab014fb4ea01021ab717379832",
+    "output_bytes": 5577215,
+    "output_sha256": "bfe64f0312f7d5c4eddbc9273f715406bb3132d420ed0f6f414717469d4a1c6c",
+    "prefix_blocks": 13,
+    "segments": [
+      {
+        "end": 1913517,
+        "start": 0
+      },
+      {
+        "end": 2233948,
+        "start": 2230963
+      },
+      {
+        "end": 2257291,
+        "start": 2256832
+      },
+      {
+        "end": 2290595,
+        "start": 2282043
+      },
+      {
+        "end": 2318538,
+        "start": 2313453
+      },
+      {
+        "end": 5960116,
+        "start": 2324729
+      },
+      {
+        "end": 5985395,
+        "start": 5985071
+      },
+      {
+        "end": 6011585,
+        "start": 6010121
+      },
+      {
+        "end": 6031137,
+        "start": 6030878
+      },
+      {
+        "literal": "        if exists_at(\"HEAD\", NFL_INTERPRETATION_POLICY_PATH):\n"
+      },
+      {
+        "end": 6042118,
+        "start": 6032997
+      }
+    ]
+  },
+  "reconstruction_json_sha256": "27b4e5ea949de3a2e501c65a7b5074efe5c323926bb874c2bd8ffb92e6c670b3",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-ci-performance-v1.md": "dba1848aa32dbca499c4d92ac6dfe3bdf8088467",
+    "scripts/ci_test_file_costs_v1.json": "960639760684a85884bde8f2d116c9b522adc187",
+    "scripts/football_document_ci_performance_scope.py": "d2796ead1e4ed7846629149afa23c668293c2315",
+    "tests/test_football_document_ci_performance.py": "cec1169658bf474c63e8fda6090ba60d85dcaa62",
+    "tests/test_football_document_ci_performance_scope.py": "306ed3884d4d6af2f954f3aebf6de9bcc35fcc16"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "scripts/ci_test_file_costs_v1.json": {
+      "after_sha256": "d65a059df8f0cbb896d8c68543c058a8ebafc933302aced8df43e95eb700d160",
+      "before_sha256": "3be3c2c7b43bffce8d0c774b0ef36d64f8227d4bee72690136b8917749416e97",
+      "reverse_patches": [
+        {
+          "end": 97743,
+          "start": 97429,
+          "text": "      \"advisory_basis_seconds\": 120.412,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 98436,
+          "start": 98258,
+          "text": ""
+        },
+        {
+          "end": 100074,
+          "start": 99998,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 100111,
+          "start": 100083,
+          "text": "      \"seconds\": 255.94285,\n"
+        },
+        {
+          "end": 187328,
+          "start": 187014,
+          "text": "      \"advisory_basis_seconds\": 172.859,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 188171,
+          "start": 187993,
+          "text": ""
+        },
+        {
+          "end": 189582,
+          "start": 189504,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 189618,
+          "start": 189591,
+          "text": "      \"seconds\": 312.6436,\n"
+        },
+        {
+          "end": 488333,
+          "start": 488019,
+          "text": "      \"advisory_basis_seconds\": 124.877,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 489024,
+          "start": 488846,
+          "text": ""
+        },
+        {
+          "end": 490656,
+          "start": 490580,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 490692,
+          "start": 490665,
+          "text": "      \"seconds\": 213.98165,\n"
+        },
+        {
+          "end": 541142,
+          "start": 540172,
+          "text": ""
+        },
+        {
+          "end": 568521,
+          "start": 567944,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

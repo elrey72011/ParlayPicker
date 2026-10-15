@@ -1,0 +1,48 @@
+{
+  "approval_reference": "Robert approved exact fixture correction proposal c6ceafeb570312c41c3647579f76d6a5c98b8a8eb438811209ceb1302c398e2f, patch 5f8ec386fb971f2e324240e8c203a9edcf30f40e0b4f20ac13adde4edde78730 in call_bd337a75042746e3b4201d54972c308c: only local synthetic-template gc.auto=0 and maintenance.auto=false before commits and synchronous git gc --prune=never before copying in tests/test_remote_continuation_scope.py. Preserve every original assertion and identity, frozen predecessors, six-shard workflow, scheduler, profile, network blocking, deadlines, acquisition and mathematics. Add focused preservation regressions, fresh bindings and policy-only seal, then one complete new final-head 16-check CI run with no automatic retries. No acquisition/storage/task changes/inference/merge/deployment.",
+  "approved_existing_test_changes": {
+    "tests/test_remote_continuation_scope.py": "Owner-approved local synthetic-template maintenance controls and synchronous non-pruning packing only; every original assertion and identity unchanged."
+  },
+  "base": "56da7ac68caccbba56d018d22de4dc3f211e019d",
+  "base_tree": "1baf6c3ba381458c120ce98f0ba8fd839e82493e",
+  "main_base": "5b9e5fe8de1d7b497b8090d9246577f8651af698",
+  "main_tree": "749d504e6a93198cb2e4ddb4f45d537282524b2a",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/football-document-remote-fixture-binding-v1.json",
+    "docs/paid-launch/football-document-remote-fixture-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_remote_fixture_scope.py",
+    "tests/test_football_document_remote_fixture.py",
+    "tests/test_football_document_remote_fixture_scope.py",
+    "tests/test_remote_continuation_scope.py"
+  ],
+  "previous_guard_sha256": "d38bce2f688b2a799ac618bbc5c322cea4116ad52c4b7cef3defd3ad5244bc6b",
+  "reconstruction_json_sha256": "3cf638a5ec176b2c3152b83aa6ccd5ecfe0edae028967c1c612dae591bed08c0",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-remote-fixture-v1.md": "f09f7707a954d588e10e4e328c604393e793c98b",
+    "scripts/football_document_remote_fixture_scope.py": "342d7adcc781599a38518f0fd5ae79834d8184a4",
+    "tests/test_football_document_remote_fixture.py": "40a36cbc6c8a4071b626b6a43a114dc735a5f031",
+    "tests/test_football_document_remote_fixture_scope.py": "0ea395967bd562ddfef7b47ed8c5f663a984bf53",
+    "tests/test_remote_continuation_scope.py": "b73668e319953dac0cd587fc7dae854887f8a840"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "tests/test_remote_continuation_scope.py": {
+      "after_sha256": "429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449",
+      "before_sha256": "ec11f00e1f75c1d696ba99e651864a4af1d007185f81221954d7070a883f48dd",
+      "reverse_patches": [
+        {
+          "end": 1567,
+          "start": 1484,
+          "text": ""
+        },
+        {
+          "end": 4333,
+          "start": 4300,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

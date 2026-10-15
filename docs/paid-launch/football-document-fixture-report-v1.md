@@ -1,0 +1,5 @@
+# Exact fixture reporting closure
+
+At head 6a78cd2260aebb5b7550a2a8eba5263f6744dd38, subscriber-postgres executed 23 tests: 22 passed and the unchanged additive-scope assertion failed. The preceding exact fixture successor validated its three setup-only changes but placed those authorized adaptations in existing_test_changes. This successor preserves that original report unchanged, preserves its exact blobs/reconstruction and reports authorized fixture adaptations separately after the complete exact policy validation. existing_test_changes retains its established meaning of unapproved existing-test changes. No assertion, acquisition, reader, scheduler, workflow, timeout or timing-profile change is made. Dirty/staged/committed/resealed changes still fail closed. Production code and the authentic failure evidence remain unchanged.
+
+The prior scanner and fixture implementation/seal identities remain immutable. This metadata-only successor has fresh exact bindings and a subsequent policy-only seal. It supplies no runtime savings, source acceptance, collection approval or wagering authority.
