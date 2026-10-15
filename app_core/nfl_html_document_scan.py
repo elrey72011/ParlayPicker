@@ -27,14 +27,16 @@ class Anchors(HTMLParser):
             if allowed:self.ranges.append((start+match.start(3),start+match.end(3)))
     handle_startendtag=handle_starttag
 
-def checked(raw, *, public_guide_examples=False):
+def _checked(raw, *, public_guide_examples=False, facts=None):
     """Raise a stable code, never the matching content or a parser exception."""
     from app_core.nfl_observed_custody import require
+    if facts is not None:facts['stage']='HTML_FORMAT'
     try:text=raw.decode('utf-8')
     except (UnicodeError,AttributeError):raise ValueError('DOCUMENT_FORMAT') from None
     require(text.strip() and re.search(r'(?i)<(?:!doctype\s+html|html)(?:\s|>)',text[:4096]),'DOCUMENT_FORMAT')
     # Decode bounded textual encodings for validation only. This prevents HTML
     # entities, percent escapes and ASCII Unicode escapes concealing assignments.
+    if facts is not None:facts['stage']='HTML_NORMALIZATION'
     scan=text
     for _ in range(2):
         try:scan=unescape(unquote(scan,errors='strict'))
@@ -44,13 +46,39 @@ def checked(raw, *, public_guide_examples=False):
     try:require(unescape(unquote(scan,errors='strict'))==scan,'DOCUMENT_FORMAT')
     except UnicodeError:raise ValueError('DOCUMENT_FORMAT') from None
     require(len(scan)<=4*len(text)+16,'DOCUMENT_FORMAT')
+    if facts is not None:facts['stage']='HTML_STRUCTURE'
     parser=Anchors(scan)
     try:parser.feed(scan);parser.close()
     except (ValueError,TypeError,IndexError):raise ValueError('DOCUMENT_FORMAT') from None
     # Only exact attribute-value locations are excluded from the validation
     # view. No body-wide/domain-wide bypass and no original evidence redaction.
+    if facts is not None:facts['structural_syntax_applied']=bool(parser.ranges)
     for start,end in sorted(parser.ranges,reverse=True):scan=scan[:start]+' '*(end-start)+scan[end:]
+    if facts is not None:facts['public_placeholder_applied']=False
     if public_guide_examples:
         for literal in ('apiKey=YOUR_API_KEY','apiKey={apiKey}'):
-            scan=re.sub(r'(?<![A-Za-z0-9_])'+re.escape(literal)+r'(?=$|[&\s"\x27<>])','PUBLIC_DOCUMENTATION_LITERAL',scan)
-    require(not CREDENTIAL.search(scan),'DOCUMENT_CREDENTIAL_BODY')
+            pattern=r'(?<![A-Za-z0-9_])'+re.escape(literal)+r'(?=$|[&\s"\x27<>])'
+            if facts is not None and re.search(pattern,scan):facts['public_placeholder_applied']=True
+            scan=re.sub(pattern,'PUBLIC_DOCUMENTATION_LITERAL',scan)
+    match=CREDENTIAL.search(scan)
+    if facts is not None:
+        from app_core.nfl_document_scan_diagnostics import rule
+        facts['stage']='HTML_ASSIGNMENT';facts['matched_rule']=rule(match)
+    require(not match,'DOCUMENT_CREDENTIAL_BODY')
+
+
+def checked(raw, *, public_guide_examples=False):
+    """Historical V3 entry point: unchanged decisions and rejection strings."""
+    return _checked(raw,public_guide_examples=public_guide_examples)
+
+
+def checked_with_diagnostics(raw, *, public_guide_examples=False):
+    """Explicit V4 only; retain fixed enums/booleans, never matched content."""
+    from app_core.nfl_document_scan_diagnostics import initial, checked as validate, Failure
+    facts=initial()
+    try:_checked(raw,public_guide_examples=public_guide_examples,facts=facts)
+    except ValueError as exc:
+        if str(exc) in {'DOCUMENT_FORMAT','DOCUMENT_CREDENTIAL_BODY'}:
+            raise Failure(str(exc),validate(facts)) from None
+        raise
+    return validate(facts)
