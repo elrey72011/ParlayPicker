@@ -71,6 +71,11 @@ def normalize(method, excerpt):
     if method == 'american_price':
         require(re.fullmatch(r'[+-]\d{3,5}', text) and abs(int(text)) >= 100, UNSUPPORTED)
         return int(text)
+    if method == 'reference_definition' and re.fullmatch(
+            r"calculated as <team> ?'s points minus <opponent> ?'s points recorded within <time period>", lower):
+        # Exact NFL Spread template variables, not named-team or period inference.
+        # The listing still binds their identities and full-game/OT applicability.
+        return 'reference_minus_opponent_final_points'
     vocabulary = {
         'period': {'entire game':'full_game', 'full game':'full_game', 'first half':'first_half'},
         'overtime': {'including overtime':True, 'inclusive of overtime':True, 'excluding overtime':False},
