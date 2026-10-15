@@ -11,6 +11,31 @@ from scripts import run_ci_tests as runner
 ROOT=Path(__file__).resolve().parents[1]
 
 
+def _verified_socket_ci_profile_bytes(source):
+    from scripts import check_launch_change_scope as guard
+    source=source.replace(b'\r\n',b'\n')
+    prior=guard._document_scan_ci_previous_source('scripts/ci_test_file_costs_v1.json',source)
+    assert hashlib.sha256(prior).hexdigest()=='4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49'
+    return prior
+
+
+@pytest.fixture(autouse=True)
+def historical_socket_ci_profile(request,tmp_path,monkeypatch):
+    # Only the two frozen predecessor-profile assertions use this exact input.
+    # Live assignment, changed-input and history-free tests retain current ROOT.
+    if request.node.name not in {
+        'test_exact_twelve_advisory_rows_and_frozen_metadata_preserved',
+        'test_only_completed_whole_file_xml_supplies_advisory_costs',
+    }:
+        return
+    root=tmp_path/'SYNTHETIC-exact-socket-ci-profile'
+    path=root/'scripts/ci_test_file_costs_v1.json';path.parent.mkdir(parents=True)
+    path.write_bytes(_verified_socket_ci_profile_bytes((ROOT/'scripts/ci_test_file_costs_v1.json').read_bytes()))
+    binding='docs/paid-launch/ncaaf-socket-ci-binding-v1.json'
+    target=root/binding;target.parent.mkdir(parents=True);target.write_bytes((ROOT/binding).read_bytes())
+    monkeypatch.setattr(__import__(__name__,fromlist=['ROOT']),'ROOT',root)
+
+
 def _exact_predecessor_profile():
     binding=json.loads((ROOT/'docs/paid-launch/ncaaf-socket-ci-binding-v1.json').read_bytes())
     from scripts import check_launch_change_scope as guard
