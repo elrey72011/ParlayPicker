@@ -11,6 +11,7 @@ import http.client
 import json
 import os
 from pathlib import Path
+import socket
 import sqlite3
 import threading
 import time
@@ -182,17 +183,30 @@ class HttpsTransport:
         # Explicit connect only. A cancelled writer must not reopen a socket
         # through HTTPConnection.send's default auto_open behavior.
         conn.auto_open=False
+        response=None;read_socket=None
+        def close():
+            cancelled.set()
+            # getresponse may detach the socket from conn. Interrupt its read
+            # before closing HTTPResponse's buffered file (which takes a lock).
+            shutdown=getattr(read_socket,'shutdown',None)
+            if shutdown is not None:
+                try:shutdown(socket.SHUT_RDWR)
+                except OSError:pass  # Cleanup only; read/socket errors propagate.
+            try:
+                if response is not None and hasattr(response,'close'):response.close()
+            finally:conn.close()
         try:
-            _timed(conn.connect,min(deadline,monotonic()+limits['connect_seconds']),monotonic,cancelled,conn.close)
+            _timed(conn.connect,min(deadline,monotonic()+limits['connect_seconds']),monotonic,cancelled,close)
             require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
+            read_socket=conn.sock
             conn.sock.settimeout(min(limits['read_seconds'],max(.001,deadline-monotonic())))
-            _timed(lambda:conn.request('GET','/'+request['endpoint']+'?'+urlencode(params),headers=headers),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)
+            _timed(lambda:conn.request('GET','/'+request['endpoint']+'?'+urlencode(params),headers=headers),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,close)
             require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
             conn.sock.settimeout(min(limits['read_seconds'],deadline-monotonic()))
-            response=_timed(conn.getresponse,min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)
+            response=_timed(conn.getresponse,min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,close)
             require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
         except Exception as exc:
-            conn.close()
+            close()
             if isinstance(exc,ValueError) and str(exc)=='NCAAF_PILOT_DEADLINE':raise
             raise ValueError('NCAAF_PILOT_TRANSPORT_FAILURE') from None
         class Stream:
@@ -201,12 +215,16 @@ class HttpsTransport:
             def chunks(self):
                 while True:
                     remaining=deadline-monotonic()
-                    require(remaining>0,'NCAAF_PILOT_DEADLINE')
-                    conn.sock.settimeout(min(limits['read_seconds'],remaining))
-                    block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)
+                    require(not cancelled.is_set() and remaining>0,'NCAAF_PILOT_DEADLINE')
+                    # HTTPResponse.isclosed() means fp is None. Its final framed
+                    # read may also close the detached socket: check completion
+                    # first. _read still verifies declared length and deadlines.
+                    if getattr(response,'fp',response) is None:return
+                    read_socket.settimeout(min(limits['read_seconds'],remaining))
+                    block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,close)
                     if not block:break
                     yield block
-            def close(self):conn.close()
+            def close(self):close()
         return Stream()
 
     def validate_body(self, raw):

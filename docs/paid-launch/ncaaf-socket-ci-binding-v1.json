@@ -1,0 +1,154 @@
+{
+  "approval_reference": "Robert authorized completing the prepared three-file #2425 correction: actual retained checkout provenance, history-free new cost test, exact predecessor-profile fixture preserving the historical assertion; audit all new follow-up tests against analogous #2424 failures and validate together in depth-one CI checkout. Preserve all prior identities/assertions and 48 socket regressions, six shards, scheduler/workflows/timeouts/network blocking, mutable live validation, frozen revision 3, source/model/admission semantics, NFL task and every pin, WNBA, authorizations, originals and journals. Fresh exact bindings and policy-only seal, push corrected candidate and one additional complete final-head CI cycle, no automatic retries. Prior timing implementation e915 retained as sole pre-policy implementation ancestor; failed fbf seal retained separately. No acquisition, inference, trust activation, scheduling/storage changes, Drive, merge or deployment",
+  "approved_existing_test_changes": {
+    "tests/test_football_document_ci_closure.py": "Exact isolated predecessor-profile fixture only for the historical provenance assertion; original identity and every assertion AST preserved. Current gates and other tests use the actual current profile."
+  },
+  "base": "2b3e65213d9f0870e45ac26cc078403de8e52211",
+  "base_tree": "e77ecba2be4630b3a962ba805c0845e33ee89407",
+  "implementation_ancestors": [
+    "e915d12d3dd144f6b8b2dd47f8255b9c5a9403cf"
+  ],
+  "main_base": "8f92728d7538afc1a9a6a842fbee5f172e241ec7",
+  "main_tree": "3bd7dab87e663b131f18278e7a127211be47da55",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/ncaaf-socket-ci-binding-v1.json",
+    "docs/paid-launch/ncaaf-socket-ci-performance-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/ncaaf_socket_ci_scope.py",
+    "tests/test_football_document_ci_closure.py",
+    "tests/test_ncaaf_socket_ci_costs.py",
+    "tests/test_ncaaf_socket_ci_scope.py"
+  ],
+  "previous_guard_sha256": "34ece55058ba188d2170d3e339527a4fe4c78ce161fa334b4780cf8e03461ef1",
+  "reconstruction_json_sha256": "d31b4e23dbaecb6911e2425ceabf94f849e35a7e635f31f04aecfc362cb944f2",
+  "reviewed_blobs": {
+    "docs/paid-launch/ncaaf-socket-ci-performance-v1.md": "a424adcbbb1bfce244aa67f7a5630bc458029175",
+    "scripts/ci_test_file_costs_v1.json": "9e418efe698bd2030544d03e771f8c9047fa12d4",
+    "scripts/ncaaf_socket_ci_scope.py": "65ba8ef368766f359103e083f1fad41798342b9b",
+    "tests/test_football_document_ci_closure.py": "ed32f584c3ec71e237bde351afcbde08ac89192b",
+    "tests/test_ncaaf_socket_ci_costs.py": "a3c4f776f9099c55ede8307ae177e03dc52b23f2",
+    "tests/test_ncaaf_socket_ci_scope.py": "8108647fa6ebb503b53fb93add511f9986e7ae69"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "scripts/ci_test_file_costs_v1.json": {
+      "after_sha256": "4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49",
+      "before_sha256": "fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b",
+      "reverse_patches": [
+        {
+          "end": 36389,
+          "start": 36216,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 37645,
+          "start": 36398,
+          "text": "      \"seconds\": 378.0993,\n"
+        },
+        {
+          "end": 109774,
+          "start": 109601,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 111029,
+          "start": 109783,
+          "text": "      \"seconds\": 350.88915,\n"
+        },
+        {
+          "end": 226038,
+          "start": 225867,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 227297,
+          "start": 226047,
+          "text": "      \"seconds\": 671.29525,\n"
+        },
+        {
+          "end": 256568,
+          "start": 256397,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 257823,
+          "start": 256577,
+          "text": "      \"seconds\": 351.4975,\n"
+        },
+        {
+          "end": 265483,
+          "start": 263637,
+          "text": ""
+        },
+        {
+          "end": 281509,
+          "start": 279983,
+          "text": ""
+        },
+        {
+          "end": 299667,
+          "start": 299538,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 300671,
+          "start": 299676,
+          "text": "      \"seconds\": 11.1251,\n"
+        },
+        {
+          "end": 305890,
+          "start": 304367,
+          "text": ""
+        },
+        {
+          "end": 311556,
+          "start": 310031,
+          "text": ""
+        },
+        {
+          "end": 318886,
+          "start": 317352,
+          "text": ""
+        },
+        {
+          "end": 327418,
+          "start": 327247,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 328670,
+          "start": 327427,
+          "text": "      \"seconds\": 204.9093,\n"
+        },
+        {
+          "end": 558172,
+          "start": 556946,
+          "text": ""
+        },
+        {
+          "end": 616860,
+          "start": 599160,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_football_document_ci_closure.py": {
+      "after_sha256": "a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee",
+      "before_sha256": "605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b",
+      "reverse_patches": [
+        {
+          "end": 1859,
+          "start": 1672,
+          "text": "def test_new_provenance_records_observed_checkout_without_rewriting_history():\n    source = (ROOT/PROFILE).read_bytes().replace(b'\\r\\n', b'\\n')\n"
+        },
+        {
+          "end": 8213,
+          "start": 7099,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "approval_reference": "Robert authorized the reproduced NCAAF Connection: close lifecycle correction in a separate draft PR: retain the readable response/socket, check framed completion after unchanged deadline/cancellation gates, preserve complete-body/size/credential/attempt checks and all historical assertions, add real local-socket regressions through actual acquisition/read-back, exact successor bindings/policy-only seal and one complete required final-head CI cycle without automatic retries. Preserve NFL document task, WNBA work, Army-FAU authorization, evidence/journals, model/source/history/freshness/authorization semantics, workflows/scheduler/timeouts. No acquisition, inference, trust activation, scheduling changes, Drive, merge or deployment.",
+  "approved_existing_test_changes": {},
+  "base": "8f92728d7538afc1a9a6a842fbee5f172e241ec7",
+  "base_tree": "3bd7dab87e663b131f18278e7a127211be47da55",
+  "main_base": "8f92728d7538afc1a9a6a842fbee5f172e241ec7",
+  "main_tree": "3bd7dab87e663b131f18278e7a127211be47da55",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/ncaaf_pilot.py",
+    "docs/paid-launch/ncaaf-socket-lifecycle-binding-v1.json",
+    "docs/paid-launch/ncaaf-socket-lifecycle-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ncaaf_socket_scope.py",
+    "tests/test_ncaaf_socket_lifecycle.py",
+    "tests/test_ncaaf_socket_scope.py"
+  ],
+  "previous_guard_sha256": "0da8278a3c4239fc3f4a8b91c7608813e8602cd0712c4bdc389ea6559009da1b",
+  "reconstruction_json_sha256": "9ce996138c0504714a95c3a33d1c6ee7ef24f01f7aa7288a3ab48f04304a38a5",
+  "reviewed_blobs": {
+    "app_core/ncaaf_pilot.py": "96b35a22d61b741729c3feb8d1dc4bf34d0f00da",
+    "docs/paid-launch/ncaaf-socket-lifecycle-v1.md": "2bcf2a427a20cc746a08b9b78e1b4fa25dcbedec",
+    "scripts/ncaaf_socket_scope.py": "b1ee5bb01acf4a60e0d46760a56c0b970ff24ce1",
+    "tests/test_ncaaf_socket_lifecycle.py": "71c5755ed726e7f84cb9bf1793c0e9c5d51094c5",
+    "tests/test_ncaaf_socket_scope.py": "2ca8d6d4d61aabff50c7f2ac601e1b315d283a8c"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app_core/ncaaf_pilot.py": {
+      "after_sha256": "800345a9d59cc26cd3d4aed3eccf76815f858e9ae864610ceee56030a352e760",
+      "before_sha256": "2f8a728290d9e80750cb60c000f5a385058bc05df9939b5af7f4d924d14523a4",
+      "reverse_patches": [
+        {
+          "end": 414,
+          "start": 400,
+          "text": ""
+        },
+        {
+          "end": 12862,
+          "start": 12254,
+          "text": ""
+        },
+        {
+          "end": 12986,
+          "start": 12875,
+          "text": "            _timed(conn.connect,min(deadline,monotonic()+limits['connect_seconds']),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 13085,
+          "start": 13051,
+          "text": ""
+        },
+        {
+          "end": 13362,
+          "start": 13178,
+          "text": "            _timed(lambda:conn.request('GET','/'+request['endpoint']+'?'+urlencode(params),headers=headers),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 13631,
+          "start": 13510,
+          "text": "            response=_timed(conn.getresponse,min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 13749,
+          "start": 13729,
+          "text": "            conn.close()\n"
+        },
+        {
+          "end": 14761,
+          "start": 14139,
+          "text": "                    require(remaining>0,'NCAAF_PILOT_DEADLINE')\n                    conn.sock.settimeout(min(limits['read_seconds'],remaining))\n                    block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 14868,
+          "start": 14832,
+          "text": "            def close(self):conn.close()\n"
+        }
+      ]
+    }
+  }
+}
