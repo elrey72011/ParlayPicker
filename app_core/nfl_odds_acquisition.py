@@ -9,6 +9,7 @@ import math
 import os
 from pathlib import Path
 import re
+import socket
 import threading
 import time
 from urllib.parse import urlencode, unquote
@@ -208,39 +209,51 @@ class HttpsTransport:
         check_request(request,version=self.version)
         require(limits==LIMITS, 'NFL_ACQUIRE_LIMITS')
         started=monotonic(); phase='CONNECTION_SETUP'; status=diagnostics.UNKNOWN
-        conn=None; cancelled=threading.Event()
+        conn=None; response=None; read_socket=None; cancelled=threading.Event()
+        def close():
+            cancelled.set()
+            shutdown=getattr(read_socket,'shutdown',None)
+            if shutdown is not None:
+                try:shutdown(socket.SHUT_RDWR)
+                except OSError:pass  # Cleanup only; body/socket errors still reject.
+            try:
+                if response is not None and hasattr(response,'close'):response.close()
+            finally:
+                if conn is not None:conn.close()
         try:
             key=_timed(self.credentials,deadline,monotonic,cancelled,lambda:None)
             require(isinstance(key,str) and 0<len(key)<=4096 and not any(x in key for x in ('\r','\n')), 'NFL_ACQUIRE_CREDENTIAL_UNAVAILABLE')
             self._secret=key
             conn=http.client.HTTPSConnection(SOURCE['host'],timeout=min(10,max(.001,deadline-monotonic())))
             conn.auto_open=False; phase='HTTPS_CONNECT'
-            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)
+            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,close)
             phase='REQUEST_SEND'; conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))
             params=dict(request['params'],apiKey=key)
-            _timed(lambda:conn.request('GET',SOURCE['endpoint']+'?'+urlencode(params),headers={'Accept':'application/json','Accept-Encoding':'identity'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)
+            _timed(lambda:conn.request('GET',SOURCE['endpoint']+'?'+urlencode(params),headers={'Accept':'application/json','Accept-Encoding':'identity'}), min(deadline,monotonic()+10),monotonic,cancelled,close)
+            read_socket=conn.sock
             phase='RESPONSE_RECEIVE'
-            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)
+            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,close)
             status=diagnostics.status(response.status); phase='RESPONSE_HEADERS'
             pairs=response.getheaders()
             require(len(pairs)<=64 and sum(len(k)+len(v)+4 for k,v in pairs)<=LIMITS['max_header_bytes'], 'NFL_ACQUIRE_HEADER_LIMIT')
             headers=checked_headers(pairs)
         except Exception as exc:
-            if conn: conn.close()
+            close()
             raise diagnostics.Failure(rejection_code(exc),diagnostics.facts(exc,phase=phase,http_status=status,started=started,ended=monotonic())) from None
         class Stream:
             status=response.status
             def chunks(self):
                 try:
                     while True:
-                        require(monotonic()<deadline,'NFL_ACQUIRE_DEADLINE')
-                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))
-                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)
+                        require(not cancelled.is_set() and monotonic()<deadline,'NFL_ACQUIRE_DEADLINE')
+                        if getattr(response,'fp',response) is None:break
+                        read_socket.settimeout(min(10,max(.001,deadline-monotonic())))
+                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,close)
                         if not block: break
                         yield block
                 except Exception as exc:
                     raise diagnostics.Failure(rejection_code(exc),diagnostics.facts(exc,phase='BODY_READ',http_status=status,started=started,ended=monotonic())) from None
-            def close(self): conn.close()
+            def close(self): close()
         out=Stream(); out.headers=headers
         return out
 
