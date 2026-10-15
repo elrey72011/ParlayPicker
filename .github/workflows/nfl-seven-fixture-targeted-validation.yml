@@ -1,0 +1,45 @@
+name: NFL seven-fixture targeted validation
+on:
+  push:
+    branches: [codex/nfl-seven-fixture-targeted-validation-v1]
+permissions:
+  contents: read
+jobs:
+  critical-shard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: tooling
+          persist-credentials: false
+      - name: Preserve helper outside exact tested checkout
+        run: cp tooling/scripts/observe_nfl_seven_fixture_target.py "$RUNNER_TEMP/observe_nfl_seven_fixture_target.py"
+      - uses: actions/checkout@v5
+        with:
+          ref: b7e5e3639b5f0cc8f61ccb3d31c6b7cac6fd32d4
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.15'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Validate payload and pinned dependencies
+        run: |
+          python "$RUNNER_TEMP/observe_nfl_seven_fixture_target.py" --self-test
+          python "$RUNNER_TEMP/observe_nfl_seven_fixture_target.py" --constraints "$RUNNER_TEMP/nfl-constraints.txt"
+          python -m pip install pip==26.2.1 -c "$RUNNER_TEMP/nfl-constraints.txt"
+          python -m pip install -r requirements.txt pytest==9.1.1 -c "$RUNNER_TEMP/nfl-constraints.txt"
+      - name: Run exact critical assignment with default temporary paths
+        run: >
+          python -B -X utf8 "$RUNNER_TEMP/observe_nfl_seven_fixture_target.py"
+          --repo . --output "$RUNNER_TEMP/nfl-seven-target-output"
+      - name: Preserve complete or partial targeted evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfl-seven-fixture-targeted-validation
+          path: ${{ runner.temp }}/nfl-seven-target-output
+          if-no-files-found: error
+          retention-days: 14
