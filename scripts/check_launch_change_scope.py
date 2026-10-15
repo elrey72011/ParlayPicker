@@ -21765,6 +21765,51 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+NFL_PDF_TIMING_BOOTSTRAP = True
+NFL_PDF_TIMING_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-pdf-timing-v1.json'
+NFL_PDF_TIMING_BINDING_PATH = 'docs/paid-launch/nfl-pdf-timing-binding-v1.json'
+NFL_PDF_TIMING_BINDING_SHA256 = '8c5f49ba990f07e0a24691030987e8a98fedc4072abfede8b553b1e085d978a6'
+NFL_PDF_TIMING_REVIEWED_GUARD_SHA256 = 'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+NFL_PDF_TIMING_PREVIOUS_GUARD_SHA256 = '2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc'
+NFL_PDF_TIMING_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha256":"8c53f69cf799c77ee2bd78ab20f73246fa11ad61f6120d66751d53c235e33792","before_sha256":"5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550","reverse_patches":[{"end":3574,"start":3537,"text":"        shard: [1, 2, 3, 4, 5, 6]\\n"},{"end":4067,"start":3987,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 6\\n"},{"end":5573,"start":5397,"text":"      - name: Reconcile complete test identities and outcomes across all six shards\\n        run: python scripts/run_ci_tests.py --shards 6 --reconcile-manifests test-results\\n"}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"090c444804b9d7941b8e8200f60dd02a7de3e0e97b7df89eca7b153c2a5470f7","before_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","reverse_patches":[{"end":42664,"start":39618,"text":""},{"end":47330,"start":44558,"text":""},{"end":47672,"start":47528,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":47708,"start":47681,"text":"      \\"seconds\\": 53.34505,\\n"},{"end":50787,"start":47742,"text":""},{"end":57651,"start":54879,"text":""},{"end":58040,"start":57898,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":58075,"start":58049,"text":"      \\"seconds\\": 39.2518,\\n"},{"end":87534,"start":85568,"text":""},{"end":87870,"start":87763,"text":"        \\"listing-completed-main-1\\"\\n"},{"end":87905,"start":87879,"text":"      \\"seconds\\": 10.65705,\\n"},{"end":161482,"start":116651,"text":""},{"end":193148,"start":191182,"text":""},{"end":193483,"start":193376,"text":"        \\"listing-completed-main-1\\"\\n"},{"end":193519,"start":193492,"text":"      \\"seconds\\": 17.66055,\\n"},{"end":282039,"start":279267,"text":""},{"end":283386,"start":283244,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":283423,"start":283395,"text":"      \\"seconds\\": 84.41345,\\n"},{"end":299119,"start":297153,"text":""},{"end":299482,"start":299377,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":299518,"start":299491,"text":"      \\"seconds\\": 58.6684,\\n"},{"end":308928,"start":306156,"text":""},{"end":309268,"start":309124,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":309304,"start":309277,"text":"      \\"seconds\\": 47.3593,\\n"},{"end":314920,"start":311872,"text":""},{"end":321424,"start":318652,"text":""},{"end":321838,"start":321696,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":321873,"start":321847,"text":"      \\"seconds\\": 29.2146,\\n"},{"end":324982,"start":323016,"text":""},{"end":325321,"start":325216,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":325356,"start":325330,"text":"      \\"seconds\\": 47.886,\\n"},{"end":340388,"start":337616,"text":""},{"end":341718,"start":341574,"text":"        \\"listing-completed-main-1\\"\\n"},{"end":341754,"start":341727,"text":"      \\"seconds\\": 63.27185,\\n"},{"end":348308,"start":343048,"text":""},{"end":353227,"start":350167,"text":""},{"end":357232,"start":354182,"text":""},{"end":364983,"start":362208,"text":""},{"end":366367,"start":366223,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":366404,"start":366376,"text":"      \\"seconds\\": 196.6454,\\n"},{"end":371060,"start":368288,"text":""},{"end":371371,"start":371231,"text":"        \\"refresh1-completed-3\\"\\n"},{"end":371407,"start":371380,"text":"      \\"seconds\\": 70.88715,\\n"},{"end":375218,"start":372444,"text":""},{"end":376544,"start":376400,"text":"        \\"listing-completed-main-2\\"\\n"},{"end":376580,"start":376553,"text":"      \\"seconds\\": 143.80405,\\n"},{"end":390410,"start":382926,"text":""},{"end":396184,"start":393409,"text":""},{"end":397492,"start":397348,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":397528,"start":397501,"text":"      \\"seconds\\": 242.47405,\\n"},{"end":412021,"start":397562,"text":""},{"end":422219,"start":419447,"text":""},{"end":422527,"start":422387,"text":"        \\"refresh1-completed-3\\"\\n"},{"end":422562,"start":422536,"text":"      \\"seconds\\": 19.59255,\\n"},{"end":429341,"start":426569,"text":""},{"end":429683,"start":429531,"text":"        \\"ncaaf-socket-ci-completed-main-1\\"\\n"},{"end":429719,"start":429692,"text":"      \\"seconds\\": 76.85795,\\n"},{"end":433512,"start":431546,"text":""},{"end":433789,"start":433682,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":433825,"start":433798,"text":"      \\"seconds\\": 13.2135,\\n"},{"end":438665,"start":436462,"text":""},{"end":445108,"start":440148,"text":""},{"end":450289,"start":447517,"text":""},{"end":450690,"start":450548,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":450726,"start":450699,"text":"      \\"seconds\\": 20.51715,\\n"},{"end":454598,"start":451826,"text":""},{"end":454977,"start":454837,"text":"        \\"refresh1-completed-2\\"\\n"},{"end":455012,"start":454986,"text":"      \\"seconds\\": 29.5688\\n"},{"end":459970,"start":457199,"text":""},{"end":460214,"start":460070,"text":"        \\"listing-completed-main-2\\"\\n"},{"end":460249,"start":460223,"text":"      \\"seconds\\": 13.7747,\\n"},{"end":465715,"start":463749,"text":""},{"end":466051,"start":465946,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":466086,"start":466060,"text":"      \\"seconds\\": 6.65965,\\n"},{"end":473933,"start":471159,"text":""},{"end":475284,"start":475142,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":475321,"start":475293,"text":"      \\"seconds\\": 158.1687,\\n"},{"end":514274,"start":512306,"text":""},{"end":515615,"start":515510,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":515651,"start":515624,"text":"      \\"seconds\\": 195.68055,\\n"},{"end":544947,"start":542981,"text":""},{"end":545290,"start":545185,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":545326,"start":545299,"text":"      \\"seconds\\": 51.15315,\\n"},{"end":557129,"start":554358,"text":""},{"end":557459,"start":557319,"text":"        \\"refresh1-completed-3\\"\\n"},{"end":557495,"start":557468,"text":"      \\"seconds\\": 13.2503,\\n"},{"end":561561,"start":558790,"text":""},{"end":561967,"start":561825,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":562002,"start":561976,"text":"      \\"seconds\\": 32.58295,\\n"},{"end":609045,"start":607078,"text":""},{"end":610356,"start":610251,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":610391,"start":610365,"text":"      \\"seconds\\": 142.83,\\n"},{"end":624350,"start":621575,"text":""},{"end":625710,"start":625568,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":625747,"start":625719,"text":"      \\"seconds\\": 215.0155,\\n"},{"end":651718,"start":649508,"text":""},{"end":658320,"start":655551,"text":""},{"end":658561,"start":658417,"text":"        \\"listing-completed-main-1\\"\\n"},{"end":658597,"start":658570,"text":"      \\"seconds\\": 0.13455,\\n"},{"end":677869,"start":675097,"text":""},{"end":678271,"start":678129,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":678307,"start":678280,"text":"      \\"seconds\\": 35.03705,\\n"},{"end":763067,"start":759267,"text":""},{"end":809847,"start":799843,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"05a71e662ecfd3b5a5db98fcd12004d71f00f6359dcd0b553834b2a3ac11279e","before_sha256":"8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479","reverse_patches":[{"end":4081,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\',\'6\']\\n"},{"end":4230,"start":4176,"text":"    assert \'--shards 6\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4645,"start":4593,"text":"    assert \'--shards 6\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_six_shards.py":{"after_sha256":"3ad7cd6e71334e3151881e606440ccc68f8e083dba0a0daacd1efd5b54bec0b9","before_sha256":"8ade1de891f57a19605bbe1aff93daa8b6628f132e0859d3b6fa2e75337fb391","reverse_patches":[{"end":4152,"start":4074,"text":"    assert shard[\'strategy\'][\'matrix\'][\'shard\']==[str(i) for i in range(1,7)]\\n"},{"end":4336,"start":4238,"text":"    assert \'--shards 6\' in shard[\'steps\'][-2][\'run\'] and \'--shards 6\' in gate[\'steps\'][-1][\'run\']\\n"},{"end":4812,"start":4572,"text":"def test_two_completed_file_costs_are_advisory_and_attributable():\\n"},{"end":5764,"start":5682,"text":""}]},"tests/test_ci_test_shards.py":{"after_sha256":"0fbed27ca141eb53b4b08e78b2b2f13989574bb818b3d01caabac2e8b9532745","before_sha256":"be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e","reverse_patches":[{"end":13653,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\', \'6\']\\n"}]},"tests/test_ci_timing_profile.py":{"after_sha256":"c5cf8c9f08285732694a3d42e5f45cdf275d533a286a3084723575fc7cb775b7","before_sha256":"0b0da1743f05fcb6e947cfea46ad4fa315e01863958665f27974321811dc5e88","reverse_patches":[{"end":448,"start":208,"text":"def test_revision_provenance_and_honest_incomplete_observations():\\n"},{"end":4173,"start":4091,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"5b67fd81854f2e39df055d1187c39de5765bbd731fae4ceaf0478f6d73c49e37","before_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","reverse_patches":[{"end":7441,"start":7372,"text":""}]},"tests/test_ncaaf_socket_ci_costs.py":{"after_sha256":"c5839b640203bfde9d1988fa19fd839e9d1b592c47a1d7d58fdaee61f5e3bfcc","before_sha256":"ea43455b8ac09e076b9049eab16a3b9bb2370f9f37b20129c0c4fd5ef574ec49","reverse_patches":[{"end":1012,"start":786,"text":"def test_exact_twelve_advisory_rows_and_frozen_metadata_preserved():\\n"},{"end":1980,"start":1757,"text":"def test_only_completed_whole_file_xml_supplies_advisory_costs():\\n"},{"end":6976,"start":6894,"text":""}]}}'
+from functools import lru_cache as _nfl_pdf_timing_lru
+
+def _nfl_pdf_timing_guard_matches(source):
+    value=NFL_PDF_TIMING_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==23 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==NFL_PDF_TIMING_REVIEWED_GUARD_SHA256
+
+@_nfl_pdf_timing_lru(maxsize=2)
+def _nfl_pdf_timing_cached_base(source,reviewed,parent):
+    _require(_nfl_pdf_timing_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+     begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _nfl_pdf_timing_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=6491186:return source
+    return _nfl_pdf_timing_cached_base(source,NFL_PDF_TIMING_REVIEWED_GUARD_SHA256,NFL_PDF_TIMING_PREVIOUS_GUARD_SHA256)
+_nfl_pdf_timing_base_source.cache_info=_nfl_pdf_timing_cached_base.cache_info
+_nfl_pdf_timing_base_source.cache_clear=_nfl_pdf_timing_cached_base.cache_clear
+
+def _nfl_pdf_timing_previous_source(path,source):
+    if path==GUARD_PATH:return _nfl_pdf_timing_base_source(source)
+    info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 NFL_PDF_MARGIN_BOOTSTRAP = True
 NFL_PDF_MARGIN_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-pdf-margin-v1.json'
 NFL_PDF_MARGIN_BINDING_PATH = 'docs/paid-launch/nfl-pdf-margin-binding-v1.json'
@@ -21795,6 +21840,23 @@ def _nfl_pdf_margin_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_margin_base_source(source):
+    # NFL_PDF_TIMING_MARGIN_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_MARGIN_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=6419755:return source
     return _nfl_pdf_margin_cached_base(source,NFL_PDF_MARGIN_REVIEWED_GUARD_SHA256,NFL_PDF_MARGIN_PREVIOUS_GUARD_SHA256)
@@ -21802,6 +21864,14 @@ _nfl_pdf_margin_base_source.cache_info=_nfl_pdf_margin_cached_base.cache_info
 _nfl_pdf_margin_base_source.cache_clear=_nfl_pdf_margin_cached_base.cache_clear
 
 def _nfl_pdf_margin_previous_source(path,source):
+    # NFL_PDF_TIMING_MARGIN_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_MARGIN_PREVIOUS_END
     if path==GUARD_PATH:return _nfl_pdf_margin_base_source(source)
     info=json.loads(NFL_PDF_MARGIN_RECONSTRUCTION_JSON).get(path)
     if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
@@ -21840,6 +21910,23 @@ def _ncaaf_socket_ci_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_ci_base_source(source):
+    # NFL_PDF_TIMING_SOCKETCI_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_SOCKETCI_END
     # NFL_PDF_MARGIN_SOCKETCI_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -21864,6 +21951,14 @@ _ncaaf_socket_ci_base_source.cache_info=_ncaaf_socket_ci_cached_base.cache_info
 _ncaaf_socket_ci_base_source.cache_clear=_ncaaf_socket_ci_cached_base.cache_clear
 
 def _ncaaf_socket_ci_previous_source(path,source):
+    # NFL_PDF_TIMING_SOCKETCI_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_SOCKETCI_PREVIOUS_END
     # NFL_PDF_MARGIN_SOCKETCI_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -21910,6 +22005,23 @@ def _ncaaf_socket_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_base_source(source):
+    # NFL_PDF_TIMING_SOCKET_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_SOCKET_END
     # NFL_PDF_MARGIN_SOCKET_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -21951,6 +22063,14 @@ _ncaaf_socket_base_source.cache_info=_ncaaf_socket_cached_base.cache_info
 _ncaaf_socket_base_source.cache_clear=_ncaaf_socket_cached_base.cache_clear
 
 def _ncaaf_socket_previous_source(path,source):
+    # NFL_PDF_TIMING_SOCKET_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_SOCKET_PREVIOUS_END
     # NFL_PDF_MARGIN_SOCKET_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -22005,6 +22125,23 @@ def _docclose_cached_base(source,reviewed,parent):
     return source
 
 def _docclose_base_source(source):
+    # NFL_PDF_TIMING_DOCCLOSE_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCCLOSE_END
     # NFL_PDF_MARGIN_DOCCLOSE_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -22063,6 +22200,14 @@ _docclose_base_source.cache_info=_docclose_cached_base.cache_info
 _docclose_base_source.cache_clear=_docclose_cached_base.cache_clear
 
 def _docclose_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCCLOSE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCCLOSE_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCCLOSE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -22125,6 +22270,23 @@ def _docperf_cached_base(source,reviewed,parent):
     return source
 
 def _docperf_base_source(source):
+    # NFL_PDF_TIMING_DOCPERF_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCPERF_END
     # NFL_PDF_MARGIN_DOCPERF_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -22200,6 +22362,14 @@ _docperf_base_source.cache_info=_docperf_cached_base.cache_info
 _docperf_base_source.cache_clear=_docperf_cached_base.cache_clear
 
 def _docperf_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCPERF_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCPERF_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCPERF_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -22270,6 +22440,23 @@ def _docremote_cached_base(source,reviewed,parent):
     return source
 
 def _docremote_base_source(source):
+    # NFL_PDF_TIMING_DOCREMOTE_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCREMOTE_END
     # NFL_PDF_MARGIN_DOCREMOTE_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -22362,6 +22549,14 @@ _docremote_base_source.cache_info=_docremote_cached_base.cache_info
 _docremote_base_source.cache_clear=_docremote_cached_base.cache_clear
 
 def _docremote_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCREMOTE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCREMOTE_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCREMOTE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -22440,6 +22635,23 @@ def _docpred_cached_base(source,reviewed,parent):
     return source
 
 def _docpred_base_source(source):
+    # NFL_PDF_TIMING_DOCPRED_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCPRED_END
     # NFL_PDF_MARGIN_DOCPRED_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -22549,6 +22761,14 @@ _docpred_base_source.cache_info=_docpred_cached_base.cache_info
 _docpred_base_source.cache_clear=_docpred_cached_base.cache_clear
 
 def _docpred_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCPRED_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCPRED_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCPRED_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -22635,6 +22855,23 @@ def _docsix_cached_base(source,reviewed,parent):
     return source
 
 def _docsix_base_source(source):
+    # NFL_PDF_TIMING_DOCSIX_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCSIX_END
     # NFL_PDF_MARGIN_DOCSIX_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -22761,6 +22998,14 @@ _docsix_base_source.cache_info=_docsix_cached_base.cache_info
 _docsix_base_source.cache_clear=_docsix_cached_base.cache_clear
 
 def _docsix_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCSIX_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCSIX_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCSIX_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -22855,6 +23100,23 @@ def _docreport_cached_base(source,reviewed,parent):
     return source
 
 def _docreport_base_source(source):
+    # NFL_PDF_TIMING_DOCREPORT_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCREPORT_END
     # NFL_PDF_MARGIN_DOCREPORT_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -22998,6 +23260,14 @@ _docreport_base_source.cache_info=_docreport_cached_base.cache_info
 _docreport_base_source.cache_clear=_docreport_cached_base.cache_clear
 
 def _docreport_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCREPORT_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCREPORT_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -23100,6 +23370,23 @@ def _docfixture_cached_base(source,reviewed,parent):
     return source
 
 def _docfixture_base_source(source):
+    # NFL_PDF_TIMING_DOCFIXTURE_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCFIXTURE_END
     # NFL_PDF_MARGIN_DOCFIXTURE_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -23260,6 +23547,14 @@ _docfixture_base_source.cache_info=_docfixture_cached_base.cache_info
 _docfixture_base_source.cache_clear=_docfixture_cached_base.cache_clear
 
 def _docfixture_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCFIXTURE_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCFIXTURE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -23370,6 +23665,23 @@ def _docanchor_cached_base(source,reviewed,parent):
     return source
 
 def _docanchor_base_source(source):
+    # NFL_PDF_TIMING_DOCANCHOR_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCANCHOR_END
     # NFL_PDF_MARGIN_DOCANCHOR_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -23547,6 +23859,14 @@ _docanchor_base_source.cache_info=_docanchor_cached_base.cache_info
 _docanchor_base_source.cache_clear=_docanchor_cached_base.cache_clear
 
 def _docanchor_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCANCHOR_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCANCHOR_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -23665,6 +23985,23 @@ def _doclife_cached_base(source,reviewed,parent):
     return source
 
 def _doclife_base_source(source):
+    # NFL_PDF_TIMING_DOCLIFE_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCLIFE_END
     # NFL_PDF_MARGIN_DOCLIFE_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -23859,6 +24196,14 @@ _doclife_base_source.cache_info=_doclife_cached_base.cache_info
 _doclife_base_source.cache_clear=_doclife_cached_base.cache_clear
 
 def _doclife_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCLIFE_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCLIFE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -23985,6 +24330,23 @@ def _docwords_cached_base(source,reviewed,parent):
     return source
 
 def _docwords_base_source(source):
+    # NFL_PDF_TIMING_DOCWORDS_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCWORDS_END
     # NFL_PDF_MARGIN_DOCWORDS_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -24196,6 +24558,14 @@ _docwords_base_source.cache_info=_docwords_cached_base.cache_info
 _docwords_base_source.cache_clear=_docwords_cached_base.cache_clear
 
 def _docwords_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCWORDS_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCWORDS_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -24330,6 +24700,23 @@ def _docmeta_cached_base(source,reviewed,parent):
     return source
 
 def _docmeta_base_source(source):
+    # NFL_PDF_TIMING_DOCMETA_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCMETA_END
     # NFL_PDF_MARGIN_DOCMETA_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -24558,6 +24945,14 @@ _docmeta_base_source.cache_info=_docmeta_cached_base.cache_info
 _docmeta_base_source.cache_clear=_docmeta_cached_base.cache_clear
 
 def _docmeta_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCMETA_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCMETA_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -24700,6 +25095,23 @@ def _docio_cached_base(source,reviewed,parent):
     return source
 
 def _docio_base_source(source):
+    # NFL_PDF_TIMING_DOCIO_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCIO_END
     # NFL_PDF_MARGIN_DOCIO_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -24945,6 +25357,14 @@ _docio_base_source.cache_info=_docio_cached_base.cache_info
 _docio_base_source.cache_clear=_docio_cached_base.cache_clear
 
 def _docio_previous_source(path,source):
+    # NFL_PDF_TIMING_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DOCIO_PREVIOUS_END
     # NFL_PDF_MARGIN_DOCIO_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -25095,6 +25515,23 @@ def _terms_cached_base(source,reviewed,parent):
     return source
 
 def _terms_base_source(source):
+    # NFL_PDF_TIMING_TERMS_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_TERMS_END
     # NFL_PDF_MARGIN_TERMS_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -25357,6 +25794,14 @@ _terms_base_source.cache_info=_terms_cached_base.cache_info
 _terms_base_source.cache_clear=_terms_cached_base.cache_clear
 
 def _terms_previous_source(path,source):
+    # NFL_PDF_TIMING_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_TPREVIOUS_END
     # NFL_PDF_MARGIN_TPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -25515,6 +25960,23 @@ def _document_cached_base(source,reviewed,parent):
     return source
 
 def _document_base_source(source):
+    # NFL_PDF_TIMING_DOCUMENT_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DOCUMENT_END
     # NFL_PDF_MARGIN_DOCUMENT_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -25794,6 +26256,14 @@ _document_base_source.cache_info=_document_cached_base.cache_info
 _document_base_source.cache_clear=_document_cached_base.cache_clear
 
 def _document_previous_source(path,source):
+    # NFL_PDF_TIMING_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_DPREVIOUS_END
     # NFL_PDF_MARGIN_DPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -25960,6 +26430,23 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    # NFL_PDF_TIMING_PDF_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_PDF_END
     # NFL_PDF_MARGIN_PDF_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -26256,6 +26743,14 @@ _pdf_base_source.cache_info=_pdf_cached_base.cache_info
 _pdf_base_source.cache_clear=_pdf_cached_base.cache_clear
 
 def _pdf_previous_source(path,source):
+    # NFL_PDF_TIMING_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_PPREVIOUS_END
     # NFL_PDF_MARGIN_PPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -26431,6 +26926,23 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    # NFL_PDF_TIMING_INTERPRET_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_INTERPRET_END
     # NFL_PDF_MARGIN_INTERPRET_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -26744,6 +27256,14 @@ _interpret_base_source.cache_info=_interpret_cached_base.cache_info
 _interpret_base_source.cache_clear=_interpret_cached_base.cache_clear
 
 def _interpret_previous_source(path,source):
+    # NFL_PDF_TIMING_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_IPREVIOUS_END
     # NFL_PDF_MARGIN_IPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -26945,6 +27465,23 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    # NFL_PDF_TIMING_CAPACITY_BEGIN
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        _require(source.count(identity)==23 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_CAPACITY_END
     # NFL_PDF_MARGIN_CAPACITY_BEGIN
     if len(source)==6419755:
         identity=b'9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac'
@@ -29045,6 +29582,25 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    # NFL_PDF_TIMING_DFS_BEGIN
+    if reviewed=='dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44':
+        return source.count(reviewed.encode())==23 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==6491186:
+        identity=b'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44'
+        if source.count(identity)!=23 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'MARGIN', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'MARGIN_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_PDF_TIMING_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_PDF_TIMING_RUN_BEGIN\n');end=source.index(b'\n# NFL_PDF_TIMING_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_PDF_TIMING_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):\n            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_PDF_TIMING_DFS_END
     # NFL_PDF_MARGIN_DFS_BEGIN
     if reviewed=='9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac':
         return source.count(reviewed.encode())==22 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
@@ -29392,6 +29948,14 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _interpret_parent_previous=_listing_capacity_previous_source
 def _listing_capacity_previous_source(path,source):
+    # NFL_PDF_TIMING_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_PDF_TIMING_PREVIOUS_END
     # NFL_PDF_MARGIN_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"app_core/nfl_pdf_interpretation.py":{"after_sha256":"ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1","before_sha256":"f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5","reverse_patches":[{"end":4082,"start":3689,"text":""}]}}').get(path)
@@ -29816,6 +30380,18 @@ def _run_nfl_pdf_margin_integrated(manifest_path,base):
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 # NFL_PDF_MARGIN_RUN_END
 
+# NFL_PDF_TIMING_RUN_BEGIN
+def _run_nfl_pdf_timing_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/NFL_PDF_TIMING_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==NFL_PDF_TIMING_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/nfl_pdf_timing_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/nfl_pdf_timing_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('ncaaf_socket_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+# NFL_PDF_TIMING_RUN_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -29823,7 +30399,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):
+        if exists_at("HEAD", NFL_PDF_TIMING_POLICY_PATH):
+            code, report = _run_nfl_pdf_timing_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", NFL_PDF_MARGIN_POLICY_PATH):
             code, report = _run_nfl_pdf_margin_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):
             code, report = _run_ncaaf_socket_ci_integrated(args.manifest, args.base)

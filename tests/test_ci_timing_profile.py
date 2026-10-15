@@ -5,7 +5,8 @@ from types import SimpleNamespace
 from scripts import run_ci_tests as runner
 
 
-def test_revision_provenance_and_honest_incomplete_observations():
+def test_revision_provenance_and_honest_incomplete_observations(historical_nfl_pdf_capacity_profile, monkeypatch):
+    monkeypatch.setattr(runner, 'DEFAULT_PROFILE', historical_nfl_pdf_capacity_profile/'scripts/ci_test_file_costs_v1.json')
     data = json.loads(runner.DEFAULT_PROFILE.read_text())
     assert data['revision'] == 3
     assert data['predecessor_profile_sha256'] == '7e91ba1167ef610a4c93290b0ae3fabb8fe2b0cdf6d7d7a7cebdb880723a6c00'
@@ -59,3 +60,6 @@ def test_retained_collection_assigns_every_identity_once_without_reordering():
     assert all(len({r['shard'] for r in rows if r['path'] == f['path']}) == 1 for f in files)
     new = next(f for f in files if f['path'] == 'tests/test_SYNTHETIC_new.py')
     assert new['scheduling_seconds'] == 38.5 and new['profile_timing_kind'] == 'missing'
+
+
+from tests.nfl_pdf_capacity_fixtures import historical_nfl_pdf_capacity_profile
