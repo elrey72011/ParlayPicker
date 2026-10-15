@@ -1,0 +1,75 @@
+name: NFL corrections targeted diagnostic
+on:
+  push:
+    branches: [codex/nfl-corrections-ci-diagnostics-v1]
+permissions:
+  contents: read
+jobs:
+  targeted:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: browser
+            candidate: 750b113f394a33244b4e93e3bcff8aec6815a0db
+          - mode: margin2
+            candidate: 4156715a7884fd064cee879baac54b44f8bf52f3
+          - mode: margin5
+            candidate: 4156715a7884fd064cee879baac54b44f8bf52f3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.candidate }}
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        if: ${{ matrix.mode != 'browser' }}
+        with:
+          ref: a796056aca70ae79ec5c4f5fd4a644fb80f9cd51
+          path: baseline
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.15'
+          cache: pip
+          cache-dependency-path: candidate/requirements.txt
+      - name: Validate exact IDs and prepare retained dependency constraints
+        run: |
+          python tooling/scripts/profile_nfl_corrections_ci.py --self-test
+          python tooling/scripts/profile_nfl_corrections_ci.py --constraints constraints.txt
+      - name: Install pinned comparison dependencies
+        run: |
+          python -m pip install pip==26.2.1 -c constraints.txt
+          python -m pip install -r candidate/requirements.txt pytest==9.1.1 -c constraints.txt
+      - name: Execute one bounded targeted diagnostic
+        run: >
+          python -B -X utf8 tooling/scripts/profile_nfl_corrections_ci.py
+          --mode ${{ matrix.mode }} --repo candidate --baseline baseline --output diagnostic-output
+      - name: Retain complete or partial diagnostic evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfl-corrections-diagnostic-${{ matrix.mode }}
+          path: |
+            diagnostic-output/environment-preflight.json
+            diagnostic-output/phase-index.json
+            diagnostic-output/interrupted.json
+            diagnostic-output/completed.json
+            diagnostic-output/*-stdout.log
+            diagnostic-output/*/receipt.json
+            diagnostic-output/*/progress.jsonl
+            diagnostic-output/*/results.xml
+            diagnostic-output/*/profile.pstats
+            diagnostic-output/*/original-shard-assignment.json
+            diagnostic-output/*/fixtures/**/browser/index.html
+            diagnostic-output/*/fixtures/**/browser/browser-result.json
+          if-no-files-found: error
+          retention-days: 14
