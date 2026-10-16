@@ -21765,6 +21765,44 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+NFL_RECON_PERF_BOOTSTRAP = True
+NFL_RECON_PERF_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-reconcile-performance-v1.json'
+NFL_RECON_PERF_BINDING_PATH = 'docs/paid-launch/nfl-reconcile-performance-binding-v1.json'
+NFL_RECON_PERF_BINDING_SHA256 = '4cd591b98ed6864497f2b37f908470408a23fa6abacc494f2ab029d9d404134e'
+NFL_RECON_PERF_REVIEWED_GUARD_SHA256 = '04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+NFL_RECON_PERF_PREVIOUS_GUARD_SHA256 = '1582f49e9393b996c4e270dcc397f225d64a81866f04ed62c49e2c1d890f4f22'
+NFL_RECON_PERF_RECONSTRUCTION_JSON = b'{}'
+
+def _nfl_recon_perf_guard_matches(source):
+    identity=NFL_RECON_PERF_REVIEWED_GUARD_SHA256.encode()
+    return isinstance(source,bytes) and len(source)==7504827 and source.count(identity)==25 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
+
+def _nfl_recon_perf_project(source,target):
+    _require(_nfl_recon_perf_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if target=='prior':
+        patches=((1913517, 1917461, b''), (1921820, 1923511, b''), (2021958, 2023649, b''), (2049025, 2050716, b''), (2068546, 2070237, b''), (2112374, 2114065, b''), (2160522, 2162561, b''), (2211392, 2213431, b''), (2266763, 2268802, b''), (2326607, 2328646, b''), (2388778, 2390817, b''), (2455570, 2457609, b''), (2526460, 2528499, b''), (2598414, 2600453, b''), (2675745, 2677784, b''), (2756233, 2758272, b''), (2838542, 2840581, b''), (2926983, 2929022, b''), (3015499, 3017538, b''), (3109855, 3111894, b''), (3207236, 3209275, b''), (3306295, 3308334, b''), (3414687, 3416726, b''), (3520859, 3522898, b''), (3640108, 3642147, b''), (7350107, 7350703, b''), (7491359, 7492297, b''), (7492556, 7492761, b'        if exists_at("HEAD", NFL_PDF_RECONCILE_POLICY_PATH):\n'))
+        expected='1582f49e9393b996c4e270dcc397f225d64a81866f04ed62c49e2c1d890f4f22'
+    elif target=='common':
+        patches=((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n'))
+        expected='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419'
+    else:raise ValueError('RECONSTRUCTION_TARGET_NOT_APPROVED')
+    cursor=0;parts=[]
+    for start,end,replacement in patches:
+        _require(cursor<=start<=end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+        parts.extend((source[cursor:start],replacement));cursor=end
+    parts.append(source[cursor:]);result=b''.join(parts)
+    _require(hashlib.sha256(result).hexdigest()==expected,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    return result
+
+def _nfl_recon_perf_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=7504827:return source
+    return _nfl_recon_perf_project(source,'prior')
+
+def _nfl_recon_perf_previous_source(path,source):
+    if path==GUARD_PATH:return _nfl_recon_perf_base_source(source)
+    return source
+
 NFL_PDF_RECONCILE_BOOTSTRAP = True
 NFL_PDF_RECONCILE_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-pdf-main-reconcile-v1.json'
 NFL_PDF_RECONCILE_BINDING_PATH = 'docs/paid-launch/nfl-pdf-main-reconcile-binding-v1.json'
@@ -21795,6 +21833,15 @@ def _nfl_reconcile_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_reconcile_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 1917461, b''), (1921820, 1923511, b''), (2021958, 2023649, b''), (2049025, 2050716, b''), (2068546, 2070237, b''), (2112374, 2114065, b''), (2160522, 2162561, b''), (2211392, 2213431, b''), (2266763, 2268802, b''), (2326607, 2328646, b''), (2388778, 2390817, b''), (2455570, 2457609, b''), (2526460, 2528499, b''), (2598414, 2600453, b''), (2675745, 2677784, b''), (2756233, 2758272, b''), (2838542, 2840581, b''), (2926983, 2929022, b''), (3015499, 3017538, b''), (3109855, 3111894, b''), (3207236, 3209275, b''), (3306295, 3308334, b''), (3414687, 3416726, b''), (3520859, 3522898, b''), (3640108, 3642147, b''), (7350107, 7350703, b''), (7491359, 7492297, b''), (7492556, 7492761, b'        if exists_at("HEAD", NFL_PDF_RECONCILE_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='1582f49e9393b996c4e270dcc397f225d64a81866f04ed62c49e2c1d890f4f22','PREVIOUS_GUARD_LOGIC_CHANGED')
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=7452009:return source
     return _nfl_reconcile_cached_base(source,NFL_PDF_RECONCILE_REVIEWED_GUARD_SHA256,NFL_PDF_RECONCILE_PREVIOUS_GUARD_SHA256)
@@ -21853,6 +21900,15 @@ def _nfl_odds_socket_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_odds_socket_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 1917461, b''), (1921820, 1923511, b''), (2021958, 2023649, b''), (2049025, 2050716, b''), (2068546, 2070237, b''), (2112374, 2114065, b''), (2160522, 2162561, b''), (2211392, 2213431, b''), (2266763, 2268802, b''), (2326607, 2328646, b''), (2388778, 2390817, b''), (2455570, 2457609, b''), (2526460, 2528499, b''), (2598414, 2600453, b''), (2675745, 2677784, b''), (2756233, 2758272, b''), (2838542, 2840581, b''), (2926983, 2929022, b''), (3015499, 3017538, b''), (3109855, 3111894, b''), (3207236, 3209275, b''), (3306295, 3308334, b''), (3414687, 3416726, b''), (3520859, 3522898, b''), (3640108, 3642147, b''), (7350107, 7350703, b''), (7491359, 7492297, b''), (7492556, 7492761, b'        if exists_at("HEAD", NFL_PDF_RECONCILE_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='1582f49e9393b996c4e270dcc397f225d64a81866f04ed62c49e2c1d890f4f22','PREVIOUS_GUARD_LOGIC_CHANGED')
     if len(source)==7452009:source=_nfl_reconcile_socket_source(source)
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=6442498:return source
@@ -21901,6 +21957,15 @@ def _nfl_pdf_fixture_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_fixture_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 1917461, b''), (1921820, 1923511, b''), (2021958, 2023649, b''), (2049025, 2050716, b''), (2068546, 2070237, b''), (2112374, 2114065, b''), (2160522, 2162561, b''), (2211392, 2213431, b''), (2266763, 2268802, b''), (2326607, 2328646, b''), (2388778, 2390817, b''), (2455570, 2457609, b''), (2526460, 2528499, b''), (2598414, 2600453, b''), (2675745, 2677784, b''), (2756233, 2758272, b''), (2838542, 2840581, b''), (2926983, 2929022, b''), (3015499, 3017538, b''), (3109855, 3111894, b''), (3207236, 3209275, b''), (3306295, 3308334, b''), (3414687, 3416726, b''), (3520859, 3522898, b''), (3640108, 3642147, b''), (7350107, 7350703, b''), (7491359, 7492297, b''), (7492556, 7492761, b'        if exists_at("HEAD", NFL_PDF_RECONCILE_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='1582f49e9393b996c4e270dcc397f225d64a81866f04ed62c49e2c1d890f4f22','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_FIXTURE_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -21971,6 +22036,15 @@ def _nfl_pdf_timing_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_timing_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 1917461, b''), (1921820, 1923511, b''), (2021958, 2023649, b''), (2049025, 2050716, b''), (2068546, 2070237, b''), (2112374, 2114065, b''), (2160522, 2162561, b''), (2211392, 2213431, b''), (2266763, 2268802, b''), (2326607, 2328646, b''), (2388778, 2390817, b''), (2455570, 2457609, b''), (2526460, 2528499, b''), (2598414, 2600453, b''), (2675745, 2677784, b''), (2756233, 2758272, b''), (2838542, 2840581, b''), (2926983, 2929022, b''), (3015499, 3017538, b''), (3109855, 3111894, b''), (3207236, 3209275, b''), (3306295, 3308334, b''), (3414687, 3416726, b''), (3520859, 3522898, b''), (3640108, 3642147, b''), (7350107, 7350703, b''), (7491359, 7492297, b''), (7492556, 7492761, b'        if exists_at("HEAD", NFL_PDF_RECONCILE_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='1582f49e9393b996c4e270dcc397f225d64a81866f04ed62c49e2c1d890f4f22','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_TIMING_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -22068,6 +22142,15 @@ def _nfl_pdf_margin_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_margin_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 1917461, b''), (1921820, 1923511, b''), (2021958, 2023649, b''), (2049025, 2050716, b''), (2068546, 2070237, b''), (2112374, 2114065, b''), (2160522, 2162561, b''), (2211392, 2213431, b''), (2266763, 2268802, b''), (2326607, 2328646, b''), (2388778, 2390817, b''), (2455570, 2457609, b''), (2526460, 2528499, b''), (2598414, 2600453, b''), (2675745, 2677784, b''), (2756233, 2758272, b''), (2838542, 2840581, b''), (2926983, 2929022, b''), (3015499, 3017538, b''), (3109855, 3111894, b''), (3207236, 3209275, b''), (3306295, 3308334, b''), (3414687, 3416726, b''), (3520859, 3522898, b''), (3640108, 3642147, b''), (7350107, 7350703, b''), (7491359, 7492297, b''), (7492556, 7492761, b'        if exists_at("HEAD", NFL_PDF_RECONCILE_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='1582f49e9393b996c4e270dcc397f225d64a81866f04ed62c49e2c1d890f4f22','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_MARGIN_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -22190,6 +22273,15 @@ def _ncaaf_socket_ci_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_ci_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_SOCKETCI_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -22337,6 +22429,15 @@ def _ncaaf_socket_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_SOCKET_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -22509,6 +22610,15 @@ def _docclose_cached_base(source,reviewed,parent):
     return source
 
 def _docclose_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCCLOSE_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -22706,6 +22816,15 @@ def _docperf_cached_base(source,reviewed,parent):
     return source
 
 def _docperf_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCPERF_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -22928,6 +23047,15 @@ def _docremote_cached_base(source,reviewed,parent):
     return source
 
 def _docremote_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCREMOTE_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -23175,6 +23303,15 @@ def _docpred_cached_base(source,reviewed,parent):
     return source
 
 def _docpred_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCPRED_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -23447,6 +23584,15 @@ def _docsix_cached_base(source,reviewed,parent):
     return source
 
 def _docsix_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCSIX_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -23744,6 +23890,15 @@ def _docreport_cached_base(source,reviewed,parent):
     return source
 
 def _docreport_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCREPORT_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -24066,6 +24221,15 @@ def _docfixture_cached_base(source,reviewed,parent):
     return source
 
 def _docfixture_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCFIXTURE_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -24413,6 +24577,15 @@ def _docanchor_cached_base(source,reviewed,parent):
     return source
 
 def _docanchor_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCANCHOR_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -24785,6 +24958,15 @@ def _doclife_cached_base(source,reviewed,parent):
     return source
 
 def _doclife_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCLIFE_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -25182,6 +25364,15 @@ def _docwords_cached_base(source,reviewed,parent):
     return source
 
 def _docwords_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCWORDS_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -25604,6 +25795,15 @@ def _docmeta_cached_base(source,reviewed,parent):
     return source
 
 def _docmeta_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCMETA_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -26051,6 +26251,15 @@ def _docio_cached_base(source,reviewed,parent):
     return source
 
 def _docio_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCIO_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -26523,6 +26732,15 @@ def _terms_cached_base(source,reviewed,parent):
     return source
 
 def _terms_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_TERMS_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -27020,6 +27238,15 @@ def _document_cached_base(source,reviewed,parent):
     return source
 
 def _document_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_DOCUMENT_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -27542,6 +27769,15 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_PDF_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -28090,6 +28326,15 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_INTERPRET_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -28681,6 +28926,15 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    if len(source)==7504827:
+        _nfl_perf_identity=b'04ebc95e1477cd18c13a8b5ec86b7e3704171ebf8a1db0b85a2985e377ede8cb'
+        _require(source.count(_nfl_perf_identity)==25 and hashlib.sha256(source.replace(_nfl_perf_identity,b'0'*64)).hexdigest()==_nfl_perf_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        _nfl_perf_cursor=0;_nfl_perf_parts=[]
+        for _nfl_perf_start,_nfl_perf_end,_nfl_perf_replacement in ((1913517, 2155836, b''), (2160522, 2192155, b''), (2192644, 2206777, b''), (2211392, 2243009, b''), (2245569, 2259686, b''), (2266763, 2298396, b''), (2302996, 2317129, b''), (2326607, 2358232, b''), (2364876, 2379001, b''), (2388778, 2420419, b''), (2429113, 2443254, b''), (2455570, 2487195, b''), (2497854, 2511979, b''), (2526460, 2558077, b''), (2570655, 2584772, b''), (2598414, 2630055, b''), (2644603, 2658744, b''), (2675745, 2707394, b''), (2723875, 2738024, b''), (2756233, 2787874, b''), (2806209, 2820350, b''), (2838542, 2870167, b''), (2890252, 2904377, b''), (2926983, 2958616, b''), (2980483, 2994616, b''), (3015499, 3047124, b''), (3070687, 3084812, b''), (3109855, 3141464, b''), (3166637, 3180746, b''), (3207236, 3238845, b''), (3265628, 3279697, b''), (3306295, 3337928, b''), (3366388, 3380457, b''), (3414687, 3446280, b''), (3476086, 3490155, b''), (3520859, 3552500, b''), (3584078, 3598147, b''), (3640108, 3671741, b''), (7350107, 7381230, b''), (7415432, 7429493, b''), (7487510, 7492297, b''), (7492556, 7493339, b'        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):\n')):
+            _require(_nfl_perf_cursor<=_nfl_perf_start<=_nfl_perf_end<=len(source),'PREVIOUS_GUARD_LOGIC_CHANGED')
+            _nfl_perf_parts.extend((source[_nfl_perf_cursor:_nfl_perf_start],_nfl_perf_replacement));_nfl_perf_cursor=_nfl_perf_end
+        _nfl_perf_parts.append(source[_nfl_perf_cursor:]);source=b''.join(_nfl_perf_parts)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
     # NFL_PDF_RECONCILE_CAPACITY_BEGIN
     if len(source)==7452009:
         identity=b'f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d'
@@ -30834,6 +31088,10 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    if reviewed==NFL_RECON_PERF_REVIEWED_GUARD_SHA256:return _nfl_recon_perf_guard_matches(source)
+    if len(source)==7504827:
+        try:source=_nfl_recon_perf_project(source,'prior' if reviewed in ('f36b22160a2e523423673bc1dee76fd6e7f06c25ad48a54b2fa7e863fef96e4d', '5cd7fa4a8b9bd34df84784260f4688f1a035e60a86ee6c51f396eb805565b857', 'dc7593406f9bf243006bb39809d0a54f422192dce44446bd0b2710087a3beb44', '9d4a55fd6a4dd4b1c9a8548cea0506a65f14dc41f7a772d59d7720b167258aac', '44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85') else 'common')
+        except ValueError:return False
     # NFL_PDF_RECONCILE_DFS_BEGIN
     if reviewed=='44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85' and len(source)==7452009:
         try:return _nfl_odds_socket_guard_matches(_nfl_reconcile_socket_source(source))
@@ -31727,6 +31985,16 @@ def _run_nfl_reconcile_integrated(manifest_path,base):
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 # NFL_PDF_RECONCILE_RUN_END
 
+def _run_nfl_recon_perf_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/NFL_RECON_PERF_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==NFL_RECON_PERF_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/nfl_reconcile_performance_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/nfl_reconcile_performance_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('nfl_reconcile_performance_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -31734,7 +32002,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NFL_PDF_RECONCILE_POLICY_PATH):
+        if exists_at("HEAD", NFL_RECON_PERF_POLICY_PATH):
+            code, report = _run_nfl_recon_perf_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", NFL_PDF_RECONCILE_POLICY_PATH):
             code, report = _run_nfl_reconcile_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NFL_PDF_FIXTURE_POLICY_PATH):
             code, report = _run_nfl_pdf_fixture_integrated(args.manifest, args.base)
