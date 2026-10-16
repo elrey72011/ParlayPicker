@@ -147,12 +147,14 @@ class Tests(unittest.TestCase):
         child, release = self.holder()
         original = Path.replace
         errors = []
+        first_error = threading.Event()
         def replacement(path, target):
             try: return original(path, target)
             except OSError as exc:
                 errors.append(getattr(exc, 'winerror', None))
+                first_error.set()
                 raise
-        releaser = threading.Thread(target=lambda: (time.sleep(.2), release.write_text('RELEASE')))
+        releaser = threading.Thread(target=lambda: (first_error.wait(5), release.write_text('RELEASE')))
         releaser.start()
         self.addCleanup(releaser.join)
         with patch.object(Path, 'replace', replacement):
