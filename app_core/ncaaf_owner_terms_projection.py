@@ -17,7 +17,7 @@ def require(ok,code):
 def subjects(packet):
     o=packet['payload']['custody_packet']['payload']['native_packet']['payload']['observation']['payload']
     q=o['quote'];t=o['source_review']['terms_review']
-    require(packet['payload']['version']=='ncaaf-owner-reviewed-private-inputs-v2' and q['market_type'] in {'spread_home','spread_away'}
+    require(packet['payload']['version'] in {'ncaaf-owner-reviewed-private-inputs-v2','ncaaf-owner-reviewed-private-inputs-v3'} and q['market_type'] in {'spread_home','spread_away'}
         and abs(q['point']%1)==.5 and t['reviewer']=='Robert Velarde' and not q['book'].lower().startswith('novig')
         and all(q.get(k)==t[k] for k in ('operator','product','listing_id','period'))
         and t['period']=='full_game' and q['rules']==t['settlement']=='full_game_including_overtime_binary_win_push_loss'

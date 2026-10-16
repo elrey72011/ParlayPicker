@@ -191,6 +191,6 @@ def is_private_source(source):
     """Scope detection survives captured metadata; labels do not grant trust."""
     try:
         meta = json.loads(source.get("ml_estimate_metadata", ""))
-        return meta["ncaaf_inputs"]["payload"].get("version") in {RESULT_VERSION,"ncaaf-owner-reviewed-private-result-v2"}
+        return meta["ncaaf_inputs"]["payload"].get("version") in {RESULT_VERSION,"ncaaf-owner-reviewed-private-result-v2","ncaaf-owner-reviewed-private-result-v3"}
     except (TypeError, ValueError, KeyError, AttributeError):
         return False
