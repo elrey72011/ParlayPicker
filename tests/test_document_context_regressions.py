@@ -102,3 +102,13 @@ def test_complete_matcher_and_reconstruction_preserve_frozen_outcomes(frozen_ref
         try:return ('bytes',fn(source))
         except (ValueError,RuntimeError) as exc:return (type(exc).__name__,str(exc))
     assert outcome(guard._listing_capacity_base_source)==outcome(reference._listing_capacity_base_source)
+
+
+@pytest.fixture(autouse=True)
+def exact_historical_projection_input(request,tmp_path,monkeypatch):
+    if request.node.name!='test_projection_derivation_and_live_hash_checks_are_exact':return
+    original=ROOT;root=tmp_path/'SYNTHETIC-exact-context-projection'
+    for path,value in {guard.GUARD_PATH:(original/'docs/paid-launch/football-document-context-guard-v1.py.txt').read_bytes(),PROOF:(original/PROOF).read_bytes()}.items():
+        target=root/path;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(value)
+    assert hashlib.sha256((root/guard.GUARD_PATH).read_bytes()).hexdigest()=='22daf87bc274b5175483b5c12e9f3df3a5c28320ee4f497ed3b9b7b0d0259f08'
+    monkeypatch.setattr(sys.modules[__name__],'ROOT',root)

@@ -1,0 +1,41 @@
+{
+  "approval_reference": "Robert authorized an isolated narrowly bounded correction for the retained Ludlow page-5 reference-margin wording: reproduce actual PDF locator and interpretation rejection, support only unambiguous reference-team points minus opponent points within the specified period, preserve all orientation/math/custody/locator/review/applicability gates, add synthetic negative and full private-pipeline regressions, shallow combined validation, exact successor bindings and policy-only seal, separate draft PR and one complete final-head CI cycle without retries. Authentic documents are static checks only. No acceptance, owner-review fabrication, acquisition, inference, trust activation, scheduling, Drive, merge or deployment. Preserve #2426 diagnostics, NCAAF/WNBA, original evidence and journals, six shards, workflows, scheduler, timing profile, assertions and historical readers",
+  "approved_existing_test_changes": {},
+  "base": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+  "base_tree": "a2ddea9d1079f057795907777b6f6fc61183a2aa",
+  "main_base": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+  "main_tree": "a2ddea9d1079f057795907777b6f6fc61183a2aa",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/nfl_pdf_interpretation.py",
+    "docs/paid-launch/nfl-pdf-margin-binding-v1.json",
+    "docs/paid-launch/nfl-pdf-margin-normalization-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_pdf_margin_scope.py",
+    "tests/test_nfl_pdf_margin_normalization.py",
+    "tests/test_nfl_pdf_margin_scope.py"
+  ],
+  "previous_guard_sha256": "779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419",
+  "reconstruction_json_sha256": "cfc0effb88743fe058173080eea9ffd80f81fee485e26894cd72f1baeb58ed58",
+  "reviewed_blobs": {
+    "app_core/nfl_pdf_interpretation.py": "fbaa6febaaebffc93a01f3e88ff99d0e19ff8386",
+    "docs/paid-launch/nfl-pdf-margin-normalization-v1.md": "5be481d5c320e02b3e6b5feabcf2b0a4fe753b9e",
+    "scripts/nfl_pdf_margin_scope.py": "b9d1626c3c284a789c503d3272b9e3fbeb31db08",
+    "tests/test_nfl_pdf_margin_normalization.py": "8ea69d205260a36423cc8fb6a5a52dab8bf92d03",
+    "tests/test_nfl_pdf_margin_scope.py": "592c068220366f2b49d6317ac5a08b819c6b189d"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app_core/nfl_pdf_interpretation.py": {
+      "after_sha256": "ae8b813624860afb5b4b8aa249fc69af42ab2d34a1220f3917d133e89620faa1",
+      "before_sha256": "f5a05424dc54b8032953f4952acaacdcca083fe7ee207e1a37bdd6da546b5fb5",
+      "reverse_patches": [
+        {
+          "end": 4082,
+          "start": 3689,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

@@ -110,3 +110,30 @@ def test_assignment_is_deterministic_whole_file_exact_once_and_ordered():
     assert [v['nodeid'] for v in a[0]]==[v.nodeid for v in items]
     assert len(a[0])==len({v['nodeid'] for v in a[0]})==24
     for path in paths:assert len({v['shard'] for v in a[0] if v['path']==path})==1
+
+
+# Exact historical test-module input. Never monkeypatch the live current-main
+# module or replace any original assertion/expected value.
+import types as _historical_types
+import sys as _historical_sys
+_historical_path=ROOT/'docs/paid-launch/football-document-scan-ci-historical-cost-test-v1.py.txt'
+_historical_raw=_historical_path.read_bytes()
+assert hashlib.sha256(_historical_raw).hexdigest()=='7364327e6d181a2c3138c71a1d99143c62fad2569dbebbd42c55f51eb2ac688f'
+historical=_historical_types.ModuleType('reviewed_document_scan_historical_socket_costs')
+historical.__file__=str(_historical_path)
+_historical_sys.modules[historical.__name__]=historical
+exec(compile(_historical_raw,str(_historical_path),'exec'),historical.__dict__)
+historical.ROOT=ROOT
+
+@pytest.fixture(autouse=True)
+def exact_historical_diagnostic_profile(request,tmp_path,monkeypatch):
+    if request.node.name not in {'test_fixed_completed_evidence_rule_and_variance','test_recorded_checkout_is_distinct_from_pr_head','test_original_test_functions_and_assertions_preserved'}:return
+    original=ROOT;root=tmp_path/'SYNTHETIC-exact-diagnostic-profile'
+    files={PROFILE:(original/'docs/paid-launch/football-document-scan-ci-profile-v1.json').read_bytes()}
+    if request.node.name=='test_original_test_functions_and_assertions_preserved':
+        for path in ('tests/test_ncaaf_socket_ci_costs.py','tests/test_football_document_ci_closure.py'):
+            raw=(original/path).read_bytes();files[path]=guard._document_main_previous(path,raw,'old')
+    assert hashlib.sha256(files[PROFILE]).hexdigest()=='271805a99755c215685a17fcf3470a783bb8a1c58843e724b1a6ec5799a0ee4d'
+    for path,value in files.items():
+        target=root/path;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(value)
+    monkeypatch.setattr(__import__(__name__,fromlist=['ROOT']),'ROOT',root)

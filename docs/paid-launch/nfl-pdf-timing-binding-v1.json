@@ -1,0 +1,706 @@
+{
+  "approval_reference": "Robert explicitly approved consolidated proposal 4c47d1cdbbe3cfcabe717623dbf93e761f214e02898358a6257d4a449b792ec6: seven whole-file application shards, the exact 66 completed-XML-backed advisory cost updates, necessary live cardinality assertions, exact isolated predecessor-profile fixtures preserving frozen metadata and original assertions, documentation and focused regressions, fresh successor bindings and policy-only seal, combined shallow validation and one complete final-head CI cycle without retries. Preserve scheduler algorithm, within-file order, all prior identities and substantive rejection assertions, network blocking and thirty-minute job limit. Preserve normalization/application behavior, #2426/#2428 and WNBA work, credentials and operational evidence. No acquisition, inference, trust activation, scheduling, Drive, merge or deployment",
+  "approved_existing_test_changes": {
+    "tests/test_ci_five_shards.py": "Only explicit live six-to-seven cardinality assertions or exact isolated predecessor fixture inputs; every other substantive assertion and identity preserved.",
+    "tests/test_ci_six_shards.py": "Only explicit live six-to-seven cardinality assertions or exact isolated predecessor fixture inputs; every other substantive assertion and identity preserved.",
+    "tests/test_ci_test_shards.py": "Only explicit live six-to-seven cardinality assertions or exact isolated predecessor fixture inputs; every other substantive assertion and identity preserved.",
+    "tests/test_ci_timing_profile.py": "Only explicit live six-to-seven cardinality assertions or exact isolated predecessor fixture inputs; every other substantive assertion and identity preserved.",
+    "tests/test_football_document_ci_closure.py": "Only explicit live six-to-seven cardinality assertions or exact isolated predecessor fixture inputs; every other substantive assertion and identity preserved.",
+    "tests/test_ncaaf_socket_ci_costs.py": "Only explicit live six-to-seven cardinality assertions or exact isolated predecessor fixture inputs; every other substantive assertion and identity preserved."
+  },
+  "base": "4156715a7884fd064cee879baac54b44f8bf52f3",
+  "base_tree": "5bdf7c2afa571c0b45f475973da6ed325b50a84d",
+  "main_base": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+  "main_tree": "a2ddea9d1079f057795907777b6f6fc61183a2aa",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    ".github/workflows/ci.yml",
+    "docs/paid-launch/nfl-pdf-seven-shard-capacity-v1.md",
+    "docs/paid-launch/nfl-pdf-timing-binding-v1.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/nfl_pdf_timing_scope.py",
+    "tests/nfl_pdf_capacity_fixtures.py",
+    "tests/test_ci_five_shards.py",
+    "tests/test_ci_six_shards.py",
+    "tests/test_ci_test_shards.py",
+    "tests/test_ci_timing_profile.py",
+    "tests/test_football_document_ci_closure.py",
+    "tests/test_ncaaf_socket_ci_costs.py",
+    "tests/test_nfl_pdf_timing_costs.py",
+    "tests/test_nfl_pdf_timing_scope.py"
+  ],
+  "previous_guard_sha256": "2e207df2f59e46375874974ef5ea651fead47b2a6481563452d955fc31dca9bc",
+  "reconstruction_json_sha256": "1fd0d0033e79f4a33b3f59f2d40b62bdac6d87f6a1564718705b18bb035845ba",
+  "reviewed_blobs": {
+    ".github/workflows/ci.yml": "35b2c951016bb88f154dea67665fa27f4530e5be",
+    "docs/paid-launch/nfl-pdf-seven-shard-capacity-v1.md": "77a8797152a393367fa2f6e942bf7fc3ac2d008c",
+    "scripts/ci_test_file_costs_v1.json": "22c54b1765486db6e62a9221f657b70d51fb0f81",
+    "scripts/nfl_pdf_timing_scope.py": "4e5e060d3f09eca23993b6ccc2864e8443bef5e7",
+    "tests/nfl_pdf_capacity_fixtures.py": "399d7214180e922160f17f2e0a8784945e92e78e",
+    "tests/test_ci_five_shards.py": "685004c9ae6293b58df0672ee0e555e593886418",
+    "tests/test_ci_six_shards.py": "52ea60c6034803ee5074293c187213f10b1dc2d0",
+    "tests/test_ci_test_shards.py": "dc599d88c385f4edb7d14862661857c4260895c0",
+    "tests/test_ci_timing_profile.py": "4328d63af21b63ccb7a34e68d299e9e6674305e6",
+    "tests/test_football_document_ci_closure.py": "53f385792063513e1488c17b243518c1e0fc3a1b",
+    "tests/test_ncaaf_socket_ci_costs.py": "51a5dbf0f0ad165b37663edc0bef29a25972ba82",
+    "tests/test_nfl_pdf_timing_costs.py": "f8c32ce48b255266ceee3721c02b6f8b64d79dde",
+    "tests/test_nfl_pdf_timing_scope.py": "0b3347cb36d07b9843fb8b3655281a0d51cbff14"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    ".github/workflows/ci.yml": {
+      "after_sha256": "8c53f69cf799c77ee2bd78ab20f73246fa11ad61f6120d66751d53c235e33792",
+      "before_sha256": "5ada16ce553db9745c9a6392ec294ab4fb105e9b671af0a83f99f76e2d5af550",
+      "reverse_patches": [
+        {
+          "end": 3574,
+          "start": 3537,
+          "text": "        shard: [1, 2, 3, 4, 5, 6]\n"
+        },
+        {
+          "end": 4067,
+          "start": 3987,
+          "text": "          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 6\n"
+        },
+        {
+          "end": 5573,
+          "start": 5397,
+          "text": "      - name: Reconcile complete test identities and outcomes across all six shards\n        run: python scripts/run_ci_tests.py --shards 6 --reconcile-manifests test-results\n"
+        }
+      ]
+    },
+    "scripts/ci_test_file_costs_v1.json": {
+      "after_sha256": "090c444804b9d7941b8e8200f60dd02a7de3e0e97b7df89eca7b153c2a5470f7",
+      "before_sha256": "4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49",
+      "reverse_patches": [
+        {
+          "end": 42664,
+          "start": 39618,
+          "text": ""
+        },
+        {
+          "end": 47330,
+          "start": 44558,
+          "text": ""
+        },
+        {
+          "end": 47672,
+          "start": 47528,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 47708,
+          "start": 47681,
+          "text": "      \"seconds\": 53.34505,\n"
+        },
+        {
+          "end": 50787,
+          "start": 47742,
+          "text": ""
+        },
+        {
+          "end": 57651,
+          "start": 54879,
+          "text": ""
+        },
+        {
+          "end": 58040,
+          "start": 57898,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 58075,
+          "start": 58049,
+          "text": "      \"seconds\": 39.2518,\n"
+        },
+        {
+          "end": 87534,
+          "start": 85568,
+          "text": ""
+        },
+        {
+          "end": 87870,
+          "start": 87763,
+          "text": "        \"listing-completed-main-1\"\n"
+        },
+        {
+          "end": 87905,
+          "start": 87879,
+          "text": "      \"seconds\": 10.65705,\n"
+        },
+        {
+          "end": 161482,
+          "start": 116651,
+          "text": ""
+        },
+        {
+          "end": 193148,
+          "start": 191182,
+          "text": ""
+        },
+        {
+          "end": 193483,
+          "start": 193376,
+          "text": "        \"listing-completed-main-1\"\n"
+        },
+        {
+          "end": 193519,
+          "start": 193492,
+          "text": "      \"seconds\": 17.66055,\n"
+        },
+        {
+          "end": 282039,
+          "start": 279267,
+          "text": ""
+        },
+        {
+          "end": 283386,
+          "start": 283244,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 283423,
+          "start": 283395,
+          "text": "      \"seconds\": 84.41345,\n"
+        },
+        {
+          "end": 299119,
+          "start": 297153,
+          "text": ""
+        },
+        {
+          "end": 299482,
+          "start": 299377,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 299518,
+          "start": 299491,
+          "text": "      \"seconds\": 58.6684,\n"
+        },
+        {
+          "end": 308928,
+          "start": 306156,
+          "text": ""
+        },
+        {
+          "end": 309268,
+          "start": 309124,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 309304,
+          "start": 309277,
+          "text": "      \"seconds\": 47.3593,\n"
+        },
+        {
+          "end": 314920,
+          "start": 311872,
+          "text": ""
+        },
+        {
+          "end": 321424,
+          "start": 318652,
+          "text": ""
+        },
+        {
+          "end": 321838,
+          "start": 321696,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 321873,
+          "start": 321847,
+          "text": "      \"seconds\": 29.2146,\n"
+        },
+        {
+          "end": 324982,
+          "start": 323016,
+          "text": ""
+        },
+        {
+          "end": 325321,
+          "start": 325216,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 325356,
+          "start": 325330,
+          "text": "      \"seconds\": 47.886,\n"
+        },
+        {
+          "end": 340388,
+          "start": 337616,
+          "text": ""
+        },
+        {
+          "end": 341718,
+          "start": 341574,
+          "text": "        \"listing-completed-main-1\"\n"
+        },
+        {
+          "end": 341754,
+          "start": 341727,
+          "text": "      \"seconds\": 63.27185,\n"
+        },
+        {
+          "end": 348308,
+          "start": 343048,
+          "text": ""
+        },
+        {
+          "end": 353227,
+          "start": 350167,
+          "text": ""
+        },
+        {
+          "end": 357232,
+          "start": 354182,
+          "text": ""
+        },
+        {
+          "end": 364983,
+          "start": 362208,
+          "text": ""
+        },
+        {
+          "end": 366367,
+          "start": 366223,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 366404,
+          "start": 366376,
+          "text": "      \"seconds\": 196.6454,\n"
+        },
+        {
+          "end": 371060,
+          "start": 368288,
+          "text": ""
+        },
+        {
+          "end": 371371,
+          "start": 371231,
+          "text": "        \"refresh1-completed-3\"\n"
+        },
+        {
+          "end": 371407,
+          "start": 371380,
+          "text": "      \"seconds\": 70.88715,\n"
+        },
+        {
+          "end": 375218,
+          "start": 372444,
+          "text": ""
+        },
+        {
+          "end": 376544,
+          "start": 376400,
+          "text": "        \"listing-completed-main-2\"\n"
+        },
+        {
+          "end": 376580,
+          "start": 376553,
+          "text": "      \"seconds\": 143.80405,\n"
+        },
+        {
+          "end": 390410,
+          "start": 382926,
+          "text": ""
+        },
+        {
+          "end": 396184,
+          "start": 393409,
+          "text": ""
+        },
+        {
+          "end": 397492,
+          "start": 397348,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 397528,
+          "start": 397501,
+          "text": "      \"seconds\": 242.47405,\n"
+        },
+        {
+          "end": 412021,
+          "start": 397562,
+          "text": ""
+        },
+        {
+          "end": 422219,
+          "start": 419447,
+          "text": ""
+        },
+        {
+          "end": 422527,
+          "start": 422387,
+          "text": "        \"refresh1-completed-3\"\n"
+        },
+        {
+          "end": 422562,
+          "start": 422536,
+          "text": "      \"seconds\": 19.59255,\n"
+        },
+        {
+          "end": 429341,
+          "start": 426569,
+          "text": ""
+        },
+        {
+          "end": 429683,
+          "start": 429531,
+          "text": "        \"ncaaf-socket-ci-completed-main-1\"\n"
+        },
+        {
+          "end": 429719,
+          "start": 429692,
+          "text": "      \"seconds\": 76.85795,\n"
+        },
+        {
+          "end": 433512,
+          "start": 431546,
+          "text": ""
+        },
+        {
+          "end": 433789,
+          "start": 433682,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 433825,
+          "start": 433798,
+          "text": "      \"seconds\": 13.2135,\n"
+        },
+        {
+          "end": 438665,
+          "start": 436462,
+          "text": ""
+        },
+        {
+          "end": 445108,
+          "start": 440148,
+          "text": ""
+        },
+        {
+          "end": 450289,
+          "start": 447517,
+          "text": ""
+        },
+        {
+          "end": 450690,
+          "start": 450548,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 450726,
+          "start": 450699,
+          "text": "      \"seconds\": 20.51715,\n"
+        },
+        {
+          "end": 454598,
+          "start": 451826,
+          "text": ""
+        },
+        {
+          "end": 454977,
+          "start": 454837,
+          "text": "        \"refresh1-completed-2\"\n"
+        },
+        {
+          "end": 455012,
+          "start": 454986,
+          "text": "      \"seconds\": 29.5688\n"
+        },
+        {
+          "end": 459970,
+          "start": 457199,
+          "text": ""
+        },
+        {
+          "end": 460214,
+          "start": 460070,
+          "text": "        \"listing-completed-main-2\"\n"
+        },
+        {
+          "end": 460249,
+          "start": 460223,
+          "text": "      \"seconds\": 13.7747,\n"
+        },
+        {
+          "end": 465715,
+          "start": 463749,
+          "text": ""
+        },
+        {
+          "end": 466051,
+          "start": 465946,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 466086,
+          "start": 466060,
+          "text": "      \"seconds\": 6.65965,\n"
+        },
+        {
+          "end": 473933,
+          "start": 471159,
+          "text": ""
+        },
+        {
+          "end": 475284,
+          "start": 475142,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 475321,
+          "start": 475293,
+          "text": "      \"seconds\": 158.1687,\n"
+        },
+        {
+          "end": 514274,
+          "start": 512306,
+          "text": ""
+        },
+        {
+          "end": 515615,
+          "start": 515510,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 515651,
+          "start": 515624,
+          "text": "      \"seconds\": 195.68055,\n"
+        },
+        {
+          "end": 544947,
+          "start": 542981,
+          "text": ""
+        },
+        {
+          "end": 545290,
+          "start": 545185,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 545326,
+          "start": 545299,
+          "text": "      \"seconds\": 51.15315,\n"
+        },
+        {
+          "end": 557129,
+          "start": 554358,
+          "text": ""
+        },
+        {
+          "end": 557459,
+          "start": 557319,
+          "text": "        \"refresh1-completed-3\"\n"
+        },
+        {
+          "end": 557495,
+          "start": 557468,
+          "text": "      \"seconds\": 13.2503,\n"
+        },
+        {
+          "end": 561561,
+          "start": 558790,
+          "text": ""
+        },
+        {
+          "end": 561967,
+          "start": 561825,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 562002,
+          "start": 561976,
+          "text": "      \"seconds\": 32.58295,\n"
+        },
+        {
+          "end": 609045,
+          "start": 607078,
+          "text": ""
+        },
+        {
+          "end": 610356,
+          "start": 610251,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 610391,
+          "start": 610365,
+          "text": "      \"seconds\": 142.83,\n"
+        },
+        {
+          "end": 624350,
+          "start": 621575,
+          "text": ""
+        },
+        {
+          "end": 625710,
+          "start": 625568,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 625747,
+          "start": 625719,
+          "text": "      \"seconds\": 215.0155,\n"
+        },
+        {
+          "end": 651718,
+          "start": 649508,
+          "text": ""
+        },
+        {
+          "end": 658320,
+          "start": 655551,
+          "text": ""
+        },
+        {
+          "end": 658561,
+          "start": 658417,
+          "text": "        \"listing-completed-main-1\"\n"
+        },
+        {
+          "end": 658597,
+          "start": 658570,
+          "text": "      \"seconds\": 0.13455,\n"
+        },
+        {
+          "end": 677869,
+          "start": 675097,
+          "text": ""
+        },
+        {
+          "end": 678271,
+          "start": 678129,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 678307,
+          "start": 678280,
+          "text": "      \"seconds\": 35.03705,\n"
+        },
+        {
+          "end": 763067,
+          "start": 759267,
+          "text": ""
+        },
+        {
+          "end": 809847,
+          "start": 799843,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ci_five_shards.py": {
+      "after_sha256": "05a71e662ecfd3b5a5db98fcd12004d71f00f6359dcd0b553834b2a3ac11279e",
+      "before_sha256": "8a63424d7d722544e83f73fa4408f24405102c4c56fa2b76cf5161425cf1a479",
+      "reverse_patches": [
+        {
+          "end": 4081,
+          "start": 4001,
+          "text": "    assert shards['strategy']['matrix']['shard']==['1','2','3','4','5','6']\n"
+        },
+        {
+          "end": 4230,
+          "start": 4176,
+          "text": "    assert '--shards 6' in shards['steps'][-2]['run']\n"
+        },
+        {
+          "end": 4645,
+          "start": 4593,
+          "text": "    assert '--shards 6' in gate['steps'][-1]['run']\n"
+        }
+      ]
+    },
+    "tests/test_ci_six_shards.py": {
+      "after_sha256": "3ad7cd6e71334e3151881e606440ccc68f8e083dba0a0daacd1efd5b54bec0b9",
+      "before_sha256": "8ade1de891f57a19605bbe1aff93daa8b6628f132e0859d3b6fa2e75337fb391",
+      "reverse_patches": [
+        {
+          "end": 4152,
+          "start": 4074,
+          "text": "    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,7)]\n"
+        },
+        {
+          "end": 4336,
+          "start": 4238,
+          "text": "    assert '--shards 6' in shard['steps'][-2]['run'] and '--shards 6' in gate['steps'][-1]['run']\n"
+        },
+        {
+          "end": 4812,
+          "start": 4572,
+          "text": "def test_two_completed_file_costs_are_advisory_and_attributable():\n"
+        },
+        {
+          "end": 5764,
+          "start": 5682,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ci_test_shards.py": {
+      "after_sha256": "0fbed27ca141eb53b4b08e78b2b2f13989574bb818b3d01caabac2e8b9532745",
+      "before_sha256": "be5b663a98918f136eda79cd7913446d825c6579d83e23a7bca011304806477e",
+      "reverse_patches": [
+        {
+          "end": 13653,
+          "start": 13547,
+          "text": "    assert jobs['full-suite-tests']['strategy']['matrix']['shard'] == ['1', '2', '3', '4', '5', '6']\n"
+        }
+      ]
+    },
+    "tests/test_ci_timing_profile.py": {
+      "after_sha256": "c5cf8c9f08285732694a3d42e5f45cdf275d533a286a3084723575fc7cb775b7",
+      "before_sha256": "0b0da1743f05fcb6e947cfea46ad4fa315e01863958665f27974321811dc5e88",
+      "reverse_patches": [
+        {
+          "end": 448,
+          "start": 208,
+          "text": "def test_revision_provenance_and_honest_incomplete_observations():\n"
+        },
+        {
+          "end": 4173,
+          "start": 4091,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_football_document_ci_closure.py": {
+      "after_sha256": "5b67fd81854f2e39df055d1187c39de5765bbd731fae4ceaf0478f6d73c49e37",
+      "before_sha256": "a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee",
+      "reverse_patches": [
+        {
+          "end": 7441,
+          "start": 7372,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ncaaf_socket_ci_costs.py": {
+      "after_sha256": "c5839b640203bfde9d1988fa19fd839e9d1b592c47a1d7d58fdaee61f5e3bfcc",
+      "before_sha256": "ea43455b8ac09e076b9049eab16a3b9bb2370f9f37b20129c0c4fd5ef574ec49",
+      "reverse_patches": [
+        {
+          "end": 1012,
+          "start": 786,
+          "text": "def test_exact_twelve_advisory_rows_and_frozen_metadata_preserved():\n"
+        },
+        {
+          "end": 1980,
+          "start": 1757,
+          "text": "def test_only_completed_whole_file_xml_supplies_advisory_costs():\n"
+        },
+        {
+          "end": 6976,
+          "start": 6894,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

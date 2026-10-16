@@ -71,15 +71,16 @@ def test_six_way_current_gate_preserves_limits_and_all_artifacts():
     import yaml
     workflow=yaml.load((runner.ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)
     shard=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']
-    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,7)]
+    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,8)]
     assert shard['strategy']['fail-fast']=='false' and shard['timeout-minutes']=='30'
-    assert '--shards 6' in shard['steps'][-2]['run'] and '--shards 6' in gate['steps'][-1]['run']
+    assert '--shards 7' in shard['steps'][-2]['run'] and '--shards 7' in gate['steps'][-1]['run']
     assert shard['steps'][-1]['if']=='${{ !cancelled() }}'
     assert shard['steps'][-1]['with']['if-no-files-found']=='error'
     assert gate['needs']=='full-suite-tests' and gate['steps'][0]['run']=='test "$SHARD_RESULT" = success'
 
 
-def test_two_completed_file_costs_are_advisory_and_attributable():
+def test_two_completed_file_costs_are_advisory_and_attributable(historical_nfl_pdf_capacity_profile, monkeypatch):
+    monkeypatch.setattr(runner, 'DEFAULT_PROFILE', historical_nfl_pdf_capacity_profile/'scripts/ci_test_file_costs_v1.json')
     profile=json.loads(runner.DEFAULT_PROFILE.read_text())
     entries={e['path']:e for e in profile['files']}
     for path,count in (('tests/test_nfl_document_html_anchors.py',50),('tests/test_nfl_document_html_pipeline.py',8)):
@@ -94,3 +95,6 @@ def test_two_completed_file_costs_are_advisory_and_attributable():
             assert len(source['xml_sha256'])==64 and source['run_attempt']==1
 
 
+
+
+from tests.nfl_pdf_capacity_fixtures import historical_nfl_pdf_capacity_profile

@@ -140,7 +140,7 @@ def test_canonical_template_packing_preserves_isolated_history(tmp_path):
 @pytest.fixture
 def historical_ci_closure_profile(tmp_path):
     original=(ROOT/PROFILE).read_bytes().replace(b'\r\n',b'\n')
-    original=guard._document_scan_ci_previous_source(PROFILE,original)
+    original=guard._nfl_pdf_timing_previous_source(PROFILE,original)
     binding=json.loads((ROOT/'docs/paid-launch/ncaaf-socket-ci-binding-v1.json').read_bytes())
     record=binding['source_reconstructions'][PROFILE]
     assert hashlib.sha256(original).hexdigest()==record['after_sha256']

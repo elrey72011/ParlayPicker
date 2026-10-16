@@ -1,0 +1,105 @@
+{
+  "approval_reference": "Robert authorized reconciliation of PR2427 against the new main, fresh exact successor bindings/seal and validation of the combined tree. Preserve reviewed PDF normalization, seven whole-file shards and exact historical fixture/context corrections; preserve owner-merged PR2428 socket lifecycle behavior and all predecessor records. No change to model/admission/acquisition semantics, assertions, scheduler/profile/timeouts/network blocking or operational pins. No merge, deployment, acquisition, inference, trust activation, scheduling, Drive or wagering.",
+  "approved_existing_test_changes": {},
+  "base": "b7e5e3639b5f0cc8f61ccb3d31c6b7cac6fd32d4",
+  "base_tree": "6bb9ef9c09859b87adaa282b21147274a455e5fd",
+  "main_base": "1fcbd66e0a0670b7f81dd1a2b07fbe66078e2c17",
+  "main_tree": "ce28e9e0989f1d2d4972e563be41aab8d3f604ae",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "merged_source_blobs": {
+    "app_core/nfl_odds_acquisition.py": "dca62439a570264f83be5b878c5863b6faee9f95",
+    "docs/paid-launch/launch-scope-policy-nfl-odds-socket-v1.json": "2300853e7c4ad81859ca7d39e7745346e647f3fa",
+    "docs/paid-launch/nfl-odds-socket-binding-v1.json": "33d6412b43411db7468c7bdda6cbfe6825cad24a",
+    "docs/paid-launch/nfl-odds-socket-lifecycle-v1.md": "8b60293740ff36c10fee2a5f8db1183e9ccdc3b3",
+    "scripts/nfl_odds_socket_scope.py": "49788322210bfe8ce171454d1d587a7e08c82caf",
+    "tests/test_nfl_odds_socket_lifecycle.py": "469ecc276a47441c1075406a4140265319da779f",
+    "tests/test_nfl_odds_socket_scope.py": "2c2d9435d7c893ee2406891df88e5fec307821c5"
+  },
+  "paths": [
+    "app_core/nfl_odds_acquisition.py",
+    "docs/paid-launch/launch-scope-policy-nfl-odds-socket-v1.json",
+    "docs/paid-launch/nfl-odds-socket-binding-v1.json",
+    "docs/paid-launch/nfl-odds-socket-lifecycle-v1.md",
+    "docs/paid-launch/nfl-pdf-main-reconcile-binding-v1.json",
+    "docs/paid-launch/nfl-pdf-main-reconcile-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_odds_socket_scope.py",
+    "scripts/nfl_pdf_reconcile_scope.py",
+    "tests/test_nfl_odds_socket_lifecycle.py",
+    "tests/test_nfl_odds_socket_scope.py",
+    "tests/test_nfl_pdf_reconcile_scope.py"
+  ],
+  "previous_guard_sha256": "9389a8c48c4799db5626f5bd6b4199624f9d251b1f80e8d92707dc7fb4e27cdd",
+  "reconstruction_json_sha256": "c8a5cfd3cec3548e43ced855b22ee616e68b046744e4739f94e507412eb8eb7b",
+  "reviewed_blobs": {
+    "app_core/nfl_odds_acquisition.py": "dca62439a570264f83be5b878c5863b6faee9f95",
+    "docs/paid-launch/launch-scope-policy-nfl-odds-socket-v1.json": "2300853e7c4ad81859ca7d39e7745346e647f3fa",
+    "docs/paid-launch/nfl-odds-socket-binding-v1.json": "33d6412b43411db7468c7bdda6cbfe6825cad24a",
+    "docs/paid-launch/nfl-odds-socket-lifecycle-v1.md": "8b60293740ff36c10fee2a5f8db1183e9ccdc3b3",
+    "docs/paid-launch/nfl-pdf-main-reconcile-v1.md": "b6dcbef61f84a78a87c4822fc5cf1d2dd2cad5c9",
+    "scripts/nfl_odds_socket_scope.py": "49788322210bfe8ce171454d1d587a7e08c82caf",
+    "scripts/nfl_pdf_reconcile_scope.py": "cdb289db7035d293fd3356d272249c3e1bc5af01",
+    "tests/test_nfl_odds_socket_lifecycle.py": "469ecc276a47441c1075406a4140265319da779f",
+    "tests/test_nfl_odds_socket_scope.py": "2c2d9435d7c893ee2406891df88e5fec307821c5",
+    "tests/test_nfl_pdf_reconcile_scope.py": "f0064b6d66910f7ab235ba8e6aa81e01e9ba77d5"
+  },
+  "reviewed_predecessors": {
+    "common": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+    "main_parents": [
+      "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+      "750b113f394a33244b4e93e3bcff8aec6815a0db"
+    ],
+    "pdf": "b7e5e3639b5f0cc8f61ccb3d31c6b7cac6fd32d4",
+    "socket": "750b113f394a33244b4e93e3bcff8aec6815a0db",
+    "socket_guard_sha256": "81cf3de91689f765505e9bf15300b44d8ddf7a9f215167be7c5b1e3799f5f748"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app_core/nfl_odds_acquisition.py": {
+      "after_sha256": "00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926",
+      "before_sha256": "537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5",
+      "reverse_patches": [
+        {
+          "end": 304,
+          "start": 290,
+          "text": ""
+        },
+        {
+          "end": 14800,
+          "start": 14269,
+          "text": "        conn=None; cancelled=threading.Event()\n"
+        },
+        {
+          "end": 15319,
+          "start": 15231,
+          "text": "            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 15713,
+          "start": 15468,
+          "text": "            _timed(lambda:conn.request('GET',SOURCE['endpoint']+'?'+urlencode(params),headers={'Accept':'application/json','Accept-Encoding':'identity'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 15851,
+          "start": 15750,
+          "text": "            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 16202,
+          "start": 16182,
+          "text": "            if conn: conn.close()\n"
+        },
+        {
+          "end": 16884,
+          "start": 16499,
+          "text": "                        require(monotonic()<deadline,'NFL_ACQUIRE_DEADLINE')\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 17213,
+          "start": 17176,
+          "text": "            def close(self): conn.close()\n"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "approval_reference": "Local preparation under the owner-approved bounded seven-shard correction: address the reproduced exact six-to-five historical input mismatch without altering assertions; restore the existing inline immutable reconstruction representation so the pure context stays within the unchanged 512-field limit. Preserve all original identities, rejection behavior, source/admission/model/acquisition semantics, seven shards,66 cost entries, workflows/scheduler/timeouts, network blocking and operational evidence. The single release cycle on f9902c98 failed and is consumed. This locally sealed followup is not pushed or authorized for another CI cycle; an additional exact-head cycle needs owner authorization. No acquisition, inference, trust activation, scheduling, Drive, merge or deployment",
+  "approved_existing_test_changes": {
+    "tests/test_football_document_predecessor_fixture.py": "Exact predecessor input projection only; all existing test functions, assertions and rejection behavior retained.",
+    "tests/test_nfl_listing_capacity_scope.py": "Exact predecessor input projection only; all existing test functions, assertions and rejection behavior retained."
+  },
+  "base": "f9902c98c5a55f5f891a28a382c2d878d0c87a08",
+  "base_tree": "02fea5d869035426050b3b634586ee531e04e831",
+  "main_base": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+  "main_tree": "a2ddea9d1079f057795907777b6f6fc61183a2aa",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/nfl-pdf-seven-fixture-binding-v1.json",
+    "docs/paid-launch/nfl-seven-fixture-followup-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_pdf_fixture_scope.py",
+    "tests/test_football_document_predecessor_fixture.py",
+    "tests/test_nfl_listing_capacity_scope.py",
+    "tests/test_nfl_pdf_fixture_scope.py",
+    "tests/test_nfl_seven_predecessor_inputs.py"
+  ],
+  "previous_guard_sha256": "63bd85fbb7cda91c3a4a2e09a5584010a6f5b1939a01497dac7f458f6d7f1f75",
+  "reconstruction_json_sha256": "272965647712a73e8b8b5ec03b5364508bc9471d220e75f1ee6170093a4187d7",
+  "reviewed_blobs": {
+    "docs/paid-launch/nfl-seven-fixture-followup-v1.md": "8257cd5646f837fbe756b62b310f2c23c17a6f87",
+    "scripts/nfl_pdf_fixture_scope.py": "28f4fea81ad6eb86447d3601ba9d6095fcf0b16f",
+    "tests/test_football_document_predecessor_fixture.py": "9d1964ebb1c8848ee4baed3bcd3bb237bdbb27ba",
+    "tests/test_nfl_listing_capacity_scope.py": "c15c3aaf8079845532296d34e2c810ba40c27699",
+    "tests/test_nfl_pdf_fixture_scope.py": "7fbd11e5f005211090528a933cab2c1529d4f98b",
+    "tests/test_nfl_seven_predecessor_inputs.py": "7f10d79c59a4935757ab9d3785ffb053288d21e1"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "tests/test_football_document_predecessor_fixture.py": {
+      "after_sha256": "05b43243efffc493eb7106f8961221829058e789203f19f6c53ce9ebcb1cd8b5",
+      "before_sha256": "817a23966dc93e1d2416fef13c466e6bbc56a6e566b82b4f74564e5258649841",
+      "reverse_patches": [
+        {
+          "end": 5057,
+          "start": 3419,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_listing_capacity_scope.py": {
+      "after_sha256": "4e512e1a39908a7b6011033b381e2359b819efe89844a123b96b72395345c9ad",
+      "before_sha256": "42c4a22a1c589be935b81c5767c631fc3892619100ac2cfb946ad79d1e975a57",
+      "reverse_patches": [
+        {
+          "end": 11489,
+          "start": 11424,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

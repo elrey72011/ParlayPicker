@@ -1,0 +1,39 @@
+{
+  "approval_reference": "Robert authorized direct passing/reconciled timing comparison, bounded immutable reconstruction correction, preserved historical/current inputs and live rejection behavior, successor binding and policy-only seal, combined shallow validation and one conditional complete final-head CI cycle. No mutable validation caching, missing context or increased limits; preserve seven shards, scheduler, workflows, tests/assertions, network blocking, operational pins/evidence, acquisition/admission/model behavior. No merge, deployment, acquisition, inference, trust, scheduling, Drive or wagering.",
+  "approved_existing_test_changes": {},
+  "base": "4c5f0253fb524c745d18f1019c4c778a9fcabb30",
+  "base_tree": "5233d1f6a55e9625281e94a23e16f8d85fb746fa",
+  "main_base": "1fcbd66e0a0670b7f81dd1a2b07fbe66078e2c17",
+  "main_tree": "ce28e9e0989f1d2d4972e563be41aab8d3f604ae",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/nfl-reconcile-performance-binding-v1.json",
+    "docs/paid-launch/nfl-reconcile-performance-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_reconcile_performance_scope.py",
+    "tests/test_nfl_reconcile_performance_scope.py",
+    "tests/test_nfl_reconcile_projection.py"
+  ],
+  "previous_guard_sha256": "1582f49e9393b996c4e270dcc397f225d64a81866f04ed62c49e2c1d890f4f22",
+  "projection_subjects": {
+    "common": {
+      "bytes": 6356800,
+      "revision": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+      "sha256": "779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419"
+    },
+    "prior": {
+      "bytes": 7452009,
+      "revision": "4c5f0253fb524c745d18f1019c4c778a9fcabb30",
+      "sha256": "1582f49e9393b996c4e270dcc397f225d64a81866f04ed62c49e2c1d890f4f22"
+    }
+  },
+  "reconstruction_json_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "reviewed_blobs": {
+    "docs/paid-launch/nfl-reconcile-performance-v1.md": "36d892d2d3f96e4cc8514b33bd304ee022001a4c",
+    "scripts/nfl_reconcile_performance_scope.py": "abca02986b30caa74e939d490dcead41687b1844",
+    "tests/test_nfl_reconcile_performance_scope.py": "ecd80701ffd6e4d39af0e4e41214420415069739",
+    "tests/test_nfl_reconcile_projection.py": "60434ae5fc7dd914c19b06683f3b450fd132134a"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {}
+}

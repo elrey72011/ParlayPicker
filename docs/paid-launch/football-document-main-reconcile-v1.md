@@ -1,0 +1,3 @@
+# Document scanner diagnostics reconciled with reviewed main
+
+Diagnostics only. Credential rejection and all application bounds are unchanged. V4 records fixed scanner/category/stage and structural/public-placeholder booleans, never rejected bodies or matching content. Historical source projections remain exact, bounded and content-bound; no validation decisions are cached. Current seven-shard workflow, scheduler and timeouts are preserved; one completed-XML-backed slate-audit cost is refreshed, with exact historical profile reconstruction. Original guide trigger remains UNKNOWN. No acquisition, trust activation or inference is authorized.

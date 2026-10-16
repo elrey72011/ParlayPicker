@@ -184,6 +184,7 @@ def test_transitive_frozen_test_preimages_remain_exact():
 # Exact immutable input view for the historical five-shard assertion above.
 # Current six-shard gate tests keep reading the actual checkout.
 def _historical_five_shard_bytes(path, source):
+    source = guard._nfl_pdf_timing_previous_source(path, source)
     record = json.loads(guard.FOOTBALL_DOCSIX_RECONSTRUCTION_JSON).get(path)
     if record is None or hashlib.sha256(source).hexdigest() != record['after_sha256']:
         return source
