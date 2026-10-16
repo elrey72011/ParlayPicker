@@ -1,0 +1,53 @@
+name: NFL reconciliation paired hotspots
+on:
+  push:
+    branches: [codex/nfl-reconcile-hotspot-diagnostic-v1]
+permissions:
+  contents: read
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - case: passing
+            revision: b7e5e3639b5f0cc8f61ccb3d31c6b7cac6fd32d4
+          - case: reconciled
+            revision: 4c5f0253fb524c745d18f1019c4c778a9fcabb30
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: tooling
+          persist-credentials: false
+      - name: Preserve exact observer outside tested checkout
+        run: cp tooling/scripts/profile_nfl_reconcile_hotspot_v1.py "$RUNNER_TEMP/profile_nfl_reconcile_hotspot_v1.py"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.revision }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.15'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install identical pinned dependencies
+        run: |
+          python "$RUNNER_TEMP/profile_nfl_reconcile_hotspot_v1.py" --self-test
+          python "$RUNNER_TEMP/profile_nfl_reconcile_hotspot_v1.py" --constraints "$RUNNER_TEMP/nfl-hotspot-constraints.txt"
+          python -m pip install pip==26.2.1 -c "$RUNNER_TEMP/nfl-hotspot-constraints.txt"
+          python -m pip install -r requirements.txt pytest==9.1.1 -c "$RUNNER_TEMP/nfl-hotspot-constraints.txt"
+      - name: Observe identical ordered synthetic workload with default temporary paths
+        run: >
+          python -B -X utf8 "$RUNNER_TEMP/profile_nfl_reconcile_hotspot_v1.py"
+          --case ${{ matrix.case }} --output "$RUNNER_TEMP/nfl-hotspot-output"
+      - name: Retain complete or partial measurements
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfl-reconcile-hotspot-${{ matrix.case }}
+          path: ${{ runner.temp }}/nfl-hotspot-output
+          if-no-files-found: error
+          retention-days: 14
