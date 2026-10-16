@@ -21765,6 +21765,51 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     return _cloud_boot_pilot_raw(source, reviewed)
 
 
+NFL_ODDS_SOCKET_BOOTSTRAP = True
+NFL_ODDS_SOCKET_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-nfl-odds-socket-v1.json'
+NFL_ODDS_SOCKET_BINDING_PATH = 'docs/paid-launch/nfl-odds-socket-binding-v1.json'
+NFL_ODDS_SOCKET_BINDING_SHA256 = 'ebda1850492201c0552f05932eacc0e12176a7a83d6a68d39baac6f3df03c67c'
+NFL_ODDS_SOCKET_REVIEWED_GUARD_SHA256 = '44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+NFL_ODDS_SOCKET_PREVIOUS_GUARD_SHA256 = '779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419'
+NFL_ODDS_SOCKET_RECONSTRUCTION_JSON = b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}'
+from functools import lru_cache as _nfl_odds_socket_lru
+
+def _nfl_odds_socket_guard_matches(source):
+    value=NFL_ODDS_SOCKET_REVIEWED_GUARD_SHA256.encode()
+    return source.count(value)==22 and hashlib.sha256(source.replace(value,b'0'*64)).hexdigest()==NFL_ODDS_SOCKET_REVIEWED_GUARD_SHA256
+
+@_nfl_odds_socket_lru(maxsize=2)
+def _nfl_odds_socket_cached_base(source,reviewed,parent):
+    _require(_nfl_odds_socket_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+    source=source[:begin]+source[end:]
+    for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+     begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+     source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+    begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+    source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+    dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _nfl_odds_socket_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=6442498:return source
+    return _nfl_odds_socket_cached_base(source,NFL_ODDS_SOCKET_REVIEWED_GUARD_SHA256,NFL_ODDS_SOCKET_PREVIOUS_GUARD_SHA256)
+_nfl_odds_socket_base_source.cache_info=_nfl_odds_socket_cached_base.cache_info
+_nfl_odds_socket_base_source.cache_clear=_nfl_odds_socket_cached_base.cache_clear
+
+def _nfl_odds_socket_previous_source(path,source):
+    if path==GUARD_PATH:return _nfl_odds_socket_base_source(source)
+    info=json.loads(NFL_ODDS_SOCKET_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source.decode()
+    for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
 NCAAF_SOCKET_CI_BOOTSTRAP = True
 NCAAF_SOCKET_CI_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ncaaf-socket-ci-v1.json'
 NCAAF_SOCKET_CI_BINDING_PATH = 'docs/paid-launch/ncaaf-socket-ci-binding-v1.json'
@@ -21795,6 +21840,23 @@ def _ncaaf_socket_ci_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_ci_base_source(source):
+    # NFL_ODDS_SOCKET_SOCKETCI_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_SOCKETCI_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=6356800:return source
     return _ncaaf_socket_ci_cached_base(source,NCAAF_SOCKET_CI_REVIEWED_GUARD_SHA256,NCAAF_SOCKET_CI_PREVIOUS_GUARD_SHA256)
@@ -21802,6 +21864,14 @@ _ncaaf_socket_ci_base_source.cache_info=_ncaaf_socket_ci_cached_base.cache_info
 _ncaaf_socket_ci_base_source.cache_clear=_ncaaf_socket_ci_cached_base.cache_clear
 
 def _ncaaf_socket_ci_previous_source(path,source):
+    # NFL_ODDS_SOCKET_SOCKETCI_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_SOCKETCI_PREVIOUS_END
     if path==GUARD_PATH:return _ncaaf_socket_ci_base_source(source)
     info=json.loads(NCAAF_SOCKET_CI_RECONSTRUCTION_JSON).get(path)
     if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
@@ -21840,6 +21910,23 @@ def _ncaaf_socket_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_base_source(source):
+    # NFL_ODDS_SOCKET_SOCKET_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_SOCKET_END
     # NCAAF_SOCKET_CI_SOCKET_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -21864,6 +21951,14 @@ _ncaaf_socket_base_source.cache_info=_ncaaf_socket_cached_base.cache_info
 _ncaaf_socket_base_source.cache_clear=_ncaaf_socket_cached_base.cache_clear
 
 def _ncaaf_socket_previous_source(path,source):
+    # NFL_ODDS_SOCKET_SOCKET_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_SOCKET_PREVIOUS_END
     # NCAAF_SOCKET_CI_SOCKET_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -21910,6 +22005,23 @@ def _docclose_cached_base(source,reviewed,parent):
     return source
 
 def _docclose_base_source(source):
+    # NFL_ODDS_SOCKET_DOCCLOSE_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCCLOSE_END
     # NCAAF_SOCKET_CI_DOCCLOSE_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -21951,6 +22063,14 @@ _docclose_base_source.cache_info=_docclose_cached_base.cache_info
 _docclose_base_source.cache_clear=_docclose_cached_base.cache_clear
 
 def _docclose_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCCLOSE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCCLOSE_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCCLOSE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -22005,6 +22125,23 @@ def _docperf_cached_base(source,reviewed,parent):
     return source
 
 def _docperf_base_source(source):
+    # NFL_ODDS_SOCKET_DOCPERF_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCPERF_END
     # NCAAF_SOCKET_CI_DOCPERF_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -22063,6 +22200,14 @@ _docperf_base_source.cache_info=_docperf_cached_base.cache_info
 _docperf_base_source.cache_clear=_docperf_cached_base.cache_clear
 
 def _docperf_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCPERF_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCPERF_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCPERF_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -22125,6 +22270,23 @@ def _docremote_cached_base(source,reviewed,parent):
     return source
 
 def _docremote_base_source(source):
+    # NFL_ODDS_SOCKET_DOCREMOTE_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCREMOTE_END
     # NCAAF_SOCKET_CI_DOCREMOTE_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -22200,6 +22362,14 @@ _docremote_base_source.cache_info=_docremote_cached_base.cache_info
 _docremote_base_source.cache_clear=_docremote_cached_base.cache_clear
 
 def _docremote_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCREMOTE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCREMOTE_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCREMOTE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -22270,6 +22440,23 @@ def _docpred_cached_base(source,reviewed,parent):
     return source
 
 def _docpred_base_source(source):
+    # NFL_ODDS_SOCKET_DOCPRED_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCPRED_END
     # NCAAF_SOCKET_CI_DOCPRED_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -22362,6 +22549,14 @@ _docpred_base_source.cache_info=_docpred_cached_base.cache_info
 _docpred_base_source.cache_clear=_docpred_cached_base.cache_clear
 
 def _docpred_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCPRED_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCPRED_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCPRED_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -22440,6 +22635,23 @@ def _docsix_cached_base(source,reviewed,parent):
     return source
 
 def _docsix_base_source(source):
+    # NFL_ODDS_SOCKET_DOCSIX_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCSIX_END
     # NCAAF_SOCKET_CI_DOCSIX_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -22549,6 +22761,14 @@ _docsix_base_source.cache_info=_docsix_cached_base.cache_info
 _docsix_base_source.cache_clear=_docsix_cached_base.cache_clear
 
 def _docsix_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCSIX_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCSIX_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCSIX_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -22635,6 +22855,23 @@ def _docreport_cached_base(source,reviewed,parent):
     return source
 
 def _docreport_base_source(source):
+    # NFL_ODDS_SOCKET_DOCREPORT_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCREPORT_END
     # NCAAF_SOCKET_CI_DOCREPORT_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -22761,6 +22998,14 @@ _docreport_base_source.cache_info=_docreport_cached_base.cache_info
 _docreport_base_source.cache_clear=_docreport_cached_base.cache_clear
 
 def _docreport_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCREPORT_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCREPORT_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCREPORT_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -22855,6 +23100,23 @@ def _docfixture_cached_base(source,reviewed,parent):
     return source
 
 def _docfixture_base_source(source):
+    # NFL_ODDS_SOCKET_DOCFIXTURE_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCFIXTURE_END
     # NCAAF_SOCKET_CI_DOCFIXTURE_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -22998,6 +23260,14 @@ _docfixture_base_source.cache_info=_docfixture_cached_base.cache_info
 _docfixture_base_source.cache_clear=_docfixture_cached_base.cache_clear
 
 def _docfixture_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCFIXTURE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCFIXTURE_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCFIXTURE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -23100,6 +23370,23 @@ def _docanchor_cached_base(source,reviewed,parent):
     return source
 
 def _docanchor_base_source(source):
+    # NFL_ODDS_SOCKET_DOCANCHOR_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCANCHOR_END
     # NCAAF_SOCKET_CI_DOCANCHOR_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -23260,6 +23547,14 @@ _docanchor_base_source.cache_info=_docanchor_cached_base.cache_info
 _docanchor_base_source.cache_clear=_docanchor_cached_base.cache_clear
 
 def _docanchor_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCANCHOR_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCANCHOR_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCANCHOR_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -23370,6 +23665,23 @@ def _doclife_cached_base(source,reviewed,parent):
     return source
 
 def _doclife_base_source(source):
+    # NFL_ODDS_SOCKET_DOCLIFE_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCLIFE_END
     # NCAAF_SOCKET_CI_DOCLIFE_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -23547,6 +23859,14 @@ _doclife_base_source.cache_info=_doclife_cached_base.cache_info
 _doclife_base_source.cache_clear=_doclife_cached_base.cache_clear
 
 def _doclife_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCLIFE_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCLIFE_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCLIFE_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -23665,6 +23985,23 @@ def _docwords_cached_base(source,reviewed,parent):
     return source
 
 def _docwords_base_source(source):
+    # NFL_ODDS_SOCKET_DOCWORDS_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCWORDS_END
     # NCAAF_SOCKET_CI_DOCWORDS_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -23859,6 +24196,14 @@ _docwords_base_source.cache_info=_docwords_cached_base.cache_info
 _docwords_base_source.cache_clear=_docwords_cached_base.cache_clear
 
 def _docwords_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCWORDS_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCWORDS_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCWORDS_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -23985,6 +24330,23 @@ def _docmeta_cached_base(source,reviewed,parent):
     return source
 
 def _docmeta_base_source(source):
+    # NFL_ODDS_SOCKET_DOCMETA_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCMETA_END
     # NCAAF_SOCKET_CI_DOCMETA_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -24196,6 +24558,14 @@ _docmeta_base_source.cache_info=_docmeta_cached_base.cache_info
 _docmeta_base_source.cache_clear=_docmeta_cached_base.cache_clear
 
 def _docmeta_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCMETA_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCMETA_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCMETA_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -24330,6 +24700,23 @@ def _docio_cached_base(source,reviewed,parent):
     return source
 
 def _docio_base_source(source):
+    # NFL_ODDS_SOCKET_DOCIO_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCIO_END
     # NCAAF_SOCKET_CI_DOCIO_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -24558,6 +24945,14 @@ _docio_base_source.cache_info=_docio_cached_base.cache_info
 _docio_base_source.cache_clear=_docio_cached_base.cache_clear
 
 def _docio_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DOCIO_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DOCIO_PREVIOUS_END
     # NCAAF_SOCKET_CI_DOCIO_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -24700,6 +25095,23 @@ def _terms_cached_base(source,reviewed,parent):
     return source
 
 def _terms_base_source(source):
+    # NFL_ODDS_SOCKET_TERMS_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_TERMS_END
     # NCAAF_SOCKET_CI_TERMS_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -24945,6 +25357,14 @@ _terms_base_source.cache_info=_terms_cached_base.cache_info
 _terms_base_source.cache_clear=_terms_cached_base.cache_clear
 
 def _terms_previous_source(path,source):
+    # NFL_ODDS_SOCKET_TPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_TPREVIOUS_END
     # NCAAF_SOCKET_CI_TPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -25095,6 +25515,23 @@ def _document_cached_base(source,reviewed,parent):
     return source
 
 def _document_base_source(source):
+    # NFL_ODDS_SOCKET_DOCUMENT_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DOCUMENT_END
     # NCAAF_SOCKET_CI_DOCUMENT_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -25357,6 +25794,14 @@ _document_base_source.cache_info=_document_cached_base.cache_info
 _document_base_source.cache_clear=_document_cached_base.cache_clear
 
 def _document_previous_source(path,source):
+    # NFL_ODDS_SOCKET_DPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_DPREVIOUS_END
     # NCAAF_SOCKET_CI_DPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -25515,6 +25960,23 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    # NFL_ODDS_SOCKET_PDF_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_PDF_END
     # NCAAF_SOCKET_CI_PDF_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -25794,6 +26256,14 @@ _pdf_base_source.cache_info=_pdf_cached_base.cache_info
 _pdf_base_source.cache_clear=_pdf_cached_base.cache_clear
 
 def _pdf_previous_source(path,source):
+    # NFL_ODDS_SOCKET_PPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_PPREVIOUS_END
     # NCAAF_SOCKET_CI_PPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -25961,6 +26431,23 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    # NFL_ODDS_SOCKET_INTERPRET_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_INTERPRET_END
     # NCAAF_SOCKET_CI_INTERPRET_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -26257,6 +26744,14 @@ _interpret_base_source.cache_info=_interpret_cached_base.cache_info
 _interpret_base_source.cache_clear=_interpret_cached_base.cache_clear
 
 def _interpret_previous_source(path,source):
+    # NFL_ODDS_SOCKET_IPREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_IPREVIOUS_END
     # NCAAF_SOCKET_CI_IPREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -26450,6 +26945,23 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    # NFL_ODDS_SOCKET_CAPACITY_BEGIN
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        _require(source.count(identity)==22 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_CAPACITY_END
     # NCAAF_SOCKET_CI_CAPACITY_BEGIN
     if len(source)==6356800:
         identity=b'e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3'
@@ -28533,6 +29045,25 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    # NFL_ODDS_SOCKET_DFS_BEGIN
+    if reviewed=='44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85':
+        return source.count(reviewed.encode())==22 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
+    if len(source)==6442498:
+        identity=b'44ab8b87a384c49a1b4929bc5efe146c2faa76b583de30ed94b83d194ae8ad85'
+        if source.count(identity)!=22 or hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()!=identity.decode():return False
+        begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
+        source=source[:begin]+source[end:]
+        for marker in (b'CAPACITY', b'INTERPRET', b'PDF', b'DOCUMENT', b'TERMS', b'DOCIO', b'DOCMETA', b'DOCWORDS', b'DOCLIFE', b'DOCANCHOR', b'DOCFIXTURE', b'DOCREPORT', b'DOCSIX', b'DOCPRED', b'DOCREMOTE', b'DOCPERF', b'DOCCLOSE', b'SOCKET', b'SOCKETCI', b'PREVIOUS', b'IPREVIOUS', b'PPREVIOUS', b'DPREVIOUS', b'TPREVIOUS', b'DOCIO_PREVIOUS', b'DOCMETA_PREVIOUS', b'DOCWORDS_PREVIOUS', b'DOCLIFE_PREVIOUS', b'DOCANCHOR_PREVIOUS', b'DOCFIXTURE_PREVIOUS', b'DOCREPORT_PREVIOUS', b'DOCSIX_PREVIOUS', b'DOCPRED_PREVIOUS', b'DOCREMOTE_PREVIOUS', b'DOCPERF_PREVIOUS', b'DOCCLOSE_PREVIOUS', b'SOCKET_PREVIOUS', b'SOCKETCI_PREVIOUS', b'DFS'):
+         begin=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_BEGIN\n');end=source.index(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n',begin)
+         source=source[:begin]+b'\n'+source[end+len(b'\n    # NFL_ODDS_SOCKET_'+marker+b'_END\n'):]
+        begin=source.index(b'\n# NFL_ODDS_SOCKET_RUN_BEGIN\n');end=source.index(b'\n# NFL_ODDS_SOCKET_RUN_END\n',begin)
+        source=source[:begin]+source[end+len(b'\n# NFL_ODDS_SOCKET_RUN_END\n'):]
+        dispatch=b'if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):\n            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):'
+        _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(dispatch,b'if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419','PREVIOUS_GUARD_LOGIC_CHANGED')
+
+    # NFL_ODDS_SOCKET_DFS_END
     # NCAAF_SOCKET_CI_DFS_BEGIN
     if reviewed=='e297344a5409ef0b4037ad32c2ca35f896af4ec8a1e3656b741422a44cf39dc3':
         return source.count(reviewed.encode())==21 and hashlib.sha256(source.replace(reviewed.encode(),b'0'*64)).hexdigest()==reviewed
@@ -28861,6 +29392,14 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _interpret_parent_previous=_listing_capacity_previous_source
 def _listing_capacity_previous_source(path,source):
+    # NFL_ODDS_SOCKET_PREVIOUS_BEGIN
+    if path!=GUARD_PATH:
+        info=json.loads(b'{"app_core/nfl_odds_acquisition.py":{"after_sha256":"00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926","before_sha256":"537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5","reverse_patches":[{"end":304,"start":290,"text":""},{"end":14800,"start":14269,"text":"        conn=None; cancelled=threading.Event()\\n"},{"end":15319,"start":15231,"text":"            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15713,"start":15468,"text":"            _timed(lambda:conn.request(\'GET\',SOURCE[\'endpoint\']+\'?\'+urlencode(params),headers={\'Accept\':\'application/json\',\'Accept-Encoding\':\'identity\'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":15851,"start":15750,"text":"            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":16202,"start":16182,"text":"            if conn: conn.close()\\n"},{"end":16884,"start":16499,"text":"                        require(monotonic()<deadline,\'NFL_ACQUIRE_DEADLINE\')\\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\\n"},{"end":17213,"start":17176,"text":"            def close(self): conn.close()\\n"}]}}').get(path)
+        if info is not None and hashlib.sha256(source).hexdigest()==info['after_sha256']:
+            value=source.decode()
+            for patch in reversed(info['reverse_patches']):value=value[:patch['start']]+patch['text']+value[patch['end']:]
+            source=value.encode();_require(hashlib.sha256(source).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    # NFL_ODDS_SOCKET_PREVIOUS_END
     # NCAAF_SOCKET_CI_PREVIOUS_BEGIN
     if path!=GUARD_PATH:
         info=json.loads(b'{"scripts/ci_test_file_costs_v1.json":{"after_sha256":"4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49","before_sha256":"fb044d17b961893f52786f9cffb63be37bd25c485569c52e82ebafef173fcb7b","reverse_patches":[{"end":36389,"start":36216,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":37645,"start":36398,"text":"      \\"seconds\\": 378.0993,\\n"},{"end":109774,"start":109601,"text":"        \\"listing-completed-main-3\\"\\n"},{"end":111029,"start":109783,"text":"      \\"seconds\\": 350.88915,\\n"},{"end":226038,"start":225867,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":227297,"start":226047,"text":"      \\"seconds\\": 671.29525,\\n"},{"end":256568,"start":256397,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":257823,"start":256577,"text":"      \\"seconds\\": 351.4975,\\n"},{"end":265483,"start":263637,"text":""},{"end":281509,"start":279983,"text":""},{"end":299667,"start":299538,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":300671,"start":299676,"text":"      \\"seconds\\": 11.1251,\\n"},{"end":305890,"start":304367,"text":""},{"end":311556,"start":310031,"text":""},{"end":318886,"start":317352,"text":""},{"end":327418,"start":327247,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":328670,"start":327427,"text":"      \\"seconds\\": 204.9093,\\n"},{"end":558172,"start":556946,"text":""},{"end":616860,"start":599160,"text":""}]},"tests/test_football_document_ci_closure.py":{"after_sha256":"a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee","before_sha256":"605bbe24b1907bed3d58dfcbf5ad6a2a7a2b72d616da6dca34dfd46a86a1701b","reverse_patches":[{"end":1859,"start":1672,"text":"def test_new_provenance_records_observed_checkout_without_rewriting_history():\\n    source = (ROOT/PROFILE).read_bytes().replace(b\'\\\\r\\\\n\', b\'\\\\n\')\\n"},{"end":8213,"start":7099,"text":""}]}}').get(path)
@@ -29265,6 +29804,18 @@ def _run_ncaaf_socket_ci_integrated(manifest_path,base):
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 # NCAAF_SOCKET_CI_RUN_END
 
+# NFL_ODDS_SOCKET_RUN_BEGIN
+def _run_nfl_odds_socket_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/NFL_ODDS_SOCKET_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==NFL_ODDS_SOCKET_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/nfl_odds_socket_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/nfl_odds_socket_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('ncaaf_socket_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+# NFL_ODDS_SOCKET_RUN_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -29272,7 +29823,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):
+        if exists_at("HEAD", NFL_ODDS_SOCKET_POLICY_PATH):
+            code, report = _run_nfl_odds_socket_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", NCAAF_SOCKET_CI_POLICY_PATH):
             code, report = _run_ncaaf_socket_ci_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NCAAF_SOCKET_POLICY_PATH):
             code, report = _run_ncaaf_socket_integrated(args.manifest, args.base)
