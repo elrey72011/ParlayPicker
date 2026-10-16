@@ -1886,7 +1886,7 @@ def _dfs_guard_matches(source: bytes, reviewed: str) -> bool:
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -1907,7 +1907,7 @@ def _dfs_previous_guard_source(source: bytes) -> bytes:
     """Reconstruct the entire reviewed main guard after verifying the successor."""
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
 
     # DOCUMENT_MAIN_HOOK_BEGIN
@@ -1923,7 +1923,7 @@ def _dfs_restore_coverage_fixture(source: bytes) -> bytes:
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -2294,7 +2294,7 @@ def _drive_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -2314,7 +2314,7 @@ def _dfs_previous_guard_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -2329,7 +2329,7 @@ def _dfs_restore_coverage_fixture(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -2631,7 +2631,7 @@ def _estimate_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -2669,7 +2669,7 @@ def _drive_previous_guard_source(source,binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -3060,7 +3060,7 @@ def _nfl_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -3094,7 +3094,7 @@ def _estimate_previous_guard_source(source,binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -3176,7 +3176,7 @@ def _home_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -3214,7 +3214,7 @@ def _nfl_previous_guard_source(source,binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -3715,7 +3715,7 @@ def _producer_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -3757,7 +3757,7 @@ def _home_previous_guard_source(source,binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -4510,7 +4510,7 @@ def _source_contract_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -4552,7 +4552,7 @@ def _producer_previous_guard_source(source,binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -4810,7 +4810,7 @@ def _nfl_inputs_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -4847,7 +4847,7 @@ def _source_contract_previous_guard_source(source,binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -5128,7 +5128,7 @@ def _nfl_admission_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -5170,7 +5170,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -5198,7 +5198,7 @@ def _nfl_inputs_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -5328,7 +5328,7 @@ def _nfl_native_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -5369,7 +5369,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -5928,7 +5928,7 @@ def _pick_board_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -5941,7 +5941,7 @@ def _pick_board_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -5985,7 +5985,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -6248,7 +6248,7 @@ def _nfl_ui_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -6261,7 +6261,7 @@ def _nfl_ui_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -6305,7 +6305,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -6355,7 +6355,7 @@ def _pick_board_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -6513,7 +6513,7 @@ def _source_intake_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -6526,7 +6526,7 @@ def _source_intake_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -6570,7 +6570,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -6620,7 +6620,7 @@ def _nfl_ui_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -6688,7 +6688,7 @@ def _nfl_calibration_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -6701,7 +6701,7 @@ def _nfl_calibration_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -6745,7 +6745,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -6795,7 +6795,7 @@ def _source_intake_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7053,7 +7053,7 @@ def _nhl_puck_line_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7066,7 +7066,7 @@ def _nhl_puck_line_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7110,7 +7110,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -7160,7 +7160,7 @@ def _nfl_calibration_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7243,7 +7243,7 @@ def _football_catalog_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7256,7 +7256,7 @@ def _football_catalog_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7300,7 +7300,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -7350,7 +7350,7 @@ def _nhl_puck_line_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7467,7 +7467,7 @@ def _mlb_nhl_research_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7480,7 +7480,7 @@ def _mlb_nhl_research_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7524,7 +7524,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -7574,7 +7574,7 @@ def _football_catalog_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7649,7 +7649,7 @@ def _ncaaf_research_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7662,7 +7662,7 @@ def _ncaaf_research_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7706,7 +7706,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -7756,7 +7756,7 @@ def _mlb_nhl_research_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7841,7 +7841,7 @@ def _canonical_download_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7854,7 +7854,7 @@ def _canonical_download_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -7898,7 +7898,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -7948,7 +7948,7 @@ def _ncaaf_research_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -8044,7 +8044,7 @@ def _remote_canonical_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -8057,7 +8057,7 @@ def _remote_canonical_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -8101,7 +8101,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -8151,7 +8151,7 @@ def _canonical_download_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -8247,7 +8247,7 @@ def _remote_continuation_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -8260,7 +8260,7 @@ def _remote_continuation_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -8304,7 +8304,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -8354,7 +8354,7 @@ def _remote_canonical_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -8967,7 +8967,7 @@ def _football_research_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -8980,7 +8980,7 @@ def _football_research_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -9032,7 +9032,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -9062,7 +9062,7 @@ def _remote_continuation_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -10224,7 +10224,7 @@ def _slate_audit_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -10237,7 +10237,7 @@ def _slate_audit_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -10311,7 +10311,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -10399,7 +10399,7 @@ def _ci_scheduling_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -10412,7 +10412,7 @@ def _ci_scheduling_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -10477,7 +10477,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -10625,7 +10625,7 @@ def _ncaaf_compatibility_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -10638,7 +10638,7 @@ def _ncaaf_compatibility_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -10728,7 +10728,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -10830,7 +10830,7 @@ def _readiness_dashboard_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -10843,7 +10843,7 @@ def _readiness_dashboard_previous_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -10920,7 +10920,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -14852,7 +14852,7 @@ def _ncaaf_normal_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -14865,7 +14865,7 @@ def _ncaaf_normal_parent_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -14960,7 +14960,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -19026,7 +19026,7 @@ def _preview_binding_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -19039,7 +19039,7 @@ def _preview_binding_parent_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -19140,7 +19140,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -20422,7 +20422,7 @@ def _ncaaf_chronology_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -20435,7 +20435,7 @@ def _ncaaf_chronology_parent_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -20542,7 +20542,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -21626,7 +21626,7 @@ def _ncaaf_custody_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -21639,7 +21639,7 @@ def _ncaaf_custody_parent_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -21752,7 +21752,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -22558,7 +22558,7 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -22571,7 +22571,7 @@ def _ncaaf_pilot_parent_guard_source(source, binding=None):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -22643,7 +22643,7 @@ def _ncaaf_custody_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -22764,7 +22764,7 @@ def _discovery_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -22776,7 +22776,7 @@ def _discovery_parent_guard_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -22791,7 +22791,7 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -22960,7 +22960,7 @@ def _cloud_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -22972,7 +22972,7 @@ def _cloud_peel_exact_guard(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -22986,7 +22986,7 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23005,11 +23005,34 @@ FROZEN66_RECONSTRUCTION_JSON=b'{"tests/test_nfl_pdf_timing_costs.py":{"after_sha
 from functools import lru_cache as _frozen66_lru
 
 def _frozen66_guard_matches(source):
+    # FROZEN79_MATCH_BEGIN
+    if len(source)==8084004:
+        identity79='f1f0be3966b20fd9981e542fa14851d25a0aaf7b5797d0c32fdd62d85c5866e8'.encode()
+        return source.count(identity79)==1 and hashlib.sha256(source.replace(identity79,b'0'*64)).hexdigest()==identity79.decode()
+    # FROZEN79_MATCH_END
     identity=FROZEN66_REVIEWED_GUARD_SHA256.encode()
-    return isinstance(source,bytes) and len(source)==8077135 and source.count(identity)==1 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
+    return isinstance(source,bytes) and len(source) in (8077135, 8084004) and source.count(identity)==1 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
 
 @_frozen66_lru(maxsize=2)
 def _frozen66_base_source(source):
+    # FROZEN79_BASE_BEGIN
+    if len(source)==8084004:
+        _require(_frozen66_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        successor_size=len(source)
+        for name in ('MATCH','BASE'):
+            begin=b'\n    # FROZEN79_'+name.encode()+b'_BEGIN\n';end=b'\n    # FROZEN79_'+name.encode()+b'_END\n'
+            _require(source.count(begin)==1 and source.count(end)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+            start=source.index(begin);stop=source.index(end,start)+len(end)
+            source=source[:start]+b'\n'+source[stop:]
+        begin=b'\n    # FROZEN79_LOADER_BEGIN\n';end=b'\n    # FROZEN79_LOADER_END'
+        _require(source.count(begin)==1 and source.count(end)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        start=source.index(begin);stop=source.index(end,start)+len(end)
+        source=source[:start]+b'\n'+b"    raw=(ROOT/FROZEN66_BINDING_PATH).read_bytes().replace(b'\\r\\n',b'\\n')\n    _require(hashlib.sha256(raw).hexdigest()==FROZEN66_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')\n    from scripts import football_document_frozen66_scope as scope\n    import sys\n    return scope.run(sys.modules[__name__],manifest_path,base,json.loads(raw))"+source[stop:]
+        expanded=('len(source) in ('+str(8077135)+', '+str(successor_size)+')').encode()
+        _require(source.count(expanded)==322,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(expanded,('len(source)=='+str(8077135)).encode())
+        _require(len(source)==8077135 and hashlib.sha256(source).hexdigest()=='f13f84014963fcc23d5843c4f0ccafc55a6c94d6161c5d478f828608c53d12c4','PREVIOUS_GUARD_LOGIC_CHANGED')
+    # FROZEN79_BASE_END
     _require(_frozen66_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     start=source.index(b'\n# FROZEN66_BOOTSTRAP_BEGIN\n');end=source.index(b'\n# FROZEN66_BOOTSTRAP_END\n',start)+len(b'\n# FROZEN66_BOOTSTRAP_END\n')
     source=source[:start]+source[end:]
@@ -23027,7 +23050,7 @@ def _frozen66_base_source(source):
     return source
 
 def _frozen66_previous(path,source):
-    if path==GUARD_PATH:return _frozen66_base_source(source) if len(source)==8077135 else source
+    if path==GUARD_PATH:return _frozen66_base_source(source) if len(source) in (8077135, 8084004) else source
     info=json.loads(FROZEN66_RECONSTRUCTION_JSON).get(path)
     if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
     value=source[:info['before_size']]
@@ -23035,11 +23058,17 @@ def _frozen66_previous(path,source):
     return value
 
 def _run_frozen66_integrated(manifest_path,base):
-    raw=(ROOT/FROZEN66_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
-    _require(hashlib.sha256(raw).hexdigest()==FROZEN66_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
-    from scripts import football_document_frozen66_scope as scope
+    # FROZEN79_LOADER_BEGIN
+    import importlib.util
     import sys
-    return scope.run(sys.modules[__name__],manifest_path,base,json.loads(raw))
+    raw=(ROOT/'docs/paid-launch/football-document-frozen66-loader-binding-v1.json').read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()=='05c013b9299a5c47506a449432a412a944ed9cd70c057c31f107e06e02832212','REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/football_document_frozen66_loader_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/football_document_frozen66_loader_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('football_document_frozen66_loader_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+    # FROZEN79_LOADER_END
 # FROZEN66_BOOTSTRAP_END
 
 # DOCUMENT_MAIN_BOOTSTRAP_BEGIN
@@ -23055,7 +23084,7 @@ from functools import lru_cache as _document_main_lru
 def _document_main_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     identity=DOCUMENT_MAIN_REVIEWED_GUARD_SHA256.encode()
     return isinstance(source,bytes) and len(source)==8012430 and source.count(identity)==1 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
@@ -23064,7 +23093,7 @@ def _document_main_guard_matches(source):
 def _document_main_project(source,target):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     identity=DOCUMENT_MAIN_REVIEWED_GUARD_SHA256.encode()
     _require(isinstance(source,bytes) and len(source)==8012430 and source.count(identity)==1 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -23106,7 +23135,7 @@ def _document_main_previous(path,source,target):
 def _document_main_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return _document_main_project(source,'old') if len(source)==8012430 else source
@@ -23122,7 +23151,7 @@ def _document_main_historical_dfs(source,reviewed):
     # reconstructs its exact predecessor. Main never supplies old alias globals.
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     matched=False
     for identity,match,peel in (
@@ -23150,7 +23179,7 @@ def _document_context_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
@@ -23161,7 +23190,7 @@ def _document_context_guard_matches(source):
 def _document_context_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_document_context_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nDOCUMENT_CONTEXT_BOOTSTRAP =');end=source.index(b'\nDOCUMENT_SCAN_CI_BOOTSTRAP =',begin)
@@ -23182,7 +23211,7 @@ def _document_context_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
@@ -23223,7 +23252,7 @@ def _document_scan_ci_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
@@ -23234,7 +23263,7 @@ def _document_scan_ci_guard_matches(source):
 def _document_scan_ci_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_document_scan_ci_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nDOCUMENT_SCAN_CI_BOOTSTRAP =');end=source.index(b'\nDOCUMENT_SCAN_BOOTSTRAP =',begin)
@@ -23256,7 +23285,7 @@ def _document_scan_ci_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
@@ -23321,7 +23350,7 @@ def _document_scan_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
@@ -23332,7 +23361,7 @@ def _document_scan_guard_matches(source):
 def _document_scan_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_document_scan_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nDOCUMENT_SCAN_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
@@ -23354,7 +23383,7 @@ def _document_scan_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
@@ -23433,7 +23462,7 @@ def _document_scan_previous_source(path,source):
 def _document_main_legacy_dfs(source: bytes, reviewed: str) -> bool:
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     digest = reviewed.encode("ascii")
     return (source.count(digest) == 1 and
@@ -23442,7 +23471,7 @@ def _document_main_legacy_dfs(source: bytes, reviewed: str) -> bool:
 def _document_main_legacy_capacity(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return _listing_capacity_cached_base_source(source,LISTING_CAPACITY_REVIEWED_GUARD_SHA256,LISTING_CAPACITY_PREVIOUS_GUARD_SHA256)
@@ -23462,7 +23491,7 @@ def _nfl_recon_perf_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23474,7 +23503,7 @@ def _nfl_recon_perf_project(source,target):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23499,7 +23528,7 @@ def _nfl_recon_perf_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23533,7 +23562,7 @@ def _nfl_reconcile_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23544,7 +23573,7 @@ def _nfl_reconcile_guard_matches(source):
 def _nfl_reconcile_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_nfl_reconcile_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_RECONCILE_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_FIXTURE_BOOTSTRAP =',begin)
@@ -23565,7 +23594,7 @@ def _nfl_reconcile_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23607,7 +23636,7 @@ def _nfl_reconcile_socket_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23636,7 +23665,7 @@ def _nfl_odds_socket_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23647,7 +23676,7 @@ def _nfl_odds_socket_guard_matches(source):
 def _nfl_odds_socket_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_nfl_odds_socket_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
@@ -23668,7 +23697,7 @@ def _nfl_odds_socket_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23719,7 +23748,7 @@ def _nfl_pdf_fixture_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23730,7 +23759,7 @@ def _nfl_pdf_fixture_guard_matches(source):
 def _nfl_pdf_fixture_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_nfl_pdf_fixture_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_FIXTURE_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =',begin)
@@ -23753,7 +23782,7 @@ def _nfl_pdf_fixture_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23828,7 +23857,7 @@ def _nfl_pdf_timing_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23839,7 +23868,7 @@ def _nfl_pdf_timing_guard_matches(source):
 def _nfl_pdf_timing_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_nfl_pdf_timing_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
@@ -23860,7 +23889,7 @@ def _nfl_pdf_timing_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23962,7 +23991,7 @@ def _nfl_pdf_margin_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -23973,7 +24002,7 @@ def _nfl_pdf_margin_guard_matches(source):
 def _nfl_pdf_margin_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_nfl_pdf_margin_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
@@ -23994,7 +24023,7 @@ def _nfl_pdf_margin_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -24121,7 +24150,7 @@ def _ncaaf_socket_ci_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -24132,7 +24161,7 @@ def _ncaaf_socket_ci_guard_matches(source):
 def _ncaaf_socket_ci_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_ncaaf_socket_ci_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_BOOTSTRAP =',begin)
@@ -24153,7 +24182,7 @@ def _ncaaf_socket_ci_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -24305,7 +24334,7 @@ def _ncaaf_socket_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -24316,7 +24345,7 @@ def _ncaaf_socket_guard_matches(source):
 def _ncaaf_socket_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_ncaaf_socket_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNCAAF_SOCKET_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =',begin)
@@ -24337,7 +24366,7 @@ def _ncaaf_socket_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -24514,7 +24543,7 @@ def _docclose_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -24525,7 +24554,7 @@ def _docclose_guard_matches(source):
 def _docclose_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docclose_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
@@ -24546,7 +24575,7 @@ def _docclose_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -24748,7 +24777,7 @@ def _docperf_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -24759,7 +24788,7 @@ def _docperf_guard_matches(source):
 def _docperf_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docperf_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
@@ -24780,7 +24809,7 @@ def _docperf_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -25007,7 +25036,7 @@ def _docremote_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -25018,7 +25047,7 @@ def _docremote_guard_matches(source):
 def _docremote_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docremote_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
@@ -25039,7 +25068,7 @@ def _docremote_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -25291,7 +25320,7 @@ def _docpred_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -25302,7 +25331,7 @@ def _docpred_guard_matches(source):
 def _docpred_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docpred_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
@@ -25323,7 +25352,7 @@ def _docpred_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -25600,7 +25629,7 @@ def _docsix_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -25611,7 +25640,7 @@ def _docsix_guard_matches(source):
 def _docsix_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docsix_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
@@ -25632,7 +25661,7 @@ def _docsix_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -25934,7 +25963,7 @@ def _docreport_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -25945,7 +25974,7 @@ def _docreport_guard_matches(source):
 def _docreport_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docreport_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
@@ -25966,7 +25995,7 @@ def _docreport_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -26293,7 +26322,7 @@ def _docfixture_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -26304,7 +26333,7 @@ def _docfixture_guard_matches(source):
 def _docfixture_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docfixture_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
@@ -26325,7 +26354,7 @@ def _docfixture_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -26677,7 +26706,7 @@ def _docanchor_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -26688,7 +26717,7 @@ def _docanchor_guard_matches(source):
 def _docanchor_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docanchor_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
@@ -26709,7 +26738,7 @@ def _docanchor_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -27086,7 +27115,7 @@ def _doclife_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -27097,7 +27126,7 @@ def _doclife_guard_matches(source):
 def _doclife_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_doclife_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCWORDS_BOOTSTRAP =',begin)
@@ -27118,7 +27147,7 @@ def _doclife_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -27520,7 +27549,7 @@ def _docwords_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -27531,7 +27560,7 @@ def _docwords_guard_matches(source):
 def _docwords_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docwords_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCWORDS_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCMETA_BOOTSTRAP =',begin)
@@ -27552,7 +27581,7 @@ def _docwords_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -27979,7 +28008,7 @@ def _docmeta_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -27990,7 +28019,7 @@ def _docmeta_guard_matches(source):
 def _docmeta_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docmeta_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCMETA_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =',begin)
@@ -28011,7 +28040,7 @@ def _docmeta_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -28463,7 +28492,7 @@ def _docio_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -28474,7 +28503,7 @@ def _docio_guard_matches(source):
 def _docio_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_docio_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =');end=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =',begin)
@@ -28495,7 +28524,7 @@ def _docio_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -28972,7 +29001,7 @@ def _terms_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -28983,7 +29012,7 @@ def _terms_guard_matches(source):
 def _terms_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_terms_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =');end=source.index(b'\nNFL_DOCUMENT_BOOTSTRAP =',begin)
@@ -29004,7 +29033,7 @@ def _terms_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -29506,7 +29535,7 @@ def _document_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -29517,7 +29546,7 @@ def _document_guard_matches(source):
 def _document_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_document_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_DOCUMENT_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_BOOTSTRAP =',begin)
@@ -29538,7 +29567,7 @@ def _document_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -30065,7 +30094,7 @@ def _pdf_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -30076,7 +30105,7 @@ def _pdf_guard_matches(source):
 def _pdf_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(_pdf_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_BOOTSTRAP =');end=source.index(b'\nNFL_INTERPRETATION_BOOTSTRAP =',begin)
@@ -30097,7 +30126,7 @@ def _pdf_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -30649,7 +30678,7 @@ def _interpret_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -30660,7 +30689,7 @@ def _interpret_guard_matches(source):
 def _interpret_cached_base(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if hashlib.sha256(source).hexdigest()==parent:return source
     if b'\nNFL_INTERPRETATION_BOOTSTRAP =' not in source:return source
@@ -30682,7 +30711,7 @@ def _interpret_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -31260,7 +31289,7 @@ def _listing_capacity_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -31271,7 +31300,7 @@ def _listing_capacity_guard_matches(source):
 def _listing_capacity_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if b'\nLISTING_CAPACITY_BOOTSTRAP =' not in source:return source
     _require(reviewed==LISTING_CAPACITY_REVIEWED_GUARD_SHA256 and parent==LISTING_CAPACITY_PREVIOUS_GUARD_SHA256 and _listing_capacity_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -31292,7 +31321,7 @@ def _listing_capacity_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     if len(source)==6717016:
@@ -31374,7 +31403,7 @@ def _listing_capacity_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     if len(source)==6717016:
@@ -31831,7 +31860,7 @@ def _listing_metadata_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -31842,7 +31871,7 @@ def _listing_metadata_guard_matches(source):
 def _listing_metadata_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if b'\nLISTING_METADATA_BOOTSTRAP =' not in source:return source
     _require(reviewed==LISTING_METADATA_REVIEWED_GUARD_SHA256 and parent==LISTING_METADATA_PREVIOUS_GUARD_SHA256 and _listing_metadata_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -31863,7 +31892,7 @@ def _listing_metadata_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -31905,14 +31934,14 @@ _capacity_previous_base=_listing_metadata_base_source
 def _listing_metadata_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _capacity_previous_match(_listing_capacity_base_source(source))
 
 def _listing_metadata_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _capacity_previous_base(_listing_capacity_base_source(source))
 _listing_metadata_base_source.cache_clear=_capacity_previous_base.cache_clear
@@ -31933,7 +31962,7 @@ def _cost_immutable_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -31943,7 +31972,7 @@ def _cost_immutable_guard_matches(source):
 def _cost_immutable_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if b'\nCOST_IMMUTABLE_BOOTSTRAP =' not in source:return source
     _require(reviewed==COST_IMMUTABLE_REVIEWED_GUARD_SHA256 and parent==COST_IMMUTABLE_PREVIOUS_GUARD_SHA256 and _cost_immutable_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -31963,7 +31992,7 @@ def _cost_immutable_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -31978,14 +32007,14 @@ _metadata_previous_base=_cost_immutable_base_source
 def _cost_immutable_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _metadata_previous_match(_listing_metadata_base_source(source))
 
 def _cost_immutable_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _metadata_previous_base(_listing_metadata_base_source(source))
 _cost_immutable_base_source.cache_clear=_metadata_previous_base.cache_clear
@@ -32005,7 +32034,7 @@ def _listing_cost_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32016,7 +32045,7 @@ def _listing_cost_guard_matches(source):
 def _listing_cost_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if b'\nLISTING_COST_BOOTSTRAP =' not in source:return source
     _require(reviewed==LISTING_COST_REVIEWED_GUARD_SHA256 and parent==LISTING_COST_PREVIOUS_GUARD_SHA256 and _listing_cost_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -32037,7 +32066,7 @@ def _listing_cost_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32071,13 +32100,13 @@ _immutable_previous_cost_base=_listing_cost_base_source
 def _listing_cost_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _immutable_previous_cost_match(_cost_immutable_base_source(source))
 def _listing_cost_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _immutable_previous_cost_base(_cost_immutable_base_source(source))
 _listing_cost_base_source.cache_clear=_immutable_previous_cost_base.cache_clear
@@ -32097,7 +32126,7 @@ def _nfl_listing_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32108,7 +32137,7 @@ def _nfl_listing_guard_matches(source):
 def _nfl_listing_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if b'\nNFL_LISTING_BOOTSTRAP =' not in source:return source
     _require(reviewed==NFL_LISTING_REVIEWED_GUARD_SHA256 and parent==NFL_LISTING_PREVIOUS_GUARD_SHA256 and _nfl_listing_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -32131,7 +32160,7 @@ def _nfl_listing_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32146,13 +32175,13 @@ _cost_original_listing_base=_nfl_listing_base_source
 def _nfl_listing_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _cost_original_listing_match(_listing_cost_base_source(source))
 def _nfl_listing_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _cost_original_listing_base(_listing_cost_base_source(source))
 _nfl_listing_base_source.cache_clear=_cost_original_listing_base.cache_clear
@@ -32171,7 +32200,7 @@ def _guard_memo_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32181,7 +32210,7 @@ def _guard_memo_guard_matches(source):
 def _guard_memo_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if b'\nGUARD_MEMO_BOOTSTRAP =' not in source:return source
     _require(reviewed==GUARD_MEMO_REVIEWED_GUARD_SHA256 and parent==GUARD_MEMO_PREVIOUS_GUARD_SHA256 and _guard_memo_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -32201,7 +32230,7 @@ def _guard_memo_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32226,7 +32255,7 @@ def _guard_memo_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32237,7 +32266,7 @@ def _guard_memo_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32257,7 +32286,7 @@ def _guard_reads_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32267,7 +32296,7 @@ def _guard_reads_guard_matches(source):
 def _guard_reads_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if b'\nGUARD_READS_BOOTSTRAP =' not in source:return source
     _require(reviewed==GUARD_READS_REVIEWED_GUARD_SHA256 and parent==GUARD_READS_PREVIOUS_GUARD_SHA256 and _guard_reads_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -32287,7 +32316,7 @@ def _guard_reads_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32309,13 +32338,13 @@ _memo_early_base = _guard_reads_base_source
 def _guard_reads_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _memo_early_match(_guard_memo_base_source(source))
 def _guard_reads_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _memo_early_base(_guard_memo_base_source(source))
 
@@ -32332,7 +32361,7 @@ def _guard_bootstrap_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32342,7 +32371,7 @@ def _guard_bootstrap_guard_matches(source):
 def _guard_bootstrap_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if b'\nGUARD_BOOTSTRAP_BOOTSTRAP =' not in source:return source
     _require(reviewed==GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256 and parent==GUARD_BOOTSTRAP_PREVIOUS_GUARD_SHA256 and _guard_bootstrap_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -32365,7 +32394,7 @@ def _guard_bootstrap_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32387,13 +32416,13 @@ _reads_early_base = _guard_bootstrap_base_source
 def _guard_bootstrap_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _reads_early_match(_guard_reads_base_source(source))
 def _guard_bootstrap_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _reads_early_base(_guard_reads_base_source(source))
 
@@ -32410,7 +32439,7 @@ def _guard_scan_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32420,7 +32449,7 @@ def _guard_scan_guard_matches(source):
 def _guard_scan_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if b'\nGUARD_SCAN_BOOTSTRAP =' not in source:return source
     _require(reviewed==GUARD_SCAN_REVIEWED_GUARD_SHA256 and parent==GUARD_SCAN_PREVIOUS_GUARD_SHA256 and _guard_scan_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -32440,7 +32469,7 @@ def _guard_scan_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32470,7 +32499,7 @@ def _guard_performance_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32480,7 +32509,7 @@ def _guard_performance_guard_matches(source):
 def _guard_performance_cached_base_source(source,reviewed,parent):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     _require(reviewed==GUARD_PERFORMANCE_REVIEWED_GUARD_SHA256 and parent==GUARD_PERFORMANCE_PREVIOUS_GUARD_SHA256 and _guard_performance_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nGUARD_PERFORMANCE_BOOTSTRAP =',1)
@@ -32499,7 +32528,7 @@ def _guard_performance_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32530,7 +32559,7 @@ def _nfl_odds_timing_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32542,7 +32571,7 @@ def _nfl_odds_timing_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32591,7 +32620,7 @@ def _nfl_odds_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32603,7 +32632,7 @@ def _nfl_odds_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32637,7 +32666,7 @@ def _nfl_scenario_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32649,7 +32678,7 @@ def _nfl_scenario_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32671,7 +32700,7 @@ def _ci_timing_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32684,7 +32713,7 @@ def _ci_timing_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32706,7 +32735,7 @@ def _nfl_diagnostics_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32717,7 +32746,7 @@ def _nfl_diagnostics_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32739,7 +32768,7 @@ def _nfl_scoring_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32750,7 +32779,7 @@ def _nfl_scoring_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32772,7 +32801,7 @@ def _nfl_observed_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32783,7 +32812,7 @@ def _nfl_observed_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32806,7 +32835,7 @@ def _nfl_owner_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32818,7 +32847,7 @@ def _nfl_owner_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32833,13 +32862,13 @@ _bootstrap_early_base = _guard_scan_base_source
 def _guard_scan_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _bootstrap_early_match(_guard_bootstrap_base_source(source))
 def _guard_scan_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _bootstrap_early_base(_guard_bootstrap_base_source(source))
 
@@ -32847,7 +32876,7 @@ _scan_early_v1_match = _guard_performance_guard_matches
 def _guard_performance_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _scan_early_v1_match(_guard_scan_base_source(source))
 @_scan_lru_cache(maxsize=2)
@@ -32856,7 +32885,7 @@ def _guard_scan_v1_presence(source,reviewed,parent):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32867,7 +32896,7 @@ def _guard_performance_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -32879,13 +32908,13 @@ _performance_early_base = _nfl_odds_timing_base_source
 def _nfl_odds_timing_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _performance_early_match(_guard_performance_base_source(source))
 def _nfl_odds_timing_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _performance_early_base(_guard_performance_base_source(source))
 _nfl_odds_timing_base_source.cache_clear = _performance_early_base.cache_clear
@@ -32896,13 +32925,13 @@ _odds_timing_early_base = _nfl_odds_base_source
 def _nfl_odds_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _odds_timing_early_match(_nfl_odds_timing_base_source(source))
 def _nfl_odds_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _odds_timing_early_base(_nfl_odds_timing_base_source(source))
 _nfl_odds_base_source.cache_clear = _odds_timing_early_base.cache_clear
@@ -32913,13 +32942,13 @@ _odds_early_base = _nfl_scenario_base_source
 def _nfl_scenario_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _odds_early_match(_nfl_odds_base_source(source))
 def _nfl_scenario_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _odds_early_base(_nfl_odds_base_source(source))
 _nfl_scenario_base_source.cache_clear = _odds_early_base.cache_clear
@@ -32930,13 +32959,13 @@ _scenario_boot_base = _ci_timing_base_source
 def _ci_timing_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _scenario_boot_match(_nfl_scenario_base_source(source))
 def _ci_timing_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _scenario_boot_base(_nfl_scenario_base_source(source))
 
@@ -32945,13 +32974,13 @@ _ci_timing_boot_base = _nfl_diagnostics_base_source
 def _nfl_diagnostics_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _ci_timing_boot_match(_ci_timing_base_source(source))
 def _nfl_diagnostics_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _ci_timing_boot_base(_ci_timing_base_source(source))
 
@@ -32960,13 +32989,13 @@ _nfl_diagnostics_boot_base = _nfl_scoring_base_source
 def _nfl_scoring_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _nfl_diagnostics_boot_match(_nfl_diagnostics_base_source(source))
 def _nfl_scoring_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _nfl_diagnostics_boot_base(_nfl_diagnostics_base_source(source))
 
@@ -32975,13 +33004,13 @@ _nfl_scoring_boot_nfl_base = _nfl_observed_base_source
 def _nfl_observed_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _nfl_scoring_boot_nfl_match(_nfl_scoring_base_source(source))
 def _nfl_observed_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _nfl_scoring_boot_nfl_base(_nfl_scoring_base_source(source))
 
@@ -32990,13 +33019,13 @@ _nfl_observed_boot_nfl_base = _nfl_owner_base_source
 def _nfl_owner_guard_matches(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _nfl_observed_boot_nfl_match(_nfl_observed_base_source(source))
 def _nfl_owner_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     return _nfl_observed_boot_nfl_base(_nfl_observed_base_source(source))
 
@@ -33011,7 +33040,7 @@ def _cloud_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33021,7 +33050,7 @@ def _cloud_peel_exact_guard(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33033,7 +33062,7 @@ def _discovery_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33043,7 +33072,7 @@ def _discovery_parent_guard_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33062,7 +33091,7 @@ def _owner_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33074,7 +33103,7 @@ def _owner_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33097,7 +33126,7 @@ def _cloud_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33107,7 +33136,7 @@ def _cloud_peel_exact_guard(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33118,7 +33147,7 @@ def _discovery_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33128,7 +33157,7 @@ def _discovery_parent_guard_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33140,7 +33169,7 @@ def _owner_guard_matches(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33150,7 +33179,7 @@ def _owner_base_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33171,7 +33200,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -33226,7 +33255,7 @@ def _discovery_parent_guard_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33242,7 +33271,7 @@ def _cloud_peel_exact_guard(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33258,7 +33287,7 @@ def _discovery_parent_guard_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33271,7 +33300,7 @@ def _cloud_peel_exact_guard(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33283,7 +33312,7 @@ def _discovery_parent_guard_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33296,7 +33325,7 @@ def _cloud_peel_exact_guard(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33347,7 +33376,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -33390,7 +33419,7 @@ def _cloud_peel_exact_guard(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33404,7 +33433,7 @@ def _discovery_parent_guard_source(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33417,7 +33446,7 @@ def _cloud_peel_exact_guard(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33429,7 +33458,7 @@ def _cloud_peel_exact_guard(source):
     # DOCUMENT_MAIN_HOOK_BEGIN
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -33481,7 +33510,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -33603,7 +33632,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -33746,7 +33775,7 @@ def _dfs_guard_matches(source, reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -33834,7 +33863,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -33916,7 +33945,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -33980,7 +34009,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34044,7 +34073,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34123,7 +34152,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34172,7 +34201,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34221,7 +34250,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34270,7 +34299,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34334,7 +34363,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34384,7 +34413,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34434,7 +34463,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34500,7 +34529,7 @@ _DOCUMENT_MAIN_ORIGINAL_TIMING_SOURCE = _nfl_odds_timing_base_source
 def _nfl_odds_timing_base_source(source):
 
     # FROZEN66_HOOK_BEGIN
-    if len(source)==8077135:source=_frozen66_base_source(source)
+    if len(source) in (8077135, 8084004):source=_frozen66_base_source(source)
     # FROZEN66_HOOK_END
     source=_guard_memo_base_source(source)
     source=_guard_reads_base_source(source)
@@ -34520,7 +34549,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34570,7 +34599,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34608,7 +34637,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34651,7 +34680,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34709,7 +34738,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34755,7 +34784,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -34800,7 +34829,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
@@ -35733,7 +35762,7 @@ def _dfs_guard_matches(source,reviewed):
 
     # FROZEN66_HOOK_BEGIN
     if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
-    if len(source)==8077135:
+    if len(source) in (8077135, 8084004):
         try:source=_frozen66_base_source(source)
         except ValueError:return False
     # FROZEN66_HOOK_END
