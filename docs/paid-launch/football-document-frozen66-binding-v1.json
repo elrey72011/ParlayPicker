@@ -1,0 +1,34 @@
+{
+  "approval_reference": "Robert explicitly authorizes the exact one-file frozen-66 input correction against 8070cd6e, preserving every existing assertion; focused isolation/tampering validation, exact successor bindings/policy-only seal and one additional complete final-head CI cycle. No optimization, workflow/profile change, acquisition, trust, inference, merge or deployment.",
+  "approved_existing_test_changes": {
+    "tests/test_nfl_pdf_timing_costs.py": "Exact authorized patch SHA-256 5d34487aa7da43616aa27c283069f6b4c768d0eb66f67dacbc7aedc5c435bf9b; original test functions/assertions/identities unchanged."
+  },
+  "base": "8070cd6e90407abf67abd4cd7af9207a81a4f8c5",
+  "base_tree": "ca26019fa6d7ad7a85d093b45e20443187d745b3",
+  "main_base": "f98015dbd969456990a01f9d45405697c7fc5251",
+  "main_tree": "bb55338dbaf1b1dea445e50ec4b3ac20a37fc852",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "merged_source_blobs": {},
+  "paths": [
+    "scripts/check_launch_change_scope.py",
+    "tests/test_nfl_pdf_timing_costs.py",
+    "docs/paid-launch/football-document-frozen66-binding-v1.json",
+    "scripts/football_document_frozen66_scope.py",
+    "docs/paid-launch/football-document-frozen66-v1.md"
+  ],
+  "previous_guard_sha256": "4e37097c9663d6cc481ec2d26ce8e63cf2316f6add235e0e597395f279bc5b23",
+  "reconstruction_json_sha256": "cbc8626d1a276a145d97495d2e1e23cf59138f169a0368cf9ce9138f84ac6dc4",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-frozen66-v1.md": "f84649b420039a843ac5d22fb2cf87e730a95a79",
+    "scripts/football_document_frozen66_scope.py": "57281d4ac76abfa31a0704e49949de57159055ea",
+    "tests/test_nfl_pdf_timing_costs.py": "945cfc0febd380e14ac83520c5b342ffeac696f1"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "tests/test_nfl_pdf_timing_costs.py": {
+      "after_sha256": "4f378c5c0777c4669f8376c1844d118ab06a8e531cc90a13d9c5c269e12e9567",
+      "before_sha256": "925390322aa8d1ba57be4fa0b31101593b59fa0c37929c62c5bdabe7f029efcf",
+      "before_size": 8627
+    }
+  }
+}

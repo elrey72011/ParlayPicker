@@ -1883,6 +1883,13 @@ DFS_PRIOR_COVERAGE_FIXTURE_SHA256 = '044051ee882b64403fdabe84549ab1b322383965b1e
 def _dfs_guard_matches(source: bytes, reviewed: str) -> bool:
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -1899,6 +1906,10 @@ def _dfs_guard_matches(source: bytes, reviewed: str) -> bool:
 def _dfs_previous_guard_source(source: bytes) -> bytes:
     """Reconstruct the entire reviewed main guard after verifying the successor."""
 
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+
     # DOCUMENT_MAIN_HOOK_BEGIN
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
@@ -1910,6 +1921,10 @@ def _dfs_previous_guard_source(source: bytes) -> bytes:
 def _dfs_restore_coverage_fixture(source: bytes) -> bytes:
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     for before, after in reversed(DFS_COVERAGE_FIXTURE_EDITS):
@@ -2257,6 +2272,10 @@ DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS = {'streamlit_app.py': {'sha256': '7e438d76e8
 
 def _drive_previous_main_source(path, source):
     """Reconstruct reviewed predecessor fixture inputs, never their assertions."""
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _drive_previous_guard_source(source)
     frozen = DRIVE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -2273,6 +2292,10 @@ def _drive_previous_main_source(path, source):
 def _drive_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = DRIVE_BINDINGS if binding is None else binding
@@ -2289,6 +2312,10 @@ _drive_prior_dfs_source = _dfs_previous_guard_source
 def _dfs_previous_guard_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _drive_prior_dfs_source(_drive_previous_guard_source(source))
@@ -2300,6 +2327,10 @@ _drive_prior_coverage_fixture = _dfs_restore_coverage_fixture
 def _dfs_restore_coverage_fixture(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _drive_prior_coverage_fixture(_drive_previous_main_source(
@@ -2598,6 +2629,10 @@ ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/market_probability_model.py':
 def _estimate_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = ESTIMATE_BINDINGS if binding is None else binding
@@ -2609,6 +2644,10 @@ def _estimate_previous_guard_source(source, binding=None):
 
 
 def _estimate_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path==GUARD_PATH:
         return _estimate_previous_guard_source(source)
     frozen=ESTIMATE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -2628,12 +2667,20 @@ _estimate_prior_drive_main = _drive_previous_main_source
 def _drive_previous_guard_source(source,binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _estimate_prior_drive_guard(_estimate_previous_guard_source(source),binding)
 
 
 def _drive_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _estimate_prior_drive_main(path,_estimate_previous_main_source(path,source))
 
 
@@ -3011,6 +3058,10 @@ NFL_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'edits': [(b"   
 def _nfl_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NFL_BINDINGS if binding is None else binding
@@ -3020,6 +3071,10 @@ def _nfl_previous_guard_source(source, binding=None):
 
 
 def _nfl_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path==GUARD_PATH: return _nfl_previous_guard_source(source)
     frozen=NFL_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
     if frozen is None or hashlib.sha256(source).hexdigest()==frozen["sha256"]: return source
@@ -3037,12 +3092,20 @@ _nfl_prior_estimate_main = _estimate_previous_main_source
 def _estimate_previous_guard_source(source,binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_prior_estimate_guard(_nfl_previous_guard_source(source),binding)
 
 
 def _estimate_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _nfl_prior_estimate_main(path,_nfl_previous_main_source(path,source))
 
 
@@ -3111,6 +3174,10 @@ HOME_PRIOR_SOURCE_RECONSTRUCTIONS = {'tests/test_nfl_provenance_scope.py': {'sha
 def _home_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = HOME_BINDINGS if binding is None else binding
@@ -3122,6 +3189,10 @@ def _home_previous_guard_source(source, binding=None):
 
 
 def _home_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path==GUARD_PATH:
         return _home_previous_guard_source(source)
     frozen=HOME_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -3141,12 +3212,20 @@ _home_prior_nfl_main = _nfl_previous_main_source
 def _nfl_previous_guard_source(source,binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _home_prior_nfl_guard(_home_previous_guard_source(source),binding)
 
 
 def _nfl_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _home_prior_nfl_main(path,_home_previous_main_source(path,source))
 
 
@@ -3634,6 +3713,10 @@ PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS = {'tests/test_home_runline_scope_policy
 def _producer_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = PROVENANCE_BINDINGS if binding is None else binding
@@ -3645,6 +3728,10 @@ def _producer_previous_guard_source(source, binding=None):
 
 
 def _producer_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path==GUARD_PATH:
         return _producer_previous_guard_source(source)
     frozen=PROVENANCE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -3668,12 +3755,20 @@ _producer_prior_home_main = _home_previous_main_source
 def _home_previous_guard_source(source,binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _producer_prior_home_guard(_producer_previous_guard_source(source),binding)
 
 
 def _home_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _producer_prior_home_main(path,_producer_previous_main_source(path,source))
 
 
@@ -4413,6 +4508,10 @@ SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS = {'tests/test_producer_provenance_
 def _source_contract_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = SOURCE_CONTRACT_BINDINGS if binding is None else binding
@@ -4424,6 +4523,10 @@ def _source_contract_previous_guard_source(source, binding=None):
 
 
 def _source_contract_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path==GUARD_PATH:
         return _source_contract_previous_guard_source(source)
     frozen=SOURCE_CONTRACT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -4447,12 +4550,20 @@ _source_contract_prior_producer_main = _producer_previous_main_source
 def _producer_previous_guard_source(source,binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _source_contract_prior_producer_guard(_source_contract_previous_guard_source(source),binding)
 
 
 def _producer_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _source_contract_prior_producer_main(path,_source_contract_previous_main_source(path,source))
 
 
@@ -4697,6 +4808,10 @@ NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/market_probability_model.py
 def _nfl_inputs_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NFL_INPUTS_BINDINGS if binding is None else binding
@@ -4707,6 +4822,10 @@ def _nfl_inputs_previous_guard_source(source, binding=None):
 
 
 def _nfl_inputs_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path==GUARD_PATH:return _nfl_inputs_previous_guard_source(source)
     frozen=NFL_INPUTS_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
     if frozen is None or hashlib.sha256(source).hexdigest()==frozen["sha256"]:return source
@@ -4726,12 +4845,20 @@ _nfl_inputs_prior_source_contract_main = _source_contract_previous_main_source
 def _source_contract_previous_guard_source(source,binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_inputs_prior_source_contract_guard(_nfl_inputs_previous_guard_source(source),binding)
 
 
 def _source_contract_previous_main_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _nfl_inputs_prior_source_contract_main(path,_nfl_inputs_previous_main_source(path,source))
 
 
@@ -4999,6 +5126,10 @@ NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/nfl_inference_evidence.p
 def _nfl_admission_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NFL_ADMISSION_BINDINGS if binding is None else binding
@@ -5009,6 +5140,10 @@ def _nfl_admission_previous_guard_source(source, binding=None):
 
 
 def _nfl_admission_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _nfl_admission_previous_guard_source(source)
     frozen = NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -5032,6 +5167,13 @@ def _dfs_guard_matches(source, reviewed):
     # An old hash is never a blanket approval for new or self-rehashed bytes.
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -5054,12 +5196,20 @@ _nfl_admission_prior_nfl_inputs_main = _nfl_inputs_previous_main_source
 def _nfl_inputs_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_admission_prior_nfl_inputs_guard(_nfl_admission_previous_guard_source(source), binding)
 
 
 def _nfl_inputs_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _nfl_admission_prior_nfl_inputs_main(path, _nfl_admission_previous_main_source(path, source))
 
 
@@ -5176,6 +5326,10 @@ NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/feature_processing.py': {'s
 def _nfl_native_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NFL_NATIVE_BINDINGS if binding is None else binding
@@ -5186,6 +5340,10 @@ def _nfl_native_previous_guard_source(source, binding=None):
 
 
 def _nfl_native_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _nfl_native_previous_guard_source(source)
     frozen = NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -5208,6 +5366,13 @@ def _dfs_guard_matches(source, reviewed):
     # Reconstruct a predecessor only from the exact reviewed successor bytes.
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -5227,6 +5392,10 @@ _nfl_native_prior_admission_main = _nfl_admission_previous_main_source
 
 
 def _nfl_admission_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _nfl_native_prior_admission_main(path, _nfl_native_previous_main_source(path, source))
 
 
@@ -5757,6 +5926,10 @@ PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/current_wagers_trace.py': {
 def _pick_board_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -5766,6 +5939,10 @@ def _pick_board_raw_guard_matches(source, reviewed):
 def _pick_board_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = PICK_BOARD_BINDINGS if binding is None else binding
@@ -5776,6 +5953,10 @@ def _pick_board_previous_guard_source(source, binding=None):
 
 
 def _pick_board_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _pick_board_previous_guard_source(source)
     frozen = PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -5801,6 +5982,13 @@ _pick_board_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -5822,6 +6010,10 @@ _pick_board_prior_native_main = _nfl_native_previous_main_source
 
 
 def _nfl_native_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _pick_board_prior_native_main(path, _pick_board_previous_main_source(path, source))
 
 
@@ -6054,6 +6246,10 @@ NFL_UI_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/nfl_inference_evidence.py': {'s
 def _nfl_ui_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -6063,6 +6259,10 @@ def _nfl_ui_raw_guard_matches(source, reviewed):
 def _nfl_ui_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NFL_UI_BINDINGS if binding is None else binding
@@ -6073,6 +6273,10 @@ def _nfl_ui_previous_guard_source(source, binding=None):
 
 
 def _nfl_ui_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _nfl_ui_previous_guard_source(source)
     frozen = NFL_UI_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -6098,6 +6302,13 @@ _nfl_ui_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -6119,6 +6330,10 @@ _nfl_ui_prior_pick_board_main = _pick_board_previous_main_source
 
 
 def _pick_board_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _nfl_ui_prior_pick_board_main(path, _nfl_ui_previous_main_source(path, source))
 
 
@@ -6138,6 +6353,10 @@ _nfl_ui_prior_pick_board_guard = _pick_board_previous_guard_source
 def _pick_board_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_ui_prior_pick_board_guard(_nfl_ui_previous_guard_source(source), binding)
@@ -6292,6 +6511,10 @@ SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/source_contract.py': {'s
 def _source_intake_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -6301,6 +6524,10 @@ def _source_intake_raw_guard_matches(source, reviewed):
 def _source_intake_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = SOURCE_INTAKE_BINDINGS if binding is None else binding
@@ -6311,6 +6538,10 @@ def _source_intake_previous_guard_source(source, binding=None):
 
 
 def _source_intake_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _source_intake_previous_guard_source(source)
     frozen = SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -6336,6 +6567,13 @@ _source_intake_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -6357,6 +6595,10 @@ _source_intake_prior_nfl_ui_main = _nfl_ui_previous_main_source
 
 
 def _nfl_ui_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _source_intake_prior_nfl_ui_main(path, _source_intake_previous_main_source(path, source))
 
 
@@ -6376,6 +6618,10 @@ _source_intake_prior_nfl_ui_guard = _nfl_ui_previous_guard_source
 def _nfl_ui_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _source_intake_prior_nfl_ui_guard(_source_intake_previous_guard_source(source), binding)
@@ -6440,6 +6686,10 @@ NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 def _nfl_calibration_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -6449,6 +6699,10 @@ def _nfl_calibration_raw_guard_matches(source, reviewed):
 def _nfl_calibration_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NFL_CALIBRATION_BINDINGS if binding is None else binding
@@ -6459,6 +6713,10 @@ def _nfl_calibration_previous_guard_source(source, binding=None):
 
 
 def _nfl_calibration_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _nfl_calibration_previous_guard_source(source)
     frozen = NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -6484,6 +6742,13 @@ _nfl_calibration_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -6505,6 +6770,10 @@ _nfl_calibration_prior_source_intake_main = _source_intake_previous_main_source
 
 
 def _source_intake_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _nfl_calibration_prior_source_intake_main(path, _nfl_calibration_previous_main_source(path, source))
 
 
@@ -6524,6 +6793,10 @@ _nfl_calibration_prior_source_intake_guard = _source_intake_previous_guard_sourc
 def _source_intake_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_calibration_prior_source_intake_guard(_nfl_calibration_previous_guard_source(source), binding)
@@ -6778,6 +7051,10 @@ NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/market_probability_model
 def _nhl_puck_line_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -6787,6 +7064,10 @@ def _nhl_puck_line_raw_guard_matches(source, reviewed):
 def _nhl_puck_line_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NHL_PUCK_LINE_BINDINGS if binding is None else binding
@@ -6797,6 +7078,10 @@ def _nhl_puck_line_previous_guard_source(source, binding=None):
 
 
 def _nhl_puck_line_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _nhl_puck_line_previous_guard_source(source)
     frozen = NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -6822,6 +7107,13 @@ _nhl_puck_line_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -6843,6 +7135,10 @@ _nhl_puck_line_prior_nfl_calibration_main = _nfl_calibration_previous_main_sourc
 
 
 def _nfl_calibration_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _nhl_puck_line_prior_nfl_calibration_main(path, _nhl_puck_line_previous_main_source(path, source))
 
 
@@ -6862,6 +7158,10 @@ _nhl_puck_line_prior_nfl_calibration_guard = _nfl_calibration_previous_guard_sou
 def _nfl_calibration_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nhl_puck_line_prior_nfl_calibration_guard(_nhl_puck_line_previous_guard_source(source), binding)
@@ -6941,6 +7241,10 @@ FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/football_stage1_cycle
 def _football_catalog_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -6950,6 +7254,10 @@ def _football_catalog_raw_guard_matches(source, reviewed):
 def _football_catalog_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = FOOTBALL_CATALOG_BINDINGS if binding is None else binding
@@ -6960,6 +7268,10 @@ def _football_catalog_previous_guard_source(source, binding=None):
 
 
 def _football_catalog_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _football_catalog_previous_guard_source(source)
     frozen = FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -6985,6 +7297,13 @@ _football_catalog_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -7006,6 +7325,10 @@ _football_catalog_prior_nhl_puck_line_main = _nhl_puck_line_previous_main_source
 
 
 def _nhl_puck_line_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _football_catalog_prior_nhl_puck_line_main(path, _football_catalog_previous_main_source(path, source))
 
 
@@ -7025,6 +7348,10 @@ _football_catalog_prior_nhl_puck_line_guard = _nhl_puck_line_previous_guard_sour
 def _nhl_puck_line_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _football_catalog_prior_nhl_puck_line_guard(_football_catalog_previous_guard_source(source), binding)
@@ -7138,6 +7465,10 @@ MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/source_contract.py': 
 def _mlb_nhl_research_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -7147,6 +7478,10 @@ def _mlb_nhl_research_raw_guard_matches(source, reviewed):
 def _mlb_nhl_research_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = MLB_NHL_RESEARCH_BINDINGS if binding is None else binding
@@ -7157,6 +7492,10 @@ def _mlb_nhl_research_previous_guard_source(source, binding=None):
 
 
 def _mlb_nhl_research_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _mlb_nhl_research_previous_guard_source(source)
     frozen = MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -7182,6 +7521,13 @@ _mlb_nhl_research_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -7203,6 +7549,10 @@ _mlb_nhl_research_prior_football_catalog_main = _football_catalog_previous_main_
 
 
 def _football_catalog_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _mlb_nhl_research_prior_football_catalog_main(path, _mlb_nhl_research_previous_main_source(path, source))
 
 
@@ -7222,6 +7572,10 @@ _mlb_nhl_research_prior_football_catalog_guard = _football_catalog_previous_guar
 def _football_catalog_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _mlb_nhl_research_prior_football_catalog_guard(_mlb_nhl_research_previous_guard_source(source), binding)
@@ -7293,6 +7647,10 @@ NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 def _ncaaf_research_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -7302,6 +7660,10 @@ def _ncaaf_research_raw_guard_matches(source, reviewed):
 def _ncaaf_research_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NCAAF_RESEARCH_BINDINGS if binding is None else binding
@@ -7312,6 +7674,10 @@ def _ncaaf_research_previous_guard_source(source, binding=None):
 
 
 def _ncaaf_research_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _ncaaf_research_previous_guard_source(source)
     frozen = NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -7337,6 +7703,13 @@ _ncaaf_research_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -7358,6 +7731,10 @@ _ncaaf_research_prior_mlb_nhl_research_main = _mlb_nhl_research_previous_main_so
 
 
 def _mlb_nhl_research_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _ncaaf_research_prior_mlb_nhl_research_main(path, _ncaaf_research_previous_main_source(path, source))
 
 
@@ -7377,6 +7754,10 @@ _ncaaf_research_prior_mlb_nhl_research_guard = _mlb_nhl_research_previous_guard_
 def _mlb_nhl_research_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _ncaaf_research_prior_mlb_nhl_research_guard(_ncaaf_research_previous_guard_source(source), binding)
@@ -7458,6 +7839,10 @@ CANONICAL_DOWNLOAD_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'
 def _canonical_download_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -7467,6 +7852,10 @@ def _canonical_download_raw_guard_matches(source, reviewed):
 def _canonical_download_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = CANONICAL_DOWNLOAD_BINDINGS if binding is None else binding
@@ -7477,6 +7866,10 @@ def _canonical_download_previous_guard_source(source, binding=None):
 
 
 def _canonical_download_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _canonical_download_previous_guard_source(source)
     frozen = CANONICAL_DOWNLOAD_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -7502,6 +7895,13 @@ _canonical_download_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -7523,6 +7923,10 @@ _canonical_download_prior_ncaaf_research_main = _ncaaf_research_previous_main_so
 
 
 def _ncaaf_research_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _canonical_download_prior_ncaaf_research_main(path, _canonical_download_previous_main_source(path, source))
 
 
@@ -7542,6 +7946,10 @@ _canonical_download_prior_ncaaf_research_guard = _ncaaf_research_previous_guard_
 def _ncaaf_research_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _canonical_download_prior_ncaaf_research_guard(_canonical_download_previous_guard_source(source), binding)
@@ -7634,6 +8042,10 @@ REMOTE_CANONICAL_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'sh
 def _remote_canonical_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -7643,6 +8055,10 @@ def _remote_canonical_raw_guard_matches(source, reviewed):
 def _remote_canonical_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = REMOTE_CANONICAL_BINDINGS if binding is None else binding
@@ -7653,6 +8069,10 @@ def _remote_canonical_previous_guard_source(source, binding=None):
 
 
 def _remote_canonical_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _remote_canonical_previous_guard_source(source)
     frozen = REMOTE_CANONICAL_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -7678,6 +8098,13 @@ _remote_canonical_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -7699,6 +8126,10 @@ _remote_canonical_prior_canonical_download_main = _canonical_download_previous_m
 
 
 def _canonical_download_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _remote_canonical_prior_canonical_download_main(path, _remote_canonical_previous_main_source(path, source))
 
 
@@ -7718,6 +8149,10 @@ _remote_canonical_prior_canonical_download_guard = _canonical_download_previous_
 def _canonical_download_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _remote_canonical_prior_canonical_download_guard(_remote_canonical_previous_guard_source(source), binding)
@@ -7810,6 +8245,10 @@ REMOTE_CONTINUATION_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 def _remote_continuation_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -7819,6 +8258,10 @@ def _remote_continuation_raw_guard_matches(source, reviewed):
 def _remote_continuation_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = REMOTE_CONTINUATION_BINDINGS if binding is None else binding
@@ -7829,6 +8272,10 @@ def _remote_continuation_previous_guard_source(source, binding=None):
 
 
 def _remote_continuation_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _remote_continuation_previous_guard_source(source)
     frozen = REMOTE_CONTINUATION_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -7854,6 +8301,13 @@ _remote_continuation_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -7875,6 +8329,10 @@ _remote_continuation_prior_remote_canonical_main = _remote_canonical_previous_ma
 
 
 def _remote_canonical_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _remote_continuation_prior_remote_canonical_main(path, _remote_continuation_previous_main_source(path, source))
 
 
@@ -7894,6 +8352,10 @@ _remote_continuation_prior_remote_canonical_guard = _remote_canonical_previous_g
 def _remote_canonical_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _remote_continuation_prior_remote_canonical_guard(_remote_continuation_previous_guard_source(source), binding)
@@ -8503,6 +8965,10 @@ FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'a
 def _football_research_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -8512,6 +8978,10 @@ def _football_research_raw_guard_matches(source, reviewed):
 def _football_research_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = FOOTBALL_RESEARCH_BINDINGS if binding is None else binding
@@ -8522,6 +8992,10 @@ def _football_research_previous_guard_source(source, binding=None):
 
 
 def _football_research_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _football_research_previous_guard_source(source)
     frozen = FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -8555,6 +9029,13 @@ _football_research_prior_guard_matches = _dfs_guard_matches
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -8579,12 +9060,20 @@ _football_research_prior_continuation_main = _remote_continuation_previous_main_
 def _remote_continuation_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _football_research_prior_continuation_guard(_football_research_previous_guard_source(source), binding)
 
 
 def _remote_continuation_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _football_research_prior_continuation_main(path, _football_research_previous_main_source(path, source))
 
 
@@ -9733,6 +10222,10 @@ SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/daily_dashboard.py': {'after
 def _slate_audit_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -9742,6 +10235,10 @@ def _slate_audit_raw_guard_matches(source, reviewed):
 def _slate_audit_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = SLATE_AUDIT_BINDINGS if binding is None else binding
@@ -9752,6 +10249,10 @@ def _slate_audit_previous_guard_source(source, binding=None):
 
 
 def _slate_audit_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _slate_audit_previous_guard_source(source)
     frozen = SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -9807,6 +10308,13 @@ for _slate_name, _slate_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -9889,6 +10397,10 @@ CI_SCHEDULING_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 def _ci_scheduling_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -9898,6 +10410,10 @@ def _ci_scheduling_raw_guard_matches(source, reviewed):
 def _ci_scheduling_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = CI_SCHEDULING_BINDINGS if binding is None else binding
@@ -9908,6 +10424,10 @@ def _ci_scheduling_previous_guard_source(source, binding=None):
 
 
 def _ci_scheduling_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _ci_scheduling_previous_guard_source(source) if path == GUARD_PATH else source
 
 
@@ -9954,6 +10474,13 @@ for _ci_name, _ci_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -10096,6 +10623,10 @@ NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 def _ncaaf_compatibility_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -10105,6 +10636,10 @@ def _ncaaf_compatibility_raw_guard_matches(source, reviewed):
 def _ncaaf_compatibility_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NCAAF_COMPAT_BINDINGS if binding is None else binding
@@ -10115,6 +10650,10 @@ def _ncaaf_compatibility_previous_guard_source(source, binding=None):
 
 
 def _ncaaf_compatibility_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _ncaaf_compatibility_previous_guard_source(source)
     frozen = NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -10186,6 +10725,13 @@ for _ncaaf_compatibility_name, _ncaaf_compatibility_method in list(globals().ite
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -10282,6 +10828,10 @@ READINESS_DASHBOARD_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 def _readiness_dashboard_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -10291,6 +10841,10 @@ def _readiness_dashboard_raw_guard_matches(source, reviewed):
 def _readiness_dashboard_previous_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = READINESS_DASHBOARD_BINDINGS if binding is None else binding
@@ -10301,6 +10855,10 @@ def _readiness_dashboard_previous_guard_source(source, binding=None):
 
 
 def _readiness_dashboard_previous_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     return _readiness_dashboard_previous_guard_source(source) if path == GUARD_PATH else source
 
 
@@ -10359,6 +10917,13 @@ for _readiness_dashboard_name, _readiness_dashboard_method in list(globals().ite
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -14285,6 +14850,10 @@ NCAAF_NORMAL_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/ncaaf_pipeline_evidence.p
 def _ncaaf_normal_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -14294,6 +14863,10 @@ def _ncaaf_normal_raw_guard_matches(source, reviewed):
 def _ncaaf_normal_parent_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NCAAF_NORMAL_BINDINGS if binding is None else binding
@@ -14304,6 +14877,10 @@ def _ncaaf_normal_parent_guard_source(source, binding=None):
 
 
 def _ncaaf_normal_parent_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _ncaaf_normal_parent_guard_source(source)
     frozen = NCAAF_NORMAL_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -14380,6 +14957,13 @@ for _ncaaf_normal_name, _ncaaf_normal_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -18440,6 +19024,10 @@ PREVIEW_BINDING_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/slate_coverage.py': {'
 def _preview_binding_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -18449,6 +19037,10 @@ def _preview_binding_raw_guard_matches(source, reviewed):
 def _preview_binding_parent_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = PREVIEW_BINDING_BINDINGS if binding is None else binding
@@ -18459,6 +19051,10 @@ def _preview_binding_parent_guard_source(source, binding=None):
 
 
 def _preview_binding_parent_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _preview_binding_parent_guard_source(source)
     frozen = PREVIEW_BINDING_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -18541,6 +19137,13 @@ for _preview_binding_name, _preview_binding_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -19817,6 +20420,10 @@ NCAAF_CHRONOLOGY_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/ncaaf_compatible_pipe
 def _ncaaf_chronology_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -19826,6 +20433,10 @@ def _ncaaf_chronology_raw_guard_matches(source, reviewed):
 def _ncaaf_chronology_parent_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NCAAF_CHRONOLOGY_BINDINGS if binding is None else binding
@@ -19836,6 +20447,10 @@ def _ncaaf_chronology_parent_guard_source(source, binding=None):
 
 
 def _ncaaf_chronology_parent_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _ncaaf_chronology_parent_guard_source(source)
     frozen = NCAAF_CHRONOLOGY_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -19924,6 +20539,13 @@ for _ncaaf_chronology_name, _ncaaf_chronology_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -21002,6 +21624,10 @@ NCAAF_CUSTODY_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/ncaaf_pipeline_evidence.
 def _ncaaf_custody_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -21011,6 +21637,10 @@ def _ncaaf_custody_raw_guard_matches(source, reviewed):
 def _ncaaf_custody_parent_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NCAAF_CUSTODY_BINDINGS if binding is None else binding
@@ -21021,6 +21651,10 @@ def _ncaaf_custody_parent_guard_source(source, binding=None):
 
 
 def _ncaaf_custody_parent_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _ncaaf_custody_parent_guard_source(source)
     frozen = NCAAF_CUSTODY_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -21115,6 +21749,13 @@ for _ncaaf_custody_name, _ncaaf_custody_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -21915,6 +22556,10 @@ NCAAF_PILOT_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 def _ncaaf_pilot_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     digest = reviewed.encode("ascii")
@@ -21924,6 +22569,10 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
 def _ncaaf_pilot_parent_guard_source(source, binding=None):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     binding = NCAAF_PILOT_BINDINGS if binding is None else binding
@@ -21934,6 +22583,10 @@ def _ncaaf_pilot_parent_guard_source(source, binding=None):
 
 
 def _ncaaf_pilot_parent_main_source(path, source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path == GUARD_PATH:
         return _ncaaf_pilot_parent_guard_source(source)
     frozen = NCAAF_PILOT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -21988,6 +22641,10 @@ _ncaaf_pilot_saved_custody_raw = _ncaaf_custody_raw_guard_matches
 def _ncaaf_custody_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b"\nNCAAF_PILOT_POLICY_PATH =" in source:
@@ -22105,6 +22762,10 @@ DISCOVERY_BOOT_PREVIOUS_TAIL = (b'_ncaaf_pilot_seeded_custody_parent = _ncaaf_cu
 def _discovery_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed = DISCOVERY_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -22113,6 +22774,10 @@ def _discovery_guard_matches(source):
 def _discovery_parent_guard_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNCAAF_DISCOVERY_BOOTSTRAP =' not in source:
@@ -22124,6 +22789,10 @@ _discovery_boot_pilot_raw = _ncaaf_pilot_raw_guard_matches
 def _ncaaf_pilot_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNCAAF_DISCOVERY_BOOTSTRAP =' in source:
@@ -22289,6 +22958,10 @@ CLOUD_BOOT_PREVIOUS_TAIL = (b'_ncaaf_pilot_seeded_custody_parent = _ncaaf_custod
 def _cloud_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed = CLOUD_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -22297,6 +22970,10 @@ def _cloud_guard_matches(source):
 def _cloud_peel_exact_guard(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =' not in source: return source
@@ -22307,6 +22984,10 @@ _cloud_boot_pilot_raw = _ncaaf_pilot_raw_guard_matches
 def _ncaaf_pilot_raw_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =' in source:
@@ -22314,6 +22995,52 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
         source = _cloud_peel_exact_guard(source)
     return _cloud_boot_pilot_raw(source, reviewed)
 
+
+# FROZEN66_BOOTSTRAP_BEGIN
+FROZEN66_POLICY_PATH='docs/paid-launch/launch-scope-policy-football-document-frozen66-v1.json'
+FROZEN66_BINDING_PATH='docs/paid-launch/football-document-frozen66-binding-v1.json'
+FROZEN66_BINDING_SHA256='6945d0365e9965a3a2dc75ec9bb8b2a390ad528cac73f828d77683bceac23cc5'
+FROZEN66_REVIEWED_GUARD_SHA256='3fe5dc3e0e6967e2cedd685ef87f7d5dbbbf84c824c47dd8fc44f0c6fe76a6fa'
+FROZEN66_RECONSTRUCTION_JSON=b'{"tests/test_nfl_pdf_timing_costs.py":{"after_sha256":"4f378c5c0777c4669f8376c1844d118ab06a8e531cc90a13d9c5c269e12e9567","before_sha256":"925390322aa8d1ba57be4fa0b31101593b59fa0c37929c62c5bdabe7f029efcf","before_size":8627}}'
+from functools import lru_cache as _frozen66_lru
+
+def _frozen66_guard_matches(source):
+    identity=FROZEN66_REVIEWED_GUARD_SHA256.encode()
+    return isinstance(source,bytes) and len(source)==8077135 and source.count(identity)==1 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
+
+@_frozen66_lru(maxsize=2)
+def _frozen66_base_source(source):
+    _require(_frozen66_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    start=source.index(b'\n# FROZEN66_BOOTSTRAP_BEGIN\n');end=source.index(b'\n# FROZEN66_BOOTSTRAP_END\n',start)+len(b'\n# FROZEN66_BOOTSTRAP_END\n')
+    source=source[:start]+source[end:]
+    marker=b'\n    # FROZEN66_HOOK_BEGIN\n'
+    while marker in source:
+        start=source.index(marker);end=source.index(b'\n    # FROZEN66_HOOK_END\n',start)+len(b'\n    # FROZEN66_HOOK_END\n')
+        source=source[:start]+source[end:]
+    for expanded,original in ((b"def _document_main_previous_source(path,source):\n    return _document_main_previous(path,source,'old')\n", b"def _document_main_previous_source(path,source):return _document_main_previous(path,source,'old')\n"), (b'def _listing_metadata_guard_matches(source):\n    return _capacity_previous_match(_listing_capacity_base_source(source))\n', b'def _listing_metadata_guard_matches(source):return _capacity_previous_match(_listing_capacity_base_source(source))\n'), (b'def _listing_metadata_base_source(source):\n    return _capacity_previous_base(_listing_capacity_base_source(source))\n', b'def _listing_metadata_base_source(source):return _capacity_previous_base(_listing_capacity_base_source(source))\n'), (b'def _cost_immutable_guard_matches(source):\n    return _metadata_previous_match(_listing_metadata_base_source(source))\n', b'def _cost_immutable_guard_matches(source):return _metadata_previous_match(_listing_metadata_base_source(source))\n'), (b'def _cost_immutable_base_source(source):\n    return _metadata_previous_base(_listing_metadata_base_source(source))\n', b'def _cost_immutable_base_source(source):return _metadata_previous_base(_listing_metadata_base_source(source))\n'), (b'def _listing_cost_guard_matches(source):\n    return _immutable_previous_cost_match(_cost_immutable_base_source(source))\n', b'def _listing_cost_guard_matches(source):return _immutable_previous_cost_match(_cost_immutable_base_source(source))\n'), (b'def _listing_cost_base_source(source):\n    return _immutable_previous_cost_base(_cost_immutable_base_source(source))\n', b'def _listing_cost_base_source(source):return _immutable_previous_cost_base(_cost_immutable_base_source(source))\n'), (b'def _nfl_listing_guard_matches(source):\n    return _cost_original_listing_match(_listing_cost_base_source(source))\n', b'def _nfl_listing_guard_matches(source):return _cost_original_listing_match(_listing_cost_base_source(source))\n'), (b'def _nfl_listing_base_source(source):\n    return _cost_original_listing_base(_listing_cost_base_source(source))\n', b'def _nfl_listing_base_source(source):return _cost_original_listing_base(_listing_cost_base_source(source))\n'), (b'def _guard_reads_guard_matches(source):\n    return _memo_early_match(_guard_memo_base_source(source))\n', b'def _guard_reads_guard_matches(source):return _memo_early_match(_guard_memo_base_source(source))\n'), (b'def _guard_reads_base_source(source):\n    return _memo_early_base(_guard_memo_base_source(source))\n', b'def _guard_reads_base_source(source):return _memo_early_base(_guard_memo_base_source(source))\n'), (b'def _guard_bootstrap_guard_matches(source):\n    return _reads_early_match(_guard_reads_base_source(source))\n', b'def _guard_bootstrap_guard_matches(source):return _reads_early_match(_guard_reads_base_source(source))\n'), (b'def _guard_bootstrap_base_source(source):\n    return _reads_early_base(_guard_reads_base_source(source))\n', b'def _guard_bootstrap_base_source(source):return _reads_early_base(_guard_reads_base_source(source))\n'), (b'def _guard_scan_guard_matches(source):\n    return _bootstrap_early_match(_guard_bootstrap_base_source(source))\n', b'def _guard_scan_guard_matches(source):return _bootstrap_early_match(_guard_bootstrap_base_source(source))\n'), (b'def _guard_scan_base_source(source):\n    return _bootstrap_early_base(_guard_bootstrap_base_source(source))\n', b'def _guard_scan_base_source(source):return _bootstrap_early_base(_guard_bootstrap_base_source(source))\n'), (b'def _guard_performance_guard_matches(source):\n    return _scan_early_v1_match(_guard_scan_base_source(source))\n', b'def _guard_performance_guard_matches(source):return _scan_early_v1_match(_guard_scan_base_source(source))\n'), (b'def _nfl_odds_timing_guard_matches(source):\n    return _performance_early_match(_guard_performance_base_source(source))\n', b'def _nfl_odds_timing_guard_matches(source):return _performance_early_match(_guard_performance_base_source(source))\n'), (b'def _nfl_odds_timing_base_source(source):\n    return _performance_early_base(_guard_performance_base_source(source))\n', b'def _nfl_odds_timing_base_source(source):return _performance_early_base(_guard_performance_base_source(source))\n'), (b'def _nfl_odds_guard_matches(source):\n    return _odds_timing_early_match(_nfl_odds_timing_base_source(source))\n', b'def _nfl_odds_guard_matches(source):return _odds_timing_early_match(_nfl_odds_timing_base_source(source))\n'), (b'def _nfl_odds_base_source(source):\n    return _odds_timing_early_base(_nfl_odds_timing_base_source(source))\n', b'def _nfl_odds_base_source(source):return _odds_timing_early_base(_nfl_odds_timing_base_source(source))\n'), (b'def _nfl_scenario_guard_matches(source):\n    return _odds_early_match(_nfl_odds_base_source(source))\n', b'def _nfl_scenario_guard_matches(source):return _odds_early_match(_nfl_odds_base_source(source))\n'), (b'def _nfl_scenario_base_source(source):\n    return _odds_early_base(_nfl_odds_base_source(source))\n', b'def _nfl_scenario_base_source(source):return _odds_early_base(_nfl_odds_base_source(source))\n'), (b'def _ci_timing_guard_matches(source):\n    return _scenario_boot_match(_nfl_scenario_base_source(source))\n', b'def _ci_timing_guard_matches(source):return _scenario_boot_match(_nfl_scenario_base_source(source))\n'), (b'def _ci_timing_base_source(source):\n    return _scenario_boot_base(_nfl_scenario_base_source(source))\n', b'def _ci_timing_base_source(source):return _scenario_boot_base(_nfl_scenario_base_source(source))\n'), (b'def _nfl_diagnostics_guard_matches(source):\n    return _ci_timing_boot_match(_ci_timing_base_source(source))\n', b'def _nfl_diagnostics_guard_matches(source):return _ci_timing_boot_match(_ci_timing_base_source(source))\n'), (b'def _nfl_diagnostics_base_source(source):\n    return _ci_timing_boot_base(_ci_timing_base_source(source))\n', b'def _nfl_diagnostics_base_source(source):return _ci_timing_boot_base(_ci_timing_base_source(source))\n'), (b'def _nfl_scoring_guard_matches(source):\n    return _nfl_diagnostics_boot_match(_nfl_diagnostics_base_source(source))\n', b'def _nfl_scoring_guard_matches(source):return _nfl_diagnostics_boot_match(_nfl_diagnostics_base_source(source))\n'), (b'def _nfl_scoring_base_source(source):\n    return _nfl_diagnostics_boot_base(_nfl_diagnostics_base_source(source))\n', b'def _nfl_scoring_base_source(source):return _nfl_diagnostics_boot_base(_nfl_diagnostics_base_source(source))\n'), (b'def _nfl_observed_guard_matches(source):\n    return _nfl_scoring_boot_nfl_match(_nfl_scoring_base_source(source))\n', b'def _nfl_observed_guard_matches(source): return _nfl_scoring_boot_nfl_match(_nfl_scoring_base_source(source))\n'), (b'def _nfl_observed_base_source(source):\n    return _nfl_scoring_boot_nfl_base(_nfl_scoring_base_source(source))\n', b'def _nfl_observed_base_source(source): return _nfl_scoring_boot_nfl_base(_nfl_scoring_base_source(source))\n'), (b'def _nfl_owner_guard_matches(source):\n    return _nfl_observed_boot_nfl_match(_nfl_observed_base_source(source))\n', b'def _nfl_owner_guard_matches(source): return _nfl_observed_boot_nfl_match(_nfl_observed_base_source(source))\n'), (b'def _nfl_owner_base_source(source):\n    return _nfl_observed_boot_nfl_base(_nfl_observed_base_source(source))\n', b'def _nfl_owner_base_source(source): return _nfl_observed_boot_nfl_base(_nfl_observed_base_source(source))\n'), (b'def _nfl_odds_timing_previous_source(path,source):\n    return _cost_original_timing_source(path,_listing_cost_previous_source(path,source))\n', b'def _nfl_odds_timing_previous_source(path,source):return _cost_original_timing_source(path,_listing_cost_previous_source(path,source))\n'), (b'def _listing_cost_previous_source(path,source):\n    return _metadata_previous_profile(path,_listing_metadata_previous_source(path,source))\n', b'def _listing_cost_previous_source(path,source):return _metadata_previous_profile(path,_listing_metadata_previous_source(path,source))\n'), (b'def _listing_cost_previous_source(path,source):\n    return _capacity_previous_source(path,_listing_capacity_previous_source(path,source))\n', b'def _listing_cost_previous_source(path,source):return _capacity_previous_source(path,_listing_capacity_previous_source(path,source))\n')):
+        _require(source.count(expanded)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+        source=source.replace(expanded,original,1)
+    dispatch=b'if exists_at("HEAD", FROZEN66_POLICY_PATH):\n            code, report = _run_frozen66_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", DOCUMENT_MAIN_POLICY_PATH):'
+    _require(source.count(dispatch)==1,'PREVIOUS_GUARD_LOGIC_CHANGED')
+    source=source.replace(dispatch,b'if exists_at("HEAD", DOCUMENT_MAIN_POLICY_PATH):',1)
+    _require(hashlib.sha256(source).hexdigest()=='4e37097c9663d6cc481ec2d26ce8e63cf2316f6add235e0e597395f279bc5b23','PREVIOUS_GUARD_LOGIC_CHANGED')
+    return source
+
+def _frozen66_previous(path,source):
+    if path==GUARD_PATH:return _frozen66_base_source(source) if len(source)==8077135 else source
+    info=json.loads(FROZEN66_RECONSTRUCTION_JSON).get(path)
+    if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
+    value=source[:info['before_size']]
+    _require(hashlib.sha256(value).hexdigest()==info['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return value
+
+def _run_frozen66_integrated(manifest_path,base):
+    raw=(ROOT/FROZEN66_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==FROZEN66_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    from scripts import football_document_frozen66_scope as scope
+    import sys
+    return scope.run(sys.modules[__name__],manifest_path,base,json.loads(raw))
+# FROZEN66_BOOTSTRAP_END
 
 # DOCUMENT_MAIN_BOOTSTRAP_BEGIN
 DOCUMENT_MAIN_BOOTSTRAP = True
@@ -22326,11 +23053,19 @@ DOCUMENT_MAIN_RECONSTRUCTION_JSON = b'{}'
 from functools import lru_cache as _document_main_lru
 
 def _document_main_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     identity=DOCUMENT_MAIN_REVIEWED_GUARD_SHA256.encode()
     return isinstance(source,bytes) and len(source)==8012430 and source.count(identity)==1 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
 
 @_document_main_lru(maxsize=2)
 def _document_main_project(source,target):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     identity=DOCUMENT_MAIN_REVIEWED_GUARD_SHA256.encode()
     _require(isinstance(source,bytes) and len(source)==8012430 and source.count(identity)==1 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     start=source.index(b'\n# DOCUMENT_MAIN_BOOTSTRAP_BEGIN\n');end=source.index(b'\n# DOCUMENT_MAIN_BOOTSTRAP_END\n',start)+len(b'\n# DOCUMENT_MAIN_BOOTSTRAP_END\n')
@@ -22356,6 +23091,10 @@ def _document_main_project(source,target):
     return result
 
 def _document_main_previous(path,source,target):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     if path==GUARD_PATH:return _document_main_project(source,target) if len(source)==8012430 else source
     records={('main', 'app_core/nfl_document_acquisition.py'): ('a143df584796c67cf597d3df9062379642de4dd27f6b5000626d5eba96eb1ca7', '2c735766f74fcbea84cd435ad372607cf6a79a8d72549a2606ffc93f364af205', ((0, 925), (975, 1137), (1192, 3326), b"        and p['version'] in {VERSION,VERSION_V2,VERSION_V3} and p['evidence_label'] in {'PROPOSAL','SYNTHETIC','PROSPECTIVE'}, 'DOCUMENT_PLAN')\n", (3481, 15683), b"    return (plan['version'] in {VERSION_V2,VERSION_V3} and document['id']==document['source_id']=='clock'\n", (15800, 15903), b'def body_ok(raw, format, *, public_guide_examples=False, html_syntax=False):\n', (16007, 16046), b'        from app_core.nfl_html_document_scan import checked\n', (16244, 20729), b"                    phase='BODY_VALIDATION';encoding=h.get('content-encoding','identity').lower();raw=decode(wire,encoding,p['limits']['decoded_body_bytes']);body_ok(raw,d['format'],public_guide_examples=public_examples(p,d),html_syntax=p['version']==VERSION_V3)\n", (21052, 22650), (22672, 22913), b"    result=seal(dict(version={VERSION:BUNDLE,VERSION_V2:BUNDLE_V2,VERSION_V3:BUNDLE_V3}[p['version']],plan=deepcopy(plan),authorization=deepcopy(authorization),status='CAPTURED_UNREVIEWED' if reason is None else 'INCOMPLETE',reason=reason,\n", (23465, 23865), (23968, 24500), b"    p=envelope(bundle);require(set(p)==set('version plan authorization status reason attempted journal_sha256 entries objects diagnostics configuration_bytes_base64 configuration_file_sha256 source_acceptance owner_reviewed inference publication wager_action stake'.split()) and p['version'] in {BUNDLE,BUNDLE_V2,BUNDLE_V3} and p['status'] in {'CAPTURED_UNREVIEWED','INCOMPLETE'},'DOCUMENT_READBACK')\n", (24997, 25120), b"    require(p['version']=={VERSION:BUNDLE,VERSION_V2:BUNDLE_V2,VERSION_V3:BUNDLE_V3}[plan['version']],'DOCUMENT_READBACK')\n", (25264, 28563), (28977, 29767), b"        body_ok(raw,d['format'],public_guide_examples=public_examples(plan,d),html_syntax=plan['version']==VERSION_V3);total_wire+=len(wire);total_raw+=len(raw)\n", (29943, 33143), b"        if plan['version']==VERSION_V3:\n", (33198, 33807), b"    return dict(status=p['status'],reason=p['reason'],attempts=p['attempted'],bundle_sha256=bundle['sha256'],journal_sha256=p['journal_sha256'],\n", (33952, 34197))), ('main', 'app_core/nfl_html_document_scan.py'): ('4080804d82257edd3e354d1446dfd397d1b569c0ec0723dcb49e475a241d2c39', 'bc095c085beba4e9eced6e60633ae9aaedc1cf1fe43a3bf52040a25a4a349329', ((0, 1568), b'def checked(raw, *, public_guide_examples=False):\n', (1631, 1766), (1820, 2213), (2274, 2790), (2847, 3160), (3240, 3341), (3408, 3504), b'            scan=re.sub(r\'(?<![A-Za-z0-9_])\'+re.escape(literal)+r\'(?=$|[&\\s"\\x27<>])\',\'PUBLIC_DOCUMENTATION_LITERAL\',scan)\n    require(not CREDENTIAL.search(scan),\'DOCUMENT_CREDENTIAL_BODY\')\n')), ('main', 'scripts/ci_test_file_costs_v1.json'): ('7c5098df7430b677207000bc4a71d9f00f0850e2cd0c7e309508b88148d9abb7', '090c444804b9d7941b8e8200f60dd02a7de3e0e97b7df89eca7b153c2a5470f7', ((0, 2), (264, 667398), b'      "advisory_basis_seconds": 361.827,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n', (667639, 668323), (668505, 669875), b'      "seconds": 593.27465,\n', (669902, 767970), (768929, 820025))), ('old', 'scripts/ci_test_file_costs_v1.json'): ('7c5098df7430b677207000bc4a71d9f00f0850e2cd0c7e309508b88148d9abb7', '271805a99755c215685a17fcf3470a783bb8a1c58843e724b1a6ec5799a0ee4d', ((0, 2), b'  "document_scan_ci_successor": {\n    "attribution": "No fixture/Git/reconstruction/hash subphase instrumentation exists in these completed XMLs. No hang, scanner runtime regression or runner variability is asserted.",\n    "changed_paths": [\n      "tests/test_ci_five_shards.py",\n      "tests/test_ci_six_shards.py",\n      "tests/test_document_scan_scope.py",\n      "tests/test_football_document_ci_closure.py",\n      "tests/test_football_document_ci_closure_scope.py",\n      "tests/test_football_document_ci_performance.py",\n      "tests/test_football_document_ci_performance_scope.py",\n      "tests/test_football_document_fixture_report_scope.py",\n      "tests/test_football_document_html_fixture_scope.py",\n      "tests/test_football_document_html_scope.py",\n      "tests/test_football_document_io_scope.py",\n      "tests/test_football_document_literals_scope.py",\n      "tests/test_football_document_metadata_scope.py",\n      "tests/test_football_document_predecessor_fixture.py",\n      "tests/test_football_document_predecessor_fixture_scope.py",\n      "tests/test_football_document_remote_fixture.py",\n      "tests/test_football_document_remote_fixture_scope.py",\n      "tests/test_football_document_six_capacity_scope.py",\n      "tests/test_football_document_socket_scope.py",\n      "tests/test_ncaaf_compatibility_scope.py",\n      "tests/test_ncaaf_owner_terms.py",\n      "tests/test_ncaaf_research_scope.py",\n      "tests/test_ncaaf_socket_ci_costs.py",\n      "tests/test_ncaaf_socket_ci_scope.py",\n      "tests/test_ncaaf_staged_document_discovery.py",\n      "tests/test_ncaaf_terms_scope.py",\n      "tests/test_nfl_admission_scope.py",\n      "tests/test_nfl_document_pipeline.py",\n      "tests/test_nfl_document_scan_diagnostics.py",\n      "tests/test_nfl_document_scope.py",\n      "tests/test_nfl_document_socket_lifecycle.py",\n      "tests/test_nfl_inputs_scope.py",\n      "tests/test_nfl_interpretation_scope.py",\n      "tests/test_nfl_listing_capacity_scope.py",\n      "tests/test_nfl_listing_cost_scope.py",\n      "tests/test_nfl_listing_immutable_scope.py",\n      "tests/test_nfl_listing_metadata_scope.py",\n      "tests/test_nfl_odds_scope.py",\n      "tests/test_nfl_pdf_ci_scope.py",\n      "tests/test_nfl_pdf_scope.py",\n      "tests/test_nfl_scenario_scope.py",\n      "tests/test_remote_canonical_scope.py",\n      "tests/test_remote_continuation_scope.py",\n      "tests/test_scope_fixture_isolation.py",\n      "tests/test_slate_audit_scope.py"\n    ],\n    "completed_measurements_only": true,\n    "frozen_revision": 3,\n    "overhead_basis": "Completed scan jobs: 64.01\\u201388.04 seconds outside testcase sums, including installation/collection/report/upload/cleanup. Round upward with >30 seconds reserve; no phase cost invented.",\n    "overhead_is_estimate": true,\n    "overhead_seconds": 120,\n    "predecessor_profile_sha256": "4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49",\n    "preserved_failure": "38764258973: all 7838 identities completed with 7836 passed/2 unchanged skips; shard 2 job cancelled at budget, aggregate failed. Not a passing check.",\n    "selection": "All absent compatible completed whole files; existing scheduling cost discrepancy >=60 seconds against max compatible completed testcase sum *1.15.",\n    "version": 1\n  },\n', (264, 39880), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (40203, 40213), (40507, 40530), b'          "seconds": 3.202,\n          "source": "document-scan-ci-socket-38684830215-shard2",\n', (40927, 41018), (41312, 41335), b'          "seconds": 1.024,\n          "source": "document-scan-ci-scan-38764258973-shard6",\n', (42535, 42624), b'      "document_scan_ci_previous_scheduling_seconds": 45.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (42676, 42772), b'        "document-scan-ci-socket-38684830215-shard2",\n        "document-scan-ci-scan-38764258973-shard6"\n', (42880, 44820), (47592, 47790), b'        "listing-completed-main-3"\n', (47934, 47943), b'      "seconds": 53.34505,\n', (47970, 48017), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (48340, 48350), (48644, 48667), b'          "seconds": 1.999,\n          "source": "document-scan-ci-socket-38684830215-shard5",\n', (49064, 49155), (49449, 49472), b'          "seconds": 1.927,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n', (50672, 50761), b'      "document_scan_ci_previous_scheduling_seconds": 52.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (50813, 50908), b'        "document-scan-ci-socket-38684830215-shard5",\n        "document-scan-ci-scan-38764258973-shard3"\n', (51016, 51025), b'      "seconds": 2.29885\n', (51049, 55141), (57913, 58160), b'        "listing-completed-pr-2"\n', (58302, 58311), b'      "seconds": 39.2518,\n', (58337, 80474), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 14,\n          "seconds": 1.499,\n          "source": "document-scan-ci-scan-38764258973-shard4",\n          "test_git_blob": "8ed2e9c4cfda72ad9207156ce8b40fceef482762"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n      "path": "tests/test_document_scan_scope.py",\n      "profiled_tests": 14,\n      "references": [\n        "document-scan-ci-scan-38764258973-shard4"\n      ],\n      "seconds": 1.72385\n    },\n    {\n', (80474, 85830), (87796, 88025), b'        "listing-completed-main-1"\n', (88132, 88141), b'      "seconds": 10.65705,\n', (88167, 116926), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (117249, 117259), (117553, 117575), b'          "seconds": 11.839,\n          "source": "document-scan-ci-socket-38684830215-shard6",\n', (117971, 118062), (118356, 118378), b'          "seconds": 12.373,\n          "source": "document-scan-ci-scan-38764258973-shard2",\n', (118774, 118863), b'      "document_scan_ci_previous_scheduling_seconds": 31.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (118915, 119024), b'        "document-scan-ci-socket-38684830215-shard6",\n        "document-scan-ci-scan-38764258973-shard2"\n', (119095, 119104), b'      "seconds": 14.22895\n', (119130, 119143), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (119466, 119476), (119770, 119793), b'          "seconds": 1.576,\n          "source": "document-scan-ci-socket-38684830215-shard1",\n', (120190, 120281), (120575, 120598), b'          "seconds": 1.829,\n          "source": "document-scan-ci-scan-38764258973-shard2",\n', (121798, 121887), b'      "document_scan_ci_previous_scheduling_seconds": 52.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (121939, 122055), b'        "document-scan-ci-socket-38684830215-shard1",\n        "document-scan-ci-scan-38764258973-shard2"\n', (122163, 122172), b'      "seconds": 2.10335\n', (122196, 122209), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (122532, 122542), (122836, 122858), b'          "seconds": 2.077,\n          "source": "document-scan-ci-socket-38684830215-shard5",\n', (123255, 123346), (123640, 123662), b'          "seconds": 2.163,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n', (124861, 124950), b'      "document_scan_ci_previous_scheduling_seconds": 31.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (125002, 125115), b'        "document-scan-ci-socket-38684830215-shard5",\n        "document-scan-ci-scan-38764258973-shard3"\n', (125223, 125232), b'      "seconds": 2.48745\n', (125256, 125269), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (125592, 125602), (125896, 125919), b'          "seconds": 1.458,\n          "source": "document-scan-ci-socket-38684830215-shard3",\n', (126314, 126405), (126699, 126722), b'          "seconds": 2.004,\n          "source": "document-scan-ci-scan-38764258973-shard1",\n', (127117, 127206), b'      "document_scan_ci_previous_scheduling_seconds": 52.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (127258, 127378), b'        "document-scan-ci-socket-38684830215-shard3",\n        "document-scan-ci-scan-38764258973-shard1"\n', (127449, 127458), b'      "seconds": 2.3046\n', (127482, 127495), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (127818, 127828), (128122, 128145), b'          "seconds": 2.104,\n          "source": "document-scan-ci-socket-38684830215-shard2",\n', (128541, 128632), (128926, 128949), b'          "seconds": 3.444,\n          "source": "document-scan-ci-scan-38764258973-shard4",\n', (130149, 130238), b'      "document_scan_ci_previous_scheduling_seconds": 52.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (130290, 130410), b'        "document-scan-ci-socket-38684830215-shard2",\n        "document-scan-ci-scan-38764258973-shard4"\n', (130518, 130527), b'      "seconds": 3.9606\n', (130552, 130565), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (130888, 130898), (131192, 131215), b'          "seconds": 2.142,\n          "source": "document-scan-ci-socket-38684830215-shard2",\n', (131610, 131701), (131995, 132018), b'          "seconds": 1.795,\n          "source": "document-scan-ci-scan-38764258973-shard6",\n', (133218, 133307), b'      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (133359, 133477), b'        "document-scan-ci-socket-38684830215-shard2",\n        "document-scan-ci-scan-38764258973-shard6"\n', (133585, 133594), b'      "seconds": 2.4633\n', (133618, 133631), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (133954, 133964), (134258, 134281), b'          "seconds": 2.279,\n          "source": "document-scan-ci-socket-38684830215-shard2",\n', (134678, 134769), (135063, 135086), b'          "seconds": 2.443,\n          "source": "document-scan-ci-scan-38764258973-shard4",\n', (136286, 136375), b'      "document_scan_ci_previous_scheduling_seconds": 56.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (136427, 136537), b'        "document-scan-ci-socket-38684830215-shard2",\n        "document-scan-ci-scan-38764258973-shard4"\n', (136645, 136654), b'      "seconds": 2.80945\n', (136679, 136692), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (137015, 137025), (137319, 137342), b'          "seconds": 2.913,\n          "source": "document-scan-ci-socket-38684830215-shard4",\n', (137739, 137830), (138124, 138147), b'          "seconds": 3.297,\n          "source": "document-scan-ci-scan-38764258973-shard5",\n', (138542, 138631), b'      "document_scan_ci_previous_scheduling_seconds": 56.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (138683, 138791), b'        "document-scan-ci-socket-38684830215-shard4",\n        "document-scan-ci-scan-38764258973-shard5"\n', (138862, 138871), b'      "seconds": 3.79155\n', (138896, 138909), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (139232, 139242), (139536, 139559), b'          "seconds": 2.725,\n          "source": "document-scan-ci-socket-38684830215-shard5",\n', (139956, 140047), (140341, 140364), b'          "seconds": 2.823,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n', (141564, 141653), b'      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (141705, 141819), b'        "document-scan-ci-socket-38684830215-shard5",\n        "document-scan-ci-scan-38764258973-shard3"\n', (141927, 141936), b'      "seconds": 3.24645\n', (141960, 141973), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (142296, 142306), (142600, 142623), b'          "seconds": 2.749,\n          "source": "document-scan-ci-socket-38684830215-shard5",\n', (143020, 143111), (143405, 143428), b'          "seconds": 2.095,\n          "source": "document-scan-ci-scan-38764258973-shard6",\n', (144628, 144717), b'      "document_scan_ci_previous_scheduling_seconds": 52.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (144769, 144883), b'        "document-scan-ci-socket-38684830215-shard5",\n        "document-scan-ci-scan-38764258973-shard6"\n', (144991, 145000), b'      "seconds": 3.16135\n', (145024, 145037), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (145360, 145370), (145664, 145686), b'          "seconds": 0.045,\n          "source": "document-scan-ci-socket-38684830215-shard2",\n', (146083, 146174), (146468, 146490), b'          "seconds": 0.054,\n          "source": "document-scan-ci-scan-38764258973-shard5",\n', (146885, 146974), b'      "document_scan_ci_previous_scheduling_seconds": 30.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (147026, 147144), b'        "document-scan-ci-socket-38684830215-shard2",\n        "document-scan-ci-scan-38764258973-shard5"\n', (147215, 147224), b'      "seconds": 0.0621\n', (147249, 147262), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (147585, 147595), (147889, 147912), b'          "seconds": 2.012,\n          "source": "document-scan-ci-socket-38684830215-shard6",\n', (148309, 148400), (148694, 148717), b'          "seconds": 3.29,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n', (149917, 150006), b'      "document_scan_ci_previous_scheduling_seconds": 52.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (150058, 150183), b'        "document-scan-ci-socket-38684830215-shard6",\n        "document-scan-ci-scan-38764258973-shard3"\n', (150291, 150300), b'      "seconds": 3.7835\n', (150325, 150338), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (150661, 150671), (150965, 150987), b'          "seconds": 2.245,\n          "source": "document-scan-ci-socket-38684830215-shard1",\n', (151384, 151475), (151769, 151791), b'          "seconds": 1.945,\n          "source": "document-scan-ci-scan-38764258973-shard4",\n', (152990, 153079), b'      "document_scan_ci_previous_scheduling_seconds": 30.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (153131, 153244), b'        "document-scan-ci-socket-38684830215-shard1",\n        "document-scan-ci-scan-38764258973-shard4"\n', (153352, 153361), b'      "seconds": 2.58175\n', (153386, 153399), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (153722, 153732), (154026, 154049), b'          "seconds": 1.879,\n          "source": "document-scan-ci-socket-38684830215-shard4",\n', (154446, 154537), (154831, 154854), b'          "seconds": 2.2,\n          "source": "document-scan-ci-scan-38764258973-shard5",\n', (155249, 155338), b'      "document_scan_ci_previous_scheduling_seconds": 52.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (155390, 155510), b'        "document-scan-ci-socket-38684830215-shard4",\n        "document-scan-ci-scan-38764258973-shard5"\n', (155581, 155590), b'      "seconds": 2.53\n', (155614, 155627), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (155950, 155960), (156254, 156277), b'          "seconds": 2.184,\n          "source": "document-scan-ci-socket-38684830215-shard1",\n', (156674, 156765), (157059, 157082), b'          "seconds": 2.4,\n          "source": "document-scan-ci-scan-38764258973-shard2",\n', (158281, 158370), b'      "document_scan_ci_previous_scheduling_seconds": 52.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (158422, 158540), b'        "document-scan-ci-socket-38684830215-shard1",\n        "document-scan-ci-scan-38764258973-shard2"\n', (158648, 158657), b'      "seconds": 2.76\n', (158681, 158694), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (159017, 159027), (159321, 159344), b'          "seconds": 2.514,\n          "source": "document-scan-ci-socket-38684830215-shard6",\n', (159741, 159832), (160126, 160149), b'          "seconds": 2.802,\n          "source": "document-scan-ci-scan-38764258973-shard5",\n', (161349, 161438), b'      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (161490, 161602), b'        "document-scan-ci-socket-38684830215-shard6",\n        "document-scan-ci-scan-38764258973-shard5"\n', (161710, 161719), b'      "seconds": 3.2223\n', (161744, 191444), (193410, 193638), b'        "listing-completed-main-1"\n', (193745, 193754), b'      "seconds": 17.66055,\n', (193781, 279529), (282301, 283506), b'        "listing-completed-pr-1"\n', (283648, 283657), b'      "seconds": 84.41345,\n', (283685, 288207), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 118,\n          "seconds": 795.303,\n          "source": "document-scan-ci-socket-38684830215-shard1",\n          "test_git_blob": "3003f6c306f27bea4140631019f02db459d7c029"\n        },\n        {\n          "count": 118,\n          "seconds": 858.983,\n          "source": "document-scan-ci-scan-38764258973-shard1",\n          "test_git_blob": "3003f6c306f27bea4140631019f02db459d7c029"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 843.66185,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (288207, 289900), b'        "ncaaf-socket-ci-completed-pr-1",\n        "document-scan-ci-socket-38684830215-shard1",\n        "document-scan-ci-scan-38764258973-shard1"\n', (289941, 289950), b'      "seconds": 987.83045,\n', (289978, 297415), (299381, 299639), b'        "listing-completed-pr-2"\n', (299744, 299753), b'      "seconds": 58.6684,\n', (299780, 306418), (309190, 309386), b'        "listing-completed-main-3"\n', (309530, 309539), b'      "seconds": 47.3593,\n', (309566, 312147), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (312470, 312480), (312774, 312797), b'          "seconds": 2.37,\n          "source": "document-scan-ci-socket-38684830215-shard5",\n', (313193, 313284), (313578, 313601), b'          "seconds": 2.458,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n', (314800, 314889), b'      "document_scan_ci_previous_scheduling_seconds": 45.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (314941, 315040), b'        "document-scan-ci-socket-38684830215-shard5",\n        "document-scan-ci-scan-38764258973-shard3"\n', (315148, 315157), b'      "seconds": 2.8267\n', (315182, 318914), (321686, 321958), b'        "listing-completed-pr-2"\n', (322100, 322109), b'      "seconds": 29.2146,\n', (322135, 323278), (325244, 325478), b'        "listing-completed-pr-1"\n', (325583, 325592), b'      "seconds": 47.886,\n', (325618, 331638), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 61,\n          "seconds": 290.989,\n          "source": "document-scan-ci-socket-38684830215-shard3",\n          "test_git_blob": "4727872f579c211d456d2a07a17915ddc5bb21dd"\n        },\n        {\n          "count": 61,\n          "seconds": 373.959,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n          "test_git_blob": "4727872f579c211d456d2a07a17915ddc5bb21dd"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 501.2574,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (331638, 333319), b'        "ncaaf-socket-ci-completed-pr-5",\n        "document-scan-ci-socket-38684830215-shard3",\n        "document-scan-ci-scan-38764258973-shard3"\n', (333360, 333369), b'      "seconds": 430.05285,\n', (333396, 337878), (340650, 341836), b'        "listing-completed-main-1"\n', (341980, 341989), b'      "seconds": 63.27185,\n', (342016, 343323), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (343646, 343656), (343950, 343972), (344106, 344134), b'          "source": "document-scan-ci-socket-38684830215-shard4",\n', (344369, 344460), (344754, 344776), b'          "seconds": 0.059,\n          "source": "document-scan-ci-scan-38764258973-shard6",\n', (345975, 346064), b'      "document_scan_ci_previous_scheduling_seconds": 30.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (346116, 346218), b'        "document-scan-ci-socket-38684830215-shard4",\n        "document-scan-ci-scan-38764258973-shard6"\n', (346326, 346372), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (346695, 346705), (346999, 347022), b'          "seconds": 1.137,\n          "source": "document-scan-ci-socket-38684830215-shard4",\n', (347419, 347510), (347804, 347827), b'          "seconds": 1.426,\n          "source": "document-scan-ci-scan-38764258973-shard1",\n', (348222, 348311), b'      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (348363, 348466), b'        "document-scan-ci-socket-38684830215-shard4",\n        "document-scan-ci-scan-38764258973-shard1"\n', (348537, 348546), b'      "seconds": 1.6399\n', (348570, 350429), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (350752, 350762), (351056, 351078), b'          "seconds": 0.075,\n          "source": "document-scan-ci-socket-38684830215-shard3",\n', (351475, 351566), (351860, 351882), b'          "seconds": 0.091,\n          "source": "document-scan-ci-scan-38764258973-shard2",\n', (353081, 353170), b'      "document_scan_ci_previous_scheduling_seconds": 30.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (353222, 353334), b'        "document-scan-ci-socket-38684830215-shard3",\n        "document-scan-ci-scan-38764258973-shard2"\n', (353442, 353451), b'      "seconds": 0.10465\n', (353476, 354457), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (354780, 354790), (355084, 355107), b'          "seconds": 2.482,\n          "source": "document-scan-ci-socket-38684830215-shard3",\n', (355504, 355595), (355889, 355912), b'          "seconds": 3.051,\n          "source": "document-scan-ci-scan-38764258973-shard2",\n', (357112, 357201), b'      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (357253, 357352), b'        "document-scan-ci-socket-38684830215-shard3",\n        "document-scan-ci-scan-38764258973-shard2"\n', (357460, 357469), b'      "seconds": 3.50865\n', (357494, 361888), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 48,\n          "seconds": 174.428,\n          "source": "document-scan-ci-socket-38684830215-shard3",\n          "test_git_blob": "2d51d95b728862e1c8c32bbac81252f0e8d0cae9"\n        },\n        {\n          "count": 48,\n          "seconds": 238.144,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n          "test_git_blob": "2d51d95b728862e1c8c32bbac81252f0e8d0cae9"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 196.6454,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (361888, 362470), (365245, 366521), b'        "document-scan-ci-socket-38684830215-shard3",\n        "document-scan-ci-scan-38764258973-shard3"\n', (366629, 366638), b'      "seconds": 273.8656,\n', (366666, 368550), (371322, 371493), b'        "refresh1-completed-3"\n', (371633, 371642), b'      "seconds": 70.88715,\n', (371669, 372706), (375480, 376662), b'        "listing-completed-main-2"\n', (376806, 376815), b'      "seconds": 143.80405,\n', (376842, 383188), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (383511, 383521), (383815, 383838), b'          "seconds": 43.833,\n          "source": "document-scan-ci-socket-38684830215-shard1",\n', (384236, 384327), (384621, 384644), b'          "seconds": 42.855,\n          "source": "document-scan-ci-scan-38764258973-shard2",\n', (385040, 385129), b'      "document_scan_ci_previous_scheduling_seconds": 73.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (385181, 385284), b'        "document-scan-ci-socket-38684830215-shard1",\n        "document-scan-ci-scan-38764258973-shard2"\n', (385355, 385403), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 34,\n          "seconds": 0.855,\n          "source": "document-scan-ci-scan-38764258973-shard1",\n          "test_git_blob": "ea60cf62859dfdad6f5b8a10e4b6f57baaf7bce7"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 119.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (385403, 385430), b'      "path": "tests/test_nfl_document_scan_diagnostics.py",\n      "profiled_tests": 34,\n      "references": [\n        "document-scan-ci-scan-38764258973-shard1"\n      ],\n      "seconds": 0.98325\n    },\n    {\n      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (385726, 385736), (386030, 386053), b'          "seconds": 3.011,\n          "source": "document-scan-ci-socket-38684830215-shard1",\n', (386450, 386541), (386835, 386858), b'          "seconds": 3.613,\n          "source": "document-scan-ci-scan-38764258973-shard4",\n', (387253, 387342), b'      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (387394, 387494), b'        "document-scan-ci-socket-38684830215-shard1",\n        "document-scan-ci-scan-38764258973-shard4"\n', (387565, 387574), b'      "seconds": 4.15495\n', (387599, 387612), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (387935, 387945), (388239, 388262), b'          "seconds": 0.46,\n          "source": "document-scan-ci-socket-38684830215-shard2",\n', (388659, 388750), (389044, 389067), b'          "seconds": 0.395,\n          "source": "document-scan-ci-scan-38764258973-shard6",\n', (390266, 390355), b'      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (390407, 390518), b'        "document-scan-ci-socket-38684830215-shard2",\n        "document-scan-ci-scan-38764258973-shard6"\n', (390626, 390635), b'      "seconds": 0.529\n', (390659, 393565), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 51,\n          "seconds": 198.154,\n          "source": "document-scan-ci-socket-38684830215-shard3",\n          "test_git_blob": "c31d24f6489bbe5c28fbe0b9e6175b5766031628"\n        },\n        {\n          "count": 51,\n          "seconds": 266.029,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n          "test_git_blob": "c31d24f6489bbe5c28fbe0b9e6175b5766031628"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 242.47405,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (393565, 393671), (396446, 397646), b'        "document-scan-ci-socket-38684830215-shard3",\n        "document-scan-ci-scan-38764258973-shard3"\n', (397754, 397763), b'      "seconds": 305.93335,\n', (397790, 397837), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (398160, 398170), (398464, 398487), b'          "seconds": 3.172,\n          "source": "document-scan-ci-socket-38684830215-shard5",\n', (398884, 398975), (399269, 399292), b'          "seconds": 2.993,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n', (400491, 400580), b'      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (400632, 400738), b'        "document-scan-ci-socket-38684830215-shard5",\n        "document-scan-ci-scan-38764258973-shard3"\n', (400846, 400855), b'      "seconds": 3.6478\n', (400878, 400891), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (401214, 401224), (401518, 401541), b'          "seconds": 76.734,\n          "source": "document-scan-ci-socket-38684830215-shard6",\n', (401939, 402030), (402324, 402347), b'          "seconds": 72.371,\n          "source": "document-scan-ci-scan-38764258973-shard5",\n', (402743, 402832), b'      "document_scan_ci_previous_scheduling_seconds": 77.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (402884, 402992), b'        "document-scan-ci-socket-38684830215-shard6",\n        "document-scan-ci-scan-38764258973-shard5"\n', (403063, 403072), b'      "seconds": 88.2441\n', (403098, 403111), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (403434, 403444), (403738, 403761), b'          "seconds": 74.461,\n          "source": "document-scan-ci-socket-38684830215-shard6",\n', (404159, 404250), (404544, 404567), b'          "seconds": 76.317,\n          "source": "document-scan-ci-scan-38764258973-shard3",\n', (405769, 405858), b'      "document_scan_ci_previous_scheduling_seconds": 66.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (405910, 406014), b'        "document-scan-ci-socket-38684830215-shard6",\n        "document-scan-ci-scan-38764258973-shard3"\n', (406122, 406131), b'      "seconds": 87.76455\n', (406157, 406170), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (406493, 406503), (406797, 406820), b'          "seconds": 69.592,\n          "source": "document-scan-ci-socket-38684830215-shard4",\n', (407218, 407309), (407603, 407626), b'          "seconds": 55.513,\n          "source": "document-scan-ci-scan-38764258973-shard6",\n', (408828, 408917), b'      "document_scan_ci_previous_scheduling_seconds": 80.5,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (408969, 409078), b'        "document-scan-ci-socket-38684830215-shard4",\n        "document-scan-ci-scan-38764258973-shard6"\n', (409186, 409195), b'      "seconds": 80.0308\n', (409221, 409234), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (409557, 409567), (409861, 409884), b'          "seconds": 68.894,\n          "source": "document-scan-ci-socket-38684830215-shard4",\n', (410282, 410373), (410667, 410690), b'          "seconds": 55.585,\n          "source": "document-scan-ci-scan-38764258973-shard6",\n', (411892, 411981), b'      "document_scan_ci_previous_scheduling_seconds": 70.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (412033, 412141), b'        "document-scan-ci-socket-38684830215-shard4",\n        "document-scan-ci-scan-38764258973-shard6"\n', (412249, 412258), b'      "seconds": 79.2281\n', (412283, 419709), (422481, 422649), b'        "refresh1-completed-3"\n', (422789, 422798), b'      "seconds": 19.59255,\n', (422824, 426831), (429603, 429793), b'        "ncaaf-socket-ci-completed-main-1"\n', (429945, 429954), b'      "seconds": 76.85795,\n', (429981, 431665), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 14,\n          "seconds": 71.798,\n          "source": "document-scan-ci-socket-38684830215-shard1",\n          "test_git_blob": "20beb8ed8d8f837cf4c287a57a7f3031bf72b68e"\n        },\n        {\n          "count": 14,\n          "seconds": 82.171,\n          "source": "document-scan-ci-scan-38764258973-shard1",\n          "test_git_blob": "20beb8ed8d8f837cf4c287a57a7f3031bf72b68e"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 13.2135,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (431665, 431808), (433774, 433980), b'        "document-scan-ci-socket-38684830215-shard1",\n        "document-scan-ci-scan-38764258973-shard1"\n', (434051, 434060), b'      "seconds": 94.49665,\n', (434087, 436697), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (437020, 437030), (437324, 437346), b'          "seconds": 0.686,\n          "source": "document-scan-ci-socket-38684830215-shard6",\n', (437743, 437834), (438128, 438150), b'          "seconds": 0.719,\n          "source": "document-scan-ci-scan-38764258973-shard1",\n', (438545, 438634), b'      "document_scan_ci_previous_scheduling_seconds": 30.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (438686, 438783), b'        "document-scan-ci-socket-38684830215-shard6",\n        "document-scan-ci-scan-38764258973-shard1"\n', (438854, 438863), b'      "seconds": 0.82685\n', (438887, 440423), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (440746, 440756), (442433, 442456), b'          "seconds": 3.145,\n          "source": "document-scan-ci-socket-38684830215-shard6",\n', (444226, 444317), (444611, 444634), b'          "seconds": 3.022,\n          "source": "document-scan-ci-scan-38764258973-shard5",\n', (445029, 445118), b'      "document_scan_ci_previous_scheduling_seconds": 49.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (445170, 445265), b'        "document-scan-ci-socket-38684830215-shard6",\n        "document-scan-ci-scan-38764258973-shard5"\n', (445336, 445345), b'      "seconds": 3.61675\n', (445370, 447779), (450551, 450810), b'        "listing-completed-pr-2"\n', (450952, 450961), b'      "seconds": 20.51715,\n', (450988, 452088), (454860, 455099), b'        "refresh1-completed-2"\n', (455239, 455248), b'      "seconds": 29.5688\n', (455274, 457318), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 14,\n          "seconds": 74.339,\n          "source": "document-scan-ci-socket-38684830215-shard6",\n          "test_git_blob": "738ce3a52eef28320c27c0262c03abb633daa48e"\n        },\n        {\n          "count": 14,\n          "seconds": 54.474,\n          "source": "document-scan-ci-scan-38764258973-shard6",\n          "test_git_blob": "738ce3a52eef28320c27c0262c03abb633daa48e"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 13.7747,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (457318, 457461), (460232, 460368), b'        "document-scan-ci-socket-38684830215-shard6",\n        "document-scan-ci-scan-38764258973-shard6"\n', (460476, 460485), b'      "seconds": 85.48985,\n', (460511, 464011), (465977, 466208), b'        "listing-completed-pr-1"\n', (466313, 466322), b'      "seconds": 6.65965,\n', (466348, 471421), (474195, 475404), b'        "listing-completed-pr-1"\n', (475546, 475555), b'      "seconds": 158.1687,\n', (475583, 512568), (514536, 515772), b'        "listing-completed-pr-1"\n', (515877, 515886), b'      "seconds": 195.68055,\n', (515913, 543243), (545209, 545447), b'        "listing-completed-pr-2"\n', (545552, 545561), b'      "seconds": 51.15315,\n', (545588, 554620), (557391, 557581), b'        "refresh1-completed-3"\n', (557721, 557730), b'      "seconds": 13.2503,\n', (557757, 559052), (561823, 562087), b'        "listing-completed-pr-2"\n', (562229, 562238), b'      "seconds": 32.58295,\n', (562264, 607340), (609307, 610513), b'        "listing-completed-pr-2"\n', (610618, 610627), b'      "seconds": 142.83,\n', (610653, 621731), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 44,\n          "seconds": 242.315,\n          "source": "document-scan-ci-socket-38684830215-shard6",\n          "test_git_blob": "680183fd1dc21439d49c53273581eded03e2888d"\n        },\n        {\n          "count": 44,\n          "seconds": 172.961,\n          "source": "document-scan-ci-scan-38764258973-shard6",\n          "test_git_blob": "680183fd1dc21439d49c53273581eded03e2888d"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 215.0155,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (621731, 621837), (624612, 625864), b'        "document-scan-ci-socket-38684830215-shard6",\n        "document-scan-ci-scan-38764258973-shard6"\n', (625972, 625981), b'      "seconds": 278.66225,\n', (626009, 627049), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 46,\n          "seconds": 222.376,\n          "source": "document-scan-ci-socket-38684830215-shard2",\n          "test_git_blob": "b73668e319953dac0cd587fc7dae854887f8a840"\n        },\n        {\n          "count": 46,\n          "seconds": 267.358,\n          "source": "document-scan-ci-scan-38764258973-shard2",\n          "test_git_blob": "b73668e319953dac0cd587fc7dae854887f8a840"\n        }\n      ],\n      "document_scan_ci_previous_scheduling_seconds": 222.87345,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (627049, 628363), b'        "listing-completed-pr-2",\n        "document-scan-ci-socket-38684830215-shard2",\n        "document-scan-ci-scan-38764258973-shard2"\n', (628396, 628405), b'      "seconds": 307.4617,\n', (628433, 649770), b'      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n', (650093, 650103), (650397, 650419), b'          "seconds": 1.188,\n          "source": "document-scan-ci-socket-38684830215-shard5",\n', (650816, 650907), (651201, 651223), b'          "seconds": 1.22,\n          "source": "document-scan-ci-scan-38764258973-shard5",\n', (651618, 651707), b'      "document_scan_ci_previous_scheduling_seconds": 30.0,\n      "document_scan_ci_variance_multiplier": 1.15,\n      "kind": "estimated",\n', (651759, 651863), b'        "document-scan-ci-socket-38684830215-shard5",\n        "document-scan-ci-scan-38764258973-shard5"\n', (651934, 651943), b'      "seconds": 1.403\n', (651967, 655813), (658582, 658679), b'        "listing-completed-main-1"\n', (658823, 658832), b'      "seconds": 0.13455,\n', (658859, 667398), b'      "advisory_basis_seconds": 361.827,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n', (667639, 668323), b'        }\n      ],\n      "document_scan_ci_basis": "Maximum compatible completed whole-file JUnit testcase sum plus 15%; not a runtime upper bound.",\n      "document_scan_ci_completed_measurements": [\n        {\n          "count": 110,\n          "seconds": 578.514,\n          "source": "document-scan-ci-socket-38684830215-shard2",\n          "test_git_blob": "db967628f548001cc3d45db68edb8d2817dd9bbb"\n', (668323, 668368), b'          "seconds": 704.111,\n          "source": "document-scan-ci-scan-38764258973-shard2",\n          "test_git_blob": "db967628f548001cc3d45db68edb8d2817dd9bbb"\n', (668505, 668524), b'      "document_scan_ci_previous_scheduling_seconds": 593.27465,\n      "document_scan_ci_variance_multiplier": 1.15,\n', (668524, 669833), b'        "listing-completed-pr-2",\n        "document-scan-ci-socket-38684830215-shard2",\n        "document-scan-ci-scan-38764258973-shard2"\n', (669866, 669875), b'      "seconds": 809.72765,\n', (669902, 675486), (678258, 678518), b'        "listing-completed-pr-2"\n', (678660, 678669), b'      "seconds": 35.03705,\n', (678696, 759656), (763456, 767970), b'    "document-scan-ci-scan-38764258973-shard1": {\n      "assignment_manifest_sha256": "d199c7ab3c56c3d7007094483762945a0a1b3814d0baaa9ee41ec841cdbdaf92",\n', (768213, 768233), b'      "checkout_commit": "40c4562c858a5f3da005374ac959a408951ad71a",\n      "checkout_receipt_log_sha256": "90bbba14bc0db3234e8bc7d65e6864246b1143f2d479e60800df86a1d3748ab2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "6e31a802ac3a39ac58ba38082747d9046efd167d",\n      "job_gate": "success",\n      "junit_sha256": "544d3b474a63b5682378e2cac147129a1587f3c6d7c74f642aa82fd04a1a51ee",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38764258973,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-scan-38764258973-shard2": {\n      "assignment_manifest_sha256": "de9a594839eb6c72dbc12c72016d5df0ffbe7510f1844f23712853454817434a",\n      "attempt": 1,\n      "checkout_commit": "40c4562c858a5f3da005374ac959a408951ad71a",\n      "checkout_receipt_log_sha256": "90bbba14bc0db3234e8bc7d65e6864246b1143f2d479e60800df86a1d3748ab2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "6e31a802ac3a39ac58ba38082747d9046efd167d",\n      "job_gate": "cancelled_after_complete_test_execution_and_upload",\n      "junit_sha256": "2c2ce6fcbb3c30829059a15df0bddcac11790845030bb898e19ce1fb61fa01cc",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38764258973,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-scan-38764258973-shard3": {\n      "assignment_manifest_sha256": "a0d1a8fed555d397a842532a4b68ee0b74c62da5db0a0122b5f49f2ccea4fe8a",\n      "attempt": 1,\n      "checkout_commit": "40c4562c858a5f3da005374ac959a408951ad71a",\n      "checkout_receipt_log_sha256": "90bbba14bc0db3234e8bc7d65e6864246b1143f2d479e60800df86a1d3748ab2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "6e31a802ac3a39ac58ba38082747d9046efd167d",\n      "job_gate": "success",\n      "junit_sha256": "aea3f1cbcd788c25b3d289428b8c4f5953c49391dec2be90532a9b673c3bc0b5",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38764258973,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-scan-38764258973-shard4": {\n      "assignment_manifest_sha256": "46cfca7742397f43f74f3f6819b667c4cd85cc451c621e4c6175bee72e5a912f",\n      "attempt": 1,\n      "checkout_commit": "40c4562c858a5f3da005374ac959a408951ad71a",\n      "checkout_receipt_log_sha256": "90bbba14bc0db3234e8bc7d65e6864246b1143f2d479e60800df86a1d3748ab2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "6e31a802ac3a39ac58ba38082747d9046efd167d",\n      "job_gate": "success",\n      "junit_sha256": "8b8b32dd154debf2df1807658036e5003513d552f0dd89cf8dc3a8e619e16f1b",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38764258973,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-scan-38764258973-shard5": {\n      "assignment_manifest_sha256": "87c5bf1b2ac844e38c5204224b00168deddcba46d2092d4de6d2499f60a05ebb",\n      "attempt": 1,\n      "checkout_commit": "40c4562c858a5f3da005374ac959a408951ad71a",\n      "checkout_receipt_log_sha256": "90bbba14bc0db3234e8bc7d65e6864246b1143f2d479e60800df86a1d3748ab2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "6e31a802ac3a39ac58ba38082747d9046efd167d",\n      "job_gate": "success",\n      "junit_sha256": "1925ad25afeb134b6316cc729be136835df13117eedc0687c1b47c637bdd1698",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38764258973,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-scan-38764258973-shard6": {\n      "assignment_manifest_sha256": "a9c2b261a2fccdb2040aefc40ac0111006c227e3daf7d46e880c234943cd9e1a",\n      "attempt": 1,\n      "checkout_commit": "40c4562c858a5f3da005374ac959a408951ad71a",\n      "checkout_receipt_log_sha256": "90bbba14bc0db3234e8bc7d65e6864246b1143f2d479e60800df86a1d3748ab2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "6e31a802ac3a39ac58ba38082747d9046efd167d",\n      "job_gate": "success",\n      "junit_sha256": "e36db84fa3c3c1b27a35f53177db5581f3bcce83c1bcb4cd4b583abb15453df1",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38764258973,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-socket-38684830215-shard1": {\n      "assignment_manifest_sha256": "36a9c2feee7e625f6be1e400fa9f35eee52916caa566699421a37e486d36fdea",\n      "attempt": 1,\n      "checkout_commit": "0ec1d6d0e189116d65dcba1de591d6146889b6ec",\n      "checkout_receipt_log_sha256": "dad4a23ae54e4ac95cf8796e41394cbfa69f0fea65baa4ddf6090961ad463ca2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "b528be527c49de3056a8834b17334f26feb0cd77",\n      "job_gate": "success",\n      "junit_sha256": "43798cf4a8ac1ddba19ba205fc1f1e46654331ed06e819b0c4cd2ea93a9b934e",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38684830215,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-socket-38684830215-shard2": {\n      "assignment_manifest_sha256": "98e11505dbdfe063d213cd5a1a2703c302decbef32cc8024adc4bfc5b620716e",\n      "attempt": 1,\n      "checkout_commit": "0ec1d6d0e189116d65dcba1de591d6146889b6ec",\n      "checkout_receipt_log_sha256": "dad4a23ae54e4ac95cf8796e41394cbfa69f0fea65baa4ddf6090961ad463ca2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "b528be527c49de3056a8834b17334f26feb0cd77",\n      "job_gate": "success",\n      "junit_sha256": "1089688bc0bd53fde1194dc4b7c3e8ab66a82c76142c48605a1d87fc555c9e17",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38684830215,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-socket-38684830215-shard3": {\n      "assignment_manifest_sha256": "7b63914c2deab80ebfb15b6e50728e615941627ec4b4781fcf9f2e34bd7adb2c",\n      "attempt": 1,\n      "checkout_commit": "0ec1d6d0e189116d65dcba1de591d6146889b6ec",\n      "checkout_receipt_log_sha256": "dad4a23ae54e4ac95cf8796e41394cbfa69f0fea65baa4ddf6090961ad463ca2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "b528be527c49de3056a8834b17334f26feb0cd77",\n      "job_gate": "success",\n      "junit_sha256": "84bdfdcc68e0e05ff54674573373908257104fbc757b334c964486f8df1ba3c9",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38684830215,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-socket-38684830215-shard4": {\n      "assignment_manifest_sha256": "b48f8255f5d502d7c0a6c342e88f0fc23d38e3fe0bf7bd4289a6274dcd9992bf",\n      "attempt": 1,\n      "checkout_commit": "0ec1d6d0e189116d65dcba1de591d6146889b6ec",\n      "checkout_receipt_log_sha256": "dad4a23ae54e4ac95cf8796e41394cbfa69f0fea65baa4ddf6090961ad463ca2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "b528be527c49de3056a8834b17334f26feb0cd77",\n      "job_gate": "success",\n      "junit_sha256": "bc01f140d25ae20d2ff632c8668717c1d93b50b5863a6186602a5e241d7b02fb",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38684830215,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-socket-38684830215-shard5": {\n      "assignment_manifest_sha256": "11b671a6c27792a0d00a74b4e924939aba1227a41e126f18f02dd0665e2ccd7c",\n      "attempt": 1,\n      "checkout_commit": "0ec1d6d0e189116d65dcba1de591d6146889b6ec",\n      "checkout_receipt_log_sha256": "dad4a23ae54e4ac95cf8796e41394cbfa69f0fea65baa4ddf6090961ad463ca2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "b528be527c49de3056a8834b17334f26feb0cd77",\n      "job_gate": "success",\n      "junit_sha256": "5e4ada878a14d2a0d8db4ae83079ab833163676d5776896bd391629e0186b49d",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38684830215,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n    },\n    "document-scan-ci-socket-38684830215-shard6": {\n      "assignment_manifest_sha256": "30bcc83b254e6a053e7327e9fd668598fe38c50c7590b473b6b035cebe81af5c",\n      "attempt": 1,\n      "checkout_commit": "0ec1d6d0e189116d65dcba1de591d6146889b6ec",\n      "checkout_receipt_log_sha256": "dad4a23ae54e4ac95cf8796e41394cbfa69f0fea65baa4ddf6090961ad463ca2",\n      "environment": "Ubuntu 24.04 / setup-python 3.12.15; unchanged requirements.txt and application workflow install step",\n      "execution_complete": true,\n      "head": "b528be527c49de3056a8834b17334f26feb0cd77",\n      "job_gate": "success",\n      "junit_sha256": "d980710c561dd1c33d060354f53978b64057c21485067c44c400547461017f08",\n      "kind": "completed_junit",\n      "requirements_git_blob": "f32801835ded3636b6e431cade936a3431d15d31",\n      "run_id": 38684830215,\n      "scope": "Whole-file testcase setup/call/teardown sum. Installation, collection, reporting, upload and cleanup are separate overhead."\n', (768922, 801191), (811195, 820025))), ('main', 'tests/nfl_pdf_capacity_fixtures.py'): ('1399faf2caa629996fff784d1ccfdbe9fa3f27011a1186f700f298ef4703ca29', '1a9b7d891b64fa289b80018b255d5db95809e0560d453fe30477a5205941f5f1', ((0, 641), (705, 1384))), ('old', 'tests/test_document_context_regressions.py'): ('4aebca7f1c79636fe7705f0b344107d6eae951cbc1b829172462d389c54eb164', '38ac9cac220310023e612e73e83b971028a45b134e89ee8681113b1fcbc79ea8', ((0, 5962),)), ('old', 'tests/test_document_scan_ci_costs.py'): ('8254e6b386df27fd2c5a9123e05303db35ec5f94d6f56a23d941d95fe6285ae5', '8007aad0470c028f9e7ec7a5bd3b4b5bc3c453fe4dd26c8b30c0dedc6f136087', ((0, 6521),)), ('old', 'tests/test_football_document_ci_closure.py'): ('5b67fd81854f2e39df055d1187c39de5765bbd731fae4ceaf0478f6d73c49e37', '2077eb2e35ef6858554fcb6422593dfd90de09a3ee9fa112395033571f77a214', ((0, 7372), b'    original=guard._document_scan_ci_previous_source(PROFILE,original)\n', (7441, 8282))), ('main', 'tests/test_football_document_html_scope.py'): ('ad6d32c6f1c8e358ca3a02e165dbbfc087c0adfbfa32905ed99bf0699a19c4d8', '54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1', ((0, 8078), b'    memo.install(guard)\n', (8127, 8770))), ('old', 'tests/test_ncaaf_socket_ci_costs.py'): ('c5839b640203bfde9d1988fa19fd839e9d1b592c47a1d7d58fdaee61f5e3bfcc', '7364327e6d181a2c3138c71a1d99143c62fad2569dbebbd42c55f51eb2ac688f', ((0, 292), b"def _verified_socket_ci_profile_bytes(source):\n    from scripts import check_launch_change_scope as guard\n    source=source.replace(b'\\r\\n',b'\\n')\n    prior=guard._document_scan_ci_previous_source('scripts/ci_test_file_costs_v1.json',source)\n    assert hashlib.sha256(prior).hexdigest()=='4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49'\n    return prior\n\n\n@pytest.fixture(autouse=True)\ndef historical_socket_ci_profile(request,tmp_path,monkeypatch):\n    # Only the two frozen predecessor-profile assertions use this exact input.\n    # Live assignment, changed-input and history-free tests retain current ROOT.\n    if request.node.name not in {\n        'test_exact_twelve_advisory_rows_and_frozen_metadata_preserved',\n        'test_only_completed_whole_file_xml_supplies_advisory_costs',\n    }:\n        return\n    root=tmp_path/'SYNTHETIC-exact-socket-ci-profile'\n    path=root/'scripts/ci_test_file_costs_v1.json';path.parent.mkdir(parents=True)\n    path.write_bytes(_verified_socket_ci_profile_bytes((ROOT/'scripts/ci_test_file_costs_v1.json').read_bytes()))\n    binding='docs/paid-launch/ncaaf-socket-ci-binding-v1.json'\n    target=root/binding;target.parent.mkdir(parents=True);target.write_bytes((ROOT/binding).read_bytes())\n    monkeypatch.setattr(__import__(__name__,fromlist=['ROOT']),'ROOT',root)\n\n\n", (292, 786), b'def test_exact_twelve_advisory_rows_and_frozen_metadata_preserved():\n', (1012, 1757), b'def test_only_completed_whole_file_xml_supplies_advisory_costs():\n', (1980, 6894)))}
     info=records.get((target,path))
@@ -22365,13 +23104,26 @@ def _document_main_previous(path,source,target):
     return value
 
 def _document_main_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return _document_main_project(source,'old') if len(source)==8012430 else source
-def _document_main_previous_source(path,source):return _document_main_previous(path,source,'old')
+def _document_main_previous_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
+    return _document_main_previous(path,source,'old')
 
 def _document_main_historical_dfs(source,reviewed):
     # Each branch first verifies its OWN exact self-neutralized source, then
     # reconstructs its exact predecessor. Main never supplies old alias globals.
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     matched=False
     for identity,match,peel in (
         (DOCUMENT_CONTEXT_REVIEWED_GUARD_SHA256,_document_context_guard_matches,_document_context_base_source),
@@ -22396,6 +23148,10 @@ from functools import lru_cache as _document_context_lru
 def _document_context_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
     value=DOCUMENT_CONTEXT_REVIEWED_GUARD_SHA256.encode()
@@ -22403,6 +23159,10 @@ def _document_context_guard_matches(source):
 
 @_document_context_lru(maxsize=2)
 def _document_context_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_document_context_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nDOCUMENT_CONTEXT_BOOTSTRAP =');end=source.index(b'\nDOCUMENT_SCAN_CI_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -22420,6 +23180,10 @@ def _document_context_cached_base(source,reviewed,parent):
 def _document_context_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22431,6 +23195,10 @@ _document_context_base_source.cache_clear=_document_context_cached_base.cache_cl
 def _document_context_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'old')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _document_context_base_source(source)
@@ -22453,6 +23221,10 @@ from functools import lru_cache as _document_scan_ci_lru
 def _document_scan_ci_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
     value=DOCUMENT_SCAN_CI_REVIEWED_GUARD_SHA256.encode()
@@ -22460,6 +23232,10 @@ def _document_scan_ci_guard_matches(source):
 
 @_document_scan_ci_lru(maxsize=2)
 def _document_scan_ci_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_document_scan_ci_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nDOCUMENT_SCAN_CI_BOOTSTRAP =');end=source.index(b'\nDOCUMENT_SCAN_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -22478,6 +23254,10 @@ def _document_scan_ci_base_source(source):
     # DOCUMENT_CONTEXT_DOCSCANCI_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==6717016:
@@ -22506,6 +23286,10 @@ def _document_scan_ci_previous_source(path,source):
     # DOCUMENT_CONTEXT_DOCSCANCI_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'old')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -22535,6 +23319,10 @@ from functools import lru_cache as _document_scan_lru
 def _document_scan_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
     value=DOCUMENT_SCAN_REVIEWED_GUARD_SHA256.encode()
@@ -22542,6 +23330,10 @@ def _document_scan_guard_matches(source):
 
 @_document_scan_lru(maxsize=2)
 def _document_scan_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_document_scan_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nDOCUMENT_SCAN_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -22560,6 +23352,10 @@ def _document_scan_base_source(source):
     # DOCUMENT_CONTEXT_DOCSCAN_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'old')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==6717016:
@@ -22605,6 +23401,10 @@ def _document_scan_previous_source(path,source):
     # DOCUMENT_CONTEXT_DOCSCAN_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'old')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -22631,11 +23431,19 @@ def _document_scan_previous_source(path,source):
     return result
 
 def _document_main_legacy_dfs(source: bytes, reviewed: str) -> bool:
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     digest = reviewed.encode("ascii")
     return (source.count(digest) == 1 and
             hashlib.sha256(source.replace(digest, b"0" * 64)).hexdigest() == reviewed)
 
 def _document_main_legacy_capacity(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return _listing_capacity_cached_base_source(source,LISTING_CAPACITY_REVIEWED_GUARD_SHA256,LISTING_CAPACITY_PREVIOUS_GUARD_SHA256)
 
@@ -22652,6 +23460,10 @@ NFL_RECON_PERF_RECONSTRUCTION_JSON = b'{}'
 def _nfl_recon_perf_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     identity=NFL_RECON_PERF_REVIEWED_GUARD_SHA256.encode()
@@ -22660,6 +23472,10 @@ def _nfl_recon_perf_guard_matches(source):
 def _nfl_recon_perf_project(source,target):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(_nfl_recon_perf_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22681,6 +23497,10 @@ def _nfl_recon_perf_project(source,target):
 def _nfl_recon_perf_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22690,6 +23510,10 @@ def _nfl_recon_perf_base_source(source):
 def _nfl_recon_perf_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _nfl_recon_perf_base_source(source)
@@ -22707,6 +23531,10 @@ from functools import lru_cache as _nfl_reconcile_lru
 def _nfl_reconcile_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NFL_PDF_RECONCILE_REVIEWED_GUARD_SHA256.encode()
@@ -22714,6 +23542,10 @@ def _nfl_reconcile_guard_matches(source):
 
 @_nfl_reconcile_lru(maxsize=2)
 def _nfl_reconcile_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_nfl_reconcile_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_RECONCILE_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_FIXTURE_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -22731,6 +23563,10 @@ def _nfl_reconcile_cached_base(source,reviewed,parent):
 def _nfl_reconcile_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -22751,6 +23587,10 @@ _nfl_reconcile_base_source.cache_clear=_nfl_reconcile_cached_base.cache_clear
 def _nfl_reconcile_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _nfl_reconcile_base_source(source)
@@ -22765,6 +23605,10 @@ def _nfl_reconcile_previous_source(path,source):
 def _nfl_reconcile_socket_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     source=_nfl_reconcile_base_source(source)
@@ -22790,6 +23634,10 @@ from functools import lru_cache as _nfl_odds_socket_lru
 def _nfl_odds_socket_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NFL_ODDS_SOCKET_REVIEWED_GUARD_SHA256.encode()
@@ -22797,6 +23645,10 @@ def _nfl_odds_socket_guard_matches(source):
 
 @_nfl_odds_socket_lru(maxsize=2)
 def _nfl_odds_socket_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_nfl_odds_socket_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_ODDS_SOCKET_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -22814,6 +23666,10 @@ def _nfl_odds_socket_cached_base(source,reviewed,parent):
 def _nfl_odds_socket_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -22835,6 +23691,10 @@ _nfl_odds_socket_base_source.cache_clear=_nfl_odds_socket_cached_base.cache_clea
 def _nfl_odds_socket_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _nfl_odds_socket_base_source(source)
@@ -22857,6 +23717,10 @@ from functools import lru_cache as _nfl_pdf_fixture_lru
 def _nfl_pdf_fixture_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NFL_PDF_FIXTURE_REVIEWED_GUARD_SHA256.encode()
@@ -22864,6 +23728,10 @@ def _nfl_pdf_fixture_guard_matches(source):
 
 @_nfl_pdf_fixture_lru(maxsize=2)
 def _nfl_pdf_fixture_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_nfl_pdf_fixture_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_FIXTURE_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -22883,6 +23751,10 @@ def _nfl_pdf_fixture_cached_base(source,reviewed,parent):
 def _nfl_pdf_fixture_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -22921,6 +23793,10 @@ def _nfl_pdf_fixture_previous_source(path,source):
     # NFL_PDF_RECONCILE_FIXTURE_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -22950,6 +23826,10 @@ from functools import lru_cache as _nfl_pdf_timing_lru
 def _nfl_pdf_timing_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NFL_PDF_TIMING_REVIEWED_GUARD_SHA256.encode()
@@ -22957,6 +23837,10 @@ def _nfl_pdf_timing_guard_matches(source):
 
 @_nfl_pdf_timing_lru(maxsize=2)
 def _nfl_pdf_timing_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_nfl_pdf_timing_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_TIMING_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -22974,6 +23858,10 @@ def _nfl_pdf_timing_cached_base(source,reviewed,parent):
 def _nfl_pdf_timing_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -23031,6 +23919,10 @@ def _nfl_pdf_timing_previous_source(path,source):
     # NFL_PDF_RECONCILE_TIMING_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -23068,6 +23960,10 @@ from functools import lru_cache as _nfl_pdf_margin_lru
 def _nfl_pdf_margin_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NFL_PDF_MARGIN_REVIEWED_GUARD_SHA256.encode()
@@ -23075,6 +23971,10 @@ def _nfl_pdf_margin_guard_matches(source):
 
 @_nfl_pdf_margin_lru(maxsize=2)
 def _nfl_pdf_margin_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_nfl_pdf_margin_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_MARGIN_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -23092,6 +23992,10 @@ def _nfl_pdf_margin_cached_base(source,reviewed,parent):
 def _nfl_pdf_margin_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -23166,6 +24070,10 @@ def _nfl_pdf_margin_previous_source(path,source):
     # NFL_PDF_RECONCILE_MARGIN_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -23211,6 +24119,10 @@ from functools import lru_cache as _ncaaf_socket_ci_lru
 def _ncaaf_socket_ci_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NCAAF_SOCKET_CI_REVIEWED_GUARD_SHA256.encode()
@@ -23218,6 +24130,10 @@ def _ncaaf_socket_ci_guard_matches(source):
 
 @_ncaaf_socket_ci_lru(maxsize=2)
 def _ncaaf_socket_ci_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_ncaaf_socket_ci_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNCAAF_SOCKET_CI_BOOTSTRAP =');end=source.index(b'\nNCAAF_SOCKET_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -23235,6 +24151,10 @@ def _ncaaf_socket_ci_cached_base(source,reviewed,parent):
 def _ncaaf_socket_ci_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -23326,6 +24246,10 @@ def _ncaaf_socket_ci_previous_source(path,source):
     # NFL_PDF_RECONCILE_SOCKETCI_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -23379,6 +24303,10 @@ from functools import lru_cache as _ncaaf_socket_lru
 def _ncaaf_socket_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NCAAF_SOCKET_REVIEWED_GUARD_SHA256.encode()
@@ -23386,6 +24314,10 @@ def _ncaaf_socket_guard_matches(source):
 
 @_ncaaf_socket_lru(maxsize=2)
 def _ncaaf_socket_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_ncaaf_socket_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNCAAF_SOCKET_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -23403,6 +24335,10 @@ def _ncaaf_socket_cached_base(source,reviewed,parent):
 def _ncaaf_socket_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -23511,6 +24447,10 @@ def _ncaaf_socket_previous_source(path,source):
     # NFL_PDF_RECONCILE_SOCKET_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -23572,6 +24512,10 @@ from functools import lru_cache as _docclose_lru
 def _docclose_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCCLOSE_REVIEWED_GUARD_SHA256.encode()
@@ -23579,6 +24523,10 @@ def _docclose_guard_matches(source):
 
 @_docclose_lru(maxsize=2)
 def _docclose_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docclose_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCCLOSE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -23596,6 +24544,10 @@ def _docclose_cached_base(source,reviewed,parent):
 def _docclose_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -23721,6 +24673,10 @@ def _docclose_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCCLOSE_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -23790,6 +24746,10 @@ from functools import lru_cache as _docperf_lru
 def _docperf_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCPERF_REVIEWED_GUARD_SHA256.encode()
@@ -23797,6 +24757,10 @@ def _docperf_guard_matches(source):
 
 @_docperf_lru(maxsize=2)
 def _docperf_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docperf_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCPERF_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -23814,6 +24778,10 @@ def _docperf_cached_base(source,reviewed,parent):
 def _docperf_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -23956,6 +24924,10 @@ def _docperf_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCPERF_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -24033,6 +25005,10 @@ from functools import lru_cache as _docremote_lru
 def _docremote_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCREMOTE_REVIEWED_GUARD_SHA256.encode()
@@ -24040,6 +25016,10 @@ def _docremote_guard_matches(source):
 
 @_docremote_lru(maxsize=2)
 def _docremote_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docremote_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCREMOTE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -24057,6 +25037,10 @@ def _docremote_cached_base(source,reviewed,parent):
 def _docremote_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -24216,6 +25200,10 @@ def _docremote_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCREMOTE_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -24301,6 +25289,10 @@ from functools import lru_cache as _docpred_lru
 def _docpred_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCPRED_REVIEWED_GUARD_SHA256.encode()
@@ -24308,6 +25300,10 @@ def _docpred_guard_matches(source):
 
 @_docpred_lru(maxsize=2)
 def _docpred_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docpred_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCPRED_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -24325,6 +25321,10 @@ def _docpred_cached_base(source,reviewed,parent):
 def _docpred_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -24501,6 +25501,10 @@ def _docpred_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCPRED_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -24594,6 +25598,10 @@ from functools import lru_cache as _docsix_lru
 def _docsix_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCSIX_REVIEWED_GUARD_SHA256.encode()
@@ -24601,6 +25609,10 @@ def _docsix_guard_matches(source):
 
 @_docsix_lru(maxsize=2)
 def _docsix_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docsix_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCSIX_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -24618,6 +25630,10 @@ def _docsix_cached_base(source,reviewed,parent):
 def _docsix_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -24811,6 +25827,10 @@ def _docsix_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCSIX_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -24912,6 +25932,10 @@ from functools import lru_cache as _docreport_lru
 def _docreport_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCREPORT_REVIEWED_GUARD_SHA256.encode()
@@ -24919,6 +25943,10 @@ def _docreport_guard_matches(source):
 
 @_docreport_lru(maxsize=2)
 def _docreport_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docreport_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCREPORT_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -24936,6 +25964,10 @@ def _docreport_cached_base(source,reviewed,parent):
 def _docreport_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -25146,6 +26178,10 @@ def _docreport_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCREPORT_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -25255,6 +26291,10 @@ from functools import lru_cache as _docfixture_lru
 def _docfixture_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCFIXTURE_REVIEWED_GUARD_SHA256.encode()
@@ -25262,6 +26302,10 @@ def _docfixture_guard_matches(source):
 
 @_docfixture_lru(maxsize=2)
 def _docfixture_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docfixture_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCFIXTURE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -25279,6 +26323,10 @@ def _docfixture_cached_base(source,reviewed,parent):
 def _docfixture_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -25506,6 +26554,10 @@ def _docfixture_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCFIXTURE_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -25623,6 +26675,10 @@ from functools import lru_cache as _docanchor_lru
 def _docanchor_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCANCHOR_REVIEWED_GUARD_SHA256.encode()
@@ -25630,6 +26686,10 @@ def _docanchor_guard_matches(source):
 
 @_docanchor_lru(maxsize=2)
 def _docanchor_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docanchor_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCANCHOR_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -25647,6 +26707,10 @@ def _docanchor_cached_base(source,reviewed,parent):
 def _docanchor_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -25891,6 +26955,10 @@ def _docanchor_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCANCHOR_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -26016,6 +27084,10 @@ from functools import lru_cache as _doclife_lru
 def _doclife_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCLIFE_REVIEWED_GUARD_SHA256.encode()
@@ -26023,6 +27095,10 @@ def _doclife_guard_matches(source):
 
 @_doclife_lru(maxsize=2)
 def _doclife_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_doclife_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCLIFE_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCWORDS_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -26040,6 +27116,10 @@ def _doclife_cached_base(source,reviewed,parent):
 def _doclife_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -26301,6 +27381,10 @@ def _doclife_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCLIFE_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -26434,6 +27518,10 @@ from functools import lru_cache as _docwords_lru
 def _docwords_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCWORDS_REVIEWED_GUARD_SHA256.encode()
@@ -26441,6 +27529,10 @@ def _docwords_guard_matches(source):
 
 @_docwords_lru(maxsize=2)
 def _docwords_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docwords_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCWORDS_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCMETA_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -26458,6 +27550,10 @@ def _docwords_cached_base(source,reviewed,parent):
 def _docwords_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -26736,6 +27832,10 @@ def _docwords_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCWORDS_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -26877,6 +27977,10 @@ from functools import lru_cache as _docmeta_lru
 def _docmeta_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCMETA_REVIEWED_GUARD_SHA256.encode()
@@ -26884,6 +27988,10 @@ def _docmeta_guard_matches(source):
 
 @_docmeta_lru(maxsize=2)
 def _docmeta_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docmeta_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCMETA_BOOTSTRAP =');end=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -26901,6 +28009,10 @@ def _docmeta_cached_base(source,reviewed,parent):
 def _docmeta_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -27196,6 +28308,10 @@ def _docmeta_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCMETA_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -27345,6 +28461,10 @@ from functools import lru_cache as _docio_lru
 def _docio_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=FOOTBALL_DOCIO_REVIEWED_GUARD_SHA256.encode()
@@ -27352,6 +28472,10 @@ def _docio_guard_matches(source):
 
 @_docio_lru(maxsize=2)
 def _docio_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_docio_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nFOOTBALL_DOCIO_BOOTSTRAP =');end=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -27369,6 +28493,10 @@ def _docio_cached_base(source,reviewed,parent):
 def _docio_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -27681,6 +28809,10 @@ def _docio_previous_source(path,source):
     # NFL_PDF_RECONCILE_DOCIO_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -27838,6 +28970,10 @@ from functools import lru_cache as _terms_lru
 def _terms_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NCAAF_TERMS_REVIEWED_GUARD_SHA256.encode()
@@ -27845,6 +28981,10 @@ def _terms_guard_matches(source):
 
 @_terms_lru(maxsize=2)
 def _terms_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_terms_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNCAAF_TERMS_BOOTSTRAP =');end=source.index(b'\nNFL_DOCUMENT_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -27862,6 +29002,10 @@ def _terms_cached_base(source,reviewed,parent):
 def _terms_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -28191,6 +29335,10 @@ def _terms_previous_source(path,source):
     # NFL_PDF_RECONCILE_TPREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -28356,6 +29504,10 @@ from functools import lru_cache as _document_lru
 def _document_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NFL_DOCUMENT_REVIEWED_GUARD_SHA256.encode()
@@ -28363,6 +29515,10 @@ def _document_guard_matches(source):
 
 @_document_lru(maxsize=2)
 def _document_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_document_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_DOCUMENT_BOOTSTRAP =');end=source.index(b'\nNFL_PDF_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -28380,6 +29536,10 @@ def _document_cached_base(source,reviewed,parent):
 def _document_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -28726,6 +29886,10 @@ def _document_previous_source(path,source):
     # NFL_PDF_RECONCILE_DPREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -28899,6 +30063,10 @@ from functools import lru_cache as _pdf_lru
 def _pdf_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     value=NFL_PDF_REVIEWED_GUARD_SHA256.encode()
@@ -28906,6 +30074,10 @@ def _pdf_guard_matches(source):
 
 @_pdf_lru(maxsize=2)
 def _pdf_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(_pdf_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     begin=source.index(b'\nNFL_PDF_BOOTSTRAP =');end=source.index(b'\nNFL_INTERPRETATION_BOOTSTRAP =',begin)
     source=source[:begin]+source[end:]
@@ -28923,6 +30095,10 @@ def _pdf_cached_base(source,reviewed,parent):
 def _pdf_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -29286,6 +30462,10 @@ def _pdf_previous_source(path,source):
     # NFL_PDF_RECONCILE_PPREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -29467,6 +30647,10 @@ from functools import lru_cache as _interpret_lru
 def _interpret_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     identity=NFL_INTERPRETATION_REVIEWED_GUARD_SHA256.encode()
@@ -29474,6 +30658,10 @@ def _interpret_guard_matches(source):
 
 @_interpret_lru(maxsize=2)
 def _interpret_cached_base(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if hashlib.sha256(source).hexdigest()==parent:return source
     if b'\nNFL_INTERPRETATION_BOOTSTRAP =' not in source:return source
     _require(_interpret_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -29492,6 +30680,10 @@ def _interpret_cached_base(source,reviewed,parent):
 def _interpret_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if len(source)==7504827:
@@ -29872,6 +31064,10 @@ def _interpret_previous_source(path,source):
     # NFL_PDF_RECONCILE_IPREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -30062,6 +31258,10 @@ from functools import lru_cache as _capacity_lru_cache
 def _listing_capacity_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=LISTING_CAPACITY_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -30069,6 +31269,10 @@ def _listing_capacity_guard_matches(source):
 
 @_capacity_lru_cache(maxsize=2)
 def _listing_capacity_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if b'\nLISTING_CAPACITY_BOOTSTRAP =' not in source:return source
     _require(reviewed==LISTING_CAPACITY_REVIEWED_GUARD_SHA256 and parent==LISTING_CAPACITY_PREVIOUS_GUARD_SHA256 and _listing_capacity_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nLISTING_CAPACITY_BOOTSTRAP =',1)
@@ -30086,6 +31290,10 @@ def _listing_capacity_cached_base_source(source,reviewed,parent):
 def _listing_capacity_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     if len(source)==6717016:
         _require(hashlib.sha256(source).hexdigest() == '22daf87bc274b5175483b5c12e9f3df3a5c28320ee4f497ed3b9b7b0d0259f08', 'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30144,6 +31352,10 @@ _listing_capacity_base_source.cache_info=_listing_capacity_cached_base_source.ca
 def _listing_capacity_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _listing_capacity_base_source(source)
@@ -30160,6 +31372,10 @@ _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     if len(source)==6717016:
         _require(hashlib.sha256(source).hexdigest() == '22daf87bc274b5175483b5c12e9f3df3a5c28320ee4f497ed3b9b7b0d0259f08', 'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30613,6 +31829,10 @@ from functools import lru_cache as _metadata_lru_cache
 def _listing_metadata_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=LISTING_METADATA_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -30620,6 +31840,10 @@ def _listing_metadata_guard_matches(source):
 
 @_metadata_lru_cache(maxsize=2)
 def _listing_metadata_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if b'\nLISTING_METADATA_BOOTSTRAP =' not in source:return source
     _require(reviewed==LISTING_METADATA_REVIEWED_GUARD_SHA256 and parent==LISTING_METADATA_PREVIOUS_GUARD_SHA256 and _listing_metadata_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nLISTING_METADATA_BOOTSTRAP =',1)
@@ -30637,6 +31861,10 @@ def _listing_metadata_cached_base_source(source,reviewed,parent):
 def _listing_metadata_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30648,6 +31876,10 @@ def _listing_metadata_previous_source(path,source):
     # NFL_PDF_METAPREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -30670,9 +31902,19 @@ def _listing_metadata_previous_source(path,source):
 _capacity_previous_match=_listing_metadata_guard_matches
 _capacity_previous_base=_listing_metadata_base_source
 
-def _listing_metadata_guard_matches(source):return _capacity_previous_match(_listing_capacity_base_source(source))
+def _listing_metadata_guard_matches(source):
 
-def _listing_metadata_base_source(source):return _capacity_previous_base(_listing_capacity_base_source(source))
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _capacity_previous_match(_listing_capacity_base_source(source))
+
+def _listing_metadata_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _capacity_previous_base(_listing_capacity_base_source(source))
 _listing_metadata_base_source.cache_clear=_capacity_previous_base.cache_clear
 _listing_metadata_base_source.cache_info=_capacity_previous_base.cache_info
 
@@ -30689,12 +31931,20 @@ from functools import lru_cache as _immutable_lru_cache
 def _cost_immutable_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=COST_IMMUTABLE_REVIEWED_GUARD_SHA256.encode('ascii')
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==COST_IMMUTABLE_REVIEWED_GUARD_SHA256
 @_immutable_lru_cache(maxsize=2)
 def _cost_immutable_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if b'\nCOST_IMMUTABLE_BOOTSTRAP =' not in source:return source
     _require(reviewed==COST_IMMUTABLE_REVIEWED_GUARD_SHA256 and parent==COST_IMMUTABLE_PREVIOUS_GUARD_SHA256 and _cost_immutable_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nCOST_IMMUTABLE_BOOTSTRAP =',1)
@@ -30711,6 +31961,10 @@ def _cost_immutable_cached_base_source(source,reviewed,parent):
 def _cost_immutable_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30721,9 +31975,19 @@ _cost_immutable_base_source.cache_info=_cost_immutable_cached_base_source.cache_
 _metadata_previous_match=_cost_immutable_guard_matches
 _metadata_previous_base=_cost_immutable_base_source
 
-def _cost_immutable_guard_matches(source):return _metadata_previous_match(_listing_metadata_base_source(source))
+def _cost_immutable_guard_matches(source):
 
-def _cost_immutable_base_source(source):return _metadata_previous_base(_listing_metadata_base_source(source))
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _metadata_previous_match(_listing_metadata_base_source(source))
+
+def _cost_immutable_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _metadata_previous_base(_listing_metadata_base_source(source))
 _cost_immutable_base_source.cache_clear=_metadata_previous_base.cache_clear
 _cost_immutable_base_source.cache_info=_metadata_previous_base.cache_info
 
@@ -30739,6 +32003,10 @@ from functools import lru_cache as _cost_lru_cache
 def _listing_cost_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=LISTING_COST_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -30746,6 +32014,10 @@ def _listing_cost_guard_matches(source):
 
 @_cost_lru_cache(maxsize=2)
 def _listing_cost_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if b'\nLISTING_COST_BOOTSTRAP =' not in source:return source
     _require(reviewed==LISTING_COST_REVIEWED_GUARD_SHA256 and parent==LISTING_COST_PREVIOUS_GUARD_SHA256 and _listing_cost_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nLISTING_COST_BOOTSTRAP =',1)
@@ -30763,6 +32035,10 @@ def _listing_cost_cached_base_source(source,reviewed,parent):
 def _listing_cost_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30773,6 +32049,10 @@ _listing_cost_base_source.cache_info=_listing_cost_cached_base_source.cache_info
 def _listing_cost_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _listing_cost_base_source(source)
@@ -30788,8 +32068,18 @@ def _listing_cost_previous_source(path,source):
 
 _immutable_previous_cost_match=_listing_cost_guard_matches
 _immutable_previous_cost_base=_listing_cost_base_source
-def _listing_cost_guard_matches(source):return _immutable_previous_cost_match(_cost_immutable_base_source(source))
-def _listing_cost_base_source(source):return _immutable_previous_cost_base(_cost_immutable_base_source(source))
+def _listing_cost_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _immutable_previous_cost_match(_cost_immutable_base_source(source))
+def _listing_cost_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _immutable_previous_cost_base(_cost_immutable_base_source(source))
 _listing_cost_base_source.cache_clear=_immutable_previous_cost_base.cache_clear
 _listing_cost_base_source.cache_info=_immutable_previous_cost_base.cache_info
 
@@ -30805,6 +32095,10 @@ from functools import lru_cache as _listing_lru_cache
 def _nfl_listing_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=NFL_LISTING_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -30812,6 +32106,10 @@ def _nfl_listing_guard_matches(source):
 
 @_listing_lru_cache(maxsize=2)
 def _nfl_listing_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if b'\nNFL_LISTING_BOOTSTRAP =' not in source:return source
     _require(reviewed==NFL_LISTING_REVIEWED_GUARD_SHA256 and parent==NFL_LISTING_PREVIOUS_GUARD_SHA256 and _nfl_listing_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nNFL_LISTING_BOOTSTRAP =',1)
@@ -30831,6 +32129,10 @@ def _nfl_listing_cached_base_source(source,reviewed,parent):
 def _nfl_listing_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30841,8 +32143,18 @@ _nfl_listing_base_source.cache_info=_nfl_listing_cached_base_source.cache_info
 
 _cost_original_listing_match=_nfl_listing_guard_matches
 _cost_original_listing_base=_nfl_listing_base_source
-def _nfl_listing_guard_matches(source):return _cost_original_listing_match(_listing_cost_base_source(source))
-def _nfl_listing_base_source(source):return _cost_original_listing_base(_listing_cost_base_source(source))
+def _nfl_listing_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _cost_original_listing_match(_listing_cost_base_source(source))
+def _nfl_listing_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _cost_original_listing_base(_listing_cost_base_source(source))
 _nfl_listing_base_source.cache_clear=_cost_original_listing_base.cache_clear
 _nfl_listing_base_source.cache_info=_cost_original_listing_base.cache_info
 
@@ -30857,12 +32169,20 @@ from functools import lru_cache as _memo_lru_cache
 def _guard_memo_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=GUARD_MEMO_REVIEWED_GUARD_SHA256.encode('ascii')
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_MEMO_REVIEWED_GUARD_SHA256
 @_memo_lru_cache(maxsize=2)
 def _guard_memo_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if b'\nGUARD_MEMO_BOOTSTRAP =' not in source:return source
     _require(reviewed==GUARD_MEMO_REVIEWED_GUARD_SHA256 and parent==GUARD_MEMO_PREVIOUS_GUARD_SHA256 and _guard_memo_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nGUARD_MEMO_BOOTSTRAP =',1)
@@ -30879,6 +32199,10 @@ def _guard_memo_cached_base_source(source,reviewed,parent):
 def _guard_memo_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30886,6 +32210,10 @@ def _guard_memo_base_source(source):
 def _guard_memo_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _guard_memo_base_source(source) if path==GUARD_PATH else source
@@ -30896,6 +32224,10 @@ _listing_previous_memo_base=_guard_memo_base_source
 def _guard_memo_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _listing_previous_memo_match(_nfl_listing_base_source(source))
@@ -30903,6 +32235,10 @@ def _guard_memo_guard_matches(source):
 def _guard_memo_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _listing_previous_memo_base(_nfl_listing_base_source(source))
@@ -30919,12 +32255,20 @@ from functools import lru_cache as _reads_lru_cache
 def _guard_reads_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=GUARD_READS_REVIEWED_GUARD_SHA256.encode('ascii')
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_READS_REVIEWED_GUARD_SHA256
 @_reads_lru_cache(maxsize=2)
 def _guard_reads_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if b'\nGUARD_READS_BOOTSTRAP =' not in source:return source
     _require(reviewed==GUARD_READS_REVIEWED_GUARD_SHA256 and parent==GUARD_READS_PREVIOUS_GUARD_SHA256 and _guard_reads_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nGUARD_READS_BOOTSTRAP =',1)
@@ -30941,6 +32285,10 @@ def _guard_reads_cached_base_source(source,reviewed,parent):
 def _guard_reads_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30948,14 +32296,28 @@ def _guard_reads_base_source(source):
 def _guard_reads_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _guard_reads_base_source(source) if path==GUARD_PATH else source
 
 _memo_early_match = _guard_reads_guard_matches
 _memo_early_base = _guard_reads_base_source
-def _guard_reads_guard_matches(source):return _memo_early_match(_guard_memo_base_source(source))
-def _guard_reads_base_source(source):return _memo_early_base(_guard_memo_base_source(source))
+def _guard_reads_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _memo_early_match(_guard_memo_base_source(source))
+def _guard_reads_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _memo_early_base(_guard_memo_base_source(source))
 
 GUARD_BOOTSTRAP_BOOTSTRAP = True
 GUARD_BOOTSTRAP_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ci-guard-bootstrap-v1.json'
@@ -30968,12 +32330,20 @@ from functools import lru_cache as _bootstrap_lru_cache
 def _guard_bootstrap_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256.encode('ascii')
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256
 @_bootstrap_lru_cache(maxsize=2)
 def _guard_bootstrap_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if b'\nGUARD_BOOTSTRAP_BOOTSTRAP =' not in source:return source
     _require(reviewed==GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256 and parent==GUARD_BOOTSTRAP_PREVIOUS_GUARD_SHA256 and _guard_bootstrap_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nGUARD_BOOTSTRAP_BOOTSTRAP =',1)
@@ -30993,6 +32363,10 @@ def _guard_bootstrap_cached_base_source(source,reviewed,parent):
 def _guard_bootstrap_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -31000,14 +32374,28 @@ def _guard_bootstrap_base_source(source):
 def _guard_bootstrap_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _guard_bootstrap_base_source(source) if path==GUARD_PATH else source
 
 _reads_early_match = _guard_bootstrap_guard_matches
 _reads_early_base = _guard_bootstrap_base_source
-def _guard_bootstrap_guard_matches(source):return _reads_early_match(_guard_reads_base_source(source))
-def _guard_bootstrap_base_source(source):return _reads_early_base(_guard_reads_base_source(source))
+def _guard_bootstrap_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _reads_early_match(_guard_reads_base_source(source))
+def _guard_bootstrap_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _reads_early_base(_guard_reads_base_source(source))
 
 GUARD_SCAN_BOOTSTRAP = True
 GUARD_SCAN_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ci-guard-scan-v1.json'
@@ -31020,12 +32408,20 @@ from functools import lru_cache as _scan_lru_cache
 def _guard_scan_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=GUARD_SCAN_REVIEWED_GUARD_SHA256.encode('ascii')
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_SCAN_REVIEWED_GUARD_SHA256
 @_scan_lru_cache(maxsize=2)
 def _guard_scan_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if b'\nGUARD_SCAN_BOOTSTRAP =' not in source:return source
     _require(reviewed==GUARD_SCAN_REVIEWED_GUARD_SHA256 and parent==GUARD_SCAN_PREVIOUS_GUARD_SHA256 and _guard_scan_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nGUARD_SCAN_BOOTSTRAP =',1)
@@ -31042,6 +32438,10 @@ def _guard_scan_cached_base_source(source,reviewed,parent):
 def _guard_scan_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -31049,6 +32449,10 @@ def _guard_scan_base_source(source):
 def _guard_scan_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _guard_scan_base_source(source) if path==GUARD_PATH else source
@@ -31064,12 +32468,20 @@ from functools import lru_cache as _performance_lru_cache
 def _guard_performance_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=GUARD_PERFORMANCE_REVIEWED_GUARD_SHA256.encode('ascii')
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_PERFORMANCE_REVIEWED_GUARD_SHA256
 @_performance_lru_cache(maxsize=2)
 def _guard_performance_cached_base_source(source,reviewed,parent):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     _require(reviewed==GUARD_PERFORMANCE_REVIEWED_GUARD_SHA256 and parent==GUARD_PERFORMANCE_PREVIOUS_GUARD_SHA256 and _guard_performance_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nGUARD_PERFORMANCE_BOOTSTRAP =',1)
     previous=prefix+b'\nNFL_ODDS_TIMING_BOOTSTRAP ='+own.split(b'\nNFL_ODDS_TIMING_BOOTSTRAP =',1)[1]
@@ -31085,6 +32497,10 @@ def _guard_performance_cached_base_source(source,reviewed,parent):
 def _guard_performance_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nGUARD_PERFORMANCE_BOOTSTRAP =' not in source:return source
@@ -31093,6 +32509,10 @@ def _guard_performance_base_source(source):
 def _guard_performance_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _guard_performance_base_source(source) if path==GUARD_PATH else source
@@ -31108,6 +32528,10 @@ from functools import lru_cache as _odds_timing_lru_cache
 def _nfl_odds_timing_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=NFL_ODDS_TIMING_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -31116,6 +32540,10 @@ def _nfl_odds_timing_guard_matches(source):
 def _nfl_odds_timing_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNFL_ODDS_TIMING_BOOTSTRAP =' not in source:return source
@@ -31134,6 +32562,10 @@ def _nfl_odds_timing_base_source(source):
 def _nfl_odds_timing_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _nfl_odds_timing_base_source(source)
@@ -31157,6 +32589,10 @@ from functools import lru_cache as _odds_lru_cache
 def _nfl_odds_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=NFL_ODDS_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -31165,6 +32601,10 @@ def _nfl_odds_guard_matches(source):
 def _nfl_odds_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNFL_ODDS_BOOTSTRAP =' not in source:return source
@@ -31195,6 +32635,10 @@ from functools import lru_cache as _scenario_lru_cache
 def _nfl_scenario_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=NFL_SCENARIO_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -31203,6 +32647,10 @@ def _nfl_scenario_guard_matches(source):
 def _nfl_scenario_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNFL_SCENARIO_BOOTSTRAP =' not in source:return source
@@ -31221,6 +32669,10 @@ CI_TIMING_SOURCE_RECONSTRUCTIONS = {'docs/ci-test-execution.md': {'before_sha256
 def _ci_timing_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=CI_TIMING_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -31230,6 +32682,10 @@ from functools import lru_cache as _ci_timing_lru_cache
 def _ci_timing_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nCI_TIMING_BOOTSTRAP =' not in source:return source
@@ -31248,6 +32704,10 @@ NFL_DIAGNOSTICS_SOURCE_RECONSTRUCTIONS = {'app_core/nfl_scoring_acquisition.py':
 def _nfl_diagnostics_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed=NFL_DIAGNOSTICS_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -31255,6 +32715,10 @@ def _nfl_diagnostics_guard_matches(source):
 def _nfl_diagnostics_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNFL_DIAGNOSTICS_BOOTSTRAP =' not in source:return source
@@ -31273,6 +32737,10 @@ NFL_SCORING_SOURCE_RECONSTRUCTIONS = {'app/ui/nfl_private_research.py': {'before
 def _nfl_scoring_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed = NFL_SCORING_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -31280,6 +32748,10 @@ def _nfl_scoring_guard_matches(source):
 def _nfl_scoring_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNFL_SCORING_BOOTSTRAP =' not in source: return source
@@ -31298,6 +32770,10 @@ NFL_OBSERVED_SOURCE_RECONSTRUCTIONS = {'core/streamlit_pipeline.py': {'before_sh
 def _nfl_observed_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed = NFL_OBSERVED_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -31305,6 +32781,10 @@ def _nfl_observed_guard_matches(source):
 def _nfl_observed_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNFL_OBSERVED_BOOTSTRAP =' not in source: return source
@@ -31324,6 +32804,10 @@ NFL_OWNER_SOURCE_RECONSTRUCTIONS = {'core/live_wager_contract.py': {'before_sha2
 def _nfl_owner_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed = NFL_OWNER_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -31332,6 +32816,10 @@ def _nfl_owner_guard_matches(source):
 def _nfl_owner_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNFL_OWNER_BOOTSTRAP =' not in source: return source
@@ -31342,15 +32830,34 @@ def _nfl_owner_base_source(source):
 
 _bootstrap_early_match = _guard_scan_guard_matches
 _bootstrap_early_base = _guard_scan_base_source
-def _guard_scan_guard_matches(source):return _bootstrap_early_match(_guard_bootstrap_base_source(source))
-def _guard_scan_base_source(source):return _bootstrap_early_base(_guard_bootstrap_base_source(source))
+def _guard_scan_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _bootstrap_early_match(_guard_bootstrap_base_source(source))
+def _guard_scan_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _bootstrap_early_base(_guard_bootstrap_base_source(source))
 
 _scan_early_v1_match = _guard_performance_guard_matches
-def _guard_performance_guard_matches(source):return _scan_early_v1_match(_guard_scan_base_source(source))
+def _guard_performance_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _scan_early_v1_match(_guard_scan_base_source(source))
 @_scan_lru_cache(maxsize=2)
 def _guard_scan_v1_presence(source,reviewed,parent):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nGUARD_PERFORMANCE_BOOTSTRAP =' not in source:return source
@@ -31358,6 +32865,10 @@ def _guard_scan_v1_presence(source,reviewed,parent):
 def _guard_performance_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     source=_guard_scan_base_source(source)
@@ -31365,49 +32876,129 @@ def _guard_performance_base_source(source):
 
 _performance_early_match = _nfl_odds_timing_guard_matches
 _performance_early_base = _nfl_odds_timing_base_source
-def _nfl_odds_timing_guard_matches(source):return _performance_early_match(_guard_performance_base_source(source))
-def _nfl_odds_timing_base_source(source):return _performance_early_base(_guard_performance_base_source(source))
+def _nfl_odds_timing_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _performance_early_match(_guard_performance_base_source(source))
+def _nfl_odds_timing_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _performance_early_base(_guard_performance_base_source(source))
 _nfl_odds_timing_base_source.cache_clear = _performance_early_base.cache_clear
 _nfl_odds_timing_base_source.cache_info = _performance_early_base.cache_info
 
 _odds_timing_early_match = _nfl_odds_guard_matches
 _odds_timing_early_base = _nfl_odds_base_source
-def _nfl_odds_guard_matches(source):return _odds_timing_early_match(_nfl_odds_timing_base_source(source))
-def _nfl_odds_base_source(source):return _odds_timing_early_base(_nfl_odds_timing_base_source(source))
+def _nfl_odds_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _odds_timing_early_match(_nfl_odds_timing_base_source(source))
+def _nfl_odds_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _odds_timing_early_base(_nfl_odds_timing_base_source(source))
 _nfl_odds_base_source.cache_clear = _odds_timing_early_base.cache_clear
 _nfl_odds_base_source.cache_info = _odds_timing_early_base.cache_info
 
 _odds_early_match = _nfl_scenario_guard_matches
 _odds_early_base = _nfl_scenario_base_source
-def _nfl_scenario_guard_matches(source):return _odds_early_match(_nfl_odds_base_source(source))
-def _nfl_scenario_base_source(source):return _odds_early_base(_nfl_odds_base_source(source))
+def _nfl_scenario_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _odds_early_match(_nfl_odds_base_source(source))
+def _nfl_scenario_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _odds_early_base(_nfl_odds_base_source(source))
 _nfl_scenario_base_source.cache_clear = _odds_early_base.cache_clear
 _nfl_scenario_base_source.cache_info = _odds_early_base.cache_info
 
 _scenario_boot_match = _ci_timing_guard_matches
 _scenario_boot_base = _ci_timing_base_source
-def _ci_timing_guard_matches(source):return _scenario_boot_match(_nfl_scenario_base_source(source))
-def _ci_timing_base_source(source):return _scenario_boot_base(_nfl_scenario_base_source(source))
+def _ci_timing_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _scenario_boot_match(_nfl_scenario_base_source(source))
+def _ci_timing_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _scenario_boot_base(_nfl_scenario_base_source(source))
 
 _ci_timing_boot_match = _nfl_diagnostics_guard_matches
 _ci_timing_boot_base = _nfl_diagnostics_base_source
-def _nfl_diagnostics_guard_matches(source):return _ci_timing_boot_match(_ci_timing_base_source(source))
-def _nfl_diagnostics_base_source(source):return _ci_timing_boot_base(_ci_timing_base_source(source))
+def _nfl_diagnostics_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _ci_timing_boot_match(_ci_timing_base_source(source))
+def _nfl_diagnostics_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _ci_timing_boot_base(_ci_timing_base_source(source))
 
 _nfl_diagnostics_boot_match = _nfl_scoring_guard_matches
 _nfl_diagnostics_boot_base = _nfl_scoring_base_source
-def _nfl_scoring_guard_matches(source):return _nfl_diagnostics_boot_match(_nfl_diagnostics_base_source(source))
-def _nfl_scoring_base_source(source):return _nfl_diagnostics_boot_base(_nfl_diagnostics_base_source(source))
+def _nfl_scoring_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _nfl_diagnostics_boot_match(_nfl_diagnostics_base_source(source))
+def _nfl_scoring_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _nfl_diagnostics_boot_base(_nfl_diagnostics_base_source(source))
 
 _nfl_scoring_boot_nfl_match = _nfl_observed_guard_matches
 _nfl_scoring_boot_nfl_base = _nfl_observed_base_source
-def _nfl_observed_guard_matches(source): return _nfl_scoring_boot_nfl_match(_nfl_scoring_base_source(source))
-def _nfl_observed_base_source(source): return _nfl_scoring_boot_nfl_base(_nfl_scoring_base_source(source))
+def _nfl_observed_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _nfl_scoring_boot_nfl_match(_nfl_scoring_base_source(source))
+def _nfl_observed_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _nfl_scoring_boot_nfl_base(_nfl_scoring_base_source(source))
 
 _nfl_observed_boot_nfl_match = _nfl_owner_guard_matches
 _nfl_observed_boot_nfl_base = _nfl_owner_base_source
-def _nfl_owner_guard_matches(source): return _nfl_observed_boot_nfl_match(_nfl_observed_base_source(source))
-def _nfl_owner_base_source(source): return _nfl_observed_boot_nfl_base(_nfl_observed_base_source(source))
+def _nfl_owner_guard_matches(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _nfl_observed_boot_nfl_match(_nfl_observed_base_source(source))
+def _nfl_owner_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
+    return _nfl_observed_boot_nfl_base(_nfl_observed_base_source(source))
 
 _nfl_owner_peel = _nfl_owner_base_source
 
@@ -31418,12 +33009,20 @@ _nfl_owner_boot_cloud_peel = _cloud_peel_exact_guard
 def _cloud_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_owner_boot_cloud_match(_nfl_owner_peel(source))
 def _cloud_peel_exact_guard(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_owner_boot_cloud_peel(_nfl_owner_peel(source))
@@ -31432,12 +33031,20 @@ _nfl_owner_boot_discovery_parent = _discovery_parent_guard_source
 def _discovery_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_owner_boot_discovery_match(_nfl_owner_peel(source))
 def _discovery_parent_guard_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_owner_boot_discovery_parent(_nfl_owner_peel(source))
@@ -31453,6 +33060,10 @@ OWNER_SOURCE_RECONSTRUCTIONS = {'streamlit_app.py': {'before_sha256': '2883ffc10
 def _owner_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     reviewed = OWNER_REVIEWED_GUARD_SHA256.encode('ascii')
@@ -31461,6 +33072,10 @@ def _owner_guard_matches(source):
 def _owner_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNCAAF_OWNER_BOOTSTRAP =' not in source: return source
@@ -31480,12 +33095,20 @@ _owner_boot_discovery_parent = _discovery_parent_guard_source
 def _cloud_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _owner_boot_cloud_match(_owner_peel(source))
 def _cloud_peel_exact_guard(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _owner_boot_cloud_peel(_owner_peel(source))
@@ -31493,12 +33116,20 @@ def _cloud_peel_exact_guard(source):
 def _discovery_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _owner_boot_discovery_match(_owner_peel(source))
 def _discovery_parent_guard_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _owner_boot_discovery_parent(_owner_peel(source))
@@ -31507,12 +33138,20 @@ _nfl_owner_early_owner_peel = _owner_base_source
 def _owner_guard_matches(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_owner_early_owner_match(_nfl_owner_peel(source))
 def _owner_base_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_owner_early_owner_peel(_nfl_owner_peel(source))
@@ -31529,6 +33168,13 @@ for _ncaaf_pilot_name, _ncaaf_pilot_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -31578,6 +33224,10 @@ DISCOVERY_BINDING_SHA256 = "ba3593a5b8dd60e3b26641522a35dd7f8b4f135a6b06c8f3aacd
 def _discovery_parent_guard_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNCAAF_DISCOVERY_BOOTSTRAP =' not in source:
@@ -31590,6 +33240,10 @@ def _discovery_parent_guard_source(source):
 def _cloud_peel_exact_guard(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =' not in source: return source
@@ -31602,6 +33256,10 @@ _owner_mid_discovery_parent = _discovery_parent_guard_source
 def _discovery_parent_guard_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _owner_mid_discovery_parent(_owner_peel(source))
@@ -31611,6 +33269,10 @@ _owner_mid_cloud_peel = _cloud_peel_exact_guard
 def _cloud_peel_exact_guard(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _owner_mid_cloud_peel(_owner_peel(source))
@@ -31619,6 +33281,10 @@ _nfl_owner_mid_discovery_parent = _discovery_parent_guard_source
 def _discovery_parent_guard_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_owner_mid_discovery_parent(_nfl_owner_peel(source))
@@ -31628,6 +33294,10 @@ _nfl_owner_mid_cloud_peel = _cloud_peel_exact_guard
 def _cloud_peel_exact_guard(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_owner_mid_cloud_peel(_nfl_owner_peel(source))
@@ -31674,6 +33344,13 @@ for _discovery_name, _discovery_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -31711,6 +33388,10 @@ CLOUD_BINDING_SHA256 = "afc6a973a246079e699b80d82e84d6c50ef4283256a838f733743bd0
 def _cloud_peel_exact_guard(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if b'\nNCAAF_CLOUD_BACKUP_BOOTSTRAP =' not in source: return source
@@ -31721,6 +33402,10 @@ _cloud_inherited_discovery_parent = _discovery_parent_guard_source
 def _discovery_parent_guard_source(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _cloud_inherited_discovery_parent(_cloud_peel_exact_guard(source))
@@ -31730,6 +33415,10 @@ _owner_late_cloud_peel = _cloud_peel_exact_guard
 def _cloud_peel_exact_guard(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _owner_late_cloud_peel(_owner_peel(source))
@@ -31738,6 +33427,10 @@ _nfl_owner_late_cloud_peel = _cloud_peel_exact_guard
 def _cloud_peel_exact_guard(source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     if len(source)==8012430:source=_document_main_project(source,'main')
     # DOCUMENT_MAIN_HOOK_END
     return _nfl_owner_late_cloud_peel(_nfl_owner_peel(source))
@@ -31785,6 +33478,13 @@ for _cloud_name,_cloud_method in list(globals().items()):
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -31851,6 +33551,10 @@ def _owner_binding():
 def _owner_previous_source(path, source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path == GUARD_PATH: return _owner_base_source(source)
@@ -31896,6 +33600,13 @@ for _owner_name, _owner_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -31971,6 +33682,10 @@ def _nfl_owner_binding():
 def _nfl_owner_previous_source(path, source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path == GUARD_PATH: return _nfl_owner_base_source(source)
@@ -32028,6 +33743,13 @@ for _nfl_owner_name, _nfl_owner_method in list(globals().items()):
 def _dfs_guard_matches(source, reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32062,6 +33784,10 @@ def _nfl_observed_binding():
 def _nfl_observed_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path == GUARD_PATH: return _nfl_observed_base_source(source)
@@ -32105,6 +33831,13 @@ _observed_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32131,6 +33864,10 @@ def _nfl_scoring_binding():
 def _nfl_scoring_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path == GUARD_PATH: return _nfl_scoring_base_source(source)
@@ -32176,6 +33913,13 @@ _scoring_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32202,6 +33946,10 @@ def _nfl_diagnostics_binding():
 def _nfl_diagnostics_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _nfl_diagnostics_base_source(source)
@@ -32229,6 +33977,13 @@ _diagnostics_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32255,6 +34010,10 @@ def _ci_timing_binding():
 def _ci_timing_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _ci_timing_base_source(source)
@@ -32282,6 +34041,13 @@ _timing_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32308,6 +34074,10 @@ def _nfl_scenario_binding():
 def _nfl_scenario_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _nfl_scenario_base_source(source)
@@ -32350,6 +34120,13 @@ for _scenario_group_name,_scenario_group in list(globals().items()):
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32392,6 +34169,13 @@ _odds_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32434,6 +34218,13 @@ _odds_timing_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32476,6 +34267,13 @@ _performance_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32533,6 +34331,13 @@ _scan_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32576,6 +34381,13 @@ _bootstrap_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32619,6 +34431,13 @@ _reads_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32679,6 +34498,10 @@ for _memo_name,_memo_method in list(globals().items()):
 _DOCUMENT_MAIN_ORIGINAL_TIMING_SOURCE = _nfl_odds_timing_base_source
 
 def _nfl_odds_timing_base_source(source):
+
+    # FROZEN66_HOOK_BEGIN
+    if len(source)==8077135:source=_frozen66_base_source(source)
+    # FROZEN66_HOOK_END
     source=_guard_memo_base_source(source)
     source=_guard_reads_base_source(source)
     source=_guard_bootstrap_base_source(source)
@@ -32694,6 +34517,13 @@ _memo_original_dfs_guard_matches=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32737,6 +34567,13 @@ _listing_previous_dfs_match=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32768,6 +34605,13 @@ _cost_original_dfs_match=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32780,7 +34624,12 @@ def _dfs_guard_matches(source,reviewed):
     try:return _cost_original_dfs_match(_listing_cost_base_source(source),reviewed)
     except ValueError:return False
 _cost_original_timing_source=_nfl_odds_timing_previous_source
-def _nfl_odds_timing_previous_source(path,source):return _cost_original_timing_source(path,_listing_cost_previous_source(path,source))
+def _nfl_odds_timing_previous_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
+    return _cost_original_timing_source(path,_listing_cost_previous_source(path,source))
 
 def _listing_cost_binding():
     raw=(ROOT/LISTING_COST_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
@@ -32799,6 +34648,13 @@ _immutable_previous_dfs_match=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32816,6 +34672,10 @@ def _dfs_guard_matches(source,reviewed):
 def _listing_cost_previous_source(path,source):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path==GUARD_PATH:return _listing_cost_base_source(source)
@@ -32846,6 +34706,13 @@ _metadata_previous_dfs_match=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32859,7 +34726,12 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _metadata_previous_profile=_listing_cost_previous_source
 
-def _listing_cost_previous_source(path,source):return _metadata_previous_profile(path,_listing_metadata_previous_source(path,source))
+def _listing_cost_previous_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
+    return _metadata_previous_profile(path,_listing_metadata_previous_source(path,source))
 
 def _listing_metadata_binding():
     raw=(ROOT/LISTING_METADATA_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
@@ -32880,6 +34752,13 @@ _capacity_previous_dfs_match=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -32893,7 +34772,12 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _capacity_previous_source=_listing_cost_previous_source
 
-def _listing_cost_previous_source(path,source):return _capacity_previous_source(path,_listing_capacity_previous_source(path,source))
+def _listing_cost_previous_source(path,source):
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
+    return _capacity_previous_source(path,_listing_capacity_previous_source(path,source))
 
 def _listing_capacity_binding():
     raw=(ROOT/LISTING_CAPACITY_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
@@ -32913,6 +34797,13 @@ _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source) in (6483492, 6610124, 6717016):return _document_main_historical_dfs(source,reviewed)
     if len(source)==8012430:
@@ -33337,6 +35228,10 @@ def _listing_capacity_previous_source(path,source):
     # NFL_PDF_RECONCILE_PREVIOUS_BEGIN
 
     # DOCUMENT_MAIN_HOOK_BEGIN
+
+    # FROZEN66_HOOK_BEGIN
+    source=_frozen66_previous(path,source)
+    # FROZEN66_HOOK_END
     source=_document_main_previous(path,source,'main')
     # DOCUMENT_MAIN_HOOK_END
     if path!=GUARD_PATH:
@@ -33835,6 +35730,13 @@ def _run_nfl_recon_perf_integrated(manifest_path,base):
 # DOCUMENT_MAIN_RUN_BEGIN
 _DOCUMENT_MAIN_ORIGINAL_DFS = _dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+
+    # FROZEN66_HOOK_BEGIN
+    if reviewed==FROZEN66_REVIEWED_GUARD_SHA256:return _frozen66_guard_matches(source)
+    if len(source)==8077135:
+        try:source=_frozen66_base_source(source)
+        except ValueError:return False
+    # FROZEN66_HOOK_END
     if reviewed==DOCUMENT_MAIN_REVIEWED_GUARD_SHA256:return _document_main_guard_matches(source)
     if len(source)==8012430:
         try:
@@ -33861,7 +35763,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", DOCUMENT_MAIN_POLICY_PATH):
+        if exists_at("HEAD", FROZEN66_POLICY_PATH):
+            code, report = _run_frozen66_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", DOCUMENT_MAIN_POLICY_PATH):
             code, report = _run_document_main_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NFL_RECON_PERF_POLICY_PATH):
             code, report = _run_nfl_recon_perf_integrated(args.manifest, args.base)

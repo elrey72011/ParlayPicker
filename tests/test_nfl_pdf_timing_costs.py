@@ -131,3 +131,15 @@ def test_original_assertions_preserved_except_approved_current_cardinality():
         old=assertions(previous);current=assertions(raw);assert set(old)==set(current)
         for name in old:
             if name not in exempt:assert old[name]==current[name]
+
+
+@pytest.fixture(autouse=True)
+def exact_main_profile_for_frozen_66_transition(request,tmp_path,monkeypatch):
+    """The frozen 66-entry transition gets exact main bytes, never live costs."""
+    if request.node.name!='test_exact_66_completed_xml_costs_and_separate_successor_metadata':return
+    original=ROOT
+    value=(original/'docs/paid-launch/football-document-main-profile-v1.json').read_bytes().replace(bytes([13,10]),bytes([10]))
+    assert hashlib.sha256(value).hexdigest()=='090c444804b9d7941b8e8200f60dd02a7de3e0e97b7df89eca7b153c2a5470f7'
+    root=tmp_path/'SYNTHETIC-exact-main-66-transition';dest=root/PROFILE
+    dest.parent.mkdir(parents=True);dest.write_bytes(value)
+    monkeypatch.setattr(sys.modules[__name__],'ROOT',root)
