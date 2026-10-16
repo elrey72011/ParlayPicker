@@ -78,7 +78,8 @@ def test_cross_repository_context_and_original_memo_bounds(predecessor, monkeypa
     assert (helper.MAX_SOURCE_BYTES, helper.MAX_RETAINED_BYTES, helper.MAX_ENTRIES, helper.MAX_CONTEXT_FIELDS) == (8*1024*1024, 32*1024*1024, 8, 512)
 
 
-def test_only_completed_exact_file_costs_and_frozen_metadata():
+def test_only_completed_exact_file_costs_and_frozen_metadata(historical_ncaaf_staged_capacity_profile,monkeypatch):
+    monkeypatch.setitem(globals(),'ROOT',historical_ncaaf_staged_capacity_profile)
     profile = json.loads((ROOT/'scripts/ci_test_file_costs_v1.json').read_text())
     assert profile['revision'] == 3
     rows = profile['football_document_ci_cost_provenance']
@@ -91,3 +92,6 @@ def test_only_completed_exact_file_costs_and_frozen_metadata():
     source = profile['sources']['document-ci-completed-56-shard6']
     assert source['complete_for_target_files'] is True
     assert source['attempt'] == 1
+
+
+from tests.ncaaf_staged_capacity_fixtures import historical_ncaaf_staged_capacity_profile

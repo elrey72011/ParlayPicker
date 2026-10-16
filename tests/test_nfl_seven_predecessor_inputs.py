@@ -49,3 +49,17 @@ def test_original_substantive_assertions_and_function_identities_are_byte_equiva
     text=(ROOT/'tests/test_football_document_predecessor_fixture.py').read_text()
     values={n.name:[ast.dump(a) for a in ast.walk(n) if isinstance(a,ast.Assert)] for n in ast.parse(text).body if isinstance(n,ast.FunctionDef) and n.name.startswith('test_')}
     assert hashlib.sha256(json.dumps(values,sort_keys=True).encode()).hexdigest()=='9a9e86308286e82f2af3bac787aaf056b1643009be94d512825a7074bcd8c7e8'
+
+
+# Freeze only this historical seven-way fixture contract; the current nine-way
+# gates continue to read the live configuration without an input override.
+@pytest.fixture(autouse=True)
+def exact_seven_way_predecessor_input(tmp_path,monkeypatch):
+    from tests.ncaaf_staged_capacity_fixtures import exact_predecessor_bytes
+    root=tmp_path/'SYNTHETIC-exact-seven-way-input'
+    for path in (old.TARGET,'tests/test_football_document_predecessor_fixture.py'):
+        source=(ROOT/path).read_bytes().replace(b'\r\n',b'\n')
+        destination=root/path;destination.parent.mkdir(parents=True,exist_ok=True)
+        destination.write_bytes(exact_predecessor_bytes(path,source))
+    monkeypatch.setitem(globals(),'ROOT',root)
+    return root

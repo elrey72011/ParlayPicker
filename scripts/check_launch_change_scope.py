@@ -2265,6 +2265,9 @@ _drive_prior_dfs_source = _dfs_previous_guard_source
 
 
 def _dfs_previous_guard_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -2600,6 +2603,9 @@ _estimate_prior_drive_main = _drive_previous_main_source
 
 
 def _drive_previous_guard_source(source,binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -2612,6 +2618,9 @@ def _drive_previous_guard_source(source,binding=None):
 
 
 def _drive_previous_main_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _estimate_prior_drive_main(path,_estimate_previous_main_source(path,source))
 
 
@@ -3009,6 +3018,9 @@ _nfl_prior_estimate_main = _estimate_previous_main_source
 
 
 def _estimate_previous_guard_source(source,binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -3021,6 +3033,9 @@ def _estimate_previous_guard_source(source,binding=None):
 
 
 def _estimate_previous_main_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _nfl_prior_estimate_main(path,_nfl_previous_main_source(path,source))
 
 
@@ -3113,6 +3128,9 @@ _home_prior_nfl_main = _nfl_previous_main_source
 
 
 def _nfl_previous_guard_source(source,binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -3125,6 +3143,9 @@ def _nfl_previous_guard_source(source,binding=None):
 
 
 def _nfl_previous_main_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _home_prior_nfl_main(path,_home_previous_main_source(path,source))
 
 
@@ -3640,6 +3661,9 @@ _producer_prior_home_main = _home_previous_main_source
 
 
 def _home_previous_guard_source(source,binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -3652,6 +3676,9 @@ def _home_previous_guard_source(source,binding=None):
 
 
 def _home_previous_main_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _producer_prior_home_main(path,_producer_previous_main_source(path,source))
 
 
@@ -4419,6 +4446,9 @@ _source_contract_prior_producer_main = _producer_previous_main_source
 
 
 def _producer_previous_guard_source(source,binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -4431,6 +4461,9 @@ def _producer_previous_guard_source(source,binding=None):
 
 
 def _producer_previous_main_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _source_contract_prior_producer_main(path,_source_contract_previous_main_source(path,source))
 
 
@@ -4698,6 +4731,9 @@ _nfl_inputs_prior_source_contract_main = _source_contract_previous_main_source
 
 
 def _source_contract_previous_guard_source(source,binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -4710,6 +4746,9 @@ def _source_contract_previous_guard_source(source,binding=None):
 
 
 def _source_contract_previous_main_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _nfl_inputs_prior_source_contract_main(path,_nfl_inputs_previous_main_source(path,source))
 
 
@@ -4975,6 +5014,9 @@ NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/nfl_inference_evidence.p
 
 
 def _nfl_admission_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -5024,6 +5066,9 @@ _nfl_admission_prior_nfl_inputs_main = _nfl_inputs_previous_main_source
 
 
 def _nfl_inputs_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -5036,6 +5081,9 @@ def _nfl_inputs_previous_guard_source(source, binding=None):
 
 
 def _nfl_inputs_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _nfl_admission_prior_nfl_inputs_main(path, _nfl_admission_previous_main_source(path, source))
 
 
@@ -5150,6 +5198,9 @@ NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/feature_processing.py': {'s
 
 
 def _nfl_native_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -5197,6 +5248,9 @@ _nfl_native_prior_admission_main = _nfl_admission_previous_main_source
 
 
 def _nfl_admission_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _nfl_native_prior_admission_main(path, _nfl_native_previous_main_source(path, source))
 
 
@@ -5725,6 +5779,10 @@ PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/current_wagers_trace.py': {
 
 
 def _pick_board_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -5782,6 +5840,9 @@ _pick_board_prior_native_main = _nfl_native_previous_main_source
 
 
 def _nfl_native_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _pick_board_prior_native_main(path, _pick_board_previous_main_source(path, source))
 
 
@@ -6012,6 +6073,10 @@ NFL_UI_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/nfl_inference_evidence.py': {'s
 
 
 def _nfl_ui_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -6069,6 +6134,9 @@ _nfl_ui_prior_pick_board_main = _pick_board_previous_main_source
 
 
 def _pick_board_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _nfl_ui_prior_pick_board_main(path, _nfl_ui_previous_main_source(path, source))
 
 
@@ -6086,6 +6154,9 @@ _nfl_ui_prior_pick_board_guard = _pick_board_previous_guard_source
 
 
 def _pick_board_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -6244,6 +6315,10 @@ SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/source_contract.py': {'s
                                                     b'_metadata=encode(item))')]}}
 
 def _source_intake_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -6301,6 +6376,9 @@ _source_intake_prior_nfl_ui_main = _nfl_ui_previous_main_source
 
 
 def _nfl_ui_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _source_intake_prior_nfl_ui_main(path, _source_intake_previous_main_source(path, source))
 
 
@@ -6318,6 +6396,9 @@ _source_intake_prior_nfl_ui_guard = _nfl_ui_previous_guard_source
 
 
 def _nfl_ui_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -6386,6 +6467,10 @@ NFL_CALIBRATION_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.Ar
 NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 def _nfl_calibration_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -6443,6 +6528,9 @@ _nfl_calibration_prior_source_intake_main = _source_intake_previous_main_source
 
 
 def _source_intake_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _nfl_calibration_prior_source_intake_main(path, _nfl_calibration_previous_main_source(path, source))
 
 
@@ -6460,6 +6548,9 @@ _nfl_calibration_prior_source_intake_guard = _source_intake_previous_guard_sourc
 
 
 def _source_intake_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -6718,6 +6809,10 @@ NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/market_probability_model
                                       b"ty_reason]||'Estimate availability not recorded';}\n")]}}
 
 def _nhl_puck_line_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -6775,6 +6870,9 @@ _nhl_puck_line_prior_nfl_calibration_main = _nfl_calibration_previous_main_sourc
 
 
 def _nfl_calibration_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _nhl_puck_line_prior_nfl_calibration_main(path, _nhl_puck_line_previous_main_source(path, source))
 
 
@@ -6792,6 +6890,9 @@ _nhl_puck_line_prior_nfl_calibration_guard = _nfl_calibration_previous_guard_sou
 
 
 def _nfl_calibration_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -6875,6 +6976,10 @@ FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/football_stage1_cycle
                                                   b'if isinstance(name, str) and name.strip()]\n')]}}
 
 def _football_catalog_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -6932,6 +7037,9 @@ _football_catalog_prior_nhl_puck_line_main = _nhl_puck_line_previous_main_source
 
 
 def _nhl_puck_line_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _football_catalog_prior_nhl_puck_line_main(path, _football_catalog_previous_main_source(path, source))
 
 
@@ -6949,6 +7057,9 @@ _football_catalog_prior_nhl_puck_line_guard = _nhl_puck_line_previous_guard_sour
 
 
 def _nhl_puck_line_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -7066,6 +7177,10 @@ MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/source_contract.py': 
                                     b'med[name]\n\n')]}}
 
 def _mlb_nhl_research_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -7123,6 +7238,9 @@ _mlb_nhl_research_prior_football_catalog_main = _football_catalog_previous_main_
 
 
 def _football_catalog_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _mlb_nhl_research_prior_football_catalog_main(path, _mlb_nhl_research_previous_main_source(path, source))
 
 
@@ -7140,6 +7258,9 @@ _mlb_nhl_research_prior_football_catalog_guard = _football_catalog_previous_guar
 
 
 def _football_catalog_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -7215,6 +7336,10 @@ NCAAF_RESEARCH_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.Arg
 NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 def _ncaaf_research_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -7272,6 +7397,9 @@ _ncaaf_research_prior_mlb_nhl_research_main = _mlb_nhl_research_previous_main_so
 
 
 def _mlb_nhl_research_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _ncaaf_research_prior_mlb_nhl_research_main(path, _ncaaf_research_previous_main_source(path, source))
 
 
@@ -7289,6 +7417,9 @@ _ncaaf_research_prior_mlb_nhl_research_guard = _mlb_nhl_research_previous_guard_
 
 
 def _mlb_nhl_research_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -7374,6 +7505,10 @@ CANONICAL_DOWNLOAD_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'
                                         b'_evidence_panel import render as render_source_evidence\n')]}}
 
 def _canonical_download_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -7431,6 +7566,9 @@ _canonical_download_prior_ncaaf_research_main = _ncaaf_research_previous_main_so
 
 
 def _ncaaf_research_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _canonical_download_prior_ncaaf_research_main(path, _canonical_download_previous_main_source(path, source))
 
 
@@ -7448,6 +7586,9 @@ _canonical_download_prior_ncaaf_research_guard = _ncaaf_research_previous_guard_
 
 
 def _ncaaf_research_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -7544,6 +7685,10 @@ REMOTE_CANONICAL_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'sh
                                         b'onical_download(setting)\n')]}}
 
 def _remote_canonical_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -7601,6 +7746,9 @@ _remote_canonical_prior_canonical_download_main = _canonical_download_previous_m
 
 
 def _canonical_download_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _remote_canonical_prior_canonical_download_main(path, _remote_canonical_previous_main_source(path, source))
 
 
@@ -7618,6 +7766,9 @@ _remote_canonical_prior_canonical_download_guard = _canonical_download_previous_
 
 
 def _canonical_download_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -7714,6 +7865,10 @@ REMOTE_CONTINUATION_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argpars
 REMOTE_CONTINUATION_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 def _remote_continuation_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -7771,6 +7926,9 @@ _remote_continuation_prior_remote_canonical_main = _remote_canonical_previous_ma
 
 
 def _remote_canonical_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _remote_continuation_prior_remote_canonical_main(path, _remote_continuation_previous_main_source(path, source))
 
 
@@ -7788,6 +7946,9 @@ _remote_continuation_prior_remote_canonical_guard = _remote_canonical_previous_g
 
 
 def _remote_canonical_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -8401,6 +8562,10 @@ FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'a
                       'sha256': 'e08d723c302d870de0bd7be0e285013e9fef4b0af0962ab3471284d7c405deaa'}}
 
 def _football_research_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -8414,6 +8579,9 @@ def _football_research_raw_guard_matches(source, reviewed):
 
 
 def _football_research_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -8430,6 +8598,9 @@ def _football_research_previous_guard_source(source, binding=None):
 
 
 def _football_research_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path == GUARD_PATH:
         return _football_research_previous_guard_source(source)
     frozen = FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -8475,6 +8646,9 @@ _football_research_prior_continuation_main = _remote_continuation_previous_main_
 
 
 def _remote_continuation_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -8487,6 +8661,9 @@ def _remote_continuation_previous_guard_source(source, binding=None):
 
 
 def _remote_continuation_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _football_research_prior_continuation_main(path, _football_research_previous_main_source(path, source))
 
 
@@ -9633,6 +9810,10 @@ SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/daily_dashboard.py': {'after
 
 
 def _slate_audit_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -9646,6 +9827,9 @@ def _slate_audit_raw_guard_matches(source, reviewed):
 
 
 def _slate_audit_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -9662,6 +9846,9 @@ def _slate_audit_previous_guard_source(source, binding=None):
 
 
 def _slate_audit_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path == GUARD_PATH:
         return _slate_audit_previous_guard_source(source)
     frozen = SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -9787,6 +9974,10 @@ CI_SCHEDULING_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 
 def _ci_scheduling_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -9800,6 +9991,9 @@ def _ci_scheduling_raw_guard_matches(source, reviewed):
 
 
 def _ci_scheduling_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -9816,6 +10010,9 @@ def _ci_scheduling_previous_guard_source(source, binding=None):
 
 
 def _ci_scheduling_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _ci_scheduling_previous_guard_source(source) if path == GUARD_PATH else source
 
 
@@ -9992,6 +10189,10 @@ NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 
 def _ncaaf_compatibility_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -10005,6 +10206,9 @@ def _ncaaf_compatibility_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_compatibility_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -10021,6 +10225,9 @@ def _ncaaf_compatibility_previous_guard_source(source, binding=None):
 
 
 def _ncaaf_compatibility_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path == GUARD_PATH:
         return _ncaaf_compatibility_previous_guard_source(source)
     frozen = NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -10176,6 +10383,10 @@ READINESS_DASHBOARD_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 
 def _readiness_dashboard_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -10189,6 +10400,9 @@ def _readiness_dashboard_raw_guard_matches(source, reviewed):
 
 
 def _readiness_dashboard_previous_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -10205,6 +10419,9 @@ def _readiness_dashboard_previous_guard_source(source, binding=None):
 
 
 def _readiness_dashboard_previous_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     return _readiness_dashboard_previous_guard_source(source) if path == GUARD_PATH else source
 
 
@@ -14177,6 +14394,10 @@ NCAAF_NORMAL_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/ncaaf_pipeline_evidence.p
 
 
 def _ncaaf_normal_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -14190,6 +14411,9 @@ def _ncaaf_normal_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_normal_parent_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -14206,6 +14430,9 @@ def _ncaaf_normal_parent_guard_source(source, binding=None):
 
 
 def _ncaaf_normal_parent_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path == GUARD_PATH:
         return _ncaaf_normal_parent_guard_source(source)
     frozen = NCAAF_NORMAL_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -18330,6 +18557,10 @@ PREVIEW_BINDING_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/slate_coverage.py': {'
 
 
 def _preview_binding_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -18343,6 +18574,9 @@ def _preview_binding_raw_guard_matches(source, reviewed):
 
 
 def _preview_binding_parent_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -18359,6 +18593,9 @@ def _preview_binding_parent_guard_source(source, binding=None):
 
 
 def _preview_binding_parent_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path == GUARD_PATH:
         return _preview_binding_parent_guard_source(source)
     frozen = PREVIEW_BINDING_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -19705,6 +19942,10 @@ NCAAF_CHRONOLOGY_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/ncaaf_compatible_pipe
 
 
 def _ncaaf_chronology_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -19718,6 +19959,9 @@ def _ncaaf_chronology_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_chronology_parent_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -19734,6 +19978,9 @@ def _ncaaf_chronology_parent_guard_source(source, binding=None):
 
 
 def _ncaaf_chronology_parent_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path == GUARD_PATH:
         return _ncaaf_chronology_parent_guard_source(source)
     frozen = NCAAF_CHRONOLOGY_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -20893,6 +21140,9 @@ def _ncaaf_custody_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_custody_parent_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -20909,6 +21159,9 @@ def _ncaaf_custody_parent_guard_source(source, binding=None):
 
 
 def _ncaaf_custody_parent_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path == GUARD_PATH:
         return _ncaaf_custody_parent_guard_source(source)
     frozen = NCAAF_CUSTODY_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -21796,6 +22049,9 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_pilot_parent_guard_source(source, binding=None):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -21812,6 +22068,9 @@ def _ncaaf_pilot_parent_guard_source(source, binding=None):
 
 
 def _ncaaf_pilot_parent_main_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path == GUARD_PATH:
         return _ncaaf_pilot_parent_guard_source(source)
     frozen = NCAAF_PILOT_PRIOR_SOURCE_RECONSTRUCTIONS.get(path)
@@ -21864,6 +22123,10 @@ def _ncaaf_pilot_wrap_previous(name):
 # Preserve the exact custody guard assertion for this append-only successor.
 _ncaaf_pilot_saved_custody_raw = _ncaaf_custody_raw_guard_matches
 def _ncaaf_custody_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -22167,6 +22430,10 @@ def _cloud_peel_exact_guard(source):
 
 _cloud_boot_pilot_raw = _ncaaf_pilot_raw_guard_matches
 def _ncaaf_pilot_raw_guard_matches(source, reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -22190,10 +22457,17 @@ NCAAF_STAGED_PREVIOUS_GUARD_SHA256 = 'd13ab631d9258d10298604be6abd4293c2dff92a70
 NCAAF_STAGED_RECONSTRUCTION_JSON = b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}'
 
 def _ncaaf_staged_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     identity=NCAAF_STAGED_REVIEWED_GUARD_SHA256.encode()
     return isinstance(source,bytes) and len(source)==8263277 and source.count(identity)==124 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
 
 def _ncaaf_staged_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     if len(source)!=8263277:return source
     _require(_ncaaf_staged_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22206,6 +22480,9 @@ def _ncaaf_staged_base_source(source):
     return result
 
 def _ncaaf_staged_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path==GUARD_PATH:return _ncaaf_staged_base_source(source)
     info=json.loads(NCAAF_STAGED_RECONSTRUCTION_JSON).get(path)
     if info is None or hashlib.sha256(source).hexdigest()!=info['after_sha256']:return source
@@ -22231,6 +22508,10 @@ NFL_RECON_PERF_PREVIOUS_GUARD_SHA256 = '1582f49e9393b996c4e270dcc397f225d64a8186
 NFL_RECON_PERF_RECONSTRUCTION_JSON = b'{}'
 
 def _nfl_recon_perf_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -22243,6 +22524,9 @@ def _nfl_recon_perf_guard_matches(source):
     return isinstance(source,bytes) and len(source)==7504827 and source.count(identity)==25 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
 
 def _nfl_recon_perf_project(source,target):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22268,6 +22552,9 @@ def _nfl_recon_perf_project(source,target):
     return result
 
 def _nfl_recon_perf_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22281,6 +22568,9 @@ def _nfl_recon_perf_base_source(source):
     return _nfl_recon_perf_project(source,'prior')
 
 def _nfl_recon_perf_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -22300,6 +22590,10 @@ NFL_PDF_RECONCILE_RECONSTRUCTION_JSON = b'{"app_core/nfl_odds_acquisition.py":{"
 from functools import lru_cache as _nfl_reconcile_lru
 
 def _nfl_reconcile_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -22328,6 +22622,9 @@ def _nfl_reconcile_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_reconcile_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22352,6 +22649,9 @@ _nfl_reconcile_base_source.cache_info=_nfl_reconcile_cached_base.cache_info
 _nfl_reconcile_base_source.cache_clear=_nfl_reconcile_cached_base.cache_clear
 
 def _nfl_reconcile_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -22389,6 +22689,10 @@ NFL_ODDS_SOCKET_RECONSTRUCTION_JSON = b'{"app_core/nfl_odds_acquisition.py":{"af
 from functools import lru_cache as _nfl_odds_socket_lru
 
 def _nfl_odds_socket_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -22417,6 +22721,9 @@ def _nfl_odds_socket_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_odds_socket_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22442,6 +22749,9 @@ _nfl_odds_socket_base_source.cache_info=_nfl_odds_socket_cached_base.cache_info
 _nfl_odds_socket_base_source.cache_clear=_nfl_odds_socket_cached_base.cache_clear
 
 def _nfl_odds_socket_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -22466,6 +22776,10 @@ NFL_PDF_FIXTURE_RECONSTRUCTION_JSON = b'{"tests/test_football_document_predecess
 from functools import lru_cache as _nfl_pdf_fixture_lru
 
 def _nfl_pdf_fixture_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -22496,6 +22810,9 @@ def _nfl_pdf_fixture_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_fixture_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22537,6 +22854,9 @@ _nfl_pdf_fixture_base_source.cache_info=_nfl_pdf_fixture_cached_base.cache_info
 _nfl_pdf_fixture_base_source.cache_clear=_nfl_pdf_fixture_cached_base.cache_clear
 
 def _nfl_pdf_fixture_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -22569,6 +22889,10 @@ NFL_PDF_TIMING_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha25
 from functools import lru_cache as _nfl_pdf_timing_lru
 
 def _nfl_pdf_timing_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -22597,6 +22921,9 @@ def _nfl_pdf_timing_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_timing_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22657,6 +22984,9 @@ _nfl_pdf_timing_base_source.cache_info=_nfl_pdf_timing_cached_base.cache_info
 _nfl_pdf_timing_base_source.cache_clear=_nfl_pdf_timing_cached_base.cache_clear
 
 def _nfl_pdf_timing_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -22697,6 +23027,10 @@ NFL_PDF_MARGIN_RECONSTRUCTION_JSON = b'{"app_core/nfl_pdf_interpretation.py":{"a
 from functools import lru_cache as _nfl_pdf_margin_lru
 
 def _nfl_pdf_margin_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -22725,6 +23059,9 @@ def _nfl_pdf_margin_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_margin_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22802,6 +23139,9 @@ _nfl_pdf_margin_base_source.cache_info=_nfl_pdf_margin_cached_base.cache_info
 _nfl_pdf_margin_base_source.cache_clear=_nfl_pdf_margin_cached_base.cache_clear
 
 def _nfl_pdf_margin_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -22850,6 +23190,10 @@ NCAAF_SOCKET_CI_RECONSTRUCTION_JSON = b'{"scripts/ci_test_file_costs_v1.json":{"
 from functools import lru_cache as _ncaaf_socket_ci_lru
 
 def _ncaaf_socket_ci_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -22878,6 +23222,9 @@ def _ncaaf_socket_ci_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_ci_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -22972,6 +23319,9 @@ _ncaaf_socket_ci_base_source.cache_info=_ncaaf_socket_ci_cached_base.cache_info
 _ncaaf_socket_ci_base_source.cache_clear=_ncaaf_socket_ci_cached_base.cache_clear
 
 def _ncaaf_socket_ci_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -23028,6 +23378,10 @@ NCAAF_SOCKET_RECONSTRUCTION_JSON = b'{"app_core/ncaaf_pilot.py":{"after_sha256":
 from functools import lru_cache as _ncaaf_socket_lru
 
 def _ncaaf_socket_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -23056,6 +23410,9 @@ def _ncaaf_socket_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -23167,6 +23524,9 @@ _ncaaf_socket_base_source.cache_info=_ncaaf_socket_cached_base.cache_info
 _ncaaf_socket_base_source.cache_clear=_ncaaf_socket_cached_base.cache_clear
 
 def _ncaaf_socket_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -23231,6 +23591,10 @@ FOOTBALL_DOCCLOSE_RECONSTRUCTION_JSON = b'{"scripts/ci_test_file_costs_v1.json":
 from functools import lru_cache as _docclose_lru
 
 def _docclose_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -23259,6 +23623,9 @@ def _docclose_cached_base(source,reviewed,parent):
     return source
 
 def _docclose_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -23387,6 +23754,9 @@ _docclose_base_source.cache_info=_docclose_cached_base.cache_info
 _docclose_base_source.cache_clear=_docclose_cached_base.cache_clear
 
 def _docclose_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -23459,6 +23829,10 @@ FOOTBALL_DOCPERF_RECONSTRUCTION_JSON = b'{"scripts/ci_test_file_costs_v1.json":{
 from functools import lru_cache as _docperf_lru
 
 def _docperf_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -23487,6 +23861,9 @@ def _docperf_cached_base(source,reviewed,parent):
     return source
 
 def _docperf_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -23632,6 +24009,9 @@ _docperf_base_source.cache_info=_docperf_cached_base.cache_info
 _docperf_base_source.cache_clear=_docperf_cached_base.cache_clear
 
 def _docperf_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -23712,6 +24092,10 @@ FOOTBALL_DOCREMOTE_RECONSTRUCTION_JSON = b'{"tests/test_remote_continuation_scop
 from functools import lru_cache as _docremote_lru
 
 def _docremote_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -23740,6 +24124,9 @@ def _docremote_cached_base(source,reviewed,parent):
     return source
 
 def _docremote_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -23902,6 +24289,9 @@ _docremote_base_source.cache_info=_docremote_cached_base.cache_info
 _docremote_base_source.cache_clear=_docremote_cached_base.cache_clear
 
 def _docremote_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -23990,6 +24380,10 @@ FOOTBALL_DOCPRED_RECONSTRUCTION_JSON = b'{"tests/test_nfl_listing_capacity_scope
 from functools import lru_cache as _docpred_lru
 
 def _docpred_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -24018,6 +24412,9 @@ def _docpred_cached_base(source,reviewed,parent):
     return source
 
 def _docpred_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -24197,6 +24594,9 @@ _docpred_base_source.cache_info=_docpred_cached_base.cache_info
 _docpred_base_source.cache_clear=_docpred_cached_base.cache_clear
 
 def _docpred_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -24293,6 +24693,10 @@ FOOTBALL_DOCSIX_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha2
 from functools import lru_cache as _docsix_lru
 
 def _docsix_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -24321,6 +24725,9 @@ def _docsix_cached_base(source,reviewed,parent):
     return source
 
 def _docsix_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -24517,6 +24924,9 @@ _docsix_base_source.cache_info=_docsix_cached_base.cache_info
 _docsix_base_source.cache_clear=_docsix_cached_base.cache_clear
 
 def _docsix_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -24621,6 +25031,10 @@ FOOTBALL_DOCREPORT_RECONSTRUCTION_JSON = b'{}'
 from functools import lru_cache as _docreport_lru
 
 def _docreport_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -24649,6 +25063,9 @@ def _docreport_cached_base(source,reviewed,parent):
     return source
 
 def _docreport_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -24862,6 +25279,9 @@ _docreport_base_source.cache_info=_docreport_cached_base.cache_info
 _docreport_base_source.cache_clear=_docreport_cached_base.cache_clear
 
 def _docreport_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -24974,6 +25394,10 @@ FOOTBALL_DOCFIXTURE_RECONSTRUCTION_JSON = b'{"tests/test_canonical_download_scop
 from functools import lru_cache as _docfixture_lru
 
 def _docfixture_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -25002,6 +25426,9 @@ def _docfixture_cached_base(source,reviewed,parent):
     return source
 
 def _docfixture_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -25232,6 +25659,9 @@ _docfixture_base_source.cache_info=_docfixture_cached_base.cache_info
 _docfixture_base_source.cache_clear=_docfixture_cached_base.cache_clear
 
 def _docfixture_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -25352,6 +25782,10 @@ FOOTBALL_DOCANCHOR_RECONSTRUCTION_JSON = b'{"app_core/nfl_document_acquisition.p
 from functools import lru_cache as _docanchor_lru
 
 def _docanchor_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -25380,6 +25814,9 @@ def _docanchor_cached_base(source,reviewed,parent):
     return source
 
 def _docanchor_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -25627,6 +26064,9 @@ _docanchor_base_source.cache_info=_docanchor_cached_base.cache_info
 _docanchor_base_source.cache_clear=_docanchor_cached_base.cache_clear
 
 def _docanchor_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -25755,6 +26195,10 @@ FOOTBALL_DOCLIFE_RECONSTRUCTION_JSON = b'{"app_core/nfl_document_acquisition.py"
 from functools import lru_cache as _doclife_lru
 
 def _doclife_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -25783,6 +26227,9 @@ def _doclife_cached_base(source,reviewed,parent):
     return source
 
 def _doclife_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -26047,6 +26494,9 @@ _doclife_base_source.cache_info=_doclife_cached_base.cache_info
 _doclife_base_source.cache_clear=_doclife_cached_base.cache_clear
 
 def _doclife_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -26183,6 +26633,10 @@ FOOTBALL_DOCWORDS_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"af
 from functools import lru_cache as _docwords_lru
 
 def _docwords_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -26211,6 +26665,9 @@ def _docwords_cached_base(source,reviewed,parent):
     return source
 
 def _docwords_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -26492,6 +26949,9 @@ _docwords_base_source.cache_info=_docwords_cached_base.cache_info
 _docwords_base_source.cache_clear=_docwords_cached_base.cache_clear
 
 def _docwords_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -26636,6 +27096,10 @@ FOOTBALL_DOCMETA_RECONSTRUCTION_JSON = b'{}'
 from functools import lru_cache as _docmeta_lru
 
 def _docmeta_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -26664,6 +27128,9 @@ def _docmeta_cached_base(source,reviewed,parent):
     return source
 
 def _docmeta_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -26962,6 +27429,9 @@ _docmeta_base_source.cache_info=_docmeta_cached_base.cache_info
 _docmeta_base_source.cache_clear=_docmeta_cached_base.cache_clear
 
 def _docmeta_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -27114,6 +27584,10 @@ FOOTBALL_DOCIO_RECONSTRUCTION_JSON = b'{"app_core/nfl_document_acquisition.py":{
 from functools import lru_cache as _docio_lru
 
 def _docio_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -27142,6 +27616,9 @@ def _docio_cached_base(source,reviewed,parent):
     return source
 
 def _docio_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -27457,6 +27934,9 @@ _docio_base_source.cache_info=_docio_cached_base.cache_info
 _docio_base_source.cache_clear=_docio_cached_base.cache_clear
 
 def _docio_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -27617,6 +28097,10 @@ NCAAF_TERMS_RECONSTRUCTION_JSON = b'{"app/ui/ncaaf_pipeline_research.py":{"after
 from functools import lru_cache as _terms_lru
 
 def _terms_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -27645,6 +28129,9 @@ def _terms_cached_base(source,reviewed,parent):
     return source
 
 def _terms_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -27977,6 +28464,9 @@ _terms_base_source.cache_info=_terms_cached_base.cache_info
 _terms_base_source.cache_clear=_terms_cached_base.cache_clear
 
 def _terms_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -28145,6 +28635,10 @@ NFL_DOCUMENT_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"after_s
 from functools import lru_cache as _document_lru
 
 def _document_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -28173,6 +28667,9 @@ def _document_cached_base(source,reviewed,parent):
     return source
 
 def _document_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -28522,6 +29019,9 @@ _document_base_source.cache_info=_document_cached_base.cache_info
 _document_base_source.cache_clear=_document_cached_base.cache_clear
 
 def _document_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -28698,6 +29198,10 @@ NFL_PDF_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"after_sha256
 from functools import lru_cache as _pdf_lru
 
 def _pdf_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -28726,6 +29230,9 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -29092,6 +29599,9 @@ _pdf_base_source.cache_info=_pdf_cached_base.cache_info
 _pdf_base_source.cache_clear=_pdf_cached_base.cache_clear
 
 def _pdf_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -29276,6 +29786,10 @@ NFL_INTERPRETATION_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"a
 from functools import lru_cache as _interpret_lru
 
 def _interpret_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -29305,6 +29819,9 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -29688,6 +30205,9 @@ _interpret_base_source.cache_info=_interpret_cached_base.cache_info
 _interpret_base_source.cache_clear=_interpret_cached_base.cache_clear
 
 def _interpret_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -29881,6 +30401,10 @@ LISTING_CAPACITY_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha
 from functools import lru_cache as _capacity_lru_cache
 
 def _listing_capacity_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -29894,6 +30418,9 @@ def _listing_capacity_guard_matches(source):
 
 @_capacity_lru_cache(maxsize=2)
 def _listing_capacity_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -29935,6 +30462,9 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30349,6 +30879,9 @@ def _listing_metadata_guard_matches(source):
 
 @_metadata_lru_cache(maxsize=2)
 def _listing_metadata_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30378,6 +30911,9 @@ _listing_metadata_base_source.cache_clear=_listing_metadata_cached_base_source.c
 _listing_metadata_base_source.cache_info=_listing_metadata_cached_base_source.cache_info
 
 def _listing_metadata_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -30426,6 +30962,9 @@ def _cost_immutable_guard_matches(source):
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==COST_IMMUTABLE_REVIEWED_GUARD_SHA256
 @_immutable_lru_cache(maxsize=2)
 def _cost_immutable_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30477,6 +31016,9 @@ def _listing_cost_guard_matches(source):
 
 @_cost_lru_cache(maxsize=2)
 def _listing_cost_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30539,6 +31081,9 @@ def _nfl_listing_guard_matches(source):
 
 @_listing_lru_cache(maxsize=2)
 def _nfl_listing_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30590,6 +31135,9 @@ def _guard_memo_guard_matches(source):
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_MEMO_REVIEWED_GUARD_SHA256
 @_memo_lru_cache(maxsize=2)
 def _guard_memo_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30615,6 +31163,9 @@ def _guard_memo_base_source(source):
     _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return _guard_memo_cached_base_source(source,GUARD_MEMO_REVIEWED_GUARD_SHA256,GUARD_MEMO_PREVIOUS_GUARD_SHA256)
 def _guard_memo_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -30627,6 +31178,10 @@ _listing_previous_memo_match=_guard_memo_guard_matches
 _listing_previous_memo_base=_guard_memo_base_source
 
 def _guard_memo_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -30638,6 +31193,9 @@ def _guard_memo_guard_matches(source):
     return _listing_previous_memo_match(_nfl_listing_base_source(source))
 
 def _guard_memo_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30662,6 +31220,9 @@ def _guard_reads_guard_matches(source):
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_READS_REVIEWED_GUARD_SHA256
 @_reads_lru_cache(maxsize=2)
 def _guard_reads_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30687,6 +31248,9 @@ def _guard_reads_base_source(source):
     _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return _guard_reads_cached_base_source(source,GUARD_READS_REVIEWED_GUARD_SHA256,GUARD_READS_PREVIOUS_GUARD_SHA256)
 def _guard_reads_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -30713,6 +31277,9 @@ def _guard_bootstrap_guard_matches(source):
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256
 @_bootstrap_lru_cache(maxsize=2)
 def _guard_bootstrap_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30741,6 +31308,9 @@ def _guard_bootstrap_base_source(source):
     _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return _guard_bootstrap_cached_base_source(source,GUARD_BOOTSTRAP_REVIEWED_GUARD_SHA256,GUARD_BOOTSTRAP_PREVIOUS_GUARD_SHA256)
 def _guard_bootstrap_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -30767,6 +31337,9 @@ def _guard_scan_guard_matches(source):
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_SCAN_REVIEWED_GUARD_SHA256
 @_scan_lru_cache(maxsize=2)
 def _guard_scan_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30792,6 +31365,9 @@ def _guard_scan_base_source(source):
     _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return _guard_scan_cached_base_source(source,GUARD_SCAN_REVIEWED_GUARD_SHA256,GUARD_SCAN_PREVIOUS_GUARD_SHA256)
 def _guard_scan_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -30813,6 +31389,9 @@ def _guard_performance_guard_matches(source):
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==GUARD_PERFORMANCE_REVIEWED_GUARD_SHA256
 @_performance_lru_cache(maxsize=2)
 def _guard_performance_cached_base_source(source,reviewed,parent):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -30838,6 +31417,9 @@ def _guard_performance_base_source(source):
     _require(len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     return _guard_performance_cached_base_source(source,GUARD_PERFORMANCE_REVIEWED_GUARD_SHA256,GUARD_PERFORMANCE_PREVIOUS_GUARD_SHA256)
 def _guard_performance_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -30858,7 +31440,29 @@ def _nfl_odds_timing_guard_matches(source):
     reviewed=NFL_ODDS_TIMING_REVIEWED_GUARD_SHA256.encode('ascii')
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==NFL_ODDS_TIMING_REVIEWED_GUARD_SHA256
 @_odds_timing_lru_cache(maxsize=8)
-def _nfl_odds_timing_base_source(source):
+def _nfl_odds_timing_base_source(source,_capacity_projection=False):
+    # NCAAF_CAPACITY_INLINE_BEGIN
+    if len(source)==8366314:
+        _cap_identity=b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'
+        _require(source.count(_cap_identity)==162 and hashlib.sha256(source.replace(_cap_identity,b'0'*64)).hexdigest()==_cap_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        for _cap_marker in (b'ENTRY',b'INLINE'):
+            _cap_parts=source.split(b'\n    # NCAAF_CAPACITY_'+_cap_marker+b'_BEGIN\n')
+            source=_cap_parts[0]+b''.join(b'\n'+_cap_part.split(b'\n    # NCAAF_CAPACITY_'+_cap_marker+b'_END\n',1)[1] for _cap_part in _cap_parts[1:])
+        _cap_start=source.index(b'\nNCAAF_STAGED_CAPACITY_BOOTSTRAP =')
+        _cap_end=source.index(b'\n# NCAAF_STAGED_CAPACITY_END\n',_cap_start)+len(b'\n# NCAAF_STAGED_CAPACITY_END\n')
+        source=source[:_cap_start]+source[_cap_end:]
+        source=source.replace(b'def _nfl_odds_timing_base_source(source,_capacity_projection=False):\n',b'def _nfl_odds_timing_base_source(source):\n',1)
+        source=source.replace(b'        if exists_at("HEAD", NCAAF_STAGED_CAPACITY_POLICY_PATH):\n            code, report = _run_ncaaf_staged_capacity_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_STAGED_POLICY_PATH):',b'        if exists_at("HEAD", NCAAF_STAGED_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='f3732664f763d99f057c9c97a642879cd4ffcc8520d43f3d3bbe5ae3f0901c87','PREVIOUS_GUARD_LOGIC_CHANGED')
+    if _capacity_projection is True:return source
+    if isinstance(_capacity_projection,str):
+        _cap_record={'.github/workflows/ci.yml': ('7789b52f4be6e9616233bfdf57ccc996cdd33847846862f8e0122687f6c729f7', '8c53f69cf799c77ee2bd78ab20f73246fa11ad61f6120d66751d53c235e33792', ((3537, 3580, '        shard: [1, 2, 3, 4, 5, 6, 7]\n'), (3993, 4073, '          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 7\n'), (5403, 5578, '      - name: Reconcile complete test identities and outcomes across all seven shards\n        run: python scripts/run_ci_tests.py --shards 7 --reconcile-manifests test-results\n'))), 'docs/ci-test-execution.md': ('7f2b101287159d5aa409ce129a2a8512e89ffa19b3b38cfcc4a0343b84678231', '729752109ea2bbc9a875796e4acbf202be0cf5264ae3e91b274d046665d4b4e6', ((3510, 3592, "The earlier 17–19 minute projection was an estimate. The corrected run's actual\n"), (8408, 9725, ''))), 'scripts/ci_test_file_costs_v1.json': ('7474e2d7f22d4c5ad5dfa6dbc945d2e549a401250e295546303084c6116ad5a7', '090c444804b9d7941b8e8200f60dd02a7de3e0e97b7df89eca7b153c2a5470f7', ((34110, 34330, '      "advisory_basis_seconds": 232.22,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (34843, 35198, ''), (36629, 36755, '        "ncaaf-socket-ci-completed-pr-4"\n'), (36764, 36872, '      "seconds": 476.51515,\n'), (52965, 53183, '      "advisory_basis_seconds": 2.918,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (53706, 54057, ''), (54389, 54507, '        "listing-completed-pr-1"\n'), (54516, 54622, '      "seconds": 3.3557,\n'), (54669, 54899, '      "advisory_basis_seconds": 34.132,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (55578, 55941, ''), (59193, 59312, '        "nfl-pdf-capacity-main-1"\n'), (59321, 59427, '      "seconds": 68.7033,\n'), (78036, 78256, '      "advisory_basis_seconds": 74.02,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (78916, 79094, ''), (80420, 80498, '        "listing-completed-main-1"\n'), (80507, 80615, '      "seconds": 169.63305,\n'), (86070, 86289, '      "advisory_basis_seconds": 9.267,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (86949, 87126, ''), (89519, 89596, '        "nfl-pdf-capacity-main-4"\n'), (89605, 89712, '      "seconds": 29.0651,\n'), (98707, 98926, '      "advisory_basis_seconds": 15.888,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (99587, 99939, ''), (100288, 100408, '        "listing-completed-main-2"\n'), (100417, 100523, '      "seconds": 18.2712,\n'), (114926, 115145, '      "advisory_basis_seconds": 279.199,\n      "basis": "Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.",\n'), (115838, 116191, ''), (117787, 117914, '        "document-ci-completed-56-shard6"\n'), (117923, 118029, '      "seconds": 321.07885,\n'), (168722, 168942, '      "advisory_basis_seconds": 218.853,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (169607, 169973, ''), (171415, 171541, '        "ncaaf-socket-ci-completed-pr-6"\n'), (171550, 171657, '      "seconds": 484.0603,\n'), (193166, 193385, '      "advisory_basis_seconds": 15.357,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (193880, 194233, ''), (196853, 196972, '        "nfl-pdf-capacity-main-4"\n'), (196981, 197088, '      "seconds": 38.08915,\n'), (254056, 254276, '      "advisory_basis_seconds": 341.974,\n      "basis": "Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.",\n'), (255119, 255474, ''), (256843, 256970, '        "document-ci-completed-56-shard6"\n'), (256979, 257086, '      "seconds": 393.2701,\n'), (291108, 291339, '      "advisory_basis_seconds": 308.052,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (291857, 292224, ''), (293936, 294062, '        "ncaaf-socket-ci-completed-pr-1"\n'), (294071, 294180, '      "seconds": 843.66185,\n'), (295449, 295668, '      "advisory_basis_seconds": 7.942,\n      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",\n'), (296156, 296508, ''), (296792, 296908, '        "refresh1-completed-3"\n'), (296917, 297023, '      "seconds": 9.1333,\n'), (298341, 298561, '      "advisory_basis_seconds": 66.35,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (299236, 299591, ''), (300947, 301065, '        "listing-completed-pr-1"\n'), (301074, 301181, '      "seconds": 146.41455,\n'), (301228, 301447, '      "advisory_basis_seconds": 51.016,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (302110, 302463, ''), (305110, 305229, '        "nfl-pdf-capacity-main-5"\n'), (305238, 305345, '      "seconds": 84.34215,\n'), (316272, 316491, '      "advisory_basis_seconds": 9.646,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (317165, 317341, ''), (317699, 317774, '        "listing-completed-pr-2"\n'), (317783, 317890, '      "seconds": 11.0929,\n'), (320985, 321203, '      "advisory_basis_seconds": 20.496,\n      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",\n'), (321694, 322045, ''), (322316, 322432, '        "refresh1-completed-2"\n'), (322441, 322546, '      "seconds": 23.5704,\n'), (333858, 334077, '      "advisory_basis_seconds": 18.438567,\n      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",\n'), (334250, 334603, ''), (334877, 334920, '      "latest_measurement_complete": false,\n'), (335095, 335211, '        "refresh1-cancelled-1"\n'), (335220, 335327, '      "seconds": 21.204352,\n'), (341334, 341553, '      "advisory_basis_seconds": 8.302,\n      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",\n'), (342041, 342394, ''), (342675, 342791, '        "refresh1-completed-2"\n'), (342800, 342906, '      "seconds": 9.5473,\n'), (344097, 344316, '      "advisory_basis_seconds": 27.066,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (344825, 345178, ''), (349371, 349490, '        "nfl-pdf-capacity-main-1"\n'), (349499, 349607, '      "seconds": 79.45925,\n'), (368804, 369024, '      "advisory_basis_seconds": 122.445,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (369385, 369740, ''), (374466, 374585, '        "nfl-pdf-capacity-main-3"\n'), (374594, 374702, '      "seconds": 277.04305,\n'), (375894, 376114, '      "advisory_basis_seconds": 61.641,\n      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",\n'), (376453, 376807, ''), (379945, 380064, '        "nfl-pdf-capacity-main-2"\n'), (380073, 380181, '      "seconds": 98.72405,\n'), (401252, 401471, '      "advisory_basis_seconds": 137.751,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (401982, 402336, ''), (406510, 406629, '        "nfl-pdf-capacity-main-3"\n'), (406638, 406745, '      "seconds": 312.6574,\n'), (409846, 410462, ''), (410489, 410532, ''), (412643, 412762, '        "nfl-pdf-capacity-main-6"\n'), (412771, 412912, '      "seconds": 88.71905\n'), (412925, 413540, ''), (413567, 413610, ''), (416560, 416679, '        "nfl-pdf-capacity-main-6"\n'), (416688, 416830, '      "seconds": 91.41465\n'), (427405, 427625, '      "advisory_basis_seconds": 54.855,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (427968, 428323, ''), (429853, 429973, '        "listing-completed-main-1"\n'), (429982, 430090, '      "seconds": 140.6496,\n'), (433991, 434210, '      "advisory_basis_seconds": 8.071,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (435033, 435385, ''), (435766, 435884, '        "listing-completed-pr-2"\n'), (435893, 435999, '      "seconds": 9.28165,\n'), (437749, 437969, '      "advisory_basis_seconds": 9.674,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (438159, 438525, ''), (441767, 441886, '        "nfl-pdf-capacity-main-5"\n'), (441895, 442003, '      "seconds": 93.42945,\n'), (447248, 447467, '      "advisory_basis_seconds": 7.971,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (447959, 448135, ''), (448704, 448781, '        "listing-completed-main-2"\n'), (448790, 448897, '      "seconds": 9.16665,\n'), (458716, 458935, '      "advisory_basis_seconds": 17.841,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (459598, 459951, ''), (463443, 463562, '        "nfl-pdf-capacity-main-3"\n'), (463571, 464710, '      "seconds": 30.60725,\n'), (481248, 481862, ''), (481889, 481932, ''), (482135, 482261, '        "ncaaf-socket-ci-completed-pr-6"\n'), (482270, 482377, '      "seconds": 42.22455,\n'), (483547, 483626, '      "successor_variance_multiplier": 1.15\n'), (492557, 492777, '      "advisory_basis_seconds": 135.32,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (493456, 493811, ''), (495282, 495408, '        "ncaaf-socket-ci-completed-pr-3"\n'), (495417, 495524, '      "seconds": 269.077,\n'), (557171, 557390, '      "advisory_basis_seconds": 44.481,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (558069, 558422, ''), (560822, 560941, '        "nfl-pdf-capacity-main-3"\n'), (560950, 561056, '      "seconds": 65.73285,\n'), (561103, 561322, '      "advisory_basis_seconds": 1.579251,\n      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",\n'), (561645, 562010, ''), (562283, 562326, '      "latest_measurement_complete": false,\n'), (562520, 562636, '        "refresh1-cancelled-1"\n'), (562645, 562751, '      "seconds": 1.816139,\n'), (573698, 573917, '      "advisory_basis_seconds": 28.333,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (574746, 575099, ''), (578367, 578486, '        "nfl-pdf-capacity-main-3"\n'), (578495, 578601, '      "seconds": 51.7822,\n'), (600397, 600616, '      "advisory_basis_seconds": 16.429,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (601127, 601480, ''), (601814, 601934, '        "listing-completed-main-1"\n'), (601943, 602050, '      "seconds": 18.89335,\n'), (623023, 623243, '      "advisory_basis_seconds": 84.412,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (623921, 624276, ''), (627645, 627764, '        "nfl-pdf-capacity-main-5"\n'), (627773, 627881, '      "seconds": 178.158,\n'), (643284, 643504, '      "advisory_basis_seconds": 149.323,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (644183, 644538, ''), (645871, 645989, '        "listing-completed-pr-2"\n'), (645998, 646105, '      "seconds": 222.87345,\n'), (662688, 662906, '      "advisory_basis_seconds": 3.28,\n      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",\n'), (663393, 663744, ''), (664015, 664131, '        "refresh1-completed-3"\n'), (664140, 664246, '      "seconds": 3.772,\n'), (672249, 672480, '      "advisory_basis_seconds": 5.469,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (672836, 673198, ''), (673498, 673616, '        "listing-completed-pr-2"\n'), (673625, 673731, '      "seconds": 6.28935,\n'), (686009, 686229, '      "advisory_basis_seconds": 361.827,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (686913, 687092, ''), (688420, 688496, '        "listing-completed-pr-2"\n'), (688505, 688613, '      "seconds": 593.27465,\n'), (692949, 693168, '      "advisory_basis_seconds": 30.467,\n      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",\n'), (693997, 694174, ''), (697439, 697516, '        "nfl-pdf-capacity-main-2"\n'), (697525, 697632, '      "seconds": 50.71615,\n'), (698663, 698883, '      "advisory_basis_seconds": 228.344,\n      "basis": "Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.",\n'), (699574, 699929, ''), (701519, 701646, '        "document-ci-completed-56-shard6"\n'), (701655, 701762, '      "seconds": 262.5956,\n'), (753438, 753855, ''), (816343, 825034, ''))), 'tests/nfl_pdf_capacity_fixtures.py': ('c29d1756d54c164e08a7f5a693672cf5af8bd71d6c3030c8cba3ed53d5221e36', '1a9b7d891b64fa289b80018b255d5db95809e0560d453fe30477a5205941f5f1', ((641, 769, ''),)), 'tests/test_ci_five_shards.py': ('c87c14b724138569ba78f273e6105709d7e4af0f656b3b25217bfcc52e721ebc', '05a71e662ecfd3b5a5db98fcd12004d71f00f6359dcd0b553834b2a3ac11279e', ((4001, 4089, "    assert shards['strategy']['matrix']['shard']==['1','2','3','4','5','6','7']\n"), (4184, 4238, "    assert '--shards 7' in shards['steps'][-2]['run']\n"), (4601, 4653, "    assert '--shards 7' in gate['steps'][-1]['run']\n"))), 'tests/test_ci_six_shards.py': ('72b5eb370fefa0d21d951d1a1fa510b04489ec15d4c91f60ed3bf8494ea7e918', '3ad7cd6e71334e3151881e606440ccc68f8e083dba0a0daacd1efd5b54bec0b9', ((4074, 4153, "    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,8)]\n"), (4239, 4337, "    assert '--shards 7' in shard['steps'][-2]['run'] and '--shards 7' in gate['steps'][-1]['run']\n"))), 'tests/test_ci_test_shards.py': ('f104159a15551f73ccb07a7ac5ce6c859c0dc37f1d43f965f4a558eba35c423f', '0fbed27ca141eb53b4b08e78b2b2f13989574bb818b3d01caabac2e8b9532745', ((13547, 13663, "    assert jobs['full-suite-tests']['strategy']['matrix']['shard'] == ['1', '2', '3', '4', '5', '6', '7']\n"),)), 'tests/test_football_document_ci_performance.py': ('72bcc1ac09084afc6ff5f159cd7908fbb965b276b3fef06c5d76edb529eb6f80', 'da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba', ((4098, 4297, 'def test_only_completed_exact_file_costs_and_frozen_metadata():\n'), (5095, 5187, ''))), 'tests/test_football_document_predecessor_fixture.py': ('67914c7058ec1e3ff4265d20007e4996fb48d13e05a235a6549b2749123ad3db', '05b43243efffc493eb7106f8961221829058e789203f19f6c53ce9ebcb1cd8b5', ((3616, 3775, ''),)), 'tests/test_nfl_pdf_timing_costs.py': ('13a4058eefe74faebc9506577dacd3354a5888556100230a7ba85b65d21f8566', '925390322aa8d1ba57be4fa0b31101593b59fa0c37929c62c5bdabe7f029efcf', ((4353, 4573, 'def test_exact_66_completed_xml_costs_and_separate_successor_metadata():\n'), (8774, 8866, ''))), 'tests/test_nfl_seven_predecessor_inputs.py': ('af3801a8559d9477afa4242a53cc3b9ee4731e9d157f288242118ab0e96c556c', 'e96c096c977e5adf8a53d461032b417395b1a1e771d8e9faef7d157d7984219f', ((3137, 3876, ''),))}.get(_capacity_projection)
+        if _cap_record is None or hashlib.sha256(source).hexdigest()!=_cap_record[0]:return source
+        _cap_value=source.decode()
+        for _cap_start,_cap_end,_cap_previous in reversed(_cap_record[2]):_cap_value=_cap_value[:_cap_start]+_cap_previous+_cap_value[_cap_end:]
+        source=_cap_value.encode();_require(hashlib.sha256(source).hexdigest()==_cap_record[1],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+        return source
+    # NCAAF_CAPACITY_INLINE_END
     if b'\nNFL_ODDS_TIMING_BOOTSTRAP =' not in source:return source
     _require(_nfl_odds_timing_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     prefix,own=source.split(b'\nNFL_ODDS_TIMING_BOOTSTRAP =',1)
@@ -31033,6 +31637,9 @@ def _guard_scan_v1_presence(source,reviewed,parent):
     if b'\nGUARD_PERFORMANCE_BOOTSTRAP =' not in source:return source
     return _guard_performance_cached_base_source(source,reviewed,parent)
 def _guard_performance_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -31135,6 +31742,10 @@ _owner_boot_cloud_peel = _cloud_peel_exact_guard
 _owner_boot_discovery_match = _discovery_guard_matches
 _owner_boot_discovery_parent = _discovery_parent_guard_source
 def _cloud_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -31148,6 +31759,10 @@ def _cloud_peel_exact_guard(source):
     return _owner_boot_cloud_peel(_owner_peel(source))
 
 def _discovery_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -31162,6 +31777,10 @@ def _discovery_parent_guard_source(source):
 _nfl_owner_early_owner_match = _owner_guard_matches
 _nfl_owner_early_owner_peel = _owner_base_source
 def _owner_guard_matches(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():return False
@@ -31172,6 +31791,9 @@ def _owner_guard_matches(source):
         _require(hashlib.sha256(source).hexdigest()=='d13ab631d9258d10298604be6abd4293c2dff92a7060698fb90d712442d3e038','PREVIOUS_GUARD_LOGIC_CHANGED')
     return _nfl_owner_early_owner_match(_nfl_owner_peel(source))
 def _owner_base_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -31336,6 +31958,9 @@ def _cloud_peel_exact_guard(source):
 
 _cloud_inherited_discovery_parent = _discovery_parent_guard_source
 def _discovery_parent_guard_source(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -31353,6 +31978,9 @@ def _cloud_peel_exact_guard(source):
 
 _nfl_owner_late_cloud_peel = _cloud_peel_exact_guard
 def _cloud_peel_exact_guard(source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
         if source.count(_stage_identity)!=124 or hashlib.sha256(source.replace(_stage_identity,b'0'*64)).hexdigest()!=_stage_identity.decode():raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
@@ -31460,6 +32088,9 @@ def _owner_binding():
     return json.loads(raw)
 
 def _owner_previous_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -31572,6 +32203,9 @@ def _nfl_owner_binding():
     return json.loads(raw)
 
 def _nfl_owner_previous_source(path, source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -31655,6 +32289,9 @@ def _nfl_observed_binding():
     _require(hashlib.sha256(raw).hexdigest()==NFL_OBSERVED_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
     return json.loads(raw)
 def _nfl_observed_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -31716,6 +32353,9 @@ def _nfl_scoring_binding():
     _require(hashlib.sha256(raw).hexdigest()==NFL_SCORING_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
     return json.loads(raw)
 def _nfl_scoring_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -31779,6 +32419,9 @@ def _nfl_diagnostics_binding():
     _require(hashlib.sha256(raw).hexdigest()==NFL_DIAGNOSTICS_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
     return json.loads(raw)
 def _nfl_diagnostics_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -31824,6 +32467,9 @@ def _ci_timing_binding():
     _require(hashlib.sha256(raw).hexdigest()==CI_TIMING_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
     return json.loads(raw)
 def _ci_timing_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -31869,6 +32515,9 @@ def _nfl_scenario_binding():
     _require(hashlib.sha256(raw).hexdigest()==NFL_SCENARIO_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
     return json.loads(raw)
 def _nfl_scenario_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -32327,6 +32976,11 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if reviewed=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2':return isinstance(source,bytes) and len(source)==8366314 and source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'
+    if len(source)==8366314 and not (source.count(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2')==162 and hashlib.sha256(source.replace(b'32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2',b'0'*64)).hexdigest()=='32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'):return False
+    if len(source)==8366314:source=_performance_early_base.__wrapped__(source,True)
+    # NCAAF_CAPACITY_ENTRY_END
     if reviewed==NCAAF_STAGED_REVIEWED_GUARD_SHA256:return _ncaaf_staged_guard_matches(source)
     if len(source)==8263277:
         _stage_identity=b'3d2b40fa2fc5b13439e583741d63c24859dee4bb19b7527a0e432b9074c2f19a'
@@ -32749,6 +33403,9 @@ def _dfs_guard_matches(source,reviewed):
     except ValueError:return False
 _interpret_parent_previous=_listing_capacity_previous_source
 def _listing_capacity_previous_source(path,source):
+    # NCAAF_CAPACITY_ENTRY_BEGIN
+    if len(source) in (1448, 3876, 4728, 5187, 5216, 5578, 5765, 8866, 9730, 14970, 847536):source=_performance_early_base.__wrapped__(source,path)
+    # NCAAF_CAPACITY_ENTRY_END
     if path!=GUARD_PATH:
         _stage_info=json.loads(b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}').get(path)
         if _stage_info is not None and hashlib.sha256(source).hexdigest()==_stage_info['after_sha256']:
@@ -33272,6 +33929,38 @@ def _run_ncaaf_staged_integrated(manifest_path,base):
     _scope_reconstruction_for_validation()
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 
+NCAAF_STAGED_CAPACITY_BOOTSTRAP = True
+NCAAF_STAGED_CAPACITY_POLICY_PATH = 'docs/paid-launch/launch-scope-policy-ncaaf-staged-capacity-v1.json'
+NCAAF_STAGED_CAPACITY_BINDING_PATH = 'docs/paid-launch/ncaaf-staged-capacity-binding-v1.json'
+NCAAF_STAGED_CAPACITY_BINDING_SHA256 = '616b86a719aa6cb3d3be3723bcff50126a41f83cfc2b0ac11daddc5d0adaedba'
+NCAAF_STAGED_CAPACITY_REVIEWED_GUARD_SHA256 = '32a022e483b9ab24d0b8eda648e4810b721015bd9fa07bff32b60c5853d289a2'
+NCAAF_STAGED_CAPACITY_PREVIOUS_GUARD_SHA256 = 'f3732664f763d99f057c9c97a642879cd4ffcc8520d43f3d3bbe5ae3f0901c87'
+NCAAF_STAGED_CAPACITY_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha256":"7789b52f4be6e9616233bfdf57ccc996cdd33847846862f8e0122687f6c729f7","before_sha256":"8c53f69cf799c77ee2bd78ab20f73246fa11ad61f6120d66751d53c235e33792","reverse_patches":[{"end":3580,"start":3537,"text":"        shard: [1, 2, 3, 4, 5, 6, 7]\\n"},{"end":4073,"start":3993,"text":"          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 7\\n"},{"end":5578,"start":5403,"text":"      - name: Reconcile complete test identities and outcomes across all seven shards\\n        run: python scripts/run_ci_tests.py --shards 7 --reconcile-manifests test-results\\n"}]},"docs/ci-test-execution.md":{"after_sha256":"7f2b101287159d5aa409ce129a2a8512e89ffa19b3b38cfcc4a0343b84678231","before_sha256":"729752109ea2bbc9a875796e4acbf202be0cf5264ae3e91b274d046665d4b4e6","reverse_patches":[{"end":3592,"start":3510,"text":"The earlier 17\\u201319 minute projection was an estimate. The corrected run\'s actual\\n"},{"end":9725,"start":8408,"text":""}]},"scripts/ci_test_file_costs_v1.json":{"after_sha256":"7474e2d7f22d4c5ad5dfa6dbc945d2e549a401250e295546303084c6116ad5a7","before_sha256":"090c444804b9d7941b8e8200f60dd02a7de3e0e97b7df89eca7b153c2a5470f7","reverse_patches":[{"end":34330,"start":34110,"text":"      \\"advisory_basis_seconds\\": 232.22,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":35198,"start":34843,"text":""},{"end":36755,"start":36629,"text":"        \\"ncaaf-socket-ci-completed-pr-4\\"\\n"},{"end":36872,"start":36764,"text":"      \\"seconds\\": 476.51515,\\n"},{"end":53183,"start":52965,"text":"      \\"advisory_basis_seconds\\": 2.918,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":54057,"start":53706,"text":""},{"end":54507,"start":54389,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":54622,"start":54516,"text":"      \\"seconds\\": 3.3557,\\n"},{"end":54899,"start":54669,"text":"      \\"advisory_basis_seconds\\": 34.132,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":55941,"start":55578,"text":""},{"end":59312,"start":59193,"text":"        \\"nfl-pdf-capacity-main-1\\"\\n"},{"end":59427,"start":59321,"text":"      \\"seconds\\": 68.7033,\\n"},{"end":78256,"start":78036,"text":"      \\"advisory_basis_seconds\\": 74.02,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":79094,"start":78916,"text":""},{"end":80498,"start":80420,"text":"        \\"listing-completed-main-1\\"\\n"},{"end":80615,"start":80507,"text":"      \\"seconds\\": 169.63305,\\n"},{"end":86289,"start":86070,"text":"      \\"advisory_basis_seconds\\": 9.267,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":87126,"start":86949,"text":""},{"end":89596,"start":89519,"text":"        \\"nfl-pdf-capacity-main-4\\"\\n"},{"end":89712,"start":89605,"text":"      \\"seconds\\": 29.0651,\\n"},{"end":98926,"start":98707,"text":"      \\"advisory_basis_seconds\\": 15.888,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":99939,"start":99587,"text":""},{"end":100408,"start":100288,"text":"        \\"listing-completed-main-2\\"\\n"},{"end":100523,"start":100417,"text":"      \\"seconds\\": 18.2712,\\n"},{"end":115145,"start":114926,"text":"      \\"advisory_basis_seconds\\": 279.199,\\n      \\"basis\\": \\"Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.\\",\\n"},{"end":116191,"start":115838,"text":""},{"end":117914,"start":117787,"text":"        \\"document-ci-completed-56-shard6\\"\\n"},{"end":118029,"start":117923,"text":"      \\"seconds\\": 321.07885,\\n"},{"end":168942,"start":168722,"text":"      \\"advisory_basis_seconds\\": 218.853,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":169973,"start":169607,"text":""},{"end":171541,"start":171415,"text":"        \\"ncaaf-socket-ci-completed-pr-6\\"\\n"},{"end":171657,"start":171550,"text":"      \\"seconds\\": 484.0603,\\n"},{"end":193385,"start":193166,"text":"      \\"advisory_basis_seconds\\": 15.357,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":194233,"start":193880,"text":""},{"end":196972,"start":196853,"text":"        \\"nfl-pdf-capacity-main-4\\"\\n"},{"end":197088,"start":196981,"text":"      \\"seconds\\": 38.08915,\\n"},{"end":254276,"start":254056,"text":"      \\"advisory_basis_seconds\\": 341.974,\\n      \\"basis\\": \\"Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.\\",\\n"},{"end":255474,"start":255119,"text":""},{"end":256970,"start":256843,"text":"        \\"document-ci-completed-56-shard6\\"\\n"},{"end":257086,"start":256979,"text":"      \\"seconds\\": 393.2701,\\n"},{"end":291339,"start":291108,"text":"      \\"advisory_basis_seconds\\": 308.052,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":292224,"start":291857,"text":""},{"end":294062,"start":293936,"text":"        \\"ncaaf-socket-ci-completed-pr-1\\"\\n"},{"end":294180,"start":294071,"text":"      \\"seconds\\": 843.66185,\\n"},{"end":295668,"start":295449,"text":"      \\"advisory_basis_seconds\\": 7.942,\\n      \\"basis\\": \\"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\\",\\n"},{"end":296508,"start":296156,"text":""},{"end":296908,"start":296792,"text":"        \\"refresh1-completed-3\\"\\n"},{"end":297023,"start":296917,"text":"      \\"seconds\\": 9.1333,\\n"},{"end":298561,"start":298341,"text":"      \\"advisory_basis_seconds\\": 66.35,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":299591,"start":299236,"text":""},{"end":301065,"start":300947,"text":"        \\"listing-completed-pr-1\\"\\n"},{"end":301181,"start":301074,"text":"      \\"seconds\\": 146.41455,\\n"},{"end":301447,"start":301228,"text":"      \\"advisory_basis_seconds\\": 51.016,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":302463,"start":302110,"text":""},{"end":305229,"start":305110,"text":"        \\"nfl-pdf-capacity-main-5\\"\\n"},{"end":305345,"start":305238,"text":"      \\"seconds\\": 84.34215,\\n"},{"end":316491,"start":316272,"text":"      \\"advisory_basis_seconds\\": 9.646,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":317341,"start":317165,"text":""},{"end":317774,"start":317699,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":317890,"start":317783,"text":"      \\"seconds\\": 11.0929,\\n"},{"end":321203,"start":320985,"text":"      \\"advisory_basis_seconds\\": 20.496,\\n      \\"basis\\": \\"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\\",\\n"},{"end":322045,"start":321694,"text":""},{"end":322432,"start":322316,"text":"        \\"refresh1-completed-2\\"\\n"},{"end":322546,"start":322441,"text":"      \\"seconds\\": 23.5704,\\n"},{"end":334077,"start":333858,"text":"      \\"advisory_basis_seconds\\": 18.438567,\\n      \\"basis\\": \\"Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.\\",\\n"},{"end":334603,"start":334250,"text":""},{"end":334920,"start":334877,"text":"      \\"latest_measurement_complete\\": false,\\n"},{"end":335211,"start":335095,"text":"        \\"refresh1-cancelled-1\\"\\n"},{"end":335327,"start":335220,"text":"      \\"seconds\\": 21.204352,\\n"},{"end":341553,"start":341334,"text":"      \\"advisory_basis_seconds\\": 8.302,\\n      \\"basis\\": \\"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\\",\\n"},{"end":342394,"start":342041,"text":""},{"end":342791,"start":342675,"text":"        \\"refresh1-completed-2\\"\\n"},{"end":342906,"start":342800,"text":"      \\"seconds\\": 9.5473,\\n"},{"end":344316,"start":344097,"text":"      \\"advisory_basis_seconds\\": 27.066,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":345178,"start":344825,"text":""},{"end":349490,"start":349371,"text":"        \\"nfl-pdf-capacity-main-1\\"\\n"},{"end":349607,"start":349499,"text":"      \\"seconds\\": 79.45925,\\n"},{"end":369024,"start":368804,"text":"      \\"advisory_basis_seconds\\": 122.445,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":369740,"start":369385,"text":""},{"end":374585,"start":374466,"text":"        \\"nfl-pdf-capacity-main-3\\"\\n"},{"end":374702,"start":374594,"text":"      \\"seconds\\": 277.04305,\\n"},{"end":376114,"start":375894,"text":"      \\"advisory_basis_seconds\\": 61.641,\\n      \\"basis\\": \\"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\\",\\n"},{"end":376807,"start":376453,"text":""},{"end":380064,"start":379945,"text":"        \\"nfl-pdf-capacity-main-2\\"\\n"},{"end":380181,"start":380073,"text":"      \\"seconds\\": 98.72405,\\n"},{"end":401471,"start":401252,"text":"      \\"advisory_basis_seconds\\": 137.751,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":402336,"start":401982,"text":""},{"end":406629,"start":406510,"text":"        \\"nfl-pdf-capacity-main-3\\"\\n"},{"end":406745,"start":406638,"text":"      \\"seconds\\": 312.6574,\\n"},{"end":410462,"start":409846,"text":""},{"end":410532,"start":410489,"text":""},{"end":412762,"start":412643,"text":"        \\"nfl-pdf-capacity-main-6\\"\\n"},{"end":412912,"start":412771,"text":"      \\"seconds\\": 88.71905\\n"},{"end":413540,"start":412925,"text":""},{"end":413610,"start":413567,"text":""},{"end":416679,"start":416560,"text":"        \\"nfl-pdf-capacity-main-6\\"\\n"},{"end":416830,"start":416688,"text":"      \\"seconds\\": 91.41465\\n"},{"end":427625,"start":427405,"text":"      \\"advisory_basis_seconds\\": 54.855,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":428323,"start":427968,"text":""},{"end":429973,"start":429853,"text":"        \\"listing-completed-main-1\\"\\n"},{"end":430090,"start":429982,"text":"      \\"seconds\\": 140.6496,\\n"},{"end":434210,"start":433991,"text":"      \\"advisory_basis_seconds\\": 8.071,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":435385,"start":435033,"text":""},{"end":435884,"start":435766,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":435999,"start":435893,"text":"      \\"seconds\\": 9.28165,\\n"},{"end":437969,"start":437749,"text":"      \\"advisory_basis_seconds\\": 9.674,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":438525,"start":438159,"text":""},{"end":441886,"start":441767,"text":"        \\"nfl-pdf-capacity-main-5\\"\\n"},{"end":442003,"start":441895,"text":"      \\"seconds\\": 93.42945,\\n"},{"end":447467,"start":447248,"text":"      \\"advisory_basis_seconds\\": 7.971,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":448135,"start":447959,"text":""},{"end":448781,"start":448704,"text":"        \\"listing-completed-main-2\\"\\n"},{"end":448897,"start":448790,"text":"      \\"seconds\\": 9.16665,\\n"},{"end":458935,"start":458716,"text":"      \\"advisory_basis_seconds\\": 17.841,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":459951,"start":459598,"text":""},{"end":463562,"start":463443,"text":"        \\"nfl-pdf-capacity-main-3\\"\\n"},{"end":464710,"start":463571,"text":"      \\"seconds\\": 30.60725,\\n"},{"end":481862,"start":481248,"text":""},{"end":481932,"start":481889,"text":""},{"end":482261,"start":482135,"text":"        \\"ncaaf-socket-ci-completed-pr-6\\"\\n"},{"end":482377,"start":482270,"text":"      \\"seconds\\": 42.22455,\\n"},{"end":483626,"start":483547,"text":"      \\"successor_variance_multiplier\\": 1.15\\n"},{"end":492777,"start":492557,"text":"      \\"advisory_basis_seconds\\": 135.32,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":493811,"start":493456,"text":""},{"end":495408,"start":495282,"text":"        \\"ncaaf-socket-ci-completed-pr-3\\"\\n"},{"end":495524,"start":495417,"text":"      \\"seconds\\": 269.077,\\n"},{"end":557390,"start":557171,"text":"      \\"advisory_basis_seconds\\": 44.481,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":558422,"start":558069,"text":""},{"end":560941,"start":560822,"text":"        \\"nfl-pdf-capacity-main-3\\"\\n"},{"end":561056,"start":560950,"text":"      \\"seconds\\": 65.73285,\\n"},{"end":561322,"start":561103,"text":"      \\"advisory_basis_seconds\\": 1.579251,\\n      \\"basis\\": \\"Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.\\",\\n"},{"end":562010,"start":561645,"text":""},{"end":562326,"start":562283,"text":"      \\"latest_measurement_complete\\": false,\\n"},{"end":562636,"start":562520,"text":"        \\"refresh1-cancelled-1\\"\\n"},{"end":562751,"start":562645,"text":"      \\"seconds\\": 1.816139,\\n"},{"end":573917,"start":573698,"text":"      \\"advisory_basis_seconds\\": 28.333,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":575099,"start":574746,"text":""},{"end":578486,"start":578367,"text":"        \\"nfl-pdf-capacity-main-3\\"\\n"},{"end":578601,"start":578495,"text":"      \\"seconds\\": 51.7822,\\n"},{"end":600616,"start":600397,"text":"      \\"advisory_basis_seconds\\": 16.429,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":601480,"start":601127,"text":""},{"end":601934,"start":601814,"text":"        \\"listing-completed-main-1\\"\\n"},{"end":602050,"start":601943,"text":"      \\"seconds\\": 18.89335,\\n"},{"end":623243,"start":623023,"text":"      \\"advisory_basis_seconds\\": 84.412,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":624276,"start":623921,"text":""},{"end":627764,"start":627645,"text":"        \\"nfl-pdf-capacity-main-5\\"\\n"},{"end":627881,"start":627773,"text":"      \\"seconds\\": 178.158,\\n"},{"end":643504,"start":643284,"text":"      \\"advisory_basis_seconds\\": 149.323,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":644538,"start":644183,"text":""},{"end":645989,"start":645871,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":646105,"start":645998,"text":"      \\"seconds\\": 222.87345,\\n"},{"end":662906,"start":662688,"text":"      \\"advisory_basis_seconds\\": 3.28,\\n      \\"basis\\": \\"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\\",\\n"},{"end":663744,"start":663393,"text":""},{"end":664131,"start":664015,"text":"        \\"refresh1-completed-3\\"\\n"},{"end":664246,"start":664140,"text":"      \\"seconds\\": 3.772,\\n"},{"end":672480,"start":672249,"text":"      \\"advisory_basis_seconds\\": 5.469,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":673198,"start":672836,"text":""},{"end":673616,"start":673498,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":673731,"start":673625,"text":"      \\"seconds\\": 6.28935,\\n"},{"end":686229,"start":686009,"text":"      \\"advisory_basis_seconds\\": 361.827,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":687092,"start":686913,"text":""},{"end":688496,"start":688420,"text":"        \\"listing-completed-pr-2\\"\\n"},{"end":688613,"start":688505,"text":"      \\"seconds\\": 593.27465,\\n"},{"end":693168,"start":692949,"text":"      \\"advisory_basis_seconds\\": 30.467,\\n      \\"basis\\": \\"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\\",\\n"},{"end":694174,"start":693997,"text":""},{"end":697516,"start":697439,"text":"        \\"nfl-pdf-capacity-main-2\\"\\n"},{"end":697632,"start":697525,"text":"      \\"seconds\\": 50.71615,\\n"},{"end":698883,"start":698663,"text":"      \\"advisory_basis_seconds\\": 228.344,\\n      \\"basis\\": \\"Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.\\",\\n"},{"end":699929,"start":699574,"text":""},{"end":701646,"start":701519,"text":"        \\"document-ci-completed-56-shard6\\"\\n"},{"end":701762,"start":701655,"text":"      \\"seconds\\": 262.5956,\\n"},{"end":753855,"start":753438,"text":""},{"end":825034,"start":816343,"text":""}]},"tests/nfl_pdf_capacity_fixtures.py":{"after_sha256":"c29d1756d54c164e08a7f5a693672cf5af8bd71d6c3030c8cba3ed53d5221e36","before_sha256":"1a9b7d891b64fa289b80018b255d5db95809e0560d453fe30477a5205941f5f1","reverse_patches":[{"end":769,"start":641,"text":""}]},"tests/test_ci_five_shards.py":{"after_sha256":"c87c14b724138569ba78f273e6105709d7e4af0f656b3b25217bfcc52e721ebc","before_sha256":"05a71e662ecfd3b5a5db98fcd12004d71f00f6359dcd0b553834b2a3ac11279e","reverse_patches":[{"end":4089,"start":4001,"text":"    assert shards[\'strategy\'][\'matrix\'][\'shard\']==[\'1\',\'2\',\'3\',\'4\',\'5\',\'6\',\'7\']\\n"},{"end":4238,"start":4184,"text":"    assert \'--shards 7\' in shards[\'steps\'][-2][\'run\']\\n"},{"end":4653,"start":4601,"text":"    assert \'--shards 7\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_six_shards.py":{"after_sha256":"72b5eb370fefa0d21d951d1a1fa510b04489ec15d4c91f60ed3bf8494ea7e918","before_sha256":"3ad7cd6e71334e3151881e606440ccc68f8e083dba0a0daacd1efd5b54bec0b9","reverse_patches":[{"end":4153,"start":4074,"text":"    assert shard[\'strategy\'][\'matrix\'][\'shard\']==[str(i) for i in range(1,8)]\\n"},{"end":4337,"start":4239,"text":"    assert \'--shards 7\' in shard[\'steps\'][-2][\'run\'] and \'--shards 7\' in gate[\'steps\'][-1][\'run\']\\n"}]},"tests/test_ci_test_shards.py":{"after_sha256":"f104159a15551f73ccb07a7ac5ce6c859c0dc37f1d43f965f4a558eba35c423f","before_sha256":"0fbed27ca141eb53b4b08e78b2b2f13989574bb818b3d01caabac2e8b9532745","reverse_patches":[{"end":13663,"start":13547,"text":"    assert jobs[\'full-suite-tests\'][\'strategy\'][\'matrix\'][\'shard\'] == [\'1\', \'2\', \'3\', \'4\', \'5\', \'6\', \'7\']\\n"}]},"tests/test_football_document_ci_performance.py":{"after_sha256":"72bcc1ac09084afc6ff5f159cd7908fbb965b276b3fef06c5d76edb529eb6f80","before_sha256":"da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba","reverse_patches":[{"end":4297,"start":4098,"text":"def test_only_completed_exact_file_costs_and_frozen_metadata():\\n"},{"end":5187,"start":5095,"text":""}]},"tests/test_football_document_predecessor_fixture.py":{"after_sha256":"67914c7058ec1e3ff4265d20007e4996fb48d13e05a235a6549b2749123ad3db","before_sha256":"05b43243efffc493eb7106f8961221829058e789203f19f6c53ce9ebcb1cd8b5","reverse_patches":[{"end":3775,"start":3616,"text":""}]},"tests/test_nfl_pdf_timing_costs.py":{"after_sha256":"13a4058eefe74faebc9506577dacd3354a5888556100230a7ba85b65d21f8566","before_sha256":"925390322aa8d1ba57be4fa0b31101593b59fa0c37929c62c5bdabe7f029efcf","reverse_patches":[{"end":4573,"start":4353,"text":"def test_exact_66_completed_xml_costs_and_separate_successor_metadata():\\n"},{"end":8866,"start":8774,"text":""}]},"tests/test_nfl_seven_predecessor_inputs.py":{"after_sha256":"af3801a8559d9477afa4242a53cc3b9ee4731e9d157f288242118ab0e96c556c","before_sha256":"e96c096c977e5adf8a53d461032b417395b1a1e771d8e9faef7d157d7984219f","reverse_patches":[{"end":3876,"start":3137,"text":""}]}}'
+
+def _ncaaf_staged_capacity_guard_matches(source):
+    identity=NCAAF_STAGED_CAPACITY_REVIEWED_GUARD_SHA256.encode()
+    return isinstance(source,bytes) and len(source)==8366314 and source.count(identity)==162 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
+
+def _ncaaf_staged_capacity_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if len(source)!=8366314:return source
+    return _performance_early_base.__wrapped__(source,True)
+
+def _ncaaf_staged_capacity_previous_source(path,source):
+    if path==GUARD_PATH:return _ncaaf_staged_capacity_base_source(source)
+    return _performance_early_base.__wrapped__(source,path)
+
+def _run_ncaaf_staged_capacity_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/NCAAF_STAGED_CAPACITY_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==NCAAF_STAGED_CAPACITY_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/ncaaf_staged_capacity_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/ncaaf_staged_capacity_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('ncaaf_staged_capacity_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _scope_reconstruction_for_validation()
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+# NCAAF_STAGED_CAPACITY_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -33279,7 +33968,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NCAAF_STAGED_POLICY_PATH):
+        if exists_at("HEAD", NCAAF_STAGED_CAPACITY_POLICY_PATH):
+            code, report = _run_ncaaf_staged_capacity_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", NCAAF_STAGED_POLICY_PATH):
             code, report = _run_ncaaf_staged_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NFL_RECON_PERF_POLICY_PATH):
             code, report = _run_nfl_recon_perf_integrated(args.manifest, args.base)

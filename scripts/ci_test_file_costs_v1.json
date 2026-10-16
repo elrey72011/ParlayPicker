@@ -1021,8 +1021,8 @@
       "seconds": 4.05648
     },
     {
-      "advisory_basis_seconds": 232.22,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 522.855,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 68,
@@ -1041,6 +1041,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 232.22,
           "source": "listing-completed-main-3"
+        },
+        {
+          "count": 68,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 522.855,
+          "source": "ncaaf-staged-runtime-previous-5"
+        },
+        {
+          "count": 68,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 377.957,
+          "source": "ncaaf-staged-runtime-current-5"
         }
       ],
       "kind": "estimated",
@@ -1075,9 +1087,12 @@
         "listing-completed-main-3",
         "ncaaf-socket-ci-completed-reviewed2424-4",
         "ncaaf-socket-ci-completed-main-4",
-        "ncaaf-socket-ci-completed-pr-4"
+        "ncaaf-socket-ci-completed-pr-4",
+        "ncaaf-staged-runtime-previous-5",
+        "ncaaf-staged-runtime-current-5"
       ],
-      "seconds": 476.51515,
+      "runtime_followup_test_blob": "93d9a6ff4d5a4598ff787e12b4d4f1a0ce72708a",
+      "seconds": 601.28325,
       "successor_advisory_basis_seconds": 414.361,
       "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
       "successor_completed_measurements": [
@@ -1453,8 +1468,8 @@
       "seconds": 0.26565
     },
     {
-      "advisory_basis_seconds": 2.918,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 7.031,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 13,
@@ -1473,6 +1488,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 2.51,
           "source": "listing-completed-pr-1"
+        },
+        {
+          "count": 13,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 7.031,
+          "source": "ncaaf-staged-runtime-previous-7"
+        },
+        {
+          "count": 13,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 6.165,
+          "source": "ncaaf-staged-runtime-current-4"
         }
       ],
       "kind": "estimated",
@@ -1484,14 +1511,17 @@
       "references": [
         "refresh1-completed-2",
         "listing-completed-main-2",
-        "listing-completed-pr-1"
+        "listing-completed-pr-1",
+        "ncaaf-staged-runtime-previous-7",
+        "ncaaf-staged-runtime-current-4"
       ],
-      "seconds": 3.3557,
+      "runtime_followup_test_blob": "8b89ebc5d24dea57579a5afcdbbd00f5319c2aa7",
+      "seconds": 8.08565,
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 34.132,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 74.69800000000001,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 21,
@@ -1516,6 +1546,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 34.132,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 21,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 39.43,
+          "source": "ncaaf-staged-runtime-previous-1"
+        },
+        {
+          "count": 21,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 74.69800000000001,
+          "source": "ncaaf-staged-runtime-current-1"
         }
       ],
       "kind": "estimated",
@@ -1580,9 +1622,12 @@
         "listing-completed-pr-2",
         "nfl-pdf-capacity-margin-6",
         "nfl-pdf-capacity-socket-4",
-        "nfl-pdf-capacity-main-1"
+        "nfl-pdf-capacity-main-1",
+        "ncaaf-staged-runtime-previous-1",
+        "ncaaf-staged-runtime-current-1"
       ],
-      "seconds": 68.7033,
+      "runtime_followup_test_blob": "9e9e71c27023cceeddce85da5eb06f39ad89e23c",
+      "seconds": 85.9027,
       "variance_multiplier": 1.15
     },
     {
@@ -2147,8 +2192,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 74.02,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 158.255,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 60,
@@ -2173,6 +2218,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 74.02,
           "source": "listing-completed-main-1"
+        },
+        {
+          "count": 60,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 158.255,
+          "source": "ncaaf-staged-runtime-previous-2"
         }
       ],
       "kind": "estimated",
@@ -2205,9 +2256,11 @@
         "oct11-main-3",
         "oct11-pr-2",
         "refresh1-completed-3",
-        "listing-completed-main-1"
+        "listing-completed-main-1",
+        "ncaaf-staged-runtime-previous-2"
       ],
-      "seconds": 169.63305,
+      "runtime_followup_test_blob": "a0cdd858b0bb6a0b3d5d92f1f04997d657c1a43a",
+      "seconds": 181.99325,
       "variance_multiplier": 1.15
     },
     {
@@ -2374,8 +2427,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 9.267,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 42.081,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 37,
@@ -2400,6 +2453,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 9.267,
           "source": "listing-completed-main-1"
+        },
+        {
+          "count": 37,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 42.081,
+          "source": "ncaaf-staged-runtime-previous-6"
         }
       ],
       "kind": "estimated",
@@ -2448,9 +2507,11 @@
         "refresh1-completed-3",
         "listing-completed-main-1",
         "nfl-pdf-capacity-socket-5",
-        "nfl-pdf-capacity-main-4"
+        "nfl-pdf-capacity-main-4",
+        "ncaaf-staged-runtime-previous-6"
       ],
-      "seconds": 29.0651,
+      "runtime_followup_test_blob": "8894eff9a96de25a897639211e92a3f43d1d863b",
+      "seconds": 48.39315,
       "variance_multiplier": 1.15
     },
     {
@@ -2729,8 +2790,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 15.888,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 30.184,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 37,
@@ -2755,6 +2816,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 15.888,
           "source": "listing-completed-main-2"
+        },
+        {
+          "count": 37,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 28.64,
+          "source": "ncaaf-staged-runtime-previous-6"
+        },
+        {
+          "count": 37,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 30.184,
+          "source": "ncaaf-staged-runtime-current-6"
         }
       ],
       "kind": "estimated",
@@ -2767,9 +2840,12 @@
         "oct11-main-3",
         "oct11-pr-3",
         "refresh1-completed-3",
-        "listing-completed-main-2"
+        "listing-completed-main-2",
+        "ncaaf-staged-runtime-previous-6",
+        "ncaaf-staged-runtime-current-6"
       ],
-      "seconds": 18.2712,
+      "runtime_followup_test_blob": "21ce84b32ed1616081ac254c8bcf68959cdfd4d0",
+      "seconds": 34.7116,
       "variance_multiplier": 1.15
     },
     {
@@ -3209,8 +3285,8 @@
       "seconds": 1.717394
     },
     {
-      "advisory_basis_seconds": 279.199,
-      "basis": "Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.",
+      "advisory_basis_seconds": 309.02,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 49,
@@ -3235,6 +3311,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 279.199,
           "source": "document-ci-completed-56-shard6"
+        },
+        {
+          "count": 49,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 287.53,
+          "source": "ncaaf-staged-runtime-previous-7"
+        },
+        {
+          "count": 49,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 309.02,
+          "source": "ncaaf-staged-runtime-current-7"
         }
       ],
       "incomplete_observations": [
@@ -3276,9 +3364,12 @@
         "refresh1-cancelled-1",
         "listing-completed-main-1",
         "listing-completed-pr-1",
-        "document-ci-completed-56-shard6"
+        "document-ci-completed-56-shard6",
+        "ncaaf-staged-runtime-previous-7",
+        "ncaaf-staged-runtime-current-7"
       ],
-      "seconds": 321.07885,
+      "runtime_followup_test_blob": "cd00c2f305ea8fe23b8fd6a58db94c231116e296",
+      "seconds": 355.373,
       "variance_multiplier": 1.15
     },
     {
@@ -4338,8 +4429,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 218.853,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 556.028,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 75,
@@ -4364,6 +4455,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 218.853,
           "source": "listing-completed-main-3"
+        },
+        {
+          "count": 75,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 556.028,
+          "source": "ncaaf-staged-runtime-previous-4"
+        },
+        {
+          "count": 75,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 431.38100000000003,
+          "source": "ncaaf-staged-runtime-current-4"
         }
       ],
       "kind": "estimated",
@@ -4399,9 +4502,12 @@
         "listing-completed-main-3",
         "ncaaf-socket-ci-completed-reviewed2424-6",
         "ncaaf-socket-ci-completed-main-6",
-        "ncaaf-socket-ci-completed-pr-6"
+        "ncaaf-socket-ci-completed-pr-6",
+        "ncaaf-staged-runtime-previous-4",
+        "ncaaf-staged-runtime-current-4"
       ],
-      "seconds": 484.0603,
+      "runtime_followup_test_blob": "8feb0d09dfc9b65d404baa35f5b12130684f8495",
+      "seconds": 639.4322,
       "successor_advisory_basis_seconds": 420.922,
       "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
       "successor_completed_measurements": [
@@ -5043,8 +5149,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 15.357,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 42.043,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 52,
@@ -5063,6 +5169,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 15.357,
           "source": "listing-completed-main-1"
+        },
+        {
+          "count": 52,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 42.043,
+          "source": "ncaaf-staged-runtime-previous-7"
+        },
+        {
+          "count": 52,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 36.318,
+          "source": "ncaaf-staged-runtime-current-1"
         }
       ],
       "incomplete_observations": [
@@ -5119,9 +5237,12 @@
         "refresh1-cancelled-1",
         "listing-completed-main-1",
         "nfl-pdf-capacity-socket-4",
-        "nfl-pdf-capacity-main-4"
+        "nfl-pdf-capacity-main-4",
+        "ncaaf-staged-runtime-previous-7",
+        "ncaaf-staged-runtime-current-1"
       ],
-      "seconds": 38.08915,
+      "runtime_followup_test_blob": "288ba5c4c80d2a3ac281c38329956a9e0a856af1",
+      "seconds": 48.34945,
       "variance_multiplier": 1.15
     },
     {
@@ -6860,8 +6981,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 341.974,
-      "basis": "Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.",
+      "advisory_basis_seconds": 383.278,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 56,
@@ -6892,6 +7013,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 341.974,
           "source": "document-ci-completed-56-shard6"
+        },
+        {
+          "count": 56,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 381.017,
+          "source": "ncaaf-staged-runtime-previous-6"
+        },
+        {
+          "count": 56,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 383.278,
+          "source": "ncaaf-staged-runtime-current-6"
         }
       ],
       "kind": "estimated",
@@ -6925,9 +7058,12 @@
         "oct11-pr-3",
         "refresh1-completed-3",
         "listing-completed-main-3",
-        "document-ci-completed-56-shard6"
+        "document-ci-completed-56-shard6",
+        "ncaaf-staged-runtime-previous-6",
+        "ncaaf-staged-runtime-current-6"
       ],
-      "seconds": 393.2701,
+      "runtime_followup_test_blob": "98e70e86928274ba3d044bbfc57e8470e6c0c935",
+      "seconds": 440.7697,
       "variance_multiplier": 1.15
     },
     {
@@ -7910,8 +8046,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 308.052,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 1017.4350000000001,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 118,
@@ -7930,6 +8066,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 308.052,
           "source": "listing-completed-pr-1"
+        },
+        {
+          "count": 118,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 504.78,
+          "source": "ncaaf-staged-runtime-previous-1"
+        },
+        {
+          "count": 118,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 1017.4350000000001,
+          "source": "ncaaf-staged-runtime-current-1"
         }
       ],
       "incomplete_observations": [
@@ -7973,9 +8121,12 @@
         "listing-completed-pr-1",
         "ncaaf-socket-ci-completed-reviewed2424-1",
         "ncaaf-socket-ci-completed-main-1",
-        "ncaaf-socket-ci-completed-pr-1"
+        "ncaaf-socket-ci-completed-pr-1",
+        "ncaaf-staged-runtime-previous-1",
+        "ncaaf-staged-runtime-current-1"
       ],
-      "seconds": 843.66185,
+      "runtime_followup_test_blob": "3003f6c306f27bea4140631019f02db459d7c029",
+      "seconds": 1170.05025,
       "successor_advisory_basis_seconds": 733.619,
       "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
       "successor_completed_measurements": [
@@ -8005,8 +8156,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 7.942,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 20.264,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 49,
@@ -8025,6 +8176,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 4.941,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 49,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 7.626,
+          "source": "ncaaf-staged-runtime-previous-7"
+        },
+        {
+          "count": 49,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 20.264,
+          "source": "ncaaf-staged-runtime-current-5"
         }
       ],
       "kind": "estimated",
@@ -8035,9 +8198,12 @@
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "ncaaf-staged-runtime-previous-7",
+        "ncaaf-staged-runtime-current-5"
       ],
-      "seconds": 9.1333,
+      "runtime_followup_test_blob": "1fd3bd0378e6ac989b7a81c3d6e4d57b91807e65",
+      "seconds": 23.3036,
       "variance_multiplier": 1.15
     },
     {
@@ -8079,8 +8245,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 66.35,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 158.802,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 47,
@@ -8105,6 +8271,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 66.35,
           "source": "listing-completed-pr-1"
+        },
+        {
+          "count": 47,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 158.488,
+          "source": "ncaaf-staged-runtime-previous-6"
+        },
+        {
+          "count": 47,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 158.802,
+          "source": "ncaaf-staged-runtime-current-6"
         }
       ],
       "kind": "estimated",
@@ -8137,14 +8315,17 @@
         "oct11-pr-2",
         "refresh1-completed-3",
         "listing-completed-main-1",
-        "listing-completed-pr-1"
+        "listing-completed-pr-1",
+        "ncaaf-staged-runtime-previous-6",
+        "ncaaf-staged-runtime-current-6"
       ],
-      "seconds": 146.41455,
+      "runtime_followup_test_blob": "e4bac80c356e8ec2358a1b627b33b902d5740f69",
+      "seconds": 182.6223,
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 51.016,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 79.565,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 15,
@@ -8169,6 +8350,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 51.016,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 78.528,
+          "source": "ncaaf-staged-runtime-previous-6"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 79.565,
+          "source": "ncaaf-staged-runtime-current-6"
         }
       ],
       "incomplete_observations": [
@@ -8226,9 +8419,12 @@
         "listing-completed-main-2",
         "listing-completed-pr-2",
         "nfl-pdf-capacity-socket-2",
-        "nfl-pdf-capacity-main-5"
+        "nfl-pdf-capacity-main-5",
+        "ncaaf-staged-runtime-previous-6",
+        "ncaaf-staged-runtime-current-6"
       ],
-      "seconds": 84.34215,
+      "runtime_followup_test_blob": "d9facae4405e54cbae44df3755cf4015b7a12aa0",
+      "seconds": 91.49975,
       "variance_multiplier": 1.15
     },
     {
@@ -8524,8 +8720,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 9.646,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 15.985,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 17,
@@ -8550,6 +8746,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 9.646,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 17,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 15.985,
+          "source": "ncaaf-staged-runtime-current-6"
         }
       ],
       "kind": "estimated",
@@ -8562,9 +8764,11 @@
         "oct11-main-1",
         "refresh1-completed-2",
         "listing-completed-main-3",
-        "listing-completed-pr-2"
+        "listing-completed-pr-2",
+        "ncaaf-staged-runtime-current-6"
       ],
-      "seconds": 11.0929,
+      "runtime_followup_test_blob": "efdf485e092bf0bb96e1c0dfd33aa32c58e7bad5",
+      "seconds": 18.38275,
       "variance_multiplier": 1.15
     },
     {
@@ -8628,8 +8832,8 @@
       "seconds": 3.03715
     },
     {
-      "advisory_basis_seconds": 20.496,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 28.84,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 74,
@@ -8648,6 +8852,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 20.411,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 74,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 28.84,
+          "source": "ncaaf-staged-runtime-previous-4"
+        },
+        {
+          "count": 74,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 18.45,
+          "source": "ncaaf-staged-runtime-current-4"
         }
       ],
       "kind": "estimated",
@@ -8658,9 +8874,12 @@
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "ncaaf-staged-runtime-previous-4",
+        "ncaaf-staged-runtime-current-4"
       ],
-      "seconds": 23.5704,
+      "runtime_followup_test_blob": "5d9fbf404f8b3319f962347677ee2728c382a115",
+      "seconds": 33.166,
       "variance_multiplier": 1.15
     },
     {
@@ -8946,14 +9165,26 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 18.438567,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 28.147,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 87,
           "kind": "completed_junit_testcase_sum",
           "seconds": 12.315,
           "source": "pr-2"
+        },
+        {
+          "count": 87,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 21.907,
+          "source": "ncaaf-staged-runtime-previous-2"
+        },
+        {
+          "count": 87,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 28.147,
+          "source": "ncaaf-staged-runtime-current-7"
         }
       ],
       "incomplete_observations": [
@@ -8965,15 +9196,18 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
       "original_measured_seconds": 12.315,
       "path": "tests/test_ncaaf_prospective_chronology.py",
       "profiled_tests": 87,
       "references": [
         "oct11-pr-2",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "ncaaf-staged-runtime-previous-2",
+        "ncaaf-staged-runtime-current-7"
       ],
-      "seconds": 21.204352,
+      "runtime_followup_test_blob": "11fb51eb8e4c2985d3e67185c3e57edc4f59e889",
+      "seconds": 32.36905,
       "variance_multiplier": 1.15
     },
     {
@@ -9137,8 +9371,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 8.302,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 16.122,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 69,
@@ -9157,6 +9391,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 8.097,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 69,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 10.804,
+          "source": "ncaaf-staged-runtime-previous-1"
+        },
+        {
+          "count": 69,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 16.122,
+          "source": "ncaaf-staged-runtime-current-1"
         }
       ],
       "kind": "estimated",
@@ -9167,9 +9413,12 @@
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "ncaaf-staged-runtime-previous-1",
+        "ncaaf-staged-runtime-current-1"
       ],
-      "seconds": 9.5473,
+      "runtime_followup_test_blob": "2a0e6174ce5d83e121ff2068161ce9cec64c877b",
+      "seconds": 18.5403,
       "variance_multiplier": 1.15
     },
     {
@@ -9209,8 +9458,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 27.066,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 88.601,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 26,
@@ -9229,6 +9478,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 27.066,
           "source": "listing-completed-main-1"
+        },
+        {
+          "count": 26,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 88.601,
+          "source": "ncaaf-staged-runtime-previous-5"
+        },
+        {
+          "count": 26,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 77.115,
+          "source": "ncaaf-staged-runtime-current-5"
         }
       ],
       "kind": "estimated",
@@ -9312,9 +9573,12 @@
         "listing-completed-main-1",
         "nfl-pdf-capacity-margin-1",
         "nfl-pdf-capacity-socket-5",
-        "nfl-pdf-capacity-main-1"
+        "nfl-pdf-capacity-main-1",
+        "ncaaf-staged-runtime-previous-5",
+        "ncaaf-staged-runtime-current-5"
       ],
-      "seconds": 79.45925,
+      "runtime_followup_test_blob": "5f3fdb8e05dd51459d134606ec32e90c3729f62c",
+      "seconds": 101.89115,
       "variance_multiplier": 1.15
     },
     {
@@ -9765,8 +10029,8 @@
       "seconds": 19.95595
     },
     {
-      "advisory_basis_seconds": 122.445,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 283.987,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 48,
@@ -9779,6 +10043,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 122.445,
           "source": "listing-completed-main-3"
+        },
+        {
+          "count": 48,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 283.987,
+          "source": "ncaaf-staged-runtime-previous-5"
+        },
+        {
+          "count": 48,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 209.335,
+          "source": "ncaaf-staged-runtime-current-5"
         }
       ],
       "incomplete_observations": [
@@ -9881,9 +10157,12 @@
         "listing-completed-main-3",
         "nfl-pdf-capacity-margin-3",
         "nfl-pdf-capacity-socket-3",
-        "nfl-pdf-capacity-main-3"
+        "nfl-pdf-capacity-main-3",
+        "ncaaf-staged-runtime-previous-5",
+        "ncaaf-staged-runtime-current-5"
       ],
-      "seconds": 277.04305,
+      "runtime_followup_test_blob": "2d51d95b728862e1c8c32bbac81252f0e8d0cae9",
+      "seconds": 326.58505,
       "variance_multiplier": 1.15
     },
     {
@@ -9923,8 +10202,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 61.641,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 101.325,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 19,
@@ -9937,6 +10216,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 58.377,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 19,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 101.325,
+          "source": "ncaaf-staged-runtime-previous-7"
+        },
+        {
+          "count": 19,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 96.864,
+          "source": "ncaaf-staged-runtime-current-7"
         }
       ],
       "kind": "estimated",
@@ -9998,9 +10289,12 @@
         "refresh1-completed-3",
         "nfl-pdf-capacity-margin-4",
         "nfl-pdf-capacity-socket-4",
-        "nfl-pdf-capacity-main-2"
+        "nfl-pdf-capacity-main-2",
+        "ncaaf-staged-runtime-previous-7",
+        "ncaaf-staged-runtime-current-7"
       ],
-      "seconds": 98.72405,
+      "runtime_followup_test_blob": "8fd1fbdf9958c13b0a6eb63f77079ef98c4849cd",
+      "seconds": 116.52375,
       "variance_multiplier": 1.15
     },
     {
@@ -10504,8 +10798,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 137.751,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 297.93,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 51,
@@ -10524,6 +10818,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 137.751,
           "source": "listing-completed-main-3"
+        },
+        {
+          "count": 51,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 288.848,
+          "source": "ncaaf-staged-runtime-previous-7"
+        },
+        {
+          "count": 51,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 297.93,
+          "source": "ncaaf-staged-runtime-current-7"
         }
       ],
       "kind": "estimated",
@@ -10607,9 +10913,12 @@
         "listing-completed-main-3",
         "nfl-pdf-capacity-margin-3",
         "nfl-pdf-capacity-socket-3",
-        "nfl-pdf-capacity-main-3"
+        "nfl-pdf-capacity-main-3",
+        "ncaaf-staged-runtime-previous-7",
+        "ncaaf-staged-runtime-current-7"
       ],
-      "seconds": 312.6574,
+      "runtime_followup_test_blob": "c31d24f6489bbe5c28fbe0b9e6175b5766031628",
+      "seconds": 342.6195,
       "variance_multiplier": 1.15
     },
     {
@@ -10673,7 +10982,24 @@
       "seconds": 3.956
     },
     {
+      "advisory_basis_seconds": 117.528,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
+      "completed_measurements": [
+        {
+          "count": 22,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 47.877,
+          "source": "ncaaf-staged-runtime-previous-1"
+        },
+        {
+          "count": 22,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 117.528,
+          "source": "ncaaf-staged-runtime-current-1"
+        }
+      ],
       "kind": "estimated",
+      "latest_measurement_complete": true,
       "nfl_pdf_capacity_basis": "Maximum compatible completed release JUnit testcase sum times 1.15. Advisory estimate, not measured wall time or a runtime guarantee. Historical fields remain historical; cancelled observations are not new measurements.",
       "nfl_pdf_capacity_measurements": [
         {
@@ -10712,12 +11038,33 @@
       "profiled_tests": 22,
       "references": [
         "nfl-pdf-capacity-socket-5",
-        "nfl-pdf-capacity-main-6"
+        "nfl-pdf-capacity-main-6",
+        "ncaaf-staged-runtime-previous-1",
+        "ncaaf-staged-runtime-current-1"
       ],
-      "seconds": 88.71905
+      "runtime_followup_test_blob": "c15c3aaf8079845532296d34e2c810ba40c27699",
+      "seconds": 135.1572,
+      "variance_multiplier": 1.15
     },
     {
+      "advisory_basis_seconds": 102.083,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
+      "completed_measurements": [
+        {
+          "count": 19,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 102.083,
+          "source": "ncaaf-staged-runtime-previous-5"
+        },
+        {
+          "count": 19,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 63.63,
+          "source": "ncaaf-staged-runtime-current-5"
+        }
+      ],
       "kind": "estimated",
+      "latest_measurement_complete": true,
       "nfl_pdf_capacity_basis": "Maximum compatible completed release JUnit testcase sum times 1.15. Advisory estimate, not measured wall time or a runtime guarantee. Historical fields remain historical; cancelled observations are not new measurements.",
       "nfl_pdf_capacity_measurements": [
         {
@@ -10772,9 +11119,13 @@
       "references": [
         "nfl-pdf-capacity-margin-3",
         "nfl-pdf-capacity-socket-1",
-        "nfl-pdf-capacity-main-6"
+        "nfl-pdf-capacity-main-6",
+        "ncaaf-staged-runtime-previous-5",
+        "ncaaf-staged-runtime-current-5"
       ],
-      "seconds": 91.41465
+      "runtime_followup_test_blob": "5ff8a0fe0df76ff44b1850fa797b7fcf5ef57a48",
+      "seconds": 117.39545,
+      "variance_multiplier": 1.15
     },
     {
       "kind": "estimated",
@@ -11033,8 +11384,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 54.855,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 164.005,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 32,
@@ -11047,6 +11398,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 54.855,
           "source": "listing-completed-main-1"
+        },
+        {
+          "count": 32,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 114.646,
+          "source": "ncaaf-staged-runtime-previous-3"
+        },
+        {
+          "count": 32,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 164.005,
+          "source": "ncaaf-staged-runtime-current-3"
         }
       ],
       "incomplete_observations": [
@@ -11086,9 +11449,12 @@
       "references": [
         "oct11-pr-3",
         "refresh1-cancelled-1",
-        "listing-completed-main-1"
+        "listing-completed-main-1",
+        "ncaaf-staged-runtime-previous-3",
+        "ncaaf-staged-runtime-current-3"
       ],
-      "seconds": 140.6496,
+      "runtime_followup_test_blob": "2659d04b996d9cb1bc50db9857718bf6558fd86e",
+      "seconds": 188.60575,
       "variance_multiplier": 1.15
     },
     {
@@ -11173,8 +11539,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 8.071,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 19.396,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 15,
@@ -11205,6 +11571,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 8.071,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 9.814,
+          "source": "ncaaf-staged-runtime-previous-1"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 19.396,
+          "source": "ncaaf-staged-runtime-current-1"
         }
       ],
       "kind": "estimated",
@@ -11218,9 +11596,12 @@
         "oct11-pr-2",
         "refresh1-completed-3",
         "listing-completed-main-3",
-        "listing-completed-pr-2"
+        "listing-completed-pr-2",
+        "ncaaf-staged-runtime-previous-1",
+        "ncaaf-staged-runtime-current-1"
       ],
-      "seconds": 9.28165,
+      "runtime_followup_test_blob": "6723b688ef95188d1f2029b2eccb3782fe812033",
+      "seconds": 22.3054,
       "variance_multiplier": 1.15
     },
     {
@@ -11271,14 +11652,26 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 9.674,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 114.997,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 14,
           "kind": "completed_junit_testcase_sum",
           "seconds": 9.674,
           "source": "listing-completed-pr-1"
+        },
+        {
+          "count": 14,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 46.574999999999996,
+          "source": "ncaaf-staged-runtime-previous-1"
+        },
+        {
+          "count": 14,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 114.997,
+          "source": "ncaaf-staged-runtime-current-1"
         }
       ],
       "incomplete_observations": [],
@@ -11342,9 +11735,12 @@
         "ncaaf-socket-ci-completed-main-1",
         "nfl-pdf-capacity-margin-3",
         "nfl-pdf-capacity-socket-3",
-        "nfl-pdf-capacity-main-5"
+        "nfl-pdf-capacity-main-5",
+        "ncaaf-staged-runtime-previous-1",
+        "ncaaf-staged-runtime-current-1"
       ],
-      "seconds": 93.42945,
+      "runtime_followup_test_blob": "2f8461f2717a745a0c295d6eca72e82197ab4fc6",
+      "seconds": 132.24655,
       "successor_advisory_basis_seconds": 66.833,
       "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
       "successor_completed_measurements": [
@@ -11465,8 +11861,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 7.971,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 15.775,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 19,
@@ -11485,6 +11881,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 7.971,
           "source": "listing-completed-main-2"
+        },
+        {
+          "count": 19,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 15.775,
+          "source": "ncaaf-staged-runtime-current-7"
         }
       ],
       "incomplete_observations": [
@@ -11505,9 +11907,11 @@
         "oct11-main-1",
         "oct11-pr-2",
         "refresh1-cancelled-1",
-        "listing-completed-main-2"
+        "listing-completed-main-2",
+        "ncaaf-staged-runtime-current-7"
       ],
-      "seconds": 9.16665,
+      "runtime_followup_test_blob": "0c99182521914a1e6d802a05e220becd82f8d4ec",
+      "seconds": 18.14125,
       "variance_multiplier": 1.15
     },
     {
@@ -11723,8 +12127,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 17.841,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 38.808,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 38,
@@ -11749,6 +12153,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 17.841,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 38,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 23.036,
+          "source": "ncaaf-staged-runtime-previous-3"
+        },
+        {
+          "count": 38,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 38.808,
+          "source": "ncaaf-staged-runtime-current-3"
         }
       ],
       "incomplete_observations": [
@@ -11822,9 +12238,41 @@
         "listing-completed-pr-2",
         "nfl-pdf-capacity-margin-1",
         "nfl-pdf-capacity-socket-3",
-        "nfl-pdf-capacity-main-3"
+        "nfl-pdf-capacity-main-3",
+        "ncaaf-staged-runtime-previous-3",
+        "ncaaf-staged-runtime-current-3"
       ],
-      "seconds": 30.60725,
+      "runtime_followup_test_blob": "e8e8b40fc6e2e0eda2249a9bea758c97130e30fd",
+      "seconds": 44.6292,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 34.706,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
+      "completed_measurements": [
+        {
+          "count": 9,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 34.706,
+          "source": "ncaaf-staged-runtime-previous-5"
+        },
+        {
+          "count": 9,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 21.427,
+          "source": "ncaaf-staged-runtime-current-5"
+        }
+      ],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "path": "tests/test_nfl_reconcile_projection.py",
+      "profiled_tests": 9,
+      "references": [
+        "ncaaf-staged-runtime-previous-5",
+        "ncaaf-staged-runtime-current-5"
+      ],
+      "runtime_followup_test_blob": "60434ae5fc7dd914c19b06683f3b450fd132134a",
+      "seconds": 39.9119,
       "variance_multiplier": 1.15
     },
     {
@@ -12219,15 +12667,35 @@
       "variance_multiplier": 1.15
     },
     {
+      "advisory_basis_seconds": 42.719,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
+      "completed_measurements": [
+        {
+          "count": 53,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 42.719,
+          "source": "ncaaf-staged-runtime-previous-4"
+        },
+        {
+          "count": 53,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 30.349,
+          "source": "ncaaf-staged-runtime-current-4"
+        }
+      ],
       "kind": "estimated",
+      "latest_measurement_complete": true,
       "path": "tests/test_nfl_source_interpretation.py",
       "profiled_tests": 53,
       "references": [
         "ncaaf-socket-ci-completed-reviewed2424-6",
         "ncaaf-socket-ci-completed-main-6",
-        "ncaaf-socket-ci-completed-pr-6"
+        "ncaaf-socket-ci-completed-pr-6",
+        "ncaaf-staged-runtime-previous-4",
+        "ncaaf-staged-runtime-current-4"
       ],
-      "seconds": 42.22455,
+      "runtime_followup_test_blob": "a759f9a2218ffc66fdd131434716b3acd9ca15c2",
+      "seconds": 49.12685,
       "successor_advisory_basis_seconds": 36.717,
       "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
       "successor_completed_measurements": [
@@ -12253,7 +12721,8 @@
           "test_git_blob": "a759f9a2218ffc66fdd131434716b3acd9ca15c2"
         }
       ],
-      "successor_variance_multiplier": 1.15
+      "successor_variance_multiplier": 1.15,
+      "variance_multiplier": 1.15
     },
     {
       "advisory_basis_seconds": 25.436149,
@@ -12481,8 +12950,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 135.32,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 271.916,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 43,
@@ -12507,6 +12976,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 135.32,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 271.916,
+          "source": "ncaaf-staged-runtime-previous-4"
+        },
+        {
+          "count": 43,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 225.381,
+          "source": "ncaaf-staged-runtime-current-4"
         }
       ],
       "kind": "estimated",
@@ -12542,9 +13023,12 @@
         "listing-completed-pr-2",
         "ncaaf-socket-ci-completed-reviewed2424-3",
         "ncaaf-socket-ci-completed-main-3",
-        "ncaaf-socket-ci-completed-pr-3"
+        "ncaaf-socket-ci-completed-pr-3",
+        "ncaaf-staged-runtime-previous-4",
+        "ncaaf-staged-runtime-current-4"
       ],
-      "seconds": 269.077,
+      "runtime_followup_test_blob": "04aea2838c24ae369eaf1041dfafd1b9a4038b72",
+      "seconds": 312.7034,
       "successor_advisory_basis_seconds": 233.98,
       "successor_basis": "Maximum of compatible completed #2424 reviewed-head/main and #2425 completed-shard JUnit testcase sums plus 15% advisory variance. Interrupted shard-2 logs and profiling subset times excluded. Historical metadata remains retained, not relabelled as current timing. No runtime guarantee.",
       "successor_completed_measurements": [
@@ -14369,8 +14853,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 44.481,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 79.444,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 15,
@@ -14395,6 +14879,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 44.481,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 78.346,
+          "source": "ncaaf-staged-runtime-previous-7"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 79.444,
+          "source": "ncaaf-staged-runtime-current-7"
         }
       ],
       "kind": "estimated",
@@ -14443,14 +14939,17 @@
         "listing-completed-main-1",
         "listing-completed-pr-2",
         "nfl-pdf-capacity-socket-2",
-        "nfl-pdf-capacity-main-3"
+        "nfl-pdf-capacity-main-3",
+        "ncaaf-staged-runtime-previous-7",
+        "ncaaf-staged-runtime-current-7"
       ],
-      "seconds": 65.73285,
+      "runtime_followup_test_blob": "e21e490228936a165ff1fd870d8275b53c6b8eb9",
+      "seconds": 91.3606,
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 1.579251,
-      "basis": "Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.",
+      "advisory_basis_seconds": 20.752,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 37,
@@ -14463,6 +14962,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 1.485,
           "source": "pr-3"
+        },
+        {
+          "count": 37,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 20.752,
+          "source": "ncaaf-staged-runtime-previous-5"
+        },
+        {
+          "count": 37,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 7.5489999999999995,
+          "source": "ncaaf-staged-runtime-current-6"
         }
       ],
       "incomplete_observations": [
@@ -14474,16 +14985,19 @@
         }
       ],
       "kind": "estimated",
-      "latest_measurement_complete": false,
+      "latest_measurement_complete": true,
       "original_measured_seconds": 1.485,
       "path": "tests/test_preview_coverage_binding.py",
       "profiled_tests": 37,
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-cancelled-1"
+        "refresh1-cancelled-1",
+        "ncaaf-staged-runtime-previous-5",
+        "ncaaf-staged-runtime-current-6"
       ],
-      "seconds": 1.816139,
+      "runtime_followup_test_blob": "ef44b2370dbac4084da715942a41d90572432c36",
+      "seconds": 23.8648,
       "variance_multiplier": 1.15
     },
     {
@@ -14783,8 +15297,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 28.333,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 61.846,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 50,
@@ -14815,6 +15329,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 28.333,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 50,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 38.106,
+          "source": "ncaaf-staged-runtime-previous-1"
+        },
+        {
+          "count": 50,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 61.846,
+          "source": "ncaaf-staged-runtime-current-1"
         }
       ],
       "kind": "estimated",
@@ -14880,9 +15406,12 @@
         "listing-completed-pr-2",
         "nfl-pdf-capacity-margin-3",
         "nfl-pdf-capacity-socket-6",
-        "nfl-pdf-capacity-main-3"
+        "nfl-pdf-capacity-main-3",
+        "ncaaf-staged-runtime-previous-1",
+        "ncaaf-staged-runtime-current-1"
       ],
-      "seconds": 51.7822,
+      "runtime_followup_test_blob": "f2f0c8ec6f11783478be18ed53c74fd38d145cd6",
+      "seconds": 71.1229,
       "variance_multiplier": 1.15
     },
     {
@@ -15553,8 +16082,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 16.429,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 26.947,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 48,
@@ -15573,6 +16102,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 16.429,
           "source": "listing-completed-main-1"
+        },
+        {
+          "count": 48,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 17.984,
+          "source": "ncaaf-staged-runtime-previous-1"
+        },
+        {
+          "count": 48,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 26.947,
+          "source": "ncaaf-staged-runtime-current-1"
         }
       ],
       "kind": "estimated",
@@ -15584,9 +16125,12 @@
       "references": [
         "oct11-main-1",
         "refresh1-completed-3",
-        "listing-completed-main-1"
+        "listing-completed-main-1",
+        "ncaaf-staged-runtime-previous-1",
+        "ncaaf-staged-runtime-current-1"
       ],
-      "seconds": 18.89335,
+      "runtime_followup_test_blob": "670eab8baa307977de5e29ba39086cefcf723c8c",
+      "seconds": 30.98905,
       "variance_multiplier": 1.15
     },
     {
@@ -16220,8 +16764,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 84.412,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 162.587,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 54,
@@ -16246,6 +16790,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 84.412,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 54,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 111.869,
+          "source": "ncaaf-staged-runtime-previous-3"
+        },
+        {
+          "count": 54,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 162.587,
+          "source": "ncaaf-staged-runtime-current-3"
         }
       ],
       "kind": "estimated",
@@ -16314,9 +16870,12 @@
         "listing-completed-main-3",
         "listing-completed-pr-2",
         "nfl-pdf-capacity-socket-5",
-        "nfl-pdf-capacity-main-5"
+        "nfl-pdf-capacity-main-5",
+        "ncaaf-staged-runtime-previous-3",
+        "ncaaf-staged-runtime-current-3"
       ],
-      "seconds": 178.158,
+      "runtime_followup_test_blob": "a12723040bf5a44690af41d85f022c8153594112",
+      "seconds": 186.97505,
       "variance_multiplier": 1.15
     },
     {
@@ -16742,8 +17301,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 149.323,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 252.002,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 46,
@@ -16768,6 +17327,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 149.323,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 46,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 250.869,
+          "source": "ncaaf-staged-runtime-previous-7"
+        },
+        {
+          "count": 46,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 252.002,
+          "source": "ncaaf-staged-runtime-current-7"
         }
       ],
       "kind": "estimated",
@@ -16800,9 +17371,12 @@
         "oct11-pr-2",
         "refresh1-completed-2",
         "listing-completed-main-2",
-        "listing-completed-pr-2"
+        "listing-completed-pr-2",
+        "ncaaf-staged-runtime-previous-7",
+        "ncaaf-staged-runtime-current-7"
       ],
-      "seconds": 222.87345,
+      "runtime_followup_test_blob": "b73668e319953dac0cd587fc7dae854887f8a840",
+      "seconds": 289.8023,
       "variance_multiplier": 1.15
     },
     {
@@ -17307,8 +17881,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 3.28,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 6.703,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 25,
@@ -17327,6 +17901,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 2.304,
           "source": "refresh1-completed-3"
+        },
+        {
+          "count": 25,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 2.265,
+          "source": "ncaaf-staged-runtime-previous-3"
+        },
+        {
+          "count": 25,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 6.703,
+          "source": "ncaaf-staged-runtime-current-5"
         }
       ],
       "kind": "estimated",
@@ -17337,9 +17923,12 @@
       "references": [
         "oct11-main-3",
         "oct11-pr-3",
-        "refresh1-completed-3"
+        "refresh1-completed-3",
+        "ncaaf-staged-runtime-previous-3",
+        "ncaaf-staged-runtime-current-5"
       ],
-      "seconds": 3.772,
+      "runtime_followup_test_blob": "97ccc17f432dcb474d30d10b4089d62159f2efed",
+      "seconds": 7.70845,
       "variance_multiplier": 1.15
     },
     {
@@ -17558,8 +18147,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 5.469,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 10.276000000000002,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 2,
@@ -17572,6 +18161,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 5.469,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 2,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 9.997,
+          "source": "ncaaf-staged-runtime-previous-6"
+        },
+        {
+          "count": 2,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 10.276000000000002,
+          "source": "ncaaf-staged-runtime-current-3"
         }
       ],
       "incomplete_observations": [],
@@ -17582,9 +18183,12 @@
       "profiled_tests": 2,
       "references": [
         "listing-completed-main-3",
-        "listing-completed-pr-2"
+        "listing-completed-pr-2",
+        "ncaaf-staged-runtime-previous-6",
+        "ncaaf-staged-runtime-current-3"
       ],
-      "seconds": 6.28935,
+      "runtime_followup_test_blob": "0e52728521d3c7d0012455c7f243dc47ed9636c9",
+      "seconds": 11.8174,
       "variance_multiplier": 1.15
     },
     {
@@ -17919,8 +18523,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 361.827,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 685.673,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 110,
@@ -17945,6 +18549,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 361.827,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 110,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 685.673,
+          "source": "ncaaf-staged-runtime-previous-2"
         }
       ],
       "kind": "estimated",
@@ -17977,9 +18587,11 @@
         "oct11-pr-2",
         "refresh1-completed-2",
         "listing-completed-main-2",
-        "listing-completed-pr-2"
+        "listing-completed-pr-2",
+        "ncaaf-staged-runtime-previous-2"
       ],
-      "seconds": 593.27465,
+      "runtime_followup_test_blob": "db967628f548001cc3d45db68edb8d2817dd9bbb",
+      "seconds": 788.52395,
       "variance_multiplier": 1.15
     },
     {
@@ -18110,8 +18722,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 30.467,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 50.101,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 51,
@@ -18142,6 +18754,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 30.467,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 51,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 50.101,
+          "source": "ncaaf-staged-runtime-previous-2"
         }
       ],
       "kind": "estimated",
@@ -18207,9 +18825,11 @@
         "listing-completed-pr-2",
         "nfl-pdf-capacity-margin-4",
         "nfl-pdf-capacity-socket-5",
-        "nfl-pdf-capacity-main-2"
+        "nfl-pdf-capacity-main-2",
+        "ncaaf-staged-runtime-previous-2"
       ],
-      "seconds": 50.71615,
+      "runtime_followup_test_blob": "52d61c2570b31f0df07dd77d539b7dc820d3b5f5",
+      "seconds": 57.61615,
       "variance_multiplier": 1.15
     },
     {
@@ -18242,8 +18862,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 228.344,
-      "basis": "Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.",
+      "advisory_basis_seconds": 273.706,
+      "basis": "Maximum compatible complete passing-file primary JUnit testcase sum plus 15% advisory variance; unchanged count/source, no cancelled progress or profiler times.",
       "completed_measurements": [
         {
           "count": 42,
@@ -18268,6 +18888,18 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 228.344,
           "source": "document-ci-completed-56-shard6"
+        },
+        {
+          "count": 42,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 176.513,
+          "source": "ncaaf-staged-runtime-previous-3"
+        },
+        {
+          "count": 42,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 273.706,
+          "source": "ncaaf-staged-runtime-current-3"
         }
       ],
       "incomplete_observations": [
@@ -18309,9 +18941,12 @@
         "refresh1-cancelled-1",
         "listing-completed-main-2",
         "listing-completed-pr-2",
-        "document-ci-completed-56-shard6"
+        "document-ci-completed-56-shard6",
+        "ncaaf-staged-runtime-previous-3",
+        "ncaaf-staged-runtime-current-3"
       ],
-      "seconds": 262.5956,
+      "runtime_followup_test_blob": "5d1aedd5b8beb03c406b7c31be93fefe65525ce0",
+      "seconds": 314.7619,
       "variance_multiplier": 1.15
     },
     {
@@ -19847,6 +20482,13 @@
     "setup_reporting_allowance_seconds": 100,
     "version": 1
   },
+  "ncaaf_staged_runtime_revision": {
+    "changed_rows": 43,
+    "measurements_are_advisory": true,
+    "predecessor_profile_sha256": "090c444804b9d7941b8e8200f60dd02a7de3e0e97b7df89eca7b153c2a5470f7",
+    "selection": "Every completed-XML upward correction at least one existing fallback case (3.5 seconds). No decreases; all smaller stale deltas remain in conservative planning sensitivity.",
+    "version": 1
+  },
   "nfl_listing_cost_basis": "Measured listing follow-up: 55 inherited scope files plus two new listing files; completed main/#2419 JUnit only, maximum compatible completed testcase cost plus unchanged 15% advisory margin. All prior sources and interrupted observations remain retained. Other file entries, scheduler, fallback, tests and workflows unchanged.",
   "nfl_listing_cost_revision": 1,
   "nfl_pdf_ci_cost_basis": "Existing scope files only: completed exact-count Ubuntu JUnit sums with >=30-second demonstrated advisory underestimate, plus unchanged 15% advisory variance. No cancelled span is used as a completed measurement; excludes installation, collection, reporting and artifact upload. Prior frozen revision and successor metadata preserved.",
@@ -21009,6 +21651,149 @@
       "run": 38656250606,
       "source_compatibility": "Exact selected test-file Git blobs verified against retained revisions; guard implementations differ but completed main/PR Ubuntu comparison shows equivalent 16-test workload. Estimates retain 15% variance; no historical timestamp is refreshed.",
       "test_time_semantics": "Completed JUnit testcase sums; setup included according to pytest JUnit semantics. Excludes collection, dependency installation and reporting/upload."
+    },
+    "ncaaf-staged-runtime-current-1": {
+      "artifact_id": 12076000060,
+      "assignment_manifest_sha256": "fa5858ad1b3715e3cb9f35df22f71a00476f6b471af009da68cef8ba0e404bab",
+      "checkout_commit": "9d7739a39f6b62747166117abe65a9ed77c30096",
+      "head_sha": "87b06dc7d05fb9bef7638b3c2f2862ffe2b92136",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38963460185,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "790725464beee34175f4a94767f903c94572c64b1faa03b90de59ee102a004b6"
+    },
+    "ncaaf-staged-runtime-current-3": {
+      "artifact_id": 12074129413,
+      "assignment_manifest_sha256": "c79eb12ec56908ff77f0b231dd597adb383a7c7d8e3bbc337f4ebf80a69761c6",
+      "checkout_commit": "9d7739a39f6b62747166117abe65a9ed77c30096",
+      "head_sha": "87b06dc7d05fb9bef7638b3c2f2862ffe2b92136",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38963460185,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "b83fb78dffa53dd08887b3e9b562176265630737b14ac292e8d9f12ccb09b984"
+    },
+    "ncaaf-staged-runtime-current-4": {
+      "artifact_id": 12073709677,
+      "assignment_manifest_sha256": "8f9ff1c9389cce714cf0a2406463005bb3f4ff729de98d8b115a440e8016a9c9",
+      "checkout_commit": "9d7739a39f6b62747166117abe65a9ed77c30096",
+      "head_sha": "87b06dc7d05fb9bef7638b3c2f2862ffe2b92136",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38963460185,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "2f0f846382fe927b6eb3d1315afbea3e6afa1a26c2713401aa9c15210f875e01"
+    },
+    "ncaaf-staged-runtime-current-5": {
+      "artifact_id": 12074492779,
+      "assignment_manifest_sha256": "fb404ee734531b71dde52404f2b75dc0e07af22684fe624870a8ddd5bf954067",
+      "checkout_commit": "9d7739a39f6b62747166117abe65a9ed77c30096",
+      "head_sha": "87b06dc7d05fb9bef7638b3c2f2862ffe2b92136",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38963460185,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "4219e028cbe665e60329b8082203788c23ae5705ccb38b3d7ed978e445ed719c"
+    },
+    "ncaaf-staged-runtime-current-6": {
+      "artifact_id": 12074851777,
+      "assignment_manifest_sha256": "d3c5a3f01994454b3454fc60000b23613e01771e569ba63942c64e26a062d211",
+      "checkout_commit": "9d7739a39f6b62747166117abe65a9ed77c30096",
+      "head_sha": "87b06dc7d05fb9bef7638b3c2f2862ffe2b92136",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38963460185,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "d0426f0a240556fcf5e016fe5140c367bae7c84208f80a06f42a9a4fdfc67147"
+    },
+    "ncaaf-staged-runtime-current-7": {
+      "artifact_id": 12075490068,
+      "assignment_manifest_sha256": "b3f91f55109f8047b8a46772d49783cb414054cc31455480e37344af98a48989",
+      "checkout_commit": "9d7739a39f6b62747166117abe65a9ed77c30096",
+      "head_sha": "87b06dc7d05fb9bef7638b3c2f2862ffe2b92136",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38963460185,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "117c7bb5bf6ef8bee2f35ffa4569c3175a888d2520fb751a2684c0feaefcb185"
+    },
+    "ncaaf-staged-runtime-previous-1": {
+      "artifact_id": 12070863679,
+      "assignment_manifest_sha256": "63a552c42d353a60019b5f85b66888f0ea7093bae6b36b80672a5e985b46c6ed",
+      "checkout_commit": "bf2cdc1d8a4faa29c8f5fb8329ad02a88a986db3",
+      "head_sha": "4967f755ce213d66d2b1aa7432c5f0cb08e1abc5",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38955565875,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "b7d95ad69615e9de6bf60ac7f9b6450dcf6d9ffe3199ea1907afe1cf0ee97728"
+    },
+    "ncaaf-staged-runtime-previous-2": {
+      "artifact_id": 12071996565,
+      "assignment_manifest_sha256": "bc8d6cdcb8d7d43e3f474bdddf9c1683f52fe22c09bc32ef0ea3fbacfcf7f30a",
+      "checkout_commit": "bf2cdc1d8a4faa29c8f5fb8329ad02a88a986db3",
+      "head_sha": "4967f755ce213d66d2b1aa7432c5f0cb08e1abc5",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38955565875,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "494f7fee4174e5f454573a09035823182b900d9e2d0fb8da3a34921b21baba74"
+    },
+    "ncaaf-staged-runtime-previous-3": {
+      "artifact_id": 12071381287,
+      "assignment_manifest_sha256": "f7de988f97a1fb7d63e0c6561f42e84048c0072e5bf38172f3b5113b0aec61c9",
+      "checkout_commit": "bf2cdc1d8a4faa29c8f5fb8329ad02a88a986db3",
+      "head_sha": "4967f755ce213d66d2b1aa7432c5f0cb08e1abc5",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38955565875,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "e629de38070af85dee35f33eaba912ac20a16b82c290304e3ce66e5842956b6f"
+    },
+    "ncaaf-staged-runtime-previous-4": {
+      "artifact_id": 12072035923,
+      "assignment_manifest_sha256": "1e207313126492e4d53934cda80b234b1881a74b659c9462a1d9c879d27c680d",
+      "checkout_commit": "bf2cdc1d8a4faa29c8f5fb8329ad02a88a986db3",
+      "head_sha": "4967f755ce213d66d2b1aa7432c5f0cb08e1abc5",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38955565875,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "9750fe5efbd55e347a52bd6504217824cedb45a8a217f70801e3229f8da3d0b0"
+    },
+    "ncaaf-staged-runtime-previous-5": {
+      "artifact_id": 12071486519,
+      "assignment_manifest_sha256": "b86dc38630beea6540ff7be1cc9c045e8360655c834f68b7ac517a6ad18c63bd",
+      "checkout_commit": "bf2cdc1d8a4faa29c8f5fb8329ad02a88a986db3",
+      "head_sha": "4967f755ce213d66d2b1aa7432c5f0cb08e1abc5",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38955565875,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "9279b71dbb089992f30b78dcf3bf4a06b81e5855d2e43f6db2e15010f7d60da1"
+    },
+    "ncaaf-staged-runtime-previous-6": {
+      "artifact_id": 12072176010,
+      "assignment_manifest_sha256": "7bcc01ba4cddd5ff2636bee90333019e03e6d18b7cbba645ea326aada4c01f4a",
+      "checkout_commit": "bf2cdc1d8a4faa29c8f5fb8329ad02a88a986db3",
+      "head_sha": "4967f755ce213d66d2b1aa7432c5f0cb08e1abc5",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38955565875,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "e9cd4535285f9846f6c0090f922f346668485b734ab1c5b87c653c7f6b918fed"
+    },
+    "ncaaf-staged-runtime-previous-7": {
+      "artifact_id": 12070959689,
+      "assignment_manifest_sha256": "46931b9e96412dc722ec6689aa7f659cb39956ea85d9940cd0ebfa64ec6954d3",
+      "checkout_commit": "bf2cdc1d8a4faa29c8f5fb8329ad02a88a986db3",
+      "head_sha": "4967f755ce213d66d2b1aa7432c5f0cb08e1abc5",
+      "kind": "completed_junit_testcase_sum",
+      "run_attempt": 1,
+      "run_id": 38955565875,
+      "source_test_compatibility": "Exact test file blob and collection count; successor guard differs. Completed passing file only, not proof of full-run success.",
+      "xml_sha256": "28cc632d5023bb6b2a85fd9b9641fc9c2e8045d05e9e30b551bbd32db4252a32"
     },
     "nfl-odds-completed-1": {
       "artifact_id": 11753905824,
