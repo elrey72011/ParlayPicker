@@ -1,0 +1,76 @@
+{
+  "approval_reference": "Robert approved the separate exact NFL odds socket lifecycle correction, patch SHA-256 e55ac972cf7e11177ddfdff95e6e05719aad653b82edf4d2e9b6492aa99a7be9: retain the socket before HTTPResponse detaches it, check framed completion after deadline/cancellation gates, interrupt detached reads on cleanup, preserve TLS, framing/truncation/size/credential/attempt checks and all original assertions; add labelled real-local-socket and actual CLI/acquisition/custody/read-back regressions with external transports blocked, combined shallow validation, exact successor bindings and policy-only seal, separate draft PR and one complete required final-head CI cycle with no retries. Preserve PDF normalization PR2427 and scanner diagnostics PR2426, NCAAF/WNBA, task pins, original evidence/journals and authorizations, model/admission behavior, workflows, six shards, scheduler, profile and timeouts. No acquisition, inference, trust activation, configuration application, arming, scheduling, Drive, merge or deployment",
+  "approved_existing_test_changes": {},
+  "base": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+  "base_tree": "a2ddea9d1079f057795907777b6f6fc61183a2aa",
+  "main_base": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+  "main_tree": "a2ddea9d1079f057795907777b6f6fc61183a2aa",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/nfl_odds_acquisition.py",
+    "docs/paid-launch/nfl-odds-socket-binding-v1.json",
+    "docs/paid-launch/nfl-odds-socket-lifecycle-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/nfl_odds_socket_scope.py",
+    "tests/test_nfl_odds_socket_lifecycle.py",
+    "tests/test_nfl_odds_socket_scope.py"
+  ],
+  "previous_guard_sha256": "779924ac64cab60a8323ec2b5460c50283c011bdccd5a08a8a49adb564494419",
+  "reconstruction_json_sha256": "c8a5cfd3cec3548e43ced855b22ee616e68b046744e4739f94e507412eb8eb7b",
+  "reviewed_blobs": {
+    "app_core/nfl_odds_acquisition.py": "dca62439a570264f83be5b878c5863b6faee9f95",
+    "docs/paid-launch/nfl-odds-socket-lifecycle-v1.md": "8b60293740ff36c10fee2a5f8db1183e9ccdc3b3",
+    "scripts/nfl_odds_socket_scope.py": "49788322210bfe8ce171454d1d587a7e08c82caf",
+    "tests/test_nfl_odds_socket_lifecycle.py": "469ecc276a47441c1075406a4140265319da779f",
+    "tests/test_nfl_odds_socket_scope.py": "2c2d9435d7c893ee2406891df88e5fec307821c5"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "app_core/nfl_odds_acquisition.py": {
+      "after_sha256": "00a17e289c397eda71a9f38e0274cbc26b8aa4d3e6339dda9c4f5d5deba00926",
+      "before_sha256": "537eee45a3e42b1b146eef1caf7501a1c32aca95505506dc2fc2c62e60a59ad5",
+      "reverse_patches": [
+        {
+          "end": 304,
+          "start": 290,
+          "text": ""
+        },
+        {
+          "end": 14800,
+          "start": 14269,
+          "text": "        conn=None; cancelled=threading.Event()\n"
+        },
+        {
+          "end": 15319,
+          "start": 15231,
+          "text": "            _timed(conn.connect,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 15713,
+          "start": 15468,
+          "text": "            _timed(lambda:conn.request('GET',SOURCE['endpoint']+'?'+urlencode(params),headers={'Accept':'application/json','Accept-Encoding':'identity'}), min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 15851,
+          "start": 15750,
+          "text": "            response=_timed(conn.getresponse,min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 16202,
+          "start": 16182,
+          "text": "            if conn: conn.close()\n"
+        },
+        {
+          "end": 16884,
+          "start": 16499,
+          "text": "                        require(monotonic()<deadline,'NFL_ACQUIRE_DEADLINE')\n                        conn.sock.settimeout(min(10,max(.001,deadline-monotonic())))\n                        block=_timed(lambda:response.read1(8192),min(deadline,monotonic()+10),monotonic,cancelled,conn.close)\n"
+        },
+        {
+          "end": 17213,
+          "start": 17176,
+          "text": "            def close(self): conn.close()\n"
+        }
+      ]
+    }
+  }
+}
