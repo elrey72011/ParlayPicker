@@ -1,0 +1,59 @@
+name: NCAAF staged runtime diagnostic
+on:
+  push:
+    branches: [codex/ncaaf-staged-runtime-diag-v1]
+permissions:
+  contents: read
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - case: previous
+            revision: bf2cdc1d8a4faa29c8f5fb8329ad02a88a986db3
+          - case: current
+            revision: 9d7739a39f6b62747166117abe65a9ed77c30096
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.revision }}
+          path: application
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.15'
+          cache: pip
+          cache-dependency-path: application/requirements.txt
+      - name: Validate exact helper and dependency constraints
+        run: |
+          python tooling/scripts/ncaaf_runtime_diagnostic.py --self-test
+          python tooling/scripts/ncaaf_runtime_diagnostic.py --constraints constraints.txt
+      - name: Install matching pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c constraints.txt -r application/requirements.txt pytest==9.1.1
+      - name: Observe bounded unchanged workload with default pytest temp paths
+        working-directory: application
+        run: >
+          timeout --signal=TERM --kill-after=20s 23m
+          python ../tooling/scripts/ncaaf_runtime_diagnostic.py
+          --case ${{ matrix.case }} --output ../diag-output/results
+      - name: Preserve complete or partial diagnostic evidence
+        if: ${{ always() }}
+        run: python tooling/scripts/ncaaf_runtime_diagnostic.py --artifact-directory diag-output
+      - name: Upload diagnostic evidence even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncaaf-runtime-${{ matrix.case }}
+          path: diag-output
+          retention-days: 7
+          if-no-files-found: error
