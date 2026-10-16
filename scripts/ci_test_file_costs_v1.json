@@ -1,4 +1,13 @@
 {
+  "document_main_reconcile_cost_provenance": [
+    {
+      "completed_testcase_seconds": 801.868,
+      "count": 110,
+      "path": "tests/test_slate_audit_scope.py",
+      "source": "document-main-f980-completed-slate",
+      "variance_factor": 1.15
+    }
+  ],
   "fallback": {
     "minimum_file_seconds": 30.0,
     "seconds_per_test": 3.5
@@ -17919,8 +17928,8 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 361.827,
-      "basis": "Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.",
+      "advisory_basis_seconds": 801.868,
+      "basis": "Completed current-main Ubuntu JUnit testcase sum plus the existing 15% advisory variance. Session collection/reporting/artifact overhead remains separate. Not a runtime upper bound.",
       "completed_measurements": [
         {
           "count": 110,
@@ -17945,6 +17954,12 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 361.827,
           "source": "listing-completed-pr-2"
+        },
+        {
+          "count": 110,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 801.868,
+          "source": "document-main-f980-completed-slate"
         }
       ],
       "kind": "estimated",
@@ -17979,7 +17994,7 @@
         "listing-completed-main-2",
         "listing-completed-pr-2"
       ],
-      "seconds": 593.27465,
+      "seconds": 922.1482,
       "variance_multiplier": 1.15
     },
     {
@@ -20548,6 +20563,22 @@
       "run_id": 38606041401,
       "xml": "full-suite-5.xml",
       "xml_sha256": "b157d4f5f6bdc6b1261a3b87803f2661f4a958e204a673371b2284b9aeb4da39"
+    },
+    "document-main-f980-completed-slate": {
+      "assignment_manifest_sha256": "b6913f02152f62bbcf5b11550abd0b423a8f5bf7ce8129c13e2feeb701f8798a",
+      "assignment_sha256": "a2768ca2be65ab1c7dfb9599e5cadb639b4d00847a430a291c8dd42d26159a55",
+      "attempt": 1,
+      "checkout_commit": "f98015dbd969456990a01f9d45405697c7fc5251",
+      "complete_for_target_file": true,
+      "count": 110,
+      "junit_sha256": "28681f88e8e3dac73b7bf98f21c3fe2bc39b729b75d3faf05e29a2f6799fdef0",
+      "kind": "completed_junit_testcase_sum",
+      "profile_sha256": "090c444804b9d7941b8e8200f60dd02a7de3e0e97b7df89eca7b153c2a5470f7",
+      "run_id": 38849841395,
+      "seconds": 801.868,
+      "setup_and_reporting_included": false,
+      "source": "document-main-f980-completed-slate",
+      "timing_scope": "JUnit testcase sums include each testcase setup/call/teardown; dependency installation, collection, session reporting and artifact handling are separate."
     },
     "listing-completed-main-1": {
       "artifact_id": 11779417039,

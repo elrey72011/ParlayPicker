@@ -1,0 +1,275 @@
+{
+  "approval_reference": "Robert authorized closing PR 2426 timing only: completed compatible XML/assignment evidence, 15 percent advisory variance, two new file costs and inspection/correction of other demonstrably stale costs, exact predecessor fixtures preserving frozen revision 3 and historical assertions, combined shallow-checkout provenance and preservation regressions, fresh exact successor bindings and policy-only seal, existing draft PR push and one complete new final-head CI cycle only after credible six-whole-file assignment with separate setup/collection/upload/cleanup allowance. Preserve scheduler, all workflows, six shards, 30-minute limits, external network blocking, original test identities/assertions/rejections and all prior failures. No mutable validation cache or scanner/credential/acquisition/model change. Preserve independently scheduled two-PDF task and every pinned file, WNBA, NFL/NCAAF, Rams, Army-FAU, storage and journals. No retries, requests, inference, scheduling/security/storage/Drive/trust changes, merge, deployment or wagering",
+  "approved_existing_test_changes": {
+    "tests/test_football_document_ci_closure.py": "Exact hash-bound predecessor fixture only; all original test function/assertion ASTs and identities unchanged.",
+    "tests/test_ncaaf_socket_ci_costs.py": "Exact hash-bound predecessor fixture only; all original test function/assertion ASTs and identities unchanged."
+  },
+  "base": "6e31a802ac3a39ac58ba38082747d9046efd167d",
+  "base_tree": "4fc2496d4f78e7a0d4e49ce91e5cdd01dc29ad7e",
+  "main_base": "a796056aca70ae79ec5c4f5fd4a644fb80f9cd51",
+  "main_tree": "a2ddea9d1079f057795907777b6f6fc61183a2aa",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "docs/paid-launch/football-document-scan-ci-binding-v1.json",
+    "docs/paid-launch/football-document-scan-ci-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/football_document_scan_ci_scope.py",
+    "tests/test_document_scan_ci_costs.py",
+    "tests/test_document_scan_ci_scope.py",
+    "tests/test_football_document_ci_closure.py",
+    "tests/test_ncaaf_socket_ci_costs.py"
+  ],
+  "previous_guard_sha256": "aef9c85ad1ebbe64c766b87fdf4e5a564102cd40f5b9f566a7b36aaeecc28ce3",
+  "reconstruction_json_sha256": "428d8eaa8a31d06b0553952705a3b099235980d148daf02777f17ec89a767cd4",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-scan-ci-v1.md": "24d4c2979b93b036551e8098fc415da084abd9fb",
+    "scripts/ci_test_file_costs_v1.json": "b2fb079a164f877c057aed575747e7289289b94c",
+    "scripts/football_document_scan_ci_scope.py": "687ef88804c4697bab4f2ae3f631d7044a2d7ea1",
+    "tests/test_document_scan_ci_costs.py": "dd8a918db985c0e0da5a2172d7f10ffeef25ec3f",
+    "tests/test_document_scan_ci_scope.py": "3f7f8ead67805c8a598b55c4a63550034ae546cd",
+    "tests/test_football_document_ci_closure.py": "ff20bd3aecd68b3ef1e81464b823b90b41e0defc",
+    "tests/test_ncaaf_socket_ci_costs.py": "1dd061fbb6dafc37cf646443a21eac1cf2093205"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "scripts/ci_test_file_costs_v1.json": {
+      "after_sha256": "271805a99755c215685a17fcf3470a783bb8a1c58843e724b1a6ec5799a0ee4d",
+      "before_sha256": "4ed86b6f3577ba1a9874cc3632889afec45650e857326bda5ffcb3ffd421bc49",
+      "reverse_patches": [
+        {
+          "end": 3288,
+          "start": 2,
+          "text": ""
+        },
+        {
+          "end": 43894,
+          "start": 42904,
+          "text": ""
+        },
+        {
+          "end": 47081,
+          "start": 46091,
+          "text": ""
+        },
+        {
+          "end": 74346,
+          "start": 73612,
+          "text": ""
+        },
+        {
+          "end": 124907,
+          "start": 108761,
+          "text": ""
+        },
+        {
+          "end": 247177,
+          "start": 246450,
+          "text": ""
+        },
+        {
+          "end": 249017,
+          "start": 248870,
+          "text": "        \"ncaaf-socket-ci-completed-pr-1\"\n"
+        },
+        {
+          "end": 249054,
+          "start": 249026,
+          "text": "      \"seconds\": 843.66185,\n"
+        },
+        {
+          "end": 267294,
+          "start": 266302,
+          "text": ""
+        },
+        {
+          "end": 279541,
+          "start": 278817,
+          "text": ""
+        },
+        {
+          "end": 281369,
+          "start": 281222,
+          "text": "        \"ncaaf-socket-ci-completed-pr-5\"\n"
+        },
+        {
+          "end": 281406,
+          "start": 281378,
+          "text": "      \"seconds\": 501.2574,\n"
+        },
+        {
+          "end": 290443,
+          "start": 288452,
+          "text": ""
+        },
+        {
+          "end": 293294,
+          "start": 292289,
+          "text": ""
+        },
+        {
+          "end": 295243,
+          "start": 294249,
+          "text": ""
+        },
+        {
+          "end": 300361,
+          "start": 299637,
+          "text": ""
+        },
+        {
+          "end": 302324,
+          "start": 302183,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 302360,
+          "start": 302333,
+          "text": "      \"seconds\": 196.6454,\n"
+        },
+        {
+          "end": 316863,
+          "start": 313119,
+          "text": ""
+        },
+        {
+          "end": 320481,
+          "start": 319756,
+          "text": ""
+        },
+        {
+          "end": 321892,
+          "start": 321751,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 321929,
+          "start": 321901,
+          "text": "      \"seconds\": 242.47405,\n"
+        },
+        {
+          "end": 326981,
+          "start": 321963,
+          "text": ""
+        },
+        {
+          "end": 341323,
+          "start": 340602,
+          "text": ""
+        },
+        {
+          "end": 341777,
+          "start": 341636,
+          "text": "        \"listing-completed-main-3\"\n"
+        },
+        {
+          "end": 341813,
+          "start": 341786,
+          "text": "      \"seconds\": 13.2135,\n"
+        },
+        {
+          "end": 345413,
+          "start": 344423,
+          "text": ""
+        },
+        {
+          "end": 347913,
+          "start": 346923,
+          "text": ""
+        },
+        {
+          "end": 354819,
+          "start": 354098,
+          "text": ""
+        },
+        {
+          "end": 355203,
+          "start": 355062,
+          "text": "        \"listing-completed-main-2\"\n"
+        },
+        {
+          "end": 355239,
+          "start": 355212,
+          "text": "      \"seconds\": 13.7747,\n"
+        },
+        {
+          "end": 500384,
+          "start": 499660,
+          "text": ""
+        },
+        {
+          "end": 501847,
+          "start": 501708,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 501884,
+          "start": 501856,
+          "text": "      \"seconds\": 215.0155,\n"
+        },
+        {
+          "end": 503649,
+          "start": 502924,
+          "text": ""
+        },
+        {
+          "end": 505102,
+          "start": 504963,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 505138,
+          "start": 505111,
+          "text": "      \"seconds\": 222.87345,\n"
+        },
+        {
+          "end": 527469,
+          "start": 526475,
+          "text": ""
+        },
+        {
+          "end": 541733,
+          "start": 541006,
+          "text": ""
+        },
+        {
+          "end": 543181,
+          "start": 543042,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 543218,
+          "start": 543190,
+          "text": "      \"seconds\": 593.27465,\n"
+        },
+        {
+          "end": 646300,
+          "start": 634605,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_football_document_ci_closure.py": {
+      "after_sha256": "2077eb2e35ef6858554fcb6422593dfd90de09a3ee9fa112395033571f77a214",
+      "before_sha256": "a26699d9698f212df4147b121a0352cfef9b36ddc54fdbccf7a1cd50e277a7ee",
+      "reverse_patches": [
+        {
+          "end": 7443,
+          "start": 7372,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ncaaf_socket_ci_costs.py": {
+      "after_sha256": "7364327e6d181a2c3138c71a1d99143c62fad2569dbebbd42c55f51eb2ac688f",
+      "before_sha256": "ea43455b8ac09e076b9049eab16a3b9bb2370f9f37b20129c0c4fd5ef574ec49",
+      "reverse_patches": [
+        {
+          "end": 1615,
+          "start": 290,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

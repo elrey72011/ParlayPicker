@@ -1,0 +1,39 @@
+{
+  "approval_reference": "Owner explicitly authorized exact fixture patch3ff95cfff814783420547ef1b6e72834ee164162a975facd7db539afc9c4989d and proposal590ca919f05a6c567554040c421145c97291d97b9a8e80b9d13afe6af36360f7, actual Windows validation, fresh bindings/seal, push and one additional complete CI cycle. Preserve every substantive assertion, production/scanner behavior, seven shards, workflows and timeouts. No retry, acquisition, inference, operational change, merge or deployment.",
+  "approved_existing_test_changes": {
+    "tests/qualification_ops/mirror_recovery_suite.py": {
+      "after_blob": "1eb596d0c08ab996fcbad970f3cda0d3a20f1da4",
+      "before_blob": "59d84f82934bfd6c37b0fe5775cd05185de873e6"
+    }
+  },
+  "base": "768f3d02c2cc4812db3df9fd7dde6aa9ec2fe080",
+  "base_tree": "b5abf21bd9773a324dc017a4bfb9cdb842914df6",
+  "main_base": "f98015dbd969456990a01f9d45405697c7fc5251",
+  "main_tree": "bb55338dbaf1b1dea445e50ec4b3ac20a37fc852",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "merged_source_blobs": {},
+  "paths": [
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_windows_sharing_scope.py",
+    "docs/paid-launch/football-document-windows-sharing-binding-v1.json",
+    "docs/paid-launch/football-document-windows-sharing-v1.md",
+    "tests/qualification_ops/mirror_recovery_suite.py",
+    "tests/test_document_windows_sharing_fixture.py"
+  ],
+  "previous_guard_sha256": "185a1956fee615293dab0d6675d8418975a2b299f838ea7917f47aeaf555310b",
+  "reconstruction_json_sha256": "cbc8626d1a276a145d97495d2e1e23cf59138f169a0368cf9ce9138f84ac6dc4",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-windows-sharing-v1.md": "a17aa5a5a9110f0a54dae382a7de2738869e2fdf",
+    "scripts/football_document_windows_sharing_scope.py": "bc69f86cd0c426de2061a7aa2b3ba99041d01638",
+    "tests/qualification_ops/mirror_recovery_suite.py": "1eb596d0c08ab996fcbad970f3cda0d3a20f1da4",
+    "tests/test_document_windows_sharing_fixture.py": "1b3b2aeb18984bdbd866470801b43e76a0c94cb5"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "tests/test_nfl_pdf_timing_costs.py": {
+      "after_sha256": "4f378c5c0777c4669f8376c1844d118ab06a8e531cc90a13d9c5c269e12e9567",
+      "before_sha256": "925390322aa8d1ba57be4fa0b31101593b59fa0c37929c62c5bdabe7f029efcf",
+      "before_size": 8627
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "approval_reference": "Local preparation of the necessary supported loader correction after the consumed authorized cycle demonstrated No module named scripts. Preserve every assertion, fixture, scanner behavior, profile, seven shards, timeouts, 512-field/8MiB source bounds and prior policy. No push/additional CI without the separately required additional-cycle authorization.",
+  "approved_existing_test_changes": {},
+  "base": "6e610048d1b46d79a16251333937132755df1ec2",
+  "base_tree": "d931d15df3dc44c0a26e54dabc9d8059f345881d",
+  "main_base": "f98015dbd969456990a01f9d45405697c7fc5251",
+  "main_tree": "bb55338dbaf1b1dea445e50ec4b3ac20a37fc852",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "merged_source_blobs": {},
+  "paths": [
+    "scripts/check_launch_change_scope.py",
+    "scripts/football_document_frozen66_loader_scope.py",
+    "docs/paid-launch/football-document-frozen66-loader-binding-v1.json",
+    "docs/paid-launch/football-document-frozen66-loader-v1.md"
+  ],
+  "previous_guard_sha256": "f13f84014963fcc23d5843c4f0ccafc55a6c94d6161c5d478f828608c53d12c4",
+  "reconstruction_json_sha256": "cbc8626d1a276a145d97495d2e1e23cf59138f169a0368cf9ce9138f84ac6dc4",
+  "reviewed_blobs": {
+    "docs/paid-launch/football-document-frozen66-loader-v1.md": "b1597f9d3c09e37aa0aad36854bac39838c5cb1a",
+    "scripts/football_document_frozen66_loader_scope.py": "67c570946d455aafe079ce5deb0c33239dea9f3e"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    "tests/test_nfl_pdf_timing_costs.py": {
+      "after_sha256": "4f378c5c0777c4669f8376c1844d118ab06a8e531cc90a13d9c5c269e12e9567",
+      "before_sha256": "925390322aa8d1ba57be4fa0b31101593b59fa0c37929c62c5bdabe7f029efcf",
+      "before_size": 8627
+    }
+  }
+}
