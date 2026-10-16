@@ -70,3 +70,38 @@ def test_all_old_assertions_and_unknown_test_source_preserved():
     old = assertions(prior); new = assertions(current)
     assert all(new[name] == values for name, values in old.items())
     assert guard._docpred_previous_source(path, current+b'\nUNREVIEWED') == current+b'\nUNREVIEWED'
+
+
+# These tests assert a frozen six-to-five projection. Supply its exact six-way
+# input; current seven-way gate tests continue to read the live checkout.
+def _exact_six_shard_input(path, source):
+    if path == guard.GUARD_PATH:
+        result = guard._nfl_pdf_timing_previous_source(path, source)
+        assert hashlib.sha256(result).hexdigest() == guard.NFL_PDF_TIMING_PREVIOUS_GUARD_SHA256
+        return result
+    record = json.loads(guard.NFL_PDF_TIMING_RECONSTRUCTION_JSON).get(path)
+    if record is None:
+        return source
+    identity = hashlib.sha256(source).hexdigest()
+    if identity == record['before_sha256']:
+        return source
+    assert identity == record['after_sha256']
+    result = guard._nfl_pdf_timing_previous_source(path, source)
+    assert hashlib.sha256(result).hexdigest() == record['before_sha256']
+    return result
+
+
+@pytest.fixture(autouse=True)
+def historical_six_shard_input(tmp_path, monkeypatch):
+    root = tmp_path/'SYNTHETIC-exact-six-way-predecessor'
+    paths = set(json.loads(guard.LISTING_CAPACITY_RECONSTRUCTION_JSON)) | {TARGET, 'tests/test_nfl_listing_capacity_scope.py'}
+    assert len(paths) <= 32
+    for path in sorted(paths):
+        source = (ROOT/path).read_bytes().replace(b'\r\n', b'\n')
+        result = _exact_six_shard_input(path, source)
+        destination = root/path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(result)
+    monkeypatch.setattr(__import__(__name__, fromlist=['ROOT']), 'ROOT', root)
+    monkeypatch.setattr(historical, '__file__', str(root/'tests/test_nfl_listing_capacity_scope.py'))
+    return root

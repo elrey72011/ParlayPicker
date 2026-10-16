@@ -20,7 +20,8 @@ def _exact_predecessor_profile():
     return raw, binding
 
 
-def test_exact_twelve_advisory_rows_and_frozen_metadata_preserved():
+def test_exact_twelve_advisory_rows_and_frozen_metadata_preserved(historical_nfl_pdf_capacity_profile, monkeypatch):
+    monkeypatch.setattr(__import__(__name__,fromlist=['ROOT']), 'ROOT', historical_nfl_pdf_capacity_profile)
     raw,binding=_exact_predecessor_profile()
     prior=json.loads(raw);now=json.loads((ROOT/'scripts/ci_test_file_costs_v1.json').read_bytes())
     successor=now['ncaaf_socket_ci_successor'];paths=set(successor['changed_paths'])
@@ -33,7 +34,8 @@ def test_exact_twelve_advisory_rows_and_frozen_metadata_preserved():
     assert all(now['sources'][key]==value for key,value in prior['sources'].items())
 
 
-def test_only_completed_whole_file_xml_supplies_advisory_costs():
+def test_only_completed_whole_file_xml_supplies_advisory_costs(historical_nfl_pdf_capacity_profile, monkeypatch):
+    monkeypatch.setattr(__import__(__name__,fromlist=['ROOT']), 'ROOT', historical_nfl_pdf_capacity_profile)
     data=json.loads((ROOT/'scripts/ci_test_file_costs_v1.json').read_bytes())
     rows={r['path']:r for r in data['files']}
     for path in data['ncaaf_socket_ci_successor']['changed_paths']:
@@ -108,3 +110,6 @@ def test_closure_profile_fixture_is_exact_isolated_and_rejects_substitution(tmp_
     p=snapshot/module.PROFILE;p.write_bytes(p.read_bytes()+b' ')
     monkeypatch.setattr(module,'ROOT',snapshot)
     with pytest.raises(AssertionError):module.historical_ci_closure_profile.__wrapped__(tmp_path/'rejected')
+
+
+from tests.nfl_pdf_capacity_fixtures import historical_nfl_pdf_capacity_profile
