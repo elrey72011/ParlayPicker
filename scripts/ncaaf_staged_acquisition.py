@@ -67,7 +67,7 @@ def main(argv=None):
         with lane.controlled(value, raw, args.bindings_sha256, root=args.custody_root, at=lane.transport.utc()) as approval:
             lane.require(load(args.authorization, 128*1024) == approval, 'NCAAF_STAGED_AUTHORIZATION')
             if not sys.stdin.isatty(): raise ValueError('NCAAF_STAGED_PRIVATE_TERMINAL_REQUIRED')
-            provider = 'cfbd' if value['payload']['version'] == lane.HISTORY_PLAN else 'odds_api'
+            provider = 'cfbd' if lane.is_history(value['payload']) else 'odds_api'
             # One private entry per stage; never arguments/environment/files/logs.
             secret = getpass.getpass(provider+' key (private, memory only): ')
             transport = lane.transport.HttpsTransport(lambda selected: secret if selected == provider else None)

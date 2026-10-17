@@ -41,7 +41,7 @@ def render(games=None, candidates=None):
             packets = []
             st.error("The selected packets exceed the bounded size or count limit.")
         st.session_state["ncaaf_research_packets"] = packets
-        st.caption("Half-point spreads and totals have separate targets. Integer push mass remains unvalidated. Historical inference clocks are never replaced by capture-finish clocks. Research supplies no wager approval.")
+        st.caption("Historical half-point targets stay separate. The explicitly versioned private spread route retains unconditional cover/push/loss; comparison requires one reviewed observed market and two attributable results. Uploading does not authorize inference. Historical clocks are never replaced by capture clocks. Research supplies no wager approval.")
 
         if private:
             import json
@@ -60,6 +60,20 @@ def render(games=None, candidates=None):
                         st.caption(result["basis"])
                         if result["availability_reason"] == "AVAILABLE":
                             st.metric("OWNER_REVIEWED / PRIVATE_RESEARCH probability", f"{result['probability']:.2%}")
+                            spread=exported.get('ncaaf_spread_private_display')
+                            if spread:
+                                shown=json.loads(spread)
+                                st.metric('Push probability',f"{shown['outcome_probabilities']['push']:.2%}")
+                                st.metric('Loss probability',f"{shown['outcome_probabilities']['loss']:.2%}")
+                                conditional=shown['conditional_no_push']
+                                if conditional['state']=='VALUE':
+                                    st.metric('Cover conditional on no push',f"{conditional['value']:.2%}")
+                                else:st.caption('Cover conditional on no push: UNKNOWN (zero denominator).')
+                                comparison=shown.get('comparison')
+                                if comparison:
+                                    st.metric('Home unconditional cover',f"{comparison['home_cover']:.2%}")
+                                    st.metric('Away unconditional cover',f"{comparison['away_cover']:.2%}")
+                                    st.caption('Higher model cover estimate: '+comparison['higher_cover']+'. This is not EV or a validated recommendation.')
                         else:
                             st.warning(result["availability_reason"])
                         st.caption("Uncalibrated research only. PASS - zero stake. No scientific qualification or wagering authority.")

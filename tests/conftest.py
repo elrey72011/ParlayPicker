@@ -74,3 +74,6 @@ def pytest_sessionfinish(session, exitstatus):
     socket.socket.connect_ex = _original_connect_ex
     socket.socket.sendto = _original_sendto
     requests.sessions.Session.request = _original_request
+
+# Exact predecessor inputs for historical scope assertions only.
+from ncaaf_future_scope_inputs import ncaaf_released_scope_inputs, exact_released_scope_contract_inputs, pytest_configure
