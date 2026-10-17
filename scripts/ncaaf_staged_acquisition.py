@@ -41,6 +41,7 @@ def main(argv=None):
     parser.add_argument('--prequote', type=Path)
     parser.add_argument('--model', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--transport-diagnostics', action='store_true', help='Retain separate sanitized private phase observations; no admission authority.')
     args = parser.parse_args(argv)
     lane = None
     try:
@@ -70,11 +71,23 @@ def main(argv=None):
             provider = 'cfbd' if lane.is_history(value['payload']) else 'odds_api'
             # One private entry per stage; never arguments/environment/files/logs.
             secret = getpass.getpass(provider+' key (private, memory only): ')
-            transport = lane.transport.HttpsTransport(lambda selected: secret if selected == provider else None)
+            observation = None
+            options = {}
+            if args.transport_diagnostics:
+                from app_core import ncaaf_transport_diagnostics as diagnostics
+                observation = diagnostics.Collector()
+                options['diagnostics'] = observation
+            transport = lane.transport.HttpsTransport(lambda selected: secret if selected == provider else None, **options)
             result = lane.acquire(value, approval, root=args.custody_root, transport=transport,
-                history_bundle=load(args.history) if args.history else None, prequote=load(args.prequote) if args.prequote else None, wall=lane.transport.utc)
+                history_bundle=load(args.history) if args.history else None, prequote=load(args.prequote) if args.prequote else None, wall=lane.transport.utc, **options)
             secret = None; transport._secret = None
-        print(json.dumps(dict(status=result['payload']['status'], reason=result['payload']['reason'], attempts=result['payload']['attempts'], bundle_sha256=result['sha256'])) )
+        summary = dict(status=result['payload']['status'], reason=result['payload']['reason'], attempts=result['payload']['attempts'], bundle_sha256=result['sha256'])
+        if args.transport_diagnostics:
+            diagnostic_raw = bounded(args.custody_root/(value['sha256']+'.transport-diagnostics.json'),32*1024)
+            diagnostic_hash = hashlib.sha256(diagnostic_raw).hexdigest()
+            diagnostics.read(args.custody_root,result,diagnostic_raw,diagnostic_hash)
+            summary.update(transport_diagnostics_file_sha256=diagnostic_hash,transport_diagnostics_readback='PASS')
+        print(json.dumps(summary))
         return 0 if result['payload']['status'] == 'CAPTURED_UNREVIEWED' else 1
     except (ValueError, KeyError, TypeError, OSError):
         print(json.dumps(dict(status='REJECTED', reason='NCAAF_STAGED_STOPPED'))); return 1

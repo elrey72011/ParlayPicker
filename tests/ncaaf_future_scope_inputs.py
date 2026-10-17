@@ -34,10 +34,13 @@ def historical_test_consumers(module,live):
 
 @pytest.fixture(autouse=True)
 def exact_released_scope_contract_inputs(request,monkeypatch):
+    from ncaaf_transport_scope_inputs import install
+    install(request,monkeypatch)
     module=request.module
     # Explicit old source-policy consumers only; runtime/feature/current-scope
     # tests and real CLI/subprocess checks never use this fixture projection.
-    names=[name for name,value in vars(module).items() if getattr(value,'__name__',None)=='scripts.check_launch_change_scope']
+    names=[name for name,value in vars(module).items() if getattr(value,'__name__',None) in
+        {'scripts.check_launch_change_scope','exact_ncaaf_transport_predecessor_scope'}]
     if not names or module.__name__=='test_ncaaf_future_spread_scope':
         return
     from scripts import check_launch_change_scope as live
