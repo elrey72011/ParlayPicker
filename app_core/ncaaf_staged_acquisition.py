@@ -221,9 +221,13 @@ def _root(root, p):
     return root
 
 
-def acquire(plan, authorization, *, root, transport, history_bundle=None, prequote=None, wall=transport.utc, monotonic=time.monotonic):
+def acquire(plan, authorization, *, root, transport, history_bundle=None, prequote=None, wall=transport.utc, monotonic=time.monotonic, diagnostics=None):
     """Exactly one stage; no implicit next stage, resume or admission."""
     p = authorize(plan, authorization, wall()); root = _root(root, p)
+    if diagnostics is not None:
+        from app_core.ncaaf_transport_diagnostics import Collector
+        require(isinstance(diagnostics,Collector) and getattr(transport,'diagnostics',None) is diagnostics,
+                'NCAAF_STAGED_DIAGNOSTIC_SELECTION')
     control = deepcopy(_lookup('AUTHORIZED_CONFIGURATIONS', plan['sha256']))
     require(isinstance(control, dict) and set(control) == {'file_sha256', 'file_b64'}
             and isinstance(control['file_b64'], str) and len(control['file_b64']) <= ((128*1024+2)//3)*4, 'NCAAF_STAGED_CONFIGURATION_REQUIRED')
@@ -272,10 +276,12 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
                 require(monotonic() < deadline, 'NCAAF_STAGED_DEADLINE')
                 attempts += 1; requested = wall()
                 append(journal, dict(kind='attempt', attempt=attempts, request=req, requested_at=requested))
+                if diagnostics is not None:diagnostics.begin(attempts,monotonic)
                 stream = None
                 try:
                     stream = transport(deepcopy(req), dict(connect_seconds=10, read_seconds=10), deadline, monotonic)
                     raw = transport_module._read(stream, min(LIMITS['max_body_bytes'], LIMITS['max_combined_original_bytes']-total), deadline, monotonic)
+                    if diagnostics is not None:diagnostics.enter('body_validation')
                     if hasattr(transport, 'validate_body'): transport.validate_body(raw)
                     received = wall(); authorize(plan, authorization, received)
                     rows = custody._parse(raw)
@@ -292,10 +298,12 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
                                          received_at=received, stage_active_seconds=last_elapsed))
                 finally:
                     if stream is not None: stream.close()
+                if diagnostics is not None:diagnostics.finish(complete=True)
         except BaseException as exc:
             # No exception text, body, secret, headers or traceback enters evidence.
             safe = str(exc) if isinstance(exc, ValueError) else ''
             code = safe if safe in SAFE_CODES else 'NCAAF_STAGED_ACQUISITION_FAILURE'
+            if diagnostics is not None:diagnostics.finish(code,complete=attempts>0 and len(objects)==attempts)
         elapsed = monotonic()-started_mono
         if not math.isfinite(elapsed) or elapsed < last_elapsed or prior_active+elapsed >= 60:
             code = 'NCAAF_STAGED_DEADLINE'
@@ -311,6 +319,9 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
     require(len(raw) <= MAX_BUNDLE, 'NCAAF_STAGED_BUNDLE_LIMIT')
     _exclusive(root/(plan['sha256']+'.stage.json'), raw)
     read_bundle(bundle, complete=False); verify_journal(root, bundle)
+    if diagnostics is not None:
+        from app_core.ncaaf_transport_diagnostics import retain
+        retain(root,bundle,diagnostics)
     return bundle
 
 

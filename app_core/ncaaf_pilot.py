@@ -165,7 +165,9 @@ class HttpsTransport:
     Runner retains only a credential-free request. HTTP exceptions are never
     logged; caller exposes stable codes only. Stream reads honor remaining time.
     """
-    def __init__(self, credentials): self.credentials=credentials
+    def __init__(self, credentials, *, diagnostics=None):
+        self.credentials=credentials
+        self.diagnostics=diagnostics
 
     def __call__(self, request, limits, deadline, monotonic):
         require(request['host']==HOSTS.get(request['provider']),'NCAAF_PILOT_HOST')
@@ -173,6 +175,7 @@ class HttpsTransport:
             representation=custody.REPRESENTATION,content_type='application/json',complete=True,received_at='2000-01-01T00:00:00Z',receipt_clock_meaning=custody.RECEIPT_MEANING))
         require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
         cancelled=threading.Event()
+        if self.diagnostics is not None:self.diagnostics.enter('credential_lookup')
         key=_timed(lambda:self.credentials(request['provider']),deadline,monotonic,cancelled,lambda:None)
         require(isinstance(key,str) and 0<len(key)<=4096 and '\r' not in key and '\n' not in key,'NCAAF_PILOT_CREDENTIAL_UNAVAILABLE')
         self._secret=key
@@ -196,14 +199,19 @@ class HttpsTransport:
                 if response is not None and hasattr(response,'close'):response.close()
             finally:conn.close()
         try:
+            if self.diagnostics is not None:self.diagnostics.enter('connect_dns_tcp_tls')
             _timed(conn.connect,min(deadline,monotonic()+limits['connect_seconds']),monotonic,cancelled,close)
             require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
             read_socket=conn.sock
             conn.sock.settimeout(min(limits['read_seconds'],max(.001,deadline-monotonic())))
+            if self.diagnostics is not None:self.diagnostics.enter('request_write')
             _timed(lambda:conn.request('GET','/'+request['endpoint']+'?'+urlencode(params),headers=headers),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,close)
+            if self.diagnostics is not None:self.diagnostics.wrote_request()
             require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
             conn.sock.settimeout(min(limits['read_seconds'],deadline-monotonic()))
+            if self.diagnostics is not None:self.diagnostics.enter('response_headers')
             response=_timed(conn.getresponse,min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,close)
+            if self.diagnostics is not None:self.diagnostics.observed_status(response.status)
             require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
         except Exception as exc:
             close()
@@ -212,8 +220,10 @@ class HttpsTransport:
         class Stream:
             status=response.status
             headers={k.lower():v for k,v in response.getheaders()}
+            diagnostics=self.diagnostics
             def chunks(self):
                 while True:
+                    if self.diagnostics is not None:self.diagnostics.enter('response_body_read')
                     remaining=deadline-monotonic()
                     require(not cancelled.is_set() and remaining>0,'NCAAF_PILOT_DEADLINE')
                     # HTTPResponse.isclosed() means fp is None. Its final framed
@@ -244,6 +254,8 @@ def _append(journal, value):
 
 
 def _read(stream, limit, deadline, monotonic):
+    diagnostic=getattr(stream,'diagnostics',None)
+    if diagnostic is not None:diagnostic.enter('body_validation')
     h={k.lower():str(v) for k,v in stream.headers.items()}
     require(stream.status==200,'NCAAF_PILOT_AUTH_OR_RATE_LIMIT' if stream.status in {401,403,429} else 'NCAAF_PILOT_HTTP_STATUS')
     require(not any(h.get(k) for k in ('location','x-next-page','x-next-page-token')) and 'next' not in h.get('link','').lower(),'NCAAF_PILOT_REDIRECT_OR_PAGINATION')
@@ -255,12 +267,14 @@ def _read(stream, limit, deadline, monotonic):
     decoder=zlib.decompressobj(16+zlib.MAX_WBITS) if encoding=='gzip' else None
     body=bytearray();wire=0
     for chunk in stream.chunks():
+        if diagnostic is not None:diagnostic.enter('body_validation')
         require(monotonic()<=deadline,'NCAAF_PILOT_DEADLINE')
         require(isinstance(chunk,bytes) and 0<len(chunk)<=MAX_WIRE,'NCAAF_PILOT_INCOMPLETE_BODY')
         wire+=len(chunk);require(wire<=MAX_WIRE,'NCAAF_PILOT_BODY_LIMIT')
         block=decoder.decompress(chunk,limit-len(body)+1) if decoder else chunk
         body.extend(block)
         require(len(body)<=limit and (decoder is None or not decoder.unconsumed_tail),'NCAAF_PILOT_BODY_LIMIT')
+    if diagnostic is not None:diagnostic.enter('body_validation')
     require(monotonic()<=deadline,'NCAAF_PILOT_DEADLINE')
     require(declared is None or wire==int(declared),'NCAAF_PILOT_INCOMPLETE_BODY')
     require(decoder is None or (decoder.eof and not decoder.unused_data),'NCAAF_PILOT_INCOMPLETE_BODY')
