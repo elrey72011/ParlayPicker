@@ -2265,6 +2265,7 @@ _drive_prior_dfs_source = _dfs_previous_guard_source
 
 
 def _dfs_previous_guard_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -2603,6 +2604,7 @@ _estimate_prior_drive_main = _drive_previous_main_source
 
 
 def _drive_previous_guard_source(source,binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -3018,6 +3020,7 @@ _nfl_prior_estimate_main = _estimate_previous_main_source
 
 
 def _estimate_previous_guard_source(source,binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -3128,6 +3131,7 @@ _home_prior_nfl_main = _nfl_previous_main_source
 
 
 def _nfl_previous_guard_source(source,binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -3661,6 +3665,7 @@ _producer_prior_home_main = _home_previous_main_source
 
 
 def _home_previous_guard_source(source,binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -4446,6 +4451,7 @@ _source_contract_prior_producer_main = _producer_previous_main_source
 
 
 def _producer_previous_guard_source(source,binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -4731,6 +4737,7 @@ _nfl_inputs_prior_source_contract_main = _source_contract_previous_main_source
 
 
 def _source_contract_previous_guard_source(source,binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -5014,6 +5021,7 @@ NFL_ADMISSION_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/nfl_inference_evidence.p
 
 
 def _nfl_admission_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -5066,6 +5074,7 @@ _nfl_admission_prior_nfl_inputs_main = _nfl_inputs_previous_main_source
 
 
 def _nfl_inputs_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -5198,6 +5207,7 @@ NFL_NATIVE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/feature_processing.py': {'s
 
 
 def _nfl_native_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -5779,6 +5789,7 @@ PICK_BOARD_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/current_wagers_trace.py': {
 
 
 def _pick_board_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -6073,6 +6084,7 @@ NFL_UI_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/nfl_inference_evidence.py': {'s
 
 
 def _nfl_ui_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -6154,6 +6166,7 @@ _nfl_ui_prior_pick_board_guard = _pick_board_previous_guard_source
 
 
 def _pick_board_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -6315,6 +6328,7 @@ SOURCE_INTAKE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/source_contract.py': {'s
                                                     b'_metadata=encode(item))')]}}
 
 def _source_intake_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -6396,6 +6410,7 @@ _source_intake_prior_nfl_ui_guard = _nfl_ui_previous_guard_source
 
 
 def _nfl_ui_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -6467,6 +6482,7 @@ NFL_CALIBRATION_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.Ar
 NFL_CALIBRATION_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 def _nfl_calibration_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -6548,6 +6564,7 @@ _nfl_calibration_prior_source_intake_guard = _source_intake_previous_guard_sourc
 
 
 def _source_intake_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -6809,6 +6826,7 @@ NHL_PUCK_LINE_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/market_probability_model
                                       b"ty_reason]||'Estimate availability not recorded';}\n")]}}
 
 def _nhl_puck_line_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -6890,6 +6908,7 @@ _nhl_puck_line_prior_nfl_calibration_guard = _nfl_calibration_previous_guard_sou
 
 
 def _nfl_calibration_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -6976,6 +6995,7 @@ FOOTBALL_CATALOG_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/football_stage1_cycle
                                                   b'if isinstance(name, str) and name.strip()]\n')]}}
 
 def _football_catalog_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -7057,6 +7077,7 @@ _football_catalog_prior_nhl_puck_line_guard = _nhl_puck_line_previous_guard_sour
 
 
 def _nhl_puck_line_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -7177,6 +7198,7 @@ MLB_NHL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/source_contract.py': 
                                     b'med[name]\n\n')]}}
 
 def _mlb_nhl_research_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -7258,6 +7280,7 @@ _mlb_nhl_research_prior_football_catalog_guard = _football_catalog_previous_guar
 
 
 def _football_catalog_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -7336,6 +7359,7 @@ NCAAF_RESEARCH_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argparse.Arg
 NCAAF_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 def _ncaaf_research_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -7417,6 +7441,7 @@ _ncaaf_research_prior_mlb_nhl_research_guard = _mlb_nhl_research_previous_guard_
 
 
 def _mlb_nhl_research_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -7505,6 +7530,7 @@ CANONICAL_DOWNLOAD_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'
                                         b'_evidence_panel import render as render_source_evidence\n')]}}
 
 def _canonical_download_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -7586,6 +7612,7 @@ _canonical_download_prior_ncaaf_research_guard = _ncaaf_research_previous_guard_
 
 
 def _ncaaf_research_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -7685,6 +7712,7 @@ REMOTE_CANONICAL_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'sh
                                         b'onical_download(setting)\n')]}}
 
 def _remote_canonical_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -7766,6 +7794,7 @@ _remote_canonical_prior_canonical_download_guard = _canonical_download_previous_
 
 
 def _canonical_download_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -7865,6 +7894,7 @@ REMOTE_CONTINUATION_PREVIOUS_CLI = (b'\ndef main() -> int:\n    parser = argpars
 REMOTE_CONTINUATION_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 def _remote_continuation_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -7946,6 +7976,7 @@ _remote_continuation_prior_remote_canonical_guard = _remote_canonical_previous_g
 
 
 def _remote_canonical_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -8562,6 +8593,7 @@ FOOTBALL_RESEARCH_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/publish_panel.py': {'a
                       'sha256': 'e08d723c302d870de0bd7be0e285013e9fef4b0af0962ab3471284d7c405deaa'}}
 
 def _football_research_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -8579,6 +8611,7 @@ def _football_research_raw_guard_matches(source, reviewed):
 
 
 def _football_research_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -8646,6 +8679,7 @@ _football_research_prior_continuation_main = _remote_continuation_previous_main_
 
 
 def _remote_continuation_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -9810,6 +9844,7 @@ SLATE_AUDIT_PRIOR_SOURCE_RECONSTRUCTIONS = {'app/ui/daily_dashboard.py': {'after
 
 
 def _slate_audit_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -9827,6 +9862,7 @@ def _slate_audit_raw_guard_matches(source, reviewed):
 
 
 def _slate_audit_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -9974,6 +10010,7 @@ CI_SCHEDULING_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 
 def _ci_scheduling_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -9991,6 +10028,7 @@ def _ci_scheduling_raw_guard_matches(source, reviewed):
 
 
 def _ci_scheduling_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -10189,6 +10227,7 @@ NCAAF_COMPAT_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 
 def _ncaaf_compatibility_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -10206,6 +10245,7 @@ def _ncaaf_compatibility_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_compatibility_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -10383,6 +10423,7 @@ READINESS_DASHBOARD_PRIOR_SOURCE_RECONSTRUCTIONS = {}
 
 
 def _readiness_dashboard_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -10400,6 +10441,7 @@ def _readiness_dashboard_raw_guard_matches(source, reviewed):
 
 
 def _readiness_dashboard_previous_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -14394,6 +14436,7 @@ NCAAF_NORMAL_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/ncaaf_pipeline_evidence.p
 
 
 def _ncaaf_normal_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -14411,6 +14454,7 @@ def _ncaaf_normal_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_normal_parent_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -18557,6 +18601,7 @@ PREVIEW_BINDING_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/slate_coverage.py': {'
 
 
 def _preview_binding_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -18574,6 +18619,7 @@ def _preview_binding_raw_guard_matches(source, reviewed):
 
 
 def _preview_binding_parent_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -19942,6 +19988,7 @@ NCAAF_CHRONOLOGY_PRIOR_SOURCE_RECONSTRUCTIONS = {'app_core/ncaaf_compatible_pipe
 
 
 def _ncaaf_chronology_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -19959,6 +20006,7 @@ def _ncaaf_chronology_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_chronology_parent_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -21140,6 +21188,7 @@ def _ncaaf_custody_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_custody_parent_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -22049,6 +22098,7 @@ def _ncaaf_pilot_raw_guard_matches(source, reviewed):
 
 
 def _ncaaf_pilot_parent_guard_source(source, binding=None):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -22123,6 +22173,7 @@ def _ncaaf_pilot_wrap_previous(name):
 # Preserve the exact custody guard assertion for this append-only successor.
 _ncaaf_pilot_saved_custody_raw = _ncaaf_custody_raw_guard_matches
 def _ncaaf_custody_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -22430,6 +22481,7 @@ def _cloud_peel_exact_guard(source):
 
 _cloud_boot_pilot_raw = _ncaaf_pilot_raw_guard_matches
 def _ncaaf_pilot_raw_guard_matches(source, reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -22457,6 +22509,7 @@ NCAAF_STAGED_PREVIOUS_GUARD_SHA256 = 'd13ab631d9258d10298604be6abd4293c2dff92a70
 NCAAF_STAGED_RECONSTRUCTION_JSON = b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","before_sha256":"33cfb08fb4531fa20c7b34f46fb2a92f7a9f7b28a4ffb51c0e95a9487e49f3ec","reverse_patches":[{"end":343,"start":278,"text":""},{"end":2959,"start":2825,"text":"        if not private and any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets):\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","before_sha256":"eabdcb6a982d188c06806943d432c7b48f794e0eb9d7b9a6f54418b4ced69eb3","reverse_patches":[{"end":10304,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","before_sha256":"b53f86997d774d99221380b4e262a204d00e82c077b6407f3c9327a962bc958a","reverse_patches":[{"end":954,"start":772,"text":"    require(packet[\'payload\'][\'version\']==\'ncaaf-owner-reviewed-private-inputs-v2\' and q[\'market_type\'] in {\'spread_home\',\'spread_away\'}\\n"}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","before_sha256":"9c883e26acb36d173b0496f3fe33321834e430272b8cdb9271bb480a5e3c09bc","reverse_patches":[{"end":997,"start":932,"text":""},{"end":1810,"start":1538,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}\\n"},{"end":2016,"start":1833,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION: return owner_terms\\n"},{"end":4935,"start":4753,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6091,"start":5928,"text":""},{"end":7564,"start":7481,"text":"    if packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":14791,"start":14553,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\']==owner_terms.VERSION and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":20253,"start":20076,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:\\n"},{"end":20638,"start":20458,"text":"    if packet is not None and packet[\'payload\'][\'version\'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:\\n"},{"end":21360,"start":21254,"text":"    if packet is not None and packet[\'payload\'][\'version\'] == owner_terms.VERSION:\\n"},{"end":22250,"start":21689,"text":""},{"end":24656,"start":24495,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\']==owner_terms.VERSION else source\\n"}]}}'
 
 def _ncaaf_staged_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -22465,6 +22518,7 @@ def _ncaaf_staged_guard_matches(source):
     return isinstance(source,bytes) and len(source)==8263277 and source.count(identity)==124 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
 
 def _ncaaf_staged_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -22508,6 +22562,7 @@ NFL_RECON_PERF_PREVIOUS_GUARD_SHA256 = '1582f49e9393b996c4e270dcc397f225d64a8186
 NFL_RECON_PERF_RECONSTRUCTION_JSON = b'{}'
 
 def _nfl_recon_perf_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -22524,6 +22579,7 @@ def _nfl_recon_perf_guard_matches(source):
     return isinstance(source,bytes) and len(source)==7504827 and source.count(identity)==25 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
 
 def _nfl_recon_perf_project(source,target):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -22552,6 +22608,7 @@ def _nfl_recon_perf_project(source,target):
     return result
 
 def _nfl_recon_perf_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -22590,6 +22647,7 @@ NFL_PDF_RECONCILE_RECONSTRUCTION_JSON = b'{"app_core/nfl_odds_acquisition.py":{"
 from functools import lru_cache as _nfl_reconcile_lru
 
 def _nfl_reconcile_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -22622,6 +22680,7 @@ def _nfl_reconcile_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_reconcile_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -22689,6 +22748,7 @@ NFL_ODDS_SOCKET_RECONSTRUCTION_JSON = b'{"app_core/nfl_odds_acquisition.py":{"af
 from functools import lru_cache as _nfl_odds_socket_lru
 
 def _nfl_odds_socket_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -22721,6 +22781,7 @@ def _nfl_odds_socket_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_odds_socket_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -22776,6 +22837,7 @@ NFL_PDF_FIXTURE_RECONSTRUCTION_JSON = b'{"tests/test_football_document_predecess
 from functools import lru_cache as _nfl_pdf_fixture_lru
 
 def _nfl_pdf_fixture_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -22810,6 +22872,7 @@ def _nfl_pdf_fixture_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_fixture_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -22889,6 +22952,7 @@ NFL_PDF_TIMING_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha25
 from functools import lru_cache as _nfl_pdf_timing_lru
 
 def _nfl_pdf_timing_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -22921,6 +22985,7 @@ def _nfl_pdf_timing_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_timing_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -23027,6 +23092,7 @@ NFL_PDF_MARGIN_RECONSTRUCTION_JSON = b'{"app_core/nfl_pdf_interpretation.py":{"a
 from functools import lru_cache as _nfl_pdf_margin_lru
 
 def _nfl_pdf_margin_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -23059,6 +23125,7 @@ def _nfl_pdf_margin_cached_base(source,reviewed,parent):
     return source
 
 def _nfl_pdf_margin_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -23190,6 +23257,7 @@ NCAAF_SOCKET_CI_RECONSTRUCTION_JSON = b'{"scripts/ci_test_file_costs_v1.json":{"
 from functools import lru_cache as _ncaaf_socket_ci_lru
 
 def _ncaaf_socket_ci_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -23222,6 +23290,7 @@ def _ncaaf_socket_ci_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_ci_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -23378,6 +23447,7 @@ NCAAF_SOCKET_RECONSTRUCTION_JSON = b'{"app_core/ncaaf_pilot.py":{"after_sha256":
 from functools import lru_cache as _ncaaf_socket_lru
 
 def _ncaaf_socket_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -23410,6 +23480,7 @@ def _ncaaf_socket_cached_base(source,reviewed,parent):
     return source
 
 def _ncaaf_socket_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -23591,6 +23662,7 @@ FOOTBALL_DOCCLOSE_RECONSTRUCTION_JSON = b'{"scripts/ci_test_file_costs_v1.json":
 from functools import lru_cache as _docclose_lru
 
 def _docclose_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -23623,6 +23695,7 @@ def _docclose_cached_base(source,reviewed,parent):
     return source
 
 def _docclose_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -23829,6 +23902,7 @@ FOOTBALL_DOCPERF_RECONSTRUCTION_JSON = b'{"scripts/ci_test_file_costs_v1.json":{
 from functools import lru_cache as _docperf_lru
 
 def _docperf_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -23861,6 +23935,7 @@ def _docperf_cached_base(source,reviewed,parent):
     return source
 
 def _docperf_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -24092,6 +24167,7 @@ FOOTBALL_DOCREMOTE_RECONSTRUCTION_JSON = b'{"tests/test_remote_continuation_scop
 from functools import lru_cache as _docremote_lru
 
 def _docremote_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -24124,6 +24200,7 @@ def _docremote_cached_base(source,reviewed,parent):
     return source
 
 def _docremote_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -24380,6 +24457,7 @@ FOOTBALL_DOCPRED_RECONSTRUCTION_JSON = b'{"tests/test_nfl_listing_capacity_scope
 from functools import lru_cache as _docpred_lru
 
 def _docpred_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -24412,6 +24490,7 @@ def _docpred_cached_base(source,reviewed,parent):
     return source
 
 def _docpred_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -24693,6 +24772,7 @@ FOOTBALL_DOCSIX_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha2
 from functools import lru_cache as _docsix_lru
 
 def _docsix_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -24725,6 +24805,7 @@ def _docsix_cached_base(source,reviewed,parent):
     return source
 
 def _docsix_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -25031,6 +25112,7 @@ FOOTBALL_DOCREPORT_RECONSTRUCTION_JSON = b'{}'
 from functools import lru_cache as _docreport_lru
 
 def _docreport_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -25063,6 +25145,7 @@ def _docreport_cached_base(source,reviewed,parent):
     return source
 
 def _docreport_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -25394,6 +25477,7 @@ FOOTBALL_DOCFIXTURE_RECONSTRUCTION_JSON = b'{"tests/test_canonical_download_scop
 from functools import lru_cache as _docfixture_lru
 
 def _docfixture_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -25426,6 +25510,7 @@ def _docfixture_cached_base(source,reviewed,parent):
     return source
 
 def _docfixture_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -25782,6 +25867,7 @@ FOOTBALL_DOCANCHOR_RECONSTRUCTION_JSON = b'{"app_core/nfl_document_acquisition.p
 from functools import lru_cache as _docanchor_lru
 
 def _docanchor_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -25814,6 +25900,7 @@ def _docanchor_cached_base(source,reviewed,parent):
     return source
 
 def _docanchor_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -26195,6 +26282,7 @@ FOOTBALL_DOCLIFE_RECONSTRUCTION_JSON = b'{"app_core/nfl_document_acquisition.py"
 from functools import lru_cache as _doclife_lru
 
 def _doclife_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -26227,6 +26315,7 @@ def _doclife_cached_base(source,reviewed,parent):
     return source
 
 def _doclife_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -26633,6 +26722,7 @@ FOOTBALL_DOCWORDS_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"af
 from functools import lru_cache as _docwords_lru
 
 def _docwords_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -26665,6 +26755,7 @@ def _docwords_cached_base(source,reviewed,parent):
     return source
 
 def _docwords_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -27096,6 +27187,7 @@ FOOTBALL_DOCMETA_RECONSTRUCTION_JSON = b'{}'
 from functools import lru_cache as _docmeta_lru
 
 def _docmeta_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -27128,6 +27220,7 @@ def _docmeta_cached_base(source,reviewed,parent):
     return source
 
 def _docmeta_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -27584,6 +27677,7 @@ FOOTBALL_DOCIO_RECONSTRUCTION_JSON = b'{"app_core/nfl_document_acquisition.py":{
 from functools import lru_cache as _docio_lru
 
 def _docio_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -27616,6 +27710,7 @@ def _docio_cached_base(source,reviewed,parent):
     return source
 
 def _docio_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -28097,6 +28192,7 @@ NCAAF_TERMS_RECONSTRUCTION_JSON = b'{"app/ui/ncaaf_pipeline_research.py":{"after
 from functools import lru_cache as _terms_lru
 
 def _terms_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -28129,6 +28225,7 @@ def _terms_cached_base(source,reviewed,parent):
     return source
 
 def _terms_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -28635,6 +28732,7 @@ NFL_DOCUMENT_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"after_s
 from functools import lru_cache as _document_lru
 
 def _document_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -28667,6 +28765,7 @@ def _document_cached_base(source,reviewed,parent):
     return source
 
 def _document_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -29198,6 +29297,7 @@ NFL_PDF_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"after_sha256
 from functools import lru_cache as _pdf_lru
 
 def _pdf_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -29230,6 +29330,7 @@ def _pdf_cached_base(source,reviewed,parent):
     return source
 
 def _pdf_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -29786,6 +29887,7 @@ NFL_INTERPRETATION_RECONSTRUCTION_JSON = b'{"app/ui/nfl_private_research.py":{"a
 from functools import lru_cache as _interpret_lru
 
 def _interpret_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -29819,6 +29921,7 @@ def _interpret_cached_base(source,reviewed,parent):
     return prior
 
 def _interpret_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -30401,6 +30504,7 @@ LISTING_CAPACITY_RECONSTRUCTION_JSON = b'{".github/workflows/ci.yml":{"after_sha
 from functools import lru_cache as _capacity_lru_cache
 
 def _listing_capacity_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -30462,6 +30566,7 @@ def _listing_capacity_previous_source(path,source):
 
 _interpret_parent_capacity_base=_listing_capacity_base_source
 def _listing_capacity_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -31178,6 +31283,7 @@ _listing_previous_memo_match=_guard_memo_guard_matches
 _listing_previous_memo_base=_guard_memo_base_source
 
 def _guard_memo_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -31193,6 +31299,7 @@ def _guard_memo_guard_matches(source):
     return _listing_previous_memo_match(_nfl_listing_base_source(source))
 
 def _guard_memo_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -31441,6 +31548,18 @@ def _nfl_odds_timing_guard_matches(source):
     return source.count(reviewed)==1 and hashlib.sha256(source.replace(reviewed,b'0'*64)).hexdigest()==NFL_ODDS_TIMING_REVIEWED_GUARD_SHA256
 @_odds_timing_lru_cache(maxsize=8)
 def _nfl_odds_timing_base_source(source,_capacity_projection=False):
+    # NCAAF_FUTURE_INLINE_BEGIN
+    if len(source)==8388189:
+        _future_identity=b'c1b49f90747e9ccdd4df889966419ac3a1f549b7a3c865c5f447d24855ab69d2'
+        _require(source.count(_future_identity)==2 and hashlib.sha256(source.replace(_future_identity,b'0'*64)).hexdigest()==_future_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+        source=source.replace(b'    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)\n',b'')
+        for _future_a,_future_b,_future_r in ((b'\n    # NCAAF_FUTURE_INLINE_BEGIN\n',b'\n    # NCAAF_FUTURE_INLINE_END\n',b'\n'),(b'\n# NCAAF_FUTURE_BEGIN\n',b'\n# NCAAF_FUTURE_END\n',b'')):
+            _future_start=source.index(_future_a);_future_end=source.index(_future_b,_future_start)+len(_future_b)
+            source=source[:_future_start]+_future_r+source[_future_end:]
+        source=source.replace(b'        if exists_at("HEAD", NCAAF_FUTURE_POLICY_PATH):\n            code, report = _run_ncaaf_future_integrated(args.manifest, args.base)\n        elif exists_at("HEAD", NCAAF_STAGED_CAPACITY_POLICY_PATH):',b'        if exists_at("HEAD", NCAAF_STAGED_CAPACITY_POLICY_PATH):',1)
+        _require(hashlib.sha256(source).hexdigest()=='3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306','PREVIOUS_GUARD_LOGIC_CHANGED')
+        if _capacity_projection is True:return source
+    # NCAAF_FUTURE_INLINE_END
     # NCAAF_CAPACITY_INLINE_BEGIN
     if len(source)==8367260:
         _cap_identity=b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'
@@ -31637,6 +31756,7 @@ def _guard_scan_v1_presence(source,reviewed,parent):
     if b'\nGUARD_PERFORMANCE_BOOTSTRAP =' not in source:return source
     return _guard_performance_cached_base_source(source,reviewed,parent)
 def _guard_performance_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -31742,6 +31862,7 @@ _owner_boot_cloud_peel = _cloud_peel_exact_guard
 _owner_boot_discovery_match = _discovery_guard_matches
 _owner_boot_discovery_parent = _discovery_parent_guard_source
 def _cloud_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -31759,6 +31880,7 @@ def _cloud_peel_exact_guard(source):
     return _owner_boot_cloud_peel(_owner_peel(source))
 
 def _discovery_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -31777,6 +31899,7 @@ def _discovery_parent_guard_source(source):
 _nfl_owner_early_owner_match = _owner_guard_matches
 _nfl_owner_early_owner_peel = _owner_base_source
 def _owner_guard_matches(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
@@ -31791,6 +31914,7 @@ def _owner_guard_matches(source):
         _require(hashlib.sha256(source).hexdigest()=='d13ab631d9258d10298604be6abd4293c2dff92a7060698fb90d712442d3e038','PREVIOUS_GUARD_LOGIC_CHANGED')
     return _nfl_owner_early_owner_match(_nfl_owner_peel(source))
 def _owner_base_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -31958,6 +32082,7 @@ def _cloud_peel_exact_guard(source):
 
 _cloud_inherited_discovery_parent = _discovery_parent_guard_source
 def _discovery_parent_guard_source(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -31978,6 +32103,7 @@ def _cloud_peel_exact_guard(source):
 
 _nfl_owner_late_cloud_peel = _cloud_peel_exact_guard
 def _cloud_peel_exact_guard(source):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if len(source)==8367260:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_END
@@ -32976,6 +33102,7 @@ def _run_listing_capacity_integrated(manifest_path,base):
 
 _interpret_parent_dfs=_dfs_guard_matches
 def _dfs_guard_matches(source,reviewed):
+    if len(source)==8388189:source=_performance_early_base.__wrapped__(source,True)
     # NCAAF_CAPACITY_ENTRY_BEGIN
     if reviewed=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8':return isinstance(source,bytes) and len(source)==8367260 and source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'
     if len(source)==8367260 and not (source.count(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8')==162 and hashlib.sha256(source.replace(b'0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8',b'0'*64)).hexdigest()=='0416160956b9ccee1221bb42629214258ddf5fc92e0a4ef434daaf8bf2f4caa8'):return False
@@ -33961,6 +34088,42 @@ def _run_ncaaf_staged_capacity_integrated(manifest_path,base):
     with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
 # NCAAF_STAGED_CAPACITY_END
 
+# NCAAF_FUTURE_BEGIN
+NCAAF_FUTURE_POLICY_PATH='docs/paid-launch/launch-scope-policy-ncaaf-future-spread-v1.json'
+NCAAF_FUTURE_BINDING_PATH='docs/paid-launch/ncaaf-future-spread-binding-v1.json'
+NCAAF_FUTURE_BINDING_SHA256='22d4f3d6d8cff793273ad455980fd631bb600ff245e42f2d79716022fa7df533'
+NCAAF_FUTURE_RECONSTRUCTION_JSON=b'{"app/ui/ncaaf_pipeline_research.py":{"after_sha256":"5c765e0399eacbe48ca8fc4fc8aaacae840fe72f28890708066098afb9fc2d55","before_sha256":"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55","reverse_patches":[{"end":3780,"start":3416,"text":"        st.caption(\\"Half-point spreads and totals have separate targets. Integer push mass remains unvalidated. Historical inference clocks are never replaced by capture-finish clocks. Research supplies no wager approval.\\")\\n"},{"end":6275,"start":5036,"text":""}]},"app_core/ncaaf_compatible_pipeline.py":{"after_sha256":"c8ccdf5adddf7352fb85dd317cc02357df8634afa9a3a70779a170f5ec33d4d3","before_sha256":"880711e4ade7d890f6cc7cab25c49074f7d8832e09f14b35b49793a41dba50a5","reverse_patches":[{"end":17108,"start":16824,"text":"    require(mass[\\"push\\"] == 0 and math.isfinite(win) and 0 <= win <= 1, \\"NCAAF_PROBABILITY_BINDING_CONFLICT\\")\\n"},{"end":18267,"start":17937,"text":""},{"end":19208,"start":18968,"text":""},{"end":20159,"start":20059,"text":"        and r[\\"push_probability\\"] == 0 and r[\\"sigma\\"] == checked[\\"fit\\"][\\"sigma\\"]\\n"}]},"app_core/ncaaf_owner_research.py":{"after_sha256":"1043c1364efbda827660fe0041ad03d8765a0a48ca7ab7995d445a48141bf0fc","before_sha256":"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8","reverse_patches":[{"end":10377,"start":10140,"text":"        return meta[\\"ncaaf_inputs\\"][\\"payload\\"].get(\\"version\\") in {RESULT_VERSION,\\"ncaaf-owner-reviewed-private-result-v2\\",\\"ncaaf-owner-reviewed-private-result-v3\\"}\\n"}]},"app_core/ncaaf_owner_terms_projection.py":{"after_sha256":"567563a7a5bed648ca73db9f51fe8c55d13ea471c1b51eb4c2b546808a4cd381","before_sha256":"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe","reverse_patches":[{"end":2776,"start":2581,"text":""}]},"app_core/ncaaf_pipeline_evidence.py":{"after_sha256":"8c14aa0e76ca6fe61daa5511bce55dbecb2ef1c165866a261a3a19521833b1da","before_sha256":"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2","reverse_patches":[{"end":1053,"start":997,"text":""},{"end":1927,"start":1594,"text":"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION, owner_staged.VERSION}\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION, owner_staged.RESULT_VERSION}\\n"},{"end":2038,"start":1950,"text":""},{"end":5170,"start":4958,"text":"    require(private_research or not any(p[\\"payload\\"][\\"version\\"] in {owner.VERSION,owner_terms.VERSION,owner_staged.VERSION} for p in packets), \\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\")\\n"},{"end":6333,"start":6163,"text":""},{"end":7320,"start":7167,"text":""},{"end":8258,"start":8039,"text":"    if packet[\'payload\'][\'version\'] in {owner_terms.VERSION,owner_staged.VERSION}:\\n"},{"end":14786,"start":14466,"text":""},{"end":15835,"start":15567,"text":"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\'payload\'][\'version\'] in {owner_terms.VERSION,owner_staged.VERSION} and result[\'ml_inference_status\']==\'success\' else source\\n"},{"end":17262,"start":17082,"text":""},{"end":24137,"start":23474,"text":""},{"end":26650,"start":26009,"text":""},{"end":27211,"start":27023,"text":"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\'payload\'][\'version\'] in {owner_terms.VERSION,owner_staged.VERSION} else source\\n"}]},"app_core/ncaaf_prospective_chronology.py":{"after_sha256":"792fdd76e4c2e356bb78b921b29872637cea7daa4735dcb9a43ab3961b77b047","before_sha256":"105dc2e42188f918baa8644f56904e663714a64a14998417ad856cce07927597","reverse_patches":[{"end":17930,"start":17631,"text":"    target = target_contract(kind, line)\\n    require(abs(line % 1) == .5, \\"NCAAF_INTEGER_PUSH_MODEL_UNVALIDATED\\")\\n"}]},"app_core/ncaaf_staged_acquisition.py":{"after_sha256":"1b549c133721d3deedb33c37867821a358438edef2267c8924bdfd8c5585fba3","before_sha256":"d73a00a350facec7de16b02459683020d5b96c8630269367dc567837c233f2e2","reverse_patches":[{"end":7493,"start":6742,"text":""},{"end":7799,"start":7563,"text":""},{"end":11975,"start":11459,"text":"    provider = \'cfbd\' if p[\'version\'] == HISTORY_PLAN else \'odds_api\'\\n"},{"end":15325,"start":15305,"text":"    if p[\'version\'] == QUOTE_PLAN:\\n"},{"end":15669,"start":15365,"text":"        require(h[\'version\'] == HISTORY_BUNDLE and history_bundle[\'sha256\'] == p[\'parent_history_sha256\']\\n                and h[\'plan\'][\'payload\'][\'target\'] == p[\'target\'] and h[\'plan\'][\'payload\'][\'custody_id\'] == p[\'custody_id\'], \'NCAAF_STAGED_PARENT\')\\n"},{"end":16231,"start":16029,"text":""},{"end":17913,"start":17885,"text":"            if p[\'version\'] == QUOTE_PLAN:\\n"},{"end":21122,"start":21043,"text":"    body = dict(version=HISTORY_BUNDLE if p[\'version\'] == HISTORY_PLAN else QUOTE_BUNDLE, evidence_label=p[\'evidence_label\'],\\n"},{"end":22091,"start":21970,"text":""},{"end":24634,"start":24539,"text":"    require(b[\'version\'] == (HISTORY_BUNDLE if p[\'version\'] == HISTORY_PLAN else QUOTE_BUNDLE) and b[\'evidence_label\'] == p[\'evidence_label\']\\n"},{"end":28965,"start":28943,"text":"    if p[\'version\'] == HISTORY_PLAN:\\n"},{"end":29289,"start":29181,"text":"        if p[\'version\'] == QUOTE_PLAN: _target(custody._parse(base64.b64decode(b[\'objects\'][0][\'body_b64\'])), p[\'target\'])\\n"},{"end":29580,"start":29541,"text":"    if b[\'plan\'][\'payload\'][\'version\'] == QUOTE_PLAN:\\n"}]},"app_core/ncaaf_staged_evidence.py":{"after_sha256":"42bd522232a54457b3794c3748e326fe2e38d25180d59ea3618c3217cbcfab6c","before_sha256":"c623631d69ebc2d05fafe5c20d569c88f760e89e744731ef6f63b5902d459fd1","reverse_patches":[{"end":2054,"start":1818,"text":""},{"end":6504,"start":6266,"text":""},{"end":8803,"start":8577,"text":""},{"end":10759,"start":10556,"text":""}]},"app_core/per_game_boards.py":{"after_sha256":"ad2e69b1028bff2e3c3fb65c922a6255e87858b0220f08e413809ff24d1fd44d","before_sha256":"46fcb8187eb95e6afd01e320219291f57374f592738a448c79f461a06d48b1a4","reverse_patches":[{"end":32432,"start":31754,"text":""}]},"app_core/research_display.py":{"after_sha256":"895fa4540235dc5d14681dd71b8652ab04b35fdfef8d1503187c83d873d6080e","before_sha256":"4a9b8458e1480203f5ca1bf3789b9b5aaa72dee6672a750bdbda51af23e0d204","reverse_patches":[{"end":34694,"start":34521,"text":"            result.update(probability=retained[\\"raw_probability\\"][\\"value\\"], push_probability=0.0,\\n"}]},"scripts/ncaaf_staged_acquisition.py":{"after_sha256":"6e3e4c92e590b3408079c00e3fc2beb1ddce4d1574f21816f63a735256536dcf","before_sha256":"48e1fe621b2fce76d7865801c03e28bd88ce25227a73ecbeeb1d051a9cf06ff3","reverse_patches":[{"end":4030,"start":3947,"text":"            provider = \'cfbd\' if value[\'payload\'][\'version\'] == lane.HISTORY_PLAN else \'odds_api\'\\n"}]},"tests/conftest.py":{"after_sha256":"060e4c8a4935cfbec129d6d817fb5cd9b648e80c1345ae079ea19bbea544380f","before_sha256":"8b3b5a6fd5b5c39605108872e954aba8d936afb19d2a0c6d4c9110abc7576e0d","reverse_patches":[{"end":2726,"start":2556,"text":""}]}}'
+NCAAF_FUTURE_REVIEWED_GUARD_SHA256='c1b49f90747e9ccdd4df889966419ac3a1f549b7a3c865c5f447d24855ab69d2'
+
+def _ncaaf_future_guard_matches(source):
+    identity=NCAAF_FUTURE_REVIEWED_GUARD_SHA256.encode()
+    return isinstance(source,bytes) and len(source)==8388189 and source.count(identity)==2 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()
+
+def _ncaaf_future_base_source(source):
+    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    if hashlib.sha256(source).hexdigest()=='3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306':return source
+    _require(_ncaaf_future_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
+    return _performance_early_base.__wrapped__(source,True)
+
+def _ncaaf_future_previous_source(path,source):
+    if path==GUARD_PATH:return _ncaaf_future_base_source(source)
+    r=json.loads(NCAAF_FUTURE_RECONSTRUCTION_JSON).get(path)
+    if r is None or hashlib.sha256(source).hexdigest()!=r['after_sha256']:return source
+    value=source.decode()
+    for p in reversed(r['reverse_patches']):value=value[:p['start']]+p['text']+value[p['end']:]
+    result=value.encode();_require(hashlib.sha256(result).hexdigest()==r['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')
+    return result
+
+def _run_ncaaf_future_integrated(manifest_path,base):
+    import importlib.util
+    raw=(ROOT/NCAAF_FUTURE_BINDING_PATH).read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha256(raw).hexdigest()==NCAAF_FUTURE_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
+    binding=json.loads(raw);path=ROOT/'scripts/ncaaf_future_spread_scope.py';content=path.read_bytes().replace(b'\r\n',b'\n')
+    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/ncaaf_future_spread_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')
+    spec=importlib.util.spec_from_file_location('ncaaf_future_spread_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)
+# NCAAF_FUTURE_END
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -33968,7 +34131,9 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path)
     args = parser.parse_args()
     try:
-        if exists_at("HEAD", NCAAF_STAGED_CAPACITY_POLICY_PATH):
+        if exists_at("HEAD", NCAAF_FUTURE_POLICY_PATH):
+            code, report = _run_ncaaf_future_integrated(args.manifest, args.base)
+        elif exists_at("HEAD", NCAAF_STAGED_CAPACITY_POLICY_PATH):
             code, report = _run_ncaaf_staged_capacity_integrated(args.manifest, args.base)
         elif exists_at("HEAD", NCAAF_STAGED_POLICY_PATH):
             code, report = _run_ncaaf_staged_integrated(args.manifest, args.base)

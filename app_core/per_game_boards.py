@@ -467,6 +467,15 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         from app_core.research_estimate_trace import boundary_trace
         import json
         display=from_export(exported, source=source, source_field=probability_field, private_research=private_research)
+        if source is not None and private_research:
+            from app_core import ncaaf_owner_spread
+            try:
+                ncaaf_saved=json.loads(source.get('ml_estimate_metadata',''))['ncaaf_inputs']['payload']
+                if ncaaf_saved.get('version') in ncaaf_owner_spread.RESULT_VERSIONS:
+                    from app_core.ncaaf_spread_pair import private_display
+                    exported['ncaaf_spread_private_display']=json.dumps(private_display(source),allow_nan=False,sort_keys=True,separators=(',',':'))
+            except (ValueError,TypeError,KeyError):
+                pass  # The existing unavailable display remains; no estimate is invented.
         exported['research_display']=json.dumps(display, allow_nan=False, sort_keys=True, separators=(',',':'))
         from app_core.nfl_private_routes import private as nfl_private, private_display
         if source is not None and nfl_private(source):
