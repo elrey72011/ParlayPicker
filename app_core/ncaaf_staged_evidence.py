@@ -39,6 +39,9 @@ def batches(bundle):
 
 
 def prepare(bundle, *, model_packet, prepared_at):
+    if bundle.get('payload',{}).get('version')=='ncaaf-named-history-unaccepted-v2':
+        from app_core.ncaaf_future_staged import prepare as selected
+        return selected(bundle,model_packet=model_packet,prepared_at=prepared_at)
     b = stages.read_bundle(bundle); t = b['plan']['payload']['target']; now = history.timestamp(prepared_at)
     start = history.timestamp(t['start_utc']); receipts = [history.timestamp(o['metadata']['received_at']) for o in b['objects']]
     require(now is not None and all(receipts) and all(t <= now and (now-t).total_seconds() <= 86400 for t in receipts)
@@ -88,6 +91,9 @@ def prequote_review_subjects(p, bundle):
 
 
 def validate_prequote(value, bundle, *, at, review_required=False):
+    if value.get('payload',{}).get('version')=='ncaaf-named-prequote-features-v2':
+        from app_core.ncaaf_future_staged import validate_prequote as selected
+        return selected(value,bundle,at=at,review_required=review_required)
     p = stages._envelope(value)
     expected = prepare(bundle, model_packet=p['model'], prepared_at=p['prepared_at'])['payload']
     require(p.get('version') == VERSION and set(p) == set(expected)
@@ -113,6 +119,9 @@ def validate_prequote(value, bundle, *, at, review_required=False):
 
 
 def join(history_bundle, prequote, quote_bundle):
+    if quote_bundle.get('payload',{}).get('version')=='ncaaf-reviewed-final-quote-unaccepted-v2':
+        from app_core.ncaaf_future_staged import join as selected
+        return selected(history_bundle,prequote,quote_bundle)
     h = stages.read_bundle(history_bundle); q = stages.read_bundle(quote_bundle)
     require(h['version'] == stages.HISTORY_BUNDLE and q['version'] == stages.QUOTE_BUNDLE, 'NCAAF_STAGED_PARENT')
     p = q['plan']['payload']; received = q['objects'][0]['metadata']['received_at']
@@ -134,6 +143,9 @@ def join(history_bundle, prequote, quote_bundle):
 
 
 def validate_binding(value, packet, *, at):
+    if value.get('payload',{}).get('version')=='ncaaf-named-staged-evidence-v2':
+        from app_core.ncaaf_future_staged import validate_binding as selected
+        return selected(value,packet,at=at)
     b = stages._envelope(value)
     require(set(b) == {'version', 'history', 'prequote', 'quote'} and b['version'] == BINDING_VERSION
             and value == join(b['history'], b['prequote'], b['quote']), 'NCAAF_STAGED_BINDING_CONFLICT')

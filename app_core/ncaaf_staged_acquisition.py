@@ -111,8 +111,33 @@ def requests(target, stage):
         commenceTimeTo=iso(start+timedelta(seconds=1))))]
 
 
+def is_history(p):
+    return p['version'] in {HISTORY_PLAN, 'ncaaf-named-history-stage-plan-v2'}
+
+
+def is_quote(p):
+    return p['version'] in {QUOTE_PLAN, 'ncaaf-reviewed-final-quote-stage-plan-v2'}
+
+
+def bundle_version(p):
+    if p['version'] in {'ncaaf-named-history-stage-plan-v2','ncaaf-reviewed-final-quote-stage-plan-v2'}:
+        from app_core import ncaaf_future_target as fresh
+        return fresh.HISTORY_BUNDLE if is_history(p) else fresh.QUOTE_BUNDLE
+    return HISTORY_BUNDLE if is_history(p) else QUOTE_BUNDLE
+
+
+def same_target(p,left,right):
+    if p['version']=='ncaaf-reviewed-final-quote-stage-plan-v2':
+        from app_core.ncaaf_future_target import same_target as same
+        return same(left,right)
+    return left==right
+
+
 def validate_plan(plan, *, executable=False):
     p = _envelope(plan)
+    if p.get('version') in {'ncaaf-named-history-stage-plan-v2','ncaaf-reviewed-final-quote-stage-plan-v2'}:
+        from app_core.ncaaf_future_target import validate_plan as selected
+        return selected(plan,executable=executable)
     require(set(p) == set('version evidence_label target requests limits execution_window advance_permissions collection_authorization_ref custody_id parent_history_sha256 prequote_sha256 unresolved'.split())
             and p['version'] in {HISTORY_PLAN, QUOTE_PLAN} and p['evidence_label'] in {'SYNTHETIC', 'RETAINED', 'PROPOSAL'}, 'NCAAF_STAGED_PLAN_SCHEMA')
     custody._credentials(p)
@@ -124,7 +149,7 @@ def validate_plan(plan, *, executable=False):
     require(t['start_utc'] == '2026-10-16T23:30:00Z' and t['neutral_site'] is False
             and (p['evidence_label'] != 'RETAINED' or t['provider_event_id'] == '55f376873e3cd0c2bb7cc9aa26e47235'), 'NCAAF_STAGED_TARGET')
     require(p['limits'] == LIMITS and p['requests'] == requests(t, p['version']), 'NCAAF_STAGED_REQUEST_OR_LIMIT_CONFLICT')
-    is_history = p['version'] == HISTORY_PLAN
+    is_history = is_history(p)
     require((p['parent_history_sha256'] is None and p['prequote_sha256'] is None) if is_history else
             all(isinstance(p[k], str) and len(p[k]) == 64 for k in ('parent_history_sha256', 'prequote_sha256')), 'NCAAF_STAGED_PARENT')
     w = p['execution_window']
@@ -155,7 +180,13 @@ def authorize(plan, authorization, at, *, trusted=True):
             and now < timestamp(a['expires_at']) <= timestamp(w['authorization_expires_at']), 'NCAAF_STAGED_AUTHORIZATION_CLOCK')
     if trusted:
         require(_lookup('AUTHORIZED_COLLECTIONS', a['reference']) == authorization['sha256'], 'NCAAF_STAGED_AUTHORIZATION_UNTRUSTED')
-    provider = 'cfbd' if p['version'] == HISTORY_PLAN else 'odds_api'
+    if p['version'] in {'ncaaf-named-history-stage-plan-v2','ncaaf-reviewed-final-quote-stage-plan-v2'}:
+        reviewed=p['target_evidence']['owner_review']['reviewed_at']
+        require(timestamp(reviewed)<=timestamp(a['authorized_at']),'NCAAF_FRESH_TARGET_REVIEW_CLOCK')
+        if is_quote(p):
+            require(timestamp(p['identity_review']['owner_review']['reviewed_at'])<=timestamp(a['authorized_at']),
+                'NCAAF_FRESH_IDENTITY_CLOCK')
+    provider = 'cfbd' if is_history(p) else 'odds_api'
     require(len(p['advance_permissions']) == 1, 'NCAAF_STAGED_PERMISSION')
     r = p['advance_permissions'][0]
     require(set(r) == set('reference provider reviewed_at effective_from effective_until permitted_use requests_sha256'.split())
@@ -200,14 +231,17 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
     require(c['authorization'] == authorization and Path(c['custody']['root']).resolve() == root.resolve()
             and c['account'] == _lookup('AUTHORIZED_ACCOUNT_EVIDENCE', authorization['payload']['reference']), 'NCAAF_STAGED_CONFIGURATION')
     prior_bytes = 0; prior_active = 0.
-    if p['version'] == QUOTE_PLAN:
+    if is_quote(p):
         h = read_bundle(history_bundle)
-        require(h['version'] == HISTORY_BUNDLE and history_bundle['sha256'] == p['parent_history_sha256']
-                and h['plan']['payload']['target'] == p['target'] and h['plan']['payload']['custody_id'] == p['custody_id'], 'NCAAF_STAGED_PARENT')
+        require(h['version'] in {HISTORY_BUNDLE,'ncaaf-named-history-unaccepted-v2'} and history_bundle['sha256'] == p['parent_history_sha256']
+                and same_target(p,h['plan']['payload']['target'],p['target']) and h['plan']['payload']['custody_id'] == p['custody_id'], 'NCAAF_STAGED_PARENT')
         history_control = json.loads(base64.b64decode(h['control_receipt']['file_b64'], validate=True))['payload']
         require(history_control['custody'] == c['custody'], 'NCAAF_STAGED_PARENT_CUSTODY')
         from app_core.ncaaf_staged_evidence import validate_prequote
         validate_prequote(prequote, history_bundle, at=wall(), review_required=True)
+        if p['version']=='ncaaf-reviewed-final-quote-stage-plan-v2':
+            from app_core.ncaaf_future_staged import validate_quote_parent
+            validate_quote_parent(h,p,prequote,at=wall())
         require(prequote['sha256'] == p['prequote_sha256'], 'NCAAF_STAGED_PREQUOTE_CONFLICT')
         require(timestamp(prequote['payload']['history_review']['reviewed_at']) <= timestamp(authorization['payload']['authorized_at']),
                 'NCAAF_STAGED_PREQUOTE_AUTHORIZATION_CLOCK')
@@ -229,7 +263,7 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
         append(journal, dict(kind='start', plan_sha256=plan['sha256'], authorization_sha256=authorization['sha256'],
             started_at=started_at, parent_history_sha256=p['parent_history_sha256'], control_receipt_sha256=model.digest(control), prior_original_bytes=prior_bytes, prior_active_seconds=prior_active))
         try:
-            if p['version'] == QUOTE_PLAN:
+            if is_quote(p):
                 # Durable exclusive claim survives any interruption, even before GET.
                 try: _exclusive(root/(p['parent_history_sha256']+'.quote-claim.json'), model.encode(dict(plan_sha256=plan['sha256'])))
                 except FileExistsError: raise ValueError('NCAAF_STAGED_HISTORY_ALREADY_CLAIMED') from None
@@ -268,7 +302,7 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
         status = 'CAPTURED_UNREVIEWED' if code is None and len(objects) == len(p['requests']) else 'INCOMPLETE'
         append(journal, dict(kind='finish', status=status, reason=code, attempts=attempts, stage_active_seconds=elapsed))
     journal_raw = journal_path.read_bytes()
-    body = dict(version=HISTORY_BUNDLE if p['version'] == HISTORY_PLAN else QUOTE_BUNDLE, evidence_label=p['evidence_label'],
+    body = dict(version=bundle_version(p), evidence_label=p['evidence_label'],
         plan=deepcopy(plan), authorization=deepcopy(authorization), control_receipt=control, started_at=started_at, status=status, reason=code, attempts=attempts, objects=objects,
         original_bytes=total-prior_bytes, active_seconds=elapsed, prior_original_bytes=prior_bytes, prior_active_seconds=prior_active,
         journal_b64=base64.b64encode(journal_raw).decode(), journal_sha256=hashlib.sha256(journal_raw).hexdigest(),
@@ -281,6 +315,9 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
 
 
 def _target(rows, t):
+    if 'home_school' in t:
+        from app_core.ncaaf_future_target import provider_target
+        t=provider_target(t)
     candidates = [g for g in rows if g.get('id') == t['provider_event_id'] or (g.get('home_team') == t['home_team'] and g.get('away_team') == t['away_team'])]
     require(len(candidates) == 1 and candidates[0].get('id') == t['provider_event_id'], 'NCAAF_STAGED_TARGET_CONFLICT')
     g = candidates[0]
@@ -304,7 +341,7 @@ def read_bundle(bundle, *, complete=True):
             and len(control['file_b64']) <= ((128*1024+2)//3)*4, 'NCAAF_STAGED_CONFIGURATION_REQUIRED')
     c = configuration(b['plan'], base64.b64decode(control['file_b64'], validate=True), control['file_sha256'], at=b['started_at'])['payload']
     require(c['authorization'] == b['authorization'], 'NCAAF_STAGED_CONFIGURATION')
-    require(b['version'] == (HISTORY_BUNDLE if p['version'] == HISTORY_PLAN else QUOTE_BUNDLE) and b['evidence_label'] == p['evidence_label']
+    require(b['version'] == (bundle_version(p)) and b['evidence_label'] == p['evidence_label']
             and all(b[k] is False for k in ('accepted', 'inference', 'scientific_acceptance', 'wagering_authority'))
             and b['wager_action'] == 'PASS' and b['live_stake'] == 0, 'NCAAF_STAGED_UNACCEPTED')
     require(type(b['attempts']) is int and 0 <= b['attempts'] <= len(p['requests']) and len(b['objects']) <= b['attempts'], 'NCAAF_STAGED_ATTEMPTS')
@@ -348,18 +385,18 @@ def read_bundle(bundle, *, complete=True):
     require(total == b['original_bytes'] and all(type(b[k]) in (int, float) and math.isfinite(b[k]) and b[k] >= 0
             for k in ('active_seconds', 'prior_active_seconds', 'prior_original_bytes'))
             and b['prior_original_bytes']+total <= LIMITS['max_combined_original_bytes'], 'NCAAF_STAGED_COMBINED_LIMIT')
-    if p['version'] == HISTORY_PLAN:
+    if is_history(p):
         require(b['prior_original_bytes'] == b['prior_active_seconds'] == 0, 'NCAAF_STAGED_PARENT')
     if complete:
         require(b['active_seconds']+b['prior_active_seconds'] < 60, 'NCAAF_STAGED_COMBINED_LIMIT')
-        if p['version'] == QUOTE_PLAN: _target(custody._parse(base64.b64decode(b['objects'][0]['body_b64'])), p['target'])
+        if is_quote(p): _target(custody._parse(base64.b64decode(b['objects'][0]['body_b64'])), p['target'])
     return deepcopy(b)
 
 
 def verify_journal(root, bundle):
     b = _envelope(bundle); path = Path(root)/(b['plan']['sha256']+'.attempts.jsonl')
     require(path.read_bytes() == base64.b64decode(b['journal_b64'], validate=True), 'NCAAF_STAGED_JOURNAL')
-    if b['plan']['payload']['version'] == QUOTE_PLAN:
+    if is_quote(b['plan']['payload']):
         claim = Path(root)/(b['plan']['payload']['parent_history_sha256']+'.quote-claim.json')
         if b['reason'] == 'NCAAF_STAGED_HISTORY_ALREADY_CLAIMED':
             prior = json.loads(claim.read_bytes())
