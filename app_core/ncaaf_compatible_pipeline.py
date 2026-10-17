@@ -269,7 +269,11 @@ def infer(packet, at, *, review_policy=None):
     threshold = -line if kind == "spread_home" else line
     mass = research.probabilities(center, checked["fit"]["sigma"], threshold, total=family == "total")
     win = mass["over" if kind in {"spread_home", "total_over"} else "under"]
-    require(mass["push"] == 0 and math.isfinite(win) and 0 <= win <= 1, "NCAAF_PROBABILITY_BINDING_CONFLICT")
+    from app_core import ncaaf_spread_mass as spread_mass
+    if spread_mass.selected_policy(review_policy):
+        outcome=spread_mass.from_native(mass,kind)
+    else:
+        require(mass["push"] == 0 and math.isfinite(win) and 0 <= win <= 1, "NCAAF_PROBABILITY_BINDING_CONFLICT")
     receipt = dict(version=result_version(packet, review_policy=review_policy), input_sha256=packet["sha256"],
         observation_sha256=packet["payload"]["observation"]["sha256"], inference_time=at,
         ordered_features=list(features.values()), feature_order=list(features), target=target,
@@ -279,6 +283,10 @@ def infer(packet, at, *, review_policy=None):
         model_record_sha256=hashlib.sha256(checked["model"]["original_bytes"]).hexdigest(),
         compatibility=deepcopy(checked["model"]["compatibility"]),
         scientific_acceptance=False, probability_calibration=False, wagering_authority=False, live_stake=0)
+    if spread_mass.selected_policy(review_policy):
+        receipt.update(push_probability=outcome['push'],outcome_probabilities=outcome,
+            probability_semantics='unconditional_cover_push_loss',conditional_no_push=spread_mass.conditional_no_push(outcome),
+            native_mass_binding=spread_mass.consumer_binding())
     if review_policy is not None or packet["payload"]["version"] == SUCCESSOR_VERSION:
         receipt["admission_receipts"] = chronology.check_chronology(p, at, review_policy=review_policy)
     return checked, center, win, dict(payload=receipt, sha256=model.digest(receipt))
@@ -291,6 +299,9 @@ def inspect_result(packet, saved, at, *, review_policy=None):
     checked = checked_observation(packet, at, review_policy=review_policy)
     objects(packet, now, review_policy=review_policy)
     r = saved["payload"]
+    from app_core import ncaaf_spread_mass as spread_mass
+    mass_selected=spread_mass.selected_policy(review_policy)
+    if mass_selected: spread_mass.inspect_receipt(r,packet['payload']['observation']['payload']['quote']['market_type'])
     require(set(saved) == {"payload", "sha256"} and model.digest(r) == saved["sha256"]
         and r["version"] == result_version(packet, review_policy=review_policy) and r["input_sha256"] == packet["sha256"]
         and r["observation_sha256"] == packet["payload"]["observation"]["sha256"]
@@ -300,7 +311,7 @@ def inspect_result(packet, saved, at, *, review_policy=None):
         and r["model_record_sha256"] == hashlib.sha256(checked["model"]["original_bytes"]).hexdigest()
         and r["compatibility"] == checked["model"]["compatibility"]
         and r["feature_derivation_verified"] is True and r["dependency_objects_verified"] is True
-        and r["push_probability"] == 0 and r["sigma"] == checked["fit"]["sigma"]
+        and (mass_selected or r["push_probability"] == 0) and r["sigma"] == checked["fit"]["sigma"]
         and r["scientific_acceptance"] is False and r["probability_calibration"] is False
         and r["wagering_authority"] is False and r["live_stake"] == 0,
         "NCAAF_COMPAT_COMPUTATION_RECEIPT_CONFLICT")

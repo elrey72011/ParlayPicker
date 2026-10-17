@@ -230,8 +230,12 @@ def read_observation(packet, *, review_policy=None):
     event, quote = p["event"], p.get("quote")
     require(isinstance(quote, dict), "NCAAF_COMPAT_QUOTE_MISSING")
     kind, line = quote.get("market_type"), quote.get("point")
-    target = target_contract(kind, line)
-    require(abs(line % 1) == .5, "NCAAF_INTEGER_PUSH_MODEL_UNVALIDATED")
+    from app_core import ncaaf_spread_mass as spread_mass
+    if spread_mass.selected_policy(review_policy):
+        target = review_policy.target_contract(kind,line)
+    else:
+        target = target_contract(kind, line)
+        require(abs(line % 1) == .5, "NCAAF_INTEGER_PUSH_MODEL_UNVALIDATED")
     require(target["family"] == checked["compatibility"]["family"], "NCAAF_COMPAT_TARGET_CONFLICT")
     require(all(quote.get(k) == event.get(v) for k, v in (
         ("provider_event_id", "provider_event_id"), ("provider_namespace", "provider_namespace"),
