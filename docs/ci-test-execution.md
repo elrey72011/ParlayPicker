@@ -41,7 +41,7 @@ shards, nonempty selections, an exact disjoint/complete node partition, complete
 outcomes and matching successful JUnit identities in original order. Collection-only
 reports are useful diagnostics and cannot satisfy the execution gate.
 
-The earlier 17–19 minute projection was an estimate. The corrected run's actual
+The earlier 17â€“19 minute projection was an estimate. The corrected run's actual
 counts and durations must be reported separately. Redistribution does not reduce
 the number of tests, total test work or runner cost; added job setup and aggregate
 reconciliation may increase cost.
@@ -96,3 +96,25 @@ The owner approved five jobs after the retained #2419 three-shard timeouts and t
 Every one of the five jobs must upload its own JUnit and assignment manifest. The existing full-suite gate rejects failure, cancellation, absent or empty results and mismatched identities/profile/assignments. Old three-shard synthetic regressions continue running. New five-shard regressions exercise the actual CLI and fail-closed reconciliation. Readiness requires all five final-head executed reports and all other required checks; previous-head passes and collection-only previews cannot satisfy it.
 
 The completed metadata correction preserves frozen revision 3 and records successor metadata separately. It fixes an assertion failure and provides no runtime savings. The reviewed capacity estimate was 112.92 aggregate application runner minutes and worst job 26m28s with about 3m32s headroom, using compatible completed historical costs plus a 15% margin and 100s per-job overhead. New regression identities require a fresh assignment preview. These projections are not demonstrated performance; actual final-head test/job/upload times must be retained separately. More jobs do not reduce total test work and introduce extra setup/report overhead. Earlier failures remain preserved.
+
+
+## NCAAF staged-route capacity follow-up
+
+The current application matrix uses **nine whole-file shards**, each with the
+unchanged 30-minute limit. The aggregate requires nine complete XML/assignment
+artifacts and exact-once execution of the actual collected inventory. Scheduler,
+within-file order, network blocking and substantive rejection assertions stay
+unchanged. Historical three/five/six/seven-shard tests retain their old contracts;
+only the three explicit current-workflow cardinality assertions move to nine.
+
+43 material upward advisory costs use compatible completed passing-file XML sums
+and the existing 15% variance method, with source/checkout/artifact provenance.
+Frozen revision 3 metadata and old observations remain retained; successor
+metadata is separate. Cancelled spans and profiling samples are not completed
+release coverage. Matched diagnostics passed the same 58 identities on both
+revisions and did not reproduce the historical slowdown. Its cause is UNKNOWN.
+
+Forecasts use the complete final inventory plus setup/collection/reporting/upload
+and cleanup allowances. Runner minutes measure resource consumption, not elapsed
+time. Available hosted concurrency and queue delays are not assumed; nine matrix
+entries do not establish nine simultaneous runners. All forecasts are estimates.

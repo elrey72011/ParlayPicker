@@ -15,6 +15,8 @@ def predecessor_profile(root=ROOT):
     assert hashlib.sha256(binding_raw).hexdigest()==guard.NFL_PDF_TIMING_BINDING_SHA256
     binding=json.loads(binding_raw)
     source=(root/PROFILE).read_bytes().replace(b'\r\n',b'\n')
+    from tests.ncaaf_staged_capacity_fixtures import exact_predecessor_bytes
+    source=exact_predecessor_bytes(PROFILE,source)
     info=binding['source_reconstructions'][PROFILE]
     assert hashlib.sha256(source).hexdigest()==info['after_sha256']
     prior=guard._nfl_pdf_timing_previous_source(PROFILE,source)

@@ -71,7 +71,8 @@ def test_seven_whole_file_assignment_is_deterministic_without_reordering():
     assert all(len({r['shard'] for r in rows if r['path']==path})==1 for path in {r['path'] for r in rows})
 
 
-def test_exact_66_completed_xml_costs_and_separate_successor_metadata():
+def test_exact_66_completed_xml_costs_and_separate_successor_metadata(historical_ncaaf_staged_capacity_profile,monkeypatch):
+    monkeypatch.setattr(sys.modules[__name__],'ROOT',historical_ncaaf_staged_capacity_profile)
     before=json.loads(predecessor_profile());data=json.loads((ROOT/PROFILE).read_bytes())
     successor=data['nfl_pdf_seven_capacity_successor'];paths=successor['changed_paths']
     assert len(paths)==len(set(paths))==66 and successor['completed_measurements_only'] is True
@@ -131,3 +132,6 @@ def test_original_assertions_preserved_except_approved_current_cardinality():
         old=assertions(previous);current=assertions(raw);assert set(old)==set(current)
         for name in old:
             if name not in exempt:assert old[name]==current[name]
+
+
+from tests.ncaaf_staged_capacity_fixtures import historical_ncaaf_staged_capacity_profile

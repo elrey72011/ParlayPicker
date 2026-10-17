@@ -166,6 +166,8 @@ def test_actual_pipeline_capture_export_static_replay_private_display(synthetic,
     from test_source_contract_pipeline import exported
     import test_source_contract_pipeline as ef
     monkeypatch.setattr(ef,'NOW',NOW);monkeypatch.setattr(ef,'CAPTURE',(NOW+timedelta(seconds=1)).isoformat())
+    # This complete pipeline uses the same explicitly synthetic evaluation clock.
+    monkeypatch.setattr('app_core.candidate_chronology.now_utc',lambda:NOW)
     saved=exported(monkeypatch,tmp_path/'export',analysis)
     from app_core.per_game_boards import per_game_board
     frames=[per_game_board(saved['card'],saved['captured'],family=f,novig_only=True,college_fallback=True,private_research=True) for f in ('overall','sides','totals')]
