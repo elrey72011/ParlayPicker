@@ -149,7 +149,7 @@ def validate_plan(plan, *, executable=False):
     require(t['start_utc'] == '2026-10-16T23:30:00Z' and t['neutral_site'] is False
             and (p['evidence_label'] != 'RETAINED' or t['provider_event_id'] == '55f376873e3cd0c2bb7cc9aa26e47235'), 'NCAAF_STAGED_TARGET')
     require(p['limits'] == LIMITS and p['requests'] == requests(t, p['version']), 'NCAAF_STAGED_REQUEST_OR_LIMIT_CONFLICT')
-    is_history = is_history(p)
+    is_history = p['version'] == HISTORY_PLAN
     require((p['parent_history_sha256'] is None and p['prequote_sha256'] is None) if is_history else
             all(isinstance(p[k], str) and len(p[k]) == 64 for k in ('parent_history_sha256', 'prequote_sha256')), 'NCAAF_STAGED_PARENT')
     w = p['execution_window']

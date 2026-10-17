@@ -49,6 +49,8 @@ def prepared(tmp_path_factory):
     try:
         with blocked_network():
             git(repo, "init", "-q")
+            git(repo, "config", "gc.auto", "0")
+            git(repo, "config", "maintenance.auto", "false")
             git(repo, "config", "user.name", "Offline Test")
             git(repo, "config", "user.email", "offline@example.invalid")
             git(repo, "config", "core.autocrlf", "false")
@@ -103,6 +105,7 @@ def prepared(tmp_path_factory):
             implementation, candidate, policy = seal(repo, binding)
     finally:
         guard.ROOT = original_root
+    git(repo, "gc", "--prune=never")
     return repo, binding, implementation, candidate, policy
 
 

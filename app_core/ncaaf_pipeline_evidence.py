@@ -21,6 +21,7 @@ from app_core import ncaaf_response_custody as custody
 from app_core import ncaaf_owner_research as owner
 from app_core import ncaaf_owner_terms_research as owner_terms
 from app_core import ncaaf_owner_staged_research as owner_staged
+from app_core import ncaaf_owner_spread as owner_spread
 from app_core.research_estimate_trace import encode, fact, origin_metadata, generated_time
 
 VERSION = "ncaaf-normal-pipeline-inputs-v1"
@@ -32,11 +33,12 @@ _SELECTED = ContextVar("ncaaf_explicit_research_packets", default=())
 # Independently accepted exact packet/review and PUBLIC derived-output permission.
 # Owner upload/selection never writes this catalog. It is empty in production.
 ACCEPTED_PACKETS = {}
-INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION, owner_staged.VERSION}
-RESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION, owner_staged.RESULT_VERSION}
+INPUT_VERSIONS = owner_spread.INPUT_VERSIONS | compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION, owner_staged.VERSION}
+RESULT_VERSIONS = owner_spread.RESULT_VERSIONS | compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION, owner_staged.RESULT_VERSION}
 
 
 def _reader(packet):
+    if packet['payload']['version'] in owner_spread.INPUT_VERSIONS: return owner_spread
     if packet['payload']['version'] == owner_staged.VERSION: return owner_staged
     if packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION}: return owner_terms
     if packet['payload']['version'] == owner.VERSION: return owner
@@ -87,7 +89,7 @@ def selected(packets=(), *, private_research=False):
     require(len(packets) <= MAX_PACKETS and sum(len(encode(p).encode()) for p in packets) <= MAX_SELECTED_BYTES,
             "NCAAF_PACKET_SCHEMA")
     require(type(private_research) is bool, "NCAAF_OWNER_MODE_CONFLICT")
-    require(private_research or not any(p["payload"]["version"] in {owner.VERSION,owner_terms.VERSION,owner_staged.VERSION} for p in packets), "NCAAF_PRIVATE_RESEARCH_NOT_SELECTED")
+    require(private_research or not any(p["payload"]["version"] in owner_spread.INPUT_VERSIONS | {owner.VERSION,owner_terms.VERSION,owner_staged.VERSION} for p in packets), "NCAAF_PRIVATE_RESEARCH_NOT_SELECTED")
     private_token = _PRIVATE.set(private_research)
     token = _SELECTED.set(deepcopy(packets))
     try:
@@ -116,6 +118,9 @@ def reader_binding():
 
 
 def accepted(packet):
+    if packet['payload']['version'] in owner_spread.INPUT_VERSIONS:
+        owner_spread.load(packet)
+        return deepcopy(owner_spread.ReviewPolicy(packet).approval)
     if packet["payload"]["version"] == owner_staged.VERSION:
         owner_staged.load(packet)
         return deepcopy(owner_staged.ReviewPolicy(packet).approval)
@@ -130,6 +135,10 @@ def accepted(packet):
             digest(_transport(packet)["source_review"]), "NCAAF_SOURCE_REVIEW_NOT_ACCEPTED")
     require(approval.get("public_derived_output") == "permitted", "NCAAF_PUBLIC_DERIVED_RIGHTS_UNAVAILABLE")
     return deepcopy(approval)
+
+
+def _projection(packet):
+    return owner_spread.projection if packet['payload']['version'] in owner_spread.INPUT_VERSIONS else owner_terms.projection
 
 
 def _transport(packet):
@@ -148,7 +157,9 @@ def _offer_matches(packet, source):
             or line != chosen["line"] or producer.number(source.get("odds_american")) != chosen["price"]):
         return False
     matches = producer._matches(source)
-    if packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION}:
+    if packet['payload']['version'] in owner_spread.INPUT_VERSIONS:
+        matches = owner_spread.projection.matches(packet,matches)
+    elif packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION}:
         matches = owner_terms.projection.matches(packet,matches)
     # The normal caller transports the original quote before it promotes its
     # provider aliases. Use that exact receipt; reject conflicting aliases.
@@ -246,6 +257,10 @@ def predict(source, *, inventory=None):
             win = mass["over" if kind in {"spread_home", "total_over"} else "under"]
             require(mass["push"] == 0 and math.isclose(win, attempted["payload"]["probabilities"]["win"], abs_tol=1e-12),
                     "NCAAF_PROBABILITY_BINDING_CONFLICT")
+        if is_compatible and attempted['payload']['version'] in owner_spread.INPUT_VERSIONS:
+            masses=computation['payload']['outcome_probabilities']
+            result.update(push_probability=masses['push'],loss_probability=masses['loss'],
+                probability_semantics='unconditional_win_push_loss')
         result.update(ml_probability=win, ml_probability_source="ncaaf-research-v1:" +
             m["data"]["artifact_hash"] + ":" + _transport(attempted)["selection"]["model_name"],
             ml_target="spread_cover" if family == "spread" else "total",
@@ -256,7 +271,7 @@ def predict(source, *, inventory=None):
         reason = str(exc)
         result["ml_unavailable_reason"] = reason if reason in PUBLIC_REASONS else "NCAAF_INFERENCE_FAILED"
     line = producer._line(source)
-    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION} and result['ml_inference_status']=='success' else source
+    origin_source = _projection(attempted).presentation(attempted,source) if attempted is not None and attempted['payload']['version'] in owner_spread.INPUT_VERSIONS | {owner_terms.VERSION,owner_staged.VERSION} and result['ml_inference_status']=='success' else source
     metadata = origin_metadata(origin_source, result, line, generated_at=at)
     metadata, fields = producer.record(origin_source, result, metadata, at,
         ncaaf_schedule=producer.text(source.get("matchup_id")).startswith("espn:college-football:"))
@@ -271,6 +286,8 @@ def predict(source, *, inventory=None):
         if attempted["payload"]["version"] in INPUT_VERSIONS:
             p.update(version=_reader(attempted).result_version(attempted), computation=computation, consumed_reader=compatible_reader_binding(attempted),
                 consumed_dependency_review=dependency_review)
+            if attempted['payload']['version'] in owner_spread.INPUT_VERSIONS:
+                p['outcome_probabilities']=deepcopy(computation['payload']['outcome_probabilities'])
     elif attempted is not None:
         p["attempted_packet_sha256"] = attempted["sha256"]
         if attempted["payload"]["version"] in INPUT_VERSIONS:
@@ -346,6 +363,12 @@ def compatible_reader_binding(packet=None):
     if packet is not None and packet['payload']['version'] == owner_staged.VERSION:
         from app_core import ncaaf_staged_evidence, ncaaf_staged_acquisition, ncaaf_owner_event_crosswalk
         binding['owner_staged_reader'] = dict(version=owner_staged.VERSION, components={Path(m.__file__).name:hashlib.sha256(Path(m.__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest() for m in (owner_staged,ncaaf_staged_evidence,ncaaf_staged_acquisition,ncaaf_owner_event_crosswalk)}, custody_reader=compatible_reader_binding(packet['payload']['custody_packet']))
+    if packet is not None and packet['payload']['version'] in owner_spread.INPUT_VERSIONS:
+        from app_core import ncaaf_future_target,ncaaf_future_staged,ncaaf_spread_mass,ncaaf_spread_execution,ncaaf_spread_pair
+        binding['owner_spread_reader']=dict(version=packet['payload']['version'],components={Path(m.__file__).name:
+            hashlib.sha256(Path(m.__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest()
+            for m in (owner_spread,owner_spread.projection,compatible.chronology,custody,ncaaf_future_target,ncaaf_future_staged,
+                owner_staged.staged.stages,ncaaf_spread_mass,ncaaf_spread_execution,ncaaf_spread_pair)})
     return binding
 
 
@@ -373,12 +396,22 @@ def _diagnose_compatible(source, item, p):
             "NCAAF_RUNTIME_BINDING_CONFLICT")
     require(p["raw_probability"] == item["probability"] == fact(source.get("ml_probability")) == fact(computation["raw_probability"]),
             "NCAAF_PROBABILITY_BINDING_CONFLICT")
+
+    if packet['payload']['version'] in owner_spread.INPUT_VERSIONS:
+        masses=computation['outcome_probabilities']
+        require(p.get('outcome_probabilities')==masses,'NCAAF_PROBABILITY_BINDING_CONFLICT')
+        for field,key in (('push_probability','push'),('loss_probability','loss')):
+            actual=producer.number(source.get(field))
+            require(actual is None or actual==masses[key],'NCAAF_PROBABILITY_BINDING_CONFLICT')
+        if computation['execution_receipt']['authorization']['payload']['max_computations']==2:
+            from app_core.ncaaf_spread_pair import inspect_row
+            inspect_row(packet,p)
     expected = "ncaaf-research-v1:" + checked["model"]["original_record"]["data"]["artifact_hash"] + ":ridge"
     require(source.get("ml_probability_source") == expected and item["predictor_id"] == fact(expected), "NCAAF_ARTIFACT_TARGET_CONFLICT")
     original = dict(item)
     original.pop("ncaaf_inputs")
     from app_core.research_estimate_trace import origin_rejection
-    origin_source = owner_terms.projection.presentation(packet,source) if packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION} else source
+    origin_source = _projection(packet).presentation(packet,source) if packet['payload']['version'] in owner_spread.INPUT_VERSIONS | {owner_terms.VERSION,owner_staged.VERSION} else source
     require(origin_rejection(dict(origin_source, ml_estimate_metadata=encode(original))) is None, "NCAAF_EVENT_OFFER_CONFLICT")
     return dict(status="COMPLETE", reason="AVAILABLE")
 

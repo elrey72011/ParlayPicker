@@ -27,7 +27,9 @@ def batches(bundle):
 
 
 def runtime():
+    import sys
     r=prior.runtime()
+    r['interpreter_sha256']=hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest()
     r['successor_components']={Path(m.__file__).name:hashlib.sha256(Path(m.__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest()
         for m in (target,__import__(__name__,fromlist=['runtime']))}
     return r
@@ -130,7 +132,7 @@ def validate_binding(value,packet,*,at):
     pref=validate_prequote(b['prequote'],b['history'],at=at)
     p=packet['payload'];c=p['custody_packet']['payload'];n=c['native_packet']['payload'];o=n['observation']['payload']
     identity=b['quote']['payload']['plan']['payload']['identity_review']
-    require(p['alias_review']==identity and p['evidence_label']==pref['evidence_label']
+    require(o['quote']['book']=='draftkings' and p['alias_review']==identity and p['evidence_label']==pref['evidence_label']
         and o['schedule']==pref['schedule'] and o['model']==pref['model']
         and o['features']==dict(order=list(pref['feature_names']),values=pref['ordered_features'],available_at=pref['prepared_at']),
         'NCAAF_STAGED_BINDING_CONFLICT')

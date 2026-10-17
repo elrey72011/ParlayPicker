@@ -606,7 +606,8 @@ def from_export(row, *, source=None, source_field="win_probability", private_res
             retained = ncaaf_origin["ncaaf_inputs"]["payload"]
             if retained["original_packet"]["payload"]["evidence_label"] == "SYNTHETIC":
                 result["basis"] += "; SYNTHETIC software fixture"
-            result.update(probability=retained["raw_probability"]["value"], push_probability=0.0,
+            push=retained.get('outcome_probabilities',{}).get('push',0.0)
+            result.update(probability=retained["raw_probability"]["value"], push_probability=push,
                 probability_semantics="win_unconditional_with_push", availability_reason="AVAILABLE",
                 value_reason="VALUE_NOT_RECORDED", inference_status="RECORDED")
             return result
