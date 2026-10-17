@@ -1,5 +1,5 @@
 {
-  "approval_reference": "Robert actually approved combined fixture follow-up334829e0b4911a2b4a6edcf62e83214bcec27d5158a5f43ebeafb15fc81fb014, explicitly both historical session construction and the real-Git copy safeguard, regressions/bindings/seal/guarded publication and ONE additional complete CI cycle without retries. No operational authority. Original software proposal2683a83d1915e0ead63f104051c7885b8067a61c8d98a13ac96fd4909accf3e2: explicit fresh target/history staging, unchanged native discrete integer masses, shared half/integer comparison, isolated draft PR, offline tests, successor bindings/seal and ONE complete final-head CI cycle. No live acquisition, configuration, scheduling, acceptance registration, inference, workflow/profile/shard/timeout/native mathematics changes.",
+  "approval_reference": "Robert authorized proposal08d51c2b440090e5adcf3ef87bd9a7cea2d9587da1c6c091cb59d6bcebd0bc16 and semantic patchfbe2fcd3d8e73643488a73e8bc91e3b94d3abf834d2cb14a25baa9d32b53980e: authenticate frozen manifest before its exact comparison base; preserve original assertions/hash/source rejection; exact successor bindings and policy-only seal, isolated draft and one complete final-head CI cycle. No workflow/profile/shard/timeout/model/acquisition/operational changes.",
   "base_sha": "ab0049adc88e913b8a2d7bda123bfeecd403dc52",
   "base_tree": "768042e40e10c1c44e649d7fef9d0e88b23fd4b3",
   "implementation_changes": {
@@ -72,19 +72,23 @@
       "before_blob": "3abaf2b5175a37dc21c78c6a6ea1d124c908a38e"
     },
     "docs/paid-launch/ncaaf-future-spread-binding-v1.json": {
-      "after_blob": "744592f8651c2c7a88c077345aef3e5cf946d7d4",
+      "after_blob": "93e5289fec6afa65bd3b2cba35e36f64a232e476",
       "before_blob": null
     },
     "docs/paid-launch/ncaaf-future-spread-v1.md": {
       "after_blob": "60bb79e3a5311d74b14e30332a3592cccc8f2c62",
       "before_blob": null
     },
+    "docs/paid-launch/ncaaf-postmerge-scope-correction-v1.txt": {
+      "after_blob": "e7162aa993dbc226c2ded9a43e5804991dfa7756",
+      "before_blob": null
+    },
     "scripts/check_launch_change_scope.py": {
-      "after_blob": "8c3baefef1d4821a068fdbcc9810decd666a7134",
+      "after_blob": "be89ce6481b22b526814a5bafc93eb768cf6597b",
       "before_blob": "08e8be61ff96f59c14e7cfeab0f8f9d82444a765"
     },
     "scripts/ncaaf_future_spread_scope.py": {
-      "after_blob": "2bcd2298fc54f11a8324dfb3372d6f154fb5130b",
+      "after_blob": "a77543c64e90a08d095fcc2b6c023257397432d9",
       "before_blob": null
     },
     "scripts/ncaaf_staged_acquisition.py": {
@@ -119,6 +123,10 @@
       "after_blob": "5794d56138df18f4490130dc098191635ca2fddb",
       "before_blob": null
     },
+    "tests/test_ncaaf_postmerge_scope.py": {
+      "after_blob": "f79f298faee0630e5d8f9d1b3daf19f0556cbe2f",
+      "before_blob": null
+    },
     "tests/test_ncaaf_spread_boundaries.py": {
       "after_blob": "2c19754e3ec63317f4c9ef8eb240088a4cfdf591",
       "before_blob": null
@@ -128,8 +136,8 @@
       "before_blob": "a12723040bf5a44690af41d85f022c8153594112"
     }
   },
-  "implementation_commit": "29041e45320323003561e01e97c4fdfe20a53a34",
-  "implementation_tree": "b8107ef999caa6e49af373d7a67bb110ec109afa",
+  "implementation_commit": "e231fb93ef5def16ebe3db450874536e8d61392b",
+  "implementation_tree": "b2016b68edb018e589075658536a3b3bf1765d0e",
   "original_manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
   "policy_version": "ncaaf-future-spread-v1",
   "predecessor_policy_blob": "8467a922e9037cf5534a19e5d9cbc7724e58eb88",

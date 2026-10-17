@@ -1,0 +1,23 @@
+Bounded post-merge comparison-base compatibility correction
+
+Approved proposal: 08d51c2b440090e5adcf3ef87bd9a7cea2d9587da1c6c091cb59d6bcebd0bc16
+Prepared semantic patch: fbe2fcd3d8e73643488a73e8bc91e3b94d3abf834d2cb14a25baa9d32b53980e
+
+The owner-merged f8ee244/tree6658ab failed protected-scope because the unchanged
+push workflow uses the exact frozen manifest comparison base 5fb8e135, while
+PR qualification used ab0049ad. Original PR evidence remains valid in context.
+Authenticate the original manifest before recognizing its exact base_sha.
+Unspecified and reviewed bases retain their prior meaning; arbitrary bases reject.
+
+The exact successor binding retains all prior implementation/reconstruction
+bindings, authenticates the merged predecessor and its original binding, guard
+and policy, and authorizes only five correction paths. Its implementation leaves
+the prior policy unchanged; the following commit modifies only that policy.
+The guard retains its exact byte count and reconstruction logic: only the fixed
+width binding and self-identity hashes change. No source/field limit is increased.
+Historical test identities, assertions, original fixtures, workflows, nine-shard
+capacity, profile, scheduler, timeouts, model and acquisition behavior are unchanged.
+
+No acquisition, operational configuration, acceptance or inference is authorized.
+Nebraska/Oregon advance answers remain separately recorded. Release clearance
+requires final-head validation and, after owner merge, actual post-merge checks.
