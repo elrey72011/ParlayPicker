@@ -26,36 +26,87 @@ def make_policy(g, binding, implementation):
         unchanged_bindings={p: value for p, value in before.items() if p not in binding['paths']})
 
 
+
+def validate_postmerge_successor(g, binding, implementation, correction):
+    """Authenticate the exact merged predecessor; never waive its protections."""
+    require = g._require
+    require(set(correction) == {'proposal_sha256', 'base', 'base_tree', 'ordered_parents',
+            'previous_binding_sha256', 'previous_policy_sha256', 'previous_guard_sha256',
+            'paths'}, 'POSTMERGE_BINDING_FIELDS_CHANGED')
+    require(correction['proposal_sha256'] == '08d51c2b440090e5adcf3ef87bd9a7cea2d9587da1c6c091cb59d6bcebd0bc16'
+            and correction['base'] == binding['main_base'] == 'f8ee244cea78c96ec244a15cda0753e1b7a09c11'
+            and correction['base_tree'] == binding['main_tree'] == '6658abdb587fca5f6053f94a4d4e8bb3447ba84f',
+            'POSTMERGE_BASE_NOT_APPROVED')
+    base = correction['base']
+    require(g.git('rev-parse', base+'^{tree}') == correction['base_tree']
+            and g.git('show', '-s', '--format=%P', base).split() == correction['ordered_parents']
+            == ['ab0049adc88e913b8a2d7bda123bfeecd403dc52', '8d474ce47deab00810441cdb141ab5e306953dee'],
+            'POSTMERGE_PREDECESSOR_CHANGED')
+    prior_binding_raw = g.git_bytes('show', base+':'+BINDING)
+    prior_policy = g.git_bytes('show', base+':'+POLICY)
+    prior_guard = g.git_bytes('show', base+':'+g.GUARD_PATH)
+    require(hashlib.sha256(prior_binding_raw).hexdigest() == correction['previous_binding_sha256']
+            and hashlib.sha256(prior_policy).hexdigest() == correction['previous_policy_sha256']
+            and hashlib.sha256(prior_guard).hexdigest() == correction['previous_guard_sha256'],
+            'POSTMERGE_PREDECESSOR_HASH_CHANGED')
+    previous = json.loads(prior_binding_raw)
+    adaptations = {'main_base', 'main_tree', 'approval_reference', 'reviewed_blobs', 'paths', 'postmerge_correction'}
+    require(set(binding) == set(previous) | {'postmerge_correction'}
+            and all(binding[k] == value for k, value in previous.items() if k not in adaptations),
+            'POSTMERGE_INHERITED_BINDINGS_CHANGED')
+    changed = set(correction['paths'])
+    require(changed == {g.GUARD_PATH, BINDING, 'scripts/ncaaf_future_spread_scope.py',
+            'tests/test_ncaaf_postmerge_scope.py', 'docs/paid-launch/ncaaf-postmerge-scope-correction-v1.txt'}
+            and set(binding['paths']) == set(previous['paths']) | changed,
+            'POSTMERGE_CHANGE_SET_NOT_APPROVED')
+    require(g.git('show', '-s', '--format=%P', implementation).split() == [base]
+            and set(g.git('diff', '--name-only', base, implementation).splitlines()) == changed,
+            'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+    require(g.git_bytes('show', implementation+':'+POLICY) == prior_policy,
+            'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
+    require(set(g.git('diff', '--name-only', binding['base'], implementation).splitlines())
+            == set(binding['paths']) | {POLICY}, 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+    # Historical paths not named by this correction must retain their exact blobs.
+    before = blobs(g, base); after = blobs(g, implementation)
+    require(all(after.get(p) == value for p, value in before.items() if p not in changed),
+            'IMMUTABLE_FILE_CHANGED')
+
+
 def validate(g, manifest_path, base, binding):
     require = g._require
     require(manifest_path.resolve() == (g.ROOT/g.MANIFEST_PATH).resolve(), 'MANIFEST_PATH_NOT_APPROVED')
-    require(base in (None, binding['base'], binding['main_base'], 'ab0049adc88e913b8a2d7bda123bfeecd403dc52'), 'COMPARISON_BASE_NOT_APPROVED')
     require(not g.git('diff', '--name-only') and not g.git('diff', '--cached', '--name-only'), 'UNAUTHORIZED_CHECKOUT_CHANGE')
     require(g.git('rev-parse', binding['base']+'^{tree}') == binding['base_tree'], 'STARTING_MAIN_TREE_CHANGED')
     original = g.git_bytes('show', binding['base']+':'+g.GUARD_PATH)
     require(hashlib.sha256(original).hexdigest() == binding['previous_guard_sha256'], 'PREVIOUS_GUARD_CHANGED')
     manifest = g.git_bytes('show', binding['base']+':'+g.MANIFEST_PATH)
     require(hashlib.sha256(manifest).hexdigest() == binding['manifest_sha256'], 'BASELINE_CHANGED')
+    require(base in (None, binding['base'], binding['main_base'], 'ab0049adc88e913b8a2d7bda123bfeecd403dc52',
+                     json.loads(manifest).get('base_sha')), 'COMPARISON_BASE_NOT_APPROVED')
     binding_bytes = g.git_bytes('show', 'HEAD:'+BINDING)
     require(hashlib.sha256(binding_bytes).hexdigest() == g.NCAAF_FUTURE_BINDING_SHA256 and json.loads(binding_bytes) == binding, 'REVIEWED_BINDINGS_CHANGED')
     require(hashlib.sha256(g.NCAAF_FUTURE_RECONSTRUCTION_JSON).hexdigest() == binding['reconstruction_json_sha256'] and json.loads(g.NCAAF_FUTURE_RECONSTRUCTION_JSON) == binding['source_reconstructions'], 'REVIEWED_RECONSTRUCTIONS_CHANGED')
     require(not g.exists_at(binding['base'], POLICY), 'SUCCESSOR_POLICY_ALREADY_EXISTS')
     raw = g.git_bytes('show', 'HEAD:'+POLICY); policy = json.loads(raw)
     implementation = policy['implementation_commit']
-    ancestors = binding.get('implementation_ancestors', [])
-    require(isinstance(ancestors, list) and len(ancestors) <= 2, 'IMPLEMENTATION_PARENT_NOT_APPROVED')
-    parent = binding['base']
-    for ancestor in ancestors:
-        require(isinstance(ancestor, str) and len(ancestor) == 40 and
-                g.git('show', '-s', '--format=%P', ancestor).split() == [parent],
-                'IMPLEMENTATION_PARENT_NOT_APPROVED')
-        require(not g.exists_at(ancestor, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
-        require(set(g.git('diff', '--name-only', binding['base'], ancestor).splitlines()) <= set(binding['paths']),
-                'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
-        parent = ancestor
-    require(g.git('show', '-s', '--format=%P', implementation).split() == [parent], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
-    require(not g.exists_at(implementation, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
-    require(set(g.git('diff', '--name-only', binding['base'], implementation).splitlines()) == set(binding['paths']), 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+    correction = binding.get('postmerge_correction')
+    if correction is not None:
+        validate_postmerge_successor(g, binding, implementation, correction)
+    else:
+        ancestors = binding.get('implementation_ancestors', [])
+        require(isinstance(ancestors, list) and len(ancestors) <= 2, 'IMPLEMENTATION_PARENT_NOT_APPROVED')
+        parent = binding['base']
+        for ancestor in ancestors:
+            require(isinstance(ancestor, str) and len(ancestor) == 40 and
+                    g.git('show', '-s', '--format=%P', ancestor).split() == [parent],
+                    'IMPLEMENTATION_PARENT_NOT_APPROVED')
+            require(not g.exists_at(ancestor, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
+            require(set(g.git('diff', '--name-only', binding['base'], ancestor).splitlines()) <= set(binding['paths']),
+                    'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+            parent = ancestor
+        require(g.git('show', '-s', '--format=%P', implementation).split() == [parent], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
+        require(not g.exists_at(implementation, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
+        require(set(g.git('diff', '--name-only', binding['base'], implementation).splitlines()) == set(binding['paths']), 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
     require(policy == make_policy(g, binding, implementation), 'EXACT_POLICY_BINDINGS_CHANGED')
     require(g.git('rev-parse', binding['main_base']+'^{tree}') == binding['main_tree'], 'STARTING_MAIN_TREE_CHANGED')
     if TEST_CONFIG in binding['paths']:
@@ -78,7 +129,8 @@ def validate(g, manifest_path, base, binding):
     else:
         candidate = g.git('rev-parse', 'HEAD')
     require(g.git('show', '-s', '--format=%P', candidate).split() == [implementation], 'CANDIDATE_NOT_POLICY_SEAL')
-    require(g.git('diff', '--name-status', implementation, candidate).splitlines() == ['A\t'+POLICY], 'SEAL_CHANGE_SET_NOT_APPROVED')
+    seal_status = 'M' if correction is not None else 'A'
+    require(g.git('diff', '--name-status', implementation, candidate).splitlines() == [seal_status+'\t'+POLICY], 'SEAL_CHANGE_SET_NOT_APPROVED')
     head = blobs(g, 'HEAD')
     require(all(head.get(p) == value for p, value in policy['unchanged_bindings'].items()), 'IMMUTABLE_FILE_CHANGED')
     require(set(head) == set(policy['unchanged_bindings']) | set(binding['paths']) | {POLICY}, 'UNREVIEWED_PATH')

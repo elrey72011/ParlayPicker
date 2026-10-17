@@ -1,5 +1,5 @@
 {
-  "approval_reference": "Robert actually approved combined fixture follow-up334829e0b4911a2b4a6edcf62e83214bcec27d5158a5f43ebeafb15fc81fb014, explicitly both historical session construction and the real-Git copy safeguard, regressions/bindings/seal/guarded publication and ONE additional complete CI cycle without retries. No operational authority. Original software proposal2683a83d1915e0ead63f104051c7885b8067a61c8d98a13ac96fd4909accf3e2: explicit fresh target/history staging, unchanged native discrete integer masses, shared half/integer comparison, isolated draft PR, offline tests, successor bindings/seal and ONE complete final-head CI cycle. No live acquisition, configuration, scheduling, acceptance registration, inference, workflow/profile/shard/timeout/native mathematics changes.",
+  "approval_reference": "Robert authorized proposal08d51c2b440090e5adcf3ef87bd9a7cea2d9587da1c6c091cb59d6bcebd0bc16 and semantic patchfbe2fcd3d8e73643488a73e8bc91e3b94d3abf834d2cb14a25baa9d32b53980e: authenticate frozen manifest before its exact comparison base; preserve original assertions/hash/source rejection; exact successor bindings and policy-only seal, isolated draft and one complete final-head CI cycle. No workflow/profile/shard/timeout/model/acquisition/operational changes.",
   "approved_existing_test_changes": {
     "tests/conftest.py": "Exact historical session/function input fixture plugin only; restore live context; original network blocking/assertions unchanged.",
     "tests/test_readiness_dashboard_scope.py": "Approved exact three-line local template safeguard: gc.auto=0, maintenance.auto=false, synchronous gc --prune=never before copy. All original test functions/assertions/identities unchanged."
@@ -10,8 +10,8 @@
     "55b0ff20adafdd45f133acb8cccbb02eca401112",
     "f8b11fda608a97cd88a3ad637490aa61d2753369"
   ],
-  "main_base": "ab0049adc88e913b8a2d7bda123bfeecd403dc52",
-  "main_tree": "768042e40e10c1c44e649d7fef9d0e88b23fd4b3",
+  "main_base": "f8ee244cea78c96ec244a15cda0753e1b7a09c11",
+  "main_tree": "6658abdb587fca5f6053f94a4d4e8bb3447ba84f",
   "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
   "paths": [
     "app/ui/ncaaf_pipeline_research.py",
@@ -33,6 +33,7 @@
     "app_core/research_display.py",
     "docs/paid-launch/ncaaf-future-spread-binding-v1.json",
     "docs/paid-launch/ncaaf-future-spread-v1.md",
+    "docs/paid-launch/ncaaf-postmerge-scope-correction-v1.txt",
     "scripts/check_launch_change_scope.py",
     "scripts/ncaaf_future_spread_scope.py",
     "scripts/ncaaf_staged_acquisition.py",
@@ -43,9 +44,29 @@
     "tests/test_ncaaf_future_spread_scope.py",
     "tests/test_ncaaf_named_staging.py",
     "tests/test_ncaaf_observed_spread_pair.py",
+    "tests/test_ncaaf_postmerge_scope.py",
     "tests/test_ncaaf_spread_boundaries.py",
     "tests/test_readiness_dashboard_scope.py"
   ],
+  "postmerge_correction": {
+    "base": "f8ee244cea78c96ec244a15cda0753e1b7a09c11",
+    "base_tree": "6658abdb587fca5f6053f94a4d4e8bb3447ba84f",
+    "ordered_parents": [
+      "ab0049adc88e913b8a2d7bda123bfeecd403dc52",
+      "8d474ce47deab00810441cdb141ab5e306953dee"
+    ],
+    "paths": [
+      "scripts/check_launch_change_scope.py",
+      "docs/paid-launch/ncaaf-future-spread-binding-v1.json",
+      "scripts/ncaaf_future_spread_scope.py",
+      "tests/test_ncaaf_postmerge_scope.py",
+      "docs/paid-launch/ncaaf-postmerge-scope-correction-v1.txt"
+    ],
+    "previous_binding_sha256": "28a1cc1249e75adbf2e0a572f0d1a5473cc8a89f89e8f01f18478ca0163619f2",
+    "previous_guard_sha256": "73dd3526e1e2f6414ca35d5c28d3a4801beca257231779f5cacc323cc4a28a89",
+    "previous_policy_sha256": "94839f0e9fd277900974260f0589f754561cb7eb599e546b1be6b7a01ec41190",
+    "proposal_sha256": "08d51c2b440090e5adcf3ef87bd9a7cea2d9587da1c6c091cb59d6bcebd0bc16"
+  },
   "previous_guard_sha256": "3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306",
   "reconstruction_json_sha256": "84ad9da74b6a9adeda488a2deb29d959efc3979a49188d2cb8adb88726d12ca2",
   "reviewed_blobs": {
@@ -67,7 +88,8 @@
     "app_core/per_game_boards.py": "3c22014b1dcbe2bc0b6ebf32a998bfdcd78336d3",
     "app_core/research_display.py": "a5225891fe8c1bd5d4a1210e5dae2958620f90fb",
     "docs/paid-launch/ncaaf-future-spread-v1.md": "60bb79e3a5311d74b14e30332a3592cccc8f2c62",
-    "scripts/ncaaf_future_spread_scope.py": "2bcd2298fc54f11a8324dfb3372d6f154fb5130b",
+    "docs/paid-launch/ncaaf-postmerge-scope-correction-v1.txt": "e7162aa993dbc226c2ded9a43e5804991dfa7756",
+    "scripts/ncaaf_future_spread_scope.py": "a77543c64e90a08d095fcc2b6c023257397432d9",
     "scripts/ncaaf_staged_acquisition.py": "590cca5a222d29060c8afe0f19c4b42aa597d055",
     "tests/conftest.py": "23e64bb9fc8c226a5a74fccb425ad4104fcf0be3",
     "tests/ncaaf_future_pair_fixtures.py": "fd6d5bd9cbbb4ded3922676d8a2d394c1252734b",
@@ -76,6 +98,7 @@
     "tests/test_ncaaf_future_spread_scope.py": "26f69dcd36cdb221f88ac1769a55f8321083821f",
     "tests/test_ncaaf_named_staging.py": "1cbd9b8e9ae56ce09976cf4183e9bf29b923ef77",
     "tests/test_ncaaf_observed_spread_pair.py": "5794d56138df18f4490130dc098191635ca2fddb",
+    "tests/test_ncaaf_postmerge_scope.py": "f79f298faee0630e5d8f9d1b3daf19f0556cbe2f",
     "tests/test_ncaaf_spread_boundaries.py": "2c19754e3ec63317f4c9ef8eb240088a4cfdf591",
     "tests/test_readiness_dashboard_scope.py": "f1fd326bf6391aac365b4a39ced3138c84d373c5"
   },
