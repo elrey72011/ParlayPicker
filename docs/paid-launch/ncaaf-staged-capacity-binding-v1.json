@@ -1,0 +1,1095 @@
+{
+  "approval_reference": "Robert additionally approved exact fixture-clock proposal a4ed1a6eec3103e8ecbd676b8e9a038876c372c69ee98a365d3d4028ebf5ddf8 with patch87fc5258eee30e8e6a60f59434eb094eece12eb077445c126fe8927e41e090a7, exact successor metadata, preservation/lease and ONE further final-head cycle. No production behavior or real chronology change. Robert approved proposal b92f43e81dd5e544882f14d0fc71af10fbe7f9b2fa8f13d5a374dca81b5a86b2:43 completed-XML-backed cost corrections, CURRENT seven-to-nine whole-file capacity and cardinality, exact historical fixtures, focused regressions/documentation, successor bindings/policy-only seal, draft publication and ONE complete final-head cycle after shallow/context/inventory/forecast validation. Preserve substantive assertions, original identities/order, scheduler, network blocking,30-minute limits, live decisions and source/hash checks. No acquisition, mathematics, operational configuration, inference, merge or deployment.",
+  "approved_existing_test_changes": {
+    "tests/test_ci_five_shards.py": "Exact owner-approved CURRENT 7-to-9 cardinality only; substantive exact-once assertion remains.",
+    "tests/test_ci_six_shards.py": "Exact owner-approved CURRENT 7-to-9 cardinality only; substantive exact-once assertion remains.",
+    "tests/test_ci_test_shards.py": "Exact owner-approved CURRENT 7-to-9 cardinality only; substantive exact-once assertion remains.",
+    "tests/test_football_document_ci_performance.py": "Exact hash-bound seven-shard historical profile input only; all original assertions and identity unchanged.",
+    "tests/test_football_document_predecessor_fixture.py": "Exact hash-bound capacity-to-seven predecessor input before the unchanged six-to-five fixture assertions; no original assertion or identity changed.",
+    "tests/test_ncaaf_staged_evidence.py": "Exact approved synthetic test-local chronology clock; all original assertions and test identities unchanged. Approval a4ed1a6eec3103e8ecbd676b8e9a038876c372c69ee98a365d3d4028ebf5ddf8.",
+    "tests/test_nfl_pdf_timing_costs.py": "Exact hash-bound seven-shard historical input only; every original assertion and identity unchanged.",
+    "tests/test_nfl_seven_predecessor_inputs.py": "Exact hash-bound seven-way source fixture for the unchanged historical seven-to-six assertions; current nine-way gates remain live."
+  },
+  "base": "87b06dc7d05fb9bef7638b3c2f2862ffe2b92136",
+  "base_tree": "cd660d1e21b8426f0f549030a271af231500fc96",
+  "main_base": "f98015dbd969456990a01f9d45405697c7fc5251",
+  "main_tree": "bb55338dbaf1b1dea445e50ec4b3ac20a37fc852",
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    ".github/workflows/ci.yml",
+    "docs/ci-test-execution.md",
+    "docs/paid-launch/ncaaf-staged-capacity-binding-v1.json",
+    "docs/paid-launch/ncaaf-staged-capacity-v1.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/ncaaf_staged_capacity_scope.py",
+    "tests/ncaaf_staged_capacity_fixtures.py",
+    "tests/nfl_pdf_capacity_fixtures.py",
+    "tests/test_ci_five_shards.py",
+    "tests/test_ci_six_shards.py",
+    "tests/test_ci_test_shards.py",
+    "tests/test_football_document_ci_performance.py",
+    "tests/test_football_document_predecessor_fixture.py",
+    "tests/test_ncaaf_staged_capacity_scope.py",
+    "tests/test_ncaaf_staged_ci_capacity.py",
+    "tests/test_ncaaf_staged_evidence.py",
+    "tests/test_nfl_pdf_timing_costs.py",
+    "tests/test_nfl_seven_predecessor_inputs.py"
+  ],
+  "previous_guard_sha256": "f3732664f763d99f057c9c97a642879cd4ffcc8520d43f3d3bbe5ae3f0901c87",
+  "reconstruction_json_sha256": "99af1fb3ba44b92dbf33f81cb3778461ff1e888e22c036a670c9b6f6d70f64b0",
+  "reviewed_blobs": {
+    ".github/workflows/ci.yml": "932c24d8d58378da0fb580620973e1ae7f517521",
+    "docs/ci-test-execution.md": "a05ecf87e6eb1239deb061471e9222a3c2ad9ba6",
+    "docs/paid-launch/ncaaf-staged-capacity-v1.md": "60ae31eb510e2c85b4b7d20216978021572e9da1",
+    "scripts/ci_test_file_costs_v1.json": "bc755c0da2d2287fc6e0e4963759eb5cbf906b79",
+    "scripts/ncaaf_staged_capacity_scope.py": "ea984b46123ba562c5cc687b8fe285d17b81c215",
+    "tests/ncaaf_staged_capacity_fixtures.py": "7528768d4c091f603e72d629b7c7af4c6f7a58eb",
+    "tests/nfl_pdf_capacity_fixtures.py": "244e1550e2422666c6d14ed4c31293d10a516883",
+    "tests/test_ci_five_shards.py": "3835c6fc485430c83a2695f49803ba55ec3a592b",
+    "tests/test_ci_six_shards.py": "709c5b3bb8154cb300259358e8c41b73b9d59a7c",
+    "tests/test_ci_test_shards.py": "2461fd68dcadfe911e07f6a9f405f237d3fdc568",
+    "tests/test_football_document_ci_performance.py": "bc8405a8f3e818d38bc07d0fc86280c5e78c9165",
+    "tests/test_football_document_predecessor_fixture.py": "d92d1da146d00b5e984173e39471168998cf46fd",
+    "tests/test_ncaaf_staged_capacity_scope.py": "c4fb3f79f53784e7492d6f81061dab8834fd05d7",
+    "tests/test_ncaaf_staged_ci_capacity.py": "153d3af3c1e0556f665ff1e7dd52f1aada250c18",
+    "tests/test_ncaaf_staged_evidence.py": "7625eec3cb0bcb32e2856fea14189b02c6afe5e9",
+    "tests/test_nfl_pdf_timing_costs.py": "d026a8f805d4cac1389621c0e68fff33cd863d19",
+    "tests/test_nfl_seven_predecessor_inputs.py": "bb603f6fc38932684d8d82bd42b700e9baaa980f"
+  },
+  "schema_version": 1,
+  "source_reconstructions": {
+    ".github/workflows/ci.yml": {
+      "after_sha256": "7789b52f4be6e9616233bfdf57ccc996cdd33847846862f8e0122687f6c729f7",
+      "before_sha256": "8c53f69cf799c77ee2bd78ab20f73246fa11ad61f6120d66751d53c235e33792",
+      "reverse_patches": [
+        {
+          "end": 3580,
+          "start": 3537,
+          "text": "        shard: [1, 2, 3, 4, 5, 6, 7]\n"
+        },
+        {
+          "end": 4073,
+          "start": 3993,
+          "text": "          python scripts/run_ci_tests.py --shard ${{ matrix.shard }} --shards 7\n"
+        },
+        {
+          "end": 5578,
+          "start": 5403,
+          "text": "      - name: Reconcile complete test identities and outcomes across all seven shards\n        run: python scripts/run_ci_tests.py --shards 7 --reconcile-manifests test-results\n"
+        }
+      ]
+    },
+    "docs/ci-test-execution.md": {
+      "after_sha256": "7f2b101287159d5aa409ce129a2a8512e89ffa19b3b38cfcc4a0343b84678231",
+      "before_sha256": "729752109ea2bbc9a875796e4acbf202be0cf5264ae3e91b274d046665d4b4e6",
+      "reverse_patches": [
+        {
+          "end": 3592,
+          "start": 3510,
+          "text": "The earlier 17\u201319 minute projection was an estimate. The corrected run's actual\n"
+        },
+        {
+          "end": 9725,
+          "start": 8408,
+          "text": ""
+        }
+      ]
+    },
+    "scripts/ci_test_file_costs_v1.json": {
+      "after_sha256": "7474e2d7f22d4c5ad5dfa6dbc945d2e549a401250e295546303084c6116ad5a7",
+      "before_sha256": "090c444804b9d7941b8e8200f60dd02a7de3e0e97b7df89eca7b153c2a5470f7",
+      "reverse_patches": [
+        {
+          "end": 34330,
+          "start": 34110,
+          "text": "      \"advisory_basis_seconds\": 232.22,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 35198,
+          "start": 34843,
+          "text": ""
+        },
+        {
+          "end": 36755,
+          "start": 36629,
+          "text": "        \"ncaaf-socket-ci-completed-pr-4\"\n"
+        },
+        {
+          "end": 36872,
+          "start": 36764,
+          "text": "      \"seconds\": 476.51515,\n"
+        },
+        {
+          "end": 53183,
+          "start": 52965,
+          "text": "      \"advisory_basis_seconds\": 2.918,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 54057,
+          "start": 53706,
+          "text": ""
+        },
+        {
+          "end": 54507,
+          "start": 54389,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 54622,
+          "start": 54516,
+          "text": "      \"seconds\": 3.3557,\n"
+        },
+        {
+          "end": 54899,
+          "start": 54669,
+          "text": "      \"advisory_basis_seconds\": 34.132,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 55941,
+          "start": 55578,
+          "text": ""
+        },
+        {
+          "end": 59312,
+          "start": 59193,
+          "text": "        \"nfl-pdf-capacity-main-1\"\n"
+        },
+        {
+          "end": 59427,
+          "start": 59321,
+          "text": "      \"seconds\": 68.7033,\n"
+        },
+        {
+          "end": 78256,
+          "start": 78036,
+          "text": "      \"advisory_basis_seconds\": 74.02,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 79094,
+          "start": 78916,
+          "text": ""
+        },
+        {
+          "end": 80498,
+          "start": 80420,
+          "text": "        \"listing-completed-main-1\"\n"
+        },
+        {
+          "end": 80615,
+          "start": 80507,
+          "text": "      \"seconds\": 169.63305,\n"
+        },
+        {
+          "end": 86289,
+          "start": 86070,
+          "text": "      \"advisory_basis_seconds\": 9.267,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 87126,
+          "start": 86949,
+          "text": ""
+        },
+        {
+          "end": 89596,
+          "start": 89519,
+          "text": "        \"nfl-pdf-capacity-main-4\"\n"
+        },
+        {
+          "end": 89712,
+          "start": 89605,
+          "text": "      \"seconds\": 29.0651,\n"
+        },
+        {
+          "end": 98926,
+          "start": 98707,
+          "text": "      \"advisory_basis_seconds\": 15.888,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 99939,
+          "start": 99587,
+          "text": ""
+        },
+        {
+          "end": 100408,
+          "start": 100288,
+          "text": "        \"listing-completed-main-2\"\n"
+        },
+        {
+          "end": 100523,
+          "start": 100417,
+          "text": "      \"seconds\": 18.2712,\n"
+        },
+        {
+          "end": 115145,
+          "start": 114926,
+          "text": "      \"advisory_basis_seconds\": 279.199,\n      \"basis\": \"Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.\",\n"
+        },
+        {
+          "end": 116191,
+          "start": 115838,
+          "text": ""
+        },
+        {
+          "end": 117914,
+          "start": 117787,
+          "text": "        \"document-ci-completed-56-shard6\"\n"
+        },
+        {
+          "end": 118029,
+          "start": 117923,
+          "text": "      \"seconds\": 321.07885,\n"
+        },
+        {
+          "end": 168942,
+          "start": 168722,
+          "text": "      \"advisory_basis_seconds\": 218.853,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 169973,
+          "start": 169607,
+          "text": ""
+        },
+        {
+          "end": 171541,
+          "start": 171415,
+          "text": "        \"ncaaf-socket-ci-completed-pr-6\"\n"
+        },
+        {
+          "end": 171657,
+          "start": 171550,
+          "text": "      \"seconds\": 484.0603,\n"
+        },
+        {
+          "end": 193385,
+          "start": 193166,
+          "text": "      \"advisory_basis_seconds\": 15.357,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 194233,
+          "start": 193880,
+          "text": ""
+        },
+        {
+          "end": 196972,
+          "start": 196853,
+          "text": "        \"nfl-pdf-capacity-main-4\"\n"
+        },
+        {
+          "end": 197088,
+          "start": 196981,
+          "text": "      \"seconds\": 38.08915,\n"
+        },
+        {
+          "end": 254276,
+          "start": 254056,
+          "text": "      \"advisory_basis_seconds\": 341.974,\n      \"basis\": \"Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.\",\n"
+        },
+        {
+          "end": 255474,
+          "start": 255119,
+          "text": ""
+        },
+        {
+          "end": 256970,
+          "start": 256843,
+          "text": "        \"document-ci-completed-56-shard6\"\n"
+        },
+        {
+          "end": 257086,
+          "start": 256979,
+          "text": "      \"seconds\": 393.2701,\n"
+        },
+        {
+          "end": 291339,
+          "start": 291108,
+          "text": "      \"advisory_basis_seconds\": 308.052,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 292224,
+          "start": 291857,
+          "text": ""
+        },
+        {
+          "end": 294062,
+          "start": 293936,
+          "text": "        \"ncaaf-socket-ci-completed-pr-1\"\n"
+        },
+        {
+          "end": 294180,
+          "start": 294071,
+          "text": "      \"seconds\": 843.66185,\n"
+        },
+        {
+          "end": 295668,
+          "start": 295449,
+          "text": "      \"advisory_basis_seconds\": 7.942,\n      \"basis\": \"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\",\n"
+        },
+        {
+          "end": 296508,
+          "start": 296156,
+          "text": ""
+        },
+        {
+          "end": 296908,
+          "start": 296792,
+          "text": "        \"refresh1-completed-3\"\n"
+        },
+        {
+          "end": 297023,
+          "start": 296917,
+          "text": "      \"seconds\": 9.1333,\n"
+        },
+        {
+          "end": 298561,
+          "start": 298341,
+          "text": "      \"advisory_basis_seconds\": 66.35,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 299591,
+          "start": 299236,
+          "text": ""
+        },
+        {
+          "end": 301065,
+          "start": 300947,
+          "text": "        \"listing-completed-pr-1\"\n"
+        },
+        {
+          "end": 301181,
+          "start": 301074,
+          "text": "      \"seconds\": 146.41455,\n"
+        },
+        {
+          "end": 301447,
+          "start": 301228,
+          "text": "      \"advisory_basis_seconds\": 51.016,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 302463,
+          "start": 302110,
+          "text": ""
+        },
+        {
+          "end": 305229,
+          "start": 305110,
+          "text": "        \"nfl-pdf-capacity-main-5\"\n"
+        },
+        {
+          "end": 305345,
+          "start": 305238,
+          "text": "      \"seconds\": 84.34215,\n"
+        },
+        {
+          "end": 316491,
+          "start": 316272,
+          "text": "      \"advisory_basis_seconds\": 9.646,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 317341,
+          "start": 317165,
+          "text": ""
+        },
+        {
+          "end": 317774,
+          "start": 317699,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 317890,
+          "start": 317783,
+          "text": "      \"seconds\": 11.0929,\n"
+        },
+        {
+          "end": 321203,
+          "start": 320985,
+          "text": "      \"advisory_basis_seconds\": 20.496,\n      \"basis\": \"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\",\n"
+        },
+        {
+          "end": 322045,
+          "start": 321694,
+          "text": ""
+        },
+        {
+          "end": 322432,
+          "start": 322316,
+          "text": "        \"refresh1-completed-2\"\n"
+        },
+        {
+          "end": 322546,
+          "start": 322441,
+          "text": "      \"seconds\": 23.5704,\n"
+        },
+        {
+          "end": 334077,
+          "start": 333858,
+          "text": "      \"advisory_basis_seconds\": 18.438567,\n      \"basis\": \"Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.\",\n"
+        },
+        {
+          "end": 334603,
+          "start": 334250,
+          "text": ""
+        },
+        {
+          "end": 334920,
+          "start": 334877,
+          "text": "      \"latest_measurement_complete\": false,\n"
+        },
+        {
+          "end": 335211,
+          "start": 335095,
+          "text": "        \"refresh1-cancelled-1\"\n"
+        },
+        {
+          "end": 335327,
+          "start": 335220,
+          "text": "      \"seconds\": 21.204352,\n"
+        },
+        {
+          "end": 341553,
+          "start": 341334,
+          "text": "      \"advisory_basis_seconds\": 8.302,\n      \"basis\": \"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\",\n"
+        },
+        {
+          "end": 342394,
+          "start": 342041,
+          "text": ""
+        },
+        {
+          "end": 342791,
+          "start": 342675,
+          "text": "        \"refresh1-completed-2\"\n"
+        },
+        {
+          "end": 342906,
+          "start": 342800,
+          "text": "      \"seconds\": 9.5473,\n"
+        },
+        {
+          "end": 344316,
+          "start": 344097,
+          "text": "      \"advisory_basis_seconds\": 27.066,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 345178,
+          "start": 344825,
+          "text": ""
+        },
+        {
+          "end": 349490,
+          "start": 349371,
+          "text": "        \"nfl-pdf-capacity-main-1\"\n"
+        },
+        {
+          "end": 349607,
+          "start": 349499,
+          "text": "      \"seconds\": 79.45925,\n"
+        },
+        {
+          "end": 369024,
+          "start": 368804,
+          "text": "      \"advisory_basis_seconds\": 122.445,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 369740,
+          "start": 369385,
+          "text": ""
+        },
+        {
+          "end": 374585,
+          "start": 374466,
+          "text": "        \"nfl-pdf-capacity-main-3\"\n"
+        },
+        {
+          "end": 374702,
+          "start": 374594,
+          "text": "      \"seconds\": 277.04305,\n"
+        },
+        {
+          "end": 376114,
+          "start": 375894,
+          "text": "      \"advisory_basis_seconds\": 61.641,\n      \"basis\": \"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\",\n"
+        },
+        {
+          "end": 376807,
+          "start": 376453,
+          "text": ""
+        },
+        {
+          "end": 380064,
+          "start": 379945,
+          "text": "        \"nfl-pdf-capacity-main-2\"\n"
+        },
+        {
+          "end": 380181,
+          "start": 380073,
+          "text": "      \"seconds\": 98.72405,\n"
+        },
+        {
+          "end": 401471,
+          "start": 401252,
+          "text": "      \"advisory_basis_seconds\": 137.751,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 402336,
+          "start": 401982,
+          "text": ""
+        },
+        {
+          "end": 406629,
+          "start": 406510,
+          "text": "        \"nfl-pdf-capacity-main-3\"\n"
+        },
+        {
+          "end": 406745,
+          "start": 406638,
+          "text": "      \"seconds\": 312.6574,\n"
+        },
+        {
+          "end": 410462,
+          "start": 409846,
+          "text": ""
+        },
+        {
+          "end": 410532,
+          "start": 410489,
+          "text": ""
+        },
+        {
+          "end": 412762,
+          "start": 412643,
+          "text": "        \"nfl-pdf-capacity-main-6\"\n"
+        },
+        {
+          "end": 412912,
+          "start": 412771,
+          "text": "      \"seconds\": 88.71905\n"
+        },
+        {
+          "end": 413540,
+          "start": 412925,
+          "text": ""
+        },
+        {
+          "end": 413610,
+          "start": 413567,
+          "text": ""
+        },
+        {
+          "end": 416679,
+          "start": 416560,
+          "text": "        \"nfl-pdf-capacity-main-6\"\n"
+        },
+        {
+          "end": 416830,
+          "start": 416688,
+          "text": "      \"seconds\": 91.41465\n"
+        },
+        {
+          "end": 427625,
+          "start": 427405,
+          "text": "      \"advisory_basis_seconds\": 54.855,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 428323,
+          "start": 427968,
+          "text": ""
+        },
+        {
+          "end": 429973,
+          "start": 429853,
+          "text": "        \"listing-completed-main-1\"\n"
+        },
+        {
+          "end": 430090,
+          "start": 429982,
+          "text": "      \"seconds\": 140.6496,\n"
+        },
+        {
+          "end": 434210,
+          "start": 433991,
+          "text": "      \"advisory_basis_seconds\": 8.071,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 435385,
+          "start": 435033,
+          "text": ""
+        },
+        {
+          "end": 435884,
+          "start": 435766,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 435999,
+          "start": 435893,
+          "text": "      \"seconds\": 9.28165,\n"
+        },
+        {
+          "end": 437969,
+          "start": 437749,
+          "text": "      \"advisory_basis_seconds\": 9.674,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 438525,
+          "start": 438159,
+          "text": ""
+        },
+        {
+          "end": 441886,
+          "start": 441767,
+          "text": "        \"nfl-pdf-capacity-main-5\"\n"
+        },
+        {
+          "end": 442003,
+          "start": 441895,
+          "text": "      \"seconds\": 93.42945,\n"
+        },
+        {
+          "end": 447467,
+          "start": 447248,
+          "text": "      \"advisory_basis_seconds\": 7.971,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 448135,
+          "start": 447959,
+          "text": ""
+        },
+        {
+          "end": 448781,
+          "start": 448704,
+          "text": "        \"listing-completed-main-2\"\n"
+        },
+        {
+          "end": 448897,
+          "start": 448790,
+          "text": "      \"seconds\": 9.16665,\n"
+        },
+        {
+          "end": 458935,
+          "start": 458716,
+          "text": "      \"advisory_basis_seconds\": 17.841,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 459951,
+          "start": 459598,
+          "text": ""
+        },
+        {
+          "end": 463562,
+          "start": 463443,
+          "text": "        \"nfl-pdf-capacity-main-3\"\n"
+        },
+        {
+          "end": 464710,
+          "start": 463571,
+          "text": "      \"seconds\": 30.60725,\n"
+        },
+        {
+          "end": 481862,
+          "start": 481248,
+          "text": ""
+        },
+        {
+          "end": 481932,
+          "start": 481889,
+          "text": ""
+        },
+        {
+          "end": 482261,
+          "start": 482135,
+          "text": "        \"ncaaf-socket-ci-completed-pr-6\"\n"
+        },
+        {
+          "end": 482377,
+          "start": 482270,
+          "text": "      \"seconds\": 42.22455,\n"
+        },
+        {
+          "end": 483626,
+          "start": 483547,
+          "text": "      \"successor_variance_multiplier\": 1.15\n"
+        },
+        {
+          "end": 492777,
+          "start": 492557,
+          "text": "      \"advisory_basis_seconds\": 135.32,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 493811,
+          "start": 493456,
+          "text": ""
+        },
+        {
+          "end": 495408,
+          "start": 495282,
+          "text": "        \"ncaaf-socket-ci-completed-pr-3\"\n"
+        },
+        {
+          "end": 495524,
+          "start": 495417,
+          "text": "      \"seconds\": 269.077,\n"
+        },
+        {
+          "end": 557390,
+          "start": 557171,
+          "text": "      \"advisory_basis_seconds\": 44.481,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 558422,
+          "start": 558069,
+          "text": ""
+        },
+        {
+          "end": 560941,
+          "start": 560822,
+          "text": "        \"nfl-pdf-capacity-main-3\"\n"
+        },
+        {
+          "end": 561056,
+          "start": 560950,
+          "text": "      \"seconds\": 65.73285,\n"
+        },
+        {
+          "end": 561322,
+          "start": 561103,
+          "text": "      \"advisory_basis_seconds\": 1.579251,\n      \"basis\": \"Maximum retained completed testcase sum or latest cancelled inter-outcome interval estimate, plus 15% advisory variance. Interval includes preceding teardown/first-test setup; terminal teardown/report UNKNOWN. Cancelled progress is NOT a completed measurement.\",\n"
+        },
+        {
+          "end": 562010,
+          "start": 561645,
+          "text": ""
+        },
+        {
+          "end": 562326,
+          "start": 562283,
+          "text": "      \"latest_measurement_complete\": false,\n"
+        },
+        {
+          "end": 562636,
+          "start": 562520,
+          "text": "        \"refresh1-cancelled-1\"\n"
+        },
+        {
+          "end": 562751,
+          "start": 562645,
+          "text": "      \"seconds\": 1.816139,\n"
+        },
+        {
+          "end": 573917,
+          "start": 573698,
+          "text": "      \"advisory_basis_seconds\": 28.333,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 575099,
+          "start": 574746,
+          "text": ""
+        },
+        {
+          "end": 578486,
+          "start": 578367,
+          "text": "        \"nfl-pdf-capacity-main-3\"\n"
+        },
+        {
+          "end": 578601,
+          "start": 578495,
+          "text": "      \"seconds\": 51.7822,\n"
+        },
+        {
+          "end": 600616,
+          "start": 600397,
+          "text": "      \"advisory_basis_seconds\": 16.429,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 601480,
+          "start": 601127,
+          "text": ""
+        },
+        {
+          "end": 601934,
+          "start": 601814,
+          "text": "        \"listing-completed-main-1\"\n"
+        },
+        {
+          "end": 602050,
+          "start": 601943,
+          "text": "      \"seconds\": 18.89335,\n"
+        },
+        {
+          "end": 623243,
+          "start": 623023,
+          "text": "      \"advisory_basis_seconds\": 84.412,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 624276,
+          "start": 623921,
+          "text": ""
+        },
+        {
+          "end": 627764,
+          "start": 627645,
+          "text": "        \"nfl-pdf-capacity-main-5\"\n"
+        },
+        {
+          "end": 627881,
+          "start": 627773,
+          "text": "      \"seconds\": 178.158,\n"
+        },
+        {
+          "end": 643504,
+          "start": 643284,
+          "text": "      \"advisory_basis_seconds\": 149.323,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 644538,
+          "start": 644183,
+          "text": ""
+        },
+        {
+          "end": 645989,
+          "start": 645871,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 646105,
+          "start": 645998,
+          "text": "      \"seconds\": 222.87345,\n"
+        },
+        {
+          "end": 662906,
+          "start": 662688,
+          "text": "      \"advisory_basis_seconds\": 3.28,\n      \"basis\": \"Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.\",\n"
+        },
+        {
+          "end": 663744,
+          "start": 663393,
+          "text": ""
+        },
+        {
+          "end": 664131,
+          "start": 664015,
+          "text": "        \"refresh1-completed-3\"\n"
+        },
+        {
+          "end": 664246,
+          "start": 664140,
+          "text": "      \"seconds\": 3.772,\n"
+        },
+        {
+          "end": 672480,
+          "start": 672249,
+          "text": "      \"advisory_basis_seconds\": 5.469,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 673198,
+          "start": 672836,
+          "text": ""
+        },
+        {
+          "end": 673616,
+          "start": 673498,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 673731,
+          "start": 673625,
+          "text": "      \"seconds\": 6.28935,\n"
+        },
+        {
+          "end": 686229,
+          "start": 686009,
+          "text": "      \"advisory_basis_seconds\": 361.827,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 687092,
+          "start": 686913,
+          "text": ""
+        },
+        {
+          "end": 688496,
+          "start": 688420,
+          "text": "        \"listing-completed-pr-2\"\n"
+        },
+        {
+          "end": 688613,
+          "start": 688505,
+          "text": "      \"seconds\": 593.27465,\n"
+        },
+        {
+          "end": 693168,
+          "start": 692949,
+          "text": "      \"advisory_basis_seconds\": 30.467,\n      \"basis\": \"Maximum of the listed completed current-main/#2419 file testcase sums plus 15% advisory variance. Different-head evidence and variance are estimates; earlier incomplete observations are preserved but not used as completed measurements.\",\n"
+        },
+        {
+          "end": 694174,
+          "start": 693997,
+          "text": ""
+        },
+        {
+          "end": 697516,
+          "start": 697439,
+          "text": "        \"nfl-pdf-capacity-main-2\"\n"
+        },
+        {
+          "end": 697632,
+          "start": 697525,
+          "text": "      \"seconds\": 50.71615,\n"
+        },
+        {
+          "end": 698883,
+          "start": 698663,
+          "text": "      \"advisory_basis_seconds\": 228.344,\n      \"basis\": \"Compatible complete passing exact-file JUnit sum, plus unchanged 15% advisory variance. Includes testcase setup/call/teardown, excludes install, collection, session reporting and artifact upload. Interrupted spans remain incomplete; no runtime guarantee.\",\n"
+        },
+        {
+          "end": 699929,
+          "start": 699574,
+          "text": ""
+        },
+        {
+          "end": 701646,
+          "start": 701519,
+          "text": "        \"document-ci-completed-56-shard6\"\n"
+        },
+        {
+          "end": 701762,
+          "start": 701655,
+          "text": "      \"seconds\": 262.5956,\n"
+        },
+        {
+          "end": 753855,
+          "start": 753438,
+          "text": ""
+        },
+        {
+          "end": 825034,
+          "start": 816343,
+          "text": ""
+        }
+      ]
+    },
+    "tests/nfl_pdf_capacity_fixtures.py": {
+      "after_sha256": "c29d1756d54c164e08a7f5a693672cf5af8bd71d6c3030c8cba3ed53d5221e36",
+      "before_sha256": "1a9b7d891b64fa289b80018b255d5db95809e0560d453fe30477a5205941f5f1",
+      "reverse_patches": [
+        {
+          "end": 769,
+          "start": 641,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ci_five_shards.py": {
+      "after_sha256": "c87c14b724138569ba78f273e6105709d7e4af0f656b3b25217bfcc52e721ebc",
+      "before_sha256": "05a71e662ecfd3b5a5db98fcd12004d71f00f6359dcd0b553834b2a3ac11279e",
+      "reverse_patches": [
+        {
+          "end": 4089,
+          "start": 4001,
+          "text": "    assert shards['strategy']['matrix']['shard']==['1','2','3','4','5','6','7']\n"
+        },
+        {
+          "end": 4238,
+          "start": 4184,
+          "text": "    assert '--shards 7' in shards['steps'][-2]['run']\n"
+        },
+        {
+          "end": 4653,
+          "start": 4601,
+          "text": "    assert '--shards 7' in gate['steps'][-1]['run']\n"
+        }
+      ]
+    },
+    "tests/test_ci_six_shards.py": {
+      "after_sha256": "72b5eb370fefa0d21d951d1a1fa510b04489ec15d4c91f60ed3bf8494ea7e918",
+      "before_sha256": "3ad7cd6e71334e3151881e606440ccc68f8e083dba0a0daacd1efd5b54bec0b9",
+      "reverse_patches": [
+        {
+          "end": 4153,
+          "start": 4074,
+          "text": "    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,8)]\n"
+        },
+        {
+          "end": 4337,
+          "start": 4239,
+          "text": "    assert '--shards 7' in shard['steps'][-2]['run'] and '--shards 7' in gate['steps'][-1]['run']\n"
+        }
+      ]
+    },
+    "tests/test_ci_test_shards.py": {
+      "after_sha256": "f104159a15551f73ccb07a7ac5ce6c859c0dc37f1d43f965f4a558eba35c423f",
+      "before_sha256": "0fbed27ca141eb53b4b08e78b2b2f13989574bb818b3d01caabac2e8b9532745",
+      "reverse_patches": [
+        {
+          "end": 13663,
+          "start": 13547,
+          "text": "    assert jobs['full-suite-tests']['strategy']['matrix']['shard'] == ['1', '2', '3', '4', '5', '6', '7']\n"
+        }
+      ]
+    },
+    "tests/test_football_document_ci_performance.py": {
+      "after_sha256": "72bcc1ac09084afc6ff5f159cd7908fbb965b276b3fef06c5d76edb529eb6f80",
+      "before_sha256": "da4c096981cd849f042709ec9442f7edc052e1df5161349c94cef274f6bfb3ba",
+      "reverse_patches": [
+        {
+          "end": 4297,
+          "start": 4098,
+          "text": "def test_only_completed_exact_file_costs_and_frozen_metadata():\n"
+        },
+        {
+          "end": 5187,
+          "start": 5095,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_football_document_predecessor_fixture.py": {
+      "after_sha256": "67914c7058ec1e3ff4265d20007e4996fb48d13e05a235a6549b2749123ad3db",
+      "before_sha256": "05b43243efffc493eb7106f8961221829058e789203f19f6c53ce9ebcb1cd8b5",
+      "reverse_patches": [
+        {
+          "end": 3775,
+          "start": 3616,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_ncaaf_staged_evidence.py": {
+      "after_sha256": "475bd1545de04a522f9f0c91604d536351f1ae562b5f9ff8c932ae98285fe501",
+      "before_sha256": "1f69d5dba4c1c57d1c5fc1dbc8030f2f9398c115658f888ecd8b6b8d8425411d",
+      "reverse_patches": [
+        {
+          "end": 13608,
+          "start": 13450,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_pdf_timing_costs.py": {
+      "after_sha256": "13a4058eefe74faebc9506577dacd3354a5888556100230a7ba85b65d21f8566",
+      "before_sha256": "925390322aa8d1ba57be4fa0b31101593b59fa0c37929c62c5bdabe7f029efcf",
+      "reverse_patches": [
+        {
+          "end": 4573,
+          "start": 4353,
+          "text": "def test_exact_66_completed_xml_costs_and_separate_successor_metadata():\n"
+        },
+        {
+          "end": 8866,
+          "start": 8774,
+          "text": ""
+        }
+      ]
+    },
+    "tests/test_nfl_seven_predecessor_inputs.py": {
+      "after_sha256": "af3801a8559d9477afa4242a53cc3b9ee4731e9d157f288242118ab0e96c556c",
+      "before_sha256": "e96c096c977e5adf8a53d461032b417395b1a1e771d8e9faef7d157d7984219f",
+      "reverse_patches": [
+        {
+          "end": 3876,
+          "start": 3137,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

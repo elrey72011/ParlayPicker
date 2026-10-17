@@ -20,6 +20,7 @@ from app_core import ncaaf_compatible_pipeline as compatible
 from app_core import ncaaf_response_custody as custody
 from app_core import ncaaf_owner_research as owner
 from app_core import ncaaf_owner_terms_research as owner_terms
+from app_core import ncaaf_owner_staged_research as owner_staged
 from app_core.research_estimate_trace import encode, fact, origin_metadata, generated_time
 
 VERSION = "ncaaf-normal-pipeline-inputs-v1"
@@ -31,12 +32,13 @@ _SELECTED = ContextVar("ncaaf_explicit_research_packets", default=())
 # Independently accepted exact packet/review and PUBLIC derived-output permission.
 # Owner upload/selection never writes this catalog. It is empty in production.
 ACCEPTED_PACKETS = {}
-INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION}
-RESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION}
+INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION, owner_staged.VERSION}
+RESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION, owner_staged.RESULT_VERSION}
 
 
 def _reader(packet):
-    if packet['payload']['version'] == owner_terms.VERSION: return owner_terms
+    if packet['payload']['version'] == owner_staged.VERSION: return owner_staged
+    if packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION}: return owner_terms
     if packet['payload']['version'] == owner.VERSION: return owner
     return custody if packet['payload']['version'] == custody.VERSION else compatible
 PUBLIC_REASONS = frozenset("""NCAAF_ORIGINAL_PACKET_NOT_SELECTED NCAAF_EXACT_OFFER_NOT_SELECTED
@@ -85,7 +87,7 @@ def selected(packets=(), *, private_research=False):
     require(len(packets) <= MAX_PACKETS and sum(len(encode(p).encode()) for p in packets) <= MAX_SELECTED_BYTES,
             "NCAAF_PACKET_SCHEMA")
     require(type(private_research) is bool, "NCAAF_OWNER_MODE_CONFLICT")
-    require(private_research or not any(p["payload"]["version"] in {owner.VERSION,owner_terms.VERSION} for p in packets), "NCAAF_PRIVATE_RESEARCH_NOT_SELECTED")
+    require(private_research or not any(p["payload"]["version"] in {owner.VERSION,owner_terms.VERSION,owner_staged.VERSION} for p in packets), "NCAAF_PRIVATE_RESEARCH_NOT_SELECTED")
     private_token = _PRIVATE.set(private_research)
     token = _SELECTED.set(deepcopy(packets))
     try:
@@ -114,6 +116,9 @@ def reader_binding():
 
 
 def accepted(packet):
+    if packet["payload"]["version"] == owner_staged.VERSION:
+        owner_staged.load(packet)
+        return deepcopy(owner_staged.ReviewPolicy(packet).approval)
     if packet["payload"]["version"] == owner_terms.VERSION:
         owner_terms.load(packet)
         return deepcopy(owner_terms.ReviewPolicy(packet).approval)
@@ -143,7 +148,7 @@ def _offer_matches(packet, source):
             or line != chosen["line"] or producer.number(source.get("odds_american")) != chosen["price"]):
         return False
     matches = producer._matches(source)
-    if packet['payload']['version'] == owner_terms.VERSION:
+    if packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION}:
         matches = owner_terms.projection.matches(packet,matches)
     # The normal caller transports the original quote before it promotes its
     # provider aliases. Use that exact receipt; reject conflicting aliases.
@@ -251,7 +256,7 @@ def predict(source, *, inventory=None):
         reason = str(exc)
         result["ml_unavailable_reason"] = reason if reason in PUBLIC_REASONS else "NCAAF_INFERENCE_FAILED"
     line = producer._line(source)
-    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted['payload']['version']==owner_terms.VERSION and result['ml_inference_status']=='success' else source
+    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION} and result['ml_inference_status']=='success' else source
     metadata = origin_metadata(origin_source, result, line, generated_at=at)
     metadata, fields = producer.record(origin_source, result, metadata, at,
         ncaaf_schedule=producer.text(source.get("matchup_id")).startswith("espn:college-football:"))
@@ -324,10 +329,10 @@ def compatible_reader_binding(packet=None):
     if packet is not None and packet["payload"]["version"] == compatible.SUCCESSOR_VERSION:
         binding["chronology_reader"] = dict(version=compatible.chronology.VERSION, sha256=hashlib.sha256(
             Path(compatible.chronology.__file__).read_bytes().replace(b"\r\n", b"\n")).hexdigest())
-    if packet is not None and packet['payload']['version'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION}:
+    if packet is not None and packet['payload']['version'] in {custody.VERSION, owner.ReviewPolicy.VERSION, owner_terms.ReviewPolicy.VERSION,owner_staged.ReviewPolicy.VERSION}:
         binding['custody_reader'] = dict(version=packet['payload']['version'], components=custody.implementation(),
             native_reader=compatible_reader_binding(packet['payload']['native_packet']))
-    if packet is not None and packet['payload']['version'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION}:
+    if packet is not None and packet['payload']['version'] in {owner.ReviewPolicy.NATIVE_VERSION,owner_terms.ReviewPolicy.NATIVE_VERSION,owner_staged.ReviewPolicy.NATIVE_VERSION}:
         from app_core import ncaaf_owner_mapping
         binding['private_components'] = {module.__name__: hashlib.sha256(
             Path(module.__file__).read_bytes().replace(b'\r\n', b'\n')).hexdigest()
@@ -336,8 +341,11 @@ def compatible_reader_binding(packet=None):
         binding["owner_reader"] = dict(version=owner.VERSION, sha256=hashlib.sha256(
             Path(owner.__file__).read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
             custody_reader=compatible_reader_binding(packet["payload"]["custody_packet"]))
-    if packet is not None and packet['payload']['version'] == owner_terms.VERSION:
+    if packet is not None and packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION}:
         binding['owner_terms_reader'] = dict(version=owner_terms.VERSION,components={Path(module.__file__).name:hashlib.sha256(Path(module.__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest() for module in (owner_terms,owner_terms.projection)},custody_reader=compatible_reader_binding(packet['payload']['custody_packet']))
+    if packet is not None and packet['payload']['version'] == owner_staged.VERSION:
+        from app_core import ncaaf_staged_evidence, ncaaf_staged_acquisition, ncaaf_owner_event_crosswalk
+        binding['owner_staged_reader'] = dict(version=owner_staged.VERSION, components={Path(m.__file__).name:hashlib.sha256(Path(m.__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest() for m in (owner_staged,ncaaf_staged_evidence,ncaaf_staged_acquisition,ncaaf_owner_event_crosswalk)}, custody_reader=compatible_reader_binding(packet['payload']['custody_packet']))
     return binding
 
 
@@ -370,7 +378,7 @@ def _diagnose_compatible(source, item, p):
     original = dict(item)
     original.pop("ncaaf_inputs")
     from app_core.research_estimate_trace import origin_rejection
-    origin_source = owner_terms.projection.presentation(packet,source) if packet['payload']['version']==owner_terms.VERSION else source
+    origin_source = owner_terms.projection.presentation(packet,source) if packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION} else source
     require(origin_rejection(dict(origin_source, ml_estimate_metadata=encode(original))) is None, "NCAAF_EVENT_OFFER_CONFLICT")
     return dict(status="COMPLETE", reason="AVAILABLE")
 

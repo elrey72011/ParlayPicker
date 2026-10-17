@@ -75,6 +75,8 @@ def test_all_old_assertions_and_unknown_test_source_preserved():
 # These tests assert a frozen six-to-five projection. Supply its exact six-way
 # input; current seven-way gate tests continue to read the live checkout.
 def _exact_six_shard_input(path, source):
+    # Peel only exact reviewed capacity bytes before frozen seven-to-six input checks.
+    source = guard._ncaaf_staged_capacity_previous_source(path, source)
     if path == guard.GUARD_PATH:
         result = guard._nfl_pdf_timing_previous_source(path, source)
         assert hashlib.sha256(result).hexdigest() == guard.NFL_PDF_TIMING_PREVIOUS_GUARD_SHA256
