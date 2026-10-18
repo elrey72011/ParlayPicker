@@ -75,7 +75,7 @@ def install(g,binding):
         if path in records:
             records[path]['after_sha256']=r['after_sha256']
     # Exact input preimages for inherited assertions, not current scheduling.
-    for path in ('scripts/ci_test_file_costs_v1.json','tests/ncaaf_staged_capacity_fixtures.py','tests/test_ncaaf_staged_ci_capacity.py','tests/test_ncaaf_transport_diagnostics.py'):
+    for path in ('scripts/ci_test_file_costs_v1.json','tests/ncaaf_staged_capacity_fixtures.py','tests/test_ncaaf_staged_ci_capacity.py','tests/test_ncaaf_transport_diagnostics.py','tests/test_ncaaf_chronology_scope.py'):
         if path in binding['source_reconstructions'] and path not in records:
             records[path]=deepcopy(binding['source_reconstructions'][path])
     g.NCAAF_FUTURE_RECONSTRUCTION_JSON=json.dumps(records,sort_keys=True,separators=(',',':')).encode()
@@ -156,6 +156,20 @@ def validate(g,manifest_path,base,b):
 
 
 def run(g,manifest_path,base,binding):
+    if 'chronology_fixture_copy' in binding:
+        # Authenticate the exact successor validator before loading its code.
+        import importlib.util
+        path='scripts/ncaaf_chronology_fixture_scope.py'
+        try:
+            source=(g.ROOT/path).read_bytes().replace(b'\r\n',b'\n')
+            g._require(blob(source)==binding['chronology_fixture_copy']['reviewed_blobs'][path],
+                'FIXTURE_SCOPE_SOURCE_CHANGED')
+            spec=importlib.util.spec_from_file_location('reviewed_ncaaf_chronology_fixture_scope',g.ROOT/path)
+            module=importlib.util.module_from_spec(spec)
+            exec(compile(source,str(g.ROOT/path),'exec'),module.__dict__)
+            return module.run(g,manifest_path,base,binding)
+        except (OSError,ValueError,KeyError,TypeError,RuntimeError,subprocess.CalledProcessError) as exc:
+            return 1,dict(schema_version=83,status='FAIL',policy_valid=False,reason_codes=[str(exc)])
     try:policy=validate(g,manifest_path,base,binding)
     except (OSError,ValueError,KeyError,TypeError,RuntimeError,subprocess.CalledProcessError) as exc:
         return 1,dict(schema_version=82,status='FAIL',policy_valid=False,reason_codes=[str(exc)])
