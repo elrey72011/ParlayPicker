@@ -1,4 +1,4 @@
-"""Network-free staged planning/preparation; explicit execution only."""
+"""Network-free version-selected staged planning/preparation; explicit execution only."""
 import argparse
 import getpass
 import hashlib

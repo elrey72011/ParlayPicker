@@ -48,9 +48,13 @@ def configuration(plan, raw, expected_hash, *, at):
     require(isinstance(raw, bytes) and 0 < len(raw) <= 128*1024 and hashlib.sha256(raw).hexdigest() == expected_hash,
             'NCAAF_STAGED_CONFIGURATION')
     c = json.loads(raw, object_pairs_hook=custody._unique, parse_constant=custody._constant); p = _envelope(c)
-    require(set(p) == set('version plan_sha256 authorization permission custody account review'.split())
-            and p['version'] == 'ncaaf-staged-controlled-bindings-v1' and p['plan_sha256'] == plan['sha256']
+    reviewed_target = plan['payload'].get('version') in {'ncaaf-reviewed-history-stage-plan-v3','ncaaf-reviewed-final-quote-stage-plan-v3'}
+    require(set(p) == set('version plan_sha256 authorization permission custody account review'.split()) | ({'runtime'} if reviewed_target else set())
+            and p['version'] == ('ncaaf-reviewed-controlled-bindings-v3' if reviewed_target else 'ncaaf-staged-controlled-bindings-v1') and p['plan_sha256'] == plan['sha256']
             and [p['permission']] == plan['payload']['advance_permissions'], 'NCAAF_STAGED_CONFIGURATION')
+    if reviewed_target:
+        from app_core.ncaaf_reviewed_target import check_runtime_receipt
+        check_runtime_receipt(p['runtime'])
     r = p['review']; now = timestamp(at)
     require(set(r) == {'reviewer', 'reviewed_at', 'subject_sha256', 'finding'} and r['reviewer'] == 'Robert Velarde'
             and r['subject_sha256'] == model.digest({k: v for k, v in p.items() if k != 'review'})
@@ -112,14 +116,17 @@ def requests(target, stage):
 
 
 def is_history(p):
-    return p['version'] in {HISTORY_PLAN, 'ncaaf-named-history-stage-plan-v2'}
+    return p['version'] in {HISTORY_PLAN, 'ncaaf-named-history-stage-plan-v2', 'ncaaf-reviewed-history-stage-plan-v3'}
 
 
 def is_quote(p):
-    return p['version'] in {QUOTE_PLAN, 'ncaaf-reviewed-final-quote-stage-plan-v2'}
+    return p['version'] in {QUOTE_PLAN, 'ncaaf-reviewed-final-quote-stage-plan-v2', 'ncaaf-reviewed-final-quote-stage-plan-v3'}
 
 
 def bundle_version(p):
+    if p['version'] in {'ncaaf-reviewed-history-stage-plan-v3','ncaaf-reviewed-final-quote-stage-plan-v3'}:
+        from app_core import ncaaf_reviewed_target as selected
+        return selected.HISTORY_BUNDLE if is_history(p) else selected.QUOTE_BUNDLE
     if p['version'] in {'ncaaf-named-history-stage-plan-v2','ncaaf-reviewed-final-quote-stage-plan-v2'}:
         from app_core import ncaaf_future_target as fresh
         return fresh.HISTORY_BUNDLE if is_history(p) else fresh.QUOTE_BUNDLE
@@ -127,6 +134,9 @@ def bundle_version(p):
 
 
 def same_target(p,left,right):
+    if p['version']=='ncaaf-reviewed-final-quote-stage-plan-v3':
+        from app_core.ncaaf_reviewed_target import same_target as same
+        return same(left,right)
     if p['version']=='ncaaf-reviewed-final-quote-stage-plan-v2':
         from app_core.ncaaf_future_target import same_target as same
         return same(left,right)
@@ -135,6 +145,9 @@ def same_target(p,left,right):
 
 def validate_plan(plan, *, executable=False):
     p = _envelope(plan)
+    if p.get('version') in {'ncaaf-reviewed-history-stage-plan-v3','ncaaf-reviewed-final-quote-stage-plan-v3'}:
+        from app_core.ncaaf_reviewed_target import validate_plan as selected
+        return selected(plan,executable=executable)
     if p.get('version') in {'ncaaf-named-history-stage-plan-v2','ncaaf-reviewed-final-quote-stage-plan-v2'}:
         from app_core.ncaaf_future_target import validate_plan as selected
         return selected(plan,executable=executable)
@@ -180,7 +193,7 @@ def authorize(plan, authorization, at, *, trusted=True):
             and now < timestamp(a['expires_at']) <= timestamp(w['authorization_expires_at']), 'NCAAF_STAGED_AUTHORIZATION_CLOCK')
     if trusted:
         require(_lookup('AUTHORIZED_COLLECTIONS', a['reference']) == authorization['sha256'], 'NCAAF_STAGED_AUTHORIZATION_UNTRUSTED')
-    if p['version'] in {'ncaaf-named-history-stage-plan-v2','ncaaf-reviewed-final-quote-stage-plan-v2'}:
+    if p['version'] in {'ncaaf-named-history-stage-plan-v2','ncaaf-reviewed-final-quote-stage-plan-v2','ncaaf-reviewed-history-stage-plan-v3','ncaaf-reviewed-final-quote-stage-plan-v3'}:
         reviewed=p['target_evidence']['owner_review']['reviewed_at']
         require(timestamp(reviewed)<=timestamp(a['authorized_at']),'NCAAF_FRESH_TARGET_REVIEW_CLOCK')
         if is_quote(p):
@@ -234,10 +247,17 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
     c = configuration(plan, base64.b64decode(control['file_b64'], validate=True), control['file_sha256'], at=wall())['payload']
     require(c['authorization'] == authorization and Path(c['custody']['root']).resolve() == root.resolve()
             and c['account'] == _lookup('AUTHORIZED_ACCOUNT_EVIDENCE', authorization['payload']['reference']), 'NCAAF_STAGED_CONFIGURATION')
+    if p['version'] in {'ncaaf-reviewed-history-stage-plan-v3','ncaaf-reviewed-final-quote-stage-plan-v3'}:
+        from app_core.ncaaf_reviewed_target import runtime_receipt
+        import subprocess
+        checkout=subprocess.run(['git','rev-parse','HEAD'],cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True)
+        require(checkout.returncode==0 and checkout.stdout.strip()==c['runtime']['code_head'],'NCAAF_TARGET_RUNTIME_CONFLICT')
+        require(c['runtime']==runtime_receipt(c['runtime']['code_head'],c['runtime']['operation_manifest_sha256']),
+                'NCAAF_TARGET_RUNTIME_CONFLICT')
     prior_bytes = 0; prior_active = 0.
     if is_quote(p):
         h = read_bundle(history_bundle)
-        require(h['version'] in {HISTORY_BUNDLE,'ncaaf-named-history-unaccepted-v2'} and history_bundle['sha256'] == p['parent_history_sha256']
+        require(h['version'] in {HISTORY_BUNDLE,'ncaaf-named-history-unaccepted-v2','ncaaf-reviewed-history-unaccepted-v3'} and history_bundle['sha256'] == p['parent_history_sha256']
                 and same_target(p,h['plan']['payload']['target'],p['target']) and h['plan']['payload']['custody_id'] == p['custody_id'], 'NCAAF_STAGED_PARENT')
         history_control = json.loads(base64.b64decode(h['control_receipt']['file_b64'], validate=True))['payload']
         require(history_control['custody'] == c['custody'], 'NCAAF_STAGED_PARENT_CUSTODY')
@@ -245,6 +265,9 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
         validate_prequote(prequote, history_bundle, at=wall(), review_required=True)
         if p['version']=='ncaaf-reviewed-final-quote-stage-plan-v2':
             from app_core.ncaaf_future_staged import validate_quote_parent
+            validate_quote_parent(h,p,prequote,at=wall())
+        if p['version']=='ncaaf-reviewed-final-quote-stage-plan-v3':
+            from app_core.ncaaf_reviewed_staged import validate_quote_parent
             validate_quote_parent(h,p,prequote,at=wall())
         require(prequote['sha256'] == p['prequote_sha256'], 'NCAAF_STAGED_PREQUOTE_CONFLICT')
         require(timestamp(prequote['payload']['history_review']['reviewed_at']) <= timestamp(authorization['payload']['authorized_at']),

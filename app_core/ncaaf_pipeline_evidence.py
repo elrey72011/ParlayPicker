@@ -109,9 +109,10 @@ def selection_requested():
 
 def reader_binding():
     root = Path(__file__).resolve().parents[1]
+    from app_core.ncaaf_reviewed_target import source_hash
     return dict(python=platform.python_version(), implementation=platform.python_implementation(),
         platform=platform.platform(), numpy=research.np.__version__,
-        artifacts={name: hashlib.sha256((root / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+        artifacts={name: source_hash(name,historical=True)
                    for name in ("app_core/ncaaf_pipeline_evidence.py", "app_core/market_probability_model.py",
                        "app_core/ncaaf_research_contract.py", "app_core/producer_provenance.py",
                        "app_core/research_estimate_trace.py", "core/streamlit_pipeline.py")})
@@ -369,6 +370,22 @@ def compatible_reader_binding(packet=None):
             hashlib.sha256(Path(m.__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest()
             for m in (owner_spread,owner_spread.projection,compatible.chronology,custody,ncaaf_future_target,ncaaf_future_staged,
                 owner_staged.staged.stages,ncaaf_spread_mass,ncaaf_spread_execution,ncaaf_spread_pair)})
+        if packet['payload']['staged_binding']['payload'].get('version')=='ncaaf-reviewed-staged-evidence-v3':
+            from app_core import ncaaf_reviewed_target,ncaaf_reviewed_staged
+            binding['owner_spread_reader']['reviewed_target_components']={Path(m.__file__).name:
+                hashlib.sha256(Path(m.__file__).read_bytes().replace(b'\r\n',b'\n')).hexdigest()
+                for m in (ncaaf_reviewed_target,ncaaf_reviewed_staged)}
+            binding['pipeline']['artifacts']['app_core/ncaaf_pipeline_evidence.py']=ncaaf_reviewed_target.source_hash('app_core/ncaaf_pipeline_evidence.py')
+    historical=packet is None or packet['payload']['version'] not in owner_spread.INPUT_VERSIONS or packet['payload']['staged_binding']['payload'].get('version')!='ncaaf-reviewed-staged-evidence-v3'
+    if historical:
+        from app_core.ncaaf_reviewed_target import HISTORICAL_COMPONENTS,source_hash
+        def preserve(value):
+            if isinstance(value,dict):
+                for key,item in value.items():
+                    path='app_core/'+key
+                    if path in HISTORICAL_COMPONENTS and isinstance(item,str):value[key]=source_hash(path,historical=True)
+                    else:preserve(item)
+        preserve(binding)
     return binding
 
 

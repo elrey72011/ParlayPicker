@@ -1,0 +1,520 @@
+{
+  "base": "c2b4b7e6fc04af950da34cda01376e94e2199ada",
+  "base_tree": "dc5f273e1a7f8f8d5c25f696fc5e952a518e1fdb",
+  "historical_future": {
+    "NCAAF_FUTURE_BINDING_PATH": "docs/paid-launch/ncaaf-future-spread-binding-v1.json",
+    "NCAAF_FUTURE_BINDING_SHA256": "9ec21025c7f47cdbf63815c03afadeda737fa86f7683ec77311aeaff539e3984",
+    "NCAAF_FUTURE_POLICY_PATH": "docs/paid-launch/launch-scope-policy-ncaaf-future-spread-v1.json",
+    "guard_identity": "7f98b35855181867ab8162dde530b9c7f0ee4d4c1ab3108e64d73ec7008c0c60",
+    "prior_base_sha256": "3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306",
+    "source_reconstructions": {
+      "app/ui/ncaaf_pipeline_research.py": {
+        "after_sha256": "5c765e0399eacbe48ca8fc4fc8aaacae840fe72f28890708066098afb9fc2d55",
+        "before_sha256": "e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55",
+        "reverse_patches": [
+          {
+            "end": 3780,
+            "start": 3416,
+            "text": "        st.caption(\"Half-point spreads and totals have separate targets. Integer push mass remains unvalidated. Historical inference clocks are never replaced by capture-finish clocks. Research supplies no wager approval.\")\n"
+          },
+          {
+            "end": 6275,
+            "start": 5036,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/ncaaf_compatible_pipeline.py": {
+        "after_sha256": "c8ccdf5adddf7352fb85dd317cc02357df8634afa9a3a70779a170f5ec33d4d3",
+        "before_sha256": "880711e4ade7d890f6cc7cab25c49074f7d8832e09f14b35b49793a41dba50a5",
+        "reverse_patches": [
+          {
+            "end": 17108,
+            "start": 16824,
+            "text": "    require(mass[\"push\"] == 0 and math.isfinite(win) and 0 <= win <= 1, \"NCAAF_PROBABILITY_BINDING_CONFLICT\")\n"
+          },
+          {
+            "end": 18267,
+            "start": 17937,
+            "text": ""
+          },
+          {
+            "end": 19208,
+            "start": 18968,
+            "text": ""
+          },
+          {
+            "end": 20159,
+            "start": 20059,
+            "text": "        and r[\"push_probability\"] == 0 and r[\"sigma\"] == checked[\"fit\"][\"sigma\"]\n"
+          }
+        ]
+      },
+      "app_core/ncaaf_owner_research.py": {
+        "after_sha256": "1043c1364efbda827660fe0041ad03d8765a0a48ca7ab7995d445a48141bf0fc",
+        "before_sha256": "daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8",
+        "reverse_patches": [
+          {
+            "end": 10377,
+            "start": 10140,
+            "text": "        return meta[\"ncaaf_inputs\"][\"payload\"].get(\"version\") in {RESULT_VERSION,\"ncaaf-owner-reviewed-private-result-v2\",\"ncaaf-owner-reviewed-private-result-v3\"}\n"
+          }
+        ]
+      },
+      "app_core/ncaaf_owner_terms_projection.py": {
+        "after_sha256": "567563a7a5bed648ca73db9f51fe8c55d13ea471c1b51eb4c2b546808a4cd381",
+        "before_sha256": "3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe",
+        "reverse_patches": [
+          {
+            "end": 2776,
+            "start": 2581,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/ncaaf_pipeline_evidence.py": {
+        "after_sha256": "8c14aa0e76ca6fe61daa5511bce55dbecb2ef1c165866a261a3a19521833b1da",
+        "before_sha256": "7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2",
+        "reverse_patches": [
+          {
+            "end": 1053,
+            "start": 997,
+            "text": ""
+          },
+          {
+            "end": 1927,
+            "start": 1594,
+            "text": "INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION, owner_staged.VERSION}\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION, owner_staged.RESULT_VERSION}\n"
+          },
+          {
+            "end": 2038,
+            "start": 1950,
+            "text": ""
+          },
+          {
+            "end": 5170,
+            "start": 4958,
+            "text": "    require(private_research or not any(p[\"payload\"][\"version\"] in {owner.VERSION,owner_terms.VERSION,owner_staged.VERSION} for p in packets), \"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\")\n"
+          },
+          {
+            "end": 6333,
+            "start": 6163,
+            "text": ""
+          },
+          {
+            "end": 7320,
+            "start": 7167,
+            "text": ""
+          },
+          {
+            "end": 8258,
+            "start": 8039,
+            "text": "    if packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION}:\n"
+          },
+          {
+            "end": 14786,
+            "start": 14466,
+            "text": ""
+          },
+          {
+            "end": 15835,
+            "start": 15567,
+            "text": "    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION} and result['ml_inference_status']=='success' else source\n"
+          },
+          {
+            "end": 17262,
+            "start": 17082,
+            "text": ""
+          },
+          {
+            "end": 24137,
+            "start": 23474,
+            "text": ""
+          },
+          {
+            "end": 26650,
+            "start": 26009,
+            "text": ""
+          },
+          {
+            "end": 27211,
+            "start": 27023,
+            "text": "    origin_source = owner_terms.projection.presentation(packet,source) if packet['payload']['version'] in {owner_terms.VERSION,owner_staged.VERSION} else source\n"
+          }
+        ]
+      },
+      "app_core/ncaaf_prospective_chronology.py": {
+        "after_sha256": "792fdd76e4c2e356bb78b921b29872637cea7daa4735dcb9a43ab3961b77b047",
+        "before_sha256": "105dc2e42188f918baa8644f56904e663714a64a14998417ad856cce07927597",
+        "reverse_patches": [
+          {
+            "end": 17930,
+            "start": 17631,
+            "text": "    target = target_contract(kind, line)\n    require(abs(line % 1) == .5, \"NCAAF_INTEGER_PUSH_MODEL_UNVALIDATED\")\n"
+          }
+        ]
+      },
+      "app_core/ncaaf_staged_acquisition.py": {
+        "after_sha256": "1b549c133721d3deedb33c37867821a358438edef2267c8924bdfd8c5585fba3",
+        "before_sha256": "d73a00a350facec7de16b02459683020d5b96c8630269367dc567837c233f2e2",
+        "reverse_patches": [
+          {
+            "end": 7493,
+            "start": 6742,
+            "text": ""
+          },
+          {
+            "end": 7799,
+            "start": 7563,
+            "text": ""
+          },
+          {
+            "end": 11975,
+            "start": 11459,
+            "text": "    provider = 'cfbd' if p['version'] == HISTORY_PLAN else 'odds_api'\n"
+          },
+          {
+            "end": 15325,
+            "start": 15305,
+            "text": "    if p['version'] == QUOTE_PLAN:\n"
+          },
+          {
+            "end": 15669,
+            "start": 15365,
+            "text": "        require(h['version'] == HISTORY_BUNDLE and history_bundle['sha256'] == p['parent_history_sha256']\n                and h['plan']['payload']['target'] == p['target'] and h['plan']['payload']['custody_id'] == p['custody_id'], 'NCAAF_STAGED_PARENT')\n"
+          },
+          {
+            "end": 16231,
+            "start": 16029,
+            "text": ""
+          },
+          {
+            "end": 17913,
+            "start": 17885,
+            "text": "            if p['version'] == QUOTE_PLAN:\n"
+          },
+          {
+            "end": 21122,
+            "start": 21043,
+            "text": "    body = dict(version=HISTORY_BUNDLE if p['version'] == HISTORY_PLAN else QUOTE_BUNDLE, evidence_label=p['evidence_label'],\n"
+          },
+          {
+            "end": 22091,
+            "start": 21970,
+            "text": ""
+          },
+          {
+            "end": 24634,
+            "start": 24539,
+            "text": "    require(b['version'] == (HISTORY_BUNDLE if p['version'] == HISTORY_PLAN else QUOTE_BUNDLE) and b['evidence_label'] == p['evidence_label']\n"
+          },
+          {
+            "end": 28965,
+            "start": 28943,
+            "text": "    if p['version'] == HISTORY_PLAN:\n"
+          },
+          {
+            "end": 29289,
+            "start": 29181,
+            "text": "        if p['version'] == QUOTE_PLAN: _target(custody._parse(base64.b64decode(b['objects'][0]['body_b64'])), p['target'])\n"
+          },
+          {
+            "end": 29580,
+            "start": 29541,
+            "text": "    if b['plan']['payload']['version'] == QUOTE_PLAN:\n"
+          }
+        ]
+      },
+      "app_core/ncaaf_staged_evidence.py": {
+        "after_sha256": "42bd522232a54457b3794c3748e326fe2e38d25180d59ea3618c3217cbcfab6c",
+        "before_sha256": "c623631d69ebc2d05fafe5c20d569c88f760e89e744731ef6f63b5902d459fd1",
+        "reverse_patches": [
+          {
+            "end": 2054,
+            "start": 1818,
+            "text": ""
+          },
+          {
+            "end": 6504,
+            "start": 6266,
+            "text": ""
+          },
+          {
+            "end": 8803,
+            "start": 8577,
+            "text": ""
+          },
+          {
+            "end": 10759,
+            "start": 10556,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/per_game_boards.py": {
+        "after_sha256": "ad2e69b1028bff2e3c3fb65c922a6255e87858b0220f08e413809ff24d1fd44d",
+        "before_sha256": "46fcb8187eb95e6afd01e320219291f57374f592738a448c79f461a06d48b1a4",
+        "reverse_patches": [
+          {
+            "end": 32432,
+            "start": 31754,
+            "text": ""
+          }
+        ]
+      },
+      "app_core/research_display.py": {
+        "after_sha256": "895fa4540235dc5d14681dd71b8652ab04b35fdfef8d1503187c83d873d6080e",
+        "before_sha256": "4a9b8458e1480203f5ca1bf3789b9b5aaa72dee6672a750bdbda51af23e0d204",
+        "reverse_patches": [
+          {
+            "end": 34694,
+            "start": 34521,
+            "text": "            result.update(probability=retained[\"raw_probability\"][\"value\"], push_probability=0.0,\n"
+          }
+        ]
+      },
+      "scripts/ncaaf_staged_acquisition.py": {
+        "after_sha256": "6e3e4c92e590b3408079c00e3fc2beb1ddce4d1574f21816f63a735256536dcf",
+        "before_sha256": "48e1fe621b2fce76d7865801c03e28bd88ce25227a73ecbeeb1d051a9cf06ff3",
+        "reverse_patches": [
+          {
+            "end": 4030,
+            "start": 3947,
+            "text": "            provider = 'cfbd' if value['payload']['version'] == lane.HISTORY_PLAN else 'odds_api'\n"
+          }
+        ]
+      },
+      "tests/conftest.py": {
+        "after_sha256": "ba1e5ecae108783e0ac418da99dde549e6963f3a116170fe3f7d0a6bd6f46164",
+        "before_sha256": "8b3b5a6fd5b5c39605108872e954aba8d936afb19d2a0c6d4c9110abc7576e0d",
+        "reverse_patches": [
+          {
+            "end": 2744,
+            "start": 2556,
+            "text": ""
+          }
+        ]
+      },
+      "tests/test_readiness_dashboard_scope.py": {
+        "after_sha256": "05ee52a641416cf304b430da7c3753a4275226aa3b396b77e65459dccca993df",
+        "before_sha256": "a657965cf673feb48607c94a32f2b7f09e1f1bc06fce9248359d6ed921347e60",
+        "reverse_patches": [
+          {
+            "end": 1629,
+            "start": 1520,
+            "text": ""
+          },
+          {
+            "end": 5570,
+            "start": 5533,
+            "text": ""
+          }
+        ]
+      }
+    }
+  },
+  "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
+  "paths": [
+    "app_core/ncaaf_reviewed_target.py",
+    "app_core/ncaaf_reviewed_staged.py",
+    "app_core/ncaaf_staged_acquisition.py",
+    "app_core/ncaaf_staged_evidence.py",
+    "app_core/ncaaf_owner_spread.py",
+    "app_core/ncaaf_pipeline_evidence.py",
+    "scripts/ncaaf_staged_acquisition.py",
+    "scripts/ncaaf_reviewed_target_operator.py",
+    "tests/ncaaf_reviewed_target_fixtures.py",
+    "tests/test_ncaaf_reviewed_target.py",
+    "tests/test_ncaaf_reviewed_target_pipeline.py",
+    "tests/test_ncaaf_reviewed_target_scope.py",
+    "scripts/ncaaf_reviewed_target_scope.py",
+    "scripts/check_launch_change_scope.py",
+    "docs/paid-launch/ncaaf-reviewed-target-v1.md",
+    "docs/paid-launch/ncaaf-reviewed-target-binding-v1.json"
+  ],
+  "predecessor_scope_sha256": {
+    "scripts/ci_scheduling_fixture_scope.py": "4eb1ed0f8e5e4d79e4fa167f2d1bb9a4ca19aeae168900152f76855640dfaae5",
+    "scripts/ncaaf_transport_scope.py": "69d10ba8e72fbffe44e8f8842d202343504ed5ff6d42db9bc29703a4f4a1aad3"
+  },
+  "proposal_sha256": "978f284f0408f0c93306131335ac05fad996669e537271d73f5d36574f1d7ac3",
+  "reviewed_blobs": {
+    "app_core/ncaaf_owner_spread.py": "4c56fde9fbaee3034797a5fa7ca505e25d831c76",
+    "app_core/ncaaf_pipeline_evidence.py": "00215a19d4aa6c0a2cec82e27a700df880e59e8b",
+    "app_core/ncaaf_reviewed_staged.py": "49385a69a514ee3a543188402af60bdc39aa63e0",
+    "app_core/ncaaf_reviewed_target.py": "fd6f88a54cd6257192e5bd677a048315d8d61756",
+    "app_core/ncaaf_staged_acquisition.py": "2934719661f576266a93ff52312f7fad6285aebd",
+    "app_core/ncaaf_staged_evidence.py": "b7f76289997aee2629bfca2e74e7b135f6aa2107",
+    "docs/paid-launch/ncaaf-reviewed-target-v1.md": "3837b32628d8179442784cf32421add198cbec48",
+    "scripts/ncaaf_reviewed_target_operator.py": "4732a4241f3eb7299f19628493422d571802a38d",
+    "scripts/ncaaf_reviewed_target_scope.py": "dc804c73997ca59427ae8baf7b1b0490ddec9970",
+    "scripts/ncaaf_staged_acquisition.py": "185301102ad6f49ca70c0844507d11db4c92fbe0",
+    "tests/ncaaf_reviewed_target_fixtures.py": "6f8194e68932963d0cfc9e154c9a2026f6e89dff",
+    "tests/test_ncaaf_reviewed_target.py": "f04ad5f133383b7b0edfdb55d1fe421c0c2c7f97",
+    "tests/test_ncaaf_reviewed_target_pipeline.py": "22d6e4d7b2cec560255ed0dc32c1568b700d2c6f",
+    "tests/test_ncaaf_reviewed_target_scope.py": "3f1ef6e4eda9c3859f8d9d120183c32a974b05c7"
+  },
+  "source_reconstructions": {
+    "app_core/ncaaf_owner_spread.py": {
+      "after_sha256": "caef9dd13839c0dea41800aa80d8e48b19621df43ef767696a347be80b4eecfe",
+      "before_sha256": "647853f7025308f74b2c1abe8990e43bc8a5a0f62b3e7719bc177621aaaa6f98",
+      "reverse_patches": [
+        {
+          "end": 4420,
+          "start": 4153,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/ncaaf_pipeline_evidence.py": {
+      "after_sha256": "3171c6a9fd74244c86ed10a21b175623ced7ab10f899fdbca40c4d5aaa7d19ba",
+      "before_sha256": "8c14aa0e76ca6fe61daa5511bce55dbecb2ef1c165866a261a3a19521833b1da",
+      "reverse_patches": [
+        {
+          "end": 5624,
+          "start": 5565,
+          "text": ""
+        },
+        {
+          "end": 5851,
+          "start": 5792,
+          "text": "        artifacts={name: hashlib.sha256((root / name).read_bytes().replace(b\"\\r\\n\", b\"\\n\")).hexdigest()\n"
+        },
+        {
+          "end": 25410,
+          "start": 24151,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/ncaaf_staged_acquisition.py": {
+      "after_sha256": "49409e1e67de7142956a05a314b1913e65e3e4429a90af2123c500a71d1d3f2b",
+      "before_sha256": "a5ae1d18641cd549cf9853180cee522a49e6d8c3be5ca0c55b9bf79fd4fe3c6b",
+      "reverse_patches": [
+        {
+          "end": 2578,
+          "start": 2112,
+          "text": "    require(set(p) == set('version plan_sha256 authorization permission custody account review'.split())\n            and p['version'] == 'ncaaf-staged-controlled-bindings-v1' and p['plan_sha256'] == plan['sha256']\n"
+        },
+        {
+          "end": 2826,
+          "start": 2685,
+          "text": ""
+        },
+        {
+          "end": 7273,
+          "start": 7154,
+          "text": "    return p['version'] in {HISTORY_PLAN, 'ncaaf-named-history-stage-plan-v2'}\n"
+        },
+        {
+          "end": 7420,
+          "start": 7292,
+          "text": "    return p['version'] in {QUOTE_PLAN, 'ncaaf-reviewed-final-quote-stage-plan-v2'}\n"
+        },
+        {
+          "end": 7699,
+          "start": 7445,
+          "text": ""
+        },
+        {
+          "end": 8201,
+          "start": 8033,
+          "text": ""
+        },
+        {
+          "end": 8703,
+          "start": 8462,
+          "text": ""
+        },
+        {
+          "end": 12786,
+          "start": 12599,
+          "text": "    if p['version'] in {'ncaaf-named-history-stage-plan-v2','ncaaf-reviewed-final-quote-stage-plan-v2'}:\n"
+        },
+        {
+          "end": 17389,
+          "start": 16766,
+          "text": ""
+        },
+        {
+          "end": 17671,
+          "start": 17488,
+          "text": "        require(h['version'] in {HISTORY_BUNDLE,'ncaaf-named-history-unaccepted-v2'} and history_bundle['sha256'] == p['parent_history_sha256']\n"
+        },
+        {
+          "end": 18539,
+          "start": 18335,
+          "text": ""
+        }
+      ]
+    },
+    "app_core/ncaaf_staged_evidence.py": {
+      "after_sha256": "e832cc334af972581b5f1472cbb598cfa1e6e0ff3886a21d244128f43f81722b",
+      "before_sha256": "42bd522232a54457b3794c3748e326fe2e38d25180d59ea3618c3217cbcfab6c",
+      "reverse_patches": [
+        {
+          "end": 850,
+          "start": 791,
+          "text": ""
+        },
+        {
+          "end": 1088,
+          "start": 980,
+          "text": "        components={Path(m.__file__).name: hashlib.sha256(Path(m.__file__).read_bytes().replace(b'\\r\\n', b'\\n')).hexdigest() for m in modules})\n"
+        },
+        {
+          "end": 2082,
+          "start": 1841,
+          "text": ""
+        },
+        {
+          "end": 6773,
+          "start": 6530,
+          "text": ""
+        },
+        {
+          "end": 9312,
+          "start": 9084,
+          "text": ""
+        },
+        {
+          "end": 11499,
+          "start": 11291,
+          "text": ""
+        }
+      ]
+    },
+    "scripts/check_launch_change_scope.py": {
+      "after_sha256": "1904a296da1d56ea66cb9ae093e41df6a30e3bd678f3aec2799d86a274cf74cb",
+      "before_sha256": "796e5102abe7232e99732696b1f9bd809c01eb5cc2ab0e08b9eabd8116eb1678",
+      "reverse_patches": [
+        {
+          "end": 4570959,
+          "start": 4570866,
+          "text": "        _future_identity=b'7f98b35855181867ab8162dde530b9c7f0ee4d4c1ab3108e64d73ec7008c0c60'\n"
+        },
+        {
+          "end": 8366503,
+          "start": 8365509,
+          "text": "NCAAF_FUTURE_POLICY_PATH='docs/paid-launch/launch-scope-policy-ncaaf-future-spread-v1.json'\nNCAAF_FUTURE_BINDING_PATH='docs/paid-launch/ncaaf-future-spread-binding-v1.json'\nNCAAF_FUTURE_BINDING_SHA256='9ec21025c7f47cdbf63815c03afadeda737fa86f7683ec77311aeaff539e3984'\nNCAAF_FUTURE_RECONSTRUCTION_JSON=b'{\"app/ui/ncaaf_pipeline_research.py\":{\"after_sha256\":\"5c765e0399eacbe48ca8fc4fc8aaacae840fe72f28890708066098afb9fc2d55\",\"before_sha256\":\"e247a4875442b62eb39751d7e5c53f732891b8b1ab72c6c559a2cc87c109ee55\",\"reverse_patches\":[{\"end\":3780,\"start\":3416,\"text\":\"        st.caption(\\\\\"Half-point spreads and totals have separate targets. Integer push mass remains unvalidated. Historical inference clocks are never replaced by capture-finish clocks. Research supplies no wager approval.\\\\\")\\\\n\"},{\"end\":6275,\"start\":5036,\"text\":\"\"}]},\"app_core/ncaaf_compatible_pipeline.py\":{\"after_sha256\":\"c8ccdf5adddf7352fb85dd317cc02357df8634afa9a3a70779a170f5ec33d4d3\",\"before_sha256\":\"880711e4ade7d890f6cc7cab25c49074f7d8832e09f14b35b49793a41dba50a5\",\"reverse_patches\":[{\"end\":17108,\"start\":16824,\"text\":\"    require(mass[\\\\\"push\\\\\"] == 0 and math.isfinite(win) and 0 <= win <= 1, \\\\\"NCAAF_PROBABILITY_BINDING_CONFLICT\\\\\")\\\\n\"},{\"end\":18267,\"start\":17937,\"text\":\"\"},{\"end\":19208,\"start\":18968,\"text\":\"\"},{\"end\":20159,\"start\":20059,\"text\":\"        and r[\\\\\"push_probability\\\\\"] == 0 and r[\\\\\"sigma\\\\\"] == checked[\\\\\"fit\\\\\"][\\\\\"sigma\\\\\"]\\\\n\"}]},\"app_core/ncaaf_owner_research.py\":{\"after_sha256\":\"1043c1364efbda827660fe0041ad03d8765a0a48ca7ab7995d445a48141bf0fc\",\"before_sha256\":\"daa4eab4c76725eafe0147e18cabe9f046e4479a3a98d27049a444e089db9ca8\",\"reverse_patches\":[{\"end\":10377,\"start\":10140,\"text\":\"        return meta[\\\\\"ncaaf_inputs\\\\\"][\\\\\"payload\\\\\"].get(\\\\\"version\\\\\") in {RESULT_VERSION,\\\\\"ncaaf-owner-reviewed-private-result-v2\\\\\",\\\\\"ncaaf-owner-reviewed-private-result-v3\\\\\"}\\\\n\"}]},\"app_core/ncaaf_owner_terms_projection.py\":{\"after_sha256\":\"567563a7a5bed648ca73db9f51fe8c55d13ea471c1b51eb4c2b546808a4cd381\",\"before_sha256\":\"3bfa080d6cea918defaadbdea3f4c308d6a1ab0f5e8d32ef943edded1eaed2fe\",\"reverse_patches\":[{\"end\":2776,\"start\":2581,\"text\":\"\"}]},\"app_core/ncaaf_pipeline_evidence.py\":{\"after_sha256\":\"8c14aa0e76ca6fe61daa5511bce55dbecb2ef1c165866a261a3a19521833b1da\",\"before_sha256\":\"7e9e2428ce9cce2c8541981881119d778b0e16f1f028bdefaf3d62a3b02973a2\",\"reverse_patches\":[{\"end\":1053,\"start\":997,\"text\":\"\"},{\"end\":1927,\"start\":1594,\"text\":\"INPUT_VERSIONS = compatible.INPUT_VERSIONS | {custody.VERSION, owner.VERSION, owner_terms.VERSION, owner_staged.VERSION}\\\\nRESULT_VERSIONS = compatible.RESULT_VERSIONS | {custody.RESULT_VERSION, owner.RESULT_VERSION, owner_terms.RESULT_VERSION, owner_staged.RESULT_VERSION}\\\\n\"},{\"end\":2038,\"start\":1950,\"text\":\"\"},{\"end\":5170,\"start\":4958,\"text\":\"    require(private_research or not any(p[\\\\\"payload\\\\\"][\\\\\"version\\\\\"] in {owner.VERSION,owner_terms.VERSION,owner_staged.VERSION} for p in packets), \\\\\"NCAAF_PRIVATE_RESEARCH_NOT_SELECTED\\\\\")\\\\n\"},{\"end\":6333,\"start\":6163,\"text\":\"\"},{\"end\":7320,\"start\":7167,\"text\":\"\"},{\"end\":8258,\"start\":8039,\"text\":\"    if packet[\\'payload\\'][\\'version\\'] in {owner_terms.VERSION,owner_staged.VERSION}:\\\\n\"},{\"end\":14786,\"start\":14466,\"text\":\"\"},{\"end\":15835,\"start\":15567,\"text\":\"    origin_source = owner_terms.projection.presentation(attempted,source) if attempted is not None and attempted[\\'payload\\'][\\'version\\'] in {owner_terms.VERSION,owner_staged.VERSION} and result[\\'ml_inference_status\\']==\\'success\\' else source\\\\n\"},{\"end\":17262,\"start\":17082,\"text\":\"\"},{\"end\":24137,\"start\":23474,\"text\":\"\"},{\"end\":26650,\"start\":26009,\"text\":\"\"},{\"end\":27211,\"start\":27023,\"text\":\"    origin_source = owner_terms.projection.presentation(packet,source) if packet[\\'payload\\'][\\'version\\'] in {owner_terms.VERSION,owner_staged.VERSION} else source\\\\n\"}]},\"app_core/ncaaf_prospective_chronology.py\":{\"after_sha256\":\"792fdd76e4c2e356bb78b921b29872637cea7daa4735dcb9a43ab3961b77b047\",\"before_sha256\":\"105dc2e42188f918baa8644f56904e663714a64a14998417ad856cce07927597\",\"reverse_patches\":[{\"end\":17930,\"start\":17631,\"text\":\"    target = target_contract(kind, line)\\\\n    require(abs(line % 1) == .5, \\\\\"NCAAF_INTEGER_PUSH_MODEL_UNVALIDATED\\\\\")\\\\n\"}]},\"app_core/ncaaf_staged_acquisition.py\":{\"after_sha256\":\"1b549c133721d3deedb33c37867821a358438edef2267c8924bdfd8c5585fba3\",\"before_sha256\":\"d73a00a350facec7de16b02459683020d5b96c8630269367dc567837c233f2e2\",\"reverse_patches\":[{\"end\":7493,\"start\":6742,\"text\":\"\"},{\"end\":7799,\"start\":7563,\"text\":\"\"},{\"end\":11975,\"start\":11459,\"text\":\"    provider = \\'cfbd\\' if p[\\'version\\'] == HISTORY_PLAN else \\'odds_api\\'\\\\n\"},{\"end\":15325,\"start\":15305,\"text\":\"    if p[\\'version\\'] == QUOTE_PLAN:\\\\n\"},{\"end\":15669,\"start\":15365,\"text\":\"        require(h[\\'version\\'] == HISTORY_BUNDLE and history_bundle[\\'sha256\\'] == p[\\'parent_history_sha256\\']\\\\n                and h[\\'plan\\'][\\'payload\\'][\\'target\\'] == p[\\'target\\'] and h[\\'plan\\'][\\'payload\\'][\\'custody_id\\'] == p[\\'custody_id\\'], \\'NCAAF_STAGED_PARENT\\')\\\\n\"},{\"end\":16231,\"start\":16029,\"text\":\"\"},{\"end\":17913,\"start\":17885,\"text\":\"            if p[\\'version\\'] == QUOTE_PLAN:\\\\n\"},{\"end\":21122,\"start\":21043,\"text\":\"    body = dict(version=HISTORY_BUNDLE if p[\\'version\\'] == HISTORY_PLAN else QUOTE_BUNDLE, evidence_label=p[\\'evidence_label\\'],\\\\n\"},{\"end\":22091,\"start\":21970,\"text\":\"\"},{\"end\":24634,\"start\":24539,\"text\":\"    require(b[\\'version\\'] == (HISTORY_BUNDLE if p[\\'version\\'] == HISTORY_PLAN else QUOTE_BUNDLE) and b[\\'evidence_label\\'] == p[\\'evidence_label\\']\\\\n\"},{\"end\":28965,\"start\":28943,\"text\":\"    if p[\\'version\\'] == HISTORY_PLAN:\\\\n\"},{\"end\":29289,\"start\":29181,\"text\":\"        if p[\\'version\\'] == QUOTE_PLAN: _target(custody._parse(base64.b64decode(b[\\'objects\\'][0][\\'body_b64\\'])), p[\\'target\\'])\\\\n\"},{\"end\":29580,\"start\":29541,\"text\":\"    if b[\\'plan\\'][\\'payload\\'][\\'version\\'] == QUOTE_PLAN:\\\\n\"}]},\"app_core/ncaaf_staged_evidence.py\":{\"after_sha256\":\"42bd522232a54457b3794c3748e326fe2e38d25180d59ea3618c3217cbcfab6c\",\"before_sha256\":\"c623631d69ebc2d05fafe5c20d569c88f760e89e744731ef6f63b5902d459fd1\",\"reverse_patches\":[{\"end\":2054,\"start\":1818,\"text\":\"\"},{\"end\":6504,\"start\":6266,\"text\":\"\"},{\"end\":8803,\"start\":8577,\"text\":\"\"},{\"end\":10759,\"start\":10556,\"text\":\"\"}]},\"app_core/per_game_boards.py\":{\"after_sha256\":\"ad2e69b1028bff2e3c3fb65c922a6255e87858b0220f08e413809ff24d1fd44d\",\"before_sha256\":\"46fcb8187eb95e6afd01e320219291f57374f592738a448c79f461a06d48b1a4\",\"reverse_patches\":[{\"end\":32432,\"start\":31754,\"text\":\"\"}]},\"app_core/research_display.py\":{\"after_sha256\":\"895fa4540235dc5d14681dd71b8652ab04b35fdfef8d1503187c83d873d6080e\",\"before_sha256\":\"4a9b8458e1480203f5ca1bf3789b9b5aaa72dee6672a750bdbda51af23e0d204\",\"reverse_patches\":[{\"end\":34694,\"start\":34521,\"text\":\"            result.update(probability=retained[\\\\\"raw_probability\\\\\"][\\\\\"value\\\\\"], push_probability=0.0,\\\\n\"}]},\"scripts/ncaaf_staged_acquisition.py\":{\"after_sha256\":\"6e3e4c92e590b3408079c00e3fc2beb1ddce4d1574f21816f63a735256536dcf\",\"before_sha256\":\"48e1fe621b2fce76d7865801c03e28bd88ce25227a73ecbeeb1d051a9cf06ff3\",\"reverse_patches\":[{\"end\":4030,\"start\":3947,\"text\":\"            provider = \\'cfbd\\' if value[\\'payload\\'][\\'version\\'] == lane.HISTORY_PLAN else \\'odds_api\\'\\\\n\"}]},\"tests/conftest.py\":{\"after_sha256\":\"ba1e5ecae108783e0ac418da99dde549e6963f3a116170fe3f7d0a6bd6f46164\",\"before_sha256\":\"8b3b5a6fd5b5c39605108872e954aba8d936afb19d2a0c6d4c9110abc7576e0d\",\"reverse_patches\":[{\"end\":2744,\"start\":2556,\"text\":\"\"}]},\"tests/test_readiness_dashboard_scope.py\":{\"after_sha256\":\"05ee52a641416cf304b430da7c3753a4275226aa3b396b77e65459dccca993df\",\"before_sha256\":\"a657965cf673feb48607c94a32f2b7f09e1f1bc06fce9248359d6ed921347e60\",\"reverse_patches\":[{\"end\":1629,\"start\":1520,\"text\":\"\"},{\"end\":5570,\"start\":5533,\"text\":\"\"}]}}'\nNCAAF_FUTURE_REVIEWED_GUARD_SHA256='7f98b35855181867ab8162dde530b9c7f0ee4d4c1ab3108e64d73ec7008c0c60'\n\ndef _ncaaf_future_guard_matches(source):\n    identity=NCAAF_FUTURE_REVIEWED_GUARD_SHA256.encode()\n    return isinstance(source,bytes) and len(source)==8388490 and source.count(identity)==2 and hashlib.sha256(source.replace(identity,b'0'*64)).hexdigest()==identity.decode()\n\ndef _ncaaf_future_base_source(source):\n    _require(isinstance(source,bytes) and len(source)<=8*1024*1024,'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')\n    if hashlib.sha256(source).hexdigest()=='3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306':return source\n    _require(_ncaaf_future_guard_matches(source),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')\n    return _performance_early_base.__wrapped__(source,True)\n\ndef _ncaaf_future_previous_source(path,source):\n    if path==GUARD_PATH:return _ncaaf_future_base_source(source)\n    r=json.loads(NCAAF_FUTURE_RECONSTRUCTION_JSON).get(path)\n    if r is None or hashlib.sha256(source).hexdigest()!=r['after_sha256']:return source\n    value=source.decode()\n    for p in reversed(r['reverse_patches']):value=value[:p['start']]+p['text']+value[p['end']:]\n    result=value.encode();_require(hashlib.sha256(result).hexdigest()==r['before_sha256'],'PREVIOUS_SOURCE_LOGIC_CHANGED')\n    return result\n\n"
+        },
+        {
+          "end": 8375500,
+          "start": 8366557,
+          "text": "    import importlib.util\n    raw=(ROOT/NCAAF_FUTURE_BINDING_PATH).read_bytes().replace(b'\\r\\n',b'\\n')\n    _require(hashlib.sha256(raw).hexdigest()==NCAAF_FUTURE_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')\n    binding=json.loads(raw);path=ROOT/'scripts/ncaaf_future_spread_scope.py';content=path.read_bytes().replace(b'\\r\\n',b'\\n')\n    _require(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\\0'+content).hexdigest()==binding['reviewed_blobs']['scripts/ncaaf_future_spread_scope.py'],'SUCCESSOR_SCOPE_MODULE_CHANGED')\n    spec=importlib.util.spec_from_file_location('ncaaf_future_spread_scope',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\n    with _scope_git_reads_for_validation().validation_stream(ROOT):return module.run(sys.modules[__name__],manifest_path,base,binding)\n"
+        }
+      ]
+    },
+    "scripts/ncaaf_staged_acquisition.py": {
+      "after_sha256": "de9222a66302e60fc30dca7324645269a949595b44abee9ba25b8cb134f22d7e",
+      "before_sha256": "bb9526e3d07429a7baf2e55632845971bb81fe6e85f34d9f56074b712309b442",
+      "reverse_patches": [
+        {
+          "end": 90,
+          "start": 0,
+          "text": "\"\"\"Network-free staged planning/preparation; explicit execution only.\"\"\"\n"
+        }
+      ]
+    }
+  },
+  "version": "ncaaf-reviewed-target-binding-v1"
+}
