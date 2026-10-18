@@ -1,0 +1,26 @@
+{
+  "application_head": "cf8b62b5048fc4f70ced131edcaa148175ca2532",
+  "application_merge": "4df0975694226f23e0951ad5f24bf6b89bcb990d",
+  "application_tree": "88e0f3936f0f7e3519326bf760bafc52e5e7b476",
+  "collected": 8471,
+  "files": {
+    ".github/workflows/ncaaf-target-full-shard8-diagnostic.yml": "c93a260fcd3c6afbce379d13a311caca12d8fe6885d11946775cade76b2dc576",
+    "diagnostics/full-shard8/diagnostic-constraints.txt": "3cf32d1c4501b93ea5be85f388afdb45767d1829175d54b369b9e932960033d1",
+    "diagnostics/full-shard8/failure_capture.py": "b9f6d0536a455ed7bb972837a9ee07d16c6428c963caf9e6491080984afe4583",
+    "diagnostics/full-shard8/full_shard_probe.py": "531ed1ecc0d751fee130439c39e96db3f4757f2b1d439d0ed2822ffae7420ff4",
+    "diagnostics/full-shard8/preview.json": "1e3d40340a002e9e998a004d637daaed87c0c4f05a0fd59b12195656b6479b52",
+    "diagnostics/full-shard8/proposal.json": "38254dfbe984eefbc50e47a9edc6a4ec7fc6a6217d22b32479703a7aee0432ac",
+    "diagnostics/full-shard8/record_context.py": "5fb4887a601c1659f0fdfea334c517e1efd6cb1d89c3059a7aae6cb4382f350d",
+    "diagnostics/full-shard8/selection.json": "63006081abc648e33038d085938d98d612f307b21c0967d46cc42fb4d13ce344"
+  },
+  "limitations": [
+    "Failure-only wrapper/watchdog can affect scheduling.",
+    "One isolated job rather than concurrent matrix.",
+    "Diagnostic push run identity/event file differ;allowlisted public process values match release.",
+    "Sanitized XML/report flags omit raw exception text.",
+    "Fresh pytest temporary root used only for Windows local fixture validation;Ubuntu uses default paths."
+  ],
+  "proposal_sha256": "38254dfbe984eefbc50e47a9edc6a4ec7fc6a6217d22b32479703a7aee0432ac",
+  "selected": 937,
+  "validation": "Four cold synthetic capture cases;937 XML/identity/outcome round-trip;native full collection;complete33-case affected file in clean shallow Windows checkout."
+}

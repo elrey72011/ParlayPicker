@@ -1,0 +1,58 @@
+name: NCAAF full shard8 failure-only diagnostic (one bounded job)
+on:
+  push:
+    branches: [codex/ncaaf-target-full-shard8-diagnostic-v1]
+permissions:
+  contents: read
+jobs:
+  full-shard8:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: tooling
+          persist-credentials: false
+      - name: Preserve diagnostic tooling outside the reviewed checkout
+        run: |
+          mkdir -p "$RUNNER_TEMP/full-shard8-diagnostic/output"
+          cp tooling/diagnostics/full-shard8/* "$RUNNER_TEMP/full-shard8-diagnostic/"
+      - uses: actions/checkout@v5
+        with:
+          ref: 4df0975694226f23e0951ad5f24bf6b89bcb990d
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.15'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install exact observed failed-release dependencies
+        run: |
+          python -m pip install pip==26.2.1
+          python -m pip install -r requirements.txt pytest==9.1.1 -c "$RUNNER_TEMP/full-shard8-diagnostic/diagnostic-constraints.txt"
+      - name: Verify and record public source and dependency context
+        run: |
+          export GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main GITHUB_HEAD_REF=codex/ncaaf-reviewed-target-v1
+          export GITHUB_REF=refs/pull/2434/merge GITHUB_SHA=4df0975694226f23e0951ad5f24bf6b89bcb990d
+          python "$RUNNER_TEMP/full-shard8-diagnostic/record_context.py" --out "$RUNNER_TEMP/full-shard8-diagnostic/output"
+      - name: Native complete shard8 with original order and failure-only observation
+        timeout-minutes: 27
+        run: |
+          export GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main GITHUB_HEAD_REF=codex/ncaaf-reviewed-target-v1
+          export GITHUB_REF=refs/pull/2434/merge GITHUB_SHA=4df0975694226f23e0951ad5f24bf6b89bcb990d
+          export PYTHONPATH="$RUNNER_TEMP/full-shard8-diagnostic"
+          export NCAAF_DIAGNOSTIC_OUTPUT="$RUNNER_TEMP/full-shard8-diagnostic/output"
+          set +e
+          timeout --signal=INT --kill-after=30s 1530s python -u scripts/run_ci_tests.py --shard 8 --shards 9 --timing-profile scripts/ci_test_file_costs_v1.json --assignment-manifest "$NCAAF_DIAGNOSTIC_OUTPUT/full-suite-8-assignment.json" -v tests --durations=30 --tb=no --show-capture=no --disable-warnings -rN -p full_shard_probe > "$NCAAF_DIAGNOSTIC_OUTPUT/console.log" 2>&1
+          result=$?
+          printf '%s\n' "$result" > "$NCAAF_DIAGNOSTIC_OUTPUT/step-exit-code.txt"
+          exit "$result"
+      - name: Retain sanitized complete or partial evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncaaf-full-shard8-diagnostic
+          path: ${{ runner.temp }}/full-shard8-diagnostic/output
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,37 @@
+{
+  "acceptance": [
+    "If reproduced,identify the attributable inner delay before preparing the smallest separately reviewable correction.",
+    "If not reproduced,retain UNKNOWN and stop; no automatic rerun or speculative fix."
+  ],
+  "current_artifact_zip_sha256": "6140f2b29f311ae5a1d835d991d76abde976f39314d051407e05454369c1fc35",
+  "current_diagnostic_run": 39151772961,
+  "excluded": [
+    "Provider/Drive operations,credential access,operational configuration,scheduling,acceptance,inference,merge,deployment."
+  ],
+  "prepared_at": "2026-10-18T18:01:31.140443+00:00",
+  "preserve": [
+    "Original3sAppTest deadline and all assertions.",
+    "Nine-shard algorithm/profile/workflows,source authentication,historical fixtures and operational records.",
+    "No arguments,locals,credentials,headers,provider content or raw exception text in fields.",
+    "Passing diagnostic does not erase the failed release or establish cause."
+  ],
+  "reason": "Exact105-prefix instrumented diagnostic passed; original3-second token-entry timeout remains unexplained. Restore actual full-shard selection and reduce continuous-observer effects before proposing a fix.",
+  "release_head": "cf8b62b5048fc4f70ced131edcaa148175ca2532",
+  "required_new_authorization": "Exactly one isolated full-shard diagnostic only; no full release cycle,failed-job release retry,production publication or protected timeout/contract change.",
+  "scope": {
+    "automatic_retries": 0,
+    "collected_identities": 8471,
+    "execution": "Actual unchanged scripts/run_ci_tests.py --shard8 --shards9 with identical profile,default temp paths,pinned dependency/context and within-file order.",
+    "job_limit_minutes": 30,
+    "observation": "Failure-only bounded sanitized thread snapshot if target token-entry rerun approaches the existing3s deadline. No continuous global Python monitoring. Validate exact helper/IDs and cleanup offline before dispatch.",
+    "production_changes": 0,
+    "release_cycles": 0,
+    "selected_identities": 937,
+    "selected_shard": 8,
+    "ubuntu_jobs": 1
+  },
+  "status": "PREPARED_NOT_AUTHORIZED",
+  "tested_merge": "4df0975694226f23e0951ad5f24bf6b89bcb990d",
+  "tree": "88e0f3936f0f7e3519326bf760bafc52e5e7b476",
+  "version": "pr2434-full-shard-failure-only-diagnostic-next-action-v1"
+}
