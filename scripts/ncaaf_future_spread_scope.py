@@ -154,6 +154,15 @@ def validate(g, manifest_path, base, binding):
 
 
 def run(g, manifest_path, base, binding):
+    if 'ci_fixture_copy' in binding:
+        import importlib.util
+        path=g.ROOT/'scripts/ci_scheduling_fixture_scope.py'
+        raw=path.read_bytes().replace(b'\r\n',b'\n')
+        expected=binding['ci_fixture_copy']['reviewed_blobs']['scripts/ci_scheduling_fixture_scope.py']
+        g._require(hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==expected,'SUCCESSOR_SCOPE_MODULE_CHANGED')
+        spec=importlib.util.spec_from_file_location('reviewed_ci_scheduling_fixture_scope',path)
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        return module.run(g,manifest_path,base,binding)
     if 'transport_diagnostics' in binding:
         import importlib.util
         path=g.ROOT/'scripts/ncaaf_transport_scope.py'
