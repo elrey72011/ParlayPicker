@@ -11,7 +11,16 @@ def frozen_predecessor(root):
     root=Path(root)
     with (root/scope.BINDING).open('rb') as f:binding=json.loads(f.read())
     with (root/live.GUARD_PATH).open('rb') as f:source=f.read().replace(b'\r\n',b'\n')
-    source=scope.predecessor_guard(source,live,binding)
+    if 'ci_fixture_copy' in binding:
+        from scripts import ci_scheduling_fixture_scope as correction
+        d=binding['ci_fixture_copy'];source=correction.predecessor_guard(source,live,binding)
+        prior=json.loads(base64.b64decode(d['previous_binding_b64'],validate=True))
+        td=prior['transport_diagnostics']
+        source=source.replace(d['previous_binding_sha256'].encode(),td['previous_binding_sha256'].encode())
+        source=source.replace(d['previous_guard_identity'].encode(),td['previous_guard_identity'].encode())
+        live._require(hashlib.sha256(source).hexdigest()==td['previous_guard_sha256'],'PREVIOUS_GUARD_LOGIC_CHANGED')
+    else:
+        source=scope.predecessor_guard(source,live,binding)
     old=types.ModuleType('exact_ncaaf_transport_predecessor_scope');old.__file__=str(root/live.GUARD_PATH)
     from unittest.mock import patch
     read=Path.read_bytes
@@ -22,6 +31,8 @@ def frozen_predecessor(root):
 
 
 def install(request,patch):
+    from ci_fixture_scope_inputs import install as selected
+    if selected(request,patch):return
     name=request.module.__name__.split('.')[-1]
     # Explicit inherited scope contracts only. New diagnostics tests and actual
     # subprocess CLI/validation do not receive a projected runtime or result.
@@ -47,7 +58,11 @@ def install(request,patch):
         normalized=value.replace(b'\r\n',b'\n')
         if relative==live.GUARD_PATH:
             return scope.predecessor_guard(normalized,live,binding)
-        if relative==scope.BINDING or relative in binding['transport_diagnostics']['source_reconstructions']:
+        if relative==scope.BINDING:return scope.previous_source(relative,normalized,live,binding)
+        if 'ci_fixture_copy' in binding:
+            from scripts import ci_scheduling_fixture_scope as correction
+            normalized=correction.previous_source(relative,normalized,live,binding)
+        if relative in binding['transport_diagnostics']['source_reconstructions']:
             return scope.previous_source(relative,normalized,live,binding)
-        return value
+        return normalized if normalized!=value.replace(b'\r\n',b'\n') else value
     patch.setattr(Path,'read_bytes',previous)
