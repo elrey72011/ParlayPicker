@@ -1,4 +1,4 @@
-"""Network-free staged planning/preparation; explicit execution only."""
+"""Network-free version-selected staged planning/preparation; explicit execution only."""
 import argparse
 import getpass
 import hashlib
@@ -46,6 +46,21 @@ def main(argv=None):
     lane = None
     try:
         if args.operation == 'execute': verify_runtime()
+        if args.operation=='execute' and args.controlled_bindings and args.bindings_sha256:
+            # Authenticate the selected source bootstrap before application imports.
+            control_raw=bounded(args.controlled_bindings,128*1024)
+            if hashlib.sha256(control_raw).hexdigest()!=args.bindings_sha256:raise ValueError('NCAAF_STAGED_CONFIGURATION')
+            control=json.loads(control_raw)
+            if not isinstance(control,dict) or not isinstance(control.get('payload'),dict):
+                raise ValueError('NCAAF_STAGED_CONFIGURATION')
+            if control.get('payload',{}).get('version')=='ncaaf-reviewed-controlled-bindings-v3':
+                runtime=control['payload']['runtime'];path=Path(__file__).resolve().parent/'ncaaf_reviewed_target_operator.py'
+                source=path.read_bytes()
+                if hashlib.sha256(source).hexdigest()!=runtime['sources']['scripts/ncaaf_reviewed_target_operator.py']:
+                    raise ValueError('NCAAF_TARGET_RUNTIME_CONFLICT')
+                scope={'__file__':str(path),'__name__':'NCAAF_REVIEWED_SOURCE_BOOTSTRAP'}
+                exec(compile(source,str(path),'exec'),scope)
+                scope['verify_checkout'](runtime['code_head'])
         from app_core import ncaaf_staged_acquisition as lane, ncaaf_staged_evidence as evidence
         def load(path, limit=lane.MAX_BUNDLE):
             return json.loads(bounded(path, limit), object_pairs_hook=lane.custody._unique, parse_constant=lane.custody._constant)

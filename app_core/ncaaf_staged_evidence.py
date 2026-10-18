@@ -20,8 +20,9 @@ require = model.require
 
 def runtime():
     modules = (stages, history, model, research, custody)
+    from app_core.ncaaf_reviewed_target import source_hash
     return dict(python=platform.python_version(), implementation=platform.python_implementation(), numpy=research.np.__version__,
-        components={Path(m.__file__).name: hashlib.sha256(Path(m.__file__).read_bytes().replace(b'\r\n', b'\n')).hexdigest() for m in modules})
+        components={Path(m.__file__).name: source_hash(Path(m.__file__),historical=True) for m in modules})
 
 
 def batches(bundle):
@@ -39,6 +40,9 @@ def batches(bundle):
 
 
 def prepare(bundle, *, model_packet, prepared_at):
+    if bundle.get('payload',{}).get('version')=='ncaaf-reviewed-history-unaccepted-v3':
+        from app_core.ncaaf_reviewed_staged import prepare as selected
+        return selected(bundle,model_packet=model_packet,prepared_at=prepared_at)
     if bundle.get('payload',{}).get('version')=='ncaaf-named-history-unaccepted-v2':
         from app_core.ncaaf_future_staged import prepare as selected
         return selected(bundle,model_packet=model_packet,prepared_at=prepared_at)
@@ -91,6 +95,9 @@ def prequote_review_subjects(p, bundle):
 
 
 def validate_prequote(value, bundle, *, at, review_required=False):
+    if value.get('payload',{}).get('version')=='ncaaf-reviewed-prequote-features-v3':
+        from app_core.ncaaf_reviewed_staged import validate_prequote as selected
+        return selected(value,bundle,at=at,review_required=review_required)
     if value.get('payload',{}).get('version')=='ncaaf-named-prequote-features-v2':
         from app_core.ncaaf_future_staged import validate_prequote as selected
         return selected(value,bundle,at=at,review_required=review_required)
@@ -119,6 +126,9 @@ def validate_prequote(value, bundle, *, at, review_required=False):
 
 
 def join(history_bundle, prequote, quote_bundle):
+    if quote_bundle.get('payload',{}).get('version')=='ncaaf-reviewed-final-quote-unaccepted-v3':
+        from app_core.ncaaf_reviewed_staged import join as selected
+        return selected(history_bundle,prequote,quote_bundle)
     if quote_bundle.get('payload',{}).get('version')=='ncaaf-reviewed-final-quote-unaccepted-v2':
         from app_core.ncaaf_future_staged import join as selected
         return selected(history_bundle,prequote,quote_bundle)
@@ -143,6 +153,9 @@ def join(history_bundle, prequote, quote_bundle):
 
 
 def validate_binding(value, packet, *, at):
+    if value.get('payload',{}).get('version')=='ncaaf-reviewed-staged-evidence-v3':
+        from app_core.ncaaf_reviewed_staged import validate_binding as selected
+        return selected(value,packet,at=at)
     if value.get('payload',{}).get('version')=='ncaaf-named-staged-evidence-v2':
         from app_core.ncaaf_future_staged import validate_binding as selected
         return selected(value,packet,at=at)
