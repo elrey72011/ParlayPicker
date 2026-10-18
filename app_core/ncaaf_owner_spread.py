@@ -84,6 +84,10 @@ class ReviewPolicy:
                 and history.timestamp(value.get(clock)) is not None)
 
     def check_mapping(self, *args, **kwargs):
+        p=self.packet['payload']
+        if p['staged_binding']['payload'].get('version')=='ncaaf-reviewed-staged-evidence-v3':
+            from app_core.ncaaf_reviewed_target import check_mapping
+            return check_mapping(*args, **kwargs, review_policy=self)
         from app_core.ncaaf_future_target import check_mapping
         return check_mapping(*args, **kwargs, review_policy=self)
 
