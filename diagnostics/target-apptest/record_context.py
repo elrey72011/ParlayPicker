@@ -1,0 +1,9 @@
+"""Only public package/source identities and allowlisted nonsecret CI context."""
+from pathlib import Path
+import argparse,hashlib,importlib.metadata,json,os,platform,subprocess,time
+p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True);args=p.parse_args();args.out.mkdir(parents=True,exist_ok=True)
+pins={line.split('==')[0]:line.split('==')[1] for line in Path(__file__).with_name('diagnostic-constraints.txt').read_text().splitlines()}
+actual={name:importlib.metadata.version(name) for name in pins};assert actual==pins and platform.python_version()=='3.12.15'
+public={name:os.environ.get(name) for name in ('CI','GITHUB_ACTIONS','GITHUB_EVENT_NAME','GITHUB_BASE_REF','GITHUB_HEAD_REF','GITHUB_REF','GITHUB_SHA','RUNNER_OS','RUNNER_ARCH','ImageOS','ImageVersion')}
+r=dict(python=platform.python_version(),public_distribution_versions=actual,head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),tree=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),shallow=subprocess.check_output(['git','rev-parse','--is-shallow-repository'],text=True).strip(),cwd=os.getcwd(),requirements_sha256=hashlib.sha256(Path('requirements.txt').read_bytes()).hexdigest(),nonsecret_context=public,timezone_names=list(time.tzname),differences=['Single diagnostic job instead of concurrent release matrix.','Only exact105-prefix executes after all8471collection imports.','Whitelisted phase/thread observer only during target case; observer overhead measured.','GitHub run identity and event file remain those of the diagnostic dispatch; selected source files do not consume event payload.','Reporting removes raw exception/captured text; no assertion,source or timeout change.'])
+(args.out/'release-context.json').write_text(json.dumps(r,indent=2)+'\n');print('PASS exact public dependency pins and source/environment context')

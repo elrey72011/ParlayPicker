@@ -1,0 +1,62 @@
+{
+  "acceptance": [
+    "One execution of the exact105-case prefix with unchanged three-second AppTest timeout and every substantive assertion.",
+    "Preserve all output and partial diagnostics on failure without calling partial execution passing coverage.",
+    "If reproduced, identify the delayed actual code path before proposing the smallest separate correction.",
+    "If not reproduced, retain UNKNOWN; a passing diagnostic does not authorize an unchanged release retry."
+  ],
+  "actual_failure": "AppTest script run timed out after3s on token-entry rerun at line86; inner delay cause UNKNOWN.",
+  "base": "c2b4b7e6fc04af950da34cda01376e94e2199ada",
+  "excluded": [
+    "No new full CI cycle or failed-job rerun.",
+    "No production implementation, release workflow/capacity/profile/scheduler/deadline changes.",
+    "No provider/Drive requests, credentials, operational configuration, scheduling, acceptance, inference, merge or deployment."
+  ],
+  "failed_test": "tests/test_drive_history_loading.py::test_actual_completed_analysis_publish_caller_defers_history",
+  "failure_xml_sha256": "f51d8c4d1942d2568e74eeb686cccf941829c9ae9486bf60eb86b2392d8ac149",
+  "head": "cf8b62b5048fc4f70ced131edcaa148175ca2532",
+  "local_reproductions": [
+    {
+      "cases": 1,
+      "exit_code": 0,
+      "mode": "cold",
+      "timeout_seconds": 3
+    },
+    {
+      "cases": 105,
+      "exit_code": 0,
+      "mode": "prefix",
+      "timeout_seconds": 3
+    }
+  ],
+  "pr": 2434,
+  "prefix_count": 105,
+  "prepared_at": "2026-10-18T17:16:50.420621+00:00",
+  "preserved_prefix_selection_sha256": "9e2163754918cff0b142f576f34edec5027b6159b8f31be3f8e9021db8b39aa9",
+  "proposed_authorization": {
+    "automatic_retries": 0,
+    "full_release_cycles": 0,
+    "job_limit_minutes": 30,
+    "production_changes": 0,
+    "ubuntu_diagnostic_jobs": 1
+  },
+  "proposed_context": {
+    "checkout": "Exact current tested candidate in clean depth-one Ubuntu checkout",
+    "collection": "Complete8471-identity collection/import context; keep exact105-prefix identities/order; validate serializedIDs offline before dispatch.",
+    "dependencies": "Unchanged pinned requirements.txt",
+    "network": "External application transports blocked; labelled synthetic only",
+    "python": "3.12.15",
+    "streamlit": "1.59.1",
+    "temporary_paths": "Release default pytest paths; no basetemp"
+  },
+  "sanitized_observation": [
+    "Fixed rerun start/stop/completion codes and monotonic elapsed time.",
+    "ScriptRunner lifecycle, readiness/termination, process/thread counts and cleanup flags.",
+    "Only whitelisted relative source-module/function/line identifiers at timeout; no frame locals, argument values, matched text, credentials, exception payloads, environment values or sensitive headers.",
+    "Observer overhead explicitly labelled; no artificial delay, manufactured error or timeout increase."
+  ],
+  "source_sha256": "6a9068743f14abd04bf6244bf5fef2c26a530ddf5eaee8f536c149f0a1753486",
+  "status": "PREPARED_NOT_AUTHORIZED",
+  "tree": "88e0f3936f0f7e3519326bf760bafc52e5e7b476",
+  "version": "ncaaf-target-apptest-timeout-bounded-next-action-v1"
+}

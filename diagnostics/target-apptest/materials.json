@@ -1,0 +1,18 @@
+{
+  "application_head": "cf8b62b5048fc4f70ced131edcaa148175ca2532",
+  "application_merge": "4df0975694226f23e0951ad5f24bf6b89bcb990d",
+  "application_tree": "88e0f3936f0f7e3519326bf760bafc52e5e7b476",
+  "files": {
+    ".github/workflows/ncaaf-target-apptest-diagnostic.yml": "2db2499cef392aed57697cb28646f5b3c8edf73944e4de7f9d5126ba88d98261",
+    "diagnostics/target-apptest/diagnostic-constraints.txt": "3cf32d1c4501b93ea5be85f388afdb45767d1829175d54b369b9e932960033d1",
+    "diagnostics/target-apptest/diagnostic_helper.py": "dfe2499a5a020d10cae5049557c23bf688ac2ce065263d850485ec8d7675a308",
+    "diagnostics/target-apptest/phase_probe.py": "aa2c14ae20854c229a59f8a11b9c62b3a97485f11738af81931d3ce125e0f24c",
+    "diagnostics/target-apptest/preview.json": "1e3d40340a002e9e998a004d637daaed87c0c4f05a0fd59b12195656b6479b52",
+    "diagnostics/target-apptest/proposal.json": "43db4353cdc13019efa4fc92fe986a886950ac888fa36956fcd3111452a2a381",
+    "diagnostics/target-apptest/record_context.py": "3266aa3aeb180fc9d1fa7a7d4156e358f473272ac9008e3e8947b7bd83369cd7",
+    "diagnostics/target-apptest/selection.json": "8e2e052c1ac3e180217c374605f33e93020ee6e85aca2bb618b60a785765a84d"
+  },
+  "measurement_limitation": "Measured callback/output times omit interpreter dispatch, filtered calls and sampling overhead. Instrumentation can change timing or behavior; a pass does not explain the historical failure.",
+  "proposal_sha256": "43db4353cdc13019efa4fc92fe986a886950ac888fa36956fcd3111452a2a381",
+  "validation": "Six cold synthetic modes pass; exact real105-prefix passes locally; Windows default-temp PermissionError retained separately and avoided only for local validation. Ubuntu default paths unchanged."
+}
