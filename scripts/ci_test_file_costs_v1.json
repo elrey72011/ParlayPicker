@@ -9101,9 +9101,32 @@
         "listing-completed-main-2",
         "listing-completed-pr-1",
         "nfl-pdf-capacity-socket-2",
-        "nfl-pdf-capacity-main-3"
+        "nfl-pdf-capacity-main-3",
+        "reviewed-target-retained-published-8",
+        "reviewed-target-retained-f68-8"
       ],
-      "seconds": 74.3314,
+      "reviewed_target_timing_basis": "Maximum of these compatible complete XML file sums times 1.15. Earlier fields retain their historical meaning; this is an estimate, not a runtime guarantee.",
+      "reviewed_target_timing_basis_seconds": 108.033,
+      "reviewed_target_timing_measurements": [
+        {
+          "count": 15,
+          "identities_sha256": "382899d95e77ca82669f2ce36627e92967c840db7077293f42cfeba14e3c428c",
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 56.368,
+          "source": "reviewed-target-retained-published-8"
+        },
+        {
+          "count": 15,
+          "identities_sha256": "382899d95e77ca82669f2ce36627e92967c840db7077293f42cfeba14e3c428c",
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 108.033,
+          "source": "reviewed-target-retained-f68-8"
+        }
+      ],
+      "reviewed_target_timing_variance_multiplier": 1.15,
+      "seconds": 124.23795,
       "variance_multiplier": 1.15
     },
     {
@@ -9419,6 +9442,84 @@
       ],
       "runtime_followup_test_blob": "2a0e6174ce5d83e121ff2068161ce9cec64c877b",
       "seconds": 18.5403,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 1.938,
+      "basis": "Complete compatible JUnit testcase sum plus the existing15% advisory variance;setup/collection/report/upload outside JUnit are forecast separately. Added unmeasured identities retain the unchanged3.5s fallback. No runtime guarantee.",
+      "completed_measurements": [
+        {
+          "count": 26,
+          "seconds": 1.938,
+          "source": "reviewed-target-ci-f68-shard2",
+          "test_git_blob": "f04ad5f133383b7b0edfdb55d1fe421c0c2c7f97"
+        }
+      ],
+      "interrupted_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "path": "tests/test_ncaaf_reviewed_target.py",
+      "profiled_tests": 26,
+      "references": [
+        "reviewed-target-ci-f68-shard2"
+      ],
+      "seconds": 2.2287,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 540.468,
+      "basis": "Complete compatible JUnit testcase sum plus the existing15% advisory variance;setup/collection/report/upload outside JUnit are forecast separately. Added unmeasured identities retain the unchanged3.5s fallback. No runtime guarantee.",
+      "completed_measurements": [
+        {
+          "count": 39,
+          "seconds": 540.468,
+          "source": "reviewed-target-diagnostic-39101454186",
+          "test_git_blob": "07c8a43f5da53a4e9e2174cfa78f43804fa56d0d"
+        }
+      ],
+      "interrupted_observations": [
+        {
+          "completed_call_seconds": [
+            208.49,
+            214.81
+          ],
+          "full_file_xml_available": false,
+          "job": 117589542452,
+          "measurement_complete": false,
+          "note": "Only these two completed call durations are known. The job timed out;the full file total and required release artifact are not inferred.",
+          "run": 39098419707
+        }
+      ],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "path": "tests/test_ncaaf_reviewed_target_pipeline.py",
+      "profiled_tests": 39,
+      "references": [
+        "reviewed-target-diagnostic-39101454186"
+      ],
+      "seconds": 621.5382,
+      "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 1.367,
+      "basis": "Complete compatible JUnit testcase sum plus the existing15% advisory variance;setup/collection/report/upload outside JUnit are forecast separately. Added unmeasured identities retain the unchanged3.5s fallback. No runtime guarantee.",
+      "completed_measurements": [
+        {
+          "count": 21,
+          "seconds": 1.367,
+          "source": "reviewed-target-ci-f68-shard2",
+          "test_git_blob": "f206d59700ed31f071b3ad39e6aa38a7523820fd"
+        }
+      ],
+      "interrupted_observations": [],
+      "kind": "estimated",
+      "latest_measurement_complete": true,
+      "path": "tests/test_ncaaf_reviewed_target_scope.py",
+      "profiled_tests": 21,
+      "references": [
+        "reviewed-target-ci-f68-shard2"
+      ],
+      "seconds": 1.57205,
       "variance_multiplier": 1.15
     },
     {
@@ -9764,6 +9865,37 @@
         }
       ],
       "successor_variance_multiplier": 1.15
+    },
+    {
+      "kind": "estimated",
+      "path": "tests/test_ncaaf_spread_boundaries.py",
+      "profiled_tests": 78,
+      "references": [
+        "reviewed-target-retained-published-5",
+        "reviewed-target-retained-f68-5"
+      ],
+      "reviewed_target_timing_basis": "Maximum of these compatible complete XML file sums times 1.15. Earlier fields retain their historical meaning; this is an estimate, not a runtime guarantee.",
+      "reviewed_target_timing_basis_seconds": 368.012,
+      "reviewed_target_timing_measurements": [
+        {
+          "count": 78,
+          "identities_sha256": "d80d88c0e6fe1e5ab89fe19f53d41bd03c521fc5fc5d731cf9a2991c6c99beda",
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 363.736,
+          "source": "reviewed-target-retained-published-5"
+        },
+        {
+          "count": 78,
+          "identities_sha256": "d80d88c0e6fe1e5ab89fe19f53d41bd03c521fc5fc5d731cf9a2991c6c99beda",
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 368.012,
+          "source": "reviewed-target-retained-f68-5"
+        }
+      ],
+      "reviewed_target_timing_variance_multiplier": 1.15,
+      "seconds": 423.2138
     },
     {
       "kind": "estimated",
@@ -22197,6 +22329,95 @@
       "kind": "completed_junit",
       "log_sha256": "a3ccece21d92d8c446c3e3334f29b611efc5e0e6f8e3da62140ff9ba6f306663",
       "run": 38170314113
+    },
+    "reviewed-target-ci-f68-shard2": {
+      "artifact_id": 12125514416,
+      "artifact_zip_sha256": "a6e60dcefd848f5ad3e223f355228167c8927e1450f928d6d85465aab762fab9",
+      "assignment_manifest_sha256": "cc812f28a9d42a2e2980c83a82bce26db487bce4d882600f64cb4e038b55e5f9",
+      "checkout_commit": "037f2819ce913b3792ee1a49895a188f13b1a3a7",
+      "complete_cycle": false,
+      "diagnostic": false,
+      "head": "f68e53086205ac56ad895c3775f82125c316a45a",
+      "kind": "completed_junit_testcase_sum",
+      "measurement_complete": true,
+      "note": "Complete successful shard2 XML in a failed overall cycle;only complete-file measurements are used,not complete release coverage.",
+      "release_coverage": false,
+      "run": 39098419707,
+      "run_attempt": 1,
+      "xml_sha256": "0ae760a0252b0b0555c84d27245ed909f840702c20a4f99d9103e2d496fdc99a"
+    },
+    "reviewed-target-diagnostic-39101454186": {
+      "artifact_id": 12126806999,
+      "artifact_zip_sha256": "7adf29bf21aeb84fba45b6c98ab91e7e1fa26a4665f3fc8b66bdc5d99a05e96c",
+      "checkout_commit": "037f2819ce913b3792ee1a49895a188f13b1a3a7",
+      "complete_cycle": false,
+      "diagnostic": true,
+      "head": "f68e53086205ac56ad895c3775f82125c316a45a",
+      "kind": "completed_junit_testcase_sum",
+      "measurement_complete": true,
+      "note": "Complete instrumented39-case file in an exact ordered374-case diagnostic prefix after8452-module collection;observer overhead is included,never subtracted. Seven open attribution intervals are incomplete;JUnit phases are complete.",
+      "release_coverage": false,
+      "run": 39101454186,
+      "run_attempt": 1,
+      "selected_prefix": 374,
+      "workflow_head": "07603b065c81c3826e8784531dab1d3ff0ef9f0a",
+      "xml_sha256": "e75ae3bd7e264d4b6037d6704f6c2fac7f26df6ae3aa03e52dbbdd3ce9a7752b"
+    },
+    "reviewed-target-retained-f68-5": {
+      "artifact_digest": "sha256:6de38d56d8969123c3c5418fa7aa6f0297a50978d13b19b6354ccf83a1cbf735",
+      "artifact_id": 12125893301,
+      "assignment_manifest_sha256": "fcf428a655127c924c5dbaa592224fd1cf3907217562768affd887574c7071b0",
+      "basis": "Complete compatible file XML retained from an earlier revision; advisory evidence, not final-candidate release coverage.",
+      "checkout_commit": "037f2819ce913b3792ee1a49895a188f13b1a3a7",
+      "complete_cycle": false,
+      "kind": "completed_junit_testcase_sum",
+      "measurement_complete": true,
+      "release_coverage": false,
+      "run_attempt": 1,
+      "source_head": "f68e53086205ac56ad895c3775f82125c316a45a",
+      "xml_sha256": "0bfaf28fd058e2e0d8aadb071f717851907986cff26a28c33393489d4454f9be"
+    },
+    "reviewed-target-retained-f68-8": {
+      "artifact_digest": "sha256:fe0c6f3fc1ad8bdee0e52fadbf1bba89b34bd5f0e5607c16b702a22797dcdbec",
+      "artifact_id": 12125908328,
+      "assignment_manifest_sha256": "f8692a0e06e880d7a7f5dbc9bca31ecb163e4dc6c38c5bdca8f1c6acd6531539",
+      "basis": "Complete compatible file XML retained from an earlier revision; advisory evidence, not final-candidate release coverage.",
+      "checkout_commit": "037f2819ce913b3792ee1a49895a188f13b1a3a7",
+      "complete_cycle": false,
+      "kind": "completed_junit_testcase_sum",
+      "measurement_complete": true,
+      "release_coverage": false,
+      "run_attempt": 1,
+      "source_head": "f68e53086205ac56ad895c3775f82125c316a45a",
+      "xml_sha256": "6391df81954f1adbbc7eeb25b4ab3a3cbcd457539781eb6ad2b8a6087c73b7ad"
+    },
+    "reviewed-target-retained-published-5": {
+      "artifact_digest": "sha256:85701f44a5bab43834345041500cb87fb12b42f0e22c94e46b1a5db00f9e5816",
+      "artifact_id": 12125295635,
+      "assignment_manifest_sha256": "4f29640aa0e5b8edf82b0d758ab47e16128e78d7ef4f200de6b80a4acfafb000",
+      "basis": "Complete compatible file XML retained from an earlier revision; advisory evidence, not final-candidate release coverage.",
+      "checkout_commit": "248ee63097f33e812c6969384c3bf2920588f5ee",
+      "complete_cycle": true,
+      "kind": "completed_junit_testcase_sum",
+      "measurement_complete": true,
+      "release_coverage": false,
+      "run_attempt": 1,
+      "source_head": "4d806f4ad46d8385d5feff2f395b72bef3d70a78",
+      "xml_sha256": "b8e38e1065545cce4b6d8f30dc95394a66124235786a955795bfaf21f5db7067"
+    },
+    "reviewed-target-retained-published-8": {
+      "artifact_digest": "sha256:d763592cd596923414d758ae785f71eda9c018ada42ba6cc9697408d082a6bad",
+      "artifact_id": 12125011003,
+      "assignment_manifest_sha256": "831bedf7c564043caf04a00e5abcee3383797dd9d872d745ac81d750fe5f3ed8",
+      "basis": "Complete compatible file XML retained from an earlier revision; advisory evidence, not final-candidate release coverage.",
+      "checkout_commit": "248ee63097f33e812c6969384c3bf2920588f5ee",
+      "complete_cycle": true,
+      "kind": "completed_junit_testcase_sum",
+      "measurement_complete": true,
+      "release_coverage": false,
+      "run_attempt": 1,
+      "source_head": "4d806f4ad46d8385d5feff2f395b72bef3d70a78",
+      "xml_sha256": "c5b9054fb501ca269c0da4363585e90b00590397447529ddcbfcc3642d13a807"
     }
   },
   "version": 1

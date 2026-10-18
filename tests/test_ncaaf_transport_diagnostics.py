@@ -53,10 +53,10 @@ def local_wire(monkeypatch, bodies, *, closing=True, mode='success', framing='le
         except OSError:
             pass  # Synthetic server cleanup; production errors are unchanged.
     for (_,peer),body in zip(pairs,bodies):
-        worker=threading.Thread(target=serve,args=(peer,body),daemon=True);worker.start();workers.append(worker)
+        worker=threading.Thread(target=serve,args=(peer,body),daemon=True);workers.append(worker)
     def connect(conn):
         assert len(connections)<len(pairs),'Unexpected retry'
-        conn.sock=pairs[len(connections)][0];connections.append(conn)
+        index=len(connections);conn.sock=pairs[index][0];connections.append(conn);workers[index].start()
         if mode=='connect':stop.wait(2)
     def request(conn,*args,**kwargs):
         if mode=='write':stop.wait(2)
@@ -74,7 +74,8 @@ def local_wire(monkeypatch, bodies, *, closing=True, mode='success', framing='le
                 except OSError:pass
                 sock.close()
         for worker in workers:
-            worker.join(2);assert not worker.is_alive()
+            if worker.ident is not None:worker.join(2)
+            assert not worker.is_alive()
 
 
 def cli_module():

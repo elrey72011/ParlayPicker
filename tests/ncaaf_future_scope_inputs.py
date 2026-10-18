@@ -34,6 +34,8 @@ def historical_test_consumers(module,live):
 
 @pytest.fixture(autouse=True)
 def exact_released_scope_contract_inputs(request,monkeypatch):
+    from tests.ncaaf_staged_capacity_fixtures import install_reviewed_target_profile_inputs
+    install_reviewed_target_profile_inputs(request,monkeypatch)
     from ncaaf_transport_scope_inputs import install
     install(request,monkeypatch)
     module=request.module

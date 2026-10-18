@@ -8,11 +8,11 @@ import pytest
 import yaml
 from scripts import run_ci_tests as runner
 from scripts import ncaaf_staged_capacity_scope as scope
-from tests.ncaaf_staged_capacity_fixtures import exact_predecessor_bytes,historical_ncaaf_staged_capacity_profile
+from tests.ncaaf_staged_capacity_fixtures import exact_predecessor_bytes,historical_ncaaf_staged_capacity_profile,historical_reviewed_target_timing_profile
 ROOT=Path(__file__).resolve().parents[1]
 PROFILE='scripts/ci_test_file_costs_v1.json'
 
-def test_exact_43_material_upward_costs_and_retained_metadata():
+def test_exact_43_material_upward_costs_and_retained_metadata(historical_reviewed_target_timing_profile):
     raw=(ROOT/PROFILE).read_bytes().replace(b'\r\n',b'\n');now=json.loads(raw)
     prior=json.loads(exact_predecessor_bytes(PROFILE,raw))
     assert now['revision']==prior['revision']==3 and now['fallback']==prior['fallback']
