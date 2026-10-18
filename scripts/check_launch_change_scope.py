@@ -31550,7 +31550,7 @@ def _nfl_odds_timing_guard_matches(source):
 def _nfl_odds_timing_base_source(source,_capacity_projection=False):
     # NCAAF_FUTURE_INLINE_BEGIN
     if len(source)==8388490:
-        _future_identity=b'cc0417a217820000712439c65092bccc0f12c23d8ac8b3b9ee587430ec6290dc'
+        _future_identity=b'a757df0a11509e1d132e7f0ed1f1e19bad2e0791a5d31ebe618e5fa02dcf9d61'
         _require(source.count(_future_identity)==2 and hashlib.sha256(source.replace(_future_identity,b'0'*64)).hexdigest()==_future_identity.decode(),'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
         source=source.replace(b'    if len(source)==8388490:source=_performance_early_base.__wrapped__(source,True)\n',b'')
         for _future_a,_future_b,_future_r in ((b'\n    # NCAAF_FUTURE_INLINE_BEGIN\n',b'\n    # NCAAF_FUTURE_INLINE_END\n',b'\n'),(b'\n# NCAAF_FUTURE_BEGIN\n',b'\n# NCAAF_FUTURE_END\n',b'')):
@@ -34089,8 +34089,8 @@ def _run_ncaaf_staged_capacity_integrated(manifest_path,base):
 # NCAAF_STAGED_CAPACITY_END
 
 # NCAAF_FUTURE_BEGIN
-NCAAF_FUTURE_REVIEWED_GUARD_SHA256='cc0417a217820000712439c65092bccc0f12c23d8ac8b3b9ee587430ec6290dc'
-_RT_BINDING_SHA256='ae629c847b657003752980914e71f2d7ed55295c548fec858ed5faaaff3f75f8'
+NCAAF_FUTURE_REVIEWED_GUARD_SHA256='a757df0a11509e1d132e7f0ed1f1e19bad2e0791a5d31ebe618e5fa02dcf9d61'
+_RT_BINDING_SHA256='0fc1855f8a246b78b846b74e21782d2ffd5f7f5cf32f79676fa9a455792a26d0'
 import importlib.util as _rt_import
 _rt_raw=(ROOT/'docs/paid-launch/ncaaf-reviewed-target-binding-v1.json').read_bytes().replace(b'\r\n',b'\n')
 _require(hashlib.sha256(_rt_raw).hexdigest()==_RT_BINDING_SHA256,'REVIEWED_BINDINGS_CHANGED')
