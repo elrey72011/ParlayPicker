@@ -71,9 +71,9 @@ def test_six_way_current_gate_preserves_limits_and_all_artifacts():
     import yaml
     workflow=yaml.load((runner.ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)
     shard=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']
-    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,10)]
+    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,12)]
     assert shard['strategy']['fail-fast']=='false' and shard['timeout-minutes']=='30'
-    assert '--shards 9' in shard['steps'][-2]['run'] and '--shards 9' in gate['steps'][-1]['run']
+    assert '--shards 11' in shard['steps'][-2]['run'] and '--shards 11' in gate['steps'][-1]['run']
     assert shard['steps'][-1]['if']=='${{ !cancelled() }}'
     assert shard['steps'][-1]['with']['if-no-files-found']=='error'
     assert gate['needs']=='full-suite-tests' and gate['steps'][0]['run']=='test "$SHARD_RESULT" = success'
