@@ -34,6 +34,14 @@ def historical_test_consumers(module,live):
 
 @pytest.fixture(autouse=True)
 def exact_released_scope_contract_inputs(request,monkeypatch):
+    # The current successor gate must inspect live inputs, never historical views.
+    if (request.module.__name__.rsplit('.',1)[-1]=='test_ci_fixture_stability_scope'
+        and Path(request.module.__file__).resolve()==Path(__file__).resolve().with_name('test_ci_fixture_stability_scope.py')):
+        from tests.ci_fixture_stability_inputs import install_exact_predecessor_sources
+        install_exact_predecessor_sources(request,monkeypatch)
+        return
+    from tests.ci_fixture_stability_inputs import install_exact_predecessor_sources
+    install_exact_predecessor_sources(request,monkeypatch)
     from tests.ncaaf_staged_capacity_fixtures import install_reviewed_target_profile_inputs
     install_reviewed_target_profile_inputs(request,monkeypatch)
     from ncaaf_transport_scope_inputs import install
@@ -73,7 +81,14 @@ class _HistoricalSourceSetup:
             yield
             return
         module=sys.modules.get(fixturedef.func.__module__)
-        if (fixturedef.scope!='session' or inspect.isgeneratorfunction(fixturedef.func)
+        exact_module_predecessor = (
+            fixturedef.scope == 'module' and fixturedef.argname == 'predecessor'
+            and module is not None
+            and module.__name__.split('.')[-1] == 'test_football_document_ci_performance'
+            and Path(module.__file__).resolve() ==
+                Path(__file__).resolve().with_name('test_football_document_ci_performance.py'))
+        if ((fixturedef.scope!='session' and not exact_module_predecessor)
+            or inspect.isgeneratorfunction(fixturedef.func)
             or module is None or not module.__name__.split('.')[-1].startswith('test_')
             or module.__name__.split('.')[-1]=='test_ncaaf_future_spread_scope'):
             yield

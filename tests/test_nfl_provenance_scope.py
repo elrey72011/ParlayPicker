@@ -52,6 +52,8 @@ def prepared(tmp_path_factory):
         git(repo,"config","user.name","Offline Test")
         git(repo,"config","user.email","offline@example.invalid")
         git(repo,"config","core.autocrlf","false")
+        git(repo,'config','gc.auto','0')
+        git(repo,'config','maintenance.auto','false')
         current_guard=guard._home_previous_main_source(guard.GUARD_PATH,(SOURCE/guard.GUARD_PATH).read_bytes().replace(b"\r\n",b"\n"))
         previous=guard._nfl_previous_guard_source(current_guard)
         original=current_guard.split(b"\nPOLICY_PATH =",1)[0]+b"\n"
@@ -96,6 +98,7 @@ def prepared(tmp_path_factory):
         binding["reviewed_blobs"]={p:git(repo,"hash-object","--",p) for p in guard.NFL_PATHS if p!=guard.GUARD_PATH}
         implementation,candidate,policy=seal(repo,binding)
         guard.ROOT=original_root
+        git(repo,'gc','--prune=never')
         return repo,binding,implementation,candidate,policy
 
 
