@@ -28,6 +28,8 @@ def prepared(tmp_path_factory):
  original_root=guard.ROOT
  with blocked_network():
   git(repo,"init","-q");git(repo,"config","user.name","Offline Test");git(repo,"config","user.email","offline@example.invalid");git(repo,"config","core.autocrlf","false")
+  git(repo,'config','gc.auto','0')
+  git(repo,'config','maintenance.auto','false')
   current=(SOURCE/guard.GUARD_PATH).read_bytes().replace(b"\r\n",b"\n")
   previous=guard._slate_audit_previous_guard_source(current)
   original=current.split(b"\nPOLICY_PATH =",1)[0]+b"\n"
@@ -56,6 +58,7 @@ def prepared(tmp_path_factory):
   for path in guard.SLATE_AUDIT_PATHS:write(repo,path,(SOURCE/path).read_bytes().replace(b"\r\n",b"\n"))
   binding["reviewed_blobs"]={p:git(repo,"hash-object",p) for p in guard.SLATE_AUDIT_PATHS if p!=guard.GUARD_PATH}
   implementation,candidate,policy=seal(repo,binding);guard.ROOT=original_root
+  git(repo,'gc','--prune=never')
  return repo,binding,implementation,candidate,policy
 
 
