@@ -1,0 +1,71 @@
+name: Bounded historical input stability diagnostic v2
+'on':
+  push:
+    branches:
+    - validation/ci-stability-historical-input-diagnostic-v2
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    name: historical-input diagnostic (${{ matrix.sequence }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        sequence:
+        - a
+        - b
+    steps:
+    - name: Start bounded job clock
+      run: python3 -c 'import json,os,time; from pathlib import Path; Path(os.environ["RUNNER_TEMP"]).joinpath("diagnostic-job-start.json").write_text(json.dumps(dict(monotonic=time.perf_counter())))'
+    - uses: actions/checkout@v5
+      with:
+        path: tools
+        fetch-depth: 1
+        persist-credentials: false
+    - uses: actions/checkout@v5
+      with:
+        path: candidate
+        ref: d30857c7dc90050c86abc9379bea7e08945f7c02
+        fetch-depth: 1
+        persist-credentials: false
+    - uses: actions/checkout@v5
+      with:
+        path: baseline
+        ref: 8b79b0a0eead4f63a041a551283a4b6be2980d72
+        fetch-depth: 1
+        persist-credentials: false
+    - uses: actions/setup-python@v6
+      with:
+        python-version: 3.12.15
+        cache: pip
+        cache-dependency-path: candidate/requirements.txt
+    - name: Authenticate generated tools and exact constraints
+      run: 'mkdir diagnostic-output
+
+        python -I -B tools/.ci-tools/stability/verify_tools.py 071a66b59bf564b0ebc10798c6f826a9d9f226522bc68e94da6b161e04831e2f > diagnostic-output/helper-verification.json'
+    - name: Install matching public dependencies
+      run: 'python -m pip install pip==26.2.1
+
+        python -m pip install -r candidate/requirements.txt pytest -c tools/.ci-tools/stability/constraints.txt'
+    - name: Record installed version identities
+      run: 'python -I -c ''import importlib.metadata,json,platform; from pathlib import Path; Path("diagnostic-output/environment.json").write_text(json.dumps(dict(python=platform.python_version(),platform=platform.platform(),packages={d.metadata["Name"]:d.version
+        for d in importlib.metadata.distributions()}),sort_keys=True,indent=2))''
+
+        git --version > diagnostic-output/git-version.txt
+
+        google-chrome --version > diagnostic-output/chrome-version.txt'
+    - name: Verify sanitized helper cleanup with local synthetic fixtures
+      run: python -I -B tools/.ci-tools/stability/validate_helpers.py --output diagnostic-output/helper-safety --temp-parent "$RUNNER_TEMP"
+    - name: Run one approved diagnostic sequence
+      run: python -I -B tools/.ci-tools/stability/run_job.py --job "${{ matrix.sequence }}" --candidate "$GITHUB_WORKSPACE/candidate" --baseline "$GITHUB_WORKSPACE/baseline"
+        --output "$GITHUB_WORKSPACE/diagnostic-output" --job-start "$RUNNER_TEMP/diagnostic-job-start.json"
+    - name: Retain complete or partial diagnostic evidence
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ci-stability-historical-input-diagnostic-${{ matrix.sequence }}
+        path: diagnostic-output
+        retention-days: 14
+        if-no-files-found: error

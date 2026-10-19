@@ -1,0 +1,18 @@
+{
+  "version": "ci-stability-one-shot-tools-v2",
+  "candidate_head": "97ed96247939165c2f73026525e31e1c3dba9302",
+  "candidate_tree": "945cab79d9674ee15e4d3d81f088e9c5beab969e",
+  "source_merge": "d30857c7dc90050c86abc9379bea7e08945f7c02",
+  "base": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+  "proposal_sha256": "12e3046831d8fde24748e5193a2e6a54311e1be318e703d3739fe6e1c41da7b2",
+  "files": {
+    "attribution.py": "5fd49f43557ba66637c4a2b338efbb765d82a52c3c8974cc0e992204c6a509c3",
+    "constraints.txt": "e905ce367f1d6d65ae1c95bf2d2b3ec11cdde8bf7ac5e80878735e5688b809bb",
+    "contract.json": "dba020123a67b6cc3b44d8590059f7e168d9668856d1a42ad4b459fd8b214284",
+    "failure_capture.py": "8e0b9035a10cc91fe7acf24f84393345a554075e2ab9a7cce693d4b0f23a3469",
+    "probe.py": "08f88186be28c9be1792ea47db3a5f17a53b5205ce565d1983484c9aac71a49a",
+    "run_job.py": "5337e5fd10d9b4fcf583e84dc16df5debf5bf4a287302b17a13715951cefac91",
+    "validate_helpers.py": "f03a39536042071fc49aecfa97cba2420e65ea84ea3c02da8729981f0388ad25",
+    "verify_tools.py": "7ff2849a9ff5337fd7a9d1bc44f4accf7d2f1815141bb3cfaba7e4275df16b2c"
+  }
+}
