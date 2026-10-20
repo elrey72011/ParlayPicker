@@ -168,3 +168,11 @@ No extra diagnostic, retry, model/acquisition change or operational action.
 Native probabilities,source authentication,clock/security limits and paid release
 checks remain intact. CFBD timeout and DraftKings applicability remain UNKNOWN
 and unresolved respectively.
+
+The first local capacity successor3ef11553752b is preserved: combined325-case
+selection stopped after36PASS and1FAIL,288unrun. The failure occurred before
+the original single-advisory assertions: a captured Path.read_bytes consumed a
+later Path.open projection, so the new edge attempted a second transition.
+Registered capacity reads now use authenticated physical bytes independently
+for both methods; unrelated reads/patches remain delegated and owned cleanup
+is unchanged. No rejection/assertion was suppressed and no hosted run consumed.

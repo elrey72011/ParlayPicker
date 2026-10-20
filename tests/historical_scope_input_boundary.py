@@ -707,18 +707,19 @@ def install_capacity_input_view(plan,patch):
         try:relative=path.resolve().relative_to(ROOT).as_posix()
         except ValueError:relative=None
         if relative not in records or mode not in ('r','rb'):return native_open(path,mode,*args,**kwargs)
-        with native_open(path,'rb') as stream:raw=stream.read()
-        value=image(relative,raw)
+        value=image(relative,physical_bytes(path))
         if mode=='rb':return io.BytesIO(value)
         import locale
         encoding=kwargs.get('encoding') or 'utf-8'
         if encoding=='locale':encoding=locale.getencoding()
         return io.StringIO(value.decode(encoding))
     def read_bytes(path):
-        raw=read(path)
         try:relative=path.resolve().relative_to(ROOT).as_posix()
-        except ValueError:return raw
-        return image(relative,raw) if relative in records else raw
+        except ValueError:return read(path)
+        # Path.read_bytes itself calls the currently owned Path.open. Start this
+        # edge from authenticated physical bytes so later historical views cannot
+        # be consumed and transformed a second time by this earlier edge.
+        return image(relative,physical_bytes(path)) if relative in records else read(path)
     patch.setattr(Path,'open',opened);patch.setattr(Path,'read_bytes',read_bytes)
     return True
 
