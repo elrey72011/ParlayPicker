@@ -146,3 +146,25 @@ boundary regression exposed an outdated current helper hash; successor metadata
 now authenticates the prior physical source before refreshing current afterimages
 and actual API definition lines. Historical preimages and expected outputs are not
 regenerated. The complete registry consistency check remains required.
+
+## Measured capacity successor after the shared boundary
+
+Approved amendment `dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8` uses the completed314-case Ubuntu
+diagnostic39455718387:314 passing identities exactly once, zero failures/errors/skips,
+15 hashed artifact files verified. Its separate23-case PostgreSQL service phase
+remains valid from39450438018. Diagnostic evidence is not full release coverage.
+Twelve exact advisory rows (three updates,nine missing) retain every earlier
+measurement/reference; source-intake and Stage1 slower observations are unchanged.
+Current application/reconciliation capacity is twelve whole-file shards with the
+unchanged scheduler and30-minute limits. Historical eleven/nine/seven/six/five
+workflow and347-row profile assertions retain exact authenticated predecessor
+inputs before fixture/import/read consumption. Live gates read actual12 capacity.
+The original347-row assertions and hashes are unchanged; no test is skipped.
+The observed setup work invalidates the92.586s preview: current11 assignment
+forecasts32m03.970s. Twelve-way157.605s reserve is provisional for the old8646
+inventory; final IDs and added setup/collection/report/upload remain required,
+with>=120s reserve before publication and the single conditional release cycle.
+No extra diagnostic, retry, model/acquisition change or operational action.
+Native probabilities,source authentication,clock/security limits and paid release
+checks remain intact. CFBD timeout and DraftKings applicability remain UNKNOWN
+and unresolved respectively.

@@ -107,8 +107,14 @@ def native_context(name, node):
         return node not in {
             'test_single_advisory_amendment_preserves_all_other_rows_and_metadata',
             'test_second_advisory_amendment_retains_exact_single_entry_predecessor',
-            'test_second_advisory_preimage_is_narrow_authenticated_and_restored'}
+            'test_second_advisory_preimage_is_narrow_authenticated_and_restored',
+            'test_complete_profile_refresh_preserves_all_prior_rows_and_measurements',
+            'test_complete_profile_views_are_exact_reject_alteration_and_restore_current_reads'}
     return (name, node) in {
+        ('test_ci_five_shards', 'test_five_shard_gate_uploads_and_reconciles_all_five'),
+        ('test_ci_six_shards', 'test_six_way_current_gate_preserves_limits_and_all_artifacts'),
+        ('test_ci_test_shards', 'test_reviewed_workflow_preserves_limits_production_safety_and_three_shard_gate'),
+        ('test_ncaaf_staged_ci_capacity', 'test_current_nine_way_configuration_keeps_original_limits'),
         ('test_ncaaf_transport_scope', 'test_external_fixture_children_keep_their_actual_live_context'),
         ('test_ci_scheduling_fixture_scope', 'test_unchanged_native_context_assertion_receives_no_projection')}
 
@@ -664,6 +670,58 @@ class InputOwner:
                 self.parent.resume()
 
 
+
+def capacity_input_records(plan):
+    """Finish the exact input edge after apply_selected_inputs authenticates plan."""
+    binding_raw=physical_bytes(ROOT/BINDING)
+    if sha(binding_raw)!=plan.binding_sha256:
+        raise ValueError('HISTORICAL_BINDING_CHANGED')
+    binding=json.loads(binding_raw)
+    relative='tests/ci_fixture_stability_inputs.py';raw=physical_bytes(ROOT/relative)
+    identity=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+    if identity!=binding['reviewed_blobs'][relative]:
+        raise ValueError('CI_CAPACITY_INPUT_HELPER_CHANGED')
+    from tests import ci_fixture_stability_inputs as inputs
+    records=json.loads(json.dumps(inputs.CAPACITY_SOURCE_RECORDS))
+    encoded=(json.dumps(records,sort_keys=True,indent=2,allow_nan=False)+'\n').encode()
+    if (sha(encoded)!=binding['measured_capacity']['source_records_sha256']
+            or set(records)!=set(binding['measured_capacity']['source_paths'])):
+        raise ValueError('CI_CAPACITY_INPUT_GENERATION_CHANGED')
+    return records
+
+def install_capacity_input_view(plan,patch):
+    if plan.role is not Role.HISTORICAL:return False
+    records=capacity_input_records(plan)
+    read=Path.read_bytes;native_open=Path.open
+    def image(relative,raw):
+        row=records[relative];digest=sha(raw.replace(b'\r\n',b'\n'))
+        if digest==row['before_sha256']:return raw
+        if digest!=row['after_sha256']:raise ValueError('CI_CAPACITY_INPUT_GENERATION_CHANGED')
+        z=zlib.decompressobj();value=z.decompress(base64.b85decode(row['compressed']),8*1024*1024+1)
+        identity=hashlib.sha1(b'blob '+str(len(value)).encode()+b'\0'+value).hexdigest()
+        if not (z.eof and not z.unused_data and len(value)==row['bytes']<=8*1024*1024
+                and sha(value)==row['before_sha256'] and identity==row['before_git_blob']):
+            raise ValueError('CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED')
+        return value
+    def opened(path,mode='r',*args,**kwargs):
+        try:relative=path.resolve().relative_to(ROOT).as_posix()
+        except ValueError:relative=None
+        if relative not in records or mode not in ('r','rb'):return native_open(path,mode,*args,**kwargs)
+        with native_open(path,'rb') as stream:raw=stream.read()
+        value=image(relative,raw)
+        if mode=='rb':return io.BytesIO(value)
+        import locale
+        encoding=kwargs.get('encoding') or 'utf-8'
+        if encoding=='locale':encoding=locale.getencoding()
+        return io.StringIO(value.decode(encoding))
+    def read_bytes(path):
+        raw=read(path)
+        try:relative=path.resolve().relative_to(ROOT).as_posix()
+        except ValueError:return raw
+        return image(relative,raw) if relative in records else raw
+    patch.setattr(Path,'open',opened);patch.setattr(Path,'read_bytes',read_bytes)
+    return True
+
 def apply_selected_inputs(plan, request, patch):
     if plan.role is not Role.HISTORICAL:
         return False
@@ -671,6 +729,7 @@ def apply_selected_inputs(plan, request, patch):
     if plan.generated_contract:
         _install_generated_source_input(plan,patch,live)
         return True
+    install_capacity_input_view(plan,patch)
     records=json.loads(physical_bytes(ROOT/BINDING))['historical_input_boundary'].get('helper_preimages',{})
     if records:
         read=Path.read_bytes

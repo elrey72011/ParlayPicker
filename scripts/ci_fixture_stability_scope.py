@@ -17,6 +17,10 @@ PROPOSAL = '261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d'
 CONSOLIDATED_AMENDMENT = 'b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b850b36fd7e'
 HISTORICAL_INPUT_AMENDMENT = '12e3046831d8fde24748e5193a2e6a54311e1be318e703d3739fe6e1c41da7b2'
 SHARED_BOUNDARY_AMENDMENT = '8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f'
+MEASURED_CAPACITY_AMENDMENT = 'dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8'
+CAPACITY_PREDECESSOR = 'bea35f9cd39d26c54130d7508cef0dbb245fa0b6'
+CAPACITY_PREDECESSOR_TREE = '3f8c0de5ae3a9900f031e1e26c93cbe848547181'
+CAPACITY_LEDGER_SHA256 = 'a6a1143c0f264136cecaf4ed543b8ddb04d9b52d4969ffad89152e8259a0fd65'
 PRESERVED_CANDIDATE = '97ed96247939165c2f73026525e31e1c3dba9302'
 PRESERVED_TREE = '945cab79d9674ee15e4d3d81f088e9c5beab969e'
 COMPLETE_LEDGER_SHA256 = '5eec77cd6d43fbd41b3839d7b99c135bfd0cb2603e92b794874385f8432261b7'
@@ -169,6 +173,7 @@ def make_policy(g, binding, implementation):
     before, after = trees(g, binding['base']), trees(g, implementation)
     return dict(schema_version=85, policy_version='ci-fixture-stability-v1',
         proposal_sha256=PROPOSAL, shared_historical_boundary_amendment_sha256=binding.get('shared_historical_boundary_amendment_sha256'),
+        measured_capacity_amendment_sha256=binding.get('measured_capacity_amendment_sha256'),
         advisory_amendment_sha256='c7597d04525eca38a52c7207f75f45829560bd6fa1ab0ce1f5ba2a1bfa7dcf45',
         second_advisory_amendment_sha256='6cf28cd1db29cd0ba101cce67b8ac3bcc5d6857b61ba555b6aa382298fda7295',
         consolidated_advisory_amendment_sha256=CONSOLIDATED_AMENDMENT,historical_input_amendment_sha256=HISTORICAL_INPUT_AMENDMENT,complete_profile_ledger_sha256=COMPLETE_LEDGER_SHA256, base_sha=binding['base'], base_tree=binding['base_tree'],
@@ -199,19 +204,27 @@ def validate(g, manifest_path, comparison_base, binding):
     # Original synthetic baseline/seal contracts still start at their supplied
     # exact BASE. Only the actual reviewed checkout may extend the preserved seal.
     successor = shared and BASE == '8b79b0a0eead4f63a041a551283a4b6be2980d72'
-    parent = PRESERVED_CANDIDATE if successor else BASE
+    capacity = binding.get('measured_capacity_amendment_sha256') == MEASURED_CAPACITY_AMENDMENT
+    if binding.get('measured_capacity_amendment_sha256') is not None:
+        require(capacity and binding['measured_capacity']['ledger_sha256']==CAPACITY_LEDGER_SHA256,
+                'MEASURED_CAPACITY_PROPOSAL_NOT_APPROVED')
+    parent = (CAPACITY_PREDECESSOR if capacity else PRESERVED_CANDIDATE) if successor else BASE
     require(g.git('show', '-s', '--format=%P', implementation).split() == [parent], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
     require(not g.exists_at(BASE, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
     if successor:
         require(binding.get('preserved_candidate') == PRESERVED_CANDIDATE and binding.get('preserved_tree') == PRESERVED_TREE,
                 'PRESERVED_CANDIDATE_CHANGED')
-        require(g.git('rev-parse', parent+'^{tree}') == PRESERVED_TREE, 'PRESERVED_CANDIDATE_CHANGED')
+        require(g.git('rev-parse', PRESERVED_CANDIDATE+'^{tree}') == PRESERVED_TREE, 'PRESERVED_CANDIDATE_CHANGED')
+        if capacity:
+            require(binding['measured_capacity']['predecessor']==CAPACITY_PREDECESSOR
+                    and binding['measured_capacity']['predecessor_tree']==CAPACITY_PREDECESSOR_TREE
+                    and g.git('rev-parse',parent+'^{tree}')==CAPACITY_PREDECESSOR_TREE, 'CAPACITY_PREDECESSOR_CHANGED')
         require(g.git_bytes('show', implementation+':'+POLICY) == g.git_bytes('show', parent+':'+POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
     else:
         require(not g.exists_at(implementation, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
     changes = set(g.git('diff', '--name-only', BASE, implementation).splitlines())
     require(changes - ({POLICY} if successor else set()) == set(binding['paths']), 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
-    require(len(binding['paths']) == len(set(binding['paths'])) == (38 if shared else 33), 'IMPLEMENTATION_PATH_SET_CHANGED')
+    require(len(binding['paths']) == len(set(binding['paths'])) == (43 if capacity else 38 if shared else 33), 'IMPLEMENTATION_PATH_SET_CHANGED')
     require(policy == make_policy(g, binding, implementation), 'EXACT_POLICY_BINDINGS_CHANGED')
     impl = trees(g, implementation)
     require(set(binding['reviewed_blobs']) == set(binding['paths'])-{GUARD, BINDING}, 'REVIEWED_BINDING_SET_CHANGED')
@@ -231,7 +244,8 @@ def validate(g, manifest_path, comparison_base, binding):
         before = g.git_bytes('show', BASE+':'+path)
         after = g.git_bytes('show', implementation+':'+path)
         require(sha(before) == record['before_sha256'] and blob(before) == record['before_git_blob'], 'PREDECESSOR_INPUT_CHANGED')
-        require(sha(after) == record['after_sha256'] and namespace['original_source'](path, after) == before, 'PREDECESSOR_INPUT_CHANGED')
+        authenticated_after=namespace['capacity_predecessor_source'](path,after) if capacity else after
+        require(sha(authenticated_after) == record['after_sha256'] and namespace['original_source'](path, after) == before, 'PREDECESSOR_INPUT_CHANGED')
     if successor:
         helpers=binding['historical_input_boundary']['helper_preimages']
         require(set(helpers)=={'tests/ci_fixture_scope_inputs.py','tests/ncaaf_transport_scope_inputs.py','tests/ncaaf_staged_capacity_fixtures.py'}, 'HISTORICAL_HELPER_INPUT_SET_CHANGED')

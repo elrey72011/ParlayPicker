@@ -520,3 +520,39 @@ def test_direct_open_projection_is_exact_and_restored_for_historical_reader():
         assert historical==source.original_source('tests/ncaaf_future_scope_inputs.py',raw)
         assert source.original_source('tests/ncaaf_future_scope_inputs.py',raw+b'UNREVIEWED')==raw+b'UNREVIEWED'
     assert Path.open is before_open and Path.read_bytes is before_read
+
+
+def test_current_measured_capacity_profile_preserves_history():
+    from tests import ci_fixture_stability_inputs as inputs
+    from scripts import run_ci_tests as runner
+    raw=(ROOT/inputs.PROFILE).read_bytes()
+    previous=inputs.capacity_predecessor_source(inputs.PROFILE,raw)
+    assert scope.sha(previous)=='6ea7580a2d3098c6906fd111c8d0f32bda7e3daec321e4717fa58aa03ba42cba'
+    old=json.loads(previous);current=json.loads(raw)
+    before={row['path']:row for row in old['files']};after={row['path']:row for row in current['files']}
+    manifest=current['ci_fixture_stability_measured_capacity_amendment']
+    assert manifest['proposal_sha256']==scope.MEASURED_CAPACITY_AMENDMENT
+    assert manifest['ledger_sha256']==scope.CAPACITY_LEDGER_SHA256 and manifest['multiplier']==1.15
+    changed={path for path in after if before.get(path)!=after[path]}
+    assert changed==set(manifest['paths']) and len(changed)==12
+    assert len(changed & set(before))==3 and len(set(after)-set(before))==9
+    assert all(current[k]==v for k,v in old.items() if k not in {'files','sources'})
+    assert all(current['sources'][k]==v for k,v in old['sources'].items())
+    for path in changed:
+        row=after[path];prior=before.get(path,{})
+        for field in ('completed_measurements','references'):
+            assert row[field][:len(prior.get(field,[]))]==prior.get(field,[])
+        measurements=[r for r in row['completed_measurements'] if r.get('kind','completed_junit_testcase_sum')=='completed_junit_testcase_sum' and r['count']==row['profiled_tests'] and r.get('measurement_complete') is not False]
+        assert row['seconds']==round(max(r['seconds'] for r in measurements)*1.15,6)
+        assert row['seconds']>=prior.get('seconds',0)
+        source=current['sources'][row['completed_measurements'][-1]['source']]
+        assert source['completed']==source['identities']==row['profiled_tests']
+        assert source['failures']==source['errors']==source['skips']==0
+        assert source['junit_sha256']=='4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a'
+        assert source['checkout_commit']=='bea35f9cd39d26c54130d7508cef0dbb245fa0b6'
+    assert after['tests/test_source_evidence_intake.py']==before['tests/test_source_evidence_intake.py']
+    assert after['tests/test_football_stage1.py']==before['tests/test_football_stage1.py']
+    assert runner.load_profile(runner.DEFAULT_PROFILE)['sha256']==scope.sha(raw)
+    workflow=(ROOT/'.github/workflows/ci.yml').read_text()
+    assert 'shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]' in workflow
+    assert workflow.count('--shards 12')==2 and 'timeout-minutes: 30' in workflow

@@ -664,3 +664,66 @@ def test_stability_generation_keeps_current_namespace_and_exact_prior_source(con
         native._ci_fixture_module()
     assert sys.modules['scripts.check_launch_change_scope'] is entry
     assert Path.open is opened and Path.read_bytes is read
+
+
+def test_capacity_historical_profile_and_nested_current_gate():
+    from tests import ci_fixture_stability_inputs as inputs
+    profile=boundary.ROOT/inputs.PROFILE
+    physical=boundary.physical_bytes(profile)
+    prior=inputs.capacity_predecessor_source(inputs.PROFILE,physical)
+    assert boundary.sha(prior)=='6ea7580a2d3098c6906fd111c8d0f32bda7e3daec321e4717fa58aa03ba42cba'
+    historical=request('test_ci_fixture_stability_scope','test_complete_profile_refresh_preserves_all_prior_rows_and_measurements')
+    current=request('test_ci_test_shards','test_reviewed_workflow_preserves_limits_production_safety_and_three_shard_gate')
+    old=boundary.resolve_context(historical);new=boundary.resolve_context(current)
+    assert old.role is boundary.Role.HISTORICAL and new.role in {boundary.Role.NATIVE,boundary.Role.LIVE}
+    opened,reader=Path.open,Path.read_bytes
+    with boundary.InputOwner(old) as owner:
+        assert boundary.apply_selected_inputs(old,historical,owner.patch)
+        assert profile.read_bytes()==prior
+        assert '--shards 11' in (boundary.ROOT/'.github/workflows/ci.yml').read_text()
+        with boundary.InputOwner(new) as inner:
+            assert not boundary.apply_selected_inputs(new,current,inner.patch)
+            assert profile.read_bytes()==physical
+            assert '--shards 12' in (boundary.ROOT/'.github/workflows/ci.yml').read_text()
+        assert profile.read_bytes()==prior
+    assert Path.open is opened and Path.read_bytes is reader
+    assert profile.read_bytes()==physical
+
+
+def test_capacity_records_and_binding_mutations_reject(monkeypatch):
+    from tests import ci_fixture_stability_inputs as inputs
+    req=request('test_ci_fixture_stability_scope','test_complete_profile_views_are_exact_reject_alteration_and_restore_current_reads')
+    plan=boundary.resolve_context(req);boundary.authenticate_plan(plan)
+    records=boundary.capacity_input_records(plan)
+    assert set(records)==set(inputs.CAPACITY_SOURCE_RECORDS)
+    changed=json.loads(json.dumps(inputs.CAPACITY_SOURCE_RECORDS))
+    changed[inputs.PROFILE]['before_git_blob']='0'*40
+    with monkeypatch.context() as patch:
+        patch.setattr(inputs,'CAPACITY_SOURCE_RECORDS',changed)
+        with pytest.raises(ValueError,match='CI_CAPACITY_INPUT_GENERATION_CHANGED'):
+            boundary.capacity_input_records(plan)
+        with pytest.raises(ValueError,match='CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED'):
+            inputs.capacity_predecessor_source(inputs.PROFILE,boundary.physical_bytes(boundary.ROOT/inputs.PROFILE))
+    physical=boundary.physical_bytes
+    for relative,code in [('tests/ci_fixture_stability_inputs.py','CI_CAPACITY_INPUT_HELPER_CHANGED'),(boundary.BINDING,'HISTORICAL_BINDING_CHANGED')]:
+        with monkeypatch.context() as patch:
+            patch.setattr(boundary,'physical_bytes',lambda path,_rel=relative:physical(path)+b'UNREVIEWED' if Path(path)==boundary.ROOT/_rel else physical(path))
+            with pytest.raises(ValueError,match=code):boundary.capacity_input_records(plan)
+    raw=physical(boundary.ROOT/inputs.PROFILE)
+    assert inputs.capacity_predecessor_source(inputs.PROFILE,raw+b'UNREVIEWED')==raw+b'UNREVIEWED'
+    assert boundary.capacity_input_records(plan)==records
+
+
+def test_capacity_failure_cleanup_restores_live_inputs():
+    from tests import ci_fixture_stability_inputs as inputs
+    req=request('test_ci_fixture_stability_scope','test_complete_profile_refresh_preserves_all_prior_rows_and_measurements')
+    plan=boundary.resolve_context(req);raw=boundary.physical_bytes(boundary.ROOT/inputs.PROFILE)
+    opened,reader=Path.open,Path.read_bytes
+    with pytest.raises(RuntimeError,match='SYNTHETIC_CAPACITY_FAILURE'):
+        with boundary.InputOwner(plan) as owner:
+            boundary.apply_selected_inputs(plan,req,owner.patch)
+            assert (boundary.ROOT/inputs.PROFILE).read_bytes()!=raw
+            raise RuntimeError('SYNTHETIC_CAPACITY_FAILURE')
+    assert Path.open is opened and Path.read_bytes is reader
+    assert (boundary.ROOT/inputs.PROFILE).read_bytes()==raw
+    assert not boundary._ACTIVE[1:]

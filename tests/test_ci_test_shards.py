@@ -249,7 +249,7 @@ def test_reviewed_workflow_preserves_limits_production_safety_and_three_shard_ga
     import yaml
     workflow = yaml.load((runner.ROOT/'.github/workflows/ci.yml').read_text(), Loader=yaml.BaseLoader)
     jobs = workflow['jobs']
-    assert jobs['full-suite-tests']['strategy']['matrix']['shard'] == ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']
+    assert jobs['full-suite-tests']['strategy']['matrix']['shard'] == ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
     assert jobs['full-suite-tests']['timeout-minutes'] == '30'
     assert jobs['production-safety']['timeout-minutes'] == '20'
     assert jobs['full-suite']['needs'] == 'full-suite-tests'

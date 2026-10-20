@@ -358,6 +358,29 @@
     "proposal_sha256": "b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b850b36fd7e",
     "updated_existing": 345
   },
+  "ci_fixture_stability_measured_capacity_amendment": {
+    "before_profile_sha256": "6ea7580a2d3098c6906fd111c8d0f32bda7e3daec321e4717fa58aa03ba42cba",
+    "interpretation": "Completed diagnostic XML, not final release performance clearance; older compatible slower observations retained",
+    "ledger_sha256": "a6a1143c0f264136cecaf4ed543b8ddb04d9b52d4969ffad89152e8259a0fd65",
+    "missing_entries": 9,
+    "multiplier": 1.15,
+    "paths": [
+      "tests/test_ci_scheduling_fixture_copy.py",
+      "tests/test_ci_scheduling_fixture_scope.py",
+      "tests/test_drive_history_harness.py",
+      "tests/test_drive_history_loading.py",
+      "tests/test_historical_scope_input_boundary.py",
+      "tests/test_ncaaf_chronology_fixture_copy.py",
+      "tests/test_ncaaf_chronology_scope.py",
+      "tests/test_ncaaf_future_fixture_copy.py",
+      "tests/test_ncaaf_future_spread_scope.py",
+      "tests/test_ncaaf_reviewed_target_timing.py",
+      "tests/test_ncaaf_transport_scope.py",
+      "tests/test_shared_git_fixture_lifecycle.py"
+    ],
+    "proposal_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
+    "updated_entries": 3
+  },
   "fallback": {
     "minimum_file_seconds": 30.0,
     "seconds_per_test": 3.5
@@ -2763,6 +2786,83 @@
       "variance_multiplier": 1.15
     },
     {
+      "advisory_basis_seconds": 58.92100000000001,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "complete_profile_provenance": {
+        "current_test_blob": "6ed7fffda130facb1dd12d07bd2db1ce1114edc0",
+        "existing_multiplier": 1.15,
+        "ledger_sha256": "5eec77cd6d43fbd41b3839d7b99c135bfd0cb2603e92b794874385f8432261b7",
+        "ordered_identity_sha256": "6bf6e03df66a3c26789b41a8549b8a843cbb39e8942373140be1f15aa314ba88",
+        "proposal_sha256": "b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b850b36fd7e"
+      },
+      "completed_measurements": [
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 28.297,
+          "source": "ci-stability-complete-52b8ec6355218970-cb193e97ab"
+        },
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 28.87,
+          "source": "ci-stability-complete-5e21d0ea3756eb25-cb193e97ab"
+        },
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 20.184,
+          "source": "ci-stability-complete-ab1fadfe5fcd2ffe-cb193e97ab"
+        },
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 24.391,
+          "source": "ci-stability-complete-ffdb66b183f71fcf-cb193e97ab"
+        },
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 58.92100000000001,
+          "source": "ubuntu_boundary_39455718387_test_ci_scheduling_fixture_copy"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_ci_scheduling_fixture_copy.py",
+      "profiled_tests": 3,
+      "references": [
+        "ci-stability-complete-52b8ec6355218970-cb193e97ab",
+        "ci-stability-complete-5e21d0ea3756eb25-cb193e97ab",
+        "ci-stability-complete-ab1fadfe5fcd2ffe-cb193e97ab",
+        "ci-stability-complete-ffdb66b183f71fcf-cb193e97ab",
+        "ubuntu_boundary_39455718387_test_ci_scheduling_fixture_copy"
+      ],
+      "seconds": 67.75915
+    },
+    {
+      "advisory_basis_seconds": 48.673,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "completed_measurements": [
+        {
+          "count": 20,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 48.673,
+          "source": "ubuntu_boundary_39455718387_test_ci_scheduling_fixture_scope"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_ci_scheduling_fixture_scope.py",
+      "profiled_tests": 20,
+      "references": [
+        "ubuntu_boundary_39455718387_test_ci_scheduling_fixture_scope"
+      ],
+      "seconds": 55.97395
+    },
+    {
       "advisory_basis_seconds": 131.807,
       "basis": "Maximum source-compatible complete passing-file primary JUnit sum times unchanged1.15. Older observations and incomplete records retained separately; added candidate setup UNKNOWN.",
       "complete_profile_provenance": {
@@ -4627,8 +4727,29 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 6.172,
-      "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
+      "advisory_basis_seconds": 4.6209999999999996,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "completed_measurements": [
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 4.6209999999999996,
+          "source": "ubuntu_boundary_39455718387_test_drive_history_harness"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_drive_history_harness.py",
+      "profiled_tests": 3,
+      "references": [
+        "ubuntu_boundary_39455718387_test_drive_history_harness"
+      ],
+      "seconds": 5.31415
+    },
+    {
+      "advisory_basis_seconds": 6.574,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
       "completed_measurements": [
         {
           "count": 33,
@@ -4641,18 +4762,27 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 6.172,
           "source": "refresh1-completed-2"
+        },
+        {
+          "count": 33,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 6.574,
+          "source": "ubuntu_boundary_39455718387_test_drive_history_loading"
         }
       ],
       "kind": "estimated",
       "latest_measurement_complete": true,
+      "measurement_complete": true,
       "original_measured_seconds": 6.172,
       "path": "tests/test_drive_history_loading.py",
       "profiled_tests": 33,
       "references": [
         "oct11-pr-3",
-        "refresh1-completed-2"
+        "refresh1-completed-2",
+        "ubuntu_boundary_39455718387_test_drive_history_loading"
       ],
-      "seconds": 7.0978,
+      "seconds": 7.5601,
       "variance_multiplier": 1.15
     },
     {
@@ -9099,6 +9229,27 @@
       "variance_multiplier": 1.15
     },
     {
+      "advisory_basis_seconds": 145.441,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "completed_measurements": [
+        {
+          "count": 70,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 145.441,
+          "source": "ubuntu_boundary_39455718387_test_historical_scope_input_boundary"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_historical_scope_input_boundary.py",
+      "profiled_tests": 70,
+      "references": [
+        "ubuntu_boundary_39455718387_test_historical_scope_input_boundary"
+      ],
+      "seconds": 167.25715
+    },
+    {
       "advisory_basis_seconds": 51.599,
       "basis": "Maximum source-compatible complete passing-file primary JUnit sum times unchanged1.15. Older observations and incomplete records retained separately; added candidate setup UNKNOWN.",
       "complete_profile_provenance": {
@@ -13518,8 +13669,29 @@
       "variance_multiplier": 1.15
     },
     {
-      "advisory_basis_seconds": 108.837,
-      "basis": "Maximum source-compatible complete passing-file primary JUnit sum times unchanged1.15. Older observations and incomplete records retained separately; added candidate setup UNKNOWN.",
+      "advisory_basis_seconds": 70.074,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "completed_measurements": [
+        {
+          "count": 4,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 70.074,
+          "source": "ubuntu_boundary_39455718387_test_ncaaf_chronology_fixture_copy"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_ncaaf_chronology_fixture_copy.py",
+      "profiled_tests": 4,
+      "references": [
+        "ubuntu_boundary_39455718387_test_ncaaf_chronology_fixture_copy"
+      ],
+      "seconds": 80.5851
+    },
+    {
+      "advisory_basis_seconds": 286.706,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
       "complete_profile_provenance": {
         "current_test_blob": "ff76947cf947ca0c7433bf68f4ee65766aebaf86",
         "existing_multiplier": 1.15,
@@ -13569,6 +13741,13 @@
           "kind": "completed_junit_testcase_sum",
           "seconds": 108.837,
           "source": "ci-stability-complete-61a883a5dc80abc4-78ea3f8210"
+        },
+        {
+          "count": 15,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 286.706,
+          "source": "ubuntu_boundary_39455718387_test_ncaaf_chronology_scope"
         }
       ],
       "kind": "estimated",
@@ -13656,9 +13835,10 @@
         "nfl-pdf-capacity-main-1",
         "ci-stability-complete-4ca009b08cee3af7-78ea3f8210",
         "ci-stability-complete-4534444bf3b0faa7-78ea3f8210",
-        "ci-stability-complete-61a883a5dc80abc4-78ea3f8210"
+        "ci-stability-complete-61a883a5dc80abc4-78ea3f8210",
+        "ubuntu_boundary_39455718387_test_ncaaf_chronology_scope"
       ],
-      "seconds": 125.16255,
+      "seconds": 329.7119,
       "variance_multiplier": 1.15
     },
     {
@@ -14379,6 +14559,48 @@
       "variance_multiplier": 1.15
     },
     {
+      "advisory_basis_seconds": 57.095,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "completed_measurements": [
+        {
+          "count": 3,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 57.095,
+          "source": "ubuntu_boundary_39455718387_test_ncaaf_future_fixture_copy"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_ncaaf_future_fixture_copy.py",
+      "profiled_tests": 3,
+      "references": [
+        "ubuntu_boundary_39455718387_test_ncaaf_future_fixture_copy"
+      ],
+      "seconds": 65.65925
+    },
+    {
+      "advisory_basis_seconds": 231.333,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "completed_measurements": [
+        {
+          "count": 20,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 231.333,
+          "source": "ubuntu_boundary_39455718387_test_ncaaf_future_spread_scope"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_ncaaf_future_spread_scope.py",
+      "profiled_tests": 20,
+      "references": [
+        "ubuntu_boundary_39455718387_test_ncaaf_future_spread_scope"
+      ],
+      "seconds": 266.03295
+    },
+    {
       "advisory_basis_seconds": 0.691,
       "basis": "Maximum source-compatible complete passing-file primary JUnit sum times unchanged1.15. Older observations and incomplete records retained separately; added candidate setup UNKNOWN.",
       "complete_profile_provenance": {
@@ -14745,6 +14967,61 @@
       ],
       "seconds": 92.7475,
       "variance_multiplier": 1.15
+    },
+    {
+      "advisory_basis_seconds": 85.353,
+      "basis": "Maximum source-compatible complete passing-file primary JUnit sum times unchanged1.15. Older observations and incomplete records retained separately; added candidate setup UNKNOWN.",
+      "complete_profile_provenance": {
+        "current_test_blob": "5794d56138df18f4490130dc098191635ca2fddb",
+        "existing_multiplier": 1.15,
+        "ledger_sha256": "5eec77cd6d43fbd41b3839d7b99c135bfd0cb2603e92b794874385f8432261b7",
+        "ordered_identity_sha256": "6fbf1e4dc7b9a06223000afbc114338ee631d059d75ba5054733182ca1f17ec2",
+        "proposal_sha256": "b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b850b36fd7e"
+      },
+      "completed_measurements": [
+        {
+          "count": 11,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 61.961,
+          "source": "ci-stability-complete-23abc32e081e1c6d-432c89b842"
+        },
+        {
+          "count": 11,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 85.353,
+          "source": "ci-stability-complete-4970aa0e2f3b64d0-432c89b842"
+        },
+        {
+          "count": 11,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 85.022,
+          "source": "ci-stability-complete-4ca009b08cee3af7-432c89b842"
+        },
+        {
+          "count": 11,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 46.047,
+          "source": "ci-stability-complete-ab1fadfe5fcd2ffe-432c89b842"
+        },
+        {
+          "count": 11,
+          "kind": "completed_junit_testcase_sum",
+          "seconds": 63.359,
+          "source": "ci-stability-complete-ffdb66b183f71fcf-432c89b842"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_ncaaf_observed_spread_pair.py",
+      "profiled_tests": 11,
+      "references": [
+        "ci-stability-complete-23abc32e081e1c6d-432c89b842",
+        "ci-stability-complete-4970aa0e2f3b64d0-432c89b842",
+        "ci-stability-complete-4ca009b08cee3af7-432c89b842",
+        "ci-stability-complete-ab1fadfe5fcd2ffe-432c89b842",
+        "ci-stability-complete-ffdb66b183f71fcf-432c89b842"
+      ],
+      "seconds": 98.15595
     },
     {
       "advisory_basis_seconds": 4.485,
@@ -15909,6 +16186,27 @@
       "variance_multiplier": 1.15
     },
     {
+      "advisory_basis_seconds": 123.087,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "completed_measurements": [
+        {
+          "count": 10,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 123.087,
+          "source": "ubuntu_boundary_39455718387_test_ncaaf_reviewed_target_timing"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_ncaaf_reviewed_target_timing.py",
+      "profiled_tests": 10,
+      "references": [
+        "ubuntu_boundary_39455718387_test_ncaaf_reviewed_target_timing"
+      ],
+      "seconds": 141.55005
+    },
+    {
       "advisory_basis_seconds": 0.256,
       "basis": "Maximum source-compatible complete passing-file primary JUnit sum times unchanged1.15. Older observations and incomplete records retained separately; added candidate setup UNKNOWN.",
       "complete_profile_provenance": {
@@ -16774,6 +17072,27 @@
         "ci-stability-complete-ba91fadae9164898-5f7058c904"
       ],
       "seconds": 4.02845
+    },
+    {
+      "advisory_basis_seconds": 211.868,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "completed_measurements": [
+        {
+          "count": 19,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 211.868,
+          "source": "ubuntu_boundary_39455718387_test_ncaaf_transport_scope"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_ncaaf_transport_scope.py",
+      "profiled_tests": 19,
+      "references": [
+        "ubuntu_boundary_39455718387_test_ncaaf_transport_scope"
+      ],
+      "seconds": 243.6482
     },
     {
       "advisory_basis_seconds": 0.53,
@@ -30463,6 +30782,27 @@
       "variance_multiplier": 1.15
     },
     {
+      "advisory_basis_seconds": 64.293,
+      "basis": "Maximum compatible completed XML testcase sum, including setup/call/teardown, plus unchanged15% variance; prior observations retained.",
+      "completed_measurements": [
+        {
+          "count": 4,
+          "kind": "completed_junit_testcase_sum",
+          "measurement_complete": true,
+          "seconds": 64.293,
+          "source": "ubuntu_boundary_39455718387_test_shared_git_fixture_lifecycle"
+        }
+      ],
+      "kind": "estimated",
+      "measurement_complete": true,
+      "path": "tests/test_shared_git_fixture_lifecycle.py",
+      "profiled_tests": 4,
+      "references": [
+        "ubuntu_boundary_39455718387_test_shared_git_fixture_lifecycle"
+      ],
+      "seconds": 73.93695
+    },
+    {
       "advisory_basis_seconds": 0.005,
       "basis": "Maximum completed testcase sum from retained sources, plus explicit 15% advisory variance; excludes install, collection/report/upload. Historical incomplete observations, where retained, remain incomplete.",
       "completed_measurements": [
@@ -33752,109 +34092,6 @@
       ],
       "seconds": 0.9223,
       "variance_multiplier": 1.15
-    },
-    {
-      "advisory_basis_seconds": 28.87,
-      "basis": "Maximum source-compatible complete passing-file primary JUnit sum times unchanged1.15. Older observations and incomplete records retained separately; added candidate setup UNKNOWN.",
-      "complete_profile_provenance": {
-        "current_test_blob": "6ed7fffda130facb1dd12d07bd2db1ce1114edc0",
-        "existing_multiplier": 1.15,
-        "ledger_sha256": "5eec77cd6d43fbd41b3839d7b99c135bfd0cb2603e92b794874385f8432261b7",
-        "ordered_identity_sha256": "6bf6e03df66a3c26789b41a8549b8a843cbb39e8942373140be1f15aa314ba88",
-        "proposal_sha256": "b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b850b36fd7e"
-      },
-      "completed_measurements": [
-        {
-          "count": 3,
-          "kind": "completed_junit_testcase_sum",
-          "seconds": 28.297,
-          "source": "ci-stability-complete-52b8ec6355218970-cb193e97ab"
-        },
-        {
-          "count": 3,
-          "kind": "completed_junit_testcase_sum",
-          "seconds": 28.87,
-          "source": "ci-stability-complete-5e21d0ea3756eb25-cb193e97ab"
-        },
-        {
-          "count": 3,
-          "kind": "completed_junit_testcase_sum",
-          "seconds": 20.184,
-          "source": "ci-stability-complete-ab1fadfe5fcd2ffe-cb193e97ab"
-        },
-        {
-          "count": 3,
-          "kind": "completed_junit_testcase_sum",
-          "seconds": 24.391,
-          "source": "ci-stability-complete-ffdb66b183f71fcf-cb193e97ab"
-        }
-      ],
-      "kind": "estimated",
-      "measurement_complete": true,
-      "path": "tests/test_ci_scheduling_fixture_copy.py",
-      "profiled_tests": 3,
-      "references": [
-        "ci-stability-complete-52b8ec6355218970-cb193e97ab",
-        "ci-stability-complete-5e21d0ea3756eb25-cb193e97ab",
-        "ci-stability-complete-ab1fadfe5fcd2ffe-cb193e97ab",
-        "ci-stability-complete-ffdb66b183f71fcf-cb193e97ab"
-      ],
-      "seconds": 33.2005
-    },
-    {
-      "advisory_basis_seconds": 85.353,
-      "basis": "Maximum source-compatible complete passing-file primary JUnit sum times unchanged1.15. Older observations and incomplete records retained separately; added candidate setup UNKNOWN.",
-      "complete_profile_provenance": {
-        "current_test_blob": "5794d56138df18f4490130dc098191635ca2fddb",
-        "existing_multiplier": 1.15,
-        "ledger_sha256": "5eec77cd6d43fbd41b3839d7b99c135bfd0cb2603e92b794874385f8432261b7",
-        "ordered_identity_sha256": "6fbf1e4dc7b9a06223000afbc114338ee631d059d75ba5054733182ca1f17ec2",
-        "proposal_sha256": "b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b850b36fd7e"
-      },
-      "completed_measurements": [
-        {
-          "count": 11,
-          "kind": "completed_junit_testcase_sum",
-          "seconds": 61.961,
-          "source": "ci-stability-complete-23abc32e081e1c6d-432c89b842"
-        },
-        {
-          "count": 11,
-          "kind": "completed_junit_testcase_sum",
-          "seconds": 85.353,
-          "source": "ci-stability-complete-4970aa0e2f3b64d0-432c89b842"
-        },
-        {
-          "count": 11,
-          "kind": "completed_junit_testcase_sum",
-          "seconds": 85.022,
-          "source": "ci-stability-complete-4ca009b08cee3af7-432c89b842"
-        },
-        {
-          "count": 11,
-          "kind": "completed_junit_testcase_sum",
-          "seconds": 46.047,
-          "source": "ci-stability-complete-ab1fadfe5fcd2ffe-432c89b842"
-        },
-        {
-          "count": 11,
-          "kind": "completed_junit_testcase_sum",
-          "seconds": 63.359,
-          "source": "ci-stability-complete-ffdb66b183f71fcf-432c89b842"
-        }
-      ],
-      "kind": "estimated",
-      "measurement_complete": true,
-      "path": "tests/test_ncaaf_observed_spread_pair.py",
-      "profiled_tests": 11,
-      "references": [
-        "ci-stability-complete-23abc32e081e1c6d-432c89b842",
-        "ci-stability-complete-4970aa0e2f3b64d0-432c89b842",
-        "ci-stability-complete-4ca009b08cee3af7-432c89b842",
-        "ci-stability-complete-ab1fadfe5fcd2ffe-432c89b842",
-        "ci-stability-complete-ffdb66b183f71fcf-432c89b842"
-      ],
-      "seconds": 98.15595
     }
   ],
   "football_document_ci_cost_provenance": [
@@ -70787,6 +71024,306 @@
       "run_attempt": 1,
       "source_head": "4d806f4ad46d8385d5feff2f395b72bef3d70a78",
       "xml_sha256": "c5b9054fb501ca269c0da4363585e90b00590397447529ddcbfcc3642d13a807"
+    },
+    "ubuntu_boundary_39455718387_test_ci_scheduling_fixture_copy": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 3,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 3,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "6bf6e03df66a3c26789b41a8549b8a843cbb39e8942373140be1f15aa314ba88",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "6ed7fffda130facb1dd12d07bd2db1ce1114edc0",
+      "source_sha256": "b1b6a8b601515fa4bf97b3b88baa0947e97833794fe269910ebfd36b1f30e0b8"
+    },
+    "ubuntu_boundary_39455718387_test_ci_scheduling_fixture_scope": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 20,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 20,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "544e7dc809b3e05dbc989ac86398f55ab667c5092f0955bc17d50c00613319e0",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "0ec6f6e30312b039eaeceb6df80d2074be8c8690",
+      "source_sha256": "59f3be007c3bc828401467abe55320b3c8fa27dd31dc973d8a53d797741effb1"
+    },
+    "ubuntu_boundary_39455718387_test_drive_history_harness": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 3,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 3,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "31e41010e06e794988e10c3e403d64dc63b929fe0242d4184dc0862448a1e2cf",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "e2a487b44828048c96e21b30d92f7514db30ab47",
+      "source_sha256": "f63ae58b43988df47e9b21d0997448cc5f35a4c339a745a0a33a14a8415417e8"
+    },
+    "ubuntu_boundary_39455718387_test_drive_history_loading": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 33,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 33,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "d1023f4b67d2716edc0ab8f68d9ab414d656564a895411cf6d15c253edbcb31e",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "4100091f2a1a953f6a9ba94f915567ac241609d5",
+      "source_sha256": "64c9bf9670b21ae5d57dd41086ae1ec209a170ae3b4e808826e2bd285eaa28d2"
+    },
+    "ubuntu_boundary_39455718387_test_historical_scope_input_boundary": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 70,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 70,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "0af00fb5706341bacda3464e3b7deab99d3e1fee2c350324ae18199ba42a345a",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "a17fd237227f61a4e44105c2c8c1f6b4a990c6e6",
+      "source_sha256": "e6af85846e411797076a7b78c20fda0c6584b96557e95250324186a77fb7e672"
+    },
+    "ubuntu_boundary_39455718387_test_ncaaf_chronology_fixture_copy": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 4,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 4,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "7ee79f565da89d8e7710f43c0a441ced402037bd72f13952c8f141bf99b2e7d0",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "2be8740365bca8a023161161992340afb0ec513f",
+      "source_sha256": "fc58e8ed2edb5477aa5d9de287ecd63218191ee87d062de2ee2e0d9959114dce"
+    },
+    "ubuntu_boundary_39455718387_test_ncaaf_chronology_scope": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 15,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 15,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "c44beb1d196daf03abe958d5fbec052a5fc5265d7c68fed4909601b7c3116853",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "ff76947cf947ca0c7433bf68f4ee65766aebaf86",
+      "source_sha256": "33874a00c0b1a8be0568e6c77661d17bfec203f55f02c805844a3a400eec5b2d"
+    },
+    "ubuntu_boundary_39455718387_test_ncaaf_future_fixture_copy": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 3,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 3,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "cfa14d59a57da49a3bda10be9e5031f873a04505e712e8ca8bc13f34faa6344a",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "12fb369d0067d01056341fb71731f2fa34bcdc9f",
+      "source_sha256": "d58818af43a05f9bb60467cdaac2bc2c961431d7aa84dbcc1889d8f8f4fcc61a"
+    },
+    "ubuntu_boundary_39455718387_test_ncaaf_future_spread_scope": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 20,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 20,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "404cb677dae80ad008fbe76ca081690aec5137fc9ff2fc029a412af2cf212968",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "26f69dcd36cdb221f88ac1769a55f8321083821f",
+      "source_sha256": "9ea0c675a3928f8295fa6bf3e668b90faa6e2f60a4bc020d2dc4292d2b9a83dd"
+    },
+    "ubuntu_boundary_39455718387_test_ncaaf_reviewed_target_timing": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 10,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 10,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "8c7556a160bbffaa77a8c1a50513ca0a6c89ed550a5f4250957cd86f9ade8198",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "6108ddeda1949da6263ed45b1d7842ef84d6b920",
+      "source_sha256": "e06c9aee9adaca2ef4317df10c3f89d87231dab7e15d93483c6369c525f14329"
+    },
+    "ubuntu_boundary_39455718387_test_ncaaf_transport_scope": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 19,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 19,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "8590dc81f76f626033bb01aefaef2cace03390267968fd6b6beb025eb8f8d4fc",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "a9cd94a0554fec894491aa8e6b2d8e698c156277",
+      "source_sha256": "7d01be45cbeb1ccb241f330170cb62b8c99b1dd06c2c8acfa3db41801301eaec"
+    },
+    "ubuntu_boundary_39455718387_test_shared_git_fixture_lifecycle": {
+      "artifact_archive_sha256": "69c7c82104080f1c32955f61618f891d8d518b3801d50598dd0c50ae51543149",
+      "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+      "checkout_provenance": {
+        "checkout_commit": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
+        "shallow": true,
+        "shallow_boundary": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "tools_commit": "81937b4fafe0e2ea4dcf54cf642270347f4ce053"
+      },
+      "checkout_tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
+      "completed": 4,
+      "context": "One completed314-case application diagnostic; complete file count/order authenticated; not full release coverage",
+      "errors": 0,
+      "failures": 0,
+      "identities": 4,
+      "junit_sha256": "4c72d679ae685ddc76c905e6d82210e8b9fa464b4013df368910c093a470fc5a",
+      "kind": "completed_junit_file_slice",
+      "ordered_identity_encoding": "JSON array, ASCII escaping, comma/colon compact separators; release collection order",
+      "ordered_identity_sha256": "f6a5f295d7512710f4ccc4b3b3a5faa98c410e69c09c319cb5442e1a757cb921",
+      "run": 39455718387,
+      "run_attempt": 1,
+      "skips": 0,
+      "source_git_blob": "f88dd245e428733a1ddbca402fede84e4cc18b0f",
+      "source_sha256": "e9cf131346628e1a8bdc45a6c7412b886e5fb61547ebc017c881b0389a0ec2a7"
     }
   },
   "version": 1
