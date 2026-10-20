@@ -184,3 +184,28 @@ and record access authenticates the plan before inspecting the generation.
 The same new regression rejects unregistered plans and missing owners. No new
 cache or independent selector is introduced; repeated authentication remains live.
 The temporary synthetic view was restored, no files/provider requests changed.
+
+## Joint read-consistency and thirteen-shard successor
+
+Approved proposal `d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1` preserves the e013fd00961f candidate:
+combined shallow run247passed/1failed/77unrun. The cold original chronology
+assertion reproduced a read-interface mismatch: physical twelve-way source,
+outer eleven-way read_bytes, inner required nine-way open. Removing the redundant
+capacity read_bytes override retains physical-byte authentication in Path.open
+and lets both interfaces follow the same explicit nested view. The original
+assertion is unchanged. Process-local prototype evidence was not release validation.
+
+Current capacity is thirteen whole-file shards; all twelve approved advisory
+rows, scheduler, timeouts, source protection and production behavior are unchanged.
+An exact authenticated thirteen-to-reviewed-twelve edge precedes the existing
+twelve-to-eleven and older reconstruction. No frozen hash is regenerated.
+Existing capacity regressions now exercise both byte interfaces, actual inner
+chronology installation, native return, exception cleanup and successor tampering.
+
+Final8650-ID twelve-way assignment moved423 files from the earlier preview and
+left54.423s reserve before extra work; an explicit local regression budget reduced
+that sensitivity to17.646s. Thirteen-way168.658s is only a forecast using the same
+inventory/profile, older compatible/conservative bases,1.15 variability and133.25s
+overhead. New assertion/setup costs and final recollection must retain>=120s.
+Only the existing conditional full cycle is authorized after complete correctness;
+no new diagnostic, retry, provider or operational action is included.

@@ -18,9 +18,10 @@ CONSOLIDATED_AMENDMENT = 'b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b
 HISTORICAL_INPUT_AMENDMENT = '12e3046831d8fde24748e5193a2e6a54311e1be318e703d3739fe6e1c41da7b2'
 SHARED_BOUNDARY_AMENDMENT = '8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f'
 MEASURED_CAPACITY_AMENDMENT = 'dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8'
-CAPACITY_PREDECESSOR = 'ea320f9e5303d0d7915456c1aebb0b23dca85e8a'
-CAPACITY_PREDECESSOR_TREE = 'b80daa84027c2a5962eac7869b2d1f72b91b904c'
+CAPACITY_PREDECESSOR = 'e013fd00961fed706e9fd0b09e5df0e5aed79641'
+CAPACITY_PREDECESSOR_TREE = '74b87658785ab25432b3d0c60068125458f6a4b1'
 CAPACITY_LEDGER_SHA256 = 'a6a1143c0f264136cecaf4ed543b8ddb04d9b52d4969ffad89152e8259a0fd65'
+READ_CONSISTENCY_CAPACITY_AMENDMENT = 'd1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1'
 PRESERVED_CANDIDATE = '97ed96247939165c2f73026525e31e1c3dba9302'
 PRESERVED_TREE = '945cab79d9674ee15e4d3d81f088e9c5beab969e'
 COMPLETE_LEDGER_SHA256 = '5eec77cd6d43fbd41b3839d7b99c135bfd0cb2603e92b794874385f8432261b7'
@@ -174,6 +175,7 @@ def make_policy(g, binding, implementation):
     return dict(schema_version=85, policy_version='ci-fixture-stability-v1',
         proposal_sha256=PROPOSAL, shared_historical_boundary_amendment_sha256=binding.get('shared_historical_boundary_amendment_sha256'),
         measured_capacity_amendment_sha256=binding.get('measured_capacity_amendment_sha256'),
+        read_consistency_capacity_amendment_sha256=binding.get('read_consistency_capacity_amendment_sha256'),
         advisory_amendment_sha256='c7597d04525eca38a52c7207f75f45829560bd6fa1ab0ce1f5ba2a1bfa7dcf45',
         second_advisory_amendment_sha256='6cf28cd1db29cd0ba101cce67b8ac3bcc5d6857b61ba555b6aa382298fda7295',
         consolidated_advisory_amendment_sha256=CONSOLIDATED_AMENDMENT,historical_input_amendment_sha256=HISTORICAL_INPUT_AMENDMENT,complete_profile_ledger_sha256=COMPLETE_LEDGER_SHA256, base_sha=binding['base'], base_tree=binding['base_tree'],
@@ -208,6 +210,9 @@ def validate(g, manifest_path, comparison_base, binding):
     if binding.get('measured_capacity_amendment_sha256') is not None:
         require(capacity and binding['measured_capacity']['ledger_sha256']==CAPACITY_LEDGER_SHA256,
                 'MEASURED_CAPACITY_PROPOSAL_NOT_APPROVED')
+    if binding.get('read_consistency_capacity_amendment_sha256') is not None:
+        require(binding['read_consistency_capacity_amendment_sha256']==READ_CONSISTENCY_CAPACITY_AMENDMENT,
+                'READ_CONSISTENCY_CAPACITY_PROPOSAL_NOT_APPROVED')
     parent = (CAPACITY_PREDECESSOR if capacity else PRESERVED_CANDIDATE) if successor else BASE
     require(g.git('show', '-s', '--format=%P', implementation).split() == [parent], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
     require(not g.exists_at(BASE, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')

@@ -375,7 +375,7 @@
           }
         },
         "generation": "future",
-        "sha256": "8794bbb9f34195b0cd75dc1a5e12926dcd939adb8f074619b89b1027cebe00a2"
+        "sha256": "7f16b0af4446f519d50ff1cadd341a2565d6aa6beb4f609f6ea6cb49789ca1ec"
       },
       "tests/test_ci_scheduling_fixture_copy.py": {
         "fixtures": {},
@@ -403,7 +403,7 @@
       "tests/test_ci_six_shards.py": {
         "fixtures": {},
         "generation": "future",
-        "sha256": "28bb57427b46f46b836a416a5b08b94c17275688dac1267c79246ef8273bc994"
+        "sha256": "d535cfff4a2851cc82e3422383e73239f0d65a49fd8b1f42fc7a4ba4f4c6eed3"
       },
       "tests/test_ci_timing_profile.py": {
         "fixtures": {},
@@ -732,7 +732,7 @@
       "tests/test_ncaaf_staged_ci_capacity.py": {
         "fixtures": {},
         "generation": "future",
-        "sha256": "d72fb9075ea8fe65644bd55118d46d5ac1043507fa89081f53d31b34b72fc740"
+        "sha256": "7c16b2a69f7f484c6dfbb82b89c8bfd8cca35a7e40c18c01bc92eddf24c22336"
       },
       "tests/test_ncaaf_staged_scope.py": {
         "fixtures": {},
@@ -1267,12 +1267,13 @@
         }
       ]
     },
-    "current_shards": 12,
+    "current_shards": 13,
+    "joint_amendment_sha256": "d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1",
     "ledger_sha256": "a6a1143c0f264136cecaf4ed543b8ddb04d9b52d4969ffad89152e8259a0fd65",
     "older_profile_and_workflow_generations": "All unchanged; authenticated before consumption",
     "original_profile_sha256": "6ea7580a2d3098c6906fd111c8d0f32bda7e3daec321e4717fa58aa03ba42cba",
-    "predecessor": "ea320f9e5303d0d7915456c1aebb0b23dca85e8a",
-    "predecessor_tree": "b80daa84027c2a5962eac7869b2d1f72b91b904c",
+    "predecessor": "e013fd00961fed706e9fd0b09e5df0e5aed79641",
+    "predecessor_tree": "74b87658785ab25432b3d0c60068125458f6a4b1",
     "proposal_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
     "source_paths": [
       ".github/workflows/ci.yml",
@@ -1282,7 +1283,72 @@
       "tests/test_ci_test_shards.py",
       "tests/test_ncaaf_staged_ci_capacity.py"
     ],
-    "source_records_sha256": "51357af2525fc981279d3e329fee3389699494a09691166da6f68ea487b7387c"
+    "source_records_sha256": "51357af2525fc981279d3e329fee3389699494a09691166da6f68ea487b7387c",
+    "successor_paths": [
+      ".github/workflows/ci.yml",
+      "tests/test_ci_five_shards.py",
+      "tests/test_ci_six_shards.py",
+      "tests/test_ci_test_shards.py",
+      "tests/test_ncaaf_staged_ci_capacity.py"
+    ],
+    "successor_records_sha256": "ed6ca518635917d92e91d78f08c17cec1d2a5fe702e4b288ec0ff84fda53bdbe",
+    "thirteen_cardinality_edits": {
+      ".github/workflows/ci.yml": [
+        {
+          "after": "shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]",
+          "before": "shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]",
+          "count": 1
+        },
+        {
+          "after": "--shards 13",
+          "before": "--shards 12",
+          "count": 2
+        }
+      ],
+      "tests/test_ci_five_shards.py": [
+        {
+          "after": "range(1,14)",
+          "before": "range(1,13)",
+          "count": 1
+        },
+        {
+          "after": "--shards 13",
+          "before": "--shards 12",
+          "count": 2
+        }
+      ],
+      "tests/test_ci_six_shards.py": [
+        {
+          "after": "range(1,14)",
+          "before": "range(1,13)",
+          "count": 1
+        },
+        {
+          "after": "--shards 13",
+          "before": "--shards 12",
+          "count": 2
+        }
+      ],
+      "tests/test_ci_test_shards.py": [
+        {
+          "after": "['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13']",
+          "before": "['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']",
+          "count": 1
+        }
+      ],
+      "tests/test_ncaaf_staged_ci_capacity.py": [
+        {
+          "after": "range(1,14)",
+          "before": "range(1,13)",
+          "count": 1
+        },
+        {
+          "after": "--shards 13",
+          "before": "--shards 12",
+          "count": 2
+        }
+      ]
+    }
   },
   "measured_capacity_amendment_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
   "module_fixture_patch_sha256": "3d5cc8b9608aeeb37ff873c2e85f5ff08dd09b9d7ea8fcd4cafc27f9e883760d",
@@ -1343,35 +1409,36 @@
   "preserved_candidate": "97ed96247939165c2f73026525e31e1c3dba9302",
   "preserved_tree": "945cab79d9674ee15e4d3d81f088e9c5beab969e",
   "proposal_sha256": "261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d",
+  "read_consistency_capacity_amendment_sha256": "d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1",
   "reviewed_blobs": {
-    ".github/workflows/ci.yml": "19b7d689762b127c85aeb5a409bace8750cd2848",
-    "docs/paid-launch/ci-fixture-stability-v1.md": "54b34c50235d12003017acd400bb8188525eec6a",
-    "scripts/ci_fixture_stability_scope.py": "fead47527f63fdbcd78399adc167383a924643d5",
+    ".github/workflows/ci.yml": "60c536767a7d8b0a83c1537834fc38a422c31dae",
+    "docs/paid-launch/ci-fixture-stability-v1.md": "31bf24e1d3736aab798796eebcd674fe9a667064",
+    "scripts/ci_fixture_stability_scope.py": "8a560d430f65c84d52beb6e3df0b52dd279efc42",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
-    "tests/ci_fixture_stability_inputs.py": "d7c40e711848d0ba944b4ed066d5290f79897a79",
-    "tests/historical_scope_input_boundary.py": "b22f8f68afac6df8aa7707be60a2ef2ef2d1a3a1",
+    "tests/ci_fixture_stability_inputs.py": "313de8373ddea03b46a3bfafc1a6676ed90b5301",
+    "tests/historical_scope_input_boundary.py": "2d4313e33d9e1845b6850f40e5c83acd296aeb64",
     "tests/ncaaf_future_scope_inputs.py": "ca01875c5bbaece2ff49188ecdc49978a6235a70",
     "tests/ncaaf_staged_capacity_fixtures.py": "254a671c1d360879fedcbfbd316fed232d410fca",
     "tests/ncaaf_transport_scope_inputs.py": "ed5f7dda6d92de6a9c723a4382b6d6e3f4daf11a",
-    "tests/test_ci_five_shards.py": "7e7509f83900d8c07a1aeb439d19c299799f4996",
-    "tests/test_ci_fixture_stability_scope.py": "20df915c9120c5cef9a433dca61bc7441ec8f18f",
-    "tests/test_ci_six_shards.py": "890dc77b41e3e43f3c2adc44dc33577617ead403",
-    "tests/test_ci_test_shards.py": "bfd727a9ebda840ebeea6c1fa223a8d718621747",
+    "tests/test_ci_five_shards.py": "e0e9d8d5bb86560f203f48e506542465bbc931f3",
+    "tests/test_ci_fixture_stability_scope.py": "f4b120e700064b03709fa29b2849d3767e438f0b",
+    "tests/test_ci_six_shards.py": "ff54adbdc8f9369fe889d92e076d5834020f8e2d",
+    "tests/test_ci_test_shards.py": "ef7f6e81c3119f315ada50a2243b8f76b77bd25a",
     "tests/test_drive_history_harness.py": "e2a487b44828048c96e21b30d92f7514db30ab47",
     "tests/test_drive_history_loading.py": "4100091f2a1a953f6a9ba94f915567ac241609d5",
     "tests/test_drive_history_scope_policy.py": "279c24089688ff97cab5a0a6793f561f975d9f89",
     "tests/test_estimate_scope_policy.py": "fa4d5f6b2ebfb1c60bb9cc9a4ceec34f606bc9c4",
     "tests/test_football_catalog_scope.py": "4b4789a96bf10cb434298c929a1102dfc27b6558",
     "tests/test_football_research_scope.py": "b4f49f7784d71aea6986c65e88f528afc7203024",
-    "tests/test_historical_scope_input_boundary.py": "3e93b247ca4548ee0c595ce28aa52eb49df85945",
+    "tests/test_historical_scope_input_boundary.py": "fad807d68fb8ee69566e0c41fdd94dc1402afa56",
     "tests/test_home_runline_scope_policy.py": "f57fbcbc4d1c4caadfe2944d66868766131d5a24",
     "tests/test_ncaaf_compatibility_scope.py": "6f2bd2ce2db6796abcb0c0004dda7fa7d12284f7",
     "tests/test_ncaaf_custody_scope.py": "2e55c1ee4853c4be74aebefe43165a14fb294466",
     "tests/test_ncaaf_normal_scope.py": "8baed61a952ce695de7a8d8b1eafb47f44ab78ec",
     "tests/test_ncaaf_pilot_scope.py": "627a55ae76450519bed2e45e280df3e5a59fbc26",
     "tests/test_ncaaf_research_scope.py": "1b39f489667e192de89569b7e576ce36e94f949a",
-    "tests/test_ncaaf_staged_ci_capacity.py": "199acb6b42710d2094ac4dd8639356ff103c1d18",
+    "tests/test_ncaaf_staged_ci_capacity.py": "f8789b360da9cf6601d847e3cd09b3fbd0cc1ee7",
     "tests/test_nfl_admission_scope.py": "5d5733beed4ab8125f60aacd97e6f2d55caad38a",
     "tests/test_nfl_calibration_scope.py": "7dc2fe64c0c03b73e88be8bc5e87c64df09ee38f",
     "tests/test_nfl_inputs_scope.py": "b6a6b73088787f22496d7fa577b24de8269a256c",

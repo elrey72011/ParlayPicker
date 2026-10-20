@@ -688,15 +688,26 @@ def capacity_input_records(plan):
     if (sha(encoded)!=binding['measured_capacity']['source_records_sha256']
             or set(records)!=set(binding['measured_capacity']['source_paths'])):
         raise ValueError('CI_CAPACITY_INPUT_GENERATION_CHANGED')
+    successors=json.loads(json.dumps(inputs.CAPACITY_SUCCESSOR_RECORDS))
+    encoded=(json.dumps(successors,sort_keys=True,indent=2,allow_nan=False)+'\n').encode()
+    meta=binding['measured_capacity']
+    if (sha(encoded)!=meta['successor_records_sha256']
+            or set(successors)!=set(meta['successor_paths'])
+            or set(successors)!=set(records)-{inputs.PROFILE}):
+        raise ValueError('CI_CAPACITY_INPUT_GENERATION_CHANGED')
+    for relative,record in successors.items():
+        if record['before_sha256']!=records[relative]['after_sha256']:
+            raise ValueError('CI_CAPACITY_INPUT_GENERATION_CHANGED')
+        records[relative]['successor']=record
     return records
 
 def install_capacity_input_view(plan,patch):
     if plan.role is not Role.HISTORICAL:return False
     patch=owned_api_patch(patch,plan)
     records=capacity_input_records(plan)
-    read=Path.read_bytes;native_open=Path.open
-    def image(relative,raw):
-        row=records[relative];digest=sha(raw.replace(b'\r\n',b'\n'))
+    native_open=Path.open
+    def transition(row,raw):
+        digest=sha(raw.replace(b'\r\n',b'\n'))
         if digest==row['before_sha256']:return raw
         if digest!=row['after_sha256']:raise ValueError('CI_CAPACITY_INPUT_GENERATION_CHANGED')
         z=zlib.decompressobj();value=z.decompress(base64.b85decode(row['compressed']),8*1024*1024+1)
@@ -705,6 +716,15 @@ def install_capacity_input_view(plan,patch):
                 and sha(value)==row['before_sha256'] and identity==row['before_git_blob']):
             raise ValueError('CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED')
         return value
+    def image(relative,raw):
+        row=records[relative];successor=row.get('successor')
+        # Physical source must be the current authenticated generation. Only
+        # the selected immutable edge(s) may produce a historical view.
+        expected=successor['after_sha256'] if successor is not None else row['after_sha256']
+        if sha(raw.replace(b'\r\n',b'\n'))!=expected:
+            raise ValueError('CI_CAPACITY_INPUT_GENERATION_CHANGED')
+        if successor is not None:raw=transition(successor,raw)
+        return transition(row,raw)
     def opened(path,mode='r',*args,**kwargs):
         try:relative=path.resolve().relative_to(ROOT).as_posix()
         except ValueError:relative=None
@@ -715,14 +735,7 @@ def install_capacity_input_view(plan,patch):
         encoding=kwargs.get('encoding') or 'utf-8'
         if encoding=='locale':encoding=locale.getencoding()
         return io.StringIO(value.decode(encoding))
-    def read_bytes(path):
-        try:relative=path.resolve().relative_to(ROOT).as_posix()
-        except ValueError:return read(path)
-        # Path.read_bytes itself calls the currently owned Path.open. Start this
-        # edge from authenticated physical bytes so later historical views cannot
-        # be consumed and transformed a second time by this earlier edge.
-        return image(relative,physical_bytes(path)) if relative in records else read(path)
-    patch.setattr(Path,'open',opened);patch.setattr(Path,'read_bytes',read_bytes)
+    patch.setattr(Path,'open',opened)
     return True
 
 def apply_selected_inputs(plan, request, patch):

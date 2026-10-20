@@ -672,6 +672,15 @@ def test_capacity_historical_profile_and_nested_current_gate():
     physical=boundary.physical_bytes(profile)
     prior=inputs.capacity_predecessor_source(inputs.PROFILE,physical)
     assert boundary.sha(prior)=='6ea7580a2d3098c6906fd111c8d0f32bda7e3daec321e4717fa58aa03ba42cba'
+    # Both authenticated edges retain their exact inputs, not regenerated hashes.
+    for relative,row in inputs.CAPACITY_SUCCESSOR_RECORDS.items():
+        current_source=boundary.physical_bytes(boundary.ROOT/relative)
+        twelve=inputs.capacity_successor_source(relative,current_source)
+        assert boundary.sha(current_source)==row['after_sha256']
+        assert boundary.sha(twelve)==row['before_sha256']
+        assert inputs.capacity_successor_source(relative,twelve)==twelve
+        eleven=inputs.capacity_predecessor_source(relative,current_source)
+        assert boundary.sha(eleven)==inputs.CAPACITY_SOURCE_RECORDS[relative]['before_sha256']
     historical=request('test_ci_fixture_stability_scope','test_complete_profile_refresh_preserves_all_prior_rows_and_measurements')
     current=request('test_ci_test_shards','test_reviewed_workflow_preserves_limits_production_safety_and_three_shard_gate')
     old=boundary.resolve_context(historical);new=boundary.resolve_context(current)
@@ -681,10 +690,28 @@ def test_capacity_historical_profile_and_nested_current_gate():
         assert boundary.apply_selected_inputs(old,historical,owner.patch)
         assert profile.read_bytes()==prior
         assert '--shards 11' in (boundary.ROOT/'.github/workflows/ci.yml').read_text()
+        from tests.ncaaf_staged_capacity_fixtures import install_chronology_capacity_inputs
+        from scripts import ncaaf_chronology_capacity_scope as chronology
+        live=boundary.canonical_guard()
+        chronology_binding=json.loads(boundary.physical_bytes(boundary.ROOT/chronology.BINDING))
+        target='tests/test_ncaaf_staged_ci_capacity.py'
+        outer=(boundary.ROOT/target).read_bytes()
+        expected=chronology.previous_source(target,outer,live,chronology_binding)
+        req=request('test_ncaaf_reviewed_target_timing','test_timing_fixture_changes_preserve_all_original_assertions_without_history')
+        for fail in (False,True):
+            try:
+                with pytest.MonkeyPatch.context() as nested:
+                    assert install_chronology_capacity_inputs(req,nested)
+                    assert (boundary.ROOT/target).read_bytes()==expected!=outer
+                    with (boundary.ROOT/target).open('rb') as stream:assert stream.read()==expected
+                    if fail:raise RuntimeError('SYNTHETIC_NESTED_CAPACITY_FAILURE')
+            except RuntimeError as exc:
+                assert fail and str(exc)=='SYNTHETIC_NESTED_CAPACITY_FAILURE'
+            assert (boundary.ROOT/target).read_bytes()==outer
         with boundary.InputOwner(new) as inner:
             assert not boundary.apply_selected_inputs(new,current,inner.patch)
             assert profile.read_bytes()==physical
-            assert '--shards 12' in (boundary.ROOT/'.github/workflows/ci.yml').read_text()
+            assert '--shards 13' in (boundary.ROOT/'.github/workflows/ci.yml').read_text()
         assert profile.read_bytes()==prior
     assert Path.open is opened and Path.read_bytes is reader
     assert profile.read_bytes()==physical
@@ -715,6 +742,15 @@ def test_capacity_records_and_binding_mutations_reject(monkeypatch):
             with pytest.raises(ValueError,match=code):boundary.capacity_input_records(plan)
     raw=physical(boundary.ROOT/inputs.PROFILE)
     assert inputs.capacity_predecessor_source(inputs.PROFILE,raw+b'UNREVIEWED')==raw+b'UNREVIEWED'
+    assert boundary.capacity_input_records(plan)==records
+    successor=json.loads(json.dumps(inputs.CAPACITY_SUCCESSOR_RECORDS))
+    path='.github/workflows/ci.yml';successor[path]['before_git_blob']='0'*40
+    with monkeypatch.context() as patch:
+        patch.setattr(inputs,'CAPACITY_SUCCESSOR_RECORDS',successor)
+        with pytest.raises(ValueError,match='CI_CAPACITY_INPUT_GENERATION_CHANGED'):
+            boundary.capacity_input_records(plan)
+        with pytest.raises(ValueError,match='CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED'):
+            inputs.capacity_successor_source(path,boundary.physical_bytes(boundary.ROOT/path))
     assert boundary.capacity_input_records(plan)==records
 
 
