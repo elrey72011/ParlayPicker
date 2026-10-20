@@ -11,19 +11,19 @@
       "before_blob": "5ae84a6613af5c748919d985f75135def6174a0e"
     },
     "docs/paid-launch/ci-fixture-stability-bindings-v1.json": {
-      "after_blob": "234745283d347b4f38d92b6b175a9972099453b7",
+      "after_blob": "a4ae2b6715843968fd77595b41190d37503be749",
       "before_blob": null
     },
     "docs/paid-launch/ci-fixture-stability-v1.md": {
-      "after_blob": "fd26fd4c85397797b9c42196dd166336fcd01d85",
+      "after_blob": "54b34c50235d12003017acd400bb8188525eec6a",
       "before_blob": null
     },
     "scripts/check_launch_change_scope.py": {
-      "after_blob": "19889dd2c6c267d21eac5d794d596da1a9f43ea6",
+      "after_blob": "44d4ee35ce87222749069f0ecbc40f97c5284b7b",
       "before_blob": "27c6f2ee96f7742a514774270fd4b353f5274d7d"
     },
     "scripts/ci_fixture_stability_scope.py": {
-      "after_blob": "37083e08232e36ea74325fe37f7a5ef40d1b0905",
+      "after_blob": "fead47527f63fdbcd78399adc167383a924643d5",
       "before_blob": null
     },
     "scripts/ci_test_file_costs_v1.json": {
@@ -39,7 +39,7 @@
       "before_blob": null
     },
     "tests/historical_scope_input_boundary.py": {
-      "after_blob": "6c25469e00032550cd272f9c7fa018f7a1e58926",
+      "after_blob": "b22f8f68afac6df8aa7707be60a2ef2ef2d1a3a1",
       "before_blob": null
     },
     "tests/ncaaf_future_scope_inputs.py": {
@@ -95,7 +95,7 @@
       "before_blob": "8feb0d09dfc9b65d404baa35f5b12130684f8495"
     },
     "tests/test_historical_scope_input_boundary.py": {
-      "after_blob": "da93099e19140fc118a6ad3282340cdd3eccef16",
+      "after_blob": "3e93b247ca4548ee0c595ce28aa52eb49df85945",
       "before_blob": null
     },
     "tests/test_home_runline_scope_policy.py": {
@@ -179,8 +179,8 @@
       "before_blob": "52d61c2570b31f0df07dd77d539b7dc820d3b5f5"
     }
   },
-  "implementation_commit": "dddecf0640b01cc461ea6db39e3de7de201dbf11",
-  "implementation_tree": "f1f6f2363da3bd5813891d04e315bfe512ebb174",
+  "implementation_commit": "76a54a0806ddde6e75ce1d92687909e388a44ed1",
+  "implementation_tree": "5ccab5dd516104334b3386b3cb4e684a5484e801",
   "measured_capacity_amendment_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
   "policy_version": "ci-fixture-stability-v1",
   "proposal_sha256": "261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d",
