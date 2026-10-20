@@ -773,3 +773,65 @@ def test_capacity_failure_cleanup_restores_live_inputs():
     assert Path.open is opened and Path.read_bytes is reader
     assert (boundary.ROOT/inputs.PROFILE).read_bytes()==raw
     assert not boundary._ACTIVE[1:]
+
+
+def test_predecessor_image_reuses_only_immutable_transformation(monkeypatch):
+    scope,binding=boundary.canonical_guard()._ci_fixture_module()
+    monkeypatch.setattr(boundary,'_PREDECESSOR_IMAGE',None)
+    decode=scope.base64.b85decode;calls=[]
+    def observed(value):
+        calls.append(1)
+        return decode(value)
+    monkeypatch.setattr(scope.base64,'b85decode',observed)
+    first=boundary.authenticated_predecessor(scope,binding)
+    assert boundary.authenticated_predecessor(scope,binding) is first
+    assert len(calls)==1
+    assert type(first) is bytes and boundary.sha(first)==binding['predecessor_guard']['sha256']
+    key,image=boundary._PREDECESSOR_IMAGE
+    monkeypatch.setattr(boundary,'_PREDECESSOR_IMAGE',(key,image+b'UNREVIEWED'))
+    with pytest.raises(ValueError,match='PREVIOUS_GUARD_LOGIC_CHANGED'):
+        boundary.authenticated_predecessor(scope,binding)
+
+
+@pytest.mark.parametrize('attack',['source','binding','generation'])
+def test_warm_predecessor_image_never_caches_authentication(monkeypatch,attack):
+    from copy import deepcopy
+    scope,binding=boundary.canonical_guard()._ci_fixture_module()
+    original=boundary.authenticated_predecessor(scope,binding)
+    changed=deepcopy(binding);physical=boundary.physical_bytes
+    if attack=='source':
+        monkeypatch.setattr(boundary,'physical_bytes',lambda path:physical(path)+b'UNREVIEWED' if Path(path)==boundary.ROOT/boundary.GUARD else physical(path))
+    elif attack=='binding':changed['base']='0'*40
+    else:changed['predecessor_guard']['sha256']='0'*64
+    with pytest.raises(ValueError):boundary.authenticated_predecessor(scope,changed)
+    assert type(original) is bytes
+
+
+@pytest.mark.parametrize('exit_kind',['success','failure','interruption'])
+def test_transitive_reader_generation_is_owned_and_restored(tmp_path,exit_kind):
+    import importlib,sys
+    package=importlib.import_module('tests')
+    names=('tests.test_ci_test_shards','tests.test_ncaaf_staged_ci_capacity','tests.test_ncaaf_reviewed_target_timing')
+    native={name:importlib.import_module(name) for name in names}
+    req=request('test_ncaaf_chronology_capacity','test_current_eleven_way_gate_preserves_profile_limits_and_history')
+    plan=boundary.resolve_context(req)
+    read,opened=Path.read_bytes,Path.open
+    try:
+        with boundary.InputOwner(plan) as owner:
+            boundary.apply_selected_inputs(plan,req,owner.patch)
+            selected={name:sys.modules[name] for name in names}
+            assert all(selected[name] is not native[name] for name in names)
+            consumer=importlib.import_module('tests.test_ncaaf_chronology_capacity')
+            consumer.test_current_eleven_way_gate_preserves_profile_limits_and_history()
+            consumer.test_historical_input_projection_is_exact_and_restores_global_state(tmp_path)
+            live=boundary.resolve_context(request('test_historical_scope_input_boundary'))
+            with boundary.InputOwner(live):
+                assert all(sys.modules[name] is native[name] for name in names)
+                native[names[0]].test_reviewed_workflow_preserves_limits_production_safety_and_three_shard_gate()
+            assert all(sys.modules[name] is selected[name] for name in names)
+            if exit_kind=='failure':raise RuntimeError('SYNTHETIC_TRANSITIVE_FAILURE')
+            if exit_kind=='interruption':raise KeyboardInterrupt('SYNTHETIC_TRANSITIVE_INTERRUPTION')
+    except (RuntimeError,KeyboardInterrupt):
+        assert exit_kind!='success'
+    assert all(sys.modules[name] is native[name] and getattr(package,name.split('.')[1]) is native[name] for name in names)
+    assert Path.read_bytes is read and Path.open is opened

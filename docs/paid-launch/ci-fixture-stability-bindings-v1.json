@@ -578,7 +578,27 @@
       "tests/test_ncaaf_chronology_capacity.py": {
         "fixtures": {},
         "generation": "stability",
-        "sha256": "fd7a2385f9013312f1605bc248274a82af47a19802f09d20ec456d045a2df3a0"
+        "sha256": "fd7a2385f9013312f1605bc248274a82af47a19802f09d20ec456d045a2df3a0",
+        "transitive_modules": {
+          "tests.test_ci_test_shards": {
+            "generation": "stability",
+            "input_sha256": "e2ef99d3c6015197a87628ebac3a4d4e75c0e1b2613cf222c42f11696b06c3fa",
+            "path": "tests/test_ci_test_shards.py",
+            "physical_sha256": "6c4db128aa5f5a9b5dc21d668d8d9d68f57950eca6c3a2e8fa2125012d685074"
+          },
+          "tests.test_ncaaf_reviewed_target_timing": {
+            "generation": "stability",
+            "input_sha256": "e06c9aee9adaca2ef4317df10c3f89d87231dab7e15d93483c6369c525f14329",
+            "path": "tests/test_ncaaf_reviewed_target_timing.py",
+            "physical_sha256": "e06c9aee9adaca2ef4317df10c3f89d87231dab7e15d93483c6369c525f14329"
+          },
+          "tests.test_ncaaf_staged_ci_capacity": {
+            "generation": "stability",
+            "input_sha256": "dfb06ab43ea6682ffc6da470c6f3316714ab1adf070329372012f1a72bb31c8a",
+            "path": "tests/test_ncaaf_staged_ci_capacity.py",
+            "physical_sha256": "7c16b2a69f7f484c6dfbb82b89c8bfd8cca35a7e40c18c01bc92eddf24c22336"
+          }
+        }
       },
       "tests/test_ncaaf_chronology_fixture_copy.py": {
         "fixtures": {},
@@ -1272,8 +1292,8 @@
     "ledger_sha256": "a6a1143c0f264136cecaf4ed543b8ddb04d9b52d4969ffad89152e8259a0fd65",
     "older_profile_and_workflow_generations": "All unchanged; authenticated before consumption",
     "original_profile_sha256": "6ea7580a2d3098c6906fd111c8d0f32bda7e3daec321e4717fa58aa03ba42cba",
-    "predecessor": "6426cdd15554f8b6ad367f6258d054015339abec",
-    "predecessor_tree": "c3580665a174308e4d82db5ce59fbaacf2f1670a",
+    "predecessor": "b6af3a7ab41eeb8f6e4387a30b83945704698536",
+    "predecessor_tree": "41734a2c62e2845c030d6b44341bed0c62032eee",
     "proposal_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
     "source_paths": [
       ".github/workflows/ci.yml",
@@ -1397,6 +1417,7 @@
     "tests/test_pick_board_scope.py",
     "tests/test_preview_binding_scope.py",
     "tests/test_producer_provenance_scope.py",
+    "tests/test_prospective_legacy_view.py",
     "tests/test_shared_git_fixture_lifecycle.py",
     "tests/test_slate_audit_scope.py",
     "tests/test_source_contract_scope.py"
@@ -1412,12 +1433,12 @@
   "read_consistency_capacity_amendment_sha256": "d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1",
   "reviewed_blobs": {
     ".github/workflows/ci.yml": "60c536767a7d8b0a83c1537834fc38a422c31dae",
-    "docs/paid-launch/ci-fixture-stability-v1.md": "12138cecea80d80defdbff9280a79b9bb0e0a989",
-    "scripts/ci_fixture_stability_scope.py": "85ebf479f3a6478908fb4adc427bf6caf74afd93",
+    "docs/paid-launch/ci-fixture-stability-v1.md": "1338efd00865c3f452087a86948775bb590d2b9f",
+    "scripts/ci_fixture_stability_scope.py": "655bd94bca860d66e85fdf50a63d8f1e64f90be3",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
     "tests/ci_fixture_stability_inputs.py": "313de8373ddea03b46a3bfafc1a6676ed90b5301",
-    "tests/historical_scope_input_boundary.py": "2d4313e33d9e1845b6850f40e5c83acd296aeb64",
+    "tests/historical_scope_input_boundary.py": "b827a634c4150ba97a951a3c6b6658fd9e96dea7",
     "tests/ncaaf_future_scope_inputs.py": "ca01875c5bbaece2ff49188ecdc49978a6235a70",
     "tests/ncaaf_staged_capacity_fixtures.py": "254a671c1d360879fedcbfbd316fed232d410fca",
     "tests/ncaaf_transport_scope_inputs.py": "ed5f7dda6d92de6a9c723a4382b6d6e3f4daf11a",
@@ -1431,7 +1452,7 @@
     "tests/test_estimate_scope_policy.py": "fa4d5f6b2ebfb1c60bb9cc9a4ceec34f606bc9c4",
     "tests/test_football_catalog_scope.py": "4b4789a96bf10cb434298c929a1102dfc27b6558",
     "tests/test_football_research_scope.py": "b4f49f7784d71aea6986c65e88f528afc7203024",
-    "tests/test_historical_scope_input_boundary.py": "d7091c271bd0f37f8f78cd1c14a4a2f0cfc87f7d",
+    "tests/test_historical_scope_input_boundary.py": "362ab1bee11081641e3ad51a4bf50bd444075cec",
     "tests/test_home_runline_scope_policy.py": "f57fbcbc4d1c4caadfe2944d66868766131d5a24",
     "tests/test_ncaaf_compatibility_scope.py": "6f2bd2ce2db6796abcb0c0004dda7fa7d12284f7",
     "tests/test_ncaaf_custody_scope.py": "2e55c1ee4853c4be74aebefe43165a14fb294466",
@@ -1449,11 +1470,18 @@
     "tests/test_pick_board_scope.py": "c7efd95165725da0ddc4cba7d6d7004be7661fb5",
     "tests/test_preview_binding_scope.py": "7087c6fbe3e0a57ac20b627d712b6c84207fa58f",
     "tests/test_producer_provenance_scope.py": "1cca843f9e02ea3d3e2ed44e8256b1a1874c34f5",
+    "tests/test_prospective_legacy_view.py": "5aca60eaee45b60213fb9124d6f0a16dfef45503",
     "tests/test_shared_git_fixture_lifecycle.py": "f88dd245e428733a1ddbca402fede84e4cc18b0f",
     "tests/test_slate_audit_scope.py": "cea668fc91f8923176808901e4e213dc88375c81",
     "tests/test_source_contract_scope.py": "9f272ddc2aaac80d2fa2f9304b635d92e8410d9e"
   },
   "schema_version": 1,
   "second_advisory_amendment_sha256": "6cf28cd1db29cd0ba101cce67b8ac3bcc5d6857b61ba555b6aa382298fda7295",
-  "shared_historical_boundary_amendment_sha256": "8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f"
+  "shared_historical_boundary_amendment_sha256": "8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f",
+  "shared_repair_followup": {
+    "clock_before_sha256": "3e30ca3b1a1ea3988b129a28575c6c3fe77c6e608fbcf0bc2f16b8d5fd778eac",
+    "clock_path": "tests/test_prospective_legacy_view.py",
+    "predecessor": "b6af3a7ab41eeb8f6e4387a30b83945704698536",
+    "predecessor_tree": "41734a2c62e2845c030d6b44341bed0c62032eee"
+  }
 }

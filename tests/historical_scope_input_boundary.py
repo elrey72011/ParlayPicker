@@ -436,13 +436,33 @@ def authenticate_plan(plan):
     for relative, record in binding['historical_input_boundary'].get('helper_preimages',{}).items():
         if sha(physical_bytes(ROOT/relative))!=record['after_sha256']:
             raise ValueError('HISTORICAL_HELPER_SOURCE_CHANGED')
-    scope.previous_guard(physical_bytes(ROOT / GUARD).replace(b'\r\n', b'\n'), binding)
+    authenticated_predecessor(scope, binding)
     return live
 
 
 _ACTIVE = []
 _LIVE_GUARD = None
 _ABSENT = object()
+_PREDECESSOR_IMAGE = None
+
+
+def authenticated_predecessor(scope, binding):
+    """Reuse one immutable transformation, never a validation or module verdict.
+
+    The caller obtains a freshly authenticated scope/binding. Both physical
+    inputs and the complete generation descriptor key the bytes. previous_guard
+    still validates the current successor, binding and returned image each time.
+    """
+    global _PREDECESSOR_IMAGE
+    source = physical_bytes(ROOT / GUARD).replace(b'\r\n', b'\n')
+    key = (source, scope.canonical(binding),
+           physical_bytes(ROOT / 'scripts/ci_fixture_stability_scope.py').replace(b'\r\n', b'\n'),
+           binding['predecessor_guard']['sha256'])
+    previous = _PREDECESSOR_IMAGE
+    image = scope.previous_guard(source, binding,
+        predecessor=previous[1] if previous is not None and previous[0] == key else None)
+    _PREDECESSOR_IMAGE = (key, image)
+    return image
 
 
 def canonical_guard():
@@ -611,7 +631,7 @@ class InputOwner:
             def setattr(self, target, name, value, raising=True):
                 key = (id(target), name)
                 if key not in owner.attributes:
-                    owner.attributes[key] = [target, name, getattr(target, name), value]
+                    owner.attributes[key] = [target, name, getattr(target, name, _ABSENT), value]
                 else:
                     owner.attributes[key][3] = value
                 return super().setattr(target, name, value, raising=raising)
@@ -631,9 +651,10 @@ class InputOwner:
     def suspend(self):
         self.suspended = []
         for obj, name, original, installed in self.attributes.values():
-            if getattr(obj, name) is installed:
+            if getattr(obj, name, _ABSENT) is installed:
                 self.suspended.append((obj, name, original, installed))
-                setattr(obj, name, original)
+                if original is _ABSENT:delattr(obj, name)
+                else:setattr(obj, name, original)
         self.suspended_items = []
         for mapping, name, original, installed in self.items.values():
             if mapping.get(name, _ABSENT) is installed:
@@ -648,7 +669,7 @@ class InputOwner:
             if mapping.get(name, _ABSENT) is original:
                 mapping[name] = value
         for obj, name, original, value in reversed(self.suspended):
-            if getattr(obj, name) is original:
+            if getattr(obj, name, _ABSENT) is original:
                 setattr(obj, name, value)
 
     def __exit__(self, *exc):
@@ -662,8 +683,9 @@ class InputOwner:
                     else:
                         mapping[name] = original
             for obj, name, original, installed in reversed(list(self.attributes.values())):
-                if getattr(obj, name) is installed:
-                    setattr(obj, name, original)
+                if getattr(obj, name, _ABSENT) is installed:
+                    if original is _ABSENT:delattr(obj, name)
+                    else:setattr(obj, name, original)
         finally:
             assert _ACTIVE.pop() is self
             if self.parent is not None:
@@ -738,6 +760,42 @@ def install_capacity_input_view(plan,patch):
     patch.setattr(Path,'open',opened)
     return True
 
+
+def install_transitive_module_inputs(plan, patch):
+    """A declared generation owns fresh readers, independent of warm imports."""
+    if plan.role is not Role.HISTORICAL:return
+    authenticate_plan(plan)
+    record=json.loads(physical_bytes(ROOT/BINDING))['historical_input_boundary']['consumers'][plan.consumer]
+    rows=record.get('transitive_modules',{})
+    if not isinstance(rows,dict) or len(rows)>32:raise ValueError('HISTORICAL_TRANSITIVE_LIMIT')
+    if not rows:return
+    if not _ACTIVE or _ACTIVE[-1].plan!=plan or patch is not _ACTIVE[-1].patch:
+        raise ValueError('HISTORICAL_TRANSITIVE_OWNER_REQUIRED')
+    import importlib
+    package=importlib.import_module('tests')
+    pending=[]
+    for name,row in rows.items():
+        if (set(row)!={'path','physical_sha256','input_sha256','generation'}
+            or not name.startswith('tests.test_') or name.count('.')!=1
+            or row['path']!=name.replace('.','/')+'.py' or row['generation']!=plan.generation):
+            raise ValueError('HISTORICAL_TRANSITIVE_CONTRACT_CHANGED')
+        path=ROOT/row['path']
+        if sha(physical_bytes(path))!=row['physical_sha256']:
+            raise ValueError('HISTORICAL_TRANSITIVE_SOURCE_CHANGED')
+        value=path.read_bytes().replace(b'\r\n',b'\n')
+        with path.open('rb') as stream:opened=stream.read().replace(b'\r\n',b'\n')
+        if sha(value)!=row['input_sha256'] or opened!=value:
+            raise ValueError('HISTORICAL_TRANSITIVE_VIEW_CHANGED')
+        module=types.ModuleType(name);module.__file__=str(path);module.__package__='tests'
+        pending.append((name,module,value))
+    # Own package attributes and import entries before execution. No mutable
+    # namespace is cached or borrowed from another generation.
+    for name,module,value in pending:
+        patch.setitem(sys.modules,name,module)
+        patch.setattr(package,name.split('.')[1],module,raising=False)
+    for name,module,value in pending:
+        exec(compile(value,module.__file__,'exec'),module.__dict__)
+
 def apply_selected_inputs(plan, request, patch):
     if plan.role is not Role.HISTORICAL:
         return False
@@ -777,4 +835,5 @@ def apply_selected_inputs(plan, request, patch):
     _install_selected_profile_inputs(request, patch)
     _install_selected_transport_inputs(request, patch, plan)
     _install_selected_future_inputs(request, patch, live, plan)
+    install_transitive_module_inputs(plan,patch)
     return True

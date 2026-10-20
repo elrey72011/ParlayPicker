@@ -1,6 +1,7 @@
 """Legacy prospective evidence stays readable and unpromoted."""
 from datetime import datetime, timedelta, timezone
 import hashlib
+import pytest
 
 from app_core import mlb_pregame_receipts as mlb
 from app_core import ncaaf_prospective_store as ncaaf
@@ -9,6 +10,12 @@ from app_core.prospective_legacy_view import CANONICAL_FIELDS, legacy_evidence
 
 NOW = datetime(2026, 9, 20, 12, tzinfo=timezone.utc)
 START = NOW + timedelta(days=30)
+
+class _SyntheticStoreClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW.astimezone(tz) if tz is not None else NOW.replace(tzinfo=None)
+
 
 
 def unchanged(path, sport):
@@ -59,7 +66,8 @@ def test_mlb_receipt_projection_is_read_only_and_quote_bound(tmp_path, monkeypat
     assert rows[0]["model_id"] is None and rows[0]["result_outcome"] is None
 
 
-def test_ncaaf_research_model_and_scores_do_not_become_validation(tmp_path):
+def test_ncaaf_research_model_and_scores_do_not_become_validation(tmp_path, monkeypatch):
+    monkeypatch.setattr(ncaaf, "datetime", _SyntheticStoreClock)
     path = tmp_path / "ncaaf-prospective.sqlite3"
     model_id = ncaaf.save("model", {"artifact": {"models": {}}, "runtime_hash": "runtime"}, path)
     event = {"cfbd_id": 9, "event_id": "odds-9", "home_id": 1, "away_id": 2,
@@ -80,7 +88,8 @@ def test_ncaaf_research_model_and_scores_do_not_become_validation(tmp_path):
     assert rows[0]["quote_verified"] is False
 
 
-def test_nfl_market_tracking_has_distinct_quotes_and_model_blocker(tmp_path):
+def test_nfl_market_tracking_has_distinct_quotes_and_model_blocker(tmp_path, monkeypatch):
+    monkeypatch.setattr(nfl, "datetime", _SyntheticStoreClock)
     path = tmp_path / "nfl-market.sqlite3"
     nfl.save("capture", {"sport": "NFL", "protocol": "nfl-market-v1", "events": [{
         "event_id": "odds-8", "home": "Detroit Lions", "away": "New Orleans Saints",
@@ -99,3 +108,42 @@ def test_missing_legacy_path_is_not_created(tmp_path):
     path = tmp_path / "absent.sqlite3"
     assert legacy_evidence("NFL", path) == []
     assert not path.exists()
+
+
+@pytest.mark.parametrize("store", [ncaaf, nfl], ids=["ncaaf", "nfl"])
+def test_native_legacy_capture_save_rejects_started_events(tmp_path, monkeypatch, store):
+    class AfterStart(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = START + timedelta(seconds=1)
+            return value.astimezone(tz) if tz is not None else value.replace(tzinfo=None)
+
+    monkeypatch.setattr(store, "datetime", AfterStart)
+    payload = {"events": [{"start": START.isoformat()}]}
+    if store is nfl:
+        payload.update(sport="NFL", protocol="nfl-market-v1")
+    path = tmp_path / "synthetic-started.sqlite3"
+    record_id = store.save("capture", payload, path)
+    from app_core.prospective_legacy_view import _records
+    retained = next(value for key, value in _records(path, "records") if key == record_id)
+    assert retained["data"]["events"] == []
+
+
+@pytest.mark.parametrize("wall_year", [2025, 2027])
+@pytest.mark.parametrize("store,body", [
+    (ncaaf, test_ncaaf_research_model_and_scores_do_not_become_validation),
+    (nfl, test_nfl_market_tracking_has_distinct_quotes_and_model_blocker),
+], ids=["ncaaf", "nfl"])
+def test_legacy_synthetic_chronology_is_calendar_independent_and_local(
+        tmp_path, monkeypatch, wall_year, store, body):
+    class WallClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = NOW.replace(year=wall_year)
+            return value.astimezone(tz) if tz is not None else value.replace(tzinfo=None)
+
+    monkeypatch.setattr(store, "datetime", WallClock)
+    with pytest.MonkeyPatch.context() as local:
+        body(tmp_path, local)
+        assert store.datetime is _SyntheticStoreClock
+    assert store.datetime is WallClock

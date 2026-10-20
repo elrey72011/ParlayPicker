@@ -226,3 +226,47 @@ The original263 prefix completed261passed and2Chrome crash-server startup
 failures, with all15chronology cases passing. Preserve these outcomes separately;
 the matching unchanged-main browser limitation does not waive any release check.
 No additional hosted diagnostic or release cycle is authorized or consumed.
+
+
+The published b6af3a7ab41e head remains preserved. Its final release cycle
+passed nine checks, timed out all thirteen application jobs and failed the
+aggregate gate. Seven of twenty required artifacts uploaded; no application
+manifest completed. The prior forecast is invalidated as completion evidence.
+Two partial-log legacy assertions reproduce on unchanged main after their fixed
+synthetic kickoff: store setup used the actual calendar. The test-local store
+clock now uses its existing synthetic NOW; original assertions remain intact.
+Separate native after-kickoff controls still exclude started events, and local
+clock patches restore the incoming clock. Production clocks are unchanged.
+Warm local profiling of twelve complete authentication calls measured 7.141s,
+including 6.566s in repeated predecessor reconstruction. Inclusive timings
+overlap. Reuse is restricted to one immutable predecessor-byte image keyed by
+complete physical source, binding, helper and generation inputs. Every call
+authenticates current physical inputs and verifies the output length/hash.
+Neither validation verdicts nor mutable historical modules are cached.
+This measurement does not establish the cause of every Ubuntu timeout. The
+two chronology assertions still require their actual failing-context evidence.
+Both hosted diagnostic allowances and the conditional release cycle have been
+consumed. No new hosted dispatch or publication follows from a local seal.
+Private research priority is distinct from wagering/commercial applicability;
+the CI repair adds no prediction framework or paid-service feature.
+
+
+An additional controlled warm-import reproduction preserves both original
+chronology assertions and reproduces their failures: a native thirteen-way
+tests.test_ci_test_shards imported before the historical eleven-way consumer
+survived in sys.modules. Input bytes were projected correctly, but the cached
+reader's assertions belonged to the wrong generation. Full collection alone
+did not reproduce this execution-order transition. The historical CI has no
+completed failure XML, so the controlled reproduction and historical logs are
+reported separately.
+The shared boundary now leases fresh, source-authenticated transitive readers
+from declared per-consumer input-generation data before fixture/body use.
+This consumer's three static test-module dependencies are bound as one group.
+Selection never depends on the previously imported module identity. Path byte
+and open views must agree with the declared input hash. The same owner restores
+module entries, package attributes and incoming views on success, exceptions
+and interruption, including absent package attributes. No mutable module cache
+is retained. An audit of all 114 registered consumers found six consumers with
+static from-tests dependencies; the chronology family is the demonstrated
+different-generation failure. The other families remain preservation coverage,
+not newly claimed historical failures.

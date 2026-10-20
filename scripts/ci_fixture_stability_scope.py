@@ -12,14 +12,15 @@ import sys
 import zlib
 import functools
 import types
+import ast
 
 PROPOSAL = '261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d'
 CONSOLIDATED_AMENDMENT = 'b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b850b36fd7e'
 HISTORICAL_INPUT_AMENDMENT = '12e3046831d8fde24748e5193a2e6a54311e1be318e703d3739fe6e1c41da7b2'
 SHARED_BOUNDARY_AMENDMENT = '8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f'
 MEASURED_CAPACITY_AMENDMENT = 'dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8'
-CAPACITY_PREDECESSOR = '6426cdd15554f8b6ad367f6258d054015339abec'
-CAPACITY_PREDECESSOR_TREE = 'c3580665a174308e4d82db5ce59fbaacf2f1670a'
+CAPACITY_PREDECESSOR = 'b6af3a7ab41eeb8f6e4387a30b83945704698536'
+CAPACITY_PREDECESSOR_TREE = '41734a2c62e2845c030d6b44341bed0c62032eee'
 CAPACITY_LEDGER_SHA256 = 'a6a1143c0f264136cecaf4ed543b8ddb04d9b52d4969ffad89152e8259a0fd65'
 READ_CONSISTENCY_CAPACITY_AMENDMENT = 'd1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1'
 PRESERVED_CANDIDATE = '97ed96247939165c2f73026525e31e1c3dba9302'
@@ -27,6 +28,10 @@ PRESERVED_TREE = '945cab79d9674ee15e4d3d81f088e9c5beab969e'
 COMPLETE_LEDGER_SHA256 = '5eec77cd6d43fbd41b3839d7b99c135bfd0cb2603e92b794874385f8432261b7'
 BASE = '8b79b0a0eead4f63a041a551283a4b6be2980d72'
 BASE_TREE = '028d3daf56d71596663a10714495a7b48d53c7ab'
+SHARED_REPAIR_FOLLOWUP = dict(predecessor='b6af3a7ab41eeb8f6e4387a30b83945704698536',
+    predecessor_tree='41734a2c62e2845c030d6b44341bed0c62032eee',
+    clock_path='tests/test_prospective_legacy_view.py',
+    clock_before_sha256='3e30ca3b1a1ea3988b129a28575c6c3fe77c6e608fbcf0bc2f16b8d5fd778eac')
 GUARD = 'scripts/check_launch_change_scope.py'
 BINDING = 'docs/paid-launch/ci-fixture-stability-bindings-v1.json'
 POLICY = 'docs/paid-launch/launch-scope-policy-ci-fixture-stability-v1.json'
@@ -56,7 +61,7 @@ def canonical(value):
     return (json.dumps(value, sort_keys=True, indent=2, allow_nan=False) + '\n').encode()
 
 
-def previous_guard(source, binding):
+def previous_guard(source, binding, *, predecessor=None):
     d = binding['predecessor_guard']
     if sha(source) == d['sha256']:
         return source
@@ -69,9 +74,13 @@ def previous_guard(source, binding):
     require(stamp.decode() == sha(canonical(binding)), 'REVIEWED_BINDINGS_CHANGED')
     template = source.replace(identity, b'0'*64).replace(stamp, b'0'*64)
     require(sha(template) == GUARD_TEMPLATE_SHA256, 'SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
-    z = zlib.decompressobj()
-    value = z.decompress(base64.b85decode(d['source_b85']), MAX_SOURCE + 1)
-    require(z.eof and not z.unused_data and len(value) == d['bytes'] <= MAX_SOURCE
+    if predecessor is None:
+        z = zlib.decompressobj()
+        value = z.decompress(base64.b85decode(d['source_b85']), MAX_SOURCE + 1)
+        require(z.eof and not z.unused_data, 'PREVIOUS_GUARD_LOGIC_CHANGED')
+    else:
+        value = predecessor
+    require(type(value) is bytes and len(value) == d['bytes'] <= MAX_SOURCE
             and sha(value) == d['sha256'], 'PREVIOUS_GUARD_LOGIC_CHANGED')
     return value
 
@@ -229,7 +238,10 @@ def validate(g, manifest_path, comparison_base, binding):
         require(not g.exists_at(implementation, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
     changes = set(g.git('diff', '--name-only', BASE, implementation).splitlines())
     require(changes - ({POLICY} if successor else set()) == set(binding['paths']), 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
-    require(len(binding['paths']) == len(set(binding['paths'])) == (43 if capacity else 38 if shared else 33), 'IMPLEMENTATION_PATH_SET_CHANGED')
+    followup=binding.get('shared_repair_followup')
+    if followup is not None:
+        require(followup==SHARED_REPAIR_FOLLOWUP and capacity, 'SHARED_REPAIR_FOLLOWUP_CHANGED')
+    require(len(binding['paths']) == len(set(binding['paths'])) == (44 if followup else 43 if capacity else 38 if shared else 33), 'IMPLEMENTATION_PATH_SET_CHANGED')
     require(policy == make_policy(g, binding, implementation), 'EXACT_POLICY_BINDINGS_CHANGED')
     impl = trees(g, implementation)
     require(set(binding['reviewed_blobs']) == set(binding['paths'])-{GUARD, BINDING}, 'REVIEWED_BINDING_SET_CHANGED')
@@ -277,6 +289,17 @@ def validate(g, manifest_path, comparison_base, binding):
     before = g.git_bytes('show', BASE+':'+ui)
     after = g.git_bytes('show', implementation+':'+ui)
     require(after.replace(b'source+"\\nmain()", default_timeout=10', b'source+"\\nmain()"') == before, 'PRIOR_ASSERTIONS_CHANGED')
+    if followup and successor:
+        before=g.git_bytes('show',BASE+':'+followup['clock_path'])
+        after=g.git_bytes('show',implementation+':'+followup['clock_path'])
+        require(sha(before)==followup['clock_before_sha256'],'PRIOR_ASSERTIONS_CHANGED')
+        old={n.name:n for n in ast.parse(before).body if isinstance(n,ast.FunctionDef) and n.name.startswith('test_')}
+        new={n.name:n for n in ast.parse(after).body if isinstance(n,ast.FunctionDef) and n.name.startswith('test_')}
+        for name,function in old.items():
+            require(name in new,'PRIOR_ASSERTIONS_CHANGED')
+            assertions=[ast.dump(n,include_attributes=False) for n in ast.walk(function) if isinstance(n,ast.Assert)]
+            preserved=[ast.dump(n,include_attributes=False) for n in ast.walk(new[name]) if isinstance(n,ast.Assert)]
+            require(assertions==preserved,'PRIOR_ASSERTIONS_CHANGED')
     parents = g.git('show', '-s', '--format=%P', 'HEAD').split()
     candidate = g.git('rev-parse', 'HEAD')
     if len(parents) == 2:
