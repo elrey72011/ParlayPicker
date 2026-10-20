@@ -7,23 +7,23 @@
   "historical_input_amendment_sha256": "12e3046831d8fde24748e5193a2e6a54311e1be318e703d3739fe6e1c41da7b2",
   "implementation_changes": {
     ".github/workflows/ci.yml": {
-      "after_blob": "19b7d689762b127c85aeb5a409bace8750cd2848",
+      "after_blob": "60c536767a7d8b0a83c1537834fc38a422c31dae",
       "before_blob": "5ae84a6613af5c748919d985f75135def6174a0e"
     },
     "docs/paid-launch/ci-fixture-stability-bindings-v1.json": {
-      "after_blob": "a4ae2b6715843968fd77595b41190d37503be749",
+      "after_blob": "6fb4de0005d2cfa8759c011ad9dcf18d9e9e603c",
       "before_blob": null
     },
     "docs/paid-launch/ci-fixture-stability-v1.md": {
-      "after_blob": "54b34c50235d12003017acd400bb8188525eec6a",
+      "after_blob": "31bf24e1d3736aab798796eebcd674fe9a667064",
       "before_blob": null
     },
     "scripts/check_launch_change_scope.py": {
-      "after_blob": "44d4ee35ce87222749069f0ecbc40f97c5284b7b",
+      "after_blob": "2afdab37357ddfac7b0b41b107bc3358f3a521f1",
       "before_blob": "27c6f2ee96f7742a514774270fd4b353f5274d7d"
     },
     "scripts/ci_fixture_stability_scope.py": {
-      "after_blob": "fead47527f63fdbcd78399adc167383a924643d5",
+      "after_blob": "8a560d430f65c84d52beb6e3df0b52dd279efc42",
       "before_blob": null
     },
     "scripts/ci_test_file_costs_v1.json": {
@@ -35,11 +35,11 @@
       "before_blob": "a19e4070b50fd1e6f300bd4509003464ee6b7ab3"
     },
     "tests/ci_fixture_stability_inputs.py": {
-      "after_blob": "d7c40e711848d0ba944b4ed066d5290f79897a79",
+      "after_blob": "313de8373ddea03b46a3bfafc1a6676ed90b5301",
       "before_blob": null
     },
     "tests/historical_scope_input_boundary.py": {
-      "after_blob": "b22f8f68afac6df8aa7707be60a2ef2ef2d1a3a1",
+      "after_blob": "2d4313e33d9e1845b6850f40e5c83acd296aeb64",
       "before_blob": null
     },
     "tests/ncaaf_future_scope_inputs.py": {
@@ -55,19 +55,19 @@
       "before_blob": "6411f0389cde0441cf8ad6eb8fc237a16e82e46c"
     },
     "tests/test_ci_five_shards.py": {
-      "after_blob": "7e7509f83900d8c07a1aeb439d19c299799f4996",
+      "after_blob": "e0e9d8d5bb86560f203f48e506542465bbc931f3",
       "before_blob": "35ae03fbc3139c38fb4decd6280c0a0d14c5e3e4"
     },
     "tests/test_ci_fixture_stability_scope.py": {
-      "after_blob": "20df915c9120c5cef9a433dca61bc7441ec8f18f",
+      "after_blob": "f4b120e700064b03709fa29b2849d3767e438f0b",
       "before_blob": null
     },
     "tests/test_ci_six_shards.py": {
-      "after_blob": "890dc77b41e3e43f3c2adc44dc33577617ead403",
+      "after_blob": "ff54adbdc8f9369fe889d92e076d5834020f8e2d",
       "before_blob": "c1e848957484ee80ddec81ac3bcc35b2ebf23bdb"
     },
     "tests/test_ci_test_shards.py": {
-      "after_blob": "bfd727a9ebda840ebeea6c1fa223a8d718621747",
+      "after_blob": "ef7f6e81c3119f315ada50a2243b8f76b77bd25a",
       "before_blob": "c88c66e391791c2725c221b60625256966d4e143"
     },
     "tests/test_drive_history_harness.py": {
@@ -95,7 +95,7 @@
       "before_blob": "8feb0d09dfc9b65d404baa35f5b12130684f8495"
     },
     "tests/test_historical_scope_input_boundary.py": {
-      "after_blob": "3e93b247ca4548ee0c595ce28aa52eb49df85945",
+      "after_blob": "fad807d68fb8ee69566e0c41fdd94dc1402afa56",
       "before_blob": null
     },
     "tests/test_home_runline_scope_policy.py": {
@@ -123,7 +123,7 @@
       "before_blob": "4727872f579c211d456d2a07a17915ddc5bb21dd"
     },
     "tests/test_ncaaf_staged_ci_capacity.py": {
-      "after_blob": "199acb6b42710d2094ac4dd8639356ff103c1d18",
+      "after_blob": "f8789b360da9cf6601d847e3cd09b3fbd0cc1ee7",
       "before_blob": "86c5782b4606abb8deb3437b8d2de90baaa36967"
     },
     "tests/test_nfl_admission_scope.py": {
@@ -179,11 +179,12 @@
       "before_blob": "52d61c2570b31f0df07dd77d539b7dc820d3b5f5"
     }
   },
-  "implementation_commit": "76a54a0806ddde6e75ce1d92687909e388a44ed1",
-  "implementation_tree": "5ccab5dd516104334b3386b3cb4e684a5484e801",
+  "implementation_commit": "e37bd642dad69fbe8a18d01bd532cb71f6b5e911",
+  "implementation_tree": "8b0c219314a8c2bbc8365d6a4fb5e397855465ed",
   "measured_capacity_amendment_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
   "policy_version": "ci-fixture-stability-v1",
   "proposal_sha256": "261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d",
+  "read_consistency_capacity_amendment_sha256": "d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1",
   "schema_version": 85,
   "second_advisory_amendment_sha256": "6cf28cd1db29cd0ba101cce67b8ac3bcc5d6857b61ba555b6aa382298fda7295",
   "shared_historical_boundary_amendment_sha256": "8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f",
