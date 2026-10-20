@@ -176,3 +176,11 @@ later Path.open projection, so the new edge attempted a second transition.
 Registered capacity reads now use authenticated physical bytes independently
 for both methods; unrelated reads/patches remain delegated and owned cleanup
 is unchanged. No rejection/assertion was suppressed and no hosted run consumed.
+
+A pre-dispatch synthetic direct-call probe on the preservedea320f9e successor
+showed that the new installer could be called without an authenticated consumer
+or active owner. It is now routed through the existing owned_api_patch boundary,
+and record access authenticates the plan before inspecting the generation.
+The same new regression rejects unregistered plans and missing owners. No new
+cache or independent selector is introduced; repeated authentication remains live.
+The temporary synthetic view was restored, no files/provider requests changed.

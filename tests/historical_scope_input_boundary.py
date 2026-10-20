@@ -672,7 +672,8 @@ class InputOwner:
 
 
 def capacity_input_records(plan):
-    """Finish the exact input edge after apply_selected_inputs authenticates plan."""
+    """Authenticate an explicit input operation before inspecting its generation."""
+    authenticate_plan(plan)
     binding_raw=physical_bytes(ROOT/BINDING)
     if sha(binding_raw)!=plan.binding_sha256:
         raise ValueError('HISTORICAL_BINDING_CHANGED')
@@ -691,6 +692,7 @@ def capacity_input_records(plan):
 
 def install_capacity_input_view(plan,patch):
     if plan.role is not Role.HISTORICAL:return False
+    patch=owned_api_patch(patch,plan)
     records=capacity_input_records(plan)
     read=Path.read_bytes;native_open=Path.open
     def image(relative,raw):

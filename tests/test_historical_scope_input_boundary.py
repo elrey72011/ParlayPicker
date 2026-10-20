@@ -694,6 +694,10 @@ def test_capacity_records_and_binding_mutations_reject(monkeypatch):
     from tests import ci_fixture_stability_inputs as inputs
     req=request('test_ci_fixture_stability_scope','test_complete_profile_views_are_exact_reject_alteration_and_restore_current_reads')
     plan=boundary.resolve_context(req);boundary.authenticate_plan(plan)
+    with pytest.raises(ValueError,match='HISTORICAL_CONSUMER_NOT_AUTHENTICATED'):
+        boundary.install_capacity_input_view(replace(plan,consumer='tests/SYNTHETIC_UNREGISTERED.py'),monkeypatch)
+    with pytest.raises(ValueError,match='HISTORICAL_API_OWNER_REQUIRED'):
+        boundary.install_capacity_input_view(plan,monkeypatch)
     records=boundary.capacity_input_records(plan)
     assert set(records)==set(inputs.CAPACITY_SOURCE_RECORDS)
     changed=json.loads(json.dumps(inputs.CAPACITY_SOURCE_RECORDS))
