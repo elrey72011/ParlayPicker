@@ -2,7 +2,7 @@
 from pathlib import Path
 from collections import Counter
 from datetime import datetime,timezone
-import functools,hashlib,importlib.metadata,json,os,shutil,subprocess,sys,threading,time
+import functools,hashlib,importlib.metadata,io,json,os,shutil,subprocess,sys,threading,time
 import pytest
 HERE=Path(__file__).resolve().parent
 ROOT=Path.cwd().resolve()
@@ -18,8 +18,12 @@ ROWS=[];OBSERVED=[];SELECTED=[];COLLECTION_SECONDS=None
 ORIGINAL_OPEN=Path.open;ORIGINAL_READ=Path.read_bytes
 ORIGINAL_RUN=subprocess.run;ORIGINAL_OUTPUT=subprocess.check_output;ORIGINAL_COPY=shutil.copytree
 ATTR={};LOCAL=threading.local();CURRENT='<collection>';STAGE='collection';WRAPPERS=[]
+def physical_write(name,text,append=False):
+    # Diagnostic files must not consume the application tests' owned Path views.
+    with io.open(str(OUT/name),'a' if append else 'w',encoding='utf-8') as stream:stream.write(text)
+
 def write(name,value):
-    (OUT/name).write_text(json.dumps(value,indent=2,ensure_ascii=True,allow_nan=False)+'\n',encoding='utf-8')
+    physical_write(name,json.dumps(value,indent=2,ensure_ascii=True,allow_nan=False)+'\n')
 def sha(raw):return hashlib.sha256(raw).hexdigest()
 def record(category,started,raised):
     key=(CURRENT,STAGE,category,bool(raised))
@@ -81,9 +85,8 @@ def pytest_fixture_setup(fixturedef,request):
     try:relative=Path(code.co_filename).resolve().relative_to(ROOT).as_posix() if code else None
     except (ValueError,OSError):relative=None
     if relative and relative.startswith('tests/'):
-        with (OUT/'fixture-setup.jsonl').open('a',encoding='utf-8') as stream:
-            stream.write(json.dumps(dict(source=relative,fixture=fixturedef.argname,scope=fixturedef.scope,
-                seconds=time.perf_counter()-start,raised=bool(result.excinfo)))+'\n')
+        physical_write('fixture-setup.jsonl',json.dumps(dict(source=relative,fixture=fixturedef.argname,scope=fixturedef.scope,
+            seconds=time.perf_counter()-start,raised=bool(result.excinfo)))+'\n',append=True)
 def pytest_runtest_logstart(nodeid,location):
     global CURRENT
     OBSERVED.append(nodeid);CURRENT=nodeid.split('::')[0]
@@ -99,7 +102,7 @@ def pytest_runtest_teardown(item):
 def pytest_runtest_logreport(report):
     row=dict(nodeid=report.nodeid,phase=report.when,outcome=report.outcome,seconds=report.duration)
     ROWS.append(row)
-    with (OUT/'phases.jsonl').open('a',encoding='utf-8') as stream:stream.write(json.dumps(row)+'\n')
+    physical_write('phases.jsonl',json.dumps(row)+'\n',append=True)
 def pytest_sessionfinish(session,exitstatus):
     errors=[]
     for obj,name,wrapper,native in reversed(WRAPPERS):

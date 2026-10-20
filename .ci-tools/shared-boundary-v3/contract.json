@@ -1,47 +1,13 @@
 {
-  "version": "shared-boundary-one-job-diagnostic-v1",
+  "version": "shared-boundary-application-only-observer-v4",
   "seal": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
   "tree": "3f8c0de5ae3a9900f031e1e26c93cbe848547181",
   "base": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
   "parent_authorization_sha256": "8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f",
-  "approved_reallocation_sha256": "96843bfdf59c71077ce32430c6bd7d19e212d4c5f297404e8f7ee43ef49d3ccc",
   "inventory_count": 8646,
   "assignment_sha256": "6031a0046d4ff7202103b32568c443858cbcf146beb46d491ab50f321ccd35d5",
   "profile_sha256": "6ea7580a2d3098c6906fd111c8d0f32bda7e3daec321e4717fa58aa03ba42cba",
   "phases": {
-    "cold-service": {
-      "nodeids": [
-        "tests/paid_launch/case_policy_and_contracts.py::test_checkout_is_fail_closed_without_owner_gates",
-        "tests/paid_launch/case_policy_and_contracts.py::test_unknown_or_stale_authority_cannot_be_promoted",
-        "tests/paid_launch/case_policy_and_contracts.py::test_review_hash_binds_every_recommendation_fact",
-        "tests/paid_launch/case_policy_and_contracts.py::test_probability_semantics_and_supported_market_are_enforced",
-        "tests/paid_launch/case_policy_and_contracts.py::test_probability_semantics_reject_unknown_and_conditional_inputs",
-        "tests/paid_launch/case_policy_and_contracts.py::test_mean_and_conservative_ev_are_distinct_and_push_aware",
-        "tests/paid_launch/case_policy_and_contracts.py::test_conservative_win_bound_cannot_exceed_mean_probability",
-        "tests/paid_launch/case_policy_and_contracts.py::test_subscriber_ev_matches_isolated_core_price_helper",
-        "tests/paid_launch/case_policy_and_contracts.py::test_legacy_v1_release_is_not_silently_reinterpreted",
-        "tests/paid_launch/case_policy_and_contracts.py::test_blocked_upstream_result_cannot_release_with_qualified_market",
-        "tests/paid_launch/case_policy_and_contracts.py::test_valid_signature_cannot_hide_invalid_probability_math",
-        "tests/paid_launch/case_policy_and_contracts.py::test_changed_calibration_id_invalidates_bound_release_scope",
-        "tests/paid_launch/case_policy_and_contracts.py::test_live_key_is_rejected_when_live_billing_is_disabled",
-        "tests/paid_launch/case_postgres_api.py::test_anonymous_requests_never_return_premium_payload",
-        "tests/paid_launch/case_postgres_api.py::test_session_logout_and_csrf_are_enforced",
-        "tests/paid_launch/case_postgres_api.py::test_cross_customer_entitlement_and_direct_id_changes_do_not_grant_access",
-        "tests/paid_launch/case_postgres_api.py::test_client_cannot_supply_price_customer_or_role",
-        "tests/paid_launch/case_postgres_api.py::test_webhook_signature_and_deduplication",
-        "tests/paid_launch/case_postgres_api.py::test_reviewed_release_is_staged_without_lock_or_publication_write",
-        "tests/paid_launch/case_postgres_api.py::test_unknown_authority_and_generic_publish_text_cannot_approve",
-        "tests/paid_launch/case_isolation_and_scope.py::test_subscriber_runtime_never_imports_research_or_lock_modules",
-        "tests/paid_launch/case_isolation_and_scope.py::test_release_submit_command_contains_no_lock_drive_or_analysis_imports",
-        "tests/paid_launch/case_isolation_and_scope.py::test_protected_scope_guard_passes_for_additive_work"
-      ],
-      "arguments": [
-        "tests/paid_launch/case_policy_and_contracts.py",
-        "tests/paid_launch/case_postgres_api.py",
-        "tests/paid_launch/case_isolation_and_scope.py"
-      ],
-      "known_active_estimate_seconds": 35.161249999999995
-    },
     "combined-application": {
       "nodeids": [
         "tests/test_ci_scheduling_fixture_copy.py::test_actual_ci_template_copy_survives_controlled_real_repack",
@@ -366,7 +332,6 @@
     }
   },
   "phases_in_order": [
-    "cold-service",
     "combined-application"
   ],
   "active_budget_seconds": 1560,
@@ -384,10 +349,20 @@
   "planned_checkout": {
     "ref": "bea35f9cd39d26c54130d7508cef0dbb245fa0b6",
     "fetch_depth": 5,
-    "explicit_base_fetch_depth": 1,
     "notes": "Match the completed local shallow qualification and authenticate exact base; no full-history requirement. Diagnostic seal checkout is not a release tested-merge artifact."
   },
   "provider_requests": 0,
   "operational_changes": 0,
-  "release_coverage": false
+  "release_coverage": false,
+  "prior_consumed_reallocation_sha256": "96843bfdf59c71077ce32430c6bd7d19e212d4c5f297404e8f7ee43ef49d3ccc",
+  "new_owner_approval_required": true,
+  "reused_cold_service_evidence": {
+    "run_id": 39450438018,
+    "count": 23,
+    "passed": 23,
+    "exact_once": true,
+    "cleanup": true,
+    "xml_sha256": "1e16dc099f74dc6e634084042342e300f524a63233da91e176907544a9683e14",
+    "note": "Retained complete cold PostgreSQL16 evidence; source tree and service dependencies unchanged. Not repeated in this app-only diagnostic; required release paid lane remains intact."
+  }
 }

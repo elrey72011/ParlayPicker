@@ -1,0 +1,64 @@
+name: One bounded application observer diagnostic v4
+'on':
+  push:
+    branches: [validation/ci-stability-shared-boundary-observer-v4]
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    name: application-only shared-boundary observer diagnostic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Start first-step bounded diagnostic clock
+        run: python3 -c 'import json,os,time; from pathlib import Path; Path(os.environ["RUNNER_TEMP"]).joinpath("boundary-job-start.json").write_text(json.dumps(dict(monotonic=time.perf_counter())))'
+      - uses: actions/checkout@v5
+        with:
+          path: tools
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          path: candidate
+          ref: bea35f9cd39d26c54130d7508cef0dbb245fa0b6
+          fetch-depth: 5
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.15"
+          cache: pip
+          cache-dependency-path: candidate/requirements.txt
+      - name: Authenticate tools without warming application imports
+        run: |
+          mkdir diagnostic-output
+          python -I -B tools/.ci-tools/shared-boundary-v3/verify_tools.py e6371f1196b54f3f04cd6324568fda0441f127b3f0e9103396bf21451c6b8362 > diagnostic-output/tool-verification.json
+      - name: Verify exact shallow footprint
+        run: |
+          test "$(git -C candidate rev-parse HEAD)" = bea35f9cd39d26c54130d7508cef0dbb245fa0b6
+          test "$(git -C candidate rev-parse 'HEAD^{tree}')" = 3f8c0de5ae3a9900f031e1e26c93cbe848547181
+          test "$(git -C candidate rev-parse --is-shallow-repository)" = true
+          test "$(cat candidate/.git/shallow)" = 8b79b0a0eead4f63a041a551283a4b6be2980d72
+          printf '%s\n' 'Depth-five ancestry already supplies the exact base-only shallow boundary; no extra authenticated fetch needed.' > diagnostic-output/shallow-footprint.txt
+      - name: Install matching pinned application dependencies
+        run: |
+          python -m pip install pip==26.2.1
+          python -m pip install -r candidate/requirements.txt pytest -c tools/.ci-tools/shared-boundary-v3/constraints.txt
+          python -m pip list --format=json > diagnostic-output/application-dependencies.json
+          python -c 'import json,platform; from pathlib import Path; Path("diagnostic-output/runtime.json").write_text(json.dumps(dict(python=platform.python_version(),platform=platform.platform())))'
+          git --version > diagnostic-output/git-version.txt
+          google-chrome --version > diagnostic-output/chrome-version.txt
+      - name: Run exactly one approved diagnostic sequence
+        run: >-
+          python -I -B tools/.ci-tools/shared-boundary-v3/run_job.py
+          --candidate "$GITHUB_WORKSPACE/candidate"
+          --service-python python
+          --output "$GITHUB_WORKSPACE/diagnostic-output"
+          --job-start "$RUNNER_TEMP/boundary-job-start.json"
+      - name: Retain complete or partial diagnostic evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-stability-shared-boundary-observer-v4
+          path: diagnostic-output
+          retention-days: 14
+          if-no-files-found: error

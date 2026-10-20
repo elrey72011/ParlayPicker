@@ -83,7 +83,7 @@ def main():
         (out/'progress.json').write_bytes(canonical(results))
         if not good:break
     assert not git('status','--porcelain')
-    good=len(results)==2 and all(r.get('passed') is True for r in results)
+    good=len(results)==len(d['phases_in_order']) and all(r.get('passed') is True for r in results)
     summary=dict(at=datetime.now(timezone.utc).isoformat(),seal=d['seal'],tree=d['tree'],results=results,completed=good,
         active_seconds=time.perf_counter()-started,setup_elapsed_before_supervisor_seconds=started-job_start,
         first_step_elapsed_seconds=time.perf_counter()-job_start,job_hard_limit_seconds=1800,active_cap_seconds=1560,artifact_reserve_seconds=120,

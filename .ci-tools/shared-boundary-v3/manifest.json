@@ -1,11 +1,12 @@
 {
-  "approval_sha256": "96843bfdf59c71077ce32430c6bd7d19e212d4c5f297404e8f7ee43ef49d3ccc",
+  "version": "prepared-application-only-observer-tools-v4",
+  "prior_consumed_approval_sha256": "96843bfdf59c71077ce32430c6bd7d19e212d4c5f297404e8f7ee43ef49d3ccc",
+  "new_owner_approval_required": true,
   "files": {
     "constraints.txt": "e905ce367f1d6d65ae1c95bf2d2b3ec11cdde8bf7ac5e80878735e5688b809bb",
-    "contract.json": "91bf9bc1a754c8b7301a6c695563644c207a0d31290e3366b368c3d04eda4a29",
-    "diag_probe.py": "46d521e8bcdd6be9248c0e05f04ad6fb977bb0a219976999ce956e34b1a57f6f",
-    "run_job.py": "8ad8dce2276753758db642e7177016aa5e1910bc848640e370f14f3a82e6b587",
+    "contract.json": "b49d82406f9372b78241e6428595f0dc03cf6f9668a0478ede9bc1294ce430b9",
+    "diag_probe.py": "02254ec92b3a3a2966ab0dfc63236bf93e986ad9f4d9ab1d5fede42fe2593eb4",
+    "run_job.py": "b355ac575cee811caf1e5d18655852c5b4fe41f9bb24f4f4871f6046cc73f826",
     "verify_tools.py": "249d3e017054a19ce2aab9dff4d8a74ac511b3e58243e202ab53cedd603c4fd1"
-  },
-  "version": "exact-one-job-tools-v3"
+  }
 }
