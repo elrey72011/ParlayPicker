@@ -7,8 +7,8 @@ import sys
 import types
 
 ROOT=Path(__file__).resolve().parents[1]
-_CI_STABILITY_BINDING_SHA256='21dfcde3feda7ef058442146ee1b1d6739f9c414b95f42c2083401c915e5fdbe'
-_CI_STABILITY_GUARD_SHA256='9b63c7984ac8926c7cc070758ed5b5d090434b9748171ae49e7cd686efb25da8'
+_CI_STABILITY_BINDING_SHA256='34c2af8443a7d6814b59d4eaee361e7d169bf088a4477c8e158119f0cb6d8110'
+_CI_STABILITY_GUARD_SHA256='beb86859676b1ca250a33ffc90ab52cbb44ba540bc6df93f184e1995a835da97'
 
 def _ci_fixture_module():
     with open(ROOT/'scripts/check_launch_change_scope.py','rb') as stream: source=stream.read().replace(b'\r\n',b'\n')
@@ -53,6 +53,16 @@ def _ncaaf_future_guard_matches(source):
         if b'_CI_STABILITY_GUARD_SHA256=' in source:source=module.previous_guard(source,binding)
         return _ci_fixture_previous_guard_match(source)
     except (OSError,ValueError,KeyError,TypeError):return False
+
+
+def _ci_authenticated_source_input():
+    module,binding=_ci_fixture_module()
+    with open(ROOT/'scripts/check_launch_change_scope.py','rb') as stream:
+        source=stream.read().replace(b'\r\n',b'\n')
+    return source,binding
+
+
+_ci_module.install_legacy_source_bridge(globals(),_ci_authenticated_source_input)
 
 def main() -> int:
     parser=argparse.ArgumentParser()

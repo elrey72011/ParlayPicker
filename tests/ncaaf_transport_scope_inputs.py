@@ -1,16 +1,17 @@
 """Exact immutable #2431 inputs for inherited scope tests, never live gates."""
 import base64,hashlib,json,sys,types
 from pathlib import Path
-from functools import lru_cache
 
 
-@lru_cache(maxsize=1)
+
 def frozen_predecessor(root):
-    from scripts import check_launch_change_scope as live
+    from tests.historical_scope_input_boundary import canonical_guard,physical_bytes
+    live=canonical_guard()
     from scripts import ncaaf_transport_scope as scope
     root=Path(root)
-    with (root/scope.BINDING).open('rb') as f:binding=json.loads(f.read())
-    with (root/live.GUARD_PATH).open('rb') as f:source=f.read().replace(b'\r\n',b'\n')
+    binding=json.loads(physical_bytes(root/scope.BINDING))
+    module,control=live._ci_fixture_module()
+    source=module.previous_guard(physical_bytes(root/live.GUARD_PATH).replace(b'\r\n',b'\n'),control)
     if 'ci_fixture_copy' in binding:
         from scripts import ci_scheduling_fixture_scope as correction
         d=binding['ci_fixture_copy'];source=correction.predecessor_guard(source,live,binding)
@@ -24,32 +25,41 @@ def frozen_predecessor(root):
     old=types.ModuleType('exact_ncaaf_transport_predecessor_scope');old.__file__=str(root/live.GUARD_PATH)
     from unittest.mock import patch
     read=Path.read_bytes
-    sys.modules[old.__name__]=old
-    with patch.object(Path,'read_bytes',lambda p:source if p.resolve()==(root/live.GUARD_PATH).resolve() else read(p)):
+    with patch.dict(sys.modules,{old.__name__:old}), patch.object(Path,'read_bytes',lambda p:source if p.resolve()==(root/live.GUARD_PATH).resolve() else read(p)):
         exec(compile(source,old.__file__,'exec'),old.__dict__)
+    from tests.historical_scope_input_boundary import register_owned_module
+    register_owned_module(old)
     return old,binding
 
 
-def install(request,patch):
+frozen_predecessor.cache_clear=lambda:None
+
+
+def _install_selected_transport_inputs(request,patch,plan):
     from ci_fixture_scope_inputs import install as selected
     if selected(request,patch):return
     name=request.module.__name__.split('.')[-1]
     # Explicit inherited scope contracts only. New diagnostics tests and actual
     # subprocess CLI/validation do not receive a projected runtime or result.
-    if 'scope' not in name or name.startswith('test_ncaaf_transport'):return
-    from scripts import check_launch_change_scope as live
+    if plan.generation not in {'transport','transport-future'}:return
+    from tests.historical_scope_input_boundary import canonical_guard,physical_bytes
+    live=canonical_guard()
     from scripts import ncaaf_transport_scope as scope
     root=Path(__file__).resolve().parents[1]
     try:Path(request.module.__file__).resolve().relative_to(root/'tests')
     except (ValueError,AttributeError):return
-    with (root/scope.BINDING).open('rb') as f:binding=json.loads(f.read())
+    binding=json.loads(physical_bytes(root/scope.BINDING))
     if 'transport_diagnostics' not in binding:return
-    old,binding=frozen_predecessor(str(root))
-    from ncaaf_future_scope_inputs import historical_test_consumers
-    for consumer,key in historical_test_consumers(request.module,live):patch.setattr(consumer,key,old)
-    import scripts
-    patch.setattr(scripts,'check_launch_change_scope',old)
-    patch.setitem(sys.modules,'scripts.check_launch_change_scope',old)
+    if plan.generation=='transport':
+        old,_=frozen_predecessor(str(root))
+        from tests.ncaaf_future_scope_inputs import historical_test_consumers
+        for consumer,key in historical_test_consumers(request.module,live):patch.setattr(consumer,key,old)
+        import scripts
+        patch.setattr(scripts,'check_launch_change_scope',old)
+        patch.setitem(sys.modules,'scripts.check_launch_change_scope',old)
+    # This route ends at the selected FUTURE generation. Reconstruct its
+    # immutable transport inputs without executing an immediately discarded
+    # intermediate predecessor module or changing the canonical import twice.
     read=Path.read_bytes
     def previous(path):
         value=read(path)
@@ -66,3 +76,10 @@ def install(request,patch):
             return scope.previous_source(relative,normalized,live,binding)
         return normalized if normalized!=value.replace(b'\r\n',b'\n') else value
     patch.setattr(Path,'read_bytes',previous)
+
+
+def install(request,patch):
+    from tests.historical_scope_input_boundary import resolve_context,Role,owned_api_patch
+    plan=resolve_context(request)
+    if plan.role is not Role.HISTORICAL:return
+    return _install_selected_transport_inputs(request,owned_api_patch(patch,plan),plan)

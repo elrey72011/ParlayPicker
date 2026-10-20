@@ -64,3 +64,85 @@ Actual measured checkout commits are separately retained from code-reference/bra
 Historical-input follow-up approved as 12e3046831d8fde24748e5193a2e6a54311e1be318e703d3739fe6e1c41da7b2. Eight exact historical profile readers and the one direct-open reader receive authenticated predecessor inputs before consumption. Two sequence-sensitive historical reconstruction tests receive the exact published INPUT afterimages, authenticated against frozen bindings, hashes, Git blobs and lengths; expected outputs/assertions are unchanged. Unknown or altered sources are never projected. Current workflow/profile collection, live scope gates and standalone entrypoints retain actual bytes. Path patches are restored on exit.
 
 The matched unchanged-main SQLite cleanup lock and four Windows Chrome startup failures remain preserved with exact causes UNKNOWN. Their narrowly reviewed local-to-Ubuntu prerequisite allowance skips no test and waives no release check. Both one-shot diagnostics remain capped at30minutes; the conditional release requires complete correctness and at least120seconds conservative reserve after added setup/overhead measurement. The authentic CFBD timeout remains separate and UNKNOWN.
+
+## Shared authenticated historical-input boundary
+
+Amendment `8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f`
+continues preserved candidate `97ed96247939165c2f73026525e31e1c3dba9302`.
+The registry authenticates physical consumer source and fixture call sites before
+choosing LIVE, NATIVE or an exact historical generation. Unregistered consumers
+have no historical authority. The nested paid-launch module remains LIVE.
+
+Physical reads use FileIO, independently of both Path methods. Chronology selects
+the exact authenticated pipeline generation `7fdb9d01149f2e9ee19ee4092ed342ad11107d6cbca570450f964b6df2f9f49a`
+before construction. The original rejection detected an intermediate reviewed-target
+generation instead; its historical expected hashes and assertions are unchanged.
+One context owns projected methods, module entries, package attributes and aliases;
+nested native/live operations suspend owned views and restore them on exit.
+Unrelated patches remain outside that ownership. Mutable predecessor modules are
+fresh per context rather than cached by repository root or warm-up order.
+
+Thirteen late legacy source loaders retain their original globals and API. Each
+call authenticates current physical source and binding; only verified immutable
+predecessor bytes may be reused by exact source/binding/generation identity. Four
+current-binding readers stay native. No persistent Path override is installed by
+the tooling API. Dirty/staged/committed/resealed validation remains live.
+
+The successor implementation is a child of the preserved candidate, followed by a
+policy-only seal. Frozen preimages, assertions, production behavior, eleven shards,
+the timing policy and all operational authorizations remain unchanged. Local and
+diagnostic passes do not replace required release checks. Neither this boundary nor
+the transport diagnostics establish the authentic CFBD timeout's cause, and offer
+applicability is a separate external-evidence requirement.
+
+Three helpers edited by this amendment are themselves inputs to unchanged older
+readers: `ci_fixture_scope_inputs`, `ncaaf_transport_scope_inputs`, and
+`ncaaf_staged_capacity_fixtures`. Their exact main8b79 preimages are separately
+authenticated against source hashes, Git blobs and bounded payloads. The shared
+owner supplies them through both read_bytes and direct open before existing
+generation transitions. The original25 preimage rows and all expected outputs are
+unchanged. A rehashed or physically altered helper cannot receive that view.
+The former helper cache_clear API remains callable without a mutable cache;
+constructed module entries exist only for the authenticated owner's lifetime.
+
+Four imported session fixtures use an alias of the original `prepared`
+constructor. Their physical import sites and consumer hashes are authenticated
+separately from the constructor's source, scope and definition line. A complete
+import-dependency scan found four direct aliases and no further transitive alias
+edges. The shared boundary resolves them before construction; unregistered aliases,
+changed caller sources and substituted call sites reject. No test body or fixture
+assertion is changed to accommodate the alias.
+
+The future-layer historical reader selects the TRANSPORT input generation before
+its own unchanged future reconstruction. The generation is an exact authenticated
+registry value, not a filename rule. Other transport-then-future consumers retain
+their separate explicit route, and native/current consumers receive no projection.
+
+All registry fixture sites are regenerated from authenticated physical definitions before sealing. A complete consistency regression checks every registered source, fixture scope and definition line; the compatibility session helper records its actual line25.
+
+Explicit historical fixture views share the selected context ownership ledger. Their ordinary pytest cleanup cannot resurrect an expired view in a later native test. Legacy descriptors lacking a file authenticate their physical API and call site before resolving a bounded target. The compatibility future fixture returns the context-owned module, so function globals and the validator module namespace agree. These corrections retain all original assertions and historical input hashes.
+
+
+The original future-spread session test generates two exact child programs outside
+the checkout. Its source-only session contract authenticates the unchanged parent
+and literal write sites, both child sources, copied conftest, actual fixture site,
+current binding and exact predecessor generation. Only the session constructor's
+binary guard input is projected. Its captured guard object and both child call
+contexts stay native. Missing origin, altered sources or mismatched contracts
+confer no historical authority; explicit invalid historical claims reject. No
+module lease, new cache, basename approval or original assertion change is used.
+The complete generated-pytest family contains eight generators and ten literal
+programs; this is the sole historical-input constructor, with nine native controls.
+
+Late guard imports and pre-existing module aliases now receive the same authenticated selected namespace. Alias discovery only identifies references to update; it confers no projection authority. The unchanged post-merge constructor explicitly receives its transport predecessor, while the reconstruction readers receive the declared future generation. Native/current contexts still precede all predecessor work.
+
+The explicit stability generation retains the authenticated current namespace and authenticates the exact starting-main source layer. The original chronology-fixture reader then receives only its separately authenticated chronology-capacity predecessor transition. Its namespace is not reconstructed from the earlier future generation. Generation selection occurs before either factory is consulted; original guard sizes, source hashes and assertions remain unchanged.
+
+Current control-binding authentication uses the canonical guard and physical bytes,
+independently of an active historical module or Path view. The explicit three-cost
+fixture keeps its existing supplied-input assertion, and the chronology-capacity
+transition still checks its original exact binding before reconstruction. A cold
+boundary regression exposed an outdated current helper hash; successor metadata
+now authenticates the prior physical source before refreshing current afterimages
+and actual API definition lines. Historical preimages and expected outputs are not
+regenerated. The complete registry consistency check remains required.
