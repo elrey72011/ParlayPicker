@@ -696,8 +696,14 @@ def test_capacity_historical_profile_and_nested_current_gate():
         chronology_binding=json.loads(boundary.physical_bytes(boundary.ROOT/chronology.BINDING))
         target='tests/test_ncaaf_staged_ci_capacity.py'
         outer=(boundary.ROOT/target).read_bytes()
-        expected=chronology.previous_source(target,outer,live,chronology_binding)
+        with (boundary.ROOT/target).open('rb') as source:
+            chronology_input=source.read()
+        reconstruction=chronology_binding['chronology_capacity']['source_reconstructions'][target]
+        assert boundary.sha(chronology_input)==reconstruction['after_sha256']
+        expected=chronology.previous_source(target,chronology_input,live,chronology_binding)
+        assert boundary.sha(expected)==reconstruction['before_sha256']
         req=request('test_ncaaf_reviewed_target_timing','test_timing_fixture_changes_preserve_all_original_assertions_without_history')
+        req.node.name=req.node.originalname
         for fail in (False,True):
             try:
                 with pytest.MonkeyPatch.context() as nested:

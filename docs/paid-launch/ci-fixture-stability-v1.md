@@ -209,3 +209,20 @@ inventory/profile, older compatible/conservative bases,1.15 variability and133.2
 overhead. New assertion/setup costs and final recollection must retain>=120s.
 Only the existing conditional full cycle is authorized after complete correctness;
 no new diagnostic, retry, provider or operational action is included.
+
+The first sealed13-way local combined context (6426cdd15554) is preserved:
+214passed,1failed,110unrun. Its new nested-input regression supplied only
+node.originalname to a legacy installer requiring actual pytest node.name.
+A corrected-shape probe then showed that the test computed its expected
+chronology output from the outer future read_bytes view, rather than the exact
+eleven-way input consumed by the chronology open transition. The actual inner
+installer returned the frozen nine-way SHA953bdd7186f517677cc38b3482fd389feb91e58d122f43a7456d47ed7348d353
+through both interfaces and restored the prior views. Only the new regression's
+request/input construction is corrected: supply node.name, authenticate the
+chronology after-image before reconstruction, and assert its frozen before-image.
+Every previous assertion remains. The process-local passing probe is not final
+validation; a new clean-shallow combined run and capacity gate remain required.
+The original263 prefix completed261passed and2Chrome crash-server startup
+failures, with all15chronology cases passing. Preserve these outcomes separately;
+the matching unchanged-main browser limitation does not waive any release check.
+No additional hosted diagnostic or release cycle is authorized or consumed.
