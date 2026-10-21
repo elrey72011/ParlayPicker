@@ -51,7 +51,7 @@
       "before_blob": "b23341dd550c7d08d3a98fad67ef4b26d5a7250d"
     },
     "docs/paid-launch/ci-fixture-stability-bindings-v1.json": {
-      "after_blob": "d1b85dd06cc79fac183735cfb2aacd8f0ec113af",
+      "after_blob": "3601194642ba4303c0e6c639f2b9cf8b4864624d",
       "before_blob": null
     },
     "docs/paid-launch/ci-fixture-stability-v1.md": {
@@ -67,11 +67,11 @@
       "before_blob": null
     },
     "scripts/check_launch_change_scope.py": {
-      "after_blob": "70422988b600f244bbbbb3dfa3c90c2721f9f695",
+      "after_blob": "142e8e1181e1af9a9de1a8733cde2b0140785b8f",
       "before_blob": "27c6f2ee96f7742a514774270fd4b353f5274d7d"
     },
     "scripts/ci_fixture_stability_scope.py": {
-      "after_blob": "e47a6101b07744b7d4b308918f47f6c79d36cdd4",
+      "after_blob": "3a7b480c2cb3229898dfc56dd555fb565df15b8f",
       "before_blob": null
     },
     "scripts/ci_test_file_costs_v1.json": {
@@ -163,7 +163,7 @@
       "before_blob": "8feb0d09dfc9b65d404baa35f5b12130684f8495"
     },
     "tests/test_historical_scope_input_boundary.py": {
-      "after_blob": "c024bf68141ef69e4d8fdb8a587a076a8791346c",
+      "after_blob": "29ea8d6a35e6b5605005305f60a3f2650de4882e",
       "before_blob": null
     },
     "tests/test_home_runline_scope_policy.py": {
@@ -275,8 +275,8 @@
       "before_blob": "52d61c2570b31f0df07dd77d539b7dc820d3b5f5"
     }
   },
-  "implementation_commit": "a52914ce26c794dab3e6806c8bd1193d8086b199",
-  "implementation_tree": "73c3994fb1552624d60042b929e8b0c39b78b720",
+  "implementation_commit": "359eb09e6ec223318b33dde9c8f2b0878d8cca24",
+  "implementation_tree": "1b50f52d44a8d255cf833d187d88c60bd2921d7a",
   "measured_capacity_amendment_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
   "policy_version": "ci-fixture-stability-v1",
   "proposal_sha256": "261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d",
