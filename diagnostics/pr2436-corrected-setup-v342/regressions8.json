@@ -1,0 +1,10 @@
+[
+  "tests/test_historical_scope_input_boundary.py::test_owned_object_stream_observes_mutations_and_closes_after_every_exit[None]",
+  "tests/test_historical_scope_input_boundary.py::test_owned_object_stream_observes_mutations_and_closes_after_every_exit[ValueError]",
+  "tests/test_historical_scope_input_boundary.py::test_owned_object_stream_observes_mutations_and_closes_after_every_exit[KeyboardInterrupt]",
+  "tests/test_historical_scope_input_boundary.py::test_nested_object_stream_owners_do_not_share_processes_or_leave_views",
+  "tests/test_historical_scope_input_boundary.py::test_owned_stream_rejects_changed_physical_reader_before_import_or_launch",
+  "tests/test_historical_scope_input_boundary.py::test_warmed_object_stream_rejects_missing_or_corrupt_required_objects[missing]",
+  "tests/test_historical_scope_input_boundary.py::test_warmed_object_stream_rejects_missing_or_corrupt_required_objects[corrupt]",
+  "tests/test_historical_scope_input_boundary.py::test_bootstrap_reuses_verified_bytes_through_live_predecessor_checks"
+]

@@ -1,0 +1,53 @@
+name: PR2436 corrected setup validation v342
+on:
+  push:
+    branches: [diag/pr2436-corrected-setup-tools-v342]
+permissions:
+  contents: read
+jobs:
+  one-bounded-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Record job clock
+        run: |
+          echo "PP_DIAG_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+          mkdir -p diagnostic-evidence
+          git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+        with:
+          path: diagnostic-tools
+          persist-credentials: false
+      - name: Verify unchanged release pins
+        run: |
+          test "$(git ls-remote https://github.com/elrey72011/ParlayPicker.git refs/heads/main | cut -f1)" = 8b79b0a0eead4f63a041a551283a4b6be2980d72
+          test "$(git ls-remote https://github.com/elrey72011/ParlayPicker.git refs/heads/fix/consolidated-fixture-stability | cut -f1)" = b6af3a7ab41eeb8f6e4387a30b83945704698536
+      - uses: actions/checkout@v5
+        with:
+          ref: e06ba8edfc76155a1397fc4dd43efe44368abd67
+          path: source
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.15"
+      - name: Install unchanged pinned dependencies
+        run: |
+          python -m pip install "pip==26.2.2"
+          python -m pip install -r source/requirements.txt pytest -c diagnostic-tools/diagnostics/pr2436-corrected-setup-v342/constraints.txt
+      - name: Authenticate exact source and required immutable objects
+        run: python diagnostic-tools/diagnostics/pr2436-corrected-setup-v342/setup_context.py source diagnostic-evidence
+      - name: Run fresh regressions then complete setup-heavy files
+        run: >-
+          python -I -B diagnostic-tools/diagnostics/pr2436-corrected-setup-v342/run.py
+          --root source --out diagnostic-evidence/execution --job-start "$PP_DIAG_JOB_START"
+      - name: Hash retained complete or partial evidence
+        if: ${{ always() }}
+        run: python diagnostic-tools/diagnostics/pr2436-corrected-setup-v342/hash_artifacts.py diagnostic-evidence
+      - name: Retain diagnostic evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr2436-corrected-setup-v342
+          path: diagnostic-evidence
+          retention-days: 14
+          if-no-files-found: error

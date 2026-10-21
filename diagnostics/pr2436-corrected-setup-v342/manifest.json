@@ -1,0 +1,90 @@
+{
+  "schema": "proposed-corrected-setup-validation-v342",
+  "prepared_at": "2026-10-21T18:37:50.217072+00:00",
+  "status": "NOT_AUTHORIZED_NOT_DISPATCHED",
+  "source_head": "a1bba27bc1d274f20ea86d0e8e9914c87d54f16f",
+  "source_tree": "a131a538b07eb852fe1dbbc0fc049df0525203c8",
+  "implementation": "87575dd54416f8fb32935ff85a6da608517b7d2d",
+  "tested_merge": "e06ba8edfc76155a1397fc4dd43efe44368abd67",
+  "ordered_parents": [
+    "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+    "a1bba27bc1d274f20ea86d0e8e9914c87d54f16f"
+  ],
+  "main": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+  "published_pr_head": "b6af3a7ab41eeb8f6e4387a30b83945704698536",
+  "source_checkout_depth": 1,
+  "required_immutable_git_objects": [
+    "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+    "3bfb62123bf550ee5727bd039b6f63c7cb1625d5",
+    "85d8a3d71327035e2466938855884f9faf936cd7",
+    "55ecf5aa115462e8b61d6761d120d3226abc07ff",
+    "c2c4155d3e78df752d26ff58958900ecbbb68bec",
+    "dee3a1ec069a9276732eddeb436b06d9099ed73e",
+    "55363384275c9d3143cfe833f94a74a18b04ff40",
+    "569155e59c0fbe9c06c9fcd0a9e8f26040d8a120",
+    "896cb7b10811ccfae220ea31510637da99a88ac6",
+    "e7919ba207f3a1c8d46ddb6ebaa5193771bd5595",
+    "8744b19d3a43414fbd9c181200aea5f5cadb430b",
+    "dc053413795f6033f6bf8b02e3d83fcb2017250e",
+    "54e7f748f337f9e5834a7222df6279967a68407d",
+    "2c3cdbc837282cb40f158bc90e29ebce157269c2",
+    "87575dd54416f8fb32935ff85a6da608517b7d2d",
+    "a1bba27bc1d274f20ea86d0e8e9914c87d54f16f"
+  ],
+  "source_ref": "diag/pr2436-corrected-setup-source-v342",
+  "tools_ref": "diag/pr2436-corrected-setup-tools-v342",
+  "exact_publication_condition": "Explicit new authorization; each new ref must be absent and published with an exact empty lease. PR branch is not replaced. Stop on main/PR drift.",
+  "requested_jobs": 1,
+  "job_cap_seconds": 1800,
+  "active_phase_cap_seconds": 1560,
+  "retention_reserve_seconds": 75,
+  "grace_seconds": 15,
+  "retries": 0,
+  "phases": [
+    {
+      "name": "regressions8",
+      "count": 8
+    },
+    {
+      "name": "hotfiles89",
+      "count": 89
+    }
+  ],
+  "collected_count": 8711,
+  "assignment_sha256": "4e0bb1e89a7b09a4e76d8c6827cb8c352fa1aa155af6657d35473ce6e788472b",
+  "profile_sha256": "42aaeee9f4179d3d9526da43d6987eb7eb8b3c554830e1b14389716463376c00",
+  "shards": 13,
+  "python": "3.12.15",
+  "pip": "26.2.2",
+  "os": "ubuntu-24.04",
+  "budget_basis": {
+    "complete_local_test_phase_seconds": 1222.726525100216,
+    "measurement_basis": "Slower complete corrected coverage file, complete source-intake file, and all eight new regression phases; Windows only. Fixture intervals are already included.",
+    "unchanged_variance_multiplier": 1.15,
+    "retained_setup_collection_reporting_upload_floor_seconds": 139.2747,
+    "extra_cold_process_and_observer_allowance_seconds": 60,
+    "estimated_total_seconds": 1605.4102038652481,
+    "limitation": "A bounded request estimate, not Linux capacity clearance. Setup, upload and platform variability remain unmeasured; retain partial evidence and stop at the cap."
+  },
+  "instrumentation": "Passive pytest phase and nested fixture timing through io.FileIO. No cProfile or application method replacement. First-failure repository hashes and context only.",
+  "network": "Unchanged tests/conftest.py external application blocking and synthetic credentials; dependencies and exact immutable Git objects installed before application execution.",
+  "success": "All 97 distinct cases pass exactly once with setup/call/teardown accounting, no skips or errors; complete two-file XML, pinned collection/assignment/source, owned fixture cleanup, hashes and retained complete artifacts. No diagnostic outcome substitutes for release artifacts.",
+  "release": "Existing ONE conditional release cycle remains unspent and HELD until complete correctness plus measured credible >=120-second reserve. This request adds no full release cycle.",
+  "stop": "Source/tool/dependency/main/PR drift, unexpected failure/skip/missing identity, changed source tree, lost accounting, cleanup failure or time exhaustion. No retries or extra phases.",
+  "release_coverage": false,
+  "data_sha256": {
+    "budget-preview.json": "496ccaff7031f1734d5efac95457040aa8a76fed356cbec783ecf6930d66607e",
+    "constraints.txt": "e93984a44f959e4d15cf0326646791ffd74ad21d1def8a028939736fa3aac576",
+    "fixture_profile.py": "a900b80c5bbc43ea6b1f2261bde97a7393e3089ea39148efdda07634ca3f6c5b",
+    "full-inventory8711.json": "ada1619e8f7dde080809cc9d19774204250863a3880b8d5919b0dc19d828a501",
+    "hash_artifacts.py": "25fe79f3ac1ccbeacb8cc7207065266a8fb525213f666e4cb4b5e1b387bb9e6e",
+    "hotfiles89.json": "a912c688b085a273ed2d3fd9a6a7258f751e9571190bfc00f3d0f92a4b124c59",
+    "observe.py": "96d42a019c3de4731b36ca69704631f87c1f6fa6c510e3ea43b44660d0a1fd9e",
+    "regressions8.json": "ddefbd747631a4a1e0ddc64a6ed0aa1272fc25ca2d29a8e6698ae0c5518e4360",
+    "run.py": "f4f7c42b80238a05ad0554ac50167c1d0762cefd63dad031f1b89984d4020717",
+    "setup_context.py": "3fac4ecc81ff06e1e2d42f5fc3abcce14adb75a70a1bf27772ae5b584658d269",
+    "source-proof.json": "16c4a4df3fdc10b4241b1cca61feafd7431eb072858dc541c696cd73bc4a70ab",
+    "workflow.yml": "7b2b9a628b2f33661ff06693d7016bfa80b950a54146a59f69b8f22d952d12cb"
+  },
+  "temporary_directory": "Each fresh phase exclusively creates a short tempfile.mkdtemp prefix pp2436-v342- and sets PYTEST_DEBUG_TEMPROOT; no shared-directory recreation or application patch. Same ownership as the successful 605-case local workload. Exact path retained in start.json."
+}

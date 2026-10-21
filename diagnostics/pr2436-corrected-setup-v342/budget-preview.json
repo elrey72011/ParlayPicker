@@ -1,0 +1,9 @@
+{
+  "complete_local_test_phase_seconds": 1222.726525100216,
+  "measurement_basis": "Slower complete corrected coverage file, complete source-intake file, and all eight new regression phases; Windows only. Fixture intervals are already included.",
+  "unchanged_variance_multiplier": 1.15,
+  "retained_setup_collection_reporting_upload_floor_seconds": 139.2747,
+  "extra_cold_process_and_observer_allowance_seconds": 60,
+  "estimated_total_seconds": 1605.4102038652481,
+  "limitation": "A bounded request estimate, not Linux capacity clearance. Setup, upload and platform variability remain unmeasured; retain partial evidence and stop at the cap."
+}
