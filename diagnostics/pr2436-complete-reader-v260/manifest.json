@@ -1,0 +1,110 @@
+{
+  "active_phase_cap_seconds": 1560,
+  "allowance": {
+    "already_consumed_run": 39547177307,
+    "conditional_full_cycles_unspent": 1,
+    "remaining_after_dispatch": 0,
+    "task_diagnostic_ceiling": 2,
+    "this_job_index": 2
+  },
+  "assignment_sha256": "1c02a921d7af78bb4cf3df07d4bce652be2f057283a3f571044c367587bb03c8",
+  "authority": "Latest owner steering: two one-shot diagnostics maximum, inclusive; no automatic retries.",
+  "budget_basis": {
+    "artifact_retention_reserve_seconds": 75,
+    "cold_controls_estimate_seconds": 60,
+    "complete_affected_upper_estimate_seconds": 345,
+    "dependency_setup_estimate_seconds": 180,
+    "estimated_total_seconds": 1710,
+    "limitation": "Prior slower completed prefix retained; no speedup assumed. Estimates are not runtime guarantees. Stop at unchanged active/global deadlines and retain partial evidence.",
+    "paid_service_estimate_seconds": 90,
+    "platform_controls_estimate_seconds": 60,
+    "prior_complete_ubuntu_original304_seconds": 846.118729864,
+    "retained_prefix_upper_estimate_seconds": 900
+  },
+  "collected_count": 8703,
+  "data_sha256": {
+    "affected162.json": "a4fa334fc17deec5e6388b751a42f442a1e3387fe226e0bd57aeb2f3e0ad6df0",
+    "cold6.json": "a29b5cb45c1e27bbd773ca5b614af48d47bd9418e7b6a166c5789a9795c66f8c",
+    "constraints.txt": "e93984a44f959e4d15cf0326646791ffd74ad21d1def8a028939736fa3aac576",
+    "hash_artifacts.py": "25fe79f3ac1ccbeacb8cc7207065266a8fb525213f666e4cb4b5e1b387bb9e6e",
+    "observe.py": "84345475c401fb126295e0d94a635b3e5499b03138bbcd1910f7671138904b3b",
+    "ordered304.json": "7b9f7bd013c996835bb422e1742fd6dc3e9428fdbf81cb1e1f382c84e8ac030c",
+    "paid23.json": "db3ddc2127bf8541f6e83e9a1673fcf69553963f8258413e4af02af4d6829432",
+    "paid_observe.py": "6ea4e5a076649a8e99b21d3933fa3b82e25e38d8b60e94032e46933f6d48302d",
+    "platform5.json": "75e478f2140221f9dd850c321b322b9484eccf04d9070dca86f958df5cfd4c08",
+    "run.py": "a885fb41cf02472c0d52a95eb80ae9557f54875154648b51cd7bd895ce41394e",
+    "setup_context.py": "5aa5013b123c97d506abebc7b8c6c42e2ffc65aefdd3a11f8ac777a2453a6d06",
+    "temp_observer.py": "781f852fa4f9e3a226d089ef0b1b0e94915df8736ba5cc64b9e33d066b1c08a8"
+  },
+  "diagnostic_skip_policy": "No skip is expected in the declared diagnostic phases; unexpected skipped cases stop the diagnostic. Unchanged baseline release skips remain a separate full-cycle requirement.",
+  "job_cap_seconds": 1800,
+  "main": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+  "network": "Existing tests/conftest external socket/requests blocking; synthetic credentials only; package/Git setup precedes application execution.",
+  "ordered_parents": [
+    "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+    "54e7f748f337f9e5834a7222df6279967a68407d"
+  ],
+  "original_proposal_sha256": "808c2b2bbff742c950164acdaab4d34d3391c26b64d42b6991489dace7b56458",
+  "os": "ubuntu-24.04",
+  "phases": [
+    "cold-isolated-postgresql16-paid23",
+    "actual-runner-exact-original304",
+    "five-preserved-Windows-baseline-controls-fresh-on-Ubuntu",
+    "complete-boundary113-and-scope49",
+    "six-fresh-cold-controls"
+  ],
+  "pip": "26.2.2",
+  "platform_controls": [
+    "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[spread_away]",
+    "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[spread_home]",
+    "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[total_over]",
+    "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[total_under]",
+    "tests/test_football_v3_feasibility.py::FeasibilityTests::test_empty_authenticated_restore_is_fail_closed_and_read_only"
+  ],
+  "preflight_missing_object": "Cold local paid guard correctly rejected a depth-one setup lacking exact implementation e7919ba207f3a1c8d46ddb6ebaa5193771bd5595. Preserve that failure. Fetch the exact immutable implementation/seal for the shallow application checkout; use an independent full-history checkout for the isolated service, matching its workflow.",
+  "prepared_at": "2026-10-21T08:37:53.465123+00:00",
+  "profile_setup_nodes": [
+    "tests/test_dfs_scope_policy.py::test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception",
+    "tests/test_dfs_scope_policy.py::test_crlf_conversion_does_not_reseal_baseline"
+  ],
+  "profile_sha256": "42aaeee9f4179d3d9526da43d6987eb7eb8b3c554830e1b14389716463376c00",
+  "published_pr_head": "b6af3a7ab41eeb8f6e4387a30b83945704698536",
+  "python": "3.12.15",
+  "reallocation": "Last authorized diagnostic, amended for the complete five-operation direct-reader family. Preserve cold paid23, actual ordered304, five platform controls, complete boundary113/scope49, and six fresh cold controls. No release artifact substitution.",
+  "release_coverage": false,
+  "required_immutable_git_objects": [
+    "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+    "3bfb62123bf550ee5727bd039b6f63c7cb1625d5",
+    "85d8a3d71327035e2466938855884f9faf936cd7",
+    "55ecf5aa115462e8b61d6761d120d3226abc07ff",
+    "c2c4155d3e78df752d26ff58958900ecbbb68bec",
+    "dee3a1ec069a9276732eddeb436b06d9099ed73e",
+    "55363384275c9d3143cfe833f94a74a18b04ff40",
+    "569155e59c0fbe9c06c9fcd0a9e8f26040d8a120",
+    "896cb7b10811ccfae220ea31510637da99a88ac6",
+    "e7919ba207f3a1c8d46ddb6ebaa5193771bd5595",
+    "8744b19d3a43414fbd9c181200aea5f5cadb430b",
+    "dc053413795f6033f6bf8b02e3d83fcb2017250e",
+    "54e7f748f337f9e5834a7222df6279967a68407d",
+    "2c3cdbc837282cb40f158bc90e29ebce157269c2"
+  ],
+  "retention_reserve_seconds": 75,
+  "schema": "complete-authenticated-reader-diagnostic-v260",
+  "selected_operation_bindings": [
+    "docs/paid-launch/ci-fixture-stability-bindings-v1.json",
+    "docs/paid-launch/ci-fixture-stability-v1.md",
+    "docs/paid-launch/launch-scope-policy-ci-fixture-stability-v1.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_fixture_stability_scope.py",
+    "tests/test_historical_scope_input_boundary.py"
+  ],
+  "service_checkout_depth": 0,
+  "service_requirements_git_blob": "1df96a2b3ec4bfcb3d6097e1ca0eda5b07378eca",
+  "service_requirements_sha256": "fe8228774ff9e7b34c8bb2d88000ef4233d71bfc5cfa5bb4a9811c33f314366d",
+  "service_requirements_worktree_sha256": "fe8228774ff9e7b34c8bb2d88000ef4233d71bfc5cfa5bb4a9811c33f314366d",
+  "setup_preflight_correction": "The push-context comparison-base literal is authenticated by the manifest, not required as a fetched Git object. Both actual push launch forms pass with that literal. Remove the unjustified Git-object prerequisite; preserve all actual source-parent objects and scope invocations.",
+  "source_checkout_depth": 1,
+  "source_head": "54e7f748f337f9e5834a7222df6279967a68407d",
+  "source_tree": "8194595f9883363d1fcf8ffd7a0673894075f65b",
+  "tested_merge": "946050925c6046d69128ceead773c5413ae8fdc0"
+}

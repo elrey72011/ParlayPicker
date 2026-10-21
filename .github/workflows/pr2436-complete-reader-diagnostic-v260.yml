@@ -1,0 +1,72 @@
+name: PR2436 complete-reader diagnostic v260
+on:
+  push:
+    branches: [diag/pr2436-complete-reader-v260]
+permissions:
+  contents: read
+jobs:
+  bounded-owned-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: subscriber_test
+          POSTGRES_USER: subscriber
+          POSTGRES_PASSWORD: test-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U subscriber -d subscriber_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    env:
+      PAID_TEST_DATABASE_URL: postgresql://subscriber:test-only@localhost:5432/subscriber_test
+    steps:
+      - name: Record bounded job clock
+        run: |
+          echo "PP_DIAG_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+          mkdir -p diagnostic-evidence
+      - uses: actions/checkout@v5
+        with:
+          path: diagnostic-tools
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: 946050925c6046d69128ceead773c5413ae8fdc0
+          path: source
+          fetch-depth: 1
+      - uses: actions/checkout@v5
+        with:
+          ref: 946050925c6046d69128ceead773c5413ae8fdc0
+          path: service-source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.15"
+      - name: Install observed pinned application dependencies
+        run: |
+          python -m pip install "pip==26.2.2"
+          python -m pip install -r source/requirements.txt pytest -c diagnostic-tools/diagnostics/pr2436-complete-reader-v260/constraints.txt
+      - name: Install isolated pinned service dependencies
+        run: |
+          python -m venv service-runtime
+          service-runtime/bin/python -m pip install "pip==26.2.2"
+          service-runtime/bin/python -m pip install -r source/services/subscriber/requirements.txt
+      - name: Verify immutable source context and environment
+        run: python diagnostic-tools/diagnostics/pr2436-complete-reader-v260/setup_context.py source diagnostic-evidence
+      - name: Run one bounded offline diagnostic
+        run: >-
+          python -I -B diagnostic-tools/diagnostics/pr2436-complete-reader-v260/run.py
+          --root source --out diagnostic-evidence/execution --job-start "$PP_DIAG_JOB_START" --service-python "$GITHUB_WORKSPACE/service-runtime/bin/python" --service-root service-source
+      - name: Hash retained complete or partial evidence
+        if: ${{ always() }}
+        run: python diagnostic-tools/diagnostics/pr2436-complete-reader-v260/hash_artifacts.py diagnostic-evidence
+      - name: Retain evidence on success, failure or interruption
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr2436-complete-reader-diagnostic-v260
+          path: diagnostic-evidence
+          retention-days: 14
+          if-no-files-found: error

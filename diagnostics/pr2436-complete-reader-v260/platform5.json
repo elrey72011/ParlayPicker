@@ -1,0 +1,7 @@
+[
+  "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[spread_away]",
+  "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[spread_home]",
+  "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[total_over]",
+  "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[total_under]",
+  "tests/test_football_v3_feasibility.py::FeasibilityTests::test_empty_authenticated_restore_is_fail_closed_and_read_only"
+]
