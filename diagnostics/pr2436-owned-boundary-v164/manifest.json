@@ -1,0 +1,60 @@
+{
+  "assignment_sha256": "954826ef3b16b01451152593faf244f6ad1feadb12b28c35e7f77fa3f9eeba30",
+  "authority": "Latest owner steering: two one-shot diagnostics maximum, inclusive; no automatic retries.",
+  "budget_basis": {
+    "limitation": "Windows timings do not establish Ubuntu completion or release capacity. Bounded diagnostic may be incomplete; retain every incremental result and stop at cap. No extrapolation is treated as clearance.",
+    "local_complete_original304_previous_source_seconds": 1721.0974089,
+    "matched_two_test_end_to_end_after_seconds": 65.3638395,
+    "matched_two_test_end_to_end_before_seconds": 69.348309
+  },
+  "collected_count": 8684,
+  "data_sha256": {
+    "cold6.json": "a29b5cb45c1e27bbd773ca5b614af48d47bd9418e7b6a166c5789a9795c66f8c",
+    "constraints.txt": "e93984a44f959e4d15cf0326646791ffd74ad21d1def8a028939736fa3aac576",
+    "hash_artifacts.py": "25fe79f3ac1ccbeacb8cc7207065266a8fb525213f666e4cb4b5e1b387bb9e6e",
+    "observe.py": "93c59ccfb4383da4de7e095c5920830a4eadf7e7275c8d206987bb49f94e0d90",
+    "ordered304.json": "7b9f7bd013c996835bb422e1742fd6dc3e9428fdbf81cb1e1f382c84e8ac030c",
+    "run.py": "a669fe97f445ef779b5a9790cc134c755da4ad6d555c4223440f6cf440930ea9",
+    "setup_context.py": "5aa5013b123c97d506abebc7b8c6c42e2ffc65aefdd3a11f8ac777a2453a6d06",
+    "temp_observer.py": "781f852fa4f9e3a226d089ef0b1b0e94915df8736ba5cc64b9e33d066b1c08a8"
+  },
+  "job_cap_seconds": 1800,
+  "main": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+  "network": "Existing tests/conftest external socket/requests blocking; synthetic credentials only; package/Git setup precedes application execution.",
+  "ordered_parents": [
+    "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+    "569155e59c0fbe9c06c9fcd0a9e8f26040d8a120"
+  ],
+  "original_proposal_sha256": "808c2b2bbff742c950164acdaab4d34d3391c26b64d42b6991489dace7b56458",
+  "os": "ubuntu-24.04",
+  "phases": [
+    "actual-runner-exact-original304",
+    "six-individual-cold-controls"
+  ],
+  "pip": "26.2.2",
+  "prepared_at": "2026-10-21T04:48:46.957528+00:00",
+  "profile_setup_nodes": [
+    "tests/test_dfs_scope_policy.py::test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception",
+    "tests/test_dfs_scope_policy.py::test_crlf_conversion_does_not_reseal_baseline"
+  ],
+  "profile_sha256": "42aaeee9f4179d3d9526da43d6987eb7eb8b3c554830e1b14389716463376c00",
+  "published_pr_head": "b6af3a7ab41eeb8f6e4387a30b83945704698536",
+  "python": "3.12.15",
+  "reallocation": "Final source and immutable-plan correction; preserve original304 identities/order with actual runpy __main__/FileShard context. The native current-assignment manifest must remain INCOMPLETE, never passing release coverage. Profile only two declared setup phases; six controls each use a fresh process if budget remains. No release workflow changes.",
+  "release_coverage": false,
+  "required_immutable_git_objects": [
+    "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+    "3bfb62123bf550ee5727bd039b6f63c7cb1625d5",
+    "85d8a3d71327035e2466938855884f9faf936cd7",
+    "55ecf5aa115462e8b61d6761d120d3226abc07ff",
+    "c2c4155d3e78df752d26ff58958900ecbbb68bec",
+    "dee3a1ec069a9276732eddeb436b06d9099ed73e",
+    "55363384275c9d3143cfe833f94a74a18b04ff40"
+  ],
+  "retention_reserve_seconds": 75,
+  "schema": "owned-boundary-diagnostic-amendment-v164",
+  "source_checkout_depth": 1,
+  "source_head": "569155e59c0fbe9c06c9fcd0a9e8f26040d8a120",
+  "source_tree": "482fde3821bf70fa72e82578621058aab1e6a963",
+  "tested_merge": "291a63acdbde4d818a93bd9ec7d9c6dc04b6896c"
+}

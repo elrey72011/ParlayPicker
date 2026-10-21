@@ -1,0 +1,48 @@
+name: PR2436 owned-boundary diagnostic v164
+on:
+  push:
+    branches: [diag/pr2436-owned-boundary-v164]
+permissions:
+  contents: read
+jobs:
+  bounded-owned-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Record bounded job clock
+        run: |
+          echo "PP_DIAG_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+          mkdir -p diagnostic-evidence
+      - uses: actions/checkout@v5
+        with:
+          path: diagnostic-tools
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: 291a63acdbde4d818a93bd9ec7d9c6dc04b6896c
+          path: source
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.15"
+      - name: Install observed pinned application dependencies
+        run: |
+          python -m pip install "pip==26.2.2"
+          python -m pip install -r source/requirements.txt pytest -c diagnostic-tools/diagnostics/pr2436-owned-boundary-v164/constraints.txt
+      - name: Verify immutable source context and environment
+        run: python diagnostic-tools/diagnostics/pr2436-owned-boundary-v164/setup_context.py source diagnostic-evidence
+      - name: Run one bounded offline diagnostic
+        run: >-
+          python -I -B diagnostic-tools/diagnostics/pr2436-owned-boundary-v164/run.py
+          --root source --out diagnostic-evidence/execution --job-start "$PP_DIAG_JOB_START"
+      - name: Hash retained complete or partial evidence
+        if: ${{ always() }}
+        run: python diagnostic-tools/diagnostics/pr2436-owned-boundary-v164/hash_artifacts.py diagnostic-evidence
+      - name: Retain evidence on success, failure or interruption
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr2436-owned-boundary-diagnostic-v164
+          path: diagnostic-evidence
+          retention-days: 14
+          if-no-files-found: error
