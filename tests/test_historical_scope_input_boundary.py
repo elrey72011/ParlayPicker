@@ -881,3 +881,75 @@ def test_transitive_reader_generation_is_owned_and_restored(tmp_path,exit_kind):
         assert exit_kind!='success'
     assert all(sys.modules[name] is native[name] and getattr(package,name.split('.')[1]) is native[name] for name in names)
     assert Path.read_bytes is read and Path.open is opened
+
+
+@pytest.mark.parametrize('exit_kind',['success','failure','interruption'])
+def test_bootstrap_assignment_owns_only_its_exact_reader(exit_kind):
+    import types
+    module=types.ModuleType('SYNTHETIC_bootstrap_owner')
+    calls=[]
+    def reader(value):
+        calls.append(value)
+        assert value==b'SYNTHETIC exact generation'
+        return b'SYNTHETIC unchanged parent'
+    module.reader=reader
+    module.__dict__['source']=b'SYNTHETIC later generation'
+    action='result=reader(source)'
+    if exit_kind=='failure':action+='\nraise RuntimeError("SYNTHETIC failure")'
+    if exit_kind=='interruption':action+='\nraise KeyboardInterrupt("SYNTHETIC interruption")'
+    opened,read=Path.open,Path.read_bytes
+    try:
+        boundary._run_bootstrap_assignment(module,compile(action,'<SYNTHETIC bootstrap>','exec'),
+            'reader',module.source,b'SYNTHETIC exact generation',boundary.sha(b'SYNTHETIC unchanged parent'))
+    except (RuntimeError,KeyboardInterrupt):
+        assert exit_kind!='success'
+    assert module.reader is reader and calls==[b'SYNTHETIC exact generation']
+    assert Path.open is opened and Path.read_bytes is read
+
+
+def test_actual_cold_and_warm_bootstraps_keep_fresh_namespaces():
+    from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs
+    live=boundary.canonical_guard()
+    opened,read=Path.open,Path.read_bytes
+    first,_=_new_released_scope_inputs(live)
+    image=boundary._BOOTSTRAP_IMAGES
+    first.ROOT=Path('SYNTHETIC mutated first-only root')
+    second,_=_new_released_scope_inputs(live)
+    assert first is not second and first.__dict__ is not second.__dict__
+    assert second.ROOT==boundary.ROOT and first.ROOT!=second.ROOT
+    assert boundary._BOOTSTRAP_IMAGES[1] is image[1]
+    assert all(type(value)is bytes for value in image[0]+image[1])
+    # The public legacy adapters still require their declared read view; do not
+    # confuse an unowned direct call with a fixture-generation failure.
+    req=request('test_dfs_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception')
+    with boundary.InputOwner(boundary.resolve_context(req)) as owner:
+        boundary.apply_selected_inputs(owner.plan,req,owner.patch)
+        for row in boundary._BOOTSTRAP_GENERATIONS:
+            fn=getattr(second,row[1])
+            assert fn.__name__!='normalized'
+            assert boundary.sha(fn(boundary._BOOTSTRAP_IMAGES[1][boundary._BOOTSTRAP_GENERATIONS.index(row)]))==row[4]
+    assert Path.open is opened and Path.read_bytes is read
+
+
+@pytest.mark.parametrize('attack',['source','binding','generation','helper','cached_image'])
+def test_warm_bootstrap_reauthenticates_every_input(monkeypatch,attack):
+    from copy import deepcopy
+    from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs
+    live=boundary.canonical_guard();scope,binding=live._ci_fixture_module()
+    scope_source=boundary.authenticated_predecessor(scope,binding)
+    source=live._ncaaf_future_base_source(scope_source)
+    if boundary._BOOTSTRAP_IMAGES is None:_new_released_scope_inputs(live)
+    physical=boundary.physical_bytes
+    if attack in {'source','helper'}:
+        target=boundary.GUARD if attack=='source' else 'tests/ncaaf_future_scope_inputs.py'
+        monkeypatch.setattr(boundary,'physical_bytes',lambda path:physical(path)+b'UNREVIEWED' if Path(path)==boundary.ROOT/target else physical(path))
+    elif attack=='binding':binding=deepcopy(binding);binding['base']='0'*40
+    elif attack=='generation':source+=b'UNREVIEWED'
+    else:
+        key,images=boundary._BOOTSTRAP_IMAGES
+        monkeypatch.setattr(boundary,'_BOOTSTRAP_IMAGES',(key,(images[0]+b'UNREVIEWED',)+images[1:]))
+    import types
+    module=types.ModuleType('SYNTHETIC no rejected bootstrap execution')
+    module.__file__=str(boundary.ROOT/boundary.GUARD)
+    with pytest.raises(ValueError):boundary.execute_released_bootstrap(source,module,live,binding)
+    assert not hasattr(module,'_ncaaf_pilot_seeded_custody_parent')

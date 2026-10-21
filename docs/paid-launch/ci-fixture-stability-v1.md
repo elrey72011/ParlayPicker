@@ -287,3 +287,31 @@ validation remains live. A separate exact helper preimage preserves the frozen
 The fully validated85 successor, XML and prior handoff remain preserved. New
 combined/shallow/legacy/capacity evidence is required for this local development
 successor. Hosted allowances remain exhausted; no publication or CI dispatch.
+
+
+Private-delivery follow-up (owner-authorized related fixture repairs):
+The four demonstrated from_string failures now use test-owned script files
+through the public AppTest.from_file API. The original application scripts,
+widget reruns, behavioral assertions and timeouts are unchanged. Five lifecycle
+regressions cover the shared-directory dependency, unrelated cleanup, isolation,
+reruns and cleanup on success/failure. Historical deleting actor remains UNKNOWN.
+
+The fresh released-guard factory now gives each of five original bootstrap
+readers its exact authenticated generation during its own assignment. Physical
+guard, binding, scope/helper bytes authenticate on every call. One bounded tuple
+retains only exact immutable input/output bytes, never a namespace or validation
+verdict; original readers, output hashes and module construction remain live.
+Compilation executes unchanged source statements with original line positions.
+The temporary reader adapter is restored before ordinary definitions continue.
+The original initializer preimage and all 25 historical records remain intact
+through one exact successor preimage, not regenerated expectations.
+
+Matched local two-DFS-identity comparison: 2/2 pass unchanged on both candidates,
+72.612 seconds baseline versus 65.367 seconds process-local prototype.
+Warm fixture setup fell from25.701 to18.513 seconds. This is contributory Windows
+evidence only; it is not a demonstrated final-tree/Ubuntu capacity reserve.
+All thirteen shards, timing rows, production deadlines and application/model
+behavior remain unchanged. The current task's total unspent hosted ceiling is
+two one-shot30-minute diagnostics and one conditional release cycle, not stacked
+with earlier consumed runs. Publication/release remains held pending complete
+correctness and a measured120-second reserve.

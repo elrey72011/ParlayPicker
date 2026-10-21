@@ -177,6 +177,9 @@ def install_legacy_source_bridge(namespace, authenticate, _immutable=None):
 FIXTURE_INITIALIZER_CORRECTION = {'parent': '85d8a3d71327035e2466938855884f9faf936cd7', 'parent_tree': '2a8f8b283ddfc76f7b727c1f5487e96800a16dd1', 'path': 'tests/ncaaf_future_scope_inputs.py', 'before_sha256': '3a4644e5d638d2ab83dcd02aaf19240552d5923659f950c5af1e77f4dd3d0dc4', 'before_git_blob': 'ca01875c5bbaece2ff49188ecdc49978a6235a70', 'after_sha256': 'e4c4955bc3829ad4b649a865e2a94c0199ceb77a6f9c66a60dc6b32eba2bb874', 'initializer': '_scope_reconstruction_for_validation', 'unchanged_source_memo_blob': 'efa69e2f228f0c44f2a5084e3becdd181a6e831d', 'max_entries': 8, 'max_retained_bytes': 33554432, 'max_context_fields': 512}
 
 
+PRIVATE_DELIVERY_REPAIR = {'parent': '55ecf5aa115462e8b61d6761d120d3226abc07ff', 'parent_tree': 'd8c9424f5313f1c35c3077e3e60b7f926a3eaab6', 'authority': 'Latest owner private-delivery engineering steering; original shared-boundary authority retained.', 'source_edits': {'tests/ncaaf_future_scope_inputs.py': {'before_sha256': 'e4c4955bc3829ad4b649a865e2a94c0199ceb77a6f9c66a60dc6b32eba2bb874', 'before_git_blob': '5e52fe7ba891b5d87eff81f08220e017e1c32558', 'after_sha256': '9728243e9b56ef491bedfba796d5b4390f77a92701d36604666ff96d9246843d', 'bytes': 8097, 'edits': [["        exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)\n", '        from tests.historical_scope_input_boundary import execute_released_bootstrap\n        execute_released_bootstrap(source,frozen,live,binding)\n', 1]]}, 'tests/test_locked_picks.py': {'before_sha256': '8265e11c4bab2b0f1ab66e72bc9674d9db5d7815752eff1b8a86526ef3882d1e', 'before_git_blob': 'ae5152343f6f2ae2ef3a2b260f4082a6fbe2d502', 'after_sha256': 'cdc5d494b8d59ed4c91fda6741625063a2de287eb3ecfe1429566ca9a97b4a1c', 'bytes': 13667, 'edits': [['import pytest\n', 'import pytest\nfrom tests.apptest_owned_script import app_from_owned_script\n', 1], ['def test_explicit_button_only_and_rerun_idempotence(store,monkeypatch):', 'def test_explicit_button_only_and_rerun_idempotence(store,monkeypatch,tmp_path):', 1], ['def test_lock_ui_explains_missing_quotes_without_requesting_pointless_refresh(monkeypatch):', 'def test_lock_ui_explains_missing_quotes_without_requesting_pointless_refresh(monkeypatch,tmp_path):', 1], ['def test_existing_alias_duplicates_do_not_hide_new_selector(store, monkeypatch):', 'def test_existing_alias_duplicates_do_not_hide_new_selector(store, monkeypatch, tmp_path):', 1], ['AppTest.from_string(code)', 'app_from_owned_script(tmp_path,code)', 3]]}, 'tests/test_mlb_prospective.py': {'before_sha256': '0cf77a41967d64aa90c15706eeea70e5d0e934d71415cee4c0d2410850d1eb34', 'before_git_blob': 'f2c0e22232d91a6d959a581785c0f2d3e1b5b0a0', 'after_sha256': '354c72225d7218f566863449a377147615ff44c66467e46b4ecd2ca43d0c407c', 'bytes': 4625, 'edits': [['import pytest\n', 'import pytest\nfrom tests.apptest_owned_script import app_from_owned_script\n', 1], ['AppTest.from_string(', 'app_from_owned_script(tmp_path,', 1]]}}, 'added_paths': ['tests/apptest_owned_script.py', 'tests/test_apptest_owned_script.py', 'tests/test_locked_picks.py', 'tests/test_mlb_prospective.py'], 'source_sha256': {'tests/apptest_owned_script.py': '713ea44cfb9c6e44f36fd4b41dbceb431dc8794d2fe33bf702dd14bc149a293f', 'tests/test_apptest_owned_script.py': '849dd7e99980905011330e4ce73985ad93a4d27960a00d23fa930e06aad9db27', 'tests/test_locked_picks.py': 'cdc5d494b8d59ed4c91fda6741625063a2de287eb3ecfe1429566ca9a97b4a1c', 'tests/test_mlb_prospective.py': '354c72225d7218f566863449a377147615ff44c66467e46b4ecd2ca43d0c407c', 'tests/historical_scope_input_boundary.py': '3f2668bc80600c991c42465e4b2435dba01a2ad894e074c22b2e92341877db38', 'tests/test_historical_scope_input_boundary.py': 'bc4e4264973b78cbe574c25945ac4a3cebdc4e4ac527e5bb7039efb1731170ec'}, 'bootstrap_source_sha256': '3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306', 'immutable_image_limit': 33554432, 'native_reconstruction_blob': 'efa69e2f228f0c44f2a5084e3becdd181a6e831d', 'original_AppTest_default_timeout': 3, 'MLB_run_timeout': 20, 'production_changes': False, 'source_parent': '55ecf5aa115462e8b61d6761d120d3226abc07ff', 'source_parent_tree': 'd8c9424f5313f1c35c3077e3e60b7f926a3eaab6'}
+
+
 def trees(g, revision):
     return {path: meta.split()[2] for row in g.git('ls-tree', '-r', revision).splitlines()
             for meta, path in [row.split('\t', 1)]}
@@ -226,6 +229,12 @@ def validate(g, manifest_path, comparison_base, binding):
         require(binding['read_consistency_capacity_amendment_sha256']==READ_CONSISTENCY_CAPACITY_AMENDMENT,
                 'READ_CONSISTENCY_CAPACITY_PROPOSAL_NOT_APPROVED')
     parent = (CAPACITY_PREDECESSOR if capacity else PRESERVED_CANDIDATE) if successor else BASE
+    delivery=binding.get('private_delivery_repair')
+    if delivery is not None:
+        require(delivery==PRIVATE_DELIVERY_REPAIR and capacity,'PRIVATE_DELIVERY_REPAIR_CHANGED')
+        if successor:
+            parent=delivery['parent']
+            require(g.git('rev-parse',parent+'^{tree}')==delivery['parent_tree'],'PRIVATE_DELIVERY_PARENT_CHANGED')
     require(g.git('show', '-s', '--format=%P', implementation).split() == [parent], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
     require(not g.exists_at(BASE, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
     if successor:
@@ -235,7 +244,7 @@ def validate(g, manifest_path, comparison_base, binding):
         if capacity:
             require(binding['measured_capacity']['predecessor']==CAPACITY_PREDECESSOR
                     and binding['measured_capacity']['predecessor_tree']==CAPACITY_PREDECESSOR_TREE
-                    and g.git('rev-parse',parent+'^{tree}')==CAPACITY_PREDECESSOR_TREE, 'CAPACITY_PREDECESSOR_CHANGED')
+                    and g.git('rev-parse',CAPACITY_PREDECESSOR+'^{tree}')==CAPACITY_PREDECESSOR_TREE, 'CAPACITY_PREDECESSOR_CHANGED')
         require(g.git_bytes('show', implementation+':'+POLICY) == g.git_bytes('show', parent+':'+POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
     else:
         require(not g.exists_at(implementation, POLICY), 'POLICY_SEAL_MUST_FOLLOW_IMPLEMENTATION')
@@ -244,7 +253,7 @@ def validate(g, manifest_path, comparison_base, binding):
     followup=binding.get('shared_repair_followup')
     if followup is not None:
         require(followup==SHARED_REPAIR_FOLLOWUP and capacity, 'SHARED_REPAIR_FOLLOWUP_CHANGED')
-    require(len(binding['paths']) == len(set(binding['paths'])) == (44 if followup else 43 if capacity else 38 if shared else 33), 'IMPLEMENTATION_PATH_SET_CHANGED')
+    require(len(binding['paths']) == len(set(binding['paths'])) == (48 if delivery is not None else 44 if followup else 43 if capacity else 38 if shared else 33), 'IMPLEMENTATION_PATH_SET_CHANGED')
     require(policy == make_policy(g, binding, implementation), 'EXACT_POLICY_BINDINGS_CHANGED')
     impl = trees(g, implementation)
     require(set(binding['reviewed_blobs']) == set(binding['paths'])-{GUARD, BINDING}, 'REVIEWED_BINDING_SET_CHANGED')
@@ -273,6 +282,7 @@ def validate(g, manifest_path, comparison_base, binding):
         require(set(rows)=={meta['path']},'FIXTURE_INITIALIZER_INPUT_SET_CHANGED')
         row=rows[meta['path']]
         current=g.git_bytes('show',implementation+':'+meta['path'])
+        current=namespace['private_delivery_predecessor_source'](meta['path'],current)
         prior=namespace['fixture_initializer_predecessor_source'](meta['path'],current)
         if successor:
             require(prior==g.git_bytes('show',meta['parent']+':'+meta['path']),'FIXTURE_INITIALIZER_PREIMAGE_CHANGED')
@@ -286,6 +296,25 @@ def validate(g, manifest_path, comparison_base, binding):
         if successor:
             require(blob(g.git_bytes('show',implementation+':scripts/scope_reconstruction.py'))==meta['unchanged_source_memo_blob'],
                     'RECONSTRUCTION_LIMIT_OR_LOGIC_CHANGED')
+    if delivery is not None:
+        rows=namespace['PRIVATE_DELIVERY_SOURCE_RECORDS']
+        require(set(rows)==set(delivery['source_edits']),'PRIVATE_DELIVERY_INPUT_SET_CHANGED')
+        for path,meta in delivery['source_edits'].items():
+            current=g.git_bytes('show',implementation+':'+path)
+            previous=namespace['private_delivery_predecessor_source'](path,current)
+            require(sha(previous)==meta['before_sha256'] and blob(previous)==meta['before_git_blob']
+                    and sha(current)==meta['after_sha256'],'PRIVATE_DELIVERY_PREIMAGE_CHANGED')
+            if successor:
+                require(previous==g.git_bytes('show',delivery['source_parent']+':'+path),'PRIVATE_DELIVERY_PREIMAGE_CHANGED')
+            expected=previous
+            for old,new,count in meta['edits']:
+                require(expected.count(old.encode())==count,'PRIVATE_DELIVERY_SEMANTICS_CHANGED')
+                expected=expected.replace(old.encode(),new.encode())
+            require(expected==current,'PRIVATE_DELIVERY_SEMANTICS_CHANGED')
+        for path,expected in delivery['source_sha256'].items():
+            require(sha(g.git_bytes('show',implementation+':'+path))==expected,'PRIVATE_DELIVERY_SOURCE_CHANGED')
+        require(blob(g.git_bytes('show',implementation+':scripts/scope_reconstruction.py'))==delivery['native_reconstruction_blob'],
+                'RECONSTRUCTION_LIMIT_OR_LOGIC_CHANGED')
     if successor:
         helpers=binding['historical_input_boundary']['helper_preimages']
         require(set(helpers)=={'tests/ci_fixture_scope_inputs.py','tests/ncaaf_transport_scope_inputs.py','tests/ncaaf_staged_capacity_fixtures.py'}, 'HISTORICAL_HELPER_INPUT_SET_CHANGED')

@@ -1,6 +1,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 import pytest
+from tests.apptest_owned_script import app_from_owned_script
 from test_public_history import Memory, pub, scores
 from app_core import public_history as history
 from app_core.locked_picks import lock_candidates, locked_selections
@@ -55,7 +56,7 @@ def test_scheduler_grades_unpublished_locks(store,monkeypatch):
     result=scheduler.run('site-1234','folder',store.client,{'MLB'},clock=lambda:datetime(2026,9,10,tzinfo=timezone.utc),fetch=lambda *a:{'recorded_at':AT,'scores':scores()})
     assert result['newly_settled']==1 and result['pending']==0
 
-def test_explicit_button_only_and_rerun_idempotence(store,monkeypatch):
+def test_explicit_button_only_and_rerun_idempotence(store,monkeypatch,tmp_path):
     monkeypatch.setattr("app_core.public_record.START_DATE","2026-09-09")
     from streamlit.testing.v1 import AppTest
     from app.ui import public_results, lock_picks, sftp_publish
@@ -69,7 +70,7 @@ if 'public_results_site-1234' not in st.session_state:
     st.session_state['public_results_site-1234']={'publications':[],'revisions':[],'imports':[],'locks':[],'rows':[]}
 render_lock_picks(PACKAGE,lambda key:'site-1234')
 """.replace('PACKAGE',repr(pub()['package']))
-    app=AppTest.from_string(code).run()
+    app=app_from_owned_script(tmp_path,code).run()
     assert not app.exception and store.all('locks')==[]
     app.button(key='lock_picks_action').click().run()
     assert not app.exception and len(store.all('locks'))==1
@@ -185,7 +186,7 @@ def test_lock_audit_duplicate_and_thirty_minute_boundary():
     assert lock_candidates(package,AT)==[]  # Ambiguity excludes only this game.
 
 
-def test_lock_ui_explains_missing_quotes_without_requesting_pointless_refresh(monkeypatch):
+def test_lock_ui_explains_missing_quotes_without_requesting_pointless_refresh(monkeypatch,tmp_path):
     from streamlit.testing.v1 import AppTest
     from app.ui import lock_picks
     monkeypatch.setattr(lock_picks,'now',lambda:AT)
@@ -196,7 +197,7 @@ from app.ui.lock_picks import render_lock_picks
 st.session_state['public_results_site']={'publications':[],'revisions':[],'locks':[],'lock_removals':[]}
 render_lock_picks(PACKAGE,lambda key:'site')
 """.replace('PACKAGE',repr(package))
-    app=AppTest.from_string(code).run()
+    app=app_from_owned_script(tmp_path,code).run()
     assert not app.exception
     assert any('Quote unavailable: 1' in r.value for r in app.caption)
     assert 'Click Refresh picks' not in ' '.join(r.value for r in app.info)
@@ -220,7 +221,7 @@ def test_duplicate_group_does_not_block_unrelated_lock(store, second_start):
     assert store.lock_picks(package, [candidates[0]['id']]) == candidates
 
 
-def test_existing_alias_duplicates_do_not_hide_new_selector(store, monkeypatch):
+def test_existing_alias_duplicates_do_not_hide_new_selector(store, monkeypatch, tmp_path):
     from streamlit.testing.v1 import AppTest
     from app.ui import lock_picks
     from app_core.locked_picks import lock_audit
@@ -236,7 +237,7 @@ def test_existing_alias_duplicates_do_not_hide_new_selector(store, monkeypatch):
     code = "import streamlit as st\nfrom app.ui.lock_picks import render_lock_picks\n"
     code += "st.session_state['public_results_site']=" + repr(dict(publications=[], revisions=[], locks=saved, lock_removals=[])) + "\n"
     code += "render_lock_picks(" + repr(package) + ", lambda key: 'site')"
-    app = AppTest.from_string(code).run()
+    app = app_from_owned_script(tmp_path,code).run()
     assert not app.exception
     assert len(app.multiselect(key='lock_pick_selection').value) == 1
     assert not app.button(key='lock_picks_action').disabled

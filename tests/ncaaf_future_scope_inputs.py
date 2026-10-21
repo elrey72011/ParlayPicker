@@ -18,7 +18,8 @@ def _new_released_scope_inputs(live):
     from unittest.mock import patch
     read=Path.read_bytes
     with patch.dict(sys.modules,{frozen.__name__:frozen}), patch.object(Path,'read_bytes',lambda path:source if path.resolve()==(root/live.GUARD_PATH).resolve() else read(path)):
-        exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)
+        from tests.historical_scope_input_boundary import execute_released_bootstrap
+        execute_released_bootstrap(source,frozen,live,binding)
         frozen._scope_reconstruction_for_validation()
     return frozen,json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON)
 

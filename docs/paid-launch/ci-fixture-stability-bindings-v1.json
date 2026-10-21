@@ -363,7 +363,7 @@
       "tests/ncaaf_future_scope_inputs.py": {
         "fixtures": {},
         "generation": "transport-future",
-        "sha256": "e4c4955bc3829ad4b649a865e2a94c0199ceb77a6f9c66a60dc6b32eba2bb874"
+        "sha256": "9728243e9b56ef491bedfba796d5b4390f77a92701d36604666ff96d9246843d"
       },
       "tests/ncaaf_transport_scope_inputs.py": {
         "fixtures": {},
@@ -1396,12 +1396,14 @@
     "scripts/check_launch_change_scope.py",
     "scripts/ci_fixture_stability_scope.py",
     "scripts/ci_test_file_costs_v1.json",
+    "tests/apptest_owned_script.py",
     "tests/ci_fixture_scope_inputs.py",
     "tests/ci_fixture_stability_inputs.py",
     "tests/historical_scope_input_boundary.py",
     "tests/ncaaf_future_scope_inputs.py",
     "tests/ncaaf_staged_capacity_fixtures.py",
     "tests/ncaaf_transport_scope_inputs.py",
+    "tests/test_apptest_owned_script.py",
     "tests/test_ci_five_shards.py",
     "tests/test_ci_fixture_stability_scope.py",
     "tests/test_ci_six_shards.py",
@@ -1414,6 +1416,8 @@
     "tests/test_football_research_scope.py",
     "tests/test_historical_scope_input_boundary.py",
     "tests/test_home_runline_scope_policy.py",
+    "tests/test_locked_picks.py",
+    "tests/test_mlb_prospective.py",
     "tests/test_ncaaf_compatibility_scope.py",
     "tests/test_ncaaf_custody_scope.py",
     "tests/test_ncaaf_normal_scope.py",
@@ -1442,19 +1446,114 @@
   },
   "preserved_candidate": "97ed96247939165c2f73026525e31e1c3dba9302",
   "preserved_tree": "945cab79d9674ee15e4d3d81f088e9c5beab969e",
+  "private_delivery_repair": {
+    "MLB_run_timeout": 20,
+    "added_paths": [
+      "tests/apptest_owned_script.py",
+      "tests/test_apptest_owned_script.py",
+      "tests/test_locked_picks.py",
+      "tests/test_mlb_prospective.py"
+    ],
+    "authority": "Latest owner private-delivery engineering steering; original shared-boundary authority retained.",
+    "bootstrap_source_sha256": "3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306",
+    "immutable_image_limit": 33554432,
+    "native_reconstruction_blob": "efa69e2f228f0c44f2a5084e3becdd181a6e831d",
+    "original_AppTest_default_timeout": 3,
+    "parent": "55ecf5aa115462e8b61d6761d120d3226abc07ff",
+    "parent_tree": "d8c9424f5313f1c35c3077e3e60b7f926a3eaab6",
+    "production_changes": false,
+    "source_edits": {
+      "tests/ncaaf_future_scope_inputs.py": {
+        "after_sha256": "9728243e9b56ef491bedfba796d5b4390f77a92701d36604666ff96d9246843d",
+        "before_git_blob": "5e52fe7ba891b5d87eff81f08220e017e1c32558",
+        "before_sha256": "e4c4955bc3829ad4b649a865e2a94c0199ceb77a6f9c66a60dc6b32eba2bb874",
+        "bytes": 8097,
+        "edits": [
+          [
+            "        exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)\n",
+            "        from tests.historical_scope_input_boundary import execute_released_bootstrap\n        execute_released_bootstrap(source,frozen,live,binding)\n",
+            1
+          ]
+        ]
+      },
+      "tests/test_locked_picks.py": {
+        "after_sha256": "cdc5d494b8d59ed4c91fda6741625063a2de287eb3ecfe1429566ca9a97b4a1c",
+        "before_git_blob": "ae5152343f6f2ae2ef3a2b260f4082a6fbe2d502",
+        "before_sha256": "8265e11c4bab2b0f1ab66e72bc9674d9db5d7815752eff1b8a86526ef3882d1e",
+        "bytes": 13667,
+        "edits": [
+          [
+            "import pytest\n",
+            "import pytest\nfrom tests.apptest_owned_script import app_from_owned_script\n",
+            1
+          ],
+          [
+            "def test_explicit_button_only_and_rerun_idempotence(store,monkeypatch):",
+            "def test_explicit_button_only_and_rerun_idempotence(store,monkeypatch,tmp_path):",
+            1
+          ],
+          [
+            "def test_lock_ui_explains_missing_quotes_without_requesting_pointless_refresh(monkeypatch):",
+            "def test_lock_ui_explains_missing_quotes_without_requesting_pointless_refresh(monkeypatch,tmp_path):",
+            1
+          ],
+          [
+            "def test_existing_alias_duplicates_do_not_hide_new_selector(store, monkeypatch):",
+            "def test_existing_alias_duplicates_do_not_hide_new_selector(store, monkeypatch, tmp_path):",
+            1
+          ],
+          [
+            "AppTest.from_string(code)",
+            "app_from_owned_script(tmp_path,code)",
+            3
+          ]
+        ]
+      },
+      "tests/test_mlb_prospective.py": {
+        "after_sha256": "354c72225d7218f566863449a377147615ff44c66467e46b4ecd2ca43d0c407c",
+        "before_git_blob": "f2c0e22232d91a6d959a581785c0f2d3e1b5b0a0",
+        "before_sha256": "0cf77a41967d64aa90c15706eeea70e5d0e934d71415cee4c0d2410850d1eb34",
+        "bytes": 4625,
+        "edits": [
+          [
+            "import pytest\n",
+            "import pytest\nfrom tests.apptest_owned_script import app_from_owned_script\n",
+            1
+          ],
+          [
+            "AppTest.from_string(",
+            "app_from_owned_script(tmp_path,",
+            1
+          ]
+        ]
+      }
+    },
+    "source_parent": "55ecf5aa115462e8b61d6761d120d3226abc07ff",
+    "source_parent_tree": "d8c9424f5313f1c35c3077e3e60b7f926a3eaab6",
+    "source_sha256": {
+      "tests/apptest_owned_script.py": "713ea44cfb9c6e44f36fd4b41dbceb431dc8794d2fe33bf702dd14bc149a293f",
+      "tests/historical_scope_input_boundary.py": "3f2668bc80600c991c42465e4b2435dba01a2ad894e074c22b2e92341877db38",
+      "tests/test_apptest_owned_script.py": "849dd7e99980905011330e4ce73985ad93a4d27960a00d23fa930e06aad9db27",
+      "tests/test_historical_scope_input_boundary.py": "bc4e4264973b78cbe574c25945ac4a3cebdc4e4ac527e5bb7039efb1731170ec",
+      "tests/test_locked_picks.py": "cdc5d494b8d59ed4c91fda6741625063a2de287eb3ecfe1429566ca9a97b4a1c",
+      "tests/test_mlb_prospective.py": "354c72225d7218f566863449a377147615ff44c66467e46b4ecd2ca43d0c407c"
+    }
+  },
   "proposal_sha256": "261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d",
   "read_consistency_capacity_amendment_sha256": "d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1",
   "reviewed_blobs": {
     ".github/workflows/ci.yml": "60c536767a7d8b0a83c1537834fc38a422c31dae",
-    "docs/paid-launch/ci-fixture-stability-v1.md": "0c68646872b58edacfd36706775dbace017b0eb8",
-    "scripts/ci_fixture_stability_scope.py": "3bffdb5f6bc391b1341b1dd3a1075b1e9d3cbce1",
+    "docs/paid-launch/ci-fixture-stability-v1.md": "3164ac76dfe7fd9809dd1f8400a0028e3b388e91",
+    "scripts/ci_fixture_stability_scope.py": "855eb6a953c1f9988b355545d3c00933e85ae2f5",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
+    "tests/apptest_owned_script.py": "dee53f63e681d24db37aabffef3c71572a15fb94",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
-    "tests/ci_fixture_stability_inputs.py": "b63384b00ec3b646ea3ebf1bb26b42dd41022ad4",
-    "tests/historical_scope_input_boundary.py": "b827a634c4150ba97a951a3c6b6658fd9e96dea7",
-    "tests/ncaaf_future_scope_inputs.py": "5e52fe7ba891b5d87eff81f08220e017e1c32558",
+    "tests/ci_fixture_stability_inputs.py": "5bdbb5c2d3ce901868522393795fde592b220628",
+    "tests/historical_scope_input_boundary.py": "921eaa4f19a414508b7935894c41ba0d17f69c46",
+    "tests/ncaaf_future_scope_inputs.py": "235abc3ad06ded8d6602bfa501fe9398ab5740a7",
     "tests/ncaaf_staged_capacity_fixtures.py": "254a671c1d360879fedcbfbd316fed232d410fca",
     "tests/ncaaf_transport_scope_inputs.py": "ed5f7dda6d92de6a9c723a4382b6d6e3f4daf11a",
+    "tests/test_apptest_owned_script.py": "fd180c307148dc69097b11b17220d4230bc938b6",
     "tests/test_ci_five_shards.py": "e0e9d8d5bb86560f203f48e506542465bbc931f3",
     "tests/test_ci_fixture_stability_scope.py": "f4b120e700064b03709fa29b2849d3767e438f0b",
     "tests/test_ci_six_shards.py": "ff54adbdc8f9369fe889d92e076d5834020f8e2d",
@@ -1465,8 +1564,10 @@
     "tests/test_estimate_scope_policy.py": "fa4d5f6b2ebfb1c60bb9cc9a4ceec34f606bc9c4",
     "tests/test_football_catalog_scope.py": "4b4789a96bf10cb434298c929a1102dfc27b6558",
     "tests/test_football_research_scope.py": "b4f49f7784d71aea6986c65e88f528afc7203024",
-    "tests/test_historical_scope_input_boundary.py": "714627b40c5aaeb1d449c3e0d32627a0d5b342b7",
+    "tests/test_historical_scope_input_boundary.py": "7c64f1c1524e0d0afae90069bc86b185ac113c5b",
     "tests/test_home_runline_scope_policy.py": "f57fbcbc4d1c4caadfe2944d66868766131d5a24",
+    "tests/test_locked_picks.py": "8c40b2dfec364cb873f58b867f3216e642bb97ad",
+    "tests/test_mlb_prospective.py": "0999b269648d9eaad4c324da4d15c8ad2f93c071",
     "tests/test_ncaaf_compatibility_scope.py": "6f2bd2ce2db6796abcb0c0004dda7fa7d12284f7",
     "tests/test_ncaaf_custody_scope.py": "2e55c1ee4853c4be74aebefe43165a14fb294466",
     "tests/test_ncaaf_normal_scope.py": "8baed61a952ce695de7a8d8b1eafb47f44ab78ec",

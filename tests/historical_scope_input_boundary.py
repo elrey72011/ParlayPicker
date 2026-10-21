@@ -445,6 +445,114 @@ _LIVE_GUARD = None
 _ABSENT = object()
 _PREDECESSOR_IMAGE = None
 
+# Exact generations used by the released guard's five import-time readers.
+# These are byte transformations, never cached validation or module objects.
+_BOOTSTRAP_SOURCE = '3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306'
+_BOOTSTRAP_IMAGES = None
+_BOOTSTRAP_LIMIT = 32 * 1024 * 1024
+_BOOTSTRAP_GENERATIONS = (
+    ('_ncaaf_custody_predecessor', '_ncaaf_custody_parent_guard_source', '_ncaaf_pilot_parent_guard_source',
+     '35ac29313e9509efd68894a86e4a98b109a58459605fe589cc6f86159e0dbc64', '0772744a3b07e7a3aa67d889efff45743e4562e4fe8b781e2d2b3d5111424d9d', 1),
+    ('_ncaaf_pilot_predecessor', '_ncaaf_pilot_parent_guard_source', '_discovery_parent_guard_source',
+     '6e82f1a4e0e14a34d62b3ead8eba8f44f382e40093dcfec447029d22027a219c', '35ac29313e9509efd68894a86e4a98b109a58459605fe589cc6f86159e0dbc64', 1),
+    ('_discovery_predecessor', '_discovery_parent_guard_source', '_cloud_peel_exact_guard',
+     '8df5b4b619e220d2884f8f395562ab356d41e247e3729a72774d4e0b79cc4d00', '6e82f1a4e0e14a34d62b3ead8eba8f44f382e40093dcfec447029d22027a219c', 2),
+    ('_cloud_predecessor', '_cloud_peel_exact_guard', '_owner_base_source',
+     '1639ccad41c0943799b30aaf6f8c0f08c08aaef96293408d147a919537a6406b', '8df5b4b619e220d2884f8f395562ab356d41e247e3729a72774d4e0b79cc4d00', 1),
+    ('_owner_predecessor', '_owner_base_source', '_nfl_owner_base_source',
+     '0ab2edd3f3a246fde7aa25c81a6e00bceb4a41621f2fb2ea276392725e29cb6b', '1639ccad41c0943799b30aaf6f8c0f08c08aaef96293408d147a919537a6406b', 1),
+)
+
+
+def _run_bootstrap_assignment(module, code, reader, source, image, expected):
+    """Only this assignment owns a generation adapter; definitions run normally."""
+    original = getattr(module, reader)
+    def normalized(value, *args, **kwargs):
+        selected = value == source
+        result = original(image if selected else value, *args, **kwargs)
+        if selected and (type(result) is not bytes or sha(result) != expected):
+            raise ValueError('HISTORICAL_BOOTSTRAP_OUTPUT_CHANGED')
+        return result
+    setattr(module, reader, normalized)
+    try:
+        exec(code, module.__dict__)
+    finally:
+        # No definitions execute in this interval. Unexpected replacement is a
+        # conflict, not permission to overwrite somebody else's patch.
+        owned = getattr(module, reader) is normalized
+        if owned:
+            setattr(module, reader, original)
+        else:
+            raise ValueError('HISTORICAL_BOOTSTRAP_READER_OWNER_CHANGED')
+
+
+def execute_released_bootstrap(source, module, live, binding):
+    """Authenticate physical inputs, then construct fresh historical namespaces.
+
+    The old constructor read a later 3.4-MB generation at every bootstrap and
+    repeatedly peeled unrelated successor layers. Give each original reader its
+    exact input generation during its assignment, with unchanged reconstruction
+    and output assertions. No mutable historical namespace is reused.
+    """
+    global _BOOTSTRAP_IMAGES
+    if type(source) is not bytes or sha(source) != _BOOTSTRAP_SOURCE:
+        raise ValueError('HISTORICAL_BOOTSTRAP_GENERATION_CHANGED')
+    scope, current = live._ci_fixture_module()
+    if scope.canonical(current) != scope.canonical(binding):
+        raise ValueError('HISTORICAL_BOOTSTRAP_BINDING_CHANGED')
+    physical = physical_bytes(ROOT / GUARD).replace(b'\r\n', b'\n')
+    scope.previous_guard(physical, current)  # Reauthenticate even on a warm hit.
+    helper = physical_bytes(ROOT / 'tests/ncaaf_future_scope_inputs.py').replace(b'\r\n', b'\n')
+    if scope.blob(helper) != current['reviewed_blobs']['tests/ncaaf_future_scope_inputs.py']:
+        raise ValueError('HISTORICAL_BOOTSTRAP_HELPER_CHANGED')
+    boundary = physical_bytes(ROOT / 'tests/historical_scope_input_boundary.py').replace(b'\r\n', b'\n')
+    if scope.blob(boundary) != current['reviewed_blobs']['tests/historical_scope_input_boundary.py']:
+        raise ValueError('HISTORICAL_BOOTSTRAP_HELPER_CHANGED')
+    key = (physical, scope.canonical(current), source, helper,
+           physical_bytes(ROOT / 'scripts/ci_fixture_stability_scope.py').replace(b'\r\n', b'\n'),
+           boundary)
+    previous = _BOOTSTRAP_IMAGES
+    if previous is not None and previous[0] == key:
+        images = previous[1]
+    else:
+        images = tuple(getattr(live, row[2])(source) for row in _BOOTSTRAP_GENERATIONS)
+    if (type(images) is not tuple or len(images) != len(_BOOTSTRAP_GENERATIONS)
+        or any(type(image) is not bytes or sha(image) != row[3]
+               for row, image in zip(_BOOTSTRAP_GENERATIONS, images))):
+        raise ValueError('HISTORICAL_BOOTSTRAP_IMAGE_CHANGED')
+    if sum(map(len, key)) + sum(map(len, images)) <= _BOOTSTRAP_LIMIT:
+        _BOOTSTRAP_IMAGES = (key, images)
+    lines = source.splitlines(keepends=True)
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line))
+    rows = {row[0]: (index, row) for index, row in enumerate(_BOOTSTRAP_GENERATIONS)}
+    steps = []
+    counts = {name: 0 for name in rows}
+    for node in ast.parse(source).body:
+        if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name) and node.value.func.id in rows):
+            name = node.value.func.id
+            counts[name] += 1
+            steps.append((offsets[node.lineno-1], offsets[node.end_lineno], *rows[name]))
+    if any(counts[row[0]] != row[5] for row in _BOOTSTRAP_GENERATIONS):
+        raise ValueError('HISTORICAL_BOOTSTRAP_SEQUENCE_CHANGED')
+    # Compile all unchanged statements first. Padding preserves function line
+    # identities; no frozen source text, assertion or future clock is rewritten.
+    chunks = []
+    cursor = 0
+    for start, end, index, row in steps:
+        prefix = b'\n' * source[:cursor].count(b'\n') + source[cursor:start]
+        assignment = b'\n' * source[:start].count(b'\n') + source[start:end]
+        chunks.append((compile(prefix, module.__file__, 'exec'),
+                       compile(assignment, module.__file__, 'exec'), index, row))
+        cursor = end
+    tail = compile(b'\n' * source[:cursor].count(b'\n') + source[cursor:], module.__file__, 'exec')
+    for prefix, assignment, index, row in chunks:
+        exec(prefix, module.__dict__)
+        _run_bootstrap_assignment(module, assignment, row[1], source, images[index], row[4])
+    exec(tail, module.__dict__)
+
 
 def authenticated_predecessor(scope, binding):
     """Reuse one immutable transformation, never a validation or module verdict.
