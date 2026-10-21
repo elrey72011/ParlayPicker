@@ -1132,6 +1132,42 @@ def test_recorded_afterimage_operation_selects_before_any_fixture_namespace(monk
         prior=ncaaf_reviewed_target_scope.previous_source(boundary.GUARD,value,binding)
         assert boundary.sha(prior)==binding['source_reconstructions'][boundary.GUARD]['before_sha256']
         assert boundary.canonical_guard()is native
+        # Exercise the unchanged complete direct reader, including application
+        # inputs added by the separately reviewed private successor layer.
+        from tests import test_ncaaf_reviewed_target_scope as consumer
+        consumer.test_current_sources_have_exact_preimages_and_unknown_bytes_stay_unknown()
+    assert Path.read_bytes is read and Path.open is opened
+
+
+@pytest.mark.parametrize('attack',[None,'physical_source','binding','record','unknown_supplied'])
+def test_recorded_afterimage_rechecks_private_edge_after_warm_read(monkeypatch,attack):
+    from tests import ci_fixture_stability_inputs as inputs
+    from scripts import ncaaf_reviewed_target_scope as scope
+    req=request('test_ncaaf_reviewed_target_scope','test_current_sources_have_exact_preimages_and_unknown_bytes_stay_unknown')
+    plan=boundary.resolve_context(req);relative='app_core/ncaaf_owner_spread.py';path=boundary.ROOT/relative
+    contract=json.loads(boundary.physical_bytes(boundary.ROOT/scope.BINDING))['source_reconstructions'][relative]
+    physical=boundary.physical_bytes;read,opened=Path.read_bytes,Path.open
+    with boundary.InputOwner(plan)as owner:
+        boundary.apply_selected_inputs(plan,req,owner.patch)
+        value=path.read_bytes()
+        assert boundary.sha(value)==contract['after_sha256']
+        with path.open('rb')as stream:assert stream.read()==value
+        assert path.read_text(encoding='utf-8').encode()==value
+        if attack in ('physical_source','binding'):
+            altered=path if attack=='physical_source'else boundary.ROOT/boundary.BINDING
+            monkeypatch.setattr(boundary,'physical_bytes',lambda p:physical(p)+b'\n 'if Path(p)==altered else physical(p))
+        elif attack=='record':
+            records={p:dict(r)for p,r in inputs.PRIVATE_DELIVERY_SOURCE_RECORDS.items()}
+            records[relative]['before_sha256']='0'*64
+            monkeypatch.setattr(inputs,'PRIVATE_DELIVERY_SOURCE_RECORDS',records)
+        if attack in ('physical_source','binding','record'):
+            with pytest.raises(ValueError):path.read_bytes()
+        elif attack=='unknown_supplied':
+            unknown=value+b'\nSYNTHETIC_UNREVIEWED_SOURCE'
+            assert boundary.current_source_input(plan,relative,unknown)==unknown
+            assert scope.previous_source(relative,unknown,json.loads(physical(boundary.ROOT/scope.BINDING)))==unknown
+        else:
+            assert path.read_bytes()==value
     assert Path.read_bytes is read and Path.open is opened
 
 

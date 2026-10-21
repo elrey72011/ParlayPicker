@@ -1100,28 +1100,40 @@ def capacity_input_records(plan):
         records[relative]['successor']=record
     return records
 
-def current_capacity_input(plan,relative,raw):
-    """Authenticate the current edge before an unchanged historical contract.
+def current_source_input(plan,relative,raw):
+    """Remove only the exact authenticated private successor input layer.
 
-    This performs fresh authentication on every read. It neither projects the
-    physical reader nor caches a validation verdict or historical module.
+    Physical authentication is independent of the supplied view. Older or
+    unknown supplied bytes remain unchanged for their original reader to judge.
+    No validation verdict, module or mutable input is reused.
     """
-    records=capacity_input_records(plan)
-    if plan.role is not Role.HISTORICAL or relative not in records or type(raw)is not bytes:
-        raise ValueError('CI_CAPACITY_INPUT_NOT_AUTHENTICATED')
+    authenticate_plan(plan)
+    if plan.role is not Role.HISTORICAL or type(raw)is not bytes:
+        raise ValueError('CI_PRIVATE_DELIVERY_INPUT_NOT_AUTHENTICATED')
     binding_raw=physical_bytes(ROOT/BINDING)
     if sha(binding_raw)!=plan.binding_sha256:raise ValueError('HISTORICAL_BINDING_CHANGED')
     binding=json.loads(binding_raw)
     from tests import ci_fixture_stability_inputs as inputs
     row=inputs.PRIVATE_DELIVERY_SOURCE_RECORDS.get(relative)
-    if row is None:return raw
     declared=binding['private_delivery_repair']['source_edits'].get(relative)
-    if (json.loads(json.dumps({key:value for key,value in row.items()if key!='compressed'}))!=declared
-            or sha(raw.replace(b'\r\n',b'\n'))!=row['after_sha256']):
+    if row is None and declared is None:return raw
+    if (not isinstance(row,dict) or not isinstance(declared,dict)
+            or json.loads(json.dumps({key:value for key,value in row.items()if key!='compressed'}))!=declared
+            or sha(physical_bytes(ROOT/relative))!=row['after_sha256']):
         raise ValueError('CI_PRIVATE_DELIVERY_GENERATION_CHANGED')
+    if sha(raw)!=row['after_sha256']:return raw
     value=inputs.private_delivery_predecessor_source(relative,raw)
-    if sha(value)!=row['before_sha256']:raise ValueError('CI_PRIVATE_DELIVERY_GENERATION_CHANGED')
+    if hashlib.sha256(value).hexdigest()!=row['before_sha256']:
+        raise ValueError('CI_PRIVATE_DELIVERY_GENERATION_CHANGED')
     return value
+
+
+def current_capacity_input(plan,relative,raw):
+    """Authenticate the current edge before an unchanged capacity contract."""
+    records=capacity_input_records(plan)
+    if plan.role is not Role.HISTORICAL or relative not in records or type(raw)is not bytes:
+        raise ValueError('CI_CAPACITY_INPUT_NOT_AUTHENTICATED')
+    return current_source_input(plan,relative,raw)
 
 
 def install_capacity_input_view(plan,patch):
@@ -1228,7 +1240,9 @@ def install_consistent_read_apis(plan,patch,live):
             # A binding reader consumes its own authenticated afterimages, not
             # the earlier namespace used by historical fixture constructors.
             if plan.generation=='recorded-source-afterimages':
-                with opened(path,'rb')as stream:return stream.read()
+                with opened(path,'rb')as stream:value=stream.read()
+                relative=path.resolve().relative_to(ROOT).as_posix()
+                return current_source_input(plan,relative,value)
             return read(path)
         finally:_DECLARED_READ_DEPTH.reset(token)
     def agreed_open(path,mode='r',*args,**kwargs):
