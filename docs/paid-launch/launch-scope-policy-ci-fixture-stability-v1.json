@@ -11,39 +11,43 @@
       "before_blob": "5ae84a6613af5c748919d985f75135def6174a0e"
     },
     "docs/paid-launch/ci-fixture-stability-bindings-v1.json": {
-      "after_blob": "8fb13c010ff4ccab3ed221f5ae62bcb6c2c2c700",
+      "after_blob": "4a782af9f67a47ec8ff650d189c289762a8380e8",
       "before_blob": null
     },
     "docs/paid-launch/ci-fixture-stability-v1.md": {
-      "after_blob": "0c68646872b58edacfd36706775dbace017b0eb8",
+      "after_blob": "3164ac76dfe7fd9809dd1f8400a0028e3b388e91",
       "before_blob": null
     },
     "scripts/check_launch_change_scope.py": {
-      "after_blob": "393d0faf7b3779d1e3ab4f397a70b675740f28d5",
+      "after_blob": "21c028242b0c48a54a5936558b2fbbc78d904f23",
       "before_blob": "27c6f2ee96f7742a514774270fd4b353f5274d7d"
     },
     "scripts/ci_fixture_stability_scope.py": {
-      "after_blob": "3bffdb5f6bc391b1341b1dd3a1075b1e9d3cbce1",
+      "after_blob": "855eb6a953c1f9988b355545d3c00933e85ae2f5",
       "before_blob": null
     },
     "scripts/ci_test_file_costs_v1.json": {
       "after_blob": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
       "before_blob": "5f9c1bc374a49083a89500976eee6b3a788fac0f"
     },
+    "tests/apptest_owned_script.py": {
+      "after_blob": "dee53f63e681d24db37aabffef3c71572a15fb94",
+      "before_blob": null
+    },
     "tests/ci_fixture_scope_inputs.py": {
       "after_blob": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
       "before_blob": "a19e4070b50fd1e6f300bd4509003464ee6b7ab3"
     },
     "tests/ci_fixture_stability_inputs.py": {
-      "after_blob": "b63384b00ec3b646ea3ebf1bb26b42dd41022ad4",
+      "after_blob": "5bdbb5c2d3ce901868522393795fde592b220628",
       "before_blob": null
     },
     "tests/historical_scope_input_boundary.py": {
-      "after_blob": "b827a634c4150ba97a951a3c6b6658fd9e96dea7",
+      "after_blob": "921eaa4f19a414508b7935894c41ba0d17f69c46",
       "before_blob": null
     },
     "tests/ncaaf_future_scope_inputs.py": {
-      "after_blob": "5e52fe7ba891b5d87eff81f08220e017e1c32558",
+      "after_blob": "235abc3ad06ded8d6602bfa501fe9398ab5740a7",
       "before_blob": "f42f0d6471bf8a294dd83b989f535eb287c389fe"
     },
     "tests/ncaaf_staged_capacity_fixtures.py": {
@@ -53,6 +57,10 @@
     "tests/ncaaf_transport_scope_inputs.py": {
       "after_blob": "ed5f7dda6d92de6a9c723a4382b6d6e3f4daf11a",
       "before_blob": "6411f0389cde0441cf8ad6eb8fc237a16e82e46c"
+    },
+    "tests/test_apptest_owned_script.py": {
+      "after_blob": "fd180c307148dc69097b11b17220d4230bc938b6",
+      "before_blob": null
     },
     "tests/test_ci_five_shards.py": {
       "after_blob": "e0e9d8d5bb86560f203f48e506542465bbc931f3",
@@ -95,12 +103,20 @@
       "before_blob": "8feb0d09dfc9b65d404baa35f5b12130684f8495"
     },
     "tests/test_historical_scope_input_boundary.py": {
-      "after_blob": "714627b40c5aaeb1d449c3e0d32627a0d5b342b7",
+      "after_blob": "7c64f1c1524e0d0afae90069bc86b185ac113c5b",
       "before_blob": null
     },
     "tests/test_home_runline_scope_policy.py": {
       "after_blob": "f57fbcbc4d1c4caadfe2944d66868766131d5a24",
       "before_blob": "288ba5c4c80d2a3ac281c38329956a9e0a856af1"
+    },
+    "tests/test_locked_picks.py": {
+      "after_blob": "8c40b2dfec364cb873f58b867f3216e642bb97ad",
+      "before_blob": "ae5152343f6f2ae2ef3a2b260f4082a6fbe2d502"
+    },
+    "tests/test_mlb_prospective.py": {
+      "after_blob": "0999b269648d9eaad4c324da4d15c8ad2f93c071",
+      "before_blob": "f2c0e22232d91a6d959a581785c0f2d3e1b5b0a0"
     },
     "tests/test_ncaaf_compatibility_scope.py": {
       "after_blob": "6f2bd2ce2db6796abcb0c0004dda7fa7d12284f7",
@@ -183,8 +199,8 @@
       "before_blob": "52d61c2570b31f0df07dd77d539b7dc820d3b5f5"
     }
   },
-  "implementation_commit": "1b45439d0b58bc8ce77778071a4ea89c93387f19",
-  "implementation_tree": "749d9459e16f50b2aadf530a24969f4072263826",
+  "implementation_commit": "401978bc7bffeb0159f4be4f24c0bce8bf90b28d",
+  "implementation_tree": "084654b905d89bbdb27fd2068da5b15a26bdf52b",
   "measured_capacity_amendment_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
   "policy_version": "ci-fixture-stability-v1",
   "proposal_sha256": "261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d",
@@ -1660,7 +1676,6 @@
     "tests/test_live_wager_contract.py": "a93d5b857705819f2bb415371a701d211676c812",
     "tests/test_lock_storage_performance.py": "b94f32e8a5f2d49ff6f8727463fcaed7a59b4273",
     "tests/test_lock_total_input_review.py": "e588c34a467bf91f9dff3b57369c1575256e3ae3",
-    "tests/test_locked_picks.py": "ae5152343f6f2ae2ef3a2b260f4082a6fbe2d502",
     "tests/test_low_line_over_override.py": "5963b6acd36985df87ad0a4929b6d188e03abe77",
     "tests/test_market_calibration.py": "565437751857f7e8d6acd28e2307ac78ab02a8df",
     "tests/test_market_probability_model.py": "575dbb0254cc9d0caf110b4f036d01663ddf870b",
@@ -1680,7 +1695,6 @@
     "tests/test_mlb_pitcher_stats.py": "1d8cd697cf8fe96237e6f279ce602e1aa652213e",
     "tests/test_mlb_pregame_receipts.py": "5a4e093305fc8445f3bf8aa58562a77e4cf66a79",
     "tests/test_mlb_production_readiness.py": "3e0820f9ef73a7f1a24073d7d1c65e73b875b9bd",
-    "tests/test_mlb_prospective.py": "f2c0e22232d91a6d959a581785c0f2d3e1b5b0a0",
     "tests/test_mlb_receipt_audit.py": "5d1dabd078b99d7a2362ba4db8f2d8d1a5a8b1d8",
     "tests/test_mlb_receipt_remote.py": "f790408ce288db787a31a143133e667ec8b8eae8",
     "tests/test_mlb_receipt_workflow.py": "61a740b9f388508adb33958010e29b61c949d6bc",
