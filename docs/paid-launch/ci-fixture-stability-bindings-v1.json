@@ -388,7 +388,7 @@
           }
         },
         "generation": "future",
-        "sha256": "7f16b0af4446f519d50ff1cadd341a2565d6aa6beb4f609f6ea6cb49789ca1ec"
+        "sha256": "cf4008cba0a45b2f5dd7fb40884cd7424c45bb97c1e0d1b685502b105d750db6"
       },
       "tests/test_ci_scheduling_fixture_copy.py": {
         "fixtures": {},
@@ -1508,8 +1508,8 @@
     "immutable_image_limit": 33554432,
     "native_reconstruction_blob": "efa69e2f228f0c44f2a5084e3becdd181a6e831d",
     "original_AppTest_default_timeout": 3,
-    "parent": "dee3a1ec069a9276732eddeb436b06d9099ed73e",
-    "parent_tree": "477407287bfa626af55b039efdfbe537c46faefd",
+    "parent": "55363384275c9d3143cfe833f94a74a18b04ff40",
+    "parent_tree": "729ed30c4ff3a7441d2d24cf96d492019119db69",
     "production_changes": false,
     "source_edits": {
       "tests/ncaaf_future_scope_inputs.py": {
@@ -1594,7 +1594,7 @@
   "reviewed_blobs": {
     ".github/workflows/ci.yml": "60c536767a7d8b0a83c1537834fc38a422c31dae",
     "docs/paid-launch/ci-fixture-stability-v1.md": "3a11bd06391d60f0c5b1382ef6bec62c1e9e0210",
-    "scripts/ci_fixture_stability_scope.py": "0909d58076a6a286a6329a26cdf92404ae7303d1",
+    "scripts/ci_fixture_stability_scope.py": "f5f75e5e463aec3890c55db06b4415bc354e6c34",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
     "tests/apptest_owned_script.py": "dee53f63e681d24db37aabffef3c71572a15fb94",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
