@@ -70,7 +70,7 @@ def seal(repo, binding):
 
 @pytest.fixture(scope="session")
 def prepared_coverage(tmp_path_factory):
-    from tests.immutable_git_fixture import freeze, source_identity
+    from tests.immutable_git_fixture import freeze, source_identity, physical
     repo = tmp_path_factory.mktemp("coverage-preparation") / "repo"
     repo.mkdir()
     git(repo, "init", "-q")
@@ -126,6 +126,9 @@ def prepared_coverage(tmp_path_factory):
     paths = set(guard.COVERAGE_PATHS) | {guard.GUARD_PATH, "app_core/ncaaf_schedule.py",
         "docs/paid-launch/ci-fixture-stability-bindings-v1.json",
         "tests/immutable_git_fixture.py", "tests/test_ncaaf_coverage_scope_policy.py"}
+    current = json.loads(physical(SOURCE / "docs/paid-launch/ci-fixture-stability-bindings-v1.json"))
+    paths.update(current["reviewed_blobs"])
+    paths.update({"scripts/scope_reconstruction.py", "scripts/scope_git_reads.py"})
     inputs = source_identity(SOURCE, paths)
     git(repo, "gc", "--prune=never")
     return freeze(repo, [binding, implementation, candidate, policy], inputs)
@@ -143,6 +146,20 @@ def fx(tmp_path, monkeypatch, prepared_coverage):
 def assess(fx, base=None):
     repo, binding, *_ = fx
     return guard._run_coverage_integrated(repo / guard.MANIFEST_PATH, base, binding)
+
+
+def test_actual_prepared_image_rechecks_transitive_source_after_warm_use(prepared_coverage,monkeypatch,tmp_path):
+    from tests import immutable_git_fixture as images
+    images.materialize(prepared_coverage,tmp_path/'first',SOURCE)
+    physical=images.physical
+    changed=(SOURCE/'scripts/ci_fixture_stability_scope.py').resolve()
+    def altered(path):
+        value=physical(path)
+        return value+b'UNREVIEWED' if Path(path).resolve()==changed else value
+    monkeypatch.setattr(images,'physical',altered)
+    with pytest.raises(ValueError,match='FIXTURE_PREPARATION_INPUT_CHANGED'):
+        images.materialize(prepared_coverage,tmp_path/'second',SOURCE)
+    assert not (tmp_path/'second').exists()
 
 
 def test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception(fx):

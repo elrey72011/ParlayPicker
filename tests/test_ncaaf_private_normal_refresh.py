@@ -57,6 +57,7 @@ def test_private_refresh_native_storage_export_replay_and_display(synthetic,monk
     assert updates['pipeline_status']=='PRIVATE_CONDITIONAL_RESEARCH'
     ranked=updates['ncaaf_private_refresh_ranked']
     assert len(ranked)==2 and ranked[0]['cover']>=ranked[1]['cover']
+    assert all(r['evidence_label']==value['packet']['payload']['evidence_label'] for r in ranked)
     assert all(r['cover']+r['push']+r['loss']==pytest.approx(1) for r in ranked)
     assert ranked[0]['push']==ranked[1]['push']
     assert (ranked[0]['push']>0) if float(line).is_integer() else ranked[0]['push']==0
@@ -126,6 +127,19 @@ def test_private_refresh_conflicts_reject_without_fallback(synthetic,monkeypatch
     updates,_,errors=refresh.pipeline(dict(ncaaf_private_refresh_selection=value))
     assert errors and updates['pipeline_status']=='UNAVAILABLE'
     assert updates['analysis_df'].empty and not list(tmp_path.glob('*.computation.json'))
+
+
+@pytest.mark.parametrize('clock',['2026-10-17T18:30:03Z','2026-10-17T18:45:01Z','2026-10-20T23:30:00Z','2026-10-18T18:30:05Z'])
+def test_conditional_private_route_keeps_actual_evaluation_clock(synthetic,monkeypatch,tmp_path,clock):
+    value=selection(synthetic,monkeypatch,tmp_path)
+    child=pair.children(value['packet'])['home']
+    assert owner.accepted_dependencies(child,None,NOW.isoformat())
+    with pytest.raises(ValueError) as rejected:
+        owner.accepted_dependencies(child,None,clock)
+    assert str(rejected.value) in {'NCAAF_OWNER_REVIEW_CLOCK_CONFLICT',
+        'NCAAF_ACCEPTANCE_CLOCK_CONFLICT','NCAAF_COMPAT_QUOTE_CLOCK_CONFLICT',
+        'NCAAF_STAGED_INPUT_CLOCK','NCAAF_TERMS_NOT_EFFECTIVE','NCAAF_RESPONSE_TOO_OLD'}
+    assert not list(tmp_path.glob('*.inference-attempts.jsonl'))
 
 
 def test_missing_private_inputs_do_not_call_live_pipeline(monkeypatch):

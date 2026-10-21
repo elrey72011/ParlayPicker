@@ -31,30 +31,8 @@ def test_exact_bytes_context_and_source_change(tmp_path):
     with pytest.raises(ValueError,match='SYNTHETIC_SOURCE_CHANGED'):method(body)
 
 
-def test_measured_capacity_leaf_reuse_preserves_warm_rejection(tmp_path):
-    g,body=synthetic(tmp_path/'capacity.py')
-    g._listing_capacity_base_source=g._nfl_odds_timing_base_source
-    del g._nfl_odds_timing_base_source
-    from tests.measured_scope_reconstruction import install
-    install(g)
-    method=g._listing_capacity_base_source
-    assert method(body)==method(body)==b'predecessor source\n'
-    assert method.reconstruction_memo.hits==1
-    with pytest.raises(ValueError,match='SYNTHETIC_SOURCE_CHANGED'):method(body+b'changed')
-    g.REVIEWED_SHA256='0'*64
-    with pytest.raises(ValueError,match='SYNTHETIC_SOURCE_CHANGED'):method(body)
 
 
-def test_measured_leaf_never_caches_live_repository_decisions(tmp_path):
-    g=types.ModuleType('SYNTHETIC_capacity_live');g.__file__=str(tmp_path/'guard.py');g.ROOT=tmp_path
-    exec('def _listing_capacity_base_source(source):\n    return (ROOT/"live").read_bytes()\n',g.__dict__)
-    from tests.measured_scope_reconstruction import install
-    install(g)
-    assert not hasattr(g._listing_capacity_base_source,'reconstruction_memo')
-    (tmp_path/'live').write_bytes(b'first')
-    assert g._listing_capacity_base_source(b'input')==b'first'
-    (tmp_path/'live').write_bytes(b'second')
-    assert g._listing_capacity_base_source(b'input')==b'second'
 
 
 @pytest.mark.parametrize('failure',[None,ValueError,KeyboardInterrupt])

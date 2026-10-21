@@ -365,7 +365,7 @@
         "fixtures": {},
         "generation": "transport-future",
         "guard_source_generation": "released-future-v1",
-        "sha256": "069bb4b18b8dbfa1237b3d3f68bc6414828bba84d50bfa51aa791638cef8edb4"
+        "sha256": "929c8f6c5f15bfad16e4924c1809e6a795a739ee86b4a10ad0e8ad50a6a0073c"
       },
       "tests/ncaaf_transport_scope_inputs.py": {
         "fixtures": {},
@@ -705,7 +705,7 @@
         },
         "generation": "transport-future",
         "guard_source_generation": "released-future-v1",
-        "sha256": "1b548a43169599c25fb8142e0f2196e7343c6ecbccac1dbb1a4c7fc8dcb127f8"
+        "sha256": "39ecd57a48c348e410e68d9ec8259d5773b31619421ee0ae2943b90ef87c8cd0"
       },
       "tests/test_ncaaf_custody_scope.py": {
         "fixtures": {
@@ -1195,7 +1195,7 @@
         "fixtures": {},
         "generation": "transport-future",
         "guard_source_generation": "released-future-v1",
-        "sha256": "5bbf2ec8b1c52b1e70242d0713931ab21777c8963b4555e3fd64dc788557ab6a"
+        "sha256": "2e92943ddf9f4f11e36a2c503d53d09ccabec365a85650e43798899f848a1b6f"
       },
       "tests/test_shared_git_fixture_lifecycle.py": {
         "fixtures": {},
@@ -1367,7 +1367,7 @@
       "docs/paid-launch/ncaaf-owner-private-binding-v1.json": "c86683fb7dabec835ceed1a9fd693be439830850dd7187fa8bc5f41519eabe30",
       "docs/paid-launch/ncaaf-owner-staged-binding-v1.json": "3ae88f6ce2383767a82e7ae9fe0eddd7b04a0ed8511fca3b43f35c24767809f1",
       "docs/paid-launch/ncaaf-owner-terms-binding-v2.json": "3f6d90b1d47857407fbb7c59990fd5df1370d2e91f32fc37f9236b4a54810492",
-      "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "28a979160808aa8b5aff8c54dcff675d4e55fb407b55d5c3a1fc763d8018ca32",
+      "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "be717669ffc2955633ad3b00b05edacea5833e710d4d27a0f84c74e4941c16c6",
       "docs/paid-launch/ncaaf-reviewed-target-binding-v1.json": "cf41ab7478be0bfa489a8791ae3379afb0dac2f1a3225c8b91c8e95b957b9bbe"
     }
   },
@@ -1563,7 +1563,6 @@
     "tests/ci_fixture_stability_inputs.py",
     "tests/historical_scope_input_boundary.py",
     "tests/immutable_git_fixture.py",
-    "tests/measured_scope_reconstruction.py",
     "tests/ncaaf_future_scope_inputs.py",
     "tests/ncaaf_staged_capacity_fixtures.py",
     "tests/ncaaf_transport_scope_inputs.py",
@@ -1688,7 +1687,7 @@
         "proposal_sha256": "3db30397da4071e5f4ece1db641607cd8e93fc50d02a6806fc4edf3715379b01",
         "scope": "New integration-test wait only; every pre-existing test and production/provider deadline preserved"
       },
-      "recorded_at": "2026-10-21T20:47:03.616529+00:00",
+      "recorded_at": "2026-10-21T21:20:30.106711+00:00",
       "release_cycle": "UNSPENT_HELD"
     },
     "direct_recorded_reader_family": [
@@ -1761,7 +1760,6 @@
       "tests/ci_fixture_stability_inputs.py",
       "tests/historical_scope_input_boundary.py",
       "tests/immutable_git_fixture.py",
-      "tests/measured_scope_reconstruction.py",
       "tests/ncaaf_future_scope_inputs.py",
       "tests/ncaaf_staged_capacity_fixtures.py",
       "tests/ncaaf_transport_scope_inputs.py",
@@ -1841,8 +1839,8 @@
     },
     "native_reconstruction_blob": "efa69e2f228f0c44f2a5084e3becdd181a6e831d",
     "original_AppTest_default_timeout": 3,
-    "parent": "ab72349a50bef62238ae0027d3918772c6dd1851",
-    "parent_tree": "ed4973ab48f3ee7b07aaccea6200d494990c9c53",
+    "parent": "d7e33e29c4820dcd2ac7a625077b9dce3b229c94",
+    "parent_tree": "49ef52e9bdf5b82c0deae3c1080c73cbfb2ef19e",
     "predecessor_reuse": "Reuse the existing authenticated_predecessor immutable-byte mechanism in the two future fixture call sites; preserve physical guard/scope/binding authentication and output validation on every warm call. Legacy reader does not construct the unused future predecessor.",
     "production_changes": false,
     "read_api_ownership": "One owned reentrant adapter exposes the existing exact selected byte view through Path.read_bytes/open/read_text for declared repository inputs. No extra source authority, cache or expected hash; restore depth on rejection/interruption.",
@@ -1993,14 +1991,14 @@
         ]
       },
       "app/ui/ncaaf_pipeline_research.py": {
-        "after_sha256": "2c345f853de2ce46f01dadc24d2693a82a2b4808f9f6985800f1b208ca131411",
+        "after_sha256": "b9bb6c8b60499cba5342ec445b85498969ba82c6d4c96beb8bcc0afbce1321aa",
         "before_git_blob": "21d1d8e084886f317510de33f3df5393cc1a55b2",
         "before_sha256": "5c765e0399eacbe48ca8fc4fc8aaacae840fe72f28890708066098afb9fc2d55",
         "bytes": 6511,
         "edits": [
           [
             "from app_core import ncaaf_pipeline_evidence as evidence\nfrom app_core import ncaaf_owner_research as owner\nfrom app_core import ncaaf_owner_terms_research as owner_terms\nfrom app_core import ncaaf_owner_staged_research as owner_staged\n\n\ndef render(games=None, candidates=None):\n    # publish_panel invokes this only after the constant-time owner token gate.\n",
-            "from app_core import ncaaf_pipeline_evidence as evidence\nfrom app_core import ncaaf_owner_research as owner\nfrom app_core import ncaaf_owner_terms_research as owner_terms\nfrom app_core import ncaaf_owner_staged_research as owner_staged\n\n\ndef render_refresh_controls():\n    \"\"\"Private selection before Refresh; independent of customer publishing.\"\"\"\n    from app_core import ncaaf_private_refresh as private\n    with st.expander('Private NCAAF model prediction', expanded=False):\n        enabled=st.checkbox('Use reviewed private NCAAF inputs for Refresh',\n                            key='ncaaf_private_refresh')\n        st.caption('Conditional research only. Select a completed target/history/feature and mathematical-market review, plus separately configured inference authorization. Staging runs no model and fetches nothing. Missing evidence remains UNAVAILABLE.')\n        upload=st.file_uploader('Reviewed private Refresh selection',type=['json'],key='ncaaf_private_refresh_upload')\n        if st.button('Stage reviewed Refresh selection',disabled=upload is None,key='ncaaf_private_refresh_stage'):\n            try:\n                selection=private.load(upload.getvalue())\n            except (ValueError,TypeError,KeyError):\n                st.session_state.pop('ncaaf_private_refresh_selection',None)\n                st.error('UNAVAILABLE: the private selection is incomplete, altered or incompatible.')\n            else:\n                st.session_state['ncaaf_private_refresh_selection']=selection\n                st.success('Staged. Only a later Refresh action can use separately authorized inference.')\n        if enabled and not st.session_state.get('ncaaf_private_refresh_selection'):\n            st.info('UNAVAILABLE: no reviewed private Refresh selection is staged.')\n\n\ndef render_refresh_result():\n    rows=st.session_state.get('ncaaf_private_refresh_ranked',[])\n    if not rows:return\n    st.subheader('Private NCAAF model estimate')\n    st.caption('Ranked by unconditional model cover probability. Price and estimated EV are separate; a higher cover estimate does not establish greater value or profitability. Calibration is unvalidated. Conditional market assumptions are not verified offer admission. PASS \u2014 zero stake.')\n    st.dataframe(rows,hide_index=True)\n    st.caption('Original inputs, native model identity, computations and static replay are retained in private custody. Receipt or replay does not refresh the original observation clock.')\n\n\ndef render(games=None, candidates=None):\n    # publish_panel invokes this only after the constant-time owner token gate.\n",
+            "from app_core import ncaaf_pipeline_evidence as evidence\nfrom app_core import ncaaf_owner_research as owner\nfrom app_core import ncaaf_owner_terms_research as owner_terms\nfrom app_core import ncaaf_owner_staged_research as owner_staged\n\n\ndef render_refresh_controls():\n    \"\"\"Private selection before Refresh; independent of customer publishing.\"\"\"\n    from app_core import ncaaf_private_refresh as private\n    with st.expander('Private NCAAF model prediction', expanded=False):\n        enabled=st.checkbox('Use reviewed private NCAAF inputs for Refresh',\n                            key='ncaaf_private_refresh')\n        st.caption('Conditional research only. Select a completed target/history/feature and mathematical-market review, plus separately configured inference authorization. Staging runs no model and fetches nothing. Missing evidence remains UNAVAILABLE.')\n        upload=st.file_uploader('Reviewed private Refresh selection',type=['json'],key='ncaaf_private_refresh_upload')\n        if st.button('Stage reviewed Refresh selection',disabled=upload is None,key='ncaaf_private_refresh_stage'):\n            try:\n                selection=private.load(upload.getvalue())\n            except (ValueError,TypeError,KeyError):\n                st.session_state.pop('ncaaf_private_refresh_selection',None)\n                st.error('UNAVAILABLE: the private selection is incomplete, altered or incompatible.')\n            else:\n                st.session_state['ncaaf_private_refresh_selection']=selection\n                st.success('Staged. Only a later Refresh action can use separately authorized inference.')\n        if enabled and not st.session_state.get('ncaaf_private_refresh_selection'):\n            st.info('UNAVAILABLE: no reviewed private Refresh selection is staged.')\n\n\ndef render_refresh_result():\n    rows=st.session_state.get('ncaaf_private_refresh_ranked',[])\n    if not rows:return\n    st.subheader('Private NCAAF model estimate')\n    st.caption('Ranked by unconditional model cover probability. Price and estimated EV are separate; a higher cover estimate does not establish greater value or profitability. Calibration is unvalidated. Conditional market assumptions are not verified offer admission. PASS \u2014 zero stake.')\n    event=rows[0]['event']\n    st.caption(f\"{event['away_team']} at {event['home_team']} | kickoff {event['start_utc']} | input label: {rows[0]['evidence_label']}\")\n    visible=[dict(Team=r['team'],Side=r['side'],Line=r['line'],Price=r['price'],\n        **{'Unconditional cover':r['cover'],'Push':r['push'],'Loss':r['loss'],\n           'Cover given no push':r['conditional_on_no_push']['value'],\n           'Estimated EV / unit':r['estimated_ev_per_unit'],'Comparison':r['selection']}) for r in rows]\n    st.dataframe(visible,hide_index=True)\n    st.caption('Original inputs, native model identity, computations and static replay are retained in private custody. Receipt or replay does not refresh the original observation clock.')\n\n\ndef render(games=None, candidates=None):\n    # publish_panel invokes this only after the constant-time owner token gate.\n",
             1
           ]
         ]
@@ -2183,7 +2181,7 @@
         ]
       },
       "tests/ncaaf_future_scope_inputs.py": {
-        "after_sha256": "069bb4b18b8dbfa1237b3d3f68bc6414828bba84d50bfa51aa791638cef8edb4",
+        "after_sha256": "929c8f6c5f15bfad16e4924c1809e6a795a739ee86b4a10ad0e8ad50a6a0073c",
         "before_git_blob": "5e52fe7ba891b5d87eff81f08220e017e1c32558",
         "before_sha256": "e4c4955bc3829ad4b649a865e2a94c0199ceb77a6f9c66a60dc6b32eba2bb874",
         "bytes": 8097,
@@ -2195,7 +2193,7 @@
           ],
           [
             "        seen.add(id(current));assert len(seen)<=128\n        for name,value in tuple(vars(current).items()):\n            if isinstance(value,types.ModuleType):\n                file=getattr(value,'__file__',None)\n                if file and Path(file).resolve()==target.resolve() and hasattr(value,'_ncaaf_future_base_source'):\n                    aliases.append((current,name))\n                elif value.__name__.split('.')[-1].startswith('test_'):\n                    pending.append(value)\n    frozen,records=_new_released_scope_inputs(live)\n    root=Path(__file__).resolve().parents[1];read=Path.read_bytes\n    from tests.historical_scope_input_boundary import physical_bytes,generation_input\n    scope,binding=live._ci_fixture_module()\n    source_inputs=binding['historical_input_boundary']['consumers'][plan.consumer].get('source_inputs',{})\n    assert len(source_inputs)<=64 and all(isinstance(p,str) and isinstance(h,str) and len(h)==64 for p,h in source_inputs.items())\n    physical_guard=physical_bytes(root/live.GUARD_PATH).replace(b'\\r\\n',b'\\n')\n    main_guard=scope.previous_guard(physical_guard,binding)\n    guard_source=live._ncaaf_future_base_source(main_guard)\n    allowed_guard_inputs={hashlib.sha256(v).hexdigest() for v in (physical_guard,main_guard,guard_source)}\n    original=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-future-spread-binding-v1.json'))\n    for data in (original.get('ci_fixture_copy',{}),original.get('transport_diagnostics',{})):\n        if 'previous_guard_sha256' in data:allowed_guard_inputs.add(data['previous_guard_sha256'])\n    def historical(path):\n        try:relative=path.resolve().relative_to(root).as_posix()\n        except ValueError:return read(path)\n        value=read(path)\n        if relative==live.GUARD_PATH:\n            return guard_source if hashlib.sha256(value.replace(b'\\r\\n',b'\\n')).hexdigest() in allowed_guard_inputs else value\n        exact=generation_input(plan,relative,value) if relative in source_inputs else None\n        if exact is not None:return exact\n",
-            "        seen.add(id(current));assert len(seen)<=128\n        for name,value in tuple(vars(current).items()):\n            if isinstance(value,types.ModuleType):\n                file=getattr(value,'__file__',None)\n                if file and Path(file).resolve()==target.resolve():\n                    aliases.append((current,name))\n                elif value.__name__.split('.')[-1].startswith('test_'):\n                    pending.append(value)\n    frozen,records=_new_released_scope_inputs(live)\n    from tests.historical_scope_input_boundary import install_owned_git_stream\n    install_owned_git_stream(frozen)\n    from tests.measured_scope_reconstruction import install as install_measured_leaf\n    install_measured_leaf(frozen)\n    from tests.historical_scope_input_boundary import own_reconstruction_memos\n    own_reconstruction_memos(frozen)\n    root=Path(__file__).resolve().parents[1];read=Path.read_bytes\n    from tests.historical_scope_input_boundary import physical_bytes,generation_input\n    scope,binding=live._ci_fixture_module()\n    source_inputs=binding['historical_input_boundary']['consumers'][plan.consumer].get('source_inputs',{})\n    assert len(source_inputs)<=64 and all(isinstance(p,str) and isinstance(h,str) and len(h)==64 for p,h in source_inputs.items())\n    physical_guard=physical_bytes(root/live.GUARD_PATH).replace(b'\\r\\n',b'\\n')\n    from tests.historical_scope_input_boundary import selected_reader_generation, historical_reader_source, authenticated_predecessor\n    reader_generation=selected_reader_generation(binding,plan)\n    if reader_generation=='released-future-v1':\n        main_guard=authenticated_predecessor(scope,binding)\n        guard_source=live._ncaaf_future_base_source(main_guard)\n        guard_inputs=(physical_guard,main_guard,guard_source)\n    else:\n        guard_source=historical_reader_source(live,binding,reader_generation)\n        guard_inputs=(physical_guard,guard_source)\n    allowed_guard_inputs={hashlib.sha256(v).hexdigest() for v in guard_inputs}\n    from tests.historical_scope_input_boundary import _BOOTSTRAP_SOURCE\n    allowed_guard_inputs.add(_BOOTSTRAP_SOURCE)\n    original=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-future-spread-binding-v1.json'))\n    for data in (original.get('ci_fixture_copy',{}),original.get('transport_diagnostics',{})):\n        if 'previous_guard_sha256' in data:allowed_guard_inputs.add(data['previous_guard_sha256'])\n    def historical(path):\n        try:relative=path.resolve().relative_to(root).as_posix()\n        except ValueError:return read(path)\n        value=read(path)\n        from tests.ci_fixture_stability_inputs import private_delivery_predecessor_source\n        value=private_delivery_predecessor_source(relative,value)\n        if relative==live.GUARD_PATH:\n            return guard_source if hashlib.sha256(value.replace(b'\\r\\n',b'\\n')).hexdigest() in allowed_guard_inputs else value\n        exact=generation_input(plan,relative,value) if relative in source_inputs else None\n        if exact is not None:return exact\n",
+            "        seen.add(id(current));assert len(seen)<=128\n        for name,value in tuple(vars(current).items()):\n            if isinstance(value,types.ModuleType):\n                file=getattr(value,'__file__',None)\n                if file and Path(file).resolve()==target.resolve():\n                    aliases.append((current,name))\n                elif value.__name__.split('.')[-1].startswith('test_'):\n                    pending.append(value)\n    frozen,records=_new_released_scope_inputs(live)\n    from tests.historical_scope_input_boundary import install_owned_git_stream\n    install_owned_git_stream(frozen)\n    from tests.historical_scope_input_boundary import own_reconstruction_memos\n    own_reconstruction_memos(frozen)\n    root=Path(__file__).resolve().parents[1];read=Path.read_bytes\n    from tests.historical_scope_input_boundary import physical_bytes,generation_input\n    scope,binding=live._ci_fixture_module()\n    source_inputs=binding['historical_input_boundary']['consumers'][plan.consumer].get('source_inputs',{})\n    assert len(source_inputs)<=64 and all(isinstance(p,str) and isinstance(h,str) and len(h)==64 for p,h in source_inputs.items())\n    physical_guard=physical_bytes(root/live.GUARD_PATH).replace(b'\\r\\n',b'\\n')\n    from tests.historical_scope_input_boundary import selected_reader_generation, historical_reader_source, authenticated_predecessor\n    reader_generation=selected_reader_generation(binding,plan)\n    if reader_generation=='released-future-v1':\n        main_guard=authenticated_predecessor(scope,binding)\n        guard_source=live._ncaaf_future_base_source(main_guard)\n        guard_inputs=(physical_guard,main_guard,guard_source)\n    else:\n        guard_source=historical_reader_source(live,binding,reader_generation)\n        guard_inputs=(physical_guard,guard_source)\n    allowed_guard_inputs={hashlib.sha256(v).hexdigest() for v in guard_inputs}\n    from tests.historical_scope_input_boundary import _BOOTSTRAP_SOURCE\n    allowed_guard_inputs.add(_BOOTSTRAP_SOURCE)\n    original=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-future-spread-binding-v1.json'))\n    for data in (original.get('ci_fixture_copy',{}),original.get('transport_diagnostics',{})):\n        if 'previous_guard_sha256' in data:allowed_guard_inputs.add(data['previous_guard_sha256'])\n    def historical(path):\n        try:relative=path.resolve().relative_to(root).as_posix()\n        except ValueError:return read(path)\n        value=read(path)\n        from tests.ci_fixture_stability_inputs import private_delivery_predecessor_source\n        value=private_delivery_predecessor_source(relative,value)\n        if relative==live.GUARD_PATH:\n            return guard_source if hashlib.sha256(value.replace(b'\\r\\n',b'\\n')).hexdigest() in allowed_guard_inputs else value\n        exact=generation_input(plan,relative,value) if relative in source_inputs else None\n        if exact is not None:return exact\n",
             1
           ],
           [
@@ -2303,19 +2301,19 @@
         ]
       },
       "tests/test_ncaaf_coverage_scope_policy.py": {
-        "after_sha256": "1b548a43169599c25fb8142e0f2196e7343c6ecbccac1dbb1a4c7fc8dcb127f8",
+        "after_sha256": "39ecd57a48c348e410e68d9ec8259d5773b31619421ee0ae2943b90ef87c8cd0",
         "before_git_blob": "e4bac80c356e8ec2358a1b627b33b902d5740f69",
         "before_sha256": "73bbaf2dc9f365fa54639e3c5a71981951b39fa44dddab061d37ffd832e18363",
         "bytes": 11414,
         "edits": [
           [
             "    candidate = commit(repo, \"policy only seal\")\n    return implementation, candidate, policy\n\n\n@pytest.fixture\ndef fx(tmp_path, monkeypatch):\n    repo = tmp_path / \"repo\"\n    repo.mkdir()\n    git(repo, \"init\", \"-q\")\n    git(repo, \"config\", \"core.autocrlf\", \"false\")\n    git(repo, \"config\", \"user.name\", \"Offline Test\")\n    git(repo, \"config\", \"user.email\", \"offline@example.invalid\")\n    source_guard = original_coverage_source(guard.GUARD_PATH)\n    previous_guard = source_guard.split(b\"\\nCOVERAGE_POLICY_PATH =\", 1)[0] + guard.COVERAGE_PREVIOUS_CLI\n",
-            "    candidate = commit(repo, \"policy only seal\")\n    return implementation, candidate, policy\n\n\n@pytest.fixture(scope=\"session\")\ndef prepared_coverage(tmp_path_factory):\n    from tests.immutable_git_fixture import freeze, source_identity\n    repo = tmp_path_factory.mktemp(\"coverage-preparation\") / \"repo\"\n    repo.mkdir()\n    git(repo, \"init\", \"-q\")\n    git(repo, \"config\", \"core.autocrlf\", \"false\")\n    git(repo, \"config\", \"gc.auto\", \"0\")\n    git(repo, \"config\", \"maintenance.auto\", \"false\")\n    git(repo, \"config\", \"user.name\", \"Offline Test\")\n    git(repo, \"config\", \"user.email\", \"offline@example.invalid\")\n    source_guard = original_coverage_source(guard.GUARD_PATH)\n    previous_guard = source_guard.split(b\"\\nCOVERAGE_POLICY_PATH =\", 1)[0] + guard.COVERAGE_PREVIOUS_CLI\n",
+            "    candidate = commit(repo, \"policy only seal\")\n    return implementation, candidate, policy\n\n\n@pytest.fixture(scope=\"session\")\ndef prepared_coverage(tmp_path_factory):\n    from tests.immutable_git_fixture import freeze, source_identity, physical\n    repo = tmp_path_factory.mktemp(\"coverage-preparation\") / \"repo\"\n    repo.mkdir()\n    git(repo, \"init\", \"-q\")\n    git(repo, \"config\", \"core.autocrlf\", \"false\")\n    git(repo, \"config\", \"gc.auto\", \"0\")\n    git(repo, \"config\", \"maintenance.auto\", \"false\")\n    git(repo, \"config\", \"user.name\", \"Offline Test\")\n    git(repo, \"config\", \"user.email\", \"offline@example.invalid\")\n    source_guard = original_coverage_source(guard.GUARD_PATH)\n    previous_guard = source_guard.split(b\"\\nCOVERAGE_POLICY_PATH =\", 1)[0] + guard.COVERAGE_PREVIOUS_CLI\n",
             1
           ],
           [
-            "        assert original_module.count(after_edit) == 1\n        original_module = original_module.replace(after_edit, before_edit, 1)\n    write(repo, \"app_core/ncaaf_schedule.py\", original_module.encode())\n    base = commit(repo, \"approved main with prior policies\")\n    monkeypatch.setattr(guard, \"ROOT\", repo)\n    binding = {\"base\": base, \"base_tree\": git(repo, \"rev-parse\", \"HEAD^{tree}\"),\n               \"manifest_sha256\": hashlib.sha256(manifest_bytes).hexdigest(),\n               \"previous_guard_sha256\": hashlib.sha256(previous_guard).hexdigest(),\n               \"previous_policy_blob\": guard.blob(base, guard.SCHEDULE_POLICY_PATH),\n               \"clock_blob\": guard.blob(base, guard.CLOCK_TEST),\n               \"successor_guard_sha256\": guard.COVERAGE_BINDINGS[\"successor_guard_sha256\"]}\n    for path in guard.COVERAGE_PATHS:\n        write(repo, path, original_coverage_source(path))\n    binding[\"reviewed_coverage_blobs\"] = {p: git(repo, \"hash-object\", \"--\", p)\n                                     for p in guard.COVERAGE_BINDINGS[\"reviewed_coverage_blobs\"]}\n    implementation, candidate, policy = seal(repo, binding)\n    return repo, binding, implementation, candidate, policy\n\n\ndef assess(fx, base=None):\n",
-            "        assert original_module.count(after_edit) == 1\n        original_module = original_module.replace(after_edit, before_edit, 1)\n    write(repo, \"app_core/ncaaf_schedule.py\", original_module.encode())\n    base = commit(repo, \"approved main with prior policies\")\n    original_root = guard.ROOT\n    try:\n        guard.ROOT = repo\n        binding = {\"base\": base, \"base_tree\": git(repo, \"rev-parse\", \"HEAD^{tree}\"),\n                   \"manifest_sha256\": hashlib.sha256(manifest_bytes).hexdigest(),\n                   \"previous_guard_sha256\": hashlib.sha256(previous_guard).hexdigest(),\n                   \"previous_policy_blob\": guard.blob(base, guard.SCHEDULE_POLICY_PATH),\n                   \"clock_blob\": guard.blob(base, guard.CLOCK_TEST),\n                   \"successor_guard_sha256\": guard.COVERAGE_BINDINGS[\"successor_guard_sha256\"]}\n        for path in guard.COVERAGE_PATHS:\n            write(repo, path, original_coverage_source(path))\n        binding[\"reviewed_coverage_blobs\"] = {p: git(repo, \"hash-object\", \"--\", p)\n                                         for p in guard.COVERAGE_BINDINGS[\"reviewed_coverage_blobs\"]}\n        implementation, candidate, policy = seal(repo, binding)\n    finally:\n        guard.ROOT = original_root\n    paths = set(guard.COVERAGE_PATHS) | {guard.GUARD_PATH, \"app_core/ncaaf_schedule.py\",\n        \"docs/paid-launch/ci-fixture-stability-bindings-v1.json\",\n        \"tests/immutable_git_fixture.py\", \"tests/test_ncaaf_coverage_scope_policy.py\"}\n    inputs = source_identity(SOURCE, paths)\n    git(repo, \"gc\", \"--prune=never\")\n    return freeze(repo, [binding, implementation, candidate, policy], inputs)\n\n\n@pytest.fixture\ndef fx(tmp_path, monkeypatch, prepared_coverage):\n    from tests.immutable_git_fixture import materialize\n    repo = tmp_path / \"repo\"\n    binding, implementation, candidate, policy = materialize(prepared_coverage, repo, SOURCE)\n    monkeypatch.setattr(guard, \"ROOT\", repo)\n    return repo, binding, implementation, candidate, policy\n\n\ndef assess(fx, base=None):\n",
+            "        assert original_module.count(after_edit) == 1\n        original_module = original_module.replace(after_edit, before_edit, 1)\n    write(repo, \"app_core/ncaaf_schedule.py\", original_module.encode())\n    base = commit(repo, \"approved main with prior policies\")\n    monkeypatch.setattr(guard, \"ROOT\", repo)\n    binding = {\"base\": base, \"base_tree\": git(repo, \"rev-parse\", \"HEAD^{tree}\"),\n               \"manifest_sha256\": hashlib.sha256(manifest_bytes).hexdigest(),\n               \"previous_guard_sha256\": hashlib.sha256(previous_guard).hexdigest(),\n               \"previous_policy_blob\": guard.blob(base, guard.SCHEDULE_POLICY_PATH),\n               \"clock_blob\": guard.blob(base, guard.CLOCK_TEST),\n               \"successor_guard_sha256\": guard.COVERAGE_BINDINGS[\"successor_guard_sha256\"]}\n    for path in guard.COVERAGE_PATHS:\n        write(repo, path, original_coverage_source(path))\n    binding[\"reviewed_coverage_blobs\"] = {p: git(repo, \"hash-object\", \"--\", p)\n                                     for p in guard.COVERAGE_BINDINGS[\"reviewed_coverage_blobs\"]}\n    implementation, candidate, policy = seal(repo, binding)\n    return repo, binding, implementation, candidate, policy\n\n\ndef assess(fx, base=None):\n    repo, binding, *_ = fx\n    return guard._run_coverage_integrated(repo / guard.MANIFEST_PATH, base, binding)\n\n\ndef test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception(fx):\n    repo, binding, _, candidate, _ = fx\n",
+            "        assert original_module.count(after_edit) == 1\n        original_module = original_module.replace(after_edit, before_edit, 1)\n    write(repo, \"app_core/ncaaf_schedule.py\", original_module.encode())\n    base = commit(repo, \"approved main with prior policies\")\n    original_root = guard.ROOT\n    try:\n        guard.ROOT = repo\n        binding = {\"base\": base, \"base_tree\": git(repo, \"rev-parse\", \"HEAD^{tree}\"),\n                   \"manifest_sha256\": hashlib.sha256(manifest_bytes).hexdigest(),\n                   \"previous_guard_sha256\": hashlib.sha256(previous_guard).hexdigest(),\n                   \"previous_policy_blob\": guard.blob(base, guard.SCHEDULE_POLICY_PATH),\n                   \"clock_blob\": guard.blob(base, guard.CLOCK_TEST),\n                   \"successor_guard_sha256\": guard.COVERAGE_BINDINGS[\"successor_guard_sha256\"]}\n        for path in guard.COVERAGE_PATHS:\n            write(repo, path, original_coverage_source(path))\n        binding[\"reviewed_coverage_blobs\"] = {p: git(repo, \"hash-object\", \"--\", p)\n                                         for p in guard.COVERAGE_BINDINGS[\"reviewed_coverage_blobs\"]}\n        implementation, candidate, policy = seal(repo, binding)\n    finally:\n        guard.ROOT = original_root\n    paths = set(guard.COVERAGE_PATHS) | {guard.GUARD_PATH, \"app_core/ncaaf_schedule.py\",\n        \"docs/paid-launch/ci-fixture-stability-bindings-v1.json\",\n        \"tests/immutable_git_fixture.py\", \"tests/test_ncaaf_coverage_scope_policy.py\"}\n    current = json.loads(physical(SOURCE / \"docs/paid-launch/ci-fixture-stability-bindings-v1.json\"))\n    paths.update(current[\"reviewed_blobs\"])\n    paths.update({\"scripts/scope_reconstruction.py\", \"scripts/scope_git_reads.py\"})\n    inputs = source_identity(SOURCE, paths)\n    git(repo, \"gc\", \"--prune=never\")\n    return freeze(repo, [binding, implementation, candidate, policy], inputs)\n\n\n@pytest.fixture\ndef fx(tmp_path, monkeypatch, prepared_coverage):\n    from tests.immutable_git_fixture import materialize\n    repo = tmp_path / \"repo\"\n    binding, implementation, candidate, policy = materialize(prepared_coverage, repo, SOURCE)\n    monkeypatch.setattr(guard, \"ROOT\", repo)\n    return repo, binding, implementation, candidate, policy\n\n\ndef assess(fx, base=None):\n    repo, binding, *_ = fx\n    return guard._run_coverage_integrated(repo / guard.MANIFEST_PATH, base, binding)\n\n\ndef test_actual_prepared_image_rechecks_transitive_source_after_warm_use(prepared_coverage,monkeypatch,tmp_path):\n    from tests import immutable_git_fixture as images\n    images.materialize(prepared_coverage,tmp_path/'first',SOURCE)\n    physical=images.physical\n    changed=(SOURCE/'scripts/ci_fixture_stability_scope.py').resolve()\n    def altered(path):\n        value=physical(path)\n        return value+b'UNREVIEWED' if Path(path).resolve()==changed else value\n    monkeypatch.setattr(images,'physical',altered)\n    with pytest.raises(ValueError,match='FIXTURE_PREPARATION_INPUT_CHANGED'):\n        images.materialize(prepared_coverage,tmp_path/'second',SOURCE)\n    assert not (tmp_path/'second').exists()\n\n\ndef test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception(fx):\n    repo, binding, _, candidate, _ = fx\n",
             1
           ]
         ]
@@ -2325,24 +2323,23 @@
     "source_parent_tree": "d8c9424f5313f1c35c3077e3e60b7f926a3eaab6",
     "source_sha256": {
       ".github/workflows/ci.yml": "4ebf749d047a7d6c3d677cd5a3b0151ac4779c9edda722da42b7a24b2021234e",
-      "app/ui/ncaaf_pipeline_research.py": "2c345f853de2ce46f01dadc24d2693a82a2b4808f9f6985800f1b208ca131411",
+      "app/ui/ncaaf_pipeline_research.py": "b9bb6c8b60499cba5342ec445b85498969ba82c6d4c96beb8bcc0afbce1321aa",
       "app_core/ncaaf_owner_research.py": "e45acba0879437f34b676944bb3a05226ecf4348af81882fdb3ca4c270b22ecb",
       "app_core/ncaaf_owner_spread.py": "1404c03c6cddcf493cb33776510b90a0635aeee4e89dc4a8fc8a9afb8cdd5b5e",
       "app_core/ncaaf_owner_terms_projection.py": "47d692edda5925806755ef7c5e9765f94109cce704a425003e0db7fb06bed78e",
-      "app_core/ncaaf_private_refresh.py": "fa2cbfd1817b17495a5a7009cb18b752683d39812c298288044cff019de0a1b0",
+      "app_core/ncaaf_private_refresh.py": "abf89dba2d1e2ebe3cb0a087b6cfaa79f9954b4941ea29dba242771b7d4fe0f0",
       "app_core/ncaaf_prospective_chronology.py": "4decd9d0e9258dca894fa576593972753bb230f9bfc030abd3a45ddbb39d5c02",
       "app_core/ncaaf_response_custody.py": "2a92344494dbbb1603baff916d1c8c33d2ee85441d43a6f30565d60b74b623b2",
       "app_core/ncaaf_reviewed_target.py": "ff20f1315a93cf876135a8510beb008529d9cc5ecf8eb4aca0626d9b99a7c18a",
       "app_core/ncaaf_spread_pair.py": "8caec64a96ab2b7ba0d0ae74bd862865d6d48c84ebeb03002fc43f298bc7b9c4",
       "app_core/ncaaf_spread_terms_projection.py": "03142f9e4505f85e76e6d4546b1899d009a04353d0acc71d07e346add9b74349",
-      "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "28a979160808aa8b5aff8c54dcff675d4e55fb407b55d5c3a1fc763d8018ca32",
-      "docs/private-ncaaf-refresh-v1.md": "81e8fe15c38a5c0e6b7f4cd3cb1155c46cfc62a646d5e10332c659157e1fcf60",
-      "scripts/ncaaf_private_refresh_scope.py": "0cb73e65767a439f387d516a4c929aae555de24c9b98795add6ae7d964b66b35",
+      "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "be717669ffc2955633ad3b00b05edacea5833e710d4d27a0f84c74e4941c16c6",
+      "docs/private-ncaaf-refresh-v1.md": "e613fab0ac069eec61bd18835fae791643f80017d3f97f6f3cfe1ae1f374c55c",
+      "scripts/ncaaf_private_refresh_scope.py": "a119fa670cfcb39c70addc7801ac49cf10a01a0866f06f1ca6269c97f93ba573",
       "streamlit_app.py": "0a8e221684fca28e87a8383d872024c8a50c8a91a458b3b4afa573068f0be8ec",
       "tests/apptest_owned_script.py": "713ea44cfb9c6e44f36fd4b41dbceb431dc8794d2fe33bf702dd14bc149a293f",
       "tests/historical_scope_input_boundary.py": "50470d101dc7635ec04096b305f03d43b562a72f39e3a2f20562c16cd5b30b53",
       "tests/immutable_git_fixture.py": "1df555edb1c4fbf1d5809b6c614f57617998ee7261ac21c65e5a5004b99565c6",
-      "tests/measured_scope_reconstruction.py": "bab5e25295466a94b69f2536d98f92cbc871f1f1a4c9a132cdc22f5273b20043",
       "tests/test_apptest_owned_script.py": "849dd7e99980905011330e4ce73985ad93a4d27960a00d23fa930e06aad9db27",
       "tests/test_ci_fixture_stability_scope.py": "2968c509bce25c8390d423a66fcc6009748d982e7d807c12d6c0b365a786b744",
       "tests/test_ci_test_shards.py": "9be92599019afbb71f722727802042627757ff368be6ae2aad609330d8b38dea",
@@ -2350,39 +2347,38 @@
       "tests/test_immutable_git_fixture.py": "5124c6709d58fd3b3dd7c38c22c3fe65ffd26a9b66f3beb7ad8b662b40459e3e",
       "tests/test_locked_picks.py": "cdc5d494b8d59ed4c91fda6741625063a2de287eb3ecfe1429566ca9a97b4a1c",
       "tests/test_mlb_prospective.py": "354c72225d7218f566863449a377147615ff44c66467e46b4ecd2ca43d0c407c",
-      "tests/test_ncaaf_coverage_scope_policy.py": "1b548a43169599c25fb8142e0f2196e7343c6ecbccac1dbb1a4c7fc8dcb127f8",
-      "tests/test_ncaaf_private_normal_refresh.py": "32055e1b5cef84fb35e0f6e03460ec61c6a82b2b901c56d9ae693d34a8fbdada",
-      "tests/test_scope_reconstruction_memo.py": "5bbf2ec8b1c52b1e70242d0713931ab21777c8963b4555e3fd64dc788557ab6a"
+      "tests/test_ncaaf_coverage_scope_policy.py": "39ecd57a48c348e410e68d9ec8259d5773b31619421ee0ae2943b90ef87c8cd0",
+      "tests/test_ncaaf_private_normal_refresh.py": "3a8ff3c0bd0b28db7b2b9bbc41f365f2feadfe568442c6e7adfb413dba7b0d29",
+      "tests/test_scope_reconstruction_memo.py": "2e92943ddf9f4f11e36a2c503d53d09ccabec365a85650e43798899f848a1b6f"
     }
   },
   "proposal_sha256": "261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d",
   "read_consistency_capacity_amendment_sha256": "d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1",
   "reviewed_blobs": {
     ".github/workflows/ci.yml": "f90f8314bd8d78f640cdf43acd7a684ccf16805b",
-    "app/ui/ncaaf_pipeline_research.py": "37ce89a801b3e53804522726ef7de5d4f74a9370",
+    "app/ui/ncaaf_pipeline_research.py": "d27f472a953ff49c1cdf53df78fc409ab208f5f3",
     "app_core/ncaaf_owner_research.py": "df562c0e357437de26bb5201e12b08e63c21c82f",
     "app_core/ncaaf_owner_spread.py": "06cabb9373121f115b2fa41c595fc2eaee1c0d6f",
     "app_core/ncaaf_owner_terms_projection.py": "57b9f25e52b0ffe9b4b5912443db897554481b0d",
-    "app_core/ncaaf_private_refresh.py": "1d20f1cd4fe830eb042b7714cee7774252240eee",
+    "app_core/ncaaf_private_refresh.py": "a3410fae2e63b0b4fdb2b15867aca81fc1682a19",
     "app_core/ncaaf_prospective_chronology.py": "e812bf191acdeb6a7ee1f9fdea76216e0a665349",
     "app_core/ncaaf_response_custody.py": "3fb26eb6c30c717f0e505a41aea066b9f6d95988",
     "app_core/ncaaf_reviewed_target.py": "19b3d4056d0016d07a9b7dbff0989d3f065b57bd",
     "app_core/ncaaf_spread_pair.py": "b0c37d97d863dcd58909b690720efc3d85ddfb8c",
     "app_core/ncaaf_spread_terms_projection.py": "366d2c4299eb18866153e102ef81712e8efe7c31",
-    "docs/paid-launch/ci-fixture-stability-v1.md": "6095bca4e51f019f580ef8ac821faa456b46306c",
-    "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "d235eda35c7f56fbda7c64e0a288bb20989df2b4",
-    "docs/private-ncaaf-refresh-v1.md": "a2eb4d57506779cd873c3d71f391f03b1d0264ec",
-    "scripts/ci_fixture_stability_scope.py": "5e445e6fea64cc086acf0910923e387551633f6d",
+    "docs/paid-launch/ci-fixture-stability-v1.md": "6f243c8b0200afda03b05d86e9b9662e942f7d54",
+    "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "f0079e64558853105ea025a793060669546f7da9",
+    "docs/private-ncaaf-refresh-v1.md": "5f07086cf236044869d39cbc3f7417a8f5429ee8",
+    "scripts/ci_fixture_stability_scope.py": "e47a6101b07744b7d4b308918f47f6c79d36cdd4",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
-    "scripts/ncaaf_private_refresh_scope.py": "ede53bd7f0b5afea6315aa0e81d8e5e466569f0c",
+    "scripts/ncaaf_private_refresh_scope.py": "4546b2839aab2538f3ce45baa7936485786dbb29",
     "streamlit_app.py": "bfe4fb3181aed7408dbc0fdb3b79d9165f1d8271",
     "tests/apptest_owned_script.py": "dee53f63e681d24db37aabffef3c71572a15fb94",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
-    "tests/ci_fixture_stability_inputs.py": "df876167e62a0917330228045d811e75b5b94afe",
+    "tests/ci_fixture_stability_inputs.py": "42d586932157c5b38fa91e642fc1cb7e5936ca66",
     "tests/historical_scope_input_boundary.py": "6fdb14f693ac740bf93a9a4317f2a8647d20951d",
     "tests/immutable_git_fixture.py": "41b9504c81df95f9da486f8eab035d79af9b432f",
-    "tests/measured_scope_reconstruction.py": "fab75bf562f98f36d7ac678e6ee52caa99b91fe7",
-    "tests/ncaaf_future_scope_inputs.py": "d933f2b739d6f92948a1240bd82c174c13ddf32b",
+    "tests/ncaaf_future_scope_inputs.py": "62afedb4b096884be14e80ed86fa6ac13a249a53",
     "tests/ncaaf_staged_capacity_fixtures.py": "254a671c1d360879fedcbfbd316fed232d410fca",
     "tests/ncaaf_transport_scope_inputs.py": "ed5f7dda6d92de6a9c723a4382b6d6e3f4daf11a",
     "tests/test_apptest_owned_script.py": "fd180c307148dc69097b11b17220d4230bc938b6",
@@ -2402,11 +2398,11 @@
     "tests/test_locked_picks.py": "8c40b2dfec364cb873f58b867f3216e642bb97ad",
     "tests/test_mlb_prospective.py": "0999b269648d9eaad4c324da4d15c8ad2f93c071",
     "tests/test_ncaaf_compatibility_scope.py": "6f2bd2ce2db6796abcb0c0004dda7fa7d12284f7",
-    "tests/test_ncaaf_coverage_scope_policy.py": "64fd25e89811eb75502285143cdafcd947097348",
+    "tests/test_ncaaf_coverage_scope_policy.py": "1fa718ee01057e1a984d4a0731e2055698d48970",
     "tests/test_ncaaf_custody_scope.py": "2e55c1ee4853c4be74aebefe43165a14fb294466",
     "tests/test_ncaaf_normal_scope.py": "8baed61a952ce695de7a8d8b1eafb47f44ab78ec",
     "tests/test_ncaaf_pilot_scope.py": "627a55ae76450519bed2e45e280df3e5a59fbc26",
-    "tests/test_ncaaf_private_normal_refresh.py": "dd37dda8a9ea5860cf70b358ccc8b202af5c0e35",
+    "tests/test_ncaaf_private_normal_refresh.py": "2c92fbd7de2c0445f48d4b68e31d36bcf137bd41",
     "tests/test_ncaaf_research_scope.py": "1b39f489667e192de89569b7e576ce36e94f949a",
     "tests/test_ncaaf_staged_ci_capacity.py": "f8789b360da9cf6601d847e3cd09b3fbd0cc1ee7",
     "tests/test_nfl_admission_scope.py": "5d5733beed4ab8125f60aacd97e6f2d55caad38a",
@@ -2420,7 +2416,7 @@
     "tests/test_preview_binding_scope.py": "7087c6fbe3e0a57ac20b627d712b6c84207fa58f",
     "tests/test_producer_provenance_scope.py": "1cca843f9e02ea3d3e2ed44e8256b1a1874c34f5",
     "tests/test_prospective_legacy_view.py": "5aca60eaee45b60213fb9124d6f0a16dfef45503",
-    "tests/test_scope_reconstruction_memo.py": "76eb2a0497db1f7bbcf62146599d2eebacba8cc6",
+    "tests/test_scope_reconstruction_memo.py": "2568224a16f6db4dbd0e7c564e6c44a2e13d6cb0",
     "tests/test_shared_git_fixture_lifecycle.py": "f88dd245e428733a1ddbca402fede84e4cc18b0f",
     "tests/test_slate_audit_scope.py": "cea668fc91f8923176808901e4e213dc88375c81",
     "tests/test_source_contract_scope.py": "9f272ddc2aaac80d2fa2f9304b635d92e8410d9e"

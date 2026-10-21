@@ -36,3 +36,13 @@ The source graph and exact predecessor images are bound in
 run before importing application dependencies and again at private selection load.
 The CI stability successor seals this separately reviewable feature scope together
 with the release repair; passing checks is not predictive validation.
+
+
+The private JSON and CSV view is separate from the existing wagering-qualified
+card. It reports native unconditional cover/push/loss, separately labelled
+conditional probability, price, estimated EV, input/result/model identities and
+the market assumptions. Read-back derives the rows again from the existing
+retained SQLite originals and export receipts, and verifies the exact CSV bytes.
+The qualified card's unavailable/default fields are never used for private
+ranking or presented as independent model estimates. Public exclusion and zero
+production stake remain unchanged.

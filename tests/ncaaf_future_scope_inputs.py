@@ -73,8 +73,6 @@ def _install_selected_future_inputs(request,patch,live,plan):
     frozen,records=_new_released_scope_inputs(live)
     from tests.historical_scope_input_boundary import install_owned_git_stream
     install_owned_git_stream(frozen)
-    from tests.measured_scope_reconstruction import install as install_measured_leaf
-    install_measured_leaf(frozen)
     from tests.historical_scope_input_boundary import own_reconstruction_memos
     own_reconstruction_memos(frozen)
     root=Path(__file__).resolve().parents[1];read=Path.read_bytes

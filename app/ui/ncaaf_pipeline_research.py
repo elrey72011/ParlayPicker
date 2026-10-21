@@ -32,7 +32,13 @@ def render_refresh_result():
     if not rows:return
     st.subheader('Private NCAAF model estimate')
     st.caption('Ranked by unconditional model cover probability. Price and estimated EV are separate; a higher cover estimate does not establish greater value or profitability. Calibration is unvalidated. Conditional market assumptions are not verified offer admission. PASS — zero stake.')
-    st.dataframe(rows,hide_index=True)
+    event=rows[0]['event']
+    st.caption(f"{event['away_team']} at {event['home_team']} | kickoff {event['start_utc']} | input label: {rows[0]['evidence_label']}")
+    visible=[dict(Team=r['team'],Side=r['side'],Line=r['line'],Price=r['price'],
+        **{'Unconditional cover':r['cover'],'Push':r['push'],'Loss':r['loss'],
+           'Cover given no push':r['conditional_on_no_push']['value'],
+           'Estimated EV / unit':r['estimated_ev_per_unit'],'Comparison':r['selection']}) for r in rows]
+    st.dataframe(visible,hide_index=True)
     st.caption('Original inputs, native model identity, computations and static replay are retained in private custody. Receipt or replay does not refresh the original observation clock.')
 
 

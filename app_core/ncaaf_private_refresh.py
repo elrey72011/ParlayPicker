@@ -67,12 +67,14 @@ def ranking(analysis):
         p=display['outcome_probabilities'];price=q['price']
         observation=pair._observation(packet)
         decimal=1+price/100 if price>0 else 1+100/abs(price)
-        rows.append(dict(event=deepcopy(observation['event']),
+        side='home' if q['market_type']=='spread_home' else 'away'
+        rows.append(dict(team=observation['event'][side+'_team'],side=side,
+            line=q['point'],price=price,cover=p['cover'],push=p['push'],loss=p['loss'],
+            evidence_label=metadata['paired_spread_comparison']['input']['payload']['evidence_label'],
+            event=deepcopy(observation['event']),
             model_artifact_sha256=observation['model']['compatibility']['artifact_sha256'],
             model_binding_sha256=observation['model']['compatibility']['binding_sha256'],
             inference_time=display['inference_time'],market_observed_at=q['recorded_at'],
-            side='home' if q['market_type']=='spread_home' else 'away',
-            line=q['point'],price=price,cover=p['cover'],push=p['push'],loss=p['loss'],
             conditional_on_no_push=display['conditional_no_push'],
             estimated_ev_per_unit=p['cover']*decimal+p['push']-1,
             input_sha256=packet['sha256'],result_sha256=metadata['computation']['sha256'],
@@ -137,7 +139,7 @@ def replay_ranked(receipts,*,database):
 def private_csv(rows):
     flattened=[]
     for row in rows:
-        value={key:row[key] for key in ('side','line','price','cover','push','loss',
+        value={key:row[key] for key in ('team','side','line','price','cover','push','loss','evidence_label',
             'estimated_ev_per_unit','selection','input_sha256','result_sha256',
             'model_artifact_sha256','model_binding_sha256','inference_time',
             'market_observed_at','applicability','calibration','wager_action','stake')}
