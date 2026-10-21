@@ -71,6 +71,8 @@ def _install_selected_future_inputs(request,patch,live,plan):
                 elif value.__name__.split('.')[-1].startswith('test_'):
                     pending.append(value)
     frozen,records=_new_released_scope_inputs(live)
+    from tests.historical_scope_input_boundary import install_owned_git_stream
+    install_owned_git_stream(frozen)
     root=Path(__file__).resolve().parents[1];read=Path.read_bytes
     from tests.historical_scope_input_boundary import physical_bytes,generation_input
     scope,binding=live._ci_fixture_module()

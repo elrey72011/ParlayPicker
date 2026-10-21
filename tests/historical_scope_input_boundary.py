@@ -644,7 +644,7 @@ def execute_released_bootstrap(source, module, live, binding):
         or tuple(tuple(row)for row in declaration['bootstrap_generations'])!=_BOOTSTRAP_GENERATIONS):
         raise ValueError('HISTORICAL_BOOTSTRAP_GENERATION_CHANGED')
     physical = physical_bytes(ROOT / GUARD).replace(b'\r\n', b'\n')
-    scope.previous_guard(physical, current)  # Reauthenticate even on a warm hit.
+    authenticated_predecessor(scope, current)  # Fresh checks; reuse only verified bytes.
     helper = physical_bytes(ROOT / 'tests/ncaaf_future_scope_inputs.py').replace(b'\r\n', b'\n')
     if scope.blob(helper) != current['reviewed_blobs']['tests/ncaaf_future_scope_inputs.py']:
         raise ValueError('HISTORICAL_BOOTSTRAP_HELPER_CHANGED')
@@ -758,6 +758,74 @@ def canonical_guard():
             raise ValueError('HISTORICAL_CURRENT_GUARD_UNAVAILABLE')
         _LIVE_GUARD = check_launch_change_scope
     return _LIVE_GUARD
+
+
+def install_owned_git_stream(module):
+    """Fresh object reads with one owned process per active fixture repository.
+
+    Only the existing Git reader is reused. Streams retain no object results,
+    still verify each returned object, and are closed with the selected owner.
+    Writable repositories and mutable historical modules are never shared.
+    """
+    if not _ACTIVE or _ACTIVE[-1].plan.role is not Role.HISTORICAL:
+        raise ValueError('HISTORICAL_FIXTURE_CONTEXT_REQUIRED')
+    owner = _ACTIVE[-1]
+    authenticate_plan(owner.plan)
+    if sha(physical_bytes(ROOT/'scripts/scope_git_reads.py')) != '3ea9d0f6b006c545b7d045fc4d7caf96cb5f7e3922240c44e2428c9b6213af40':
+        raise ValueError('HISTORICAL_GIT_READER_SOURCE_CHANGED')
+    from scripts import scope_git_reads
+    streams = {}
+    closed = False
+    active = _ACTIVE
+    path_type = Path
+    def close():
+        nonlocal closed
+        closed = True
+        errors = []
+        for stream in reversed(tuple(streams.values())):
+            try:
+                stream.close()
+            except BaseException as exc:
+                errors.append(exc)
+        streams.clear()
+        if errors:
+            raise BaseExceptionGroup('HISTORICAL_GIT_STREAM_CLEANUP_FAILED', errors)
+    owner.resources.append(close)
+    def wrap(method, kind):
+        from functools import wraps
+        @wraps(method)
+        def read(*args, **kwargs):
+            if closed or not active or active[-1] is not owner:
+                return method(*args, **kwargs)
+            root = path_type(module.ROOT).resolve()
+            if root not in streams:
+                if len(streams) >= 8:
+                    oldest = next(iter(streams))
+                    streams[oldest].close()
+                    del streams[oldest]
+                streams[root] = scope_git_reads.ObjectStream(root)
+            stream = streams[root]
+            if kind == 'git' and set(kwargs) <= {'check'} and len(args) == 2 and args[0] == 'rev-parse' and isinstance(args[1], str) and scope_git_reads._SPEC.fullmatch(args[1]):
+                info = stream.info(args[1])
+                if info is not None:
+                    return info[0]
+            elif kind == 'git_bytes' and not kwargs and len(args) == 2 and args[0] == 'show' and isinstance(args[1], str) and scope_git_reads._SPEC.fullmatch(args[1]):
+                value = stream.contents(args[1])
+                if value is not None:
+                    return value
+            elif kind == 'exists_at' and not kwargs and len(args) == 2:
+                spec = str(args[0]) + ':' + str(args[1])
+                if scope_git_reads._SPEC.fullmatch(spec):
+                    return stream.info(spec) is not None
+            return method(*args, **kwargs)
+        # Retain the original function-global/API contract. All ownership and
+        # stream state is private closure data; no native policy module changes.
+        result = types.FunctionType(read.__code__, method.__globals__, method.__name__,
+                                    read.__defaults__, read.__closure__)
+        result.__kwdefaults__ = read.__kwdefaults__
+        return wraps(method)(result)
+    for name in ('git', 'git_bytes', 'exists_at'):
+        owner.patch.setattr(module, name, wrap(getattr(module, name), name))
 
 
 def require_historical_fixture(name):
@@ -929,6 +997,7 @@ class InputOwner:
                 return super().setitem(mapping, name, value)
         self.attributes = {}
         self.items = {}
+        self.resources = []
         self.patch = OwnedPatch()
         _ACTIVE.append(self)
         return self
@@ -959,6 +1028,13 @@ class InputOwner:
 
     def __exit__(self, *exc):
         try:
+            cleanup_errors = []
+            for close in reversed(self.resources):
+                try:
+                    close()
+                except BaseException as error:
+                    cleanup_errors.append(error)
+            self.resources.clear()
             # A later unrelated patch is not owned by this context. Restore only
             # values that still match our installation, including module entries.
             for mapping, name, original, installed in reversed(list(self.items.values())):
@@ -971,6 +1047,8 @@ class InputOwner:
                 if getattr(obj, name, _ABSENT) is installed:
                     if original is _ABSENT:delattr(obj, name)
                     else:setattr(obj, name, original)
+            if cleanup_errors:
+                raise BaseExceptionGroup('HISTORICAL_RESOURCE_CLEANUP_FAILED', cleanup_errors)
         finally:
             assert _ACTIVE.pop() is self
             if self.parent is not None:

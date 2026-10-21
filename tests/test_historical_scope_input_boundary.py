@@ -1159,3 +1159,140 @@ def test_complete_direct_reader_family_selects_authenticated_operations():
         req=request(Path(row['path']).stem,row['function'])
         plan=boundary.resolve_context(req)
         assert plan.generation==row['generation']
+
+
+def _real_git_reader(repo):
+    import subprocess
+    def git(*args,check=True):
+        result=subprocess.run(['git',*args],cwd=module.ROOT,capture_output=True,check=check)
+        return result.stdout.decode().strip()
+    def git_bytes(*args):return subprocess.check_output(['git',*args],cwd=module.ROOT)
+    def exists_at(revision,path):
+        return subprocess.run(['git','cat-file','-e',str(revision)+':'+str(path)],cwd=module.ROOT,capture_output=True).returncode==0
+    module=SimpleNamespace(ROOT=repo,git=git,git_bytes=git_bytes,exists_at=exists_at)
+    return module
+
+
+def _prepare_stream_repository(path):
+    import subprocess
+    path.mkdir()
+    for args in (('init','-q'),('config','user.name','Offline Test'),('config','user.email','offline@example.invalid'),('config','core.autocrlf','false')):
+        subprocess.run(['git',*args],cwd=path,check=True,capture_output=True)
+    (path/'original.txt').write_bytes(b'first\n')
+    subprocess.run(['git','add','--all'],cwd=path,check=True,capture_output=True)
+    subprocess.run(['git','commit','-qm','synthetic first'],cwd=path,check=True,capture_output=True)
+    return _real_git_reader(path)
+
+
+@pytest.mark.parametrize('failure',[None,ValueError,KeyboardInterrupt])
+def test_owned_object_stream_observes_mutations_and_closes_after_every_exit(tmp_path,monkeypatch,failure):
+    from scripts import scope_git_reads
+    module=_prepare_stream_repository(tmp_path/'repository')
+    native=module.git_bytes;observed=[]
+    real=scope_git_reads.ObjectStream
+    class Track(real):
+        def _start(self):
+            super()._start()
+            if self.process not in observed:observed.append(self.process)
+    monkeypatch.setattr(scope_git_reads,'ObjectStream',Track)
+    plan=boundary.resolve_context(request('test_ncaaf_coverage_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'))
+    read,opened=Path.read_bytes,Path.open
+    def run():
+        with boundary.InputOwner(plan):
+            boundary.install_owned_git_stream(module)
+            assert module.git_bytes.__globals__ is native.__globals__
+            assert module.git_bytes('show','HEAD:original.txt')==b'first\n'
+            assert module.exists_at('HEAD','original.txt') and not module.exists_at('HEAD','missing.txt')
+            assert module.git('rev-parse','HEAD:original.txt')
+            assert len(observed)==1
+            (module.ROOT/'original.txt').write_bytes(b'second\n')
+            module.git('add','--all');module.git('commit','-qm','synthetic second')
+            assert module.git_bytes('show','HEAD:original.txt')==b'second\n'
+            assert len(observed)==1
+            with pytest.raises(Exception):module.git_bytes('show','HEAD:missing.txt')
+            if failure is not None:raise failure('SYNTHETIC_OWNER_INTERRUPTION')
+    if failure is None:run()
+    else:
+        with pytest.raises(failure,match='SYNTHETIC_OWNER_INTERRUPTION'):run()
+    assert module.git_bytes is native and Path.read_bytes is read and Path.open is opened
+    assert observed and all(process.poll() is not None for process in observed)
+
+
+def test_nested_object_stream_owners_do_not_share_processes_or_leave_views(tmp_path,monkeypatch):
+    from scripts import scope_git_reads
+    module=_prepare_stream_repository(tmp_path/'repository')
+    real=scope_git_reads.ObjectStream;streams=[]
+    class Track(real):
+        def __init__(self,*args):super().__init__(*args);streams.append(self)
+    monkeypatch.setattr(scope_git_reads,'ObjectStream',Track)
+    plan=boundary.resolve_context(request('test_ncaaf_coverage_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'))
+    native=module.git_bytes
+    with boundary.InputOwner(plan):
+        boundary.install_owned_git_stream(module)
+        assert module.git_bytes('show','HEAD:original.txt')==b'first\n'
+        parent=module.git_bytes
+        with boundary.InputOwner(plan):
+            boundary.install_owned_git_stream(module)
+            assert module.git_bytes('show','HEAD:original.txt')==b'first\n'
+            assert len(streams)==2 and streams[0] is not streams[1]
+        assert module.git_bytes is parent and streams[1].process is None
+        assert module.git_bytes('show','HEAD:original.txt')==b'first\n'
+    assert module.git_bytes is native and all(stream.process is None for stream in streams)
+
+
+def test_owned_stream_rejects_changed_physical_reader_before_import_or_launch(monkeypatch):
+    plan=boundary.resolve_context(request('test_ncaaf_coverage_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'))
+    actual=boundary.physical_bytes
+    def altered(path):
+        return b'changed helper' if Path(path)==boundary.ROOT/'scripts/scope_git_reads.py' else actual(path)
+    with boundary.InputOwner(plan):
+        monkeypatch.setattr(boundary,'physical_bytes',altered)
+        with pytest.raises(ValueError,match='HISTORICAL_GIT_READER_SOURCE_CHANGED'):
+            boundary.install_owned_git_stream(SimpleNamespace())
+
+
+@pytest.mark.parametrize('damage',['missing','corrupt'])
+def test_warmed_object_stream_rejects_missing_or_corrupt_required_objects(tmp_path,damage):
+    import subprocess
+    import stat
+    module=_prepare_stream_repository(tmp_path/'repository')
+    identity=module.git('rev-parse','HEAD:original.txt')
+    path=module.ROOT/'.git/objects'/identity[:2]/identity[2:]
+    plan=boundary.resolve_context(request('test_ncaaf_coverage_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'))
+    native=module.git_bytes
+    with pytest.raises((RuntimeError,subprocess.CalledProcessError,BaseExceptionGroup)):
+        with boundary.InputOwner(plan):
+            boundary.install_owned_git_stream(module)
+            assert module.git_bytes('show','HEAD:original.txt')==b'first\n'
+            path.chmod(path.stat().st_mode|stat.S_IWUSR)
+            if damage=='missing':path.unlink()
+            else:path.write_bytes(b'corrupt required object')
+            module.git_bytes('show','HEAD:original.txt')
+    assert module.git_bytes is native
+
+
+def test_bootstrap_reuses_verified_bytes_through_live_predecessor_checks(monkeypatch,released_bootstrap_owner):
+    import types
+    from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs
+    live=boundary.canonical_guard()
+    first,_=_new_released_scope_inputs(live)
+    scope,binding=live._ci_fixture_module()
+    predecessor=boundary.authenticated_predecessor(scope,binding)
+    source=live._ncaaf_future_base_source(predecessor)
+    checked=[];original=scope.previous_guard
+    def observed(value,current,*,predecessor=None):
+        checked.append(predecessor)
+        return original(value,current,predecessor=predecessor)
+    monkeypatch.setattr(scope,'previous_guard',observed)
+    monkeypatch.setattr(live,'_ci_fixture_module',lambda:(scope,binding))
+    second,_=_new_released_scope_inputs(live)
+    assert checked and all(value is predecessor for value in checked)
+    assert first is not second and first.__dict__ is not second.__dict__
+    assert first._ncaaf_custody_predecessor is not second._ncaaf_custody_predecessor
+    key,image=boundary._PREDECESSOR_IMAGE
+    monkeypatch.setattr(boundary,'_PREDECESSOR_IMAGE',(key,image+b'UNREVIEWED'))
+    rejected=types.ModuleType('SYNTHETIC_REJECTED_BOOTSTRAP')
+    rejected.__file__=first.__file__
+    with pytest.raises(ValueError,match='PREVIOUS_GUARD_LOGIC_CHANGED'):
+        boundary.execute_released_bootstrap(source,rejected,live,binding)
+    assert not hasattr(rejected,'_ncaaf_custody_predecessor')
