@@ -1295,6 +1295,18 @@ def test_current_ci_budget_uses_exact_authenticated_historical_edge(monkeypatch,
     assert Path.open is opened and Path.read_bytes is read
 
 
+def test_final_binding_covers_every_transitive_physical_source():
+    binding=json.loads(boundary.physical_bytes(boundary.ROOT/boundary.BINDING))
+    edges=[]
+    for consumer,record in binding['historical_input_boundary']['consumers'].items():
+        for name,row in record.get('transitive_modules',{}).items():
+            assert row['path']==name.replace('.','/')+'.py'
+            assert boundary.sha(boundary.physical_bytes(boundary.ROOT/row['path']))==row['physical_sha256'],(consumer,name)
+            assert row['generation']==record['generation']
+            edges.append((consumer,name))
+    assert edges and len(edges)==len(set(edges))
+
+
 def test_bootstrap_reuses_verified_bytes_through_live_predecessor_checks(monkeypatch,released_bootstrap_owner):
     import types
     from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs

@@ -7,8 +7,8 @@ import sys
 import types
 
 ROOT=Path(__file__).resolve().parents[1]
-_CI_STABILITY_BINDING_SHA256='c3591cf5c94792570b89701bf33128846a5f381a4480dcd9e3f83d6e3f526e67'
-_CI_STABILITY_GUARD_SHA256='b77f8a1e8feca7bfcd03a99312d785b14b481eca6e43e74b064ce117cee43385'
+_CI_STABILITY_BINDING_SHA256='eefe83fc377896af26aedf23110e5d5d7b43f0a1de6bfbe5eaa93446440e3350'
+_CI_STABILITY_GUARD_SHA256='fa993959b24db763e874abf461399a26fbe6447a96f39960061dd6f02906ef90'
 
 def _ci_fixture_module():
     with open(ROOT/'scripts/check_launch_change_scope.py','rb') as stream: source=stream.read().replace(b'\r\n',b'\n')
