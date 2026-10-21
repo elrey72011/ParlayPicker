@@ -82,7 +82,7 @@ def test_actual_completed_analysis_publish_caller_defers_history(monkeypatch):
         raise AssertionError("Display-only rerun must not restore")
     monkeypatch.setattr(public_results, "restore_history", forbidden)
     monkeypatch.setenv("PARLAYPICKER_PUBLISH_TOKEN", "test-only-publish-token")
-    at = AppTest.from_string(source+"\nmain()").run()
+    at = AppTest.from_string(source+"\nmain()", default_timeout=10).run()
     at.text_input(key="publication_token").set_value("test-only-publish-token").run()
     at.run()
     at.button(key="publication_build").click().run()
