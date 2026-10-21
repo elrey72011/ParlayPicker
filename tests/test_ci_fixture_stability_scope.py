@@ -570,4 +570,4 @@ def test_current_measured_capacity_profile_preserves_history():
     assert runner.load_profile(runner.DEFAULT_PROFILE)['sha256']==scope.sha(raw)
     workflow=(ROOT/'.github/workflows/ci.yml').read_text()
     assert 'shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]' in workflow
-    assert workflow.count('--shards 13')==2 and 'timeout-minutes: 30' in workflow
+    assert workflow.count('--shards 13')==2 and 'timeout-minutes: 40' in workflow

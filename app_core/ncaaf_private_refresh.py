@@ -34,7 +34,11 @@ def load(raw):
 
 def _source(packet):
     o=pair._observation(packet);q=o['quote'];e=o['event']
-    return dict(league='NCAAF',sport='NCAAF',matchup_id=e['canonical_event_id'],
+    from zoneinfo import ZoneInfo
+    from app_core.ncaaf_history import timestamp
+    day=timestamp(e['start_utc']).astimezone(ZoneInfo('America/New_York')).date().isoformat()
+    return dict(league='NCAAF',sport='NCAAF',matchup_id='|'.join((e['home_team'],e['away_team'],day)),
+        canonical_event_id=e['canonical_event_id'],
         home_team=e['home_team'],away_team=e['away_team'],game_start_utc=e['start_utc'],
         market_type=q['market_type'],spread_line=q['point'],odds_american=q['price'],
         odds_book=q['book'],bookmaker=q['book'],odds_timestamp=q['recorded_at'],
@@ -71,7 +75,11 @@ def ranking(analysis):
             wager_action='PASS',stake=0))
     require(len(rows)==2 and {r['side'] for r in rows}=={'home','away'},'NCAAF_PAIR_INCOMPLETE')
     rows.sort(key=lambda r:(-r['cover'],r['side']))
-    for r in rows:r['selection']='TIE' if rows[0]['cover']==rows[1]['cover'] else 'HIGHER_MODEL_COVER' if r is rows[0] else 'OTHER_SIDE'
+    from app_core.ncaaf_spread_mass import compare
+    sides={row['side']:row for row in rows}
+    comparison=compare({k:sides['home'][k] for k in ('cover','push','loss')},
+                       {k:sides['away'][k] for k in ('cover','push','loss')})
+    for r in rows:r['selection']='TIE' if comparison['higher_cover']=='tie' else 'HIGHER_MODEL_COVER' if r['side']==comparison['higher_cover'] else 'OTHER_SIDE'
     return rows
 
 

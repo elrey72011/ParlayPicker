@@ -73,6 +73,10 @@ def _install_selected_future_inputs(request,patch,live,plan):
     frozen,records=_new_released_scope_inputs(live)
     from tests.historical_scope_input_boundary import install_owned_git_stream
     install_owned_git_stream(frozen)
+    from tests.measured_scope_reconstruction import install as install_measured_leaf
+    install_measured_leaf(frozen)
+    from tests.historical_scope_input_boundary import own_reconstruction_memos
+    own_reconstruction_memos(frozen)
     root=Path(__file__).resolve().parents[1];read=Path.read_bytes
     from tests.historical_scope_input_boundary import physical_bytes,generation_input
     scope,binding=live._ci_fixture_module()
@@ -98,6 +102,8 @@ def _install_selected_future_inputs(request,patch,live,plan):
         try:relative=path.resolve().relative_to(root).as_posix()
         except ValueError:return read(path)
         value=read(path)
+        from tests.ci_fixture_stability_inputs import private_delivery_predecessor_source
+        value=private_delivery_predecessor_source(relative,value)
         if relative==live.GUARD_PATH:
             return guard_source if hashlib.sha256(value.replace(b'\r\n',b'\n')).hexdigest() in allowed_guard_inputs else value
         exact=generation_input(plan,relative,value) if relative in source_inputs else None

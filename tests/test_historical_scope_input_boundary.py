@@ -1271,6 +1271,30 @@ def test_warmed_object_stream_rejects_missing_or_corrupt_required_objects(tmp_pa
     assert module.git_bytes is native
 
 
+@pytest.mark.parametrize('damage',[None,'workflow','binding'])
+def test_current_ci_budget_uses_exact_authenticated_historical_edge(monkeypatch,damage):
+    import base64,zlib
+    from tests import ci_fixture_stability_inputs as inputs
+    relative='.github/workflows/ci.yml';path=boundary.ROOT/relative
+    plan=boundary.resolve_context(request('test_ncaaf_coverage_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'))
+    current=boundary.physical_bytes(path)
+    expected=zlib.decompress(base64.b85decode(inputs.CAPACITY_SOURCE_RECORDS[relative]['compressed']))
+    opened,read=Path.open,Path.read_bytes
+    with boundary.InputOwner(plan) as owner:
+        boundary.install_capacity_input_view(plan,owner.patch)
+        assert path.read_bytes()==expected
+        assert boundary.physical_bytes(path)==current
+        assert b'timeout-minutes: 40' in current and current!=expected
+        if damage is not None:
+            actual=boundary.physical_bytes
+            def altered(p):
+                value=actual(p)
+                return value+b'UNREVIEWED' if Path(p)==(path if damage=='workflow' else boundary.ROOT/boundary.BINDING) else value
+            monkeypatch.setattr(boundary,'physical_bytes',altered)
+            with pytest.raises((ValueError,__import__('json').JSONDecodeError)):path.read_bytes()
+    assert Path.open is opened and Path.read_bytes is read
+
+
 def test_bootstrap_reuses_verified_bytes_through_live_predecessor_checks(monkeypatch,released_bootstrap_owner):
     import types
     from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs

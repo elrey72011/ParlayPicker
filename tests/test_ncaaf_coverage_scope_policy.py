@@ -68,12 +68,15 @@ def seal(repo, binding):
     return implementation, candidate, policy
 
 
-@pytest.fixture
-def fx(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
+@pytest.fixture(scope="session")
+def prepared_coverage(tmp_path_factory):
+    from tests.immutable_git_fixture import freeze, source_identity
+    repo = tmp_path_factory.mktemp("coverage-preparation") / "repo"
     repo.mkdir()
     git(repo, "init", "-q")
     git(repo, "config", "core.autocrlf", "false")
+    git(repo, "config", "gc.auto", "0")
+    git(repo, "config", "maintenance.auto", "false")
     git(repo, "config", "user.name", "Offline Test")
     git(repo, "config", "user.email", "offline@example.invalid")
     source_guard = original_coverage_source(guard.GUARD_PATH)
@@ -104,18 +107,36 @@ def fx(tmp_path, monkeypatch):
         original_module = original_module.replace(after_edit, before_edit, 1)
     write(repo, "app_core/ncaaf_schedule.py", original_module.encode())
     base = commit(repo, "approved main with prior policies")
+    original_root = guard.ROOT
+    try:
+        guard.ROOT = repo
+        binding = {"base": base, "base_tree": git(repo, "rev-parse", "HEAD^{tree}"),
+                   "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+                   "previous_guard_sha256": hashlib.sha256(previous_guard).hexdigest(),
+                   "previous_policy_blob": guard.blob(base, guard.SCHEDULE_POLICY_PATH),
+                   "clock_blob": guard.blob(base, guard.CLOCK_TEST),
+                   "successor_guard_sha256": guard.COVERAGE_BINDINGS["successor_guard_sha256"]}
+        for path in guard.COVERAGE_PATHS:
+            write(repo, path, original_coverage_source(path))
+        binding["reviewed_coverage_blobs"] = {p: git(repo, "hash-object", "--", p)
+                                         for p in guard.COVERAGE_BINDINGS["reviewed_coverage_blobs"]}
+        implementation, candidate, policy = seal(repo, binding)
+    finally:
+        guard.ROOT = original_root
+    paths = set(guard.COVERAGE_PATHS) | {guard.GUARD_PATH, "app_core/ncaaf_schedule.py",
+        "docs/paid-launch/ci-fixture-stability-bindings-v1.json",
+        "tests/immutable_git_fixture.py", "tests/test_ncaaf_coverage_scope_policy.py"}
+    inputs = source_identity(SOURCE, paths)
+    git(repo, "gc", "--prune=never")
+    return freeze(repo, [binding, implementation, candidate, policy], inputs)
+
+
+@pytest.fixture
+def fx(tmp_path, monkeypatch, prepared_coverage):
+    from tests.immutable_git_fixture import materialize
+    repo = tmp_path / "repo"
+    binding, implementation, candidate, policy = materialize(prepared_coverage, repo, SOURCE)
     monkeypatch.setattr(guard, "ROOT", repo)
-    binding = {"base": base, "base_tree": git(repo, "rev-parse", "HEAD^{tree}"),
-               "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
-               "previous_guard_sha256": hashlib.sha256(previous_guard).hexdigest(),
-               "previous_policy_blob": guard.blob(base, guard.SCHEDULE_POLICY_PATH),
-               "clock_blob": guard.blob(base, guard.CLOCK_TEST),
-               "successor_guard_sha256": guard.COVERAGE_BINDINGS["successor_guard_sha256"]}
-    for path in guard.COVERAGE_PATHS:
-        write(repo, path, original_coverage_source(path))
-    binding["reviewed_coverage_blobs"] = {p: git(repo, "hash-object", "--", p)
-                                     for p in guard.COVERAGE_BINDINGS["reviewed_coverage_blobs"]}
-    implementation, candidate, policy = seal(repo, binding)
     return repo, binding, implementation, candidate, policy
 
 

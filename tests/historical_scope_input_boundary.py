@@ -760,6 +760,20 @@ def canonical_guard():
     return _LIVE_GUARD
 
 
+def own_reconstruction_memos(module):
+    if not _ACTIVE or _ACTIVE[-1].plan.role is not Role.HISTORICAL:
+        raise ValueError('HISTORICAL_FIXTURE_CONTEXT_REQUIRED')
+    memos=[]
+    for name in ('_nfl_odds_timing_base_source','_nfl_odds_base_source','_listing_capacity_base_source'):
+        memo=getattr(getattr(module,name,None),'reconstruction_memo',None)
+        if memo is not None and all(memo is not item for item in memos):memos.append(memo)
+    def close():
+        for memo in memos:
+            memo.entries.clear()
+            memo.retained_bytes=0
+    _ACTIVE[-1].resources.append(close)
+
+
 def install_owned_git_stream(module):
     """Fresh object reads with one owned process per active fixture repository.
 
@@ -1102,6 +1116,16 @@ def install_capacity_input_view(plan,patch):
             raise ValueError('CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED')
         return value
     def image(relative,raw):
+        from tests import ci_fixture_stability_inputs as inputs
+        # Normalize only the reviewed current-budget edge before the original
+        # thirteen/twelve/eleven contracts. Physical bytes must be current.
+        row=inputs.PRIVATE_DELIVERY_SOURCE_RECORDS.get(relative)
+        if row is not None:
+            declared=json.loads(physical_bytes(ROOT/BINDING))['private_delivery_repair']['source_edits'].get(relative)
+            if (json.loads(json.dumps({key:value for key,value in row.items()if key!='compressed'}))!=declared
+                    or sha(raw.replace(b'\r\n',b'\n'))!=row['after_sha256']):
+                raise ValueError('CI_PRIVATE_DELIVERY_GENERATION_CHANGED')
+            raw=inputs.private_delivery_predecessor_source(relative,raw)
         row=records[relative];successor=row.get('successor')
         # Physical source must be the current authenticated generation. Only
         # the selected immutable edge(s) may produce a historical view.

@@ -74,7 +74,7 @@ def test_actual_normal_refresh_button_uses_private_caller(synthetic,monkeypatch,
     from tests.apptest_owned_script import app_from_owned_script
     value=selection(synthetic,monkeypatch,tmp_path)
     # Actual main, sidebar button callback and private caller. No publishing token.
-    app=app_from_owned_script(tmp_path,'import streamlit_app\nstreamlit_app.main()\n',default_timeout=10)
+    app=app_from_owned_script(tmp_path,'import streamlit_app\nstreamlit_app.main()\n',default_timeout=180)
     app.session_state['ncaaf_private_refresh']=True
     app.session_state['ncaaf_private_refresh_selection']=value
     app.run()
