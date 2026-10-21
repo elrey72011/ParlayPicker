@@ -1305,8 +1305,8 @@
     "ledger_sha256": "a6a1143c0f264136cecaf4ed543b8ddb04d9b52d4969ffad89152e8259a0fd65",
     "older_profile_and_workflow_generations": "All unchanged; authenticated before consumption",
     "original_profile_sha256": "6ea7580a2d3098c6906fd111c8d0f32bda7e3daec321e4717fa58aa03ba42cba",
-    "predecessor": "85d8a3d71327035e2466938855884f9faf936cd7",
-    "predecessor_tree": "2a8f8b283ddfc76f7b727c1f5487e96800a16dd1",
+    "predecessor": "3bfb62123bf550ee5727bd039b6f63c7cb1625d5",
+    "predecessor_tree": "7ec3783d8d8aa071f107909216ffbfaa6d1d288e",
     "proposal_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
     "source_paths": [
       ".github/workflows/ci.yml",
@@ -1447,7 +1447,7 @@
   "reviewed_blobs": {
     ".github/workflows/ci.yml": "60c536767a7d8b0a83c1537834fc38a422c31dae",
     "docs/paid-launch/ci-fixture-stability-v1.md": "0c68646872b58edacfd36706775dbace017b0eb8",
-    "scripts/ci_fixture_stability_scope.py": "d57b976e5b4f08db1c9f81626c291e93ae3f3219",
+    "scripts/ci_fixture_stability_scope.py": "3bffdb5f6bc391b1341b1dd3a1075b1e9d3cbce1",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
     "tests/ci_fixture_stability_inputs.py": "b63384b00ec3b646ea3ebf1bb26b42dd41022ad4",

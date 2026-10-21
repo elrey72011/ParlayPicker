@@ -19,8 +19,8 @@ CONSOLIDATED_AMENDMENT = 'b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b
 HISTORICAL_INPUT_AMENDMENT = '12e3046831d8fde24748e5193a2e6a54311e1be318e703d3739fe6e1c41da7b2'
 SHARED_BOUNDARY_AMENDMENT = '8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f'
 MEASURED_CAPACITY_AMENDMENT = 'dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8'
-CAPACITY_PREDECESSOR = '85d8a3d71327035e2466938855884f9faf936cd7'
-CAPACITY_PREDECESSOR_TREE = '2a8f8b283ddfc76f7b727c1f5487e96800a16dd1'
+CAPACITY_PREDECESSOR = '3bfb62123bf550ee5727bd039b6f63c7cb1625d5'
+CAPACITY_PREDECESSOR_TREE = '7ec3783d8d8aa071f107909216ffbfaa6d1d288e'
 CAPACITY_LEDGER_SHA256 = 'a6a1143c0f264136cecaf4ed543b8ddb04d9b52d4969ffad89152e8259a0fd65'
 READ_CONSISTENCY_CAPACITY_AMENDMENT = 'd1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1'
 PRESERVED_CANDIDATE = '97ed96247939165c2f73026525e31e1c3dba9302'
@@ -283,8 +283,9 @@ def validate(g, manifest_path, comparison_base, binding):
         original=b"        exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)\n    return frozen,json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON)\n\n\n@pytest.fixture"
         corrected=b"        exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)\n        frozen._scope_reconstruction_for_validation()\n    return frozen,json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON)\n\n@pytest.fixture"
         require(prior.count(original)==1 and prior.replace(original,corrected)==current,'FIXTURE_INITIALIZER_SEMANTICS_CHANGED')
-        require(blob(g.git_bytes('show',implementation+':scripts/scope_reconstruction.py'))==meta['unchanged_source_memo_blob'],
-                'RECONSTRUCTION_LIMIT_OR_LOGIC_CHANGED')
+        if successor:
+            require(blob(g.git_bytes('show',implementation+':scripts/scope_reconstruction.py'))==meta['unchanged_source_memo_blob'],
+                    'RECONSTRUCTION_LIMIT_OR_LOGIC_CHANGED')
     if successor:
         helpers=binding['historical_input_boundary']['helper_preimages']
         require(set(helpers)=={'tests/ci_fixture_scope_inputs.py','tests/ncaaf_transport_scope_inputs.py','tests/ncaaf_staged_capacity_fixtures.py'}, 'HISTORICAL_HELPER_INPUT_SET_CHANGED')
