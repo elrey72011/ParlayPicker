@@ -43,6 +43,7 @@ def sealed_template(tmp_path_factory):
     manifest='docs/paid-launch/launch-baseline-manifest.json'
     write(manifest, (ROOT/manifest).read_bytes().replace(b'\r\n', b'\n'))
     write('core/frozen.py', b'# SYNTHETIC immutable dependency\n')
+    write('scripts/scope_reconstruction.py', (ROOT/'scripts/scope_reconstruction.py').read_bytes().replace(b'\r\n', b'\n'))
     for path, row in inputs.RECORDS.items():
         before = zlib.decompress(base64.b85decode(row['compressed']))
         assert scope.sha(before) == row['before_sha256']
@@ -97,6 +98,20 @@ def test_synthetic_exact_seal_and_ordered_merge(case):
     code,report=scope.run(g,g.ROOT/g.MANIFEST_PATH,scope.BASE,f.binding)
     assert code==0,report
     assert report['original_guard_report']=={'status':'SYNTHETIC retained original report'}
+
+
+@pytest.mark.parametrize('attack', ['missing', 'corrupt'])
+def test_synthetic_seal_requires_unchanged_native_reconstruction(case, attack):
+    path = 'scripts/scope_reconstruction.py'
+    expected = case.binding['private_delivery_repair']['native_reconstruction_blob']
+    assert scope.blob(raw_git(case.g.ROOT, 'show', scope.BASE+':'+path)) == expected
+    assert scope.blob(raw_git(case.g.ROOT, 'show', case.implementation+':'+path)) == expected
+    target = case.g.ROOT/path
+    if attack == 'missing':
+        target.unlink()
+    else:
+        target.write_bytes(target.read_bytes()+b'\n# SYNTHETIC corrupt required dependency\n')
+    assert scope.run(case.g, case.g.ROOT/case.g.MANIFEST_PATH, None, case.binding)[0] != 0
 
 
 @pytest.mark.parametrize('base',['HEAD','main','--help','0'*40,'5fb8e135',''])

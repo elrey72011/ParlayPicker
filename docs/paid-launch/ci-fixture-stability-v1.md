@@ -327,3 +327,4 @@ retention. Altered source, binding, generation catalogue, helper, image, code
 plan and compiler controls reject. The experimental over-bound failures remain
 preserved. End-to-end final-tree timing and Ubuntu capacity remain unestablished;
 this text does not authorize publication or declare release clearance.
+Synthetic seal preservation follow-up: the miniature repository must include the unchanged native reconstruction module before its baseline commit. The production guard correctly rejected its absence. The original ordered-seal assertions remain unchanged; missing/corrupt native-module controls remain rejecting. This does not change production reconstruction or the historical Git deleting-process finding.
