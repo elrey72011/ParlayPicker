@@ -5,22 +5,29 @@ import pytest
 
 
 def _new_released_scope_inputs(live):
-    from tests.historical_scope_input_boundary import physical_bytes
+    from tests.historical_scope_input_boundary import physical_bytes, selected_reader_generation, historical_reader_source
     root=Path(__file__).resolve().parents[1]
     scope,binding=live._ci_fixture_module()
-    physical=physical_bytes(root/live.GUARD_PATH).replace(b'\r\n',b'\n')
-    current=scope.previous_guard(physical,binding)
-    source=live._ncaaf_future_base_source(current)
-    reviewed=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-reviewed-target-binding-v1.json'))
-    assert hashlib.sha256(physical_bytes(root/'docs/paid-launch/ncaaf-reviewed-target-binding-v1.json')).hexdigest()==binding['historical_input_boundary']['source_generations']['docs/paid-launch/ncaaf-reviewed-target-binding-v1.json']
-    assert hashlib.sha256(source).hexdigest()==reviewed['historical_future']['prior_base_sha256']
+    reader_generation=selected_reader_generation(binding)
+    if reader_generation=='released-future-v1':
+        physical=physical_bytes(root/live.GUARD_PATH).replace(b'\r\n',b'\n')
+        current=scope.previous_guard(physical,binding)
+        source=live._ncaaf_future_base_source(current)
+        reviewed=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-reviewed-target-binding-v1.json'))
+        assert hashlib.sha256(physical_bytes(root/'docs/paid-launch/ncaaf-reviewed-target-binding-v1.json')).hexdigest()==binding['historical_input_boundary']['source_generations']['docs/paid-launch/ncaaf-reviewed-target-binding-v1.json']
+        assert hashlib.sha256(source).hexdigest()==reviewed['historical_future']['prior_base_sha256']
+    else:
+        source=historical_reader_source(live,binding,reader_generation)
     frozen=types.ModuleType('exact_ncaaf_future_released_scope');frozen.__file__=str(root/live.GUARD_PATH)
     from unittest.mock import patch
     read=Path.read_bytes
     with patch.dict(sys.modules,{frozen.__name__:frozen}), patch.object(Path,'read_bytes',lambda path:source if path.resolve()==(root/live.GUARD_PATH).resolve() else read(path)):
-        from tests.historical_scope_input_boundary import execute_released_bootstrap
-        execute_released_bootstrap(source,frozen,live,binding)
-        frozen._scope_reconstruction_for_validation()
+        if reader_generation=='released-future-v1':
+            from tests.historical_scope_input_boundary import execute_released_bootstrap
+            execute_released_bootstrap(source,frozen,live,binding)
+            frozen._scope_reconstruction_for_validation()
+        else:
+            exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)
     return frozen,json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON)
 
 @pytest.fixture
@@ -60,7 +67,7 @@ def _install_selected_future_inputs(request,patch,live,plan):
         for name,value in tuple(vars(current).items()):
             if isinstance(value,types.ModuleType):
                 file=getattr(value,'__file__',None)
-                if file and Path(file).resolve()==target.resolve() and hasattr(value,'_ncaaf_future_base_source'):
+                if file and Path(file).resolve()==target.resolve():
                     aliases.append((current,name))
                 elif value.__name__.split('.')[-1].startswith('test_'):
                     pending.append(value)
@@ -72,17 +79,26 @@ def _install_selected_future_inputs(request,patch,live,plan):
     assert len(source_inputs)<=64 and all(isinstance(p,str) and isinstance(h,str) and len(h)==64 for p,h in source_inputs.items())
     physical_guard=physical_bytes(root/live.GUARD_PATH).replace(b'\r\n',b'\n')
     main_guard=scope.previous_guard(physical_guard,binding)
-    guard_source=live._ncaaf_future_base_source(main_guard)
+    from tests.historical_scope_input_boundary import selected_reader_generation, historical_reader_source
+    reader_generation=selected_reader_generation(binding,plan)
+    guard_source=(live._ncaaf_future_base_source(main_guard) if reader_generation=='released-future-v1'
+                  else historical_reader_source(live,binding,reader_generation))
     allowed_guard_inputs={hashlib.sha256(v).hexdigest() for v in (physical_guard,main_guard,guard_source)}
+    from tests.historical_scope_input_boundary import _BOOTSTRAP_SOURCE
+    allowed_guard_inputs.add(_BOOTSTRAP_SOURCE)
     original=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-future-spread-binding-v1.json'))
     for data in (original.get('ci_fixture_copy',{}),original.get('transport_diagnostics',{})):
         if 'previous_guard_sha256' in data:allowed_guard_inputs.add(data['previous_guard_sha256'])
     def historical(path):
         try:relative=path.resolve().relative_to(root).as_posix()
         except ValueError:return read(path)
-        value=read(path)
         if relative==live.GUARD_PATH:
+            # Read the authenticated physical generation before its one selected
+            # view. Calling an outer read_bytes here can re-transform the view
+            # supplied by our Path.open override through a predecessor adapter.
+            value=physical_bytes(path)
             return guard_source if hashlib.sha256(value.replace(b'\r\n',b'\n')).hexdigest() in allowed_guard_inputs else value
+        value=read(path)
         exact=generation_input(plan,relative,value) if relative in source_inputs else None
         if exact is not None:return exact
         normalized=value.replace(b'\r\n',b'\n')
@@ -94,6 +110,23 @@ def _install_selected_future_inputs(request,patch,live,plan):
     patch.setattr(scripts,'check_launch_change_scope',frozen)
     patch.setitem(sys.modules,'scripts.check_launch_change_scope',frozen)
     patch.setitem(sys.modules,frozen.__name__,frozen)
+    native_open=Path.open
+    def guard_open(path,mode='r',*args,**kwargs):
+        if path.resolve()!=target.resolve() or mode not in ('r','rb'):
+            return native_open(path,mode,*args,**kwargs)
+        import io
+        value=physical_bytes(path)
+        if hashlib.sha256(value.replace(b'\r\n',b'\n')).hexdigest() in allowed_guard_inputs:
+            value=guard_source
+        if mode=='rb':return io.BytesIO(value)
+        encoding=kwargs.get('encoding',args[1] if len(args)>1 else None) or 'utf-8'
+        if encoding=='locale':
+            import locale
+            encoding=locale.getencoding()
+        return io.TextIOWrapper(io.BytesIO(value),encoding=encoding,
+            errors=kwargs.get('errors',args[2] if len(args)>2 else None),
+            newline=kwargs.get('newline',args[3] if len(args)>3 else None))
+    patch.setattr(Path,'open',guard_open)
     patch.setattr(Path,'read_bytes',historical)
 
 

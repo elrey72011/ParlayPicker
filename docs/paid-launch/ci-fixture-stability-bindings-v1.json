@@ -358,16 +358,19 @@
       "tests/ci_fixture_scope_inputs.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "04cec61bcb803f60d63d7b17e5f3122543f7ce2c690bd8ac5a66ecc19d8afe84"
       },
       "tests/ncaaf_future_scope_inputs.py": {
         "fixtures": {},
         "generation": "transport-future",
-        "sha256": "9728243e9b56ef491bedfba796d5b4390f77a92701d36604666ff96d9246843d"
+        "guard_source_generation": "released-future-v1",
+        "sha256": "5dc0939e335860a618d769123956b156bd0737d8c8fa2835195870fbd0550689"
       },
       "tests/ncaaf_transport_scope_inputs.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "b70bf0bc2ef240b2c3478ab616f50c86d5d948a186556e1969c7eb31d21b4513"
       },
       "tests/test_canonical_download_scope.py": {
@@ -378,6 +381,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "c0c8ad2f6630529b29172f1bd775c1b2a4cca33f3b20f87a87918e25d6e5ce3b"
       },
       "tests/test_ci_fixture_stability_scope.py": {
@@ -388,11 +392,13 @@
           }
         },
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "cf4008cba0a45b2f5dd7fb40884cd7424c45bb97c1e0d1b685502b105d750db6"
       },
       "tests/test_ci_scheduling_fixture_copy.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "requested_historical_fixtures": {
           "ncaaf_released_scope_inputs": "ncaaf-future"
         },
@@ -401,6 +407,7 @@
       "tests/test_ci_scheduling_fixture_scope.py": {
         "fixtures": {},
         "generation": "stability",
+        "guard_source_generation": "released-future-v1",
         "sha256": "59f3be007c3bc828401467abe55320b3c8fa27dd31dc973d8a53d797741effb1"
       },
       "tests/test_ci_scheduling_scope.py": {
@@ -411,31 +418,37 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "92843adcc7a87d9c3744a1c66f234ac3f758b2caa6b967baa575d3bcfadf58aa"
       },
       "tests/test_ci_six_shards.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "d535cfff4a2851cc82e3422383e73239f0d65a49fd8b1f42fc7a4ba4f4c6eed3"
       },
       "tests/test_ci_timing_profile.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "c5cf8c9f08285732694a3d42e5f45cdf275d533a286a3084723575fc7cb775b7"
       },
       "tests/test_ci_timing_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "81b561e6d2a60df1a4db5e048ab9d7ede655e0495623a9405b69ec2c721ddc88"
       },
       "tests/test_clock_scope_exception_proposal.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "5210c2c948f9eb6b933903685a59b05fa1f8bc3cabaf93d48f4e48cd99de0489"
       },
       "tests/test_dfs_scope_policy.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "legacy-drive-after-v1",
         "sha256": "71c5e5a1012b05c0499ad09736656931bad713b1b320b394172501cf3e43e30f"
       },
       "tests/test_drive_history_scope_policy.py": {
@@ -446,6 +459,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "439929a9554c422cc2e74834744c9358a9434964b8be9afca0fca9acb0170e57"
       },
       "tests/test_estimate_scope_policy.py": {
@@ -456,11 +470,13 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "640e0bf39ecd20fb2e445484bd7fcd60cf2dc6008b01d079a0531b89a806b807"
       },
       "tests/test_export_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "ad4a606dca6305cc69abc51a7257960f9f568527ed218ba38e5da446e4b3f67a"
       },
       "tests/test_football_catalog_scope.py": {
@@ -471,16 +487,19 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "14c14fe8a1a1e88ce628447f545133c17e5647ce3ce84573423484ed626e2efb"
       },
       "tests/test_football_document_ci_closure.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "5b67fd81854f2e39df055d1187c39de5765bbd731fae4ceaf0478f6d73c49e37"
       },
       "tests/test_football_document_ci_closure_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "c40d37229f7c87e649a3d5fbd6a08a998519de2f0f261d785ca8bea1d53c6c0d"
       },
       "tests/test_football_document_ci_performance.py": {
@@ -491,66 +510,79 @@
           }
         },
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "72bcc1ac09084afc6ff5f159cd7908fbb965b276b3fef06c5d76edb529eb6f80"
       },
       "tests/test_football_document_ci_performance_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "79da58385c00185d6b01aa5a73a8b324d6e215a918059b0a93e099bc873ea270"
       },
       "tests/test_football_document_fixture_report_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "39af5e8a71aea8623be7d117d6622a9c7d540d1500bc5b41cd65de93357dc87f"
       },
       "tests/test_football_document_html_fixture_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "f285957d6a15bac390deeebb275398a79c3485fa6bce17916a054ee7878e5964"
       },
       "tests/test_football_document_html_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "54fce0fca1e7c9d8826e3cdad173ff1904787d90b1d91b03e955ec7f070646b1"
       },
       "tests/test_football_document_io_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "0e46df633f345ef53e0edcfc02160378681c2e7f75ef12588d072a66142f8314"
       },
       "tests/test_football_document_literals_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "2ac2f94dadfffd90d5c56137bd20b80ade7beeb0572399ce04b9dbd2c64ee1c6"
       },
       "tests/test_football_document_metadata_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "2aa0302e93e77b49c11f0c1eaba8e080d323a895118f8db6c9d3d360888ebbb7"
       },
       "tests/test_football_document_predecessor_fixture.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "67914c7058ec1e3ff4265d20007e4996fb48d13e05a235a6549b2749123ad3db"
       },
       "tests/test_football_document_predecessor_fixture_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "adc1fcf13a660da6f9e3949b964a4cbae8305829235be3fa5fa50d4dd92bcf4c"
       },
       "tests/test_football_document_remote_fixture_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "bed9bf5de9c2459ff40f0f85f66b68d3ba0217b7bdb05ab2f3b2f24be0c8e220"
       },
       "tests/test_football_document_six_capacity_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "797bf87f8210063cd75c4f2b389139df5e66a8a0022654897024fc8842668473"
       },
       "tests/test_football_document_socket_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "acac58abeb97049e2907b45bcd17caf25231f83b3697ceb0b58d2594d3bba69f"
       },
       "tests/test_football_research_scope.py": {
@@ -561,6 +593,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "bfc91f3c291a9d41613468f2336a795d9697e315d219c0d93a6f9055c8b4a3db"
       },
       "tests/test_home_runline_scope_policy.py": {
@@ -571,11 +604,13 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "a46ba5c768c6d43118c9163ce3152cd2780b6b9c0c97818eb12620d74824700c"
       },
       "tests/test_launch_scope_integration.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "c20fae62b0ebb0b9c8ee64298370333c776e7b9809343885970100f589f746b4"
       },
       "tests/test_mlb_nhl_research_scope.py": {
@@ -586,11 +621,13 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "7087911d6a1bc83ecbce0d021af25b857c127333f3276a434ceb1d1c4b6712b1"
       },
       "tests/test_ncaaf_chronology_capacity.py": {
         "fixtures": {},
         "generation": "stability",
+        "guard_source_generation": "released-future-v1",
         "sha256": "fd7a2385f9013312f1605bc248274a82af47a19802f09d20ec456d045a2df3a0",
         "transitive_modules": {
           "tests.test_ci_test_shards": {
@@ -616,6 +653,7 @@
       "tests/test_ncaaf_chronology_fixture_copy.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "requested_historical_fixtures": {
           "ncaaf_released_scope_inputs": "ncaaf-future"
         },
@@ -624,6 +662,7 @@
       "tests/test_ncaaf_chronology_fixture_scope.py": {
         "fixtures": {},
         "generation": "stability",
+        "guard_source_generation": "released-future-v1",
         "sha256": "2efee4ea3274422c5fca61c526da1f8b19d630697c86d53a9b66d39952b7a0e5"
       },
       "tests/test_ncaaf_chronology_scope.py": {
@@ -634,6 +673,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "33874a00c0b1a8be0568e6c77661d17bfec203f55f02c805844a3a400eec5b2d",
         "source_inputs": {
           "app_core/ncaaf_pipeline_evidence.py": "7fdb9d01149f2e9ee19ee4092ed342ad11107d6cbca570450f964b6df2f9f49a"
@@ -642,6 +682,7 @@
       "tests/test_ncaaf_cloud_backup_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "20ddc97bdf8dd779492ca19be592ae076473181c4c9f1dc9ebacc39e3ff3eb4e"
       },
       "tests/test_ncaaf_compatibility_scope.py": {
@@ -652,11 +693,13 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "7cfe815f6ba79ae01c7b102ee7fcccb3a07f5562bb79446d3512f36edbb4765c"
       },
       "tests/test_ncaaf_coverage_scope_policy.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "73bbaf2dc9f365fa54639e3c5a71981951b39fa44dddab061d37ffd832e18363"
       },
       "tests/test_ncaaf_custody_scope.py": {
@@ -667,11 +710,13 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "1bbe1a385d7c838624adf66b97de108d4ca3829968dfff4cbd5a3cbcdce41c2a"
       },
       "tests/test_ncaaf_future_fixture_copy.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "requested_historical_fixtures": {
           "ncaaf_released_scope_inputs": "ncaaf-future"
         },
@@ -680,6 +725,7 @@
       "tests/test_ncaaf_future_spread_scope.py": {
         "fixtures": {},
         "generation": "transport",
+        "guard_source_generation": "released-future-v1",
         "sha256": "9ea0c675a3928f8295fa6bf3e668b90faa6e2f60a4bc020d2dc4292d2b9a83dd"
       },
       "tests/test_ncaaf_normal_scope.py": {
@@ -690,16 +736,19 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "2c218d6cbd5e2fccd5db5467a7741ed94aa7aefd9ecb51c8d7de60902dd21e93"
       },
       "tests/test_ncaaf_owner_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "44e3efa2fbe89dd867248f09fe5fde9586dcb675c6fef9abc6d6d3f8847e8d09"
       },
       "tests/test_ncaaf_pilot_discovery_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "cf4431db1dd9eb41ae5489da9d0b95249e8e9db38278cae0539468b364790f79"
       },
       "tests/test_ncaaf_pilot_scope.py": {
@@ -710,11 +759,13 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "57be88774a2794548a942b744d60a853c0d907375d781b60a28a2b8aba81f6c8"
       },
       "tests/test_ncaaf_postmerge_scope.py": {
         "fixtures": {},
         "generation": "transport",
+        "guard_source_generation": "released-future-v1",
         "sha256": "cf1262a4ec6bfa3a66532f1a44cbd9bc82549682b8f8d013deb2bf877c2ee8dd"
       },
       "tests/test_ncaaf_research_scope.py": {
@@ -725,61 +776,73 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "a09d24d2a78be528396c5d1fc1b03d17b659cdc872377458d0eb342ca166fc1e"
       },
       "tests/test_ncaaf_reviewed_target_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "a5ed8e8553f2ddbf3771e0756a798c8b10bfb82419bf29b58d398d2c40098a14"
       },
       "tests/test_ncaaf_reviewed_target_timing.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "e06c9aee9adaca2ef4317df10c3f89d87231dab7e15d93483c6369c525f14329"
       },
       "tests/test_ncaaf_schedule_scope_policy.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "8255483412cde65bfdc3e7d22e0b9509ce21d3a74c553ca464fe48d165fe4929"
       },
       "tests/test_ncaaf_socket_ci_costs.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "c5839b640203bfde9d1988fa19fd839e9d1b592c47a1d7d58fdaee61f5e3bfcc"
       },
       "tests/test_ncaaf_socket_ci_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "186494223e3499fe3d3c8952d361bfde15b7a8a4e27eb09953b67716ce2b2984"
       },
       "tests/test_ncaaf_socket_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "149dd5c6d3faf2a355b2c95a6c57bfccf6a6bb58b84667521b3aec6d20251613"
       },
       "tests/test_ncaaf_staged_capacity_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "a67356a61777c319b49d76f83eb3a64de63460edb7c0909fca880ff286593bd9"
       },
       "tests/test_ncaaf_staged_ci_capacity.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "7c16b2a69f7f484c6dfbb82b89c8bfd8cca35a7e40c18c01bc92eddf24c22336"
       },
       "tests/test_ncaaf_staged_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "0b6655d9c227056333a4069b83306518967a355c9e285f063873850d598927bb"
       },
       "tests/test_ncaaf_terms_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "76a322215b39d5270eeb7bdf2e824292d399b7f09697f87eccfaccde3fa3fb15"
       },
       "tests/test_ncaaf_transport_scope.py": {
         "fixtures": {},
         "generation": "fixture",
+        "guard_source_generation": "released-future-v1",
         "sha256": "7d01be45cbeb1ccb241f330170cb62b8c99b1dd06c2c8acfa3db41801301eaec"
       },
       "tests/test_nfl_admission_scope.py": {
@@ -790,6 +853,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "efff65e92163a51025aae7764c89bc0fe890813aec3bd5c7bbf806a37cb12e32"
       },
       "tests/test_nfl_calibration_scope.py": {
@@ -800,16 +864,19 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "fe3473477d480b1031444d72d4434201dc2e689e25c0ba5d1e192365f425aa4f"
       },
       "tests/test_nfl_diagnostics_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "6f4df9c32764b96ce908db89fb7f7e47865bdec040bcffbc5261abe098d98fc8"
       },
       "tests/test_nfl_document_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "10504630cad4d885f6c399c9ff36ded551bef4eaefb07768975757a73ef5fe7b"
       },
       "tests/test_nfl_inputs_scope.py": {
@@ -820,31 +887,37 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "a78520bfe8cb09d478e1444ccdd99ffbb420c0877e1de87363ffa8623b48ec49"
       },
       "tests/test_nfl_interpretation_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "252fd75a2f0523b226c8be08bf7160ea7c53e0955f83ab675d11e3e009a29a66"
       },
       "tests/test_nfl_listing_capacity_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "4e512e1a39908a7b6011033b381e2359b819efe89844a123b96b72395345c9ad"
       },
       "tests/test_nfl_listing_cost_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "2a9dbb4d8a5e93677f7fba00f272a4f90ac77910124132df6ded634c2fb94184"
       },
       "tests/test_nfl_listing_immutable_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "27c1d4ab3bafc24c7873326951d1509cad53f975f3c933d5aada457428a96297"
       },
       "tests/test_nfl_listing_metadata_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "5059f8354a8c4f4d757d0ec3e15c68ae8f30b437d09226a8c26f45e987ed4c3b"
       },
       "tests/test_nfl_native_scope.py": {
@@ -855,66 +928,79 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "e0b698380bb1a528423bb538abd7c4caef3b61b2a8f80417f304c0fef9de4193"
       },
       "tests/test_nfl_observed_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "d34c79dc739f4d69864277f738d1bc31d405f80c87de8d80576ccb5484cc35b8"
       },
       "tests/test_nfl_odds_listing_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "129784d4cfb9df9c9d25fbde6b1cd1447e1ffc502158f4c18b6ce96bca364b5c"
       },
       "tests/test_nfl_odds_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "e12cf2726778caf78238543b65a7f43bb0e3bf95e923d297b30451037f3cc611"
       },
       "tests/test_nfl_odds_socket_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "0f6ed8bac1a63b1fcc702a7b9bdba0296c707c020ffde8196e332478cdd39218"
       },
       "tests/test_nfl_owner_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "328346b11bf181f4ae27849878ae88853da578059511b1bc9a884cb451535681"
       },
       "tests/test_nfl_pdf_ci_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "0293edf73e3b67d8ede4085d3a384c72462f12fa2ede987c2e6a338633853506"
       },
       "tests/test_nfl_pdf_fixture_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "3b4828fe36aeb98fe04a53a4e48775c778d53df21e5724a5fba5f53e6d2ada4b"
       },
       "tests/test_nfl_pdf_margin_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "12449c2065dc732ae8ade3fab8f9971f74226b2e04690c9d58b46f2c69637f37"
       },
       "tests/test_nfl_pdf_reconcile_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "29da1f2e9350c83efec78aeda9bdedfc0198abc8a1799f0cc44d82a4f7b478cc"
       },
       "tests/test_nfl_pdf_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "7b9486d6f0cc32cf0b75f57e465f64f17739ec0091a5f26b195823b5ea6f89d7"
       },
       "tests/test_nfl_pdf_timing_costs.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "13a4058eefe74faebc9506577dacd3354a5888556100230a7ba85b65d21f8566"
       },
       "tests/test_nfl_pdf_timing_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "ab5ff6707e4dbef4416608e9b73eb603e9620df3158a0d87d0efcaf56c8c7b4a"
       },
       "tests/test_nfl_provenance_scope.py": {
@@ -925,31 +1011,37 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "f789d604ecb4a31149e2e2f7fa62f98091d4b1a47f0b2b51ee9a95fcc4a715fa"
       },
       "tests/test_nfl_reconcile_performance_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "0d99a2945193ecce5532e4e2555e4e3c1f615a9d8e8a534789694afdfcc6b1eb"
       },
       "tests/test_nfl_reconcile_projection.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "c0115cc2d0daf781ae1bbf77bbd3feeaf4802b48aa07717a47161d61dd43b907"
       },
       "tests/test_nfl_scenario_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "786dba68cd83f57e6b3a1a32cf289755fc211425e06a0a868e9fef658ff918be"
       },
       "tests/test_nfl_scoring_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "4137ebf751f410a02f24afb8baeb730e7b4b63dfe4eddf69cfc7d5882d10338c"
       },
       "tests/test_nfl_seven_predecessor_inputs.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "af3801a8559d9477afa4242a53cc3b9ee4731e9d157f288242118ab0e96c556c"
       },
       "tests/test_nfl_ui_scope.py": {
@@ -960,6 +1052,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "48d0321d5e86c1a786513e345f6180190d1935fc4374faab2b06bd49cfcf69dd"
       },
       "tests/test_nhl_puck_line_scope.py": {
@@ -970,11 +1063,13 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "2c20de16a37be1fe417e272a111ffba66b8a64d8030e8c4d7fbc489d7aadb641"
       },
       "tests/test_performance_recap_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "d62247760b67ab53089d81c97c38bcd502a1bb7037d5edf835e752741f7dd654"
       },
       "tests/test_pick_board_scope.py": {
@@ -985,6 +1080,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "5e5806405a3d0a81613a7d00d20532c690bd6d45121c306e90cf11c6e62e8a5e"
       },
       "tests/test_preview_binding_scope.py": {
@@ -995,6 +1091,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "78a4b347296212c614e1a2d3a35143f74d849ec732b328e73465da0c211970e8"
       },
       "tests/test_producer_provenance_scope.py": {
@@ -1005,11 +1102,13 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "934b3c60fa4e89c28b0279d3d5c92b163a496be5cd82e99547f05b2967acb786"
       },
       "tests/test_provider_health_scope_policy.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "ddc1997e5f854fc4c0ad4b303185344f0dea652a0408ea096df7672cd4f23497"
       },
       "tests/test_readiness_dashboard_scope.py": {
@@ -1020,6 +1119,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "05ee52a641416cf304b430da7c3753a4275226aa3b396b77e65459dccca993df"
       },
       "tests/test_remote_canonical_scope.py": {
@@ -1030,6 +1130,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "da7c42a5d97e1cd81ff2f482cdade981975f6dd476576722afc325156273f34d"
       },
       "tests/test_remote_continuation_scope.py": {
@@ -1040,41 +1141,49 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "429a1acba09fca40071fb6b3c4eb1b56b94bba6b38a11ccbf9e2239adf5dd449"
       },
       "tests/test_scope_fixture_isolation.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "e6d13a862aef00d050988920bb9cf302b002850a1223ea55e9671ea1cc29003e"
       },
       "tests/test_scope_git_batch.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "d90736b7a685e8497f272c5bfc316e2513b91bf97a7b218acecaca38a6309fc7"
       },
       "tests/test_scope_git_reads.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "6827765cf3f98d6f53e1a725c4c0c5a4d60c6c5347addc4f021dfb8d37ad63ff"
       },
       "tests/test_scope_guard_bootstrap.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "d5aaa9d569beeecbf649a3611e18b2708bc348eb7e108dfa4dabfe98455a9d5a"
       },
       "tests/test_scope_guard_scan.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "ff8adf898f36cef1fe9f21ab2d207deb44a5849b0c65f4f66df1b51189dfda81"
       },
       "tests/test_scope_reconstruction_memo.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "b5a63ed3bdcf39e2348ddd679c855808fe34dddc86207e93631d40a6f0a064be"
       },
       "tests/test_shared_git_fixture_lifecycle.py": {
         "fixtures": {},
         "generation": "future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "e9cf131346628e1a8bdc45a6c7412b886e5fb61547ebc017c881b0389a0ec2a7"
       },
       "tests/test_slate_audit_scope.py": {
@@ -1085,6 +1194,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "c0a17879a6505d76a4e581acb106a50f4a9b2794ee6d738c34eed1fba580994a"
       },
       "tests/test_source_contract_scope.py": {
@@ -1095,6 +1205,7 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "9d868436e427e4e48955cab54a2a22c43049c9228b469a65ef75ce9873e26f75"
       },
       "tests/test_source_intake_scope.py": {
@@ -1105,16 +1216,19 @@
           }
         },
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "dfbb11ef1edcd6afb56c396c9df7ed429a242add1a26c3daa1a75daf5f6a487f"
       },
       "tests/test_sweet_spot_export_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "883b53d652aded651aa1cec4c2c1ebb3ec08829f7be8c8fb4e4bf014f10348f8"
       },
       "tests/test_theover_fade_scope.py": {
         "fixtures": {},
         "generation": "transport-future",
+        "guard_source_generation": "released-future-v1",
         "sha256": "c6fd47b4c6cb46bd688baafcda9d560d1a13c8e1b731563345b566baebcb0a74"
       }
     },
@@ -1241,6 +1355,22 @@
   },
   "historical_input_patch_sha256": "264dc0d806e27e44665dd0d04b8da60c2ab493a7901c27719c5bed950cc25add",
   "historical_input_regressions_sha256": "f44cb544246114ca23ce19b4dde41a52006ba055f65472e8b77e55d1bacb8535",
+  "historical_reader_sources": {
+    "legacy-drive-after-v1": {
+      "bytes": 170111,
+      "compressed_b85": "c-riJ{de0ovgq&mE4b{r&r&NZBK7TkzUR1(lKM2Ub8M%(`y5{$kOXaRWJya(N!(oj?{8)RkRV0Mr0le5>+adsB8kCZFc=I5^I@9iOBPNIZ#s{;Z+yDuGh@L*e|O4OGw<5?G><+Q%lXQ?=CQGe=1cA^;k$^(oJH{7=L<gb`OFJ>+%`?~*|Q*;-x!V)td^^YJB|_FEauVDV6)kL$(G@K7C(EYo<&y+7R6lszGm_DG<4O^f5-Eg0JmUEe4${yg`eu9c;y0G9*^VX$!+qdH(%Te2+P|=IJ;5+4raH{o;^D~IXO4>30eaX4yS-_vkgO=Pe1ZTvkkcM*)qPcE}y-aygYdK`rLVQaD4P~a)!;Q^>f4Y=U!~$9~#-{xA=3{Wig+IGroJnW?{hNWgEw3K0BMde(AhDJvpBoo=;u?z{WEJ{xM@O3Kz@xIZ)jD;0Pd&cg<#3+=*d8yuG+JTjE>n`?=Qd^UZy>o;6|EJ`aqmaM}1C$RF<+@iJ-|)Y+cl&gWCW<UCsOrm_3q_->DS0-~&@OL&!%yB)1&0%iQ?!UT|J%OIea0PvH)j}&SdOa6Jej}YM@TM$#sSIfmJd5B%_zhu*xi%~V{-(eu$0OR<wdzcz%KJ(^2-%C1<SQvBTbTwOsH+&LB^Qa-ej+Z`<BKQx`v(Yr>k&(Ut4D=TPVsCueF?QPjo`<sr4x)Ky1h6u=Z#E?fu=8RVDOH_#<so%6>JlZ9vU@t5`h*l+?rRNSOny0j_xd%xf}s|@5){=aXYB7A9f>clH{$ySF0egX3Hf;^WaYwa$Jfm659n(E$$ZDXUGlimY__lYXFt3GPD_ZvKZo%$cGwc;<6{`Z!k4@z`r4W>rpK1Mh&2Aai~kPHFRF{Xy)Ov<&eSQFfOvcgigoEbASWV_fDK%D>DZ<~feSzMmKQW|kUE!_a;)qVEGArqrXL0Y4P|%6Zuo8tLUI+;gEwMq2=lJpZvQkncp-UFcDGm90|36bq|X9iZ4?7WIKv*>@nRY-@c~R(x`IH=En{eeFT^Je^ZioxB$pz{Zt-2(4FB=wu<T|lu2C4V2VnH^MdvaFvg9{=Miy20?u#i0yeHeXP>?RK;kN*>Yh42E7gOeOK<hmc=DFFt(~%PmVJ%{VPa#Ni^VDpT;F$7RgWxoA*1B2j5v2=rKJ^{y@iIZXu*;;WBz~JMaO-Ozl#GOs?<I#I4=X9`q|2;jB&=fmuW>w|34yy@EvEb;oGn{MA>SxSfGSG#_H@qtI167aOq99}j{FMS-oCk72D>A(sqpmXkq=ypC;%kY{KCWs4lHt0%$qmA0fL0kk@}SWLy}YjA$TpEVONSL0db8Hm$1m;rE?R;H*ATzMB!)1uL~j$|GXeY!$HY|?3-+4R~*<=!4vWbCg{suvyBsxVQddLAoSUir@J*m&+~QiSv!n{G^9Nt6^_XVP2+F-S=6!&wLVP6B-n4VuN6=u0i(#M8k%Q^CvPXtt9J*dFP!s}lh;SbubiI_&VF*<9G$&6I6wT!OyJ^R^exD|;n5W*Wk3j+Fy3V|c(t5I@F1P`i2r95MldAtHo7%0FU&>c*xlaPAs`O0!VQRD5UZw;LmN<jdn#JKnVi0wIL9aF&e5@RaC``Q)9Jsm=%$-Qj@O`{Q|RZ-q<!OW?CkL5&D(?1qqCD^=f{IH(cQr>2S=|DetbR2ic4UFyu8l!Dn3^q;iO@sFZlKCg(;;3aw$DQzLbFO)*H503*?yweJa>C5j8M65Ku*c1O}<1t*_4HDY0cN7pc<q9Ctc*<B|r*7W7^=O5X^aD{Uo+I-;61PNzjJ3MnE|d@it2x(j4psvQtE?_D|vsJ&d1Ey;$SQ4~{Q?5!eH(lhXIVeZb|e*;E>@6DDJE5#thtdaB=1I#i2j693BCIs+h1_kY%E@vdfthiX41jW>uukfEQ>7IzgFcTSseZph)8(w8lg;$y1s6A=e!fXBKU8dh;ov!oBrll{>GtSGS*AwUPr-S2HlSFI5#g2k+iF=g<hGz;ml5uU+Gz~h#W#&UCEA4mszK@XO=W_GcHBgPE1T!?VXN^MKHVky~&!e+*l*Q*D)tt#c-@>R5&W}I}Wyd_7dkl|MUlLHL@W5bz_C@O7d^WumKRpKA3bHSwwWYeOxtiS%sHpK>ikG9y8956v2r7Dcp%A?^elX;dq|eKy@qY~bG=b1eNSOn@frzh94i8?ZXJAP>NjYHKz~O$l+^j1ge`Jr+dpd_~*kFhYavEV!D3Nka6PZN%z($digP$GOx^h6PWQy`4r+Gm?86M7p-2@W#<CK!s^o)~J+Dk##$S+|~xcvDiXjncciL}_TUBs&(2tO;^OSTEwU6$!GN1&-D2k=mpYe!cguo{KUk^OUYkNA`=!;h#4rrMr*=q%?AgxPGf*jdcu@N=V?=L*ux8=Kn7(+VCq#ORuPmvrb5P31Fb&5+o@tY(of;1)%2HBqW@Q&HRveV@;qNLWCe>-qe{!-T3JYC=l<7EWoPU3)9g9B;y3g#`*EP|TyuvpYk=Zv&=MBDWW?api<<GAOdW6c3@&CUg4k`26V2#5w!v;Kj*5P#l9M_;X^gAzNQo_JT~kVa`V$p|t=+r=>~M<n*(bUw_(1nPn)y&TcR1x7T<Q6Q8V!6{$wIGW&u!2%B#Y&dyAwBCFwpU;sg2z690Q%;3WiOEgSiTlKZ}g_>xgH0~))Q~P3Vheu5#|4jS7aI+*eq~N*MPV5Zn_w;-1eGxXfH#*f&xD_=?rJnY+I(pIJE<Jz2=j(?uoyd|i6UIgO>3*5=^ABb0+|2C0(o)dq6i>3%Y)S5Y_UzePIP)F;%Xxcn{uA(WsmYg2!@CO@gm=69(UwMLA<tFYN~Yy!%Eo<fmt~giL)h1UCdCL_3zdvG!kx3ocl?lD&E~);UQGSLa(;VqhKd06ca|E$aYo|jXxZbR91l3)gFw>ZpFO_7n*_}guJuy*DY6L2b~fE)J*Sqt2xK>DxSKSDgD4u%kB-kLuTF)omtg#Tb`UKiC46g5rW<*T<xB{a!`YHwMJzkM_2wnW3pUVU;Q9I4!COG^7eMcH@^W%IfwMSH&B>=3j|>p2(flK5sdJG1r^a`7ci1!7(two%E1G#rL(Bnai73!$6Y(P!z!zyZATKzGHu{^U^u@bFBGHdW$1gxIpCxjb#4JiVe-!jbong1<*&}yo*}=HWJG{pRy&)gFw#8g4u*ddDO;>y!E*4_#nZ9RRmgkLo-BEYk@rK<|Z{%@{^}2rFvYF31oo;vJCvDXvV%tvNa#_$Hd!1ot(CH5cfg22&H5dmY9t_8$9v`ydU}&qhE{72l#$LcWLwDc~yn$^8ol)0whraC(c^95r-64zyMr3tWOP~>tupu8<9jn)6LC_yqmfh_KV=r)fJ)c=!Zu|Wnx4ePdOVCXWdeXoJAnbqzy{_Hq`JG<h8(GW>e4yVr2m%`@84L$~tM7H$(6hWTpf#{Z{=gjuy`kq@-ClyzJPNPE83@y>6)wiK1AokW?%3;&`#pc?TBA<a2Sjb4#n2t{q1WwkzwZybyg%*^{9(Xh$d=`^t~c&>I7i&?w0jV7GmyUp!G~qmej$~_-B4rWHAv1<|MuwZMBO^zId=1fLuzr&AX03J$lWS5vquW`Uh4Wncq3$qj3W(eaP|Q4z9fwBz5}H@?%F9*DLTq1nY75=bp67ntK^;wfvAx?u!KoDb;Kr6&FTzK#MUEh^O_MFf3{LBUmBp3A?0n(^3oJF-i9=`W;PP-VilC1<amLvgw2j5RC3Tr*i^H4r)&kXVE#$ojtKNGc5q}nmoQbCZto<#1n=Bc)>=QAt1KLi>R@eAqAm2~^yt;mG04?qKu0eopp%~eD|c{8`Y$C;dYhJ9KDg%l==}`F34hE?!e$NM-2Px{2e--L&nNHB%MdA|ChDZ?1T5}X@9N~uo1=V3SwT~M`qG`V^4w7m<r7yd@-ovWIxU&I;!Brx&dDN6=XN+dH8RUg+_7NiMYk@vGztyc*~O9cAuawT#veLt7JMQtOZm^?w=l?@pB^0koHxe^p&}-*WHJT!X!`118S`u3RA+r11He_nC}DH)adyUZ0OG3;{5BSsklAw~UP6kGwI@nXg3$y#;xmt@Pw^ZrRSXA}q@3E8=q~c5cGhfZTXJ5)z&lOFQg<*p(E1n4i1W2p@<h}!*00S>p(~RTnrOV{U3SvQ%tzFqX&{;*XNhMQdD>m#M>c+ul}zgM9AW8m-FIeJD6**n{?SHE&)yv#PR`CwP8~V%XE5_`4xFQ7P-~A;6SFjo6A+qOX*o|1B`u}WB_{G@X$nmbB?GB$Yaa-O?lMOpHL?N*q0tp6-=)+kVW-QCKufgQ%W^<jj?1=BH0jICM5b~m^R*CI<vo?M@8#z0vm9a}R}!@B{K7mXw3X+KoEQjiK$W@SGvRq=>?d6mtgFkl{V|bk=C1I_*aiN$VaxshdJ8|Zu%)S8Y&{nRq(-jFo*jV|&NqtpBAqnb>)ro+`GSl7?oOAH7wbYH-~0LLWRkx^&TK2GmYeOdl@Z>l96p=CB)oYCTEoke*RN0h;T*kr`+D*QhDaTnnXA<j-xqoLQ9!&BYRij_b$KQGA)4UtwL^O|M-Ra^Fp9z%N!c#BwE7~n>Mwa&g6EII0nia)O|szUc>>dycg5%a+|9?@xJpD*(T0#)P|{kLCCiVmPku~}@VT|6<B>Igq-T~?8!8<r35g8VQt_5j?R4_X(c~YXlq5ZssI^&8O4&-Ke^xbA5`SG5l}}_DEV((9fD-oJdt0Ldn0z6~U%-!KhuJSRDnFBMUFf~4KHDV85L_a^l50HSI)yL@Q@dbRm4|GnXve^z90?t^T-N3NbTpsawcd)vA)=laf`wOjst^5RfuV3yA%U2?ub%1`Z910NYt7vvbt1}a6xk&~G&_LR_Tu1NX#SdXE!-W-ya)43E#JMAoP<MQ9=u;>^>##rB>HB#C>6?79Oh1Fg-5>J4wl$fvQDHMgkE}b$|<yEidp_Mx|S2qGMc6GuPW9h60oxAh1rJjU9a5d=p-LZ=bthL+4k+tRCHC2ZzT|b;y+GKe}0LZs+^93sqp4AsZz(A9O{sM5{q?*xx_2A<Y*@+O7ooI-iP@L55^76!7h8GTVKaHCV^hp&h81isGq8CHXRNDNP(r?e0O~C?))b>=KsG*>OPk_*Xq9JIF!E;tTi`RMcefYc4<Epyw=jcO{{>cSz^`a{zL6@iF2s5$bDy=U-QJ;LjI;rK<b8tzzN7jqzSc+BiIXYf~6~e7$fHJk>H77HJ!G_nvQNY-{AF8!DMeXHHyI`15g?i>hVV7<cw^WEzOSEGJfW_@~`vTg?gwNcn{fh%Kf+E7rky83@;}<jd#T~SgrNb{GMUA^y^h|g}Qciie}CRz-(R?-npblv*b)dtuA#VK#`tB-xNYDy0#>EWf!dUQXQai4&WJivq{0%O8H=a-Sb#XOzv_VLuA@M=L`HJF>2`_DM!XERri6W*`xe^*$F@W5K$Ik9|iQtndwC5`|4>cS)vZPvvFcBM`O%=?e8M^n<i<0qoTYKTFMRkWHWDUKE<|-bu+>Kx`m*5sZYU02}h9c&6;P2B3XGW={kqPF4Z<KGaZ)PtKZjSX)~?M)WVzXvg~sHzCKIal^&t;{}du8Y$Ny>&%@|3lk%5B{01h{ouW#Jr_79N^F1@COD+ke&HNgkg}H9Z2w&PyHHWWUFQufe)XgUUb=5;gDAUY~Cp7o+&&=%S8UVubD>-WkJ~{pt+X40<HU!bK5DDRVLtZ%<_YLd5HXYrO<Cm_pl`ltEx>cm@f0>+~0Yex$!zqfD(C5)E98adpYiPL}S=4UB_5UtgEw6!^zk(hhZuODvr60gRUi|~>M-ea<-C#0rxnk2@4>x7<_oGe?(JAcPEZ~Ob<3aFXYh8I5`{x^zv$w~_%fmARM7cM=;W7FeptfRk`a|ZjU}Rf8doc3HW0#G6%OAOHFto?xA?q_9jI7}A2E`;8QlE@r?UCyNm)Mg3!7oQICZ~Cq5*P-54!Cf317{#-5iZDqMf$VRTU6FieZ})pEMI`ce!dEyCyyN;*q@wPG;b34$RP-dB95R)3PZf+@nYu8JjMcN?)$O}&0Qqp8Ir&f)Yd_+`Mu=&mF^^hizE_j441HsfUh`5Hj*AM2{qpxOW}~CYv#hRl`*wz91s29f7;0m3tu|Qy#<ZaVLYFTy&0HFkA~Hd)E!R5t>T`sQ<b%LpnqyaR#R*_cD;_<?=qWPoqm68jlAx7%(?@=&w4%|^gH98>-T#dYMHZfWBZ5tZ4lfAGWL8GXKpYN`Y5pb-SLP8Y|KUjyW<ZAmTeDxdth6>)fx1Mo!+?L_x+wfb~~L;&l*_%n2pEd?!ba3S?KD5Y&v%lxaD)twLI4E4Q$u$j=O-j1q1I5x<jA27SNIV!>&M4XgjKDRfm_IyL94S938wmK7qaO(3!kAIu{dIzG9)9i;EpP<zj%hT3>BkR1RB&D%KlLM<?*;;O)`jG~{@A+PPmZ*a^ZZnrW{X2q<Sc_t~w3*6H`NomPd`zdcr4A(fLD3O5XU22tITB3)|Y)i9Jo9k+p5xWrw>k&gh$%lm03W)uhLpfZg-aQA*jxA0RJF!6Y}SSozQ%gQs7hgy|r<vmvfkkC2V@?`tU1X1V<+fMbK)q%cV3uO}_&O}QAs#4^lR3DCxxd4c<aJ2O`;twqYkCyvnnA{4-Fb**$1rAXS>ZK*kC8%_m@H=K#+(b2y-foHibbfWkqc$h6tH8vCYrx7i=m9CFU*ZpUdzBW*7ea*M0pIUP1mEv8@66`IXj_*nq(Nq)PNrl~*@8Yf+8pyGZtl;KJW`Hm1p30a8fRvVts0HDCC=J{y@)^HNkRT>m}r1KJUM=O^y=Lyo|Wo>f2_5&-OB!&E3$M|q90*%OJpm}h_vF<F|JA{f&$`XC)+xcH*e4X1$r`GebM{omL#B?qsJd?jSaYAO2-&D@}0dsIX;_gD_|b7j!Fg1XKzdL_-M06>!uVgWU$>1)O{=^y1FpsZ#3Oi>E?R5TsXqIu&+R9&&<o;SkS8oUpWk8zj)yFfP&Q50LnceoCR}|ZP^|*3gSjwX_HKrb1T0(@5GvwU4CNGESz0!jeJ9F=7|v_CY$qr#fk~=&$^TTUwHotf^_@kR!+cbEV$NwjsI#Xo;vqosM|+iomnt-W<aznCE(#~<9y(^&6+#(<7{J9u=-PrtqU_?)2Ykg2u_+<jCackHDKXY>1ki0`5+}(u1LAC6jtfNsscKmuOg4{C;02DF~8EbUuAlfEvh}+iThF!|KKI&&8Jg-#lOL2b{}ScmZesuP4(rNp&DI0d|S&cgWq3c$vxH~c<mr;9v>bYyrgT6WKL%24K@vb6|Tr4w_vsHoN{yS8KhY7ZI=F@VKbu}lfaArsGFI>|Ifd&wl+9YtkMJQbSfQTwbqrsGW8$d89#-XJT3It^f_`u5KgCb4T;xP#?2~T8rO4J=f?7y8{$fBCpOFq$nejLY3PMZvc9xyF7e-u;3dmf`fZ5_lYPS!C%30Lt-U|VDI$5}d}Avkk7)dXBDwJL)CDRzH&fRnGrY*#6DLN_)^>dQa3WOW)+&(Amq)M9C#RDa&Ns%|TTe<Y*8EC$2eiqqYf0HFgi7Y4?XDTV)_iD!maZRbQc5`(`|THO$zDbPrqO(C9Fqj!nQqW(-$?Loe?*^MO!wTZ3%Jde%P77u*RN7(&8<JK(}9+kdkgVWaSu}l$w#<l+e-0%B&ECJXwf5X^1}QI@P$hMpyO|$a-NkNk7dVwutNSdl<{vwtko15lw2|Kz#t=jCHu-2V(&MSJ9-B>SDMP2M8?IYv9@}|U8Lx$p480>#md`zp|8snGaZr#lOKoyi+sifRISF^U+(HyF@8&&9@CF1b%CnOTX}%hcq!jsql`v*W^L9w;%mOW^%hpu`Ob7uw6Jo|s?&9A)N7yIh)I+cOWDr@zVxmg%>g*@V&Qk8+$~yL>^56;^N?N=MFdz0d8(1^zuICm^O6o0DHTC@440D}s?sIw0sa`tkk_0V^L;(Q$Ko+A8`R^x!SrFqP)Xr6HAY2P=(qKiCO_|QL+(_klf#qK7oc?B?LAEEdfZ!^5;9(1lGAfh#6aqptU^OdB#qiFGR&*OD1;kh1vP1>f)DI(jm@*)X9LX)v%W^QzJcngN;mAB#0wjPL<CPzJs2#P7C8l<HQ34zm-{06H^AT~`S(txIJO-PS!&p<XlxT_jRdpY5Oo?<l%Zc=Nm4x|>e1TF>1bn?>54$Hj!gMPS4T{md_?1VR7=(OTFv5R8_TP~;WzKoq(t1FVH!VFC4|5{4U<a?A~`6q4YS#v&Oh;}QIjw_n&;OXs|hKec%Nf_VwW4s>o68dOxrjmN^oELAXMy0M7E>FK8y@;0Vl)IlyN_dxbcZy0eSc|yb9fL8ZK`|h;iIDtB<MH;Bl2DTTHyVxna?5Lyf<=Et?oPA);;_<!k@JFvV2U*<0VQf2iHV+CPoJG%kKRKYwd{5#ZnJHk0=|mv@&{U2w4<iDJgYp*uxO2VJxIaLmz!jPz*<x=;|QB)!Un@s*}Mnt!U{xS2@LxpYTtQK2%#H(8YU7#F3=;8CA*040^m0@OEzhbhfPcjnui=rH%H&ZjJ?mKeGoHf<&`T9UXy0MGCWAp5GGU;w@6BNa^%(9{EQczHO+Z&O36>O!}zJ{0^*<${oC`jw|<P4Ecp3eFDAN5fL8(T|3sQp=lnwYOvB`1<PvwktR@vw*CR8B-*}YqpGQSSL;hiqmJxYf*bM^yi;un4Q#dSIZ@CiZA4Y_5ItdtO-)iQ-5`{h!X`KQJgI?X$R19{>hoKnXH4=dZ=in!nr6}_Y<vYH<7HO?rc@WZ$g9ua%mcRWXOL`?Z1LtuKeNeptE0AQra&xH6UjjeW>zVXhW@Rv(0KK_ns-X(0YEm;U-7Bve^Cfuy2~CP*%z7PpGR{0*7kJO!<-<FEG8r&s63Egxd$cjKvYD3cfp-HsSqFY{ZC&I95WB6=x)eAfs@sT`F?33^9L+yvrecS$dkPhFad3qGm`USQWoY$3>-@yb`uXc^O)9(TIt9(4A~1iX?LjNqH?&x6gUTV^Df~Do@Tz9SL{Os<*srr-G{LrhZ=4EI$i&i`!5w<LQ>fiPRa7RU^!7K9jZ942h-rwP{pmojnqNZGYjv<up`+EH2hz@u9=qESS%i<X1#8@xh+0r7A|j4f+Fa$Jf{(BUBm}3H0XE3aU@KFJ^jbTn|F6rWx&Irgbm5YJzQQF`rR&VDXO9EvdVss)vG|THA%H4}$}&BL)fyB(KOaG}0rNwW#E3bjn?&JZzbzC%F5_Uk$mkIl8>OTQ6Fp_WM6W^_t2>K(y)<TUNJeX6uLKs=?GLCQ_6(Ip2RS({g4!X`=bF^Mg~7!VZ%v|COry{FVh-GC85XMtz-Z59OpQ%uYoFe2Zz@Pu`s+ng8yiUvc(!z2ZP|&syfHY{#<ccKw#+YEN@rWjhn!m-KaCa^-A#z|zt=+0Uw1&%p%A+Z4^g?97i<D@QMSlS+(SJ)2F{a0=%;TgFB`%4QiatDTemC@G(lYrCm}PLg5Sk?avaM*W;_z4|$8sUa&D%&A<&rZ|h_Bb1NPwvMtbCDYC0mzyb;A{7Kp2CqC1UY3iD+$Ozs4Vyw1|0-o{#3WJ?nM_%iuUy5ZV0jkc@PJx2IcZwAoK0qpSE*>Dc9u=mY?7ii*(|1Ox?PS6n=3WcEL@}TtXs4uUlc~ezpOG%v8<)lqt&Fzj&)O6n(vHL?!hUAGR_(}0Tj8H)UZvB#m4n&_96Z|-iR1;_$D&&q+$riftX8ZAU`l|ZR}yDtS|_@=Q3mN@|LbXgfPc0lH)i94T==}Mu_(=7+l!SS7gA_)EP466JV|vXh_N;RMz%n$%eMiacm89wG4JgTImDCM=(Omph-rI2(@epgk;_n3T<z`nk^fmEwQWx^P~-d&Kn2Ehd;p%l%1i1(Iik44MxYQWmwI^axm44i{uHQ7nvw39H9+FWUww+Q$aNUm1AXT9)zFCEm_xtr65HO3{Seq3=KM<hO_0Ki9@>RTowrU&HDV>_%^8XMQ}B&^7*J0PDq-}(DH&O(RW4PuTNe9m9kTuXho^O*&twwrA98>aEbgV(7$K|$#aq(Z{D3B{P=ouUn#4!P7297L?^AFv9=nsrw3KwDJg1|1+}JqkT*?f)s#)De7&V##N8=DULL*9r+lwbI7-%=`U94ZBFz6sXdS;*)u@f-y8c9!r1B@(HHEiAWvN;<cc02o{T5}Ya+COYHL0kY#Kyu@;%HN@_+-jc{r!>ZQYD?1R;Ln(S1nPMz<abpRSCoz<*HzCzVb(0E92PsniUeV1Aaic1dTD`RUmXPydMywY=d-N#u)`yDEBZvWQKNhh1<2(0OegXOTvg_oq>-iwW)DiJ#dzDVyUcTfO(;7hlcu0AaSvaJE6d_xpzriAik5&h<B1U49yF1_!*e&Z~HVSduxP~)2HUOpslPBIiG)^NnWg@u6IPUpCgU=eNIuQ`Z(<{cJRE@5Lh=BL^l!t6T^!2;LtO_34c|*vWj_>d3J}sIg7TMvVFsBFVM68a{a)rm{i%zX*6VMJvpBop2HG3eRq6*^ai$%pAKG}`~w%u>CxHGW}T933FCde+HCb|scpIe`v!}ub)Sl=J$g~K?w_-$T8WLPa$U75Rop=~ym)sg%tP{&r&V;XTnenD@_X*eN0m-=lH(zKTs8+~9j#m1_X=vo-)$z7(&ZG*HG{yOQKorbXeHS0ionnKCnvjJ^yzr2P4`rr?x{B2pQ$z--VMHZ_j<Bbg*wvCcRyOPPF)^WNwqrB3im&MHRaG;YgwmW-CpWoE!^W2NFeY>*mLI5Egm(Qx0JT{CH(%+3Yd{XEcgta^~50#lN+-uo)n~G!O-pcp6hi3KK9tq8d&aVH1G!f&amh5u0QOKUB*ZE7o<yvR#={_YDWd-$wthwhQ8|!gTZ(>bXmates^H^M&pq`?z0{r+CjJ5`+drjv2iyTcYN0x^}7DRXMhOv18X=QjsuT-F0(s<-|hFtZf`gm^jLR@g~5VBzuSkAbcYYCET(ayELV52sh$}2mA-)uRy~x5+Zfo#WtjbXwv6V}SbHsws^XNYm~8EJLGVC9bH%;6&LwQc(dw;M{x93yQOtb*m$^ED^!3`h&#l%3`i(E>=0)KG;FCHjOZG`QpOop_xzuJPu|U(Tl!+N+b)24E#knM6iZLv#ooUx?&`ld?6eCN9qh|w<bh_7Wra`J$%}}f;7ERghBJ@7+=sB{$8e{6jghMdpqO4UlPi_=b&aPGzH2l99GrWW*4$J;@A2V}UwXf)qP8;}Y0V}HE2YZ<`V|3<*2WLDAYvltqP4ke=<}<vJHDm{{FBmI~&opA#4Y{A>l7l~y02DSHSBstBnVcIwyTzC!Suk}ML+{X711q;#IV47;HxT7j5|QH2bi_1fAPJm9@C$ls*2y09?N5D9M4`{rqw>HzOgx}m13(uH$=H{O*F;nJyYT@|@j$67=G_`cFREn`ME&a1HJs_{O?T*%K?v3@oz=8yP6)vfLEwiv=}pN%fTr*Q$d%Id2tL7UzGc*2Ef$#dq0RpzliY7rSL**5+ai;Yf)=mxQ5X1-&R)M9o5TpnPa_Og(<uROL?-Upd$KUXu8MZqd;i}5p<=G18IxhQHE>$Zq_eqyA3G!riz~$3stafS;Tz+Pug4=8oYS~4-yNS$&Q4zAJrxl1;LVRmuil-!tDL<mY2YNT3P%L#=cB`)PhP&n6Km=Nd~*B}PC@5em;I8YsM0i@RGJMKcC?H!q_ZKiSnZ`BpaaS_tSNU6Tq-2s8YEm=8b8VB83wCJ*s4i(o-~c$UDK$X4^b)=`zZ+<;*m&6@Oj@4+Vn@u@Rzp>zHf>(Uq^BXO=Z0g_YwP`8yXO@NF=^=u=271(r`plTec)hHJfcLATVPM)2zR)3RSS=r^4a)S|lRFBVtftm9*+i-V=k|2VQER`;W>ZbfK)QW&34XcYQWaY#3rMNPf;Z4!R`=)BHp5ajnd+Y8on~pq$S!d^r)Tm$Yfiq-ylH@+FDP_wVB$MB24#TWJL9YMq2M4;TRZ#BRTl0X%w9gzt=(b4(qV`1^>=VavHOTTukOy3EHr6k`e4%8W<&NtI5H*|G8II-H^@n!|4U5#h{Wb<lA%n9kWUu8}pGCM1h&<wWGb^vk&;$JHnX)sn;8H@!Ir!kBea7C)_zKfwCXcLhgA{S|HvIKXB-_JrYk7a1tYreLN@cx9%|Kq`cL`6Ls52boZL)07GWWzKS3G`0J|@1quor0H75{3Pw0$hNqbCKHfuU_ivmxxRK#G1Gm>WMidoBnrshwlxTHw@WHtQlp-HD@`3=vl0s3hvFqXm3$GPMDC0FX6nBzb395p$nRUJFei&p^#paPc;z#H|Do(^n&!`FOV^AP^1?nfyQ6s<gdax-2@roF$XQCBTB%AZn;9-Q+*LST*0j4P{R_I+s_c~|ZYFmvxydG_>nJsyG>f9|N0mM<Vr5em>0q&)0Crioo<UYxWVdrAECidYr}g0LM9jizWJ#p)BXB__GT_iNFq&IbDRS;x#4S2KS6dm*x(R+i`KwurfwW7fly_>Eh|_BkWha+*`=pbH!%f_jWyai!x`YIU`k(moLfsu)>h}egsBxeNHAYGStNO9ote8(axr`8=RW$A7=~OYxTVdg(-@`!h2i|RPyD3^5$>veF<kw$8AKI$85P|=yC1a}BsCz0aQ<2#BmX+B8KUMXql*Jk~>M~_(Ic;%e`OQ|E|5m5(snUGy;+FMrf1Kjzt#7ib*OQ3;L#%NiVS!Tg0DWKor^>;u3T&}|Bxs_NvprJTO(_F(`|YSuwcK($pezlKHNK}!_i598+H^D4paAfs81Ld#;U*c!wzRZ7P;h=z0<(gkytv%jCiM*~RJ9Mi-x)uJF$@a*>7L^{4OA^RjIIzl*RJQYc|<<l70@$1jDU}JP*!5WnQ%!4!1nu@S#xaP8Ryq{1?aO|%J^r96kfol6sEg~LW~8YH$ip$cF+Q3#8ZJ&U3!xcOG*NZ|Dq~~m{cyl4kTVGOP@pIb8r-mZ8xe!2*ff_{!4*;2&R}%;P~b1s!C;vh}l!t_B$%`5`SoJ#kE<Sx7<^+GA99<xLaaPMA&NUh#&Gw_m;TV%RikpxZ5F{Wt|$htRv9SV6}3j{3^mp6E#}bTh3aEYN8i(t4JX8<<aZ&2?c4<$!Cib<&*sT<IBHqSuLun8ZAQ@`;y%(s!8Wh;mn_ZY8jLBEl~=i7%Mq2$^}=w$3_8#D6&3Uk}s~gy;gN$@|iDzG#^96UR=?-xI&Xk!l{i9q4!}P1jb&qVJGv_xDsW}FgqA#6>;#5*=&luO+-)Q|5k%3QD_740miSuSdGbfvrU<6ng|4^<?=}n_;cz3Yl9}qB|R8^UqMxemQ~<Odb8z{dDq*clwH;WT2=*;<a>bZNybO9pz(v`*xW@2L+(3l`Jezbl3p?!+{4u_jsFmgkY*(@eaMmzh}zqGxJd?4yfD|<PfOxb3Be>%@OLq2KI#0wh0eeAP5<53q8t7b%|A&MnLKYUQb+8|EjJD!O)-<kmfIxAlOW_%UnC_>f&kDr95VwdpL+4T(qzcbV^Ky%WquUDOBZiN*z4_e!MZgNVOpkqR){5*sZB6X5&=|%E*f*1WLcgSr03p)t_71Bx{{7M+g_6XvA8?Ooa?z69u%dHp|;66UkgmG4K<e=;E|{L0h=aF$OXZ>l=C8gJ;|CUSyP<>D{rM(4~EjR`AJq6JSeShW^tX=EO5%0(pkOUFqBVfCW2mPEBuiJ2v?@CCKhVqld%do5u-8#<YpRh;32^WRq;qzg!1XtzTv!YvFQt`9zK8Z#a3e;E^F-DPfIC-Ptnd_x~o@0rflag+tr^I|I^}s=;E)uk*;E3>gk^0&gbYIMA@!uL=-QuI7IB^GcIf$gs_}1+4Pa%X({}5SS=&_i_Q=6GHMwIv)jwdy~mF&w%W#zt8gmn$?+M8f@{p1ZczA#(Kx^6Cm(s#G=7}CJUN}<#T}yr<<)Ko0OlJOW0AKryj80q`TxXoPY4!7NN&+ug-Jef-Da+<o;~WCW1?9n5*2G4ALzUgn;@poQk!Jl&_DbNX+Z3@F`+@@MK?JM9=tumLVj~2KRm;~ov|C-!l$>@vbIq^Fns_uvI3<sVnGsjSspl6!@`d{i`-FUVV;UsPaP!@I4JD*>i}Vs`*PRZHohxYHb~h4Vm1qxm`_bUuaPMs2e4uWid=t<vhnA@i(Ge=lVm-ugF5S=aet_9t?+lTD{Km5-q(LLA7ts+5Kvy-Z{<EgPy@xB7s$R*#^JfJ<Jw(h1B)LhZVF?S(U<l~27Y5Qu#z%RBM)Dir2S&8!%M2tn|Zb+<btV0;OmdKgpc(uQLxW_o}L{mUp*GKt{nv5U^6zojYFKqmO%+vFeAPAsbO1vqiH?re)PwkYP_w^IoECN5>v%zFXBPO<Ljg-M7<s|)F?<Uk$v=F*jpx;C~90c+eMa24Gp=Lp)H2y)1uZ^>*Zx(<&>n*1TiV5Eo&r|Q)oAE+3W-Sn!+B~X?L2<O{eArkORkMpo0^DvdE)F1iEJqtkNK*(ZPIlz{2=Y1@0yq?ri&xQiLRv7|s@}WsJHaCfZq2YLBeJfb!ANF!VR&@Uab9CeYTici#|A(>xW7g*G9PyU7pZ#gyH0U#3xsF_RrRUgIIbTSZu>J6TT~P!WT>Cz%tWkpSB_hzMfFG*;iJj*1l6EOr#W`v#_p2S_uICkv*P%M`1Mla_;3E!+HNv2m#;n*!E4P4U>P!nkr>Q!4lSzDIXmCti8z$`q`oS!(58CRJmcIJ}xMbfw&!@AEId*vS&OjB;?Yr#Z7pNx;kpLxWRhby!bg=npG~8jY_Yh?-THPx}YhOv6GOn5Hgly0O}UBW|&YKp3~1%|D4~EIrDmijcTS*+-^M*7k)do|=~x<wA0uvY-B0sbz9+vY-6*^`r-N7~XJMiKJn^VbKS^)GrvQ>LT7H(6WsAR1~tPxX=9YXjyRAw0XOz2N4aCn>LJZcCITdoZMlbqu{{OdGU-b;_LZR<cXlelqxx1g?2vHUIu86%mop*;rIf?Y6Rxnq!WYVnG(x{eq!RB9y2VWvq|Iu0(a&k&=XXYFurcwI~bByj;Jb*JI9wQqc>AQmK1WA^=X##DBU^DR;2~`*PEk9HoolKZ-&r|P>L`=wWb`l@<Ys#ym2p1Kd1EVITJwhkH(Z6Bu53MqEvxx#~AE^th=O~uu7^n_o^xGZQ}GsRYl7@P>Q3#!;nSg4Jt-Y`s%ti`-yJ~Zri!yGmbTg{kCCN#^Z1bj9`5K{po6Eyu!<Wh1mDsWBz*JbXhY|sn60kU;`dOIOTC29L{hK4B|-IH27zcKAFLAuR|Xexv`op!ztkr@n|*M#O|^-G^p=Y5NK9cD>q8SKQixW*_I8la5r&dc_$e@eHb?ii70rYj1%Q4?N7;Q50G;DF4bOzZPal=w#IlV9A8sm<8-5%q2;{biz=OLVuUidjg7k*)p=ju(y@8dmbRS{yUH5XPVRU^LznQdJhaE+L|tiRsstXl##O|~eF~W_;)|6Fd`^X+MHY{Ui|X?qSvX}bu&7vfZ1Y+pr-TOyr6*R|mU38RQ{+E!mdxF&OXys2_Z*R{<ZjnQMz&4kFTNVY<rG#>Uxm+OI3c(!a*{K$eoe*vk7(cW+wsc12L9twBi$M&vn%9B^U-~(gtY>b1*q;}>-9dk^Un=)GNbXnd2OV}95l3%_ieTO9sG7*8AO`(kh<bGpyU@KR@2X4#*7%R1jJJ~sPRt}cK0J+)(#t>vP1jI0lBIJ-P7c*9a%RBp2TXT7Rt7s)VW$8`|FS!iZm5n^6L7r{&85jR&D?@zMg+_KCo$g9Xh%he$Oa*Q#U#%f3vn{<eqE`P~NDe@Wg|<;4rV4x(slp^D6+zJS>ssOu2u>qq^`wyH8JK-W(Kv9sx{zEPrhSkq$`_dZjF42~B_0su?u@H0?P9`CeY&Y#qWk^L1eG^DoPgiONJq&F6BDkp4!A%Ji6f<*U<^cW=+|y0iL-8YX7lp0A>iqUge3f1R(yU*f5;41wtJ=1Y$?m@sN#w4{K<#ez+lcOA0XhKJR11>=l?8q2ppDZ06(j^V$CJH-UmA7<gz^|CIYa5@cV^N?aA)!#;dkWl-kCt*#Hu$_V`<%Uy?htz%<7-%~8fqm*Cc?Czk8L0Q4xa*2|Ui!UT^c%T%R<V+ryP8h@`Bhv3<H|@rsE4mR|1`zsR}tqk1nyqN#D|#|m|NUK{jMJH4}1oCDf^UiU-pRsebj{sivuKZM7XNIjnxd~R1~8(V)5fjH2yckyq^-G)^A)nYfBm8!IF%LwDQlC*6M*b|K!eZWBpMjRh4E)HLf>FQ^7;<A0@`{*L)SmAa+=aV(wAJJds<-#V1+&*O9d)qPJ2&dXad(SM=7B-%sNCQN(jj$;(yC%NWK)cITuz2Ab&>QFz0mTLZI3#CXOw{4fYO-NS$mjX~lw3gW7O7ka1p#tn<T`7*AS=-Ds@UT4>MRfD%P>dKgsSu@OrIt^J22)G<h=O~767A(RErxXi@Sp_et^M(K>o>xOm5)4aM!qnWN!wb412!90w#5BBsKPXpbV;;$SG>=!!iH+q_1nDX1MzdW5t=T-f0kZtc(GZjT5E(aS6dSmV8lsxHa4c=AV)ZpTAwqkY(l_F0Y->d3#s9F~Upu?wOJrX7e~L%57EvcEOS$AQHO0VwzTt|?Kt&y7sma;f<7zaeRF+p<uyY-fN(aL)=2gUQTofom6zm!4lWL+9WoHJ4+)}fUYM_=LaizG>gvg$u%b9A}sRl}l=rBZLWjXaN#RFAm_i;ZXzhp{?@_~y)?RigRE$sq5!#b*aH7JV<hCF=d7<=8QIVTqm$b|Wfa{M5qMw;R_&1%$aR-Be{U};vQX7jQJj?Mb)PXxK>T(;z2*5&Uu^X2upsvSv;rycK4wBr?d=Ou~D<XuO)5sLT7!Vlk6Q&?h0ecD2ww$MNK7W%Z0ZoiM#D!WnxuBsriZ)n9ql9A=>gFME@-%@?H!+0K`lv*~L=sTiNsniAKIWf&|Q;Vo@Ppe(j%E%=xe(EYo>ebxaLKxx2c{p3~noVIPW8$F9s&3YVA;$u0Q3F6w_#uMDnh%`Me#61g{P-#gV4I;J!fodJG>|%~;h%g?x5559<9H4l1i7=wWxj_J0=>3Sp%4i#g&GQ~3*YE2p3z2UpkN#PKPymEmbdLKP<uF|JYafI>OE|Ed}q8!4jD;}HqyzCUc{8$ggmhUIZziRnX3s{Djh>pvK3ksUn_J-;X19vyEg}1K*esOR}&>m1r}h-YFMeEg!9=pldY1c%IKnWqYKkm=`Fy<a(U(IbP3iXNB(pHRxL+E&RdsTAOqd0VTwq*7+p^rCfaXzO%V#5AY8FT6C6ij^>2X;Q3ol#M&?r7D)phm``dmxuL<qd2)Dp_D+%|zi;~CR@GdX!o;^D|{Au#y-Rp_-^5~zF7tYyF2X=peVOl$MDUhagQN{*wFR(MVISc$C@O;nh!vAd^@KMJaj7CAn>UR7A^E!dw?eo6HIrDrzv^~ok*~1}sJ1)0&N)pEG40*3R@`nRHvaOCc9<ZTn1^$@zdt>-_&mD|huix*D+<`q9cE>gw4T3ReectstR$z^H?sfLv@dm?Q5ZEs74*M?aGk?$<^g8w^2;4p&xSgOs8t}f|4|?9f9S^wG9Sl1G8@SA8ouL)%-0K{(<N2d5AG)2f)%VBV7_fDRUYEIU&<iZzMk4ixo;B+G9oO?MuLGYkf9&_h)+hi1?A(7fvoq{)YwY@iv1fN(do=KEzXv4f2P5u!uHR$67Ytn>xi$2yPSCUZ-C#WEx`T0l<aIlC(J<7JLv=B>xYrqbJ<scKchqGadpPP32BV(c>-9!MZ)|nOtTPIRT{dJeApGHZey8v8!0K{+GIEZlvWLOQ3p}f1`vc$Nqk%W}0@eZ6>U3;x)Nx0a+qDA#*Y!J$ckEy=vU)?-<6V1bkH)@BJuI>O>2v(IlO0A9Kq-5(`)p{9*qC>Kn|iDpSgvjR<3R^lx8HL+%=Yd6$R3ObV{Y@YI~-Yz4f?~rHFVwH@V?$+Z@$2wO4y~<`24;-=#9o*-~r3Bfun5Cw*#N|1_4Y;$L(2G*XqFH8QWtvV4Qd1Aq;F70D3)JFoHk#;^zw%`nyxMnt9iPmb<Fo-DH$EKK035HtGNakA|I27g!l)1Bf_u2SbnfoQ=n0A4tgT0q3qih8}yPU^M9UT|VgdeQ!sX3$NZCoW5{gpS(IcOr^sPgY{qsL6>{M7*@%^w#Ixo=-L2xJnD>m#(*by51!fmPLFrG7Pmat8uxnrf!BxS|Lhr=7(RktNAVj84F&ZYH*6LL6sf_M*Db?kF=*FrNI8d_dnERpNVwu=ziorkF`s_K;*_uvH%?DZ&W-2Bn}g${my@$|=k3AyPtEk3mSO&Qa5i~;bUdL~&hg2)bMO}H!%be8P3mVJg;(K>^6`s)ux1U&EcX_8ph5naX3Gf7FA}|r9mIC$@^0@-rrSFSPXmJ`YucEGCT^_t(##GLVN!V-$}X))abe<fEC8sQi6>5c%`pFgVIH2md3$hrbary=;7E%GnDhaoYM2rKxVvBxdBhY9>VLj`0jbUJ?nL3e3?2@?L1fIc^Mlj#qvKc3`RQbHpO^%H8oF&j7<j9I4DD<F*$=Pa&qlV#WZFej>i6XI=+)8j!D}a()uR`a<MX5Qe>sOg9UQ+}@1H8thm^@Az_4j^cNeYrRK(a!6RYGt@fh;!+UM~5^~oW0e|~y!_%rOMqEp%D0!SOqSFs~%BUk1ku>^G%Dx+SuhjP+oztai$_H^>g5tc|iKRJ1g6Ien&u}rakM9DaQnjE~?`;v%}w*c+%U&Vt^i?rzDCWW9$==g(f4jQicK6;O4SNLNlI5EWthan&Uz{8(U-kldBpIv`xbMXyT8=`=9@({jZ4%vO@<dz{n)}Bz6YmjCzC_1fC4UKdus=sN0V8M+%o2xm<TOrI4V@ff52E{`;Xt4{){U`TALC$|qal7PrvxK7>8naYShKYL#h4ng;Gh*{DJ2f$A;bO2vV@VXc4Wp+QdE#8+XIAEm9I@z&{8axkIXyc%InIsVJbQO|I5|5zIaS|byEg~U(eW<_uaDN&vg)y5GP1o2VFc^+bn<d?IypX^WH3%8=$eRwNAP79%}g^P0?R~WrkheGxV%Ts<*1a5=EtMs7r17#+@9qKV?XJ?n6)ko_5``A&D~gtJYm+||F5_3GYbXIeG5?Ng}k}Qkq!mS(VMrgCvQNe9Gt_1!x{(jpV!`%vYqBPrIG<AyHgGa+N0haoxM3YKm4g^f8d`(Q289TY-Ay}ibYl`f6gW_D{tO`0`T(W_3M*=IN6@_ec@^=-HQtL{6f;>Aq_+&5ds0GC<1P0%{=quXdze!5HFk)DNRr+F7`k&ii>8)oz7iz&%pmQ){tBvJt$x^^Ie{ji{>4j?iZ-!WO2SLUgaf{juwynu|C&7zCQU;t&_9dLZR+S-Q<3_j5COU>Pux@UmTsEwZkR90TS;eq~xC$+*|S*dph<5+}ifJH}^piO+X<Mf~+kW<_c&KK6{y&OUR-6Zc|7|L$syYw@?vN10dz^;P~(-5T@B-7YrhSne4YZMlHiiTk6Ynec-uux;}2iQ}w2!dv<v8woq}@CP_A<I!c+z(rp>*lU1fX)f&K>Zk55N;4Wc}5&v~QIlE8pRlp~s97^GfN>PzyGWJcJyNeF4k=!1Z(Fip-bQ#9NS%WTo!`X6A!O*ou{gjyHuIc<L^vc#n<<V?BEDD6I%Z;kBYi@>N{2)+Wo7fE};c|7QoF0kJMM4yqsZ?&lyJo`f8U8+c^XA?8!H=&eC6ci~uOq3LJSVv*VN{TYinS3@L?nT;VR6x*=oDb8vFNLWK%p|Elz;l9s<OYnyy}VF%=lj(!M{pQhsj7U4&h+;vjc1PJgc2~)4BIS>};78A-*p=J+X*xU-pfA)hj{5M6G%zuK=ce){sz$uy(-|$oFEouWJwH;gQ%C%5^Z>^OJ;q`wDNh);6nYg!%sn#Z2gBMVed!URUA-a&IQ5po)-omL(q*x-Ueq7>PoSaud-LkXdy$E3Sxy2e5Wt9Gr`-O4IrZyUeL|NiD*>E|l+Hs&s@yU>>|*mYl1}@`5VoW-U%01f>?Y-7dJc1tz*%YKY1mI4?`2RsJ&^rhL}YWva4B6rXYuu(Iie*@mH9uiWRK=Fx{>I{%b0p|)=^K`3@rj&CIpfZ{(+PJe!h+Px%uk>Wg`$@4E&J-y6GSaCnRrl}kMOHU<Mnv4|(wQ_Y+m|mo)OIu;WgZT>0j^#3UeOaq!n@leWLO_gn#|Q7uLCHM&e`Nm3*k3ekK!ha-{Y`_ARdO}5shcmtnLdJP@<lPMTJ%ikdlAi-VmG1$b>^i;W9bw@7G>yG-ea~GSVsL>(RE((FkS^g_!+Qz3vC6u?FC+iW>ow+`uriHI2G;a3U^Db0m_G5M-iVgj3o!i)VQr4ILkRrXjYqt0g!iILwzQYxY)&=L*UrlyQJw8-^ph(2ajySV$hG`@N<K%VM$$C+k1tpG@X%As(`3M);v>pdj^P&=oZf8;fzXIu_-bfJP2nq?iWB~E;=<ZIDg&Ttd`_cq7r+yp(_Bf;L!~p(C}Pr;2-4vTmVYAppauLu=n2$7P;XvLf2NjKPD-RA!z9R1{1kJr{{o$)AkxDpk@(GfOsa5b;@orp%jmv<6T$&R?{pcsjf=x6<+18aaY1+g89{|D1a{5;d(y*KuctiN@$Jc%<oO|&0Dm?m{vhUFhFBLEQnu!F=Np3yj8rM--N&7O&XaFV;*Im-Qm6eqOG_e2-99*eW%NHbBbEH%C=58lJ0bJJ~=!GxpDdqw5B(7>V9$Z4;1#NM`u4v@gY4A#rDzCWyCXitAr^Hv~tNyenoi)t6VAptEMwi&;@#1ZFgxUG?&jFUo4Hr$=L)mG`5Ui&^28C{WHInf1Teh)Wdk?f}Fyv<LyH>opS%J_(iXqxJ&?Min1gQ9R1hq)_X<|LkE+DsxJ?YUgJ~(x5i}t^Ep1hP<eTay&R=+6@;c33*{_=R+la9m7=+BmyzG3LO1iGuq!1~9J*}H1CnNCoD6tI8Q!Ia(Ms;@(1U(8E1DR^OXOLL8_?pm?Q_1sKayK0{iC+XVcW=3bsuP&HE{2j*}c;b5oM9|r(oELRao53h|c%b(^j%=I+P!m6LUElhwf{C7s1~&N&ENN);0o68Djt9i;1L$c}dSrcn7j>FH{4&Ffo24!tzF``MsqzZ&q>8R6Lq7H<ldL)aKwMG8jHCo0YPT)^8g2jP=`vyUm1Cil>?d%?z?<l&Q%V=|`7$=v4X1$*vcDIxcliz9?B(m$`i+otm=mapyqAKsy{~`ic3J>T%^(e0fKu4OCCspff!w>fmVx-L|P5>c+0hTdembu5E<N?@Zqg6cRVU1TK}vL=`hNpnTx4eFy<dm-melQUW_p{&{pJuFTP4VDitmuodbyc{oaxGiIZVa%59QQ>qvY9HWw(@k(IJsFZ`N&SpOyoc*L-rK~H|a=y^_aWADCxupp*Wf?WIH_=>5Vj^)<y6QqC(}46g`by4S(q)cO#jc1wh<#DCEJQ+tCcHg3J2Q2Cq+#9HrqgW6_s^ak!r}1r;8o5%YnW@UKH@*S<XW^VWWla*|M_UQ@&4LegC#Fh4N^`MNV1jk6@unk%YqA0Xnpbt6E(=xsu<rEbI^9FvTp<;mL`D;{eEY6heHER$hazY0}4ijC9|3>qR`|1E(PuxfwV>%Y-xy$o^H3p28<1RY#jK$Z+989J44U!u-@2Zfz{{MaNG_4j`nHcON?EO0I=|f{5#C6;ls&veoGZ5C~<X&u6RM{Jx`Lts{0_FR(K}Fv+y$|$V>d-=;}Q0@};PVZ6Z;{BBpNzw8}1G06dj4WsQ^0)*G88u3^b6>-gRHfL}8u!MkHA0&>Lo9(m#D#pE>qMa%ep-3DEJ2@0BRH}hLSZY;_!`GnM!t28@H&4R`Widy50$d-)?OgLUhmYY`5I|?)iWb)ZvptjJDV$tHh$<@3KrB8_9DXk7ha*|D%g+8Hrxu2k|^j3uxB%#o2@y6#~7$>YIUr|0xohdY^H&lWp%P|roSe6dOrDh+`UFL=uYvFi630DkX1B+#(pKGt4^B~|N#~n7#v?A%$Drn=bJVXnHZY;mbtwNG7A5c~}-jv00=%qA8XVUb&z)j=oHz&kYbW@8P#>I{dpTmyc&yvK-81iEjzJopPI{P82Zx=fSMuEnB>R+VMh7KG>K((ZYNz@=cB>PDtntxjV8lAXz=uN%}idQ}peaP?%M+sRpR~i3pSojfrpl3l8d)eRiHP~yfr5Ai*4RQjgT$+&~17M&fZI7rRZ)h3D@royAiS#}fuSL#CnK?Or2~y$QY*NJ4PJzXPI-|;GUz55U29X}cz9Rjr^-paJW}*yz&@WgRk!e_~c~-=_q>Yt8-^3dzg3+;_^jRV|txF)T+1$HlP)X$dz5wxqVJ0(jU(<ldtRM(aD#SngB>N4_K;{#PpSg+X%H&3|S91{>w_Gys8sH17t%!QsiDkM6EJa~_n9V=UjH4Ir_cL?TFpzrWMMvbz5CJcOB%=2cQkz2@F+og8B7RnZp%%LYu&*_**ji(_dqe{rd1bZ%ZT{t>3iGc<D_f-FRS&9+xE{Wl?vgllJmY2F{E$JTxk<KY<4`iiOh=MF+N*$>24Fwe{GQg;sUX)~fp|k3@4Mrlk5B$_Y^DP!6obikl}1(2m9do!tv1T<j8l=h1U{5SZ45lY#4=Dd4q+2mPHznvHIPa%Sj&mZS1xFi9gU8x0;Au5^A#$M@T^J7j3v=IEy~ss?_-2SavLpvCT07?&!pP=HD}Z1^}YyC_#P9Ke4-!CJ+aYCyvaZ>PK6Gg3L7G+i%t>KG!G?8hP*g{Gb0`!LpVhqz|jvh^qE0W{*HNPc({P+l4T-RFoG3wN?NX!po+X^`yz>qh%Y1vroLRmKo9DsCM~KzyC#y?D~s-^3xwR4)C+VhiX!XDV0QF70nO;I-wI%DEj*kEgMURV<YUxi+hHsS*C0H^{SI?u_4B{?4Xe|UZL|OREqEiVTGQOnebs-2iAQ)8pv}n#DU0>$==p!}x!|9;5n)yi1%Zs~j)IfbF~2iTW?b=$xbX9h<#jY)U0sVoJx>ROca`xnoK6iYa^j--foXxs+7w9s+c&0Ryli}-r~-d=vxpo2Y0;j6k*cw<_+u$Uwwf;Y<0Z_d@t^y)tQu6fYZGsw^KTAno~-{7rZ9<jxV9pjdC8iis+hC{l6Zbc6|xJ4kgx&Xt*#<2CS?te>g|h<V``itH~Kzm?lq>uSQ|~N_<&N-jc5T3FJ8z2X&<N|szjhgKw*6mk;TzG-$eq!*fla;61XI{i<&~Mr9O2qrprss`1p$@t<CDN+}KGhELZKUfoAVhghB)jn5{*tadz_V^l<WgQSP(%K6;OSBKX(LY&O$buK+%|1WUJk%5BhCNI+e*?=<B8#bT_N*9bo6_8Lu$l><b7i`?cj`OG6Pj75U7<SOx_Whm2(%3%?4yj(KEB_0B(5?x|$%WXa~H3OVd1>x@Xc$CyLB>A#i6nVLzLtR_DDJtF>M8~Ns?fY4=={fNX{sEw-pQP@LN5v>?vYh5oTJq0J(xM3^<pQ4jsL%mELUPBTdTY4phMvL$6S4)SO@dyfb3DNlzVQX$OZ4b_H51a|T_I#Oi>XX)_-t)JI-#l?g&&7*=(n(%Ez8K4S^Kr=N58kBVNC*NxOjb8=U2Yf1o8Hr@iLnK%1J>4q5$jSUXFyvVwOza9bvZTWwi3hX(_+ZV^CPy&kC0TjLzLD@{1RH7df6rSZOG_qQBb*(bWnsC*IN<99{YyUVJ%Be$X&?ca^6CEXO72gZppEVL@$FFD5S!-n~9|R9x|9Smfxt`4ik9cjv3+VwLGpHi9o>;q{Ac=|9*yR$~yluAZ1A36xTv--Q8Ed)aLsC%u)rVwAe?VApL$pcY}*7Cts<l#BFbZ>Bx)X(3|S>xn8TC2B||l#&aILX=`&p~I^Eym)sgLQ1kd$#ca-xdA9&p|s<qy8>S!E8{CPIXyi&Epiqz#RfF_=j8AmAtAm*{|Zs*doQW;eV2BO&7oUcJP`#8>6otRYXZ3zEG;|=@7sCxO^y<a5+XIQr6V|58)5!cTX?XyZ$9{8q#Wd>Hb^|;%s=SR3t^C^;-JK8B&h#jm}0*s83rO{-&`$&-BGgsBACtO^QIa&2{)w1`x*WZHE~MB?Kre$I1Y*!$1&xQB8FPY*=@Y!H<QmHI<uk#B7vDoE5!$t#)U#3_KcmXSFMzAB8ga~TqZ-WXTf*9@vvjFF%SCP@vz??4*gND=XQ7p^GS^S9<@w;Y_KUGSRJd^WkJv%SeD)G2V*aAdp)07U2gmR9=E)K+Y?zXa&fMduOnbVuWNUD(0kt-S<DLjpg$T1L16o%AQ%q%R^RJl<`Hk~4*h{W@(1oP=)t(GZm&yl3xnMedJv2_51>)U=Of1a!LWl#Ubx#IGuyR;uI=}%PJiSM0>-+$0|0q9um?W;+l6nl(4}*i8hU5gwOQBi2OZYw^#YIghhAswcLt*&3pftK<{f5<6e$r^kwdo)b=8YtVu17Io(wJCi1~oOJskVvA&_<4_j}#$n0djlJMue2W?McG*uF2l-A>gjZsMh(?^-aY{gKT_n27~2=vqD|<AFK0`uKV{>aqHrZc3%nWxmzvS}?^Udo+ShtpT$-<H4xw+IF`y3c4fL<6V2_j&cjFJam(sM{CpWk1R|i)VD{&zT5A)yf?Bu=65=y{xIlv2gC8WGq!x6je4UIAF|G9WcPys<~D(~;#!y<MfjO!XRD#EhW11<R8;(8(hkzhsqio3f2nNhrErabQ^F~n0AvE^S8$S;yZ;7i8(JP_ba0trR$g-aM2YB4SE6338>80)^@IlwnXg1iQ)#Xih)7=*EKY{6Qnylcki0OjL{<ThEqBomScIv#Xmi*lkHh`{Y6#58HQi9ZP-SSE_awyhKKc9TblegZy7x`9{qH#luE6}FXr^MbK!#@g_~l^kasESDETy=|79do)l-24Xjez932uj3&8p^JW<Y>oBA0r&}SevZZGM=O91?j$YC#di;Oc7Fy4o}X}F{WF2JvmpQ4#FUVg7_{MREOYjfWL+d1x!4Qvrbc#b1RKNFl0*7d>Df0=mKG*p%^*rSw`J>R&)=Cxmu|xC-tI-n61Tuh!0^;BLB(6{VPeDgH*@`6z6bKo$5|g;*)3jY(UAvDsrseGu|d%ynEV;N?ff)s$wlcG5&0kaSm7E<>gcUpr`yn56mC*XUgT1joDq}jKU*aF$$UvRFo*C7{2D>T`96wqVWwScDgSMQjx{2Gz(JE$JMhSZJYim$$Nz7tFM#wD8maIG9Ven{DjI0aRjN0>QPC0q-UFQDE%g>l8BD?B}(d-Cle~lnpEQG+p3x<Nz3r@r8sn9gF~=Bv3qO#$C`Sk&HP@OlrQChz3SPI45Nf!_U@BU1q@XZERvgP%#|yr3H{h{X2jic;_)wjV&WE+NJS<}Ktb}9uIYD6*HkE5zpZplg|5$ArfZUQfcDo;s_T1jwpVH`E??FgmlHK@t0#&gm3=K&6#WusgM5A{`XOH3We$Vco__nZP|8e$xFjSjvE7)L8<L}FBcx4Rf*^HU4iUAT$v;5TAk=dCFH{zln>p17sj7W$xT?!#qDn859Lzl>Z<Ofo%tYvSa0TPcA(}~1MZl6gRjKiEW1gz@k>|U}W~^GnKFM8GFU?XV%4HJV2z2txHyP%Oqk~t+CuirFONb8AIi8~nEC)6&kxO8U^h^bt$>zh#=44D+q7}i_u)61p88b=h1FV)wDp_c16v+}Sw)N$=#zLG0M`l5*dq|VTUKpA}He2heTJFGB2w$<|<{nUk@0iB-#-O*JSuET1zMNC3+@J(wSrTITFSIjeQGJfLol-X99u%k1R-6jDNw;TA=nwSXMShdu$YNsrh_<236>1WQs4C~p@ftsgH%<~dBsDFjw{2w?5<$6Sw3P9bn^JbjtR7`SP3uXw?%fNsC^Wxfime1{9w&84nM0+#gMu7ZPdTQZa!fra$5gS^VlDe@&4g2=4L(}t#b*WHl1f|rt0kh!&C6qCrD}YiRk>Tn_vKi^%bdL0GG*1@zr9>liXe)UaaVhs{8h<Dm)rToww4WZRhwOLVymKaSSBTw*5BT@maa-9kxKLjnM5j=I!dIB$`F4S=o<#;$4zOY+RuLPtWAX(n^KujB_-G2@+rB<U#)N)bS^Ev8m*d6DPuZev)jhk%LVnU)Wf|fFIDrgQ$i(5R#{4@`ZtRq*0aNBms_Nd+IY+P4W^Ik*GwN(oTKThWR=>K{f55z9Wq1p|5}-$?#n>*sHvk0ydE#)C+6i-qNwsjQBQfGexp24U$jI;Up))dW2b+5aNehabWeAGjl@pRe(7zM)9GVRW^+p0m*jEsgLoHa`rpDQb62@l0fgPiruG%HIl1%I%!mKJczGrhI!WbK*yzOlPoiIA;-#@DLut4cRvPTto@IOXU}SgQLEsI1+wSs#&pUS4>JM#u)YI}dC3h#-8!jUkjs?c?;laU6Eov&(HfY?7aVL9D6bdmo6XmjY1_tFO_M*@Q6+X@SWF%RiC^-}%+{)#M3ZR3T7eXhB95iI}86a1h8LDnhntZY#m^UY#H@#xyJz1czVU^TRWsD(PQTnI48K#~!i6*~Gswh0S7S=yVb3WmlT-v8iDWBF!TQ;Y~-`q^y%y*mME!d1tzoFzx1q3ZfqE$f9veu<}#1tGUnUggoK^55*@9(4%=$-YcXGlMh&I?pp)bEfLc1ph&tWy3yn9r9koTSjQdd00eAKRNh2Ikt8VZOT*p5_6sh{@jAE@ufW|8P@sv+`DGawC_9U60S=)xBTGoJF*`i7V1*^Y^I;-}UBrv>@CT^LTj$pk!MigY>YLXNiju9!0BeM{1qvu1V&&=i7rWb9+Ij6Yzo88CZSG8?(-kb8pDJ;m9BJj^9;{*L{`DhlZ&r(8aEtG(fvQw)$>wgpn!Gn>Dh%afc5^V{g!Bqh4p+9rOY>=(;23_D3VHKk9U_IIGQjz8|c0kad(YJMN&{Wh2|}dqcbL`~3m82OS?nba=<@+ZgZCb2|wEwF45gt{UZ|T9;hc0;JJk6xgmm0utJc4TIsZGwO}HJ-_F6-JruQ*6H?G*K+|=cjR}x?f}aL_Xa({d@!<956P7&Zk@s%V^1<omCY3}VKyIjhi<>uhdFWw)?f?-Wu3ljcVJpazUKj<EmwDItg)>^2g8Bg>#**Kb%OqocRC~6_eMk88}h&!2Llf)ME5%#Tkqf=RRo~=Js;)@R{(bz>-t^R^LnGvc-$NMeRn*vxMdGKyPJc$uD$@Qz#76ZJ3g>%F!V++ejB*S^#hn|K8A-dAp>CM5)y1scW}w{tpE#4_q|Tg8^b*J23~LI!rZ%F#|vQT1*~rm)QsM>o+VK?$(%j~+&l%`JO$i5O27>*)~8sTr&yb(SexH9)~3)w`6<?>MyyTN{8k!ell|-|zUI#vU(>4>U$bU<eZ<I`LbL2sOwChF%^y9cCMQY1t!SFOf$+hBH0j}U4WYEJZ1_ytBu~0ri?0(jlXUW}#ml6&ne9SlaA2FFWd7hW6#09^2S!h%zUD}Gp})#Y-9k)S_lH+B9~6s_M9RPr(11``udi-qs}#$GY?P?oFOU9t{_eCwK$ApzLqyZt(<2~+0(gH!Q%Z)lPQFe|Qw=(1BAX;u`N_|Y_jGc2a(s4vDxGxxDq$!EccldpC>u7B-y`@WMdvB*<SFjtcaJ;CpWvS&PX1C6CyBoL6m0Ux2{zHTzdvg9Nf@U!%=0D7J@ifnexico;$SE44;3AA&~P`+PMdI}^Q31ThN|e-isUsh6?KL_#7{viPeClDK`f}OeIxNJWtWD3g39NA@z9mtQ|QW5=*qVpx{?5v<_KBO!_gD_Q<cWVU9h%~)_r_)Q3F~o{Na%TZ>mnBUR(D|hBvE^;O;4;=P9J;FB#H9r<$h<AX`=dDRgP6Q2nAPTD!aq##-@%`zwGvl_q&AP4ZNl<ToizQhvuqMdw_q<s=Uhuv>^Ka7w9NyXqIEp4@C*w^VP*)^$sKz7w^Ou85MWX>lnemB`pYr(d+!cstYu?zv=wqf%I8TBEvdk5ST1^pLPhQqzs@fird8az|Y8g><mbIwXp*i~rC}ican+L{_c?Z|WP!wZwCc=pun3NvR{TR>lkeS7XXW4><8u_0QER>Lu6l=_KR{SbaiTl2~iNOSx>VFC9btN2_Wmog%j679G1{z?+u>V0Nig8N8@nTaITx9l)6j2D{Vg^*Viv^U=t52k>_{@R`d;y?$?uF)v-)?vA?SLEp7FM)~;tt~DHux$Sy^Hws*TM~~FVdKw6f;Jk|CO&vr?5|bK*rFMl)M_jlVsmn(`X<|m9leO{0b-ZX=lD08-6C@id!i%Pr@-a5`VQyN8a=2oA_?H%ml9fv6uODf`iRu{(Ce)&_Z&k&*#4#fYMcL%#A&?PXN2%rE>o|9m6rU`2YWcy)YuP$=m8dBZG9?7wTuHKgPbzXl%J7#~MzXr2N3vbyIBu=N<T?Ri-JTx(GTADxfFFe)`R;Xy1ian-Xvr)C8GvPp269bRtGek05R4(gJWpIMDBi3%L?7cvph+5`3JMm+_apaaf>>K=uzxnJUmcd!I7>qM6*3MDH4W#_y~Ts*a_#kE<pPBrIWR4ZJNbep0<E3QkMpf>SR})=ft_#oG77yo3j>4lWFI1ID$eE`pm%VT*8|PhE`ZiU)C<RaU$%jgyaA;ZOp7Ap@%Bv;%R#4j48<-8w%0!^0gDmC3uxiOIIfY98=<SO3qTjZBulg-R)Dm*Xx|oPUC68w)%DiN7KmR9EBJwg-~-kf!!FA`jBIv!#|rvgcWe(j_Q)Q2UDom4;d%u>-)5|1cl{pkyPh>1b^_P+2C!G#qn>A5-0Shtkavc^O&Pvip**{X5ujsl*d4OLcsL3MF7x@IKODJUuLIq(anEK}Z*wib!N6i&-x~G+86d<c7;>!NX9wIJ^}60@&<lb-AHuLLA61p^VBq$L!+ww3w%ZwZ2)dXMk-1xg&D^oeT{mz&dl)c(;Isa~A9wowUf&&AK-eJ;*zWfG7IWEf$jAQBAGuZs_Ad;Y-Pv4^uG1OVc88BW9|$@Ktl@a%vOcqT*X@oy*6((qPpjV>d7js`F#MKVqmDg>Ng0n}PO}vR3knCWt#~3B9{~?xU~^|=0qk+l9rZ2S<^5h4SPMhJyW_y`melau*&rnm{1_-dWM1C}1{w8P$AuvbL6d~3>;u}vF=~pP?&x0dYf=`WTce)U1D5N%KA`9Yz>eG<cNm6ckNSPj8jbvZ(DUwvo|DiBd)Tu^jE#n@1KbRYhIKkV@;%Ir-}QaZ_J&^9=l8=dk?@2+=Yz3lk8#oU{O*Wz8@gZvi}!lt0kDD>jG@QjhCT{+2dcRVR1XH@p6B<*U8^&)$G*k-{h@0Imf!6R`yCs4XO&=Uy9@D5;0+i@I`9#<I@Wj?3`f4(?F}(#+wa)DaloOsGSK<miMYQH%ikJzK?vEn)-9j0?g&m8d;~Mw8FCx=X51f_!Q8a7A$(wCs|ymrXT5IE1)=9#<1wt$QD@W{`mQ?$npm*bD!?z;8A&|A(EU+=<aS&a<g?rL`#!M06?8zXfiUcYScJ}5g&yuNg4qw?H0F+Y2eUL-z5W;l?4UD%9l_?~j@KQ6U>Mk5mEn}^nWE<FsE;EU`a>)h3lrgvfrUD}I~cmXK{tTIo(~JSb~gn>viuIri4SwYI(@s_>AU@Y7mk{vku@5F=(a(W`fjhBt14>)w7f_DxDP9OZ1rKo0C53JzYCIN1e<Fx05Lyy1E8pNUvI_Q1c^S_Xe`)pV9~)=V}a1KZIDWQ(DTRspw}N+HXFiDRn|jg4FfxaP0|{8eZL3%4HBgT+eB{w8}E?$<KD3EqMqOnhSiy`Ogkab(sP+N0w(Lj?!iGg_D9Te2lmkIf)>)T{r(U(^TBxM?oKJ*PuC_}UYq2?sw&vzbDlxvc6r?ZaQ|(@)BVlU{ms+;&0qTdM#*xta|!EpF1|+`R14HQc$l1XhP>Au`9s(`Y^&pqK?QZ;964tF-q^>2+ymIl;7m1w4P`LwVlnYSFy^e!LHn=*Yg}4Qd<TP|@XT`|4ew1HFv;2Q2IMbA3^mL*q>lp?K@q>EOpxTEn?zW|e9Cw3_o#7q$g@aM-w)Z<Y#uK`xhK~I+&R&z>kAJBfdTv*qjac6r7jHN+6#+ey1Eg*@@70Gr%U)3#qfs<%8u!{t8hw56!>T4YO%a4bwaIVM-iKS(0)$&RV)%0-nha~JWXDhJg?LVHipwuc*Ca7-1lRx6aEo@sIFGC@INc=Tp^2+nH3+-XO%kPh_JH&0gBB<TBQh`-V%^;@{l?}TE*x!=CK95snp3D%oI&IAYrW~Sr*10oMp%({Bae{SBpAx;tH?MTXcwY=X08v!};uEC{k&i;qelm0aJ;AM<Q9nHH#~C;xGb)t~Cw=4RaoetPpcwc+EL63;6ODEg@VR9;F(?-<3L9MEoXP-8jIdSD`BsT)`5XieBl)1m8<;f>nZsTjvvtW|(cM>YRK4h__A<i4loygutQc*>U;Oyp&tk%>qV*ECLimaTQb?28}&-zD&J4P_fW0&~LwBOZGAX7HG%?x}ROIO}cxSda%P(TkZ|mgSxnl?X)U={~HUrAe!G8%CONcGHl?5EpGTXu!*mtYKzv#gr-v|M(I>QaPeUScdAx;1JE+Q$GsB%^ZkcU_*bPKn(O!10zcVxX)mE4?^o(U&>lWdF{{2WRO%tSdDPq&s*4<b^QgHmRO)1H^QgHmRFiA@&7<bNP;sxxZ5}oEg-V^QZ5}oEg=$-Ke)FigFI1Dz`OTx|zEEvW@|#DUeWBVmkl#FN?hBPVS=&6ceW7{(#-O>KfVOWEE0S1H4z+B?rnhkz1HNq~L7*$`aV0b_G|-prFrKkSvyI|3f7JCcU;u@!oEVHttVV4NUQByYIT+<Wl%i|A|IF?8pGTedpT|ApXEu$m!)k0vP7w$){tzw}+;5wk57AnuE#pI_E(jY32!Mxfu^~I?UgmrdZ*Va+G`LN@$7*T=&hv+)pB&0%GeE@sz$*2iKqtxubcn%$(R>=WuQ(_is~B{Esi{xBX5HGUs?B6cj1-G+XC6S-P97nT8<}~KdtF7bEu?4YeaI188Z**(v~_Dn<#8nRCJRME?ZABV+IT~y6JD}#iVja-pocq+>8evo=o~>f3*&1vC{|Y)pCrS#CmD35*Hmjc(cWR>Di9sjlp&NaEu&1p+#@?`GyJ-MxleXf>f$~DQz$zUnpTr>K=_QDxpgpEGLpVf2DP$NUX5=Pt$ZsXR7Z?%Cxq(tP#}cr=_fZ+<ynWOSqiRAj<cD`%}#7J#wSg0v7!olvzUq&I4B?F>S>g(-z^9shXGu&uMMh|_EB3xe@)tCq)kE{Wc7Q9whd`=l&wOvT3u9UJJI`h#y>b5pyQaFXSD-5MZn|1C%QG_IlN^{GL+E6iiDMB5Rqq!oN-{-s$Y-I3>T9R{99zBQc(sGpQ1BwwNV2q3jhytAvtEW*>V}hfNKQDA6dkxEjrBznrdU%H^`Qpl~GxZOCuUyS?njjtJ##4aU_e}zJcr(X~NNw<_M{ZH1I{WwXc9~K-DWW(S&|A8v|ujSBR10(5)i_yb<MKJ`Lw&;XzM!P1N9ut9A;cY>7I75{(Scg>)>uD6rQc+33%z#_ZXA7J?uU1pmNq%}f1e3M+K!NL*+ws%dHo*fxvtg1mt~{%!ad{y$uRW;o*w)07HgRVn$jl&dY}tfW`=UnijjMwYCvcBR`?(`l+MwES{M+^QYg)Bv*bfbK#!N{p81vofP@D>7ykt;E}ljB4}!K#@`HD&!#|qoS5vS7cPzI=>@Hp(**hK^VnLn9+DKWw)@7XEPoVy*Tr(4LoADRRmoHm1K$Q)|t&QJN?3MpM!oJFWJqa4UZbjU-!*-=ZAp!a_%f{aV4SxE!}~t^^m=Tkq4<MX4asdmEB)m#DL^N9|T7VuxeY65)<;WAr%`7;LMgBWAZc>Np)2>)n*uRNdRcfuC1(=0W{lB2r9m*L#oUwO$U+0ilDs~*IRacb@cQnZu%<Rq-|Oitpf_76gFYX<QA95JL#<MS)&?z<~gsLMp>CX>z%RHKV&SEcaKzv>ZXC-SKJY~pQIf(#k>;IxCei^Yl^nn>rL@O6dEE2qBVr7aSvimUScXq)s(q>x*wRYFp--&mKeeYA(D)L(Z*VB7<=tbaECY(N%l=ygpiv#yyIm%=5b7yVE85CRBafTT}vnTJ%BGv<x?E-YDU+H$Jca*1`)x1;v94{yRVxm!x*1RJ&4eiV3o=RCl0S>3_~!fzsC9`J8FWeo!h8RSqinG423yr)i$O)ErLJhA`sk3j8|<8TXH8cUNt4Y8h36dqk#ZeM-K?lFi%%AgJ$<Y&F*q;c(^-bl(=vPsf2On<^s>D*bSTl7<!5}%(oGjhh<};f^yGP+U9D;5CO~ICnIJ4jwh>PB*8h?oJ}z$Y{h$b)IM@;D|Lg>Xw~L5QF2t2`J4ic<u6ziw=*x><(3zm!t$B+(a5onyaRywM|Do!0#xfEcVC&Z72N?el%w?e6%c&lR@(%YOX5y306Og<Wzrn__#8waFb^Ez_D#Aw5ix-jnN{t;kJ$yA1tVF%^2t%OvCS<;LMOnrQ6Qw({oJbwqmt>^z^))sg76ACv6`m{uq)p0i7TFMH^nEZ^X*8TA~_?M=i17v=GIqld1hB$?d!mMmnZDcQ%B2!UF~R;516R6Xsa2u$|6{*EZS;oRjur`MO)|cidK>e%3U&7!&G6{UWM&U*lsOxA_7R93;^AIcKvNb#2;7G0I9MNdR(>)0mhT*R8wn^Zf|WF`bX7<5zQBIww)iuiTeRj5GdEvNQa8&%7q1vvZ>m|$&Z+o=&kVnGizR3JWb-3lh`t*?AKcrZmXn1(Y)4>T$#yVpV#K)9cEUzC%{~faOw}Op3nPs-|E^!)(u8JM&XZauRHMjL)No<UN8*o?*DJ^+IrJCqVPMv0`X!{2?lmqz!Fkjn>Kw&92rM#Wk+b)i-lwx#NsNcl>gp2bK9A{&Yp3iRCOL=aog|A<$N=9X6AgsW)@9m!?{D=i{r={O=EB9`k_fz(r!C-XxyFVrlb5Gv20>YSar<=!;|g@DigLiIYdFU-5)!~sh?SGbxuz}wuL-$9c~Yc<Kv!Y9Pcd_w_WkfQ!=KU^g-klj@33sK$PONF-X%=V2Z&@!Q{(nI^cvLjJXVhA0`Bj3<%K)JAK?7p(_kOCEc#a?+dc*agc-WaCqJyPxzn+b=erftn&4`Yz!hQpWl{dm8R8CU#X>bynSd2aS|ni;34u4raQ~I4*BX=|0};@6~rc}5wE26VYfR<kL$P7?%yNs*BHdaU$r)Bj9}=msrz*-9HY`-rTaB@+~T3PIQNP=_>Mz==s4kY77nMA`PiS%z0mQzc`zT&CT=iu$CGIkxbA%FZvrP8Iq`fFK$48nl)Uzah9r@@Yz*pWEDdLeE#leD71EOa^Klm(9;hr@3~N=BZT5odC`AFy8Y*i8FRtR4?${wPZXj<)El~966CQ?pRWSmC8uxSb*@w{bVEe>`ReEYFT|Jj80;6&IR|JNZlvP~7SCf*-43G3B0znahtxTB73VQkL3W1>|W?`k!C0g`SgaZVIQi`%7uxe!Z2n00;Zs&S=e)(=m6Yr7d?zlIQ>JiDE?~Jy5bL&0C{6Q=+Ua8^5se%4QU<`OtsNy`m`Q*_Eh=%#5QGL;XaWwisfS53jN*@RaBgWC_0|8RcI9d8YfYdTh$8b-uZii46b~@t?0WZ2NRnPr1!gzQ_DhAZ+=VG7P<j|ObhUb$$Q#wyo@@Y&ln8GTbdMc8WN_U0)zh_PE+U4lHVIp?~L`Cj*evDR#e6iC^2ne`yFT|diGS>b~rFF=S{)Vj~sFp7R;tia-Dv8+V<Lacf5Ey&Cb<_SNv!E)a{A#u@STKH<N*4>!JE{xrKhWAkK%@$Z_$kIKMf}JVA=EPTsRvEGm0)^|lyfkYkw8Ecuun1la4*9^n9`5nk`rs+D5oFJB}m^eqaV&C7{WHCAI>ER2u44cDT+{Wp#d7Iqr-ia7%F8M6+OmvgfI_eme*-^Yu3TfN)>p}E!j*j1{pZWOy9+NrbNpJOAwm!4iDC4R8Is}53`iY=%Ey`wptd<R4COU5fMe&o3y4@GwWmeeRVSaTra@PQ%dG@xZ(cCaW{2X!wmSQi*W9d2nci0C*w;Kxe><Di-k*K+`!a}g-c?hbcS9mToM6c?8U+*5g4XkEV==Tz;j-l->0a};I3|2%tqmO2uA|^AoiTVi(PLX217rdjLDmmaOw`n-q4?Un`q{Z#<S3cA9$nD+z&?XaN3+ja=RCzi5I*@PVe=RuyH-<)0avY<n=g6>_E~uQBg){i2jUvw{{T2Pd`zBg52dIEnkw{-PwT@gr(HR=+maMg8;5j7D0X58|VahAnR^r2l4j&dU?rov<9RckBOH1hhB(SbnPH`Pu*8@ylrF1?iof@c20?DNMSKc@95`M$!LqHHD(8)j2*P<H3755VuTy~idR~!Z5fO%Znm+kC#sA#LQR`;roIy1E8%^2!n?PFD2pJma8Mt&U9KV2(<yXcI}ASGuHsX|h;|tDd}_~kwS4+Qlv=^3q^|4`1fTXS2(>HJT;x7pI_*_8nC&c;3eL;VkmWUr=*@cp+5US3Ipypij*um`-+qEVLwXJb(%Rc2+<yTmIHVN?mI#o{rA|274&qzwI_oan%ga^grK;^ae~EnT-II`sv4bez;2uaF8assi@fuZto8Kg{oNAovYfY}#Z8=4H^=K=PzSo9o>$!_Q&=>6c{3kfWgfw1Yz^o$;JBXzLY1p!o0cqF{`z54N7RahlgHr=paXg9L&3v<&JMP5sreinsB5yo(g6Sj($5A}>=Fw~%4`auRgW)s?=8-?12TtV2j_YnL16di;N{#*oq?MIyms;)ngRQ?GM1VArS>>nzF(e~qlTKTNr=)fk(z9Hun1$Ufc`HvSnM1#4m_r{$VGT|y#Q}ah1burTjrFTef3%z<7`U??!k2F{?RfRzMjo6wW@6cA3PKFonTKV^FFmiK^2Cb-8)}Hc4nr<@s))i4qF^5}PZV|#lxAv(!ZKbdx8wL!<7=zc0)MXzYtcT(%X`);@Lk1kqcCEJ#N-wu%_o(JB>-{r?Ll}T_n}s%XDEY5E7PczXUDmT^f&Qg_fPahJhEOfktU6zye16cKi($o_q!)p5M{S}Ia2og1^eA?N1T|*na_UL%0$}Q`OOFMBs#b1eCnl75;?lL4O-X>Yye45R@z^G|MTYK^>Tgw{^BipdGYrA{cp?5PES5cvKD`o9@>)Djo2?FFs?47S?8<O@|sqB#w5LtN;+migUiF43urA~Rs1d40mN21G_Uwfv@b|Wh&M$SApG~lyN<Tl5HcMMx~hR?eNhTxc2h+Q!m}B}i_TWETFXWSJFAZu7t7U()Fbl}Sg0)jSYEDw`Ris`S)=JXtgv9|Dk`rRP1-`X0~~gtR{%xlDL-o=o3QFIMoKDK7uS)xCa&MhS}NHyJ@7!EDUv^BKUYmI`%b;pxnES#t8Czo@tUtA>9{8hrn1u%L=hAgTEhI&EIWNHPC7I5c`_9C2fX_ExP54`eI;Py_Vv}(4IB=sR$K2>QUpAzbeeGxixIjdp|gnI`BQJ9)$zDv@vxL&Qs-D*Tzy!s-(AsdCEY2KeH4&#=_MY(yG&&PuFS3<b}ZvXm#d3GBIW47YglcK4m)7X9?dMuKb%`i9}hrX_%F3)07CL`ck45;fql2j{%CH@-WrgW?j~On{?O!BXbF=FsBCZ6QS>cD-q3Y&@5<L~)!wTf#l+sLzEP(2PJdG_^-e#A#7MF~6{>~jXi*t<;a{QDd)DVF#NM@mC>@5&w9DP5rl3^k>&z$?ov$^<R&&12tYXReTC;2w=W83yX=sqG-n?Q^64k?@)#mAw%f#lDS<rXYns2E^1*v&XmnfxqG4sm_%}W%#&V2bJ%4FsXRpuEr>LT;%2m#eVCIsaI^X$td`tq%R0T!gNp8",
+      "git_blob": "30d04ccf7764a9f07bf9b8c98d3dd8a6556976b4",
+      "sha256": "2116a73036a6243da92120a29c5a4dcf242d21fa735e31beeeceedd0174ef386",
+      "source_generation": "legacy-drive-after-v1",
+      "source_provenance": {
+        "expected_hash_preserved": true,
+        "original_binding": "ESTIMATE_BINDINGS.previous_guard_sha256",
+        "original_reader": "_estimate_previous_guard_source",
+        "parent_source_sha256": "3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306"
+      },
+      "version": "authenticated-historical-reader-source-v1"
+    }
+  },
   "manifest_sha256": "2faf43204d045c81a1fdf589fff2d8ff76515c3a7c1c9b7d628d6b7f47cd1343",
   "measured_capacity": {
     "cardinality_edits": {
@@ -1508,19 +1638,156 @@
     "immutable_image_limit": 33554432,
     "native_reconstruction_blob": "efa69e2f228f0c44f2a5084e3becdd181a6e831d",
     "original_AppTest_default_timeout": 3,
-    "parent": "55363384275c9d3143cfe833f94a74a18b04ff40",
-    "parent_tree": "729ed30c4ff3a7441d2d24cf96d492019119db69",
+    "parent": "569155e59c0fbe9c06c9fcd0a9e8f26040d8a120",
+    "parent_tree": "482fde3821bf70fa72e82578621058aab1e6a963",
     "production_changes": false,
+    "reader_contract_semantics": "Authenticate physical consumer, exact binding and declared guard generation before constructor; retain frozen original expected hash; no validation verdict or mutable module cache; Path.open/read_bytes/read_text agree and restore incoming ownership.",
+    "reader_generation_contracts": {
+      "tests/ci_fixture_scope_inputs.py": "released-future-v1",
+      "tests/ncaaf_future_scope_inputs.py": "released-future-v1",
+      "tests/ncaaf_transport_scope_inputs.py": "released-future-v1",
+      "tests/test_canonical_download_scope.py": "released-future-v1",
+      "tests/test_ci_fixture_stability_scope.py": "released-future-v1",
+      "tests/test_ci_scheduling_fixture_copy.py": "released-future-v1",
+      "tests/test_ci_scheduling_fixture_scope.py": "released-future-v1",
+      "tests/test_ci_scheduling_scope.py": "released-future-v1",
+      "tests/test_ci_six_shards.py": "released-future-v1",
+      "tests/test_ci_timing_profile.py": "released-future-v1",
+      "tests/test_ci_timing_scope.py": "released-future-v1",
+      "tests/test_clock_scope_exception_proposal.py": "released-future-v1",
+      "tests/test_dfs_scope_policy.py": "legacy-drive-after-v1",
+      "tests/test_drive_history_scope_policy.py": "released-future-v1",
+      "tests/test_estimate_scope_policy.py": "released-future-v1",
+      "tests/test_export_scope.py": "released-future-v1",
+      "tests/test_football_catalog_scope.py": "released-future-v1",
+      "tests/test_football_document_ci_closure.py": "released-future-v1",
+      "tests/test_football_document_ci_closure_scope.py": "released-future-v1",
+      "tests/test_football_document_ci_performance.py": "released-future-v1",
+      "tests/test_football_document_ci_performance_scope.py": "released-future-v1",
+      "tests/test_football_document_fixture_report_scope.py": "released-future-v1",
+      "tests/test_football_document_html_fixture_scope.py": "released-future-v1",
+      "tests/test_football_document_html_scope.py": "released-future-v1",
+      "tests/test_football_document_io_scope.py": "released-future-v1",
+      "tests/test_football_document_literals_scope.py": "released-future-v1",
+      "tests/test_football_document_metadata_scope.py": "released-future-v1",
+      "tests/test_football_document_predecessor_fixture.py": "released-future-v1",
+      "tests/test_football_document_predecessor_fixture_scope.py": "released-future-v1",
+      "tests/test_football_document_remote_fixture_scope.py": "released-future-v1",
+      "tests/test_football_document_six_capacity_scope.py": "released-future-v1",
+      "tests/test_football_document_socket_scope.py": "released-future-v1",
+      "tests/test_football_research_scope.py": "released-future-v1",
+      "tests/test_home_runline_scope_policy.py": "released-future-v1",
+      "tests/test_launch_scope_integration.py": "released-future-v1",
+      "tests/test_mlb_nhl_research_scope.py": "released-future-v1",
+      "tests/test_ncaaf_chronology_capacity.py": "released-future-v1",
+      "tests/test_ncaaf_chronology_fixture_copy.py": "released-future-v1",
+      "tests/test_ncaaf_chronology_fixture_scope.py": "released-future-v1",
+      "tests/test_ncaaf_chronology_scope.py": "released-future-v1",
+      "tests/test_ncaaf_cloud_backup_scope.py": "released-future-v1",
+      "tests/test_ncaaf_compatibility_scope.py": "released-future-v1",
+      "tests/test_ncaaf_coverage_scope_policy.py": "released-future-v1",
+      "tests/test_ncaaf_custody_scope.py": "released-future-v1",
+      "tests/test_ncaaf_future_fixture_copy.py": "released-future-v1",
+      "tests/test_ncaaf_future_spread_scope.py": "released-future-v1",
+      "tests/test_ncaaf_normal_scope.py": "released-future-v1",
+      "tests/test_ncaaf_owner_scope.py": "released-future-v1",
+      "tests/test_ncaaf_pilot_discovery_scope.py": "released-future-v1",
+      "tests/test_ncaaf_pilot_scope.py": "released-future-v1",
+      "tests/test_ncaaf_postmerge_scope.py": "released-future-v1",
+      "tests/test_ncaaf_research_scope.py": "released-future-v1",
+      "tests/test_ncaaf_reviewed_target_scope.py": "released-future-v1",
+      "tests/test_ncaaf_reviewed_target_timing.py": "released-future-v1",
+      "tests/test_ncaaf_schedule_scope_policy.py": "released-future-v1",
+      "tests/test_ncaaf_socket_ci_costs.py": "released-future-v1",
+      "tests/test_ncaaf_socket_ci_scope.py": "released-future-v1",
+      "tests/test_ncaaf_socket_scope.py": "released-future-v1",
+      "tests/test_ncaaf_staged_capacity_scope.py": "released-future-v1",
+      "tests/test_ncaaf_staged_ci_capacity.py": "released-future-v1",
+      "tests/test_ncaaf_staged_scope.py": "released-future-v1",
+      "tests/test_ncaaf_terms_scope.py": "released-future-v1",
+      "tests/test_ncaaf_transport_scope.py": "released-future-v1",
+      "tests/test_nfl_admission_scope.py": "released-future-v1",
+      "tests/test_nfl_calibration_scope.py": "released-future-v1",
+      "tests/test_nfl_diagnostics_scope.py": "released-future-v1",
+      "tests/test_nfl_document_scope.py": "released-future-v1",
+      "tests/test_nfl_inputs_scope.py": "released-future-v1",
+      "tests/test_nfl_interpretation_scope.py": "released-future-v1",
+      "tests/test_nfl_listing_capacity_scope.py": "released-future-v1",
+      "tests/test_nfl_listing_cost_scope.py": "released-future-v1",
+      "tests/test_nfl_listing_immutable_scope.py": "released-future-v1",
+      "tests/test_nfl_listing_metadata_scope.py": "released-future-v1",
+      "tests/test_nfl_native_scope.py": "released-future-v1",
+      "tests/test_nfl_observed_scope.py": "released-future-v1",
+      "tests/test_nfl_odds_listing_scope.py": "released-future-v1",
+      "tests/test_nfl_odds_scope.py": "released-future-v1",
+      "tests/test_nfl_odds_socket_scope.py": "released-future-v1",
+      "tests/test_nfl_owner_scope.py": "released-future-v1",
+      "tests/test_nfl_pdf_ci_scope.py": "released-future-v1",
+      "tests/test_nfl_pdf_fixture_scope.py": "released-future-v1",
+      "tests/test_nfl_pdf_margin_scope.py": "released-future-v1",
+      "tests/test_nfl_pdf_reconcile_scope.py": "released-future-v1",
+      "tests/test_nfl_pdf_scope.py": "released-future-v1",
+      "tests/test_nfl_pdf_timing_costs.py": "released-future-v1",
+      "tests/test_nfl_pdf_timing_scope.py": "released-future-v1",
+      "tests/test_nfl_provenance_scope.py": "released-future-v1",
+      "tests/test_nfl_reconcile_performance_scope.py": "released-future-v1",
+      "tests/test_nfl_reconcile_projection.py": "released-future-v1",
+      "tests/test_nfl_scenario_scope.py": "released-future-v1",
+      "tests/test_nfl_scoring_scope.py": "released-future-v1",
+      "tests/test_nfl_seven_predecessor_inputs.py": "released-future-v1",
+      "tests/test_nfl_ui_scope.py": "released-future-v1",
+      "tests/test_nhl_puck_line_scope.py": "released-future-v1",
+      "tests/test_performance_recap_scope.py": "released-future-v1",
+      "tests/test_pick_board_scope.py": "released-future-v1",
+      "tests/test_preview_binding_scope.py": "released-future-v1",
+      "tests/test_producer_provenance_scope.py": "released-future-v1",
+      "tests/test_provider_health_scope_policy.py": "released-future-v1",
+      "tests/test_readiness_dashboard_scope.py": "released-future-v1",
+      "tests/test_remote_canonical_scope.py": "released-future-v1",
+      "tests/test_remote_continuation_scope.py": "released-future-v1",
+      "tests/test_scope_fixture_isolation.py": "released-future-v1",
+      "tests/test_scope_git_batch.py": "released-future-v1",
+      "tests/test_scope_git_reads.py": "released-future-v1",
+      "tests/test_scope_guard_bootstrap.py": "released-future-v1",
+      "tests/test_scope_guard_scan.py": "released-future-v1",
+      "tests/test_scope_reconstruction_memo.py": "released-future-v1",
+      "tests/test_shared_git_fixture_lifecycle.py": "released-future-v1",
+      "tests/test_slate_audit_scope.py": "released-future-v1",
+      "tests/test_source_contract_scope.py": "released-future-v1",
+      "tests/test_source_intake_scope.py": "released-future-v1",
+      "tests/test_sweet_spot_export_scope.py": "released-future-v1",
+      "tests/test_theover_fade_scope.py": "released-future-v1"
+    },
+    "reader_source_specs": {
+      "legacy-drive-after-v1": {
+        "bytes": 170111,
+        "git_blob": "30d04ccf7764a9f07bf9b8c98d3dd8a6556976b4",
+        "sha256": "2116a73036a6243da92120a29c5a4dcf242d21fa735e31beeeceedd0174ef386",
+        "source_generation": "legacy-drive-after-v1",
+        "source_provenance": {
+          "expected_hash_preserved": true,
+          "original_binding": "ESTIMATE_BINDINGS.previous_guard_sha256",
+          "original_reader": "_estimate_previous_guard_source",
+          "parent_source_sha256": "3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306"
+        },
+        "version": "authenticated-historical-reader-source-v1"
+      }
+    },
     "source_edits": {
       "tests/ncaaf_future_scope_inputs.py": {
-        "after_sha256": "9728243e9b56ef491bedfba796d5b4390f77a92701d36604666ff96d9246843d",
+        "after_sha256": "5dc0939e335860a618d769123956b156bd0737d8c8fa2835195870fbd0550689",
         "before_git_blob": "5e52fe7ba891b5d87eff81f08220e017e1c32558",
         "before_sha256": "e4c4955bc3829ad4b649a865e2a94c0199ceb77a6f9c66a60dc6b32eba2bb874",
         "bytes": 8097,
         "edits": [
           [
-            "        exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)\n",
-            "        from tests.historical_scope_input_boundary import execute_released_bootstrap\n        execute_released_bootstrap(source,frozen,live,binding)\n",
+            "def _new_released_scope_inputs(live):\n    from tests.historical_scope_input_boundary import physical_bytes\n    root=Path(__file__).resolve().parents[1]\n    scope,binding=live._ci_fixture_module()\n    physical=physical_bytes(root/live.GUARD_PATH).replace(b'\\r\\n',b'\\n')\n    current=scope.previous_guard(physical,binding)\n    source=live._ncaaf_future_base_source(current)\n    reviewed=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-reviewed-target-binding-v1.json'))\n    assert hashlib.sha256(physical_bytes(root/'docs/paid-launch/ncaaf-reviewed-target-binding-v1.json')).hexdigest()==binding['historical_input_boundary']['source_generations']['docs/paid-launch/ncaaf-reviewed-target-binding-v1.json']\n    assert hashlib.sha256(source).hexdigest()==reviewed['historical_future']['prior_base_sha256']\n    frozen=types.ModuleType('exact_ncaaf_future_released_scope');frozen.__file__=str(root/live.GUARD_PATH)\n    from unittest.mock import patch\n    read=Path.read_bytes\n    with patch.dict(sys.modules,{frozen.__name__:frozen}), patch.object(Path,'read_bytes',lambda path:source if path.resolve()==(root/live.GUARD_PATH).resolve() else read(path)):\n        exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)\n        frozen._scope_reconstruction_for_validation()\n    return frozen,json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON)",
+            "def _new_released_scope_inputs(live):\n    from tests.historical_scope_input_boundary import physical_bytes, selected_reader_generation, historical_reader_source\n    root=Path(__file__).resolve().parents[1]\n    scope,binding=live._ci_fixture_module()\n    reader_generation=selected_reader_generation(binding)\n    if reader_generation=='released-future-v1':\n        physical=physical_bytes(root/live.GUARD_PATH).replace(b'\\r\\n',b'\\n')\n        current=scope.previous_guard(physical,binding)\n        source=live._ncaaf_future_base_source(current)\n        reviewed=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-reviewed-target-binding-v1.json'))\n        assert hashlib.sha256(physical_bytes(root/'docs/paid-launch/ncaaf-reviewed-target-binding-v1.json')).hexdigest()==binding['historical_input_boundary']['source_generations']['docs/paid-launch/ncaaf-reviewed-target-binding-v1.json']\n        assert hashlib.sha256(source).hexdigest()==reviewed['historical_future']['prior_base_sha256']\n    else:\n        source=historical_reader_source(live,binding,reader_generation)\n    frozen=types.ModuleType('exact_ncaaf_future_released_scope');frozen.__file__=str(root/live.GUARD_PATH)\n    from unittest.mock import patch\n    read=Path.read_bytes\n    with patch.dict(sys.modules,{frozen.__name__:frozen}), patch.object(Path,'read_bytes',lambda path:source if path.resolve()==(root/live.GUARD_PATH).resolve() else read(path)):\n        if reader_generation=='released-future-v1':\n            from tests.historical_scope_input_boundary import execute_released_bootstrap\n            execute_released_bootstrap(source,frozen,live,binding)\n            frozen._scope_reconstruction_for_validation()\n        else:\n            exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)\n    return frozen,json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON)",
+            1
+          ],
+          [
+            "def _install_selected_future_inputs(request,patch,live,plan):\n    # The authenticated generation decides before alias discovery or loading.\n    # A consumer importing the guard later has the same namespace contract.\n    if plan.generation not in {'future','transport-future'}:\n        return\n    # Selection is the authenticated physical contract, not alias identity or\n    # whichever generation happened to populate a session fixture first.\n    aliases=[];pending=[request.module];seen=set()\n    target=Path(__file__).resolve().parents[1]/live.GUARD_PATH\n    while pending:\n        current=pending.pop()\n        if id(current) in seen:continue\n        seen.add(id(current));assert len(seen)<=128\n        for name,value in tuple(vars(current).items()):\n            if isinstance(value,types.ModuleType):\n                file=getattr(value,'__file__',None)\n                if file and Path(file).resolve()==target.resolve() and hasattr(value,'_ncaaf_future_base_source'):\n                    aliases.append((current,name))\n                elif value.__name__.split('.')[-1].startswith('test_'):\n                    pending.append(value)\n    frozen,records=_new_released_scope_inputs(live)\n    root=Path(__file__).resolve().parents[1];read=Path.read_bytes\n    from tests.historical_scope_input_boundary import physical_bytes,generation_input\n    scope,binding=live._ci_fixture_module()\n    source_inputs=binding['historical_input_boundary']['consumers'][plan.consumer].get('source_inputs',{})\n    assert len(source_inputs)<=64 and all(isinstance(p,str) and isinstance(h,str) and len(h)==64 for p,h in source_inputs.items())\n    physical_guard=physical_bytes(root/live.GUARD_PATH).replace(b'\\r\\n',b'\\n')\n    main_guard=scope.previous_guard(physical_guard,binding)\n    guard_source=live._ncaaf_future_base_source(main_guard)\n    allowed_guard_inputs={hashlib.sha256(v).hexdigest() for v in (physical_guard,main_guard,guard_source)}\n    original=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-future-spread-binding-v1.json'))\n    for data in (original.get('ci_fixture_copy',{}),original.get('transport_diagnostics',{})):\n        if 'previous_guard_sha256' in data:allowed_guard_inputs.add(data['previous_guard_sha256'])\n    def historical(path):\n        try:relative=path.resolve().relative_to(root).as_posix()\n        except ValueError:return read(path)\n        value=read(path)\n        if relative==live.GUARD_PATH:\n            return guard_source if hashlib.sha256(value.replace(b'\\r\\n',b'\\n')).hexdigest() in allowed_guard_inputs else value\n        exact=generation_input(plan,relative,value) if relative in source_inputs else None\n        if exact is not None:return exact\n        normalized=value.replace(b'\\r\\n',b'\\n')\n        record=records.get(relative)\n        if record is None:return value\n        return live._ncaaf_future_previous_source(relative,normalized)\n    for consumer,name in aliases:patch.setattr(consumer,name,frozen)\n    import scripts\n    patch.setattr(scripts,'check_launch_change_scope',frozen)\n    patch.setitem(sys.modules,'scripts.check_launch_change_scope',frozen)\n    patch.setitem(sys.modules,frozen.__name__,frozen)\n    patch.setattr(Path,'read_bytes',historical)",
+            "def _install_selected_future_inputs(request,patch,live,plan):\n    # The authenticated generation decides before alias discovery or loading.\n    # A consumer importing the guard later has the same namespace contract.\n    if plan.generation not in {'future','transport-future'}:\n        return\n    # Selection is the authenticated physical contract, not alias identity or\n    # whichever generation happened to populate a session fixture first.\n    aliases=[];pending=[request.module];seen=set()\n    target=Path(__file__).resolve().parents[1]/live.GUARD_PATH\n    while pending:\n        current=pending.pop()\n        if id(current) in seen:continue\n        seen.add(id(current));assert len(seen)<=128\n        for name,value in tuple(vars(current).items()):\n            if isinstance(value,types.ModuleType):\n                file=getattr(value,'__file__',None)\n                if file and Path(file).resolve()==target.resolve():\n                    aliases.append((current,name))\n                elif value.__name__.split('.')[-1].startswith('test_'):\n                    pending.append(value)\n    frozen,records=_new_released_scope_inputs(live)\n    root=Path(__file__).resolve().parents[1];read=Path.read_bytes\n    from tests.historical_scope_input_boundary import physical_bytes,generation_input\n    scope,binding=live._ci_fixture_module()\n    source_inputs=binding['historical_input_boundary']['consumers'][plan.consumer].get('source_inputs',{})\n    assert len(source_inputs)<=64 and all(isinstance(p,str) and isinstance(h,str) and len(h)==64 for p,h in source_inputs.items())\n    physical_guard=physical_bytes(root/live.GUARD_PATH).replace(b'\\r\\n',b'\\n')\n    main_guard=scope.previous_guard(physical_guard,binding)\n    from tests.historical_scope_input_boundary import selected_reader_generation, historical_reader_source\n    reader_generation=selected_reader_generation(binding,plan)\n    guard_source=(live._ncaaf_future_base_source(main_guard) if reader_generation=='released-future-v1'\n                  else historical_reader_source(live,binding,reader_generation))\n    allowed_guard_inputs={hashlib.sha256(v).hexdigest() for v in (physical_guard,main_guard,guard_source)}\n    from tests.historical_scope_input_boundary import _BOOTSTRAP_SOURCE\n    allowed_guard_inputs.add(_BOOTSTRAP_SOURCE)\n    original=json.loads(physical_bytes(root/'docs/paid-launch/ncaaf-future-spread-binding-v1.json'))\n    for data in (original.get('ci_fixture_copy',{}),original.get('transport_diagnostics',{})):\n        if 'previous_guard_sha256' in data:allowed_guard_inputs.add(data['previous_guard_sha256'])\n    def historical(path):\n        try:relative=path.resolve().relative_to(root).as_posix()\n        except ValueError:return read(path)\n        if relative==live.GUARD_PATH:\n            # Read the authenticated physical generation before its one selected\n            # view. Calling an outer read_bytes here can re-transform the view\n            # supplied by our Path.open override through a predecessor adapter.\n            value=physical_bytes(path)\n            return guard_source if hashlib.sha256(value.replace(b'\\r\\n',b'\\n')).hexdigest() in allowed_guard_inputs else value\n        value=read(path)\n        exact=generation_input(plan,relative,value) if relative in source_inputs else None\n        if exact is not None:return exact\n        normalized=value.replace(b'\\r\\n',b'\\n')\n        record=records.get(relative)\n        if record is None:return value\n        return live._ncaaf_future_previous_source(relative,normalized)\n    for consumer,name in aliases:patch.setattr(consumer,name,frozen)\n    import scripts\n    patch.setattr(scripts,'check_launch_change_scope',frozen)\n    patch.setitem(sys.modules,'scripts.check_launch_change_scope',frozen)\n    patch.setitem(sys.modules,frozen.__name__,frozen)\n    native_open=Path.open\n    def guard_open(path,mode='r',*args,**kwargs):\n        if path.resolve()!=target.resolve() or mode not in ('r','rb'):\n            return native_open(path,mode,*args,**kwargs)\n        import io\n        value=physical_bytes(path)\n        if hashlib.sha256(value.replace(b'\\r\\n',b'\\n')).hexdigest() in allowed_guard_inputs:\n            value=guard_source\n        if mode=='rb':return io.BytesIO(value)\n        encoding=kwargs.get('encoding',args[1] if len(args)>1 else None) or 'utf-8'\n        if encoding=='locale':\n            import locale\n            encoding=locale.getencoding()\n        return io.TextIOWrapper(io.BytesIO(value),encoding=encoding,\n            errors=kwargs.get('errors',args[2] if len(args)>2 else None),\n            newline=kwargs.get('newline',args[3] if len(args)>3 else None))\n    patch.setattr(Path,'open',guard_open)\n    patch.setattr(Path,'read_bytes',historical)",
             1
           ]
         ]
@@ -1581,10 +1848,10 @@
     "source_parent_tree": "d8c9424f5313f1c35c3077e3e60b7f926a3eaab6",
     "source_sha256": {
       "tests/apptest_owned_script.py": "713ea44cfb9c6e44f36fd4b41dbceb431dc8794d2fe33bf702dd14bc149a293f",
-      "tests/historical_scope_input_boundary.py": "5528c3725cb317fce0a1a12f2699a1f2f379557f388041ce19f9a7b689fb3eee",
+      "tests/historical_scope_input_boundary.py": "235505567dc8513bc9028a6fd3d46dbe3999b4ee4240cc581b7944196a2c68f2",
       "tests/test_apptest_owned_script.py": "849dd7e99980905011330e4ce73985ad93a4d27960a00d23fa930e06aad9db27",
       "tests/test_ci_fixture_stability_scope.py": "cf4008cba0a45b2f5dd7fb40884cd7424c45bb97c1e0d1b685502b105d750db6",
-      "tests/test_historical_scope_input_boundary.py": "6dbfeb43630fff1fcce4d7fb9ff77e3bddfbb808ca72da2a938a98b4e38eecd9",
+      "tests/test_historical_scope_input_boundary.py": "02438b62c11c52ee5d2ff1ebbc5393050c1c5c05f17d359310c97ba05197b5fc",
       "tests/test_locked_picks.py": "cdc5d494b8d59ed4c91fda6741625063a2de287eb3ecfe1429566ca9a97b4a1c",
       "tests/test_mlb_prospective.py": "354c72225d7218f566863449a377147615ff44c66467e46b4ecd2ca43d0c407c"
     }
@@ -1593,14 +1860,14 @@
   "read_consistency_capacity_amendment_sha256": "d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1",
   "reviewed_blobs": {
     ".github/workflows/ci.yml": "60c536767a7d8b0a83c1537834fc38a422c31dae",
-    "docs/paid-launch/ci-fixture-stability-v1.md": "3a11bd06391d60f0c5b1382ef6bec62c1e9e0210",
-    "scripts/ci_fixture_stability_scope.py": "f5f75e5e463aec3890c55db06b4415bc354e6c34",
+    "docs/paid-launch/ci-fixture-stability-v1.md": "99b98bfcfd804704d8d8a6303288250aec0f72af",
+    "scripts/ci_fixture_stability_scope.py": "14b11b711b1f79bcd3c9acdb4107fda2dab14f93",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
     "tests/apptest_owned_script.py": "dee53f63e681d24db37aabffef3c71572a15fb94",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
-    "tests/ci_fixture_stability_inputs.py": "5bdbb5c2d3ce901868522393795fde592b220628",
-    "tests/historical_scope_input_boundary.py": "7ed521fdc25c935b159a416747cd8eecec6ef374",
-    "tests/ncaaf_future_scope_inputs.py": "235abc3ad06ded8d6602bfa501fe9398ab5740a7",
+    "tests/ci_fixture_stability_inputs.py": "3ad4e07aed39c2488decb3204f21819beda28b29",
+    "tests/historical_scope_input_boundary.py": "7ed6f27e5055fafa53b1ec1816d064a0052b1d04",
+    "tests/ncaaf_future_scope_inputs.py": "0b510bbf04fd21806ae37eb570dd5df3f04e05a5",
     "tests/ncaaf_staged_capacity_fixtures.py": "254a671c1d360879fedcbfbd316fed232d410fca",
     "tests/ncaaf_transport_scope_inputs.py": "ed5f7dda6d92de6a9c723a4382b6d6e3f4daf11a",
     "tests/test_apptest_owned_script.py": "fd180c307148dc69097b11b17220d4230bc938b6",
@@ -1614,7 +1881,7 @@
     "tests/test_estimate_scope_policy.py": "fa4d5f6b2ebfb1c60bb9cc9a4ceec34f606bc9c4",
     "tests/test_football_catalog_scope.py": "4b4789a96bf10cb434298c929a1102dfc27b6558",
     "tests/test_football_research_scope.py": "b4f49f7784d71aea6986c65e88f528afc7203024",
-    "tests/test_historical_scope_input_boundary.py": "570a78478ce607ed3b3f8c20f45699421df3b2a9",
+    "tests/test_historical_scope_input_boundary.py": "10e664a8cfe2e42d143fb648bd024f9537ccba93",
     "tests/test_home_runline_scope_policy.py": "f57fbcbc4d1c4caadfe2944d66868766131d5a24",
     "tests/test_locked_picks.py": "8c40b2dfec364cb873f58b867f3216e642bb97ad",
     "tests/test_mlb_prospective.py": "0999b269648d9eaad4c324da4d15c8ad2f93c071",

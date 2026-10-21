@@ -391,6 +391,8 @@ def resolve_context(request, *, phase='call', fixture='', historical=False):
     role = Role.NATIVE if native_context(name, node) else Role.HISTORICAL
     generation = record['generation'] if role is Role.HISTORICAL else 'current'
     plan = InputContextPlan(role, relative, record['sha256'], node, phase, fixture, generation, sha(binding_raw),definition,caller,caller_sha)
+    if role is Role.HISTORICAL:
+        selected_reader_generation(binding, plan)
     authenticate_plan(plan)
     return plan
 
@@ -433,6 +435,10 @@ def authenticate_plan(plan):
     scope, binding = loader()
     if sha(scope.canonical(binding)) != plan.binding_sha256:
         raise ValueError('HISTORICAL_BINDING_CHANGED')
+    if plan.role is Role.HISTORICAL and not plan.generated_contract:
+        if binding.get('private_delivery_repair') != scope.PRIVATE_DELIVERY_REPAIR:
+            raise ValueError('HISTORICAL_READER_BINDING_CHANGED')
+        selected_reader_generation(binding, plan)
     for relative, record in binding['historical_input_boundary'].get('helper_preimages',{}).items():
         if sha(physical_bytes(ROOT/relative))!=record['after_sha256']:
             raise ValueError('HISTORICAL_HELPER_SOURCE_CHANGED')
@@ -464,6 +470,79 @@ _BOOTSTRAP_GENERATIONS = (
     ('_owner_predecessor', '_owner_base_source', '_nfl_owner_base_source',
      '0ab2edd3f3a246fde7aa25c81a6e00bceb4a41621f2fb2ea276392725e29cb6b', '1639ccad41c0943799b30aaf6f8c0f08c08aaef96293408d147a919537a6406b', 1),
 )
+
+
+_RELEASED_READER_GENERATION = 'released-future-v1'
+_LEGACY_READER_SOURCES = {
+    'legacy-drive-after-v1': {
+        'version': 'authenticated-historical-reader-source-v1',
+        'source_generation': 'legacy-drive-after-v1',
+        'sha256': '2116a73036a6243da92120a29c5a4dcf242d21fa735e31beeeceedd0174ef386',
+        'git_blob': '30d04ccf7764a9f07bf9b8c98d3dd8a6556976b4',
+        'bytes': 170111,
+        'source_provenance': {
+            'parent_source_sha256': _BOOTSTRAP_SOURCE,
+            'original_binding': 'ESTIMATE_BINDINGS.previous_guard_sha256',
+            'original_reader': '_estimate_previous_guard_source',
+            'expected_hash_preserved': True,
+        },
+    },
+}
+
+
+def selected_reader_generation(binding, plan=None):
+    """Select inert, exact reader authority before a view or constructor exists."""
+    if plan is None:
+        if not _ACTIVE:
+            raise ValueError('HISTORICAL_CONTEXT_NOT_OWNED')
+        plan = _ACTIVE[-1].plan
+    if plan.role is not Role.HISTORICAL or plan.generated_contract:
+        raise ValueError('HISTORICAL_READER_CONTEXT_CHANGED')
+    record = binding['historical_input_boundary']['consumers'].get(plan.consumer)
+    declared = binding['private_delivery_repair'].get('reader_generation_contracts', {})
+    key = record.get('guard_source_generation') if record is not None else None
+    if (key not in {_RELEASED_READER_GENERATION, *_LEGACY_READER_SOURCES}
+            or declared.get(plan.consumer) != key):
+        raise ValueError('HISTORICAL_READER_GENERATION_CHANGED')
+    return key
+
+
+def decode_reader_source(row):
+    """Decode a complete code preimage; this confers no source-use authority."""
+    if not isinstance(row, dict):
+        raise ValueError('HISTORICAL_READER_SOURCE_CHANGED')
+    key = row.get('source_generation')
+    expected = _LEGACY_READER_SOURCES.get(key)
+    if (expected is None or set(row) != set(expected) | {'compressed_b85'}
+            or {k: v for k, v in row.items() if k != 'compressed_b85'} != expected
+            or not isinstance(row['compressed_b85'], str)
+            or len(row['compressed_b85']) > 1024 * 1024):
+        raise ValueError('HISTORICAL_READER_SOURCE_CHANGED')
+    try:
+        decoder = zlib.decompressobj()
+        value = decoder.decompress(base64.b85decode(row['compressed_b85']), expected['bytes'] + 1)
+    except (ValueError, zlib.error):
+        raise ValueError('HISTORICAL_READER_SOURCE_CHANGED') from None
+    blob = hashlib.sha1(b'blob ' + str(len(value)).encode() + b'\0' + value).hexdigest()
+    if (not decoder.eof or decoder.unused_data or decoder.unconsumed_tail
+            or len(value) != expected['bytes'] or sha(value) != expected['sha256']
+            or blob != expected['git_blob']):
+        raise ValueError('HISTORICAL_READER_SOURCE_CHANGED')
+    return value
+
+
+def historical_reader_source(live, binding, key):
+    if not _ACTIVE or selected_reader_generation(binding) != key:
+        raise ValueError('HISTORICAL_CONTEXT_NOT_OWNED')
+    plan = _ACTIVE[-1].plan
+    authenticate_plan(plan)
+    scope, current = live._ci_fixture_module()
+    if scope.canonical(current) != scope.canonical(binding):
+        raise ValueError('HISTORICAL_READER_BINDING_CHANGED')
+    rows = current.get('historical_reader_sources', {})
+    if set(rows) != set(_LEGACY_READER_SOURCES) or key not in rows:
+        raise ValueError('HISTORICAL_READER_SOURCE_CHANGED')
+    return decode_reader_source(rows[key])
 
 
 def _run_bootstrap_assignment(module, code, reader, source, image, expected):

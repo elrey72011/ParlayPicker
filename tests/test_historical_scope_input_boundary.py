@@ -14,6 +14,13 @@ def request(name, node='', *, nested=False):
                            node=SimpleNamespace(originalname=node))
 
 
+@pytest.fixture
+def released_bootstrap_owner():
+    req=request('test_football_document_io_scope','test_exact_policy_and_ordered_ci_merge')
+    with boundary.InputOwner(boundary.resolve_context(req)) as owner:
+        yield owner
+
+
 @pytest.mark.parametrize('method',['read_bytes','open'])
 def test_physical_reader_is_independent_of_both_path_views(monkeypatch,method):
     path=boundary.ROOT/boundary.BINDING
@@ -66,8 +73,8 @@ def test_fixture_initializer_preserves_exact_helper_generation(monkeypatch):
 
 def test_fresh_fixture_initializes_existing_memo_before_consumption_and_reauthenticates(tmp_path,monkeypatch):
     import importlib
-    consumer=importlib.import_module('tests.test_dfs_scope_policy')
-    name='test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'
+    consumer=importlib.import_module('tests.test_football_document_io_scope')
+    name='test_exact_policy_and_ordered_ci_merge'
     req=SimpleNamespace(module=consumer,node=SimpleNamespace(name=name,originalname=name))
     plan=boundary.resolve_context(req)
     native=consumer.guard;read,opened=Path.read_bytes,Path.open
@@ -204,7 +211,7 @@ def test_legacy_bridge_preserves_globals_and_authenticates_every_repeated_call()
     assert Path.read_bytes is read and Path.open is opened
 
 
-def test_predecessor_construction_leaves_no_module_entry_or_root_cache():
+def test_predecessor_construction_leaves_no_module_entry_or_root_cache(released_bootstrap_owner):
     import sys
     from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs
     native=boundary.canonical_guard();name='exact_ncaaf_future_released_scope'
@@ -907,7 +914,7 @@ def test_bootstrap_assignment_owns_only_its_exact_reader(exit_kind):
     assert Path.open is opened and Path.read_bytes is read
 
 
-def test_actual_cold_and_warm_bootstraps_keep_fresh_namespaces():
+def test_actual_cold_and_warm_bootstraps_keep_fresh_namespaces(released_bootstrap_owner):
     from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs
     live=boundary.canonical_guard()
     opened,read=Path.open,Path.read_bytes
@@ -927,7 +934,7 @@ def test_actual_cold_and_warm_bootstraps_keep_fresh_namespaces():
     assert all(type(value)is bytes for value in image[0]+image[1])
     # The public legacy adapters still require their declared read view; do not
     # confuse an unowned direct call with a fixture-generation failure.
-    req=request('test_dfs_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception')
+    req=request('test_football_document_io_scope','test_exact_policy_and_ordered_ci_merge')
     with boundary.InputOwner(boundary.resolve_context(req)) as owner:
         boundary.apply_selected_inputs(owner.plan,req,owner.patch)
         for row in boundary._BOOTSTRAP_GENERATIONS:
@@ -939,7 +946,7 @@ def test_actual_cold_and_warm_bootstraps_keep_fresh_namespaces():
 
 
 @pytest.mark.parametrize('attack',['source','binding','generation','helper','cached_image','catalog','cached_plan','compiler'])
-def test_warm_bootstrap_reauthenticates_every_input(monkeypatch,attack):
+def test_warm_bootstrap_reauthenticates_every_input(monkeypatch,attack,released_bootstrap_owner):
     from copy import deepcopy
     from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs
     live=boundary.canonical_guard();scope,binding=live._ci_fixture_module()
@@ -969,3 +976,97 @@ def test_warm_bootstrap_reauthenticates_every_input(monkeypatch,attack):
     module.__file__=str(boundary.ROOT/boundary.GUARD)
     with pytest.raises(ValueError):boundary.execute_released_bootstrap(source,module,live,binding)
     assert not hasattr(module,'_ncaaf_pilot_seeded_custody_parent')
+
+
+def test_declared_legacy_reader_precedes_bootstrap_and_agrees_across_read_apis(monkeypatch):
+    import importlib
+    consumer=importlib.import_module('tests.test_dfs_scope_policy')
+    req=SimpleNamespace(module=consumer,node=SimpleNamespace(originalname='test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'))
+    plan=boundary.resolve_context(req)
+    native,read,opened=consumer.guard,Path.read_bytes,Path.open
+    images=boundary._BOOTSTRAP_IMAGES
+    def forbidden(*args,**kwargs):raise AssertionError('SYNTHETIC_WRONG_READER_GENERATION')
+    monkeypatch.setattr(boundary,'execute_released_bootstrap',forbidden)
+    expected=boundary._LEGACY_READER_SOURCES['legacy-drive-after-v1']['sha256']
+    with boundary.InputOwner(plan) as owner:
+        boundary.apply_selected_inputs(plan,req,owner.patch)
+        path=boundary.ROOT/boundary.GUARD
+        assert boundary.sha(path.read_bytes())==expected
+        with path.open('rb') as stream:assert boundary.sha(stream.read())==expected
+        assert boundary.sha(path.read_text(encoding='utf-8').encode())==expected
+        assert not hasattr(consumer.guard,'_ncaaf_custody_predecessor')
+        assert hasattr(consumer.guard,'_drive_previous_guard_source')
+        assert boundary._BOOTSTRAP_IMAGES is images
+    assert consumer.guard is native and Path.read_bytes is read and Path.open is opened
+
+
+@pytest.mark.parametrize('inner_native',[False,True])
+def test_declared_guard_generations_restore_nested_views(inner_native):
+    outer=request('test_dfs_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception')
+    inner=(request('test_ci_scheduling_fixture_scope','test_unchanged_native_context_assertion_receives_no_projection')
+           if inner_native else request('test_football_document_io_scope','test_exact_policy_and_ordered_ci_merge'))
+    path=boundary.ROOT/boundary.GUARD
+    physical=boundary.sha(boundary.physical_bytes(path));read,opened=Path.read_bytes,Path.open
+    expected=boundary._LEGACY_READER_SOURCES['legacy-drive-after-v1']['sha256']
+    with boundary.InputOwner(boundary.resolve_context(outer)) as owner:
+        boundary.apply_selected_inputs(owner.plan,outer,owner.patch)
+        assert boundary.sha(path.read_bytes())==expected
+        with boundary.InputOwner(boundary.resolve_context(inner)) as child:
+            boundary.apply_selected_inputs(child.plan,inner,child.patch)
+            wanted=physical if inner_native else boundary._BOOTSTRAP_SOURCE
+            assert boundary.sha(path.read_bytes())==wanted
+            with path.open('rb') as stream:assert boundary.sha(stream.read())==wanted
+        assert boundary.sha(path.read_bytes())==expected
+    assert Path.read_bytes is read and Path.open is opened
+
+
+@pytest.mark.parametrize('attack',['body','rehashed_body','generation','trailing_stream','blob','size'])
+def test_complete_reader_preimages_reject_altered_or_rehashed_rows(attack):
+    import base64,zlib,hashlib
+    binding=json.loads(boundary.physical_bytes(boundary.ROOT/boundary.BINDING))
+    row=binding['historical_reader_sources']['legacy-drive-after-v1']
+    value=boundary.decode_reader_source(row)
+    if attack in {'body','rehashed_body'}:
+        changed=value+b'\n# SYNTHETIC source mutation\n'
+        row['compressed_b85']=base64.b85encode(zlib.compress(changed)).decode()
+        if attack=='rehashed_body':
+            row.update(sha256=boundary.sha(changed),bytes=len(changed),git_blob=hashlib.sha1(b'blob '+str(len(changed)).encode()+b'\0'+changed).hexdigest())
+    elif attack=='generation':row['source_generation']='SYNTHETIC_UNREGISTERED_GENERATION'
+    elif attack=='trailing_stream':row['compressed_b85']=base64.b85encode(zlib.compress(value)+zlib.compress(value)).decode()
+    elif attack=='blob':row['git_blob']='0'*40
+    else:row['bytes']+=1
+    with pytest.raises(ValueError,match='HISTORICAL_READER_SOURCE_CHANGED'):
+        boundary.decode_reader_source(row)
+
+
+def test_legacy_reader_construction_is_fresh_and_rechecks_warm_physical_inputs(monkeypatch):
+    from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs
+    req=request('test_dfs_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception')
+    with boundary.InputOwner(boundary.resolve_context(req)):
+        live=boundary.canonical_guard()
+        first,_=_new_released_scope_inputs(live);first.ROOT=Path('SYNTHETIC MUTATED MODULE ONLY')
+        second,_=_new_released_scope_inputs(live)
+        assert first is not second and second.ROOT==boundary.ROOT
+        native=boundary.physical_bytes
+        for relative in (boundary.GUARD,boundary.BINDING):
+            with monkeypatch.context() as patch:
+                patch.setattr(boundary,'physical_bytes',lambda path:native(path)+b'UNREVIEWED' if Path(path)==boundary.ROOT/relative else native(path))
+                with pytest.raises(ValueError):_new_released_scope_inputs(live)
+
+
+def test_declared_reader_compile_failure_restores_owned_methods_and_modules(monkeypatch):
+    import builtins,sys
+    req=request('test_dfs_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception')
+    native=boundary.canonical_guard();read,opened=Path.read_bytes,Path.open
+    current=sys.modules.get('scripts.check_launch_change_scope');compile_native=builtins.compile
+    def fail_selected(source,filename,*args,**kwargs):
+        if isinstance(source,bytes) and len(source)==170111 and Path(filename)==boundary.ROOT/boundary.GUARD:
+            raise RuntimeError('SYNTHETIC_DECLARED_READER_COMPILE')
+        return compile_native(source,filename,*args,**kwargs)
+    monkeypatch.setattr(builtins,'compile',fail_selected)
+    with pytest.raises(RuntimeError,match='SYNTHETIC_DECLARED_READER_COMPILE'):
+        with boundary.InputOwner(boundary.resolve_context(req)) as owner:
+            boundary.apply_selected_inputs(owner.plan,req,owner.patch)
+    assert Path.read_bytes is read and Path.open is opened
+    assert sys.modules.get('scripts.check_launch_change_scope') is current
+    assert boundary.canonical_guard() is native
