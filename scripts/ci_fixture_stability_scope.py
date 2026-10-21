@@ -19,8 +19,8 @@ CONSOLIDATED_AMENDMENT = 'b7175b51176334e8b31967bac836e38ebea307a0f90d5e1f7af24b
 HISTORICAL_INPUT_AMENDMENT = '12e3046831d8fde24748e5193a2e6a54311e1be318e703d3739fe6e1c41da7b2'
 SHARED_BOUNDARY_AMENDMENT = '8ad3749ffee5ebcb9f2688e9bb1b10d99efb5b5dc476c85d956dfd004c8a731f'
 MEASURED_CAPACITY_AMENDMENT = 'dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8'
-CAPACITY_PREDECESSOR = 'b6af3a7ab41eeb8f6e4387a30b83945704698536'
-CAPACITY_PREDECESSOR_TREE = '41734a2c62e2845c030d6b44341bed0c62032eee'
+CAPACITY_PREDECESSOR = '85d8a3d71327035e2466938855884f9faf936cd7'
+CAPACITY_PREDECESSOR_TREE = '2a8f8b283ddfc76f7b727c1f5487e96800a16dd1'
 CAPACITY_LEDGER_SHA256 = 'a6a1143c0f264136cecaf4ed543b8ddb04d9b52d4969ffad89152e8259a0fd65'
 READ_CONSISTENCY_CAPACITY_AMENDMENT = 'd1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1'
 PRESERVED_CANDIDATE = '97ed96247939165c2f73026525e31e1c3dba9302'
@@ -174,6 +174,9 @@ def install_legacy_source_bridge(namespace, authenticate, _immutable=None):
                 current[loader] = wrapped
 
 
+FIXTURE_INITIALIZER_CORRECTION = {'parent': '85d8a3d71327035e2466938855884f9faf936cd7', 'parent_tree': '2a8f8b283ddfc76f7b727c1f5487e96800a16dd1', 'path': 'tests/ncaaf_future_scope_inputs.py', 'before_sha256': '3a4644e5d638d2ab83dcd02aaf19240552d5923659f950c5af1e77f4dd3d0dc4', 'before_git_blob': 'ca01875c5bbaece2ff49188ecdc49978a6235a70', 'after_sha256': 'e4c4955bc3829ad4b649a865e2a94c0199ceb77a6f9c66a60dc6b32eba2bb874', 'initializer': '_scope_reconstruction_for_validation', 'unchanged_source_memo_blob': 'efa69e2f228f0c44f2a5084e3becdd181a6e831d', 'max_entries': 8, 'max_retained_bytes': 33554432, 'max_context_fields': 512}
+
+
 def trees(g, revision):
     return {path: meta.split()[2] for row in g.git('ls-tree', '-r', revision).splitlines()
             for meta, path in [row.split('\t', 1)]}
@@ -263,6 +266,25 @@ def validate(g, manifest_path, comparison_base, binding):
         require(sha(before) == record['before_sha256'] and blob(before) == record['before_git_blob'], 'PREDECESSOR_INPUT_CHANGED')
         authenticated_after=namespace['capacity_predecessor_source'](path,after) if capacity else after
         require(sha(authenticated_after) == record['after_sha256'] and namespace['original_source'](path, after) == before, 'PREDECESSOR_INPUT_CHANGED')
+    if binding.get('fixture_initializer_correction') is not None:
+        require(binding['fixture_initializer_correction']==FIXTURE_INITIALIZER_CORRECTION,'FIXTURE_INITIALIZER_BINDING_CHANGED')
+        meta=FIXTURE_INITIALIZER_CORRECTION
+        rows=namespace['FIXTURE_INITIALIZER_SOURCE_RECORDS']
+        require(set(rows)=={meta['path']},'FIXTURE_INITIALIZER_INPUT_SET_CHANGED')
+        row=rows[meta['path']]
+        current=g.git_bytes('show',implementation+':'+meta['path'])
+        prior=namespace['fixture_initializer_predecessor_source'](meta['path'],current)
+        if successor:
+            require(prior==g.git_bytes('show',meta['parent']+':'+meta['path']),'FIXTURE_INITIALIZER_PREIMAGE_CHANGED')
+        require(sha(prior)==meta['before_sha256'] and blob(prior)==meta['before_git_blob']
+                and sha(current)==meta['after_sha256']
+                and namespace['fixture_initializer_predecessor_source'](meta['path'],current)==prior,
+                'FIXTURE_INITIALIZER_PREIMAGE_CHANGED')
+        original=b"        exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)\n    return frozen,json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON)\n\n\n@pytest.fixture"
+        corrected=b"        exec(compile(source,frozen.__file__,'exec'),frozen.__dict__)\n        frozen._scope_reconstruction_for_validation()\n    return frozen,json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON)\n\n@pytest.fixture"
+        require(prior.count(original)==1 and prior.replace(original,corrected)==current,'FIXTURE_INITIALIZER_SEMANTICS_CHANGED')
+        require(blob(g.git_bytes('show',implementation+':scripts/scope_reconstruction.py'))==meta['unchanged_source_memo_blob'],
+                'RECONSTRUCTION_LIMIT_OR_LOGIC_CHANGED')
     if successor:
         helpers=binding['historical_input_boundary']['helper_preimages']
         require(set(helpers)=={'tests/ci_fixture_scope_inputs.py','tests/ncaaf_transport_scope_inputs.py','tests/ncaaf_staged_capacity_fixtures.py'}, 'HISTORICAL_HELPER_INPUT_SET_CHANGED')

@@ -270,3 +270,20 @@ is retained. An audit of all 114 registered consumers found six consumers with
 static from-tests dependencies; the chronology family is the demonstrated
 different-generation failure. The other families remain preservation coverage,
 not newly claimed historical failures.
+
+
+Actual304-order profiling of the preserved85d8a3d71327 successor passed304/304,
+but measured78 fresh historical namespace constructions (1061.358s inclusive),
+expensive reconstruction and live Git work. Those spans overlap. An actual
+historical fixture entered with the existing pure-source memo uninitialized.
+The supported initializer passed the unchanged firstDFS assertion and produced
+1633/2571 bounded memo hits during fixture setup; one cold comparison reduced
+setup40.181s to34.820s. This is local contributory evidence, not an Ubuntu root
+cause or capacity guarantee. The fixture now invokes that existing authenticated
+initializer immediately after exact-source compilation and before returning the
+fresh namespace. No new cache or bound is introduced; physical mutable checkout
+validation remains live. A separate exact helper preimage preserves the frozen
+25-record historical inputs and assertions. All old rows/hashes remain intact.
+The fully validated85 successor, XML and prior handoff remain preserved. New
+combined/shallow/legacy/capacity evidence is required for this local development
+successor. Hosted allowances remain exhausted; no publication or CI dispatch.

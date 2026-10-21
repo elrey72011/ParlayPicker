@@ -47,6 +47,52 @@ def test_native_decisions_precede_outer_historical_views(module,node):
     assert Path.read_bytes is read and Path.open is opened
 
 
+def test_fixture_initializer_preserves_exact_helper_generation(monkeypatch):
+    from tests import ci_fixture_stability_inputs as inputs
+    path='tests/ncaaf_future_scope_inputs.py'
+    current=boundary.physical_bytes(boundary.ROOT/path)
+    prior=inputs.fixture_initializer_predecessor_source(path,current)
+    assert boundary.sha(prior)=='3a4644e5d638d2ab83dcd02aaf19240552d5923659f950c5af1e77f4dd3d0dc4'
+    assert inputs.fixture_initializer_predecessor_source(path,prior)==prior
+    assert inputs.fixture_initializer_predecessor_source(path,current+b'\n# SYNTHETIC ALTERATION')==current+b'\n# SYNTHETIC ALTERATION'
+    assert boundary.sha(inputs.original_source(path,current))==inputs.RECORDS[path]['before_sha256']
+    assert boundary.sha(inputs.original_source(path,prior))==inputs.RECORDS[path]['before_sha256']
+    rows=json.loads(json.dumps(inputs.FIXTURE_INITIALIZER_SOURCE_RECORDS))
+    rows[path]['before_sha256']='0'*64
+    monkeypatch.setattr(inputs,'FIXTURE_INITIALIZER_SOURCE_RECORDS',rows)
+    with pytest.raises(ValueError,match='CI_FIXTURE_INITIALIZER_PREDECESSOR_CHANGED'):
+        inputs.fixture_initializer_predecessor_source(path,current)
+
+
+def test_fresh_fixture_initializes_existing_memo_before_consumption_and_reauthenticates(tmp_path,monkeypatch):
+    import importlib
+    consumer=importlib.import_module('tests.test_dfs_scope_policy')
+    name='test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'
+    req=SimpleNamespace(module=consumer,node=SimpleNamespace(name=name,originalname=name))
+    plan=boundary.resolve_context(req)
+    native=consumer.guard;read,opened=Path.read_bytes,Path.open
+    incoming=tuple(boundary._ACTIVE)
+    with boundary.InputOwner(plan) as owner:
+        boundary.apply_selected_inputs(plan,req,owner.patch)
+        guard=consumer.guard
+        assert guard is not native and guard._scope_pure_reconstruction_installed is True
+        runtime=guard._scope_reconstruction_for_validation()
+        assert (runtime.MAX_ENTRIES,runtime.MAX_RETAINED_BYTES,runtime.MAX_CONTEXT_FIELDS)==(8,32*1024*1024,512)
+        for field in runtime.NAMES:
+            fn=getattr(guard,field)
+            assert fn.__wrapped__.__globals__ is guard.__dict__
+            assert fn.reconstruction_context_fields<=runtime.MAX_CONTEXT_FIELDS
+            assert fn.reconstruction_memo.retained_bytes<=runtime.MAX_RETAINED_BYTES
+        directory=tmp_path/'scripts';directory.mkdir()
+        (directory/'scope_reconstruction.py').write_bytes(boundary.physical_bytes(boundary.ROOT/'scripts/scope_reconstruction.py')+b'\n# SYNTHETIC TAMPER')
+        with monkeypatch.context() as changed:
+            changed.setattr(guard,'__file__',str(directory/'check_launch_change_scope.py'))
+            with pytest.raises(ValueError,match='SUCCESSOR_SCOPE_MODULE_CHANGED'):
+                guard._scope_reconstruction_for_validation()
+    assert consumer.guard is native and tuple(boundary._ACTIVE)==incoming
+    assert Path.read_bytes is read and Path.open is opened
+
+
 def test_unknown_explicit_historical_consumer_rejects():
     with pytest.raises(ValueError,match='HISTORICAL_CONSUMER_NOT_AUTHENTICATED'):
         boundary.resolve_context(request('test_historical_scope_input_boundary'),historical=True)
