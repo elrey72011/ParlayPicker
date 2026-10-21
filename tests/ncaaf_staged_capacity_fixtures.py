@@ -31,6 +31,8 @@ def reviewed_target_predecessor_profile(source):
 
 @pytest.fixture
 def historical_reviewed_target_timing_profile(tmp_path,monkeypatch,request):
+    from tests.historical_scope_input_boundary import owned_fixture_patch
+    monkeypatch=owned_fixture_patch(monkeypatch)
     # Only an explicitly requesting historical assertion receives this ROOT.
     # The live runner.DEFAULT_PROFILE and every other test module stay unchanged.
     root=tmp_path/'SYNTHETIC-exact-prior-nine-shard-profile'
@@ -41,7 +43,7 @@ def historical_reviewed_target_timing_profile(tmp_path,monkeypatch,request):
 PROFILE='scripts/ci_test_file_costs_v1.json'
 
 
-def install_reviewed_target_profile_inputs(request,patch):
+def _install_selected_profile_inputs(request,patch):
     """Two inherited direct readers receive only their exact frozen input.
 
     Current scheduling and every unrelated reader keep the live profile. Unknown
@@ -225,10 +227,15 @@ def three_cost_binding():
 
 @pytest.fixture
 def exact_three_cost_review_inputs(monkeypatch):
-    from scripts import check_launch_change_scope as live
+    from tests.historical_scope_input_boundary import owned_fixture_patch
+    monkeypatch=owned_fixture_patch(monkeypatch)
+    from tests.historical_scope_input_boundary import canonical_guard,physical_bytes
+    live=canonical_guard()
     root=Path(__file__).resolve().parents[1]
     binding_path='docs/paid-launch/ncaaf-reviewed-target-binding-v1.json'
     expected=live._RT_BINDING_SHA256
+    if hashlib.sha256(physical_bytes(root/binding_path).replace(b'\r\n',b'\n')).hexdigest()!=expected:
+        raise ValueError('HISTORICAL_CURRENT_BINDING_CHANGED')
     read=Path.read_bytes
     def exact(path):
         value=read(path)
@@ -261,10 +268,11 @@ def install_chronology_capacity_inputs(request,patch):
         'test_football_document_predecessor_fixture','test_nfl_seven_predecessor_inputs'}
     if name not in historical_modules and not historical_assertion:return False
     import io
-    from scripts import check_launch_change_scope as live
+    from tests.historical_scope_input_boundary import canonical_guard,physical_bytes
+    live=canonical_guard()
     from scripts import ncaaf_chronology_capacity_scope as capacity
     native=Path.open
-    with native(ROOT/capacity.BINDING,'rb') as handle:raw=handle.read().replace(b'\r\n',b'\n')
+    raw=physical_bytes(ROOT/capacity.BINDING).replace(b'\r\n',b'\n')
     assert hashlib.sha256(raw).hexdigest()==live._RT_BINDING_SHA256
     binding=json.loads(raw)
     if 'chronology_capacity' not in binding:return False
@@ -284,3 +292,10 @@ def install_chronology_capacity_inputs(request,patch):
         return io.BytesIO(previous) if 'b' in mode else io.StringIO(previous.decode(kwargs.get('encoding') or 'utf-8'))
     patch.setattr(Path,'open',exact)
     return True
+
+
+def install_reviewed_target_profile_inputs(request,patch):
+    from tests.historical_scope_input_boundary import resolve_context,Role,owned_api_patch
+    plan=resolve_context(request)
+    if plan.role is not Role.HISTORICAL:return False
+    return _install_selected_profile_inputs(request,owned_api_patch(patch,plan))

@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone, timedelta
 from copy import deepcopy
 import pytest
+from tests.apptest_owned_script import app_from_owned_script
 from app_core import mlb_prospective as p
 from app_core import mlb_prospective_store as store
 
@@ -84,7 +85,7 @@ def test_grade_identity_and_score_capture(tmp_path,monkeypatch):
 def test_empty_ui(tmp_path,monkeypatch):
     from streamlit.testing.v1 import AppTest
     monkeypatch.setenv("PARLAYPICKER_EVIDENCE_DIR",str(tmp_path))
-    app=AppTest.from_string("from app.ui.mlb_prospective import render_mlb_prospective\nrender_mlb_prospective()")
+    app=app_from_owned_script(tmp_path,"from app.ui.mlb_prospective import render_mlb_prospective\nrender_mlb_prospective()")
     app.run(timeout=20)
     assert not app.exception
     assert any(b.label=="Freeze MLB comparison models" and b.disabled for b in app.button)
