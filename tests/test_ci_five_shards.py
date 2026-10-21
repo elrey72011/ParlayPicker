@@ -70,16 +70,16 @@ def test_five_shard_gate_uploads_and_reconciles_all_five(tmp_path):
     import yaml
     workflow=yaml.load((runner.ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)
     shards=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']
-    assert shards['strategy']['matrix']['shard']==[str(i) for i in range(1,12)]
+    assert shards['strategy']['matrix']['shard']==[str(i) for i in range(1,14)]
     assert shards['strategy']['fail-fast']=='false'
     assert shards['timeout-minutes']=='30'
-    assert '--shards 11' in shards['steps'][-2]['run']
+    assert '--shards 13' in shards['steps'][-2]['run']
     upload=shards['steps'][-1]
     assert upload['if']=='${{ !cancelled() }}'
     assert upload['with']['if-no-files-found']=='error'
     assert upload['with']['name']=='full-suite-test-results-${{ matrix.shard }}'
     assert gate['needs']=='full-suite-tests' and gate['if']=='${{ always() }}'
     assert gate['steps'][0]['run']=='test "$SHARD_RESULT" = success'
-    assert '--shards 11' in gate['steps'][-1]['run']
+    assert '--shards 13' in gate['steps'][-1]['run']
     reports(tmp_path)
     assert runner.reconcile(tmp_path,5)['shards']==5
