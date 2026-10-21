@@ -315,3 +315,15 @@ behavior remain unchanged. The current task's total unspent hosted ceiling is
 two one-shot30-minute diagnostics and one conditional release cycle, not stacked
 with earlier consumed runs. Publication/release remains held pending complete
 correctness and a measured120-second reserve.
+
+A separately validated development follow-up also retains immutable compiled
+bootstrap statements under the complete freshly authenticated input identity,
+filename, Python ABI and optimization mode. It executes them into new module
+dictionaries every time. A stable content digest protects the code plan; live
+compiler substitutions bypass reuse. All bytes and code share the unchanged
+32MiB bound. Warm reads reuse identical immutable key buffers only after fresh
+physical authentication and complete byte comparison, preventing duplicate
+retention. Altered source, binding, generation catalogue, helper, image, code
+plan and compiler controls reject. The experimental over-bound failures remain
+preserved. End-to-end final-tree timing and Ubuntu capacity remain unestablished;
+this text does not authorize publication or declare release clearance.

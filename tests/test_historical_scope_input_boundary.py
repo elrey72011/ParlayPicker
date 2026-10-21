@@ -913,11 +913,17 @@ def test_actual_cold_and_warm_bootstraps_keep_fresh_namespaces():
     opened,read=Path.open,Path.read_bytes
     first,_=_new_released_scope_inputs(live)
     image=boundary._BOOTSTRAP_IMAGES
+    compiled=boundary._BOOTSTRAP_PLAN
+    assert compiled is not None and compiled[5]<=boundary._BOOTSTRAP_LIMIT
     first.ROOT=Path('SYNTHETIC mutated first-only root')
     second,_=_new_released_scope_inputs(live)
     assert first is not second and first.__dict__ is not second.__dict__
     assert second.ROOT==boundary.ROOT and first.ROOT!=second.ROOT
     assert boundary._BOOTSTRAP_IMAGES[1] is image[1]
+    assert boundary._BOOTSTRAP_IMAGES[0] is image[0]
+    assert boundary._BOOTSTRAP_PLAN is compiled
+    assert first._ncaaf_custody_predecessor is not second._ncaaf_custody_predecessor
+    assert first._ncaaf_custody_predecessor.__code__ is second._ncaaf_custody_predecessor.__code__
     assert all(type(value)is bytes for value in image[0]+image[1])
     # The public legacy adapters still require their declared read view; do not
     # confuse an unowned direct call with a fixture-generation failure.
@@ -929,9 +935,10 @@ def test_actual_cold_and_warm_bootstraps_keep_fresh_namespaces():
             assert fn.__name__!='normalized'
             assert boundary.sha(fn(boundary._BOOTSTRAP_IMAGES[1][boundary._BOOTSTRAP_GENERATIONS.index(row)]))==row[4]
     assert Path.open is opened and Path.read_bytes is read
+    assert boundary._bootstrap_immutable_size((boundary._BOOTSTRAP_IMAGES,boundary._BOOTSTRAP_PLAN))<=boundary._BOOTSTRAP_LIMIT
 
 
-@pytest.mark.parametrize('attack',['source','binding','generation','helper','cached_image'])
+@pytest.mark.parametrize('attack',['source','binding','generation','helper','cached_image','catalog','cached_plan','compiler'])
 def test_warm_bootstrap_reauthenticates_every_input(monkeypatch,attack):
     from copy import deepcopy
     from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs
@@ -945,9 +952,18 @@ def test_warm_bootstrap_reauthenticates_every_input(monkeypatch,attack):
         monkeypatch.setattr(boundary,'physical_bytes',lambda path:physical(path)+b'UNREVIEWED' if Path(path)==boundary.ROOT/target else physical(path))
     elif attack=='binding':binding=deepcopy(binding);binding['base']='0'*40
     elif attack=='generation':source+=b'UNREVIEWED'
-    else:
+    elif attack=='cached_image':
         key,images=boundary._BOOTSTRAP_IMAGES
         monkeypatch.setattr(boundary,'_BOOTSTRAP_IMAGES',(key,(images[0]+b'UNREVIEWED',)+images[1:]))
+    elif attack=='catalog':monkeypatch.setattr(boundary,'_BOOTSTRAP_GENERATIONS',boundary._BOOTSTRAP_GENERATIONS[:-1])
+    elif attack=='cached_plan':
+        plan=boundary._BOOTSTRAP_PLAN
+        assert plan is not None
+        wrong=compile('SYNTHETIC_WRONG=True','<SYNTHETIC tampered plan>','exec')
+        monkeypatch.setattr(boundary,'_BOOTSTRAP_PLAN',plan[:3]+(wrong,)+plan[4:])
+    else:
+        def reject(*args,**kwargs):raise ValueError('SYNTHETIC_COMPILER_REMAINS_LIVE')
+        monkeypatch.setattr(boundary,'compile',reject,raising=False)
     import types
     module=types.ModuleType('SYNTHETIC no rejected bootstrap execution')
     module.__file__=str(boundary.ROOT/boundary.GUARD)

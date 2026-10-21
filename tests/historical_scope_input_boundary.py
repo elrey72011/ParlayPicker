@@ -449,6 +449,8 @@ _PREDECESSOR_IMAGE = None
 # These are byte transformations, never cached validation or module objects.
 _BOOTSTRAP_SOURCE = '3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306'
 _BOOTSTRAP_IMAGES = None
+_BOOTSTRAP_PLAN = None
+_BOOTSTRAP_NATIVE_COMPILE = compile
 _BOOTSTRAP_LIMIT = 32 * 1024 * 1024
 _BOOTSTRAP_GENERATIONS = (
     ('_ncaaf_custody_predecessor', '_ncaaf_custody_parent_guard_source', '_ncaaf_pilot_parent_guard_source',
@@ -486,6 +488,49 @@ def _run_bootstrap_assignment(module, code, reader, source, image, expected):
             raise ValueError('HISTORICAL_BOOTSTRAP_READER_OWNER_CHANGED')
 
 
+def _bootstrap_immutable_size(value):
+    """Bound the complete retained byte/code graph; never retain a namespace."""
+    pending=[value];seen=set();size=0
+    while pending:
+        item=pending.pop()
+        if id(item) in seen:continue
+        seen.add(id(item));size+=sys.getsizeof(item)
+        if size>_BOOTSTRAP_LIMIT or len(seen)>128000:return _BOOTSTRAP_LIMIT+1
+        if isinstance(item,types.CodeType):
+            pending.extend((item.co_code,item.co_consts,item.co_names,item.co_varnames,
+                            item.co_filename,item.co_linetable,item.co_exceptiontable,
+                            item.co_freevars,item.co_cellvars))
+        elif type(item) in (tuple,frozenset):pending.extend(item)
+        elif item is _BOOTSTRAP_NATIVE_COMPILE:pass
+        elif type(item) not in (str,bytes,int,float,complex,bool,type(None),type(Ellipsis)):
+            return _BOOTSTRAP_LIMIT+1
+    return size
+
+
+def _bootstrap_code_digest(value):
+    """Content digest independent of marshal reference counts/interning."""
+    digest=hashlib.sha256()
+    def visit(item):
+        if isinstance(item,types.CodeType):
+            digest.update(b'C')
+            visit(tuple(getattr(item,name) for name in (
+                'co_argcount','co_posonlyargcount','co_kwonlyargcount','co_nlocals',
+                'co_stacksize','co_flags','co_code','co_consts','co_names','co_varnames',
+                'co_filename','co_name','co_qualname','co_firstlineno','co_linetable',
+                'co_exceptiontable','co_freevars','co_cellvars')))
+        elif type(item)is tuple:
+            digest.update(b'T'+str(len(item)).encode()+b':')
+            for part in item:visit(part)
+        elif type(item)is frozenset:
+            visit(('frozenset',tuple(sorted(_bootstrap_code_digest(part)for part in item))))
+        elif type(item)in(str,bytes,int,float,complex,bool,type(None),type(Ellipsis)):
+            raw=item if type(item)is bytes else repr(item).encode()
+            digest.update(type(item).__name__.encode()+b':'+str(len(raw)).encode()+b':'+raw)
+        else:raise ValueError('HISTORICAL_BOOTSTRAP_PLAN_TYPE_CHANGED')
+    visit(value)
+    return digest.hexdigest()
+
+
 def execute_released_bootstrap(source, module, live, binding):
     """Authenticate physical inputs, then construct fresh historical namespaces.
 
@@ -494,12 +539,16 @@ def execute_released_bootstrap(source, module, live, binding):
     exact input generation during its assignment, with unchanged reconstruction
     and output assertions. No mutable historical namespace is reused.
     """
-    global _BOOTSTRAP_IMAGES
+    global _BOOTSTRAP_IMAGES,_BOOTSTRAP_PLAN
     if type(source) is not bytes or sha(source) != _BOOTSTRAP_SOURCE:
         raise ValueError('HISTORICAL_BOOTSTRAP_GENERATION_CHANGED')
     scope, current = live._ci_fixture_module()
     if scope.canonical(current) != scope.canonical(binding):
         raise ValueError('HISTORICAL_BOOTSTRAP_BINDING_CHANGED')
+    declaration=current['private_delivery_repair']
+    if (declaration['bootstrap_source_sha256']!=_BOOTSTRAP_SOURCE
+        or tuple(tuple(row)for row in declaration['bootstrap_generations'])!=_BOOTSTRAP_GENERATIONS):
+        raise ValueError('HISTORICAL_BOOTSTRAP_GENERATION_CHANGED')
     physical = physical_bytes(ROOT / GUARD).replace(b'\r\n', b'\n')
     scope.previous_guard(physical, current)  # Reauthenticate even on a warm hit.
     helper = physical_bytes(ROOT / 'tests/ncaaf_future_scope_inputs.py').replace(b'\r\n', b'\n')
@@ -511,17 +560,42 @@ def execute_released_bootstrap(source, module, live, binding):
     key = (physical, scope.canonical(current), source, helper,
            physical_bytes(ROOT / 'scripts/ci_fixture_stability_scope.py').replace(b'\r\n', b'\n'),
            boundary)
+    plan_suffix=(module.__file__.encode(),sys.implementation.cache_tag.encode(),
+                 sys.version.encode(),str(sys.flags.optimize).encode())
+    plan_key=key+plan_suffix
+    if (_BOOTSTRAP_PLAN is not None and (_BOOTSTRAP_PLAN[0]!=plan_key
+        or _BOOTSTRAP_PLAN[1] is not compile)):
+        _BOOTSTRAP_PLAN=None
     previous = _BOOTSTRAP_IMAGES
     if previous is not None and previous[0] == key:
+        # Authentication and full-byte comparison already ran. Retain one
+        # immutable copy of identical inputs, not duplicate warm-read buffers.
+        key=previous[0]
         images = previous[1]
     else:
         images = tuple(getattr(live, row[2])(source) for row in _BOOTSTRAP_GENERATIONS)
+    plan_key=key+plan_suffix
     if (type(images) is not tuple or len(images) != len(_BOOTSTRAP_GENERATIONS)
         or any(type(image) is not bytes or sha(image) != row[3]
                for row, image in zip(_BOOTSTRAP_GENERATIONS, images))):
         raise ValueError('HISTORICAL_BOOTSTRAP_IMAGE_CHANGED')
-    if sum(map(len, key)) + sum(map(len, images)) <= _BOOTSTRAP_LIMIT:
+    image_size=_bootstrap_immutable_size((key,images))
+    if image_size <= _BOOTSTRAP_LIMIT:
         _BOOTSTRAP_IMAGES = (key, images)
+    else:
+        _BOOTSTRAP_IMAGES=None;_BOOTSTRAP_PLAN=None
+    cached=_BOOTSTRAP_PLAN
+    if cached is not None:
+        chunks,tail=cached[2:4]
+        actual_size=_bootstrap_immutable_size((_BOOTSTRAP_IMAGES,cached))
+        actual_digest=_bootstrap_code_digest((chunks,tail))
+        if actual_size>_BOOTSTRAP_LIMIT or actual_digest!=cached[4]:
+            raise ValueError('HISTORICAL_BOOTSTRAP_PLAN_CHANGED',actual_size,_BOOTSTRAP_LIMIT,cached[4],actual_digest)
+        for prefix,assignment,index,row in chunks:
+            exec(prefix,module.__dict__)
+            _run_bootstrap_assignment(module,assignment,row[1],source,images[index],row[4])
+        exec(tail,module.__dict__)
+        return
     lines = source.splitlines(keepends=True)
     offsets = [0]
     for line in lines:
@@ -548,6 +622,15 @@ def execute_released_bootstrap(source, module, live, binding):
                        compile(assignment, module.__file__, 'exec'), index, row))
         cursor = end
     tail = compile(b'\n' * source[:cursor].count(b'\n') + source[cursor:], module.__file__, 'exec')
+    chunks=tuple(chunks)
+    digest=_bootstrap_code_digest((chunks,tail))
+    entry=(plan_key,compile,chunks,tail,digest,0)
+    size=_bootstrap_immutable_size((_BOOTSTRAP_IMAGES,entry))+128
+    if (size<=_BOOTSTRAP_LIMIT and compile is _BOOTSTRAP_NATIVE_COMPILE
+        and isinstance(compile,types.BuiltinFunctionType)):
+        # Code objects and their constants are immutable. Every use still
+        # authenticates physical inputs and executes into new dictionaries.
+        _BOOTSTRAP_PLAN=(plan_key,compile,chunks,tail,digest,size)
     for prefix, assignment, index, row in chunks:
         exec(prefix, module.__dict__)
         _run_bootstrap_assignment(module, assignment, row[1], source, images[index], row[4])

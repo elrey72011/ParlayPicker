@@ -1455,12 +1455,55 @@
       "tests/test_mlb_prospective.py"
     ],
     "authority": "Latest owner private-delivery engineering steering; original shared-boundary authority retained.",
+    "bootstrap_generations": [
+      [
+        "_ncaaf_custody_predecessor",
+        "_ncaaf_custody_parent_guard_source",
+        "_ncaaf_pilot_parent_guard_source",
+        "35ac29313e9509efd68894a86e4a98b109a58459605fe589cc6f86159e0dbc64",
+        "0772744a3b07e7a3aa67d889efff45743e4562e4fe8b781e2d2b3d5111424d9d",
+        1
+      ],
+      [
+        "_ncaaf_pilot_predecessor",
+        "_ncaaf_pilot_parent_guard_source",
+        "_discovery_parent_guard_source",
+        "6e82f1a4e0e14a34d62b3ead8eba8f44f382e40093dcfec447029d22027a219c",
+        "35ac29313e9509efd68894a86e4a98b109a58459605fe589cc6f86159e0dbc64",
+        1
+      ],
+      [
+        "_discovery_predecessor",
+        "_discovery_parent_guard_source",
+        "_cloud_peel_exact_guard",
+        "8df5b4b619e220d2884f8f395562ab356d41e247e3729a72774d4e0b79cc4d00",
+        "6e82f1a4e0e14a34d62b3ead8eba8f44f382e40093dcfec447029d22027a219c",
+        2
+      ],
+      [
+        "_cloud_predecessor",
+        "_cloud_peel_exact_guard",
+        "_owner_base_source",
+        "1639ccad41c0943799b30aaf6f8c0f08c08aaef96293408d147a919537a6406b",
+        "8df5b4b619e220d2884f8f395562ab356d41e247e3729a72774d4e0b79cc4d00",
+        1
+      ],
+      [
+        "_owner_predecessor",
+        "_owner_base_source",
+        "_nfl_owner_base_source",
+        "0ab2edd3f3a246fde7aa25c81a6e00bceb4a41621f2fb2ea276392725e29cb6b",
+        "1639ccad41c0943799b30aaf6f8c0f08c08aaef96293408d147a919537a6406b",
+        1
+      ]
+    ],
     "bootstrap_source_sha256": "3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306",
+    "compiled_plan": "Immutable code and byte transformations only; fresh dictionaries every execution; combined32MiB retention bound; physical authentication before every warm hit.",
     "immutable_image_limit": 33554432,
     "native_reconstruction_blob": "efa69e2f228f0c44f2a5084e3becdd181a6e831d",
     "original_AppTest_default_timeout": 3,
-    "parent": "55ecf5aa115462e8b61d6761d120d3226abc07ff",
-    "parent_tree": "d8c9424f5313f1c35c3077e3e60b7f926a3eaab6",
+    "parent": "c2c4155d3e78df752d26ff58958900ecbbb68bec",
+    "parent_tree": "971f25c62955efc286a4735804cf717a9b0bc72c",
     "production_changes": false,
     "source_edits": {
       "tests/ncaaf_future_scope_inputs.py": {
@@ -1532,9 +1575,9 @@
     "source_parent_tree": "d8c9424f5313f1c35c3077e3e60b7f926a3eaab6",
     "source_sha256": {
       "tests/apptest_owned_script.py": "713ea44cfb9c6e44f36fd4b41dbceb431dc8794d2fe33bf702dd14bc149a293f",
-      "tests/historical_scope_input_boundary.py": "3f2668bc80600c991c42465e4b2435dba01a2ad894e074c22b2e92341877db38",
+      "tests/historical_scope_input_boundary.py": "5528c3725cb317fce0a1a12f2699a1f2f379557f388041ce19f9a7b689fb3eee",
       "tests/test_apptest_owned_script.py": "849dd7e99980905011330e4ce73985ad93a4d27960a00d23fa930e06aad9db27",
-      "tests/test_historical_scope_input_boundary.py": "bc4e4264973b78cbe574c25945ac4a3cebdc4e4ac527e5bb7039efb1731170ec",
+      "tests/test_historical_scope_input_boundary.py": "6dbfeb43630fff1fcce4d7fb9ff77e3bddfbb808ca72da2a938a98b4e38eecd9",
       "tests/test_locked_picks.py": "cdc5d494b8d59ed4c91fda6741625063a2de287eb3ecfe1429566ca9a97b4a1c",
       "tests/test_mlb_prospective.py": "354c72225d7218f566863449a377147615ff44c66467e46b4ecd2ca43d0c407c"
     }
@@ -1543,13 +1586,13 @@
   "read_consistency_capacity_amendment_sha256": "d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1",
   "reviewed_blobs": {
     ".github/workflows/ci.yml": "60c536767a7d8b0a83c1537834fc38a422c31dae",
-    "docs/paid-launch/ci-fixture-stability-v1.md": "3164ac76dfe7fd9809dd1f8400a0028e3b388e91",
-    "scripts/ci_fixture_stability_scope.py": "855eb6a953c1f9988b355545d3c00933e85ae2f5",
+    "docs/paid-launch/ci-fixture-stability-v1.md": "2e24d065e86dd8a674adb8a8672b9c4187e2628b",
+    "scripts/ci_fixture_stability_scope.py": "609dba2a328b16d0e22f5ffcdfff817975ceaf54",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
     "tests/apptest_owned_script.py": "dee53f63e681d24db37aabffef3c71572a15fb94",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
     "tests/ci_fixture_stability_inputs.py": "5bdbb5c2d3ce901868522393795fde592b220628",
-    "tests/historical_scope_input_boundary.py": "921eaa4f19a414508b7935894c41ba0d17f69c46",
+    "tests/historical_scope_input_boundary.py": "7ed521fdc25c935b159a416747cd8eecec6ef374",
     "tests/ncaaf_future_scope_inputs.py": "235abc3ad06ded8d6602bfa501fe9398ab5740a7",
     "tests/ncaaf_staged_capacity_fixtures.py": "254a671c1d360879fedcbfbd316fed232d410fca",
     "tests/ncaaf_transport_scope_inputs.py": "ed5f7dda6d92de6a9c723a4382b6d6e3f4daf11a",
@@ -1564,7 +1607,7 @@
     "tests/test_estimate_scope_policy.py": "fa4d5f6b2ebfb1c60bb9cc9a4ceec34f606bc9c4",
     "tests/test_football_catalog_scope.py": "4b4789a96bf10cb434298c929a1102dfc27b6558",
     "tests/test_football_research_scope.py": "b4f49f7784d71aea6986c65e88f528afc7203024",
-    "tests/test_historical_scope_input_boundary.py": "7c64f1c1524e0d0afae90069bc86b185ac113c5b",
+    "tests/test_historical_scope_input_boundary.py": "570a78478ce607ed3b3f8c20f45699421df3b2a9",
     "tests/test_home_runline_scope_policy.py": "f57fbcbc4d1c4caadfe2944d66868766131d5a24",
     "tests/test_locked_picks.py": "8c40b2dfec364cb873f58b867f3216e642bb97ad",
     "tests/test_mlb_prospective.py": "0999b269648d9eaad4c324da4d15c8ad2f93c071",
