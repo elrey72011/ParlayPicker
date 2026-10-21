@@ -1070,3 +1070,63 @@ def test_declared_reader_compile_failure_restores_owned_methods_and_modules(monk
     assert Path.read_bytes is read and Path.open is opened
     assert sys.modules.get('scripts.check_launch_change_scope') is current
     assert boundary.canonical_guard() is native
+
+
+@pytest.mark.parametrize('consumer',['test_ci_timing_profile','test_dfs_scope_policy','test_football_document_io_scope'])
+def test_declared_configuration_views_agree_before_consumption_and_restore(consumer):
+    req=request(consumer);plan=boundary.resolve_context(req)
+    read,opened=Path.read_bytes,Path.open
+    live=boundary.canonical_guard();records=json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON)
+    with boundary.InputOwner(plan) as owner:
+        boundary.apply_selected_inputs(plan,req,owner.patch)
+        for relative in ('.github/workflows/ci.yml','scripts/ci_test_file_costs_v1.json'):
+            path=boundary.ROOT/relative;value=path.read_bytes()
+            expected=(boundary.capacity_input_records(plan)[relative]['before_sha256']
+                      if relative.endswith('ci_test_file_costs_v1.json') else records[relative]['before_sha256'])
+            assert boundary.sha(value)==expected
+            with path.open('rb') as stream:assert stream.read()==value
+            assert path.read_text(encoding='utf-8').encode()==value
+        assert boundary._DECLARED_READ_DEPTH.get()==0
+    assert Path.read_bytes is read and Path.open is opened
+    assert boundary._DECLARED_READ_DEPTH.get()==0
+
+
+@pytest.mark.parametrize('failure',[ValueError,KeyboardInterrupt])
+def test_consistent_read_ownership_restores_after_rejection_and_interruption(failure):
+    req=request('test_ci_timing_profile');plan=boundary.resolve_context(req)
+    read,opened=Path.read_bytes,Path.open;target=boundary.ROOT/'scripts/ci_test_file_costs_v1.json'
+    def reject(path):
+        if path==target:raise failure('SYNTHETIC_DECLARED_READ_FAILURE')
+        return read(path)
+    with boundary.InputOwner(plan) as owner:
+        owner.patch.setattr(Path,'read_bytes',reject)
+        boundary.install_consistent_read_apis(plan,owner.patch,boundary.canonical_guard())
+        for call in (target.read_bytes,lambda:target.open('rb')):
+            with pytest.raises(failure,match='SYNTHETIC_DECLARED_READ_FAILURE'):call()
+            assert boundary._DECLARED_READ_DEPTH.get()==0
+            assert boundary._DECLARED_OPEN_DEPTH.get()==0
+    assert Path.read_bytes is read and Path.open is opened
+    assert boundary._DECLARED_READ_DEPTH.get()==0
+    assert boundary._DECLARED_OPEN_DEPTH.get()==0
+
+
+def test_recorded_afterimage_operation_selects_before_any_fixture_namespace(monkeypatch):
+    from tests import ncaaf_future_scope_inputs
+    from scripts import ncaaf_reviewed_target_scope
+    req=request('test_ncaaf_reviewed_target_scope','test_current_sources_have_exact_preimages_and_unknown_bytes_stay_unknown')
+    plan=boundary.resolve_context(req)
+    assert plan.generation=='recorded-source-afterimages'
+    with pytest.raises(ValueError,match='HISTORICAL_CONTEXT_GENERATION_CHANGED'):
+        boundary.authenticate_plan(replace(plan,generation='future'))
+    def forbidden(*args,**kwargs):raise AssertionError('SYNTHETIC_UNREQUESTED_FIXTURE_NAMESPACE')
+    monkeypatch.setattr(ncaaf_future_scope_inputs,'_new_released_scope_inputs',forbidden)
+    native=boundary.canonical_guard();read,opened=Path.read_bytes,Path.open
+    binding=json.loads(boundary.physical_bytes(boundary.ROOT/ncaaf_reviewed_target_scope.BINDING))
+    with boundary.InputOwner(plan)as owner:
+        boundary.apply_selected_inputs(plan,req,owner.patch)
+        path=boundary.ROOT/boundary.GUARD;value=path.read_bytes()
+        with path.open('rb')as stream:assert stream.read()==value
+        prior=ncaaf_reviewed_target_scope.previous_source(boundary.GUARD,value,binding)
+        assert boundary.sha(prior)==binding['source_reconstructions'][boundary.GUARD]['before_sha256']
+        assert boundary.canonical_guard()is native
+    assert Path.read_bytes is read and Path.open is opened

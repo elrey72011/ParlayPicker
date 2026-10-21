@@ -10,6 +10,7 @@ import types
 import base64
 import zlib
 import ast
+from contextvars import ContextVar
 
 ROOT = Path(__file__).resolve().parents[1]
 BINDING = 'docs/paid-launch/ci-fixture-stability-bindings-v1.json'
@@ -117,6 +118,20 @@ def native_context(name, node):
         ('test_ncaaf_staged_ci_capacity', 'test_current_nine_way_configuration_keeps_original_limits'),
         ('test_ncaaf_transport_scope', 'test_external_fixture_children_keep_their_actual_live_context'),
         ('test_ci_scheduling_fixture_scope', 'test_unchanged_native_context_assertion_receives_no_projection')}
+
+
+def declared_input_generation(record,node,phase,source):
+    operations=record.get('call_generations',{})
+    if not isinstance(operations,dict) or len(operations)>32:
+        raise ValueError('HISTORICAL_CALL_GENERATION_CHANGED')
+    operation=operations.get(node)if phase=='call'else None
+    if operation is None:return record['generation']
+    if (set(operation)!={'generation','function_line'}
+            or operation['generation']!='recorded-source-afterimages'
+            or not any(isinstance(n,ast.FunctionDef)and n.name==node and n.lineno==operation['function_line']
+                       for n in ast.parse(source).body)):
+        raise ValueError('HISTORICAL_CALL_GENERATION_CHANGED')
+    return operation['generation']
 
 
 def fixture_alias_identity(binding,constructor,definition,alias,scope,consumer):
@@ -389,7 +404,7 @@ def resolve_context(request, *, phase='call', fixture='', historical=False):
             caller_sha=fixture_alias_identity(binding,relative,definition,fixture,phase,caller)
     name = path.stem
     role = Role.NATIVE if native_context(name, node) else Role.HISTORICAL
-    generation = record['generation'] if role is Role.HISTORICAL else 'current'
+    generation = declared_input_generation(record,node,phase,physical_bytes(path)) if role is Role.HISTORICAL else 'current'
     plan = InputContextPlan(role, relative, record['sha256'], node, phase, fixture, generation, sha(binding_raw),definition,caller,caller_sha)
     if role is Role.HISTORICAL:
         selected_reader_generation(binding, plan)
@@ -414,7 +429,7 @@ def authenticate_plan(plan):
         if plan.phase not in {'call', 'session', 'module'} or (plan.phase == 'call' and plan.fixture):
             raise ValueError('HISTORICAL_FIXTURE_CALLSITE_NOT_AUTHENTICATED')
         expected_role = Role.NATIVE if native_context(Path(plan.consumer).stem, plan.node) else Role.HISTORICAL
-        expected_generation = record['generation'] if expected_role is Role.HISTORICAL else 'current'
+        expected_generation = declared_input_generation(record,plan.node,plan.phase,physical_bytes(ROOT/plan.consumer)) if expected_role is Role.HISTORICAL else 'current'
         if plan.role is not expected_role or plan.generation != expected_generation:
             raise ValueError('HISTORICAL_CONTEXT_GENERATION_CHANGED')
         if plan.phase in {'module','session'}:
@@ -1066,6 +1081,60 @@ def install_transitive_module_inputs(plan, patch):
     for name,module,value in pending:
         exec(compile(value,module.__file__,'exec'),module.__dict__)
 
+_DECLARED_READ_DEPTH=ContextVar('authenticated_historical_read_depth',default=0)
+_DECLARED_OPEN_DEPTH=ContextVar('authenticated_historical_open_depth',default=0)
+
+
+def install_consistent_read_apis(plan,patch,live):
+    """One owned declared view across read_bytes/open/read_text; no new cache.
+
+    Existing authenticated transformations decide the bytes. Reentrancy sends
+    their own low-level opens through the incoming implementation, preventing
+    an API adapter from applying the transformation to its own output again.
+    """
+    if plan.role is not Role.HISTORICAL or plan.generated_contract or not _ACTIVE or _ACTIVE[-1].plan!=plan or patch is not _ACTIVE[-1].patch:
+        raise ValueError('HISTORICAL_API_OWNER_REQUIRED')
+    binding=json.loads(physical_bytes(ROOT/BINDING))
+    paths=set(binding['reviewed_blobs'])|{GUARD,BINDING}
+    paths.update(binding['historical_input_boundary']['source_generations'])
+    paths.update(binding['historical_input_boundary']['helper_preimages'])
+    paths.update(binding['historical_input_boundary']['consumers'][plan.consumer].get('source_inputs',{}))
+    paths.update(json.loads(live.NCAAF_FUTURE_RECONSTRUCTION_JSON))
+    read,opened=Path.read_bytes,Path.open
+    def selected(path):
+        try:return path.resolve().relative_to(ROOT).as_posix() in paths
+        except ValueError:return False
+    def agreed_read(path):
+        if not selected(path) or _DECLARED_READ_DEPTH.get():return read(path)
+        token=_DECLARED_READ_DEPTH.set(1)
+        try:
+            # A binding reader consumes its own authenticated afterimages, not
+            # the earlier namespace used by historical fixture constructors.
+            if plan.generation=='recorded-source-afterimages':
+                with opened(path,'rb')as stream:return stream.read()
+            return read(path)
+        finally:_DECLARED_READ_DEPTH.reset(token)
+    def agreed_open(path,mode='r',*args,**kwargs):
+        if mode not in ('r','rb') or not selected(path) or _DECLARED_READ_DEPTH.get() or _DECLARED_OPEN_DEPTH.get():
+            return opened(path,mode,*args,**kwargs)
+        token=_DECLARED_OPEN_DEPTH.set(1)
+        try:
+            # An explicitly owned later legacy operation may install a narrower
+            # read. Follow that current operation, never a stale captured view.
+            value=Path.read_bytes(path)
+        finally:_DECLARED_OPEN_DEPTH.reset(token)
+        if mode=='rb':return io.BytesIO(value)
+        encoding=kwargs.get('encoding',args[1]if len(args)>1 else None)or'utf-8'
+        if encoding=='locale':
+            import locale
+            encoding=locale.getencoding()
+        return io.TextIOWrapper(io.BytesIO(value),encoding=encoding,
+            errors=kwargs.get('errors',args[2]if len(args)>2 else None),
+            newline=kwargs.get('newline',args[3]if len(args)>3 else None))
+    patch.setattr(Path,'read_bytes',agreed_read)
+    patch.setattr(Path,'open',agreed_open)
+
+
 def apply_selected_inputs(plan, request, patch):
     if plan.role is not Role.HISTORICAL:
         return False
@@ -1105,5 +1174,6 @@ def apply_selected_inputs(plan, request, patch):
     _install_selected_profile_inputs(request, patch)
     _install_selected_transport_inputs(request, patch, plan)
     _install_selected_future_inputs(request, patch, live, plan)
+    install_consistent_read_apis(plan,patch,live)
     install_transitive_module_inputs(plan,patch)
     return True
