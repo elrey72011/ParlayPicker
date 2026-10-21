@@ -447,6 +447,9 @@ def _analysis_input_signature(controls: dict[str, Any] | None) -> tuple[Any, ...
         tuple(sorted(str(r) for r in controls.get("source_evidence_refs", ()))),
         tuple(sorted(str(p.get("sha256", "")) for p in controls.get("ncaaf_research_packets", ()))),
         bool(controls.get("ncaaf_private_research", False)),
+        bool(controls.get("ncaaf_private_refresh", False)),
+        str((controls.get("ncaaf_private_refresh_selection") or {}).get("packet", {}).get("sha256", "")),
+        str((controls.get("ncaaf_private_refresh_selection") or {}).get("authorization", {}).get("sha256", "")),
         tuple(sorted(str(p.get("sha256", "")) for p in controls.get("nfl_private_packets", ()))),
     )
 
@@ -1009,6 +1012,9 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     """Run game analysis without collecting or reviewing player props. Returns (state_updates, warnings, errors).
     Contains NO st.* calls.
     """
+    if controls.get("ncaaf_private_refresh"):
+        from app_core.ncaaf_private_refresh import pipeline
+        return pipeline(controls)
     from app_core.stage_timing import StageTimer
     timer = StageTimer(progress)
     timer.start("Load inputs and initialize evidence")
@@ -1885,6 +1891,10 @@ def main() -> None:
         st.session_state.setdefault(f"parlays_{leg_count}_df", pd.DataFrame())
 
     controls = render_sidebar()
+    from app.ui.ncaaf_pipeline_research import render_refresh_controls
+    render_refresh_controls()
+    controls["ncaaf_private_refresh"] = bool(st.session_state.get("ncaaf_private_refresh", False))
+    controls["ncaaf_private_refresh_selection"] = st.session_state.get("ncaaf_private_refresh_selection")
     controls["source_evidence_refs"] = list(st.session_state.get("source_evidence_refs", ()))
     controls["ncaaf_research_packets"] = list(st.session_state.get("ncaaf_research_packets", ()))
     controls["ncaaf_private_research"] = bool(st.session_state.get("ncaaf_private_research", False))
@@ -1964,6 +1974,12 @@ def main() -> None:
         return
 
     pipeline_status = st.session_state.get("pipeline_status", "idle")
+    if controls.get("ncaaf_private_refresh"):
+        from app.ui.ncaaf_pipeline_research import render_refresh_result
+        render_refresh_result()
+        if not st.session_state.get('ncaaf_private_refresh_ranked'):
+            st.info('UNAVAILABLE: complete the private evidence and authorization requirements before Refresh.')
+        return
     if not st.session_state["analysis_df"].empty:
         st.caption(f"Pipeline status: {pipeline_status}")
 

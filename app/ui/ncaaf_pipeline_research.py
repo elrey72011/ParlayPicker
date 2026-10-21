@@ -6,6 +6,36 @@ from app_core import ncaaf_owner_terms_research as owner_terms
 from app_core import ncaaf_owner_staged_research as owner_staged
 
 
+def render_refresh_controls():
+    """Private selection before Refresh; independent of customer publishing."""
+    from app_core import ncaaf_private_refresh as private
+    with st.expander('Private NCAAF model prediction', expanded=False):
+        enabled=st.checkbox('Use reviewed private NCAAF inputs for Refresh',
+                            key='ncaaf_private_refresh')
+        st.caption('Conditional research only. Select a completed target/history/feature and mathematical-market review, plus separately configured inference authorization. Staging runs no model and fetches nothing. Missing evidence remains UNAVAILABLE.')
+        upload=st.file_uploader('Reviewed private Refresh selection',type=['json'],key='ncaaf_private_refresh_upload')
+        if st.button('Stage reviewed Refresh selection',disabled=upload is None,key='ncaaf_private_refresh_stage'):
+            try:
+                selection=private.load(upload.getvalue())
+            except (ValueError,TypeError,KeyError):
+                st.session_state.pop('ncaaf_private_refresh_selection',None)
+                st.error('UNAVAILABLE: the private selection is incomplete, altered or incompatible.')
+            else:
+                st.session_state['ncaaf_private_refresh_selection']=selection
+                st.success('Staged. Only a later Refresh action can use separately authorized inference.')
+        if enabled and not st.session_state.get('ncaaf_private_refresh_selection'):
+            st.info('UNAVAILABLE: no reviewed private Refresh selection is staged.')
+
+
+def render_refresh_result():
+    rows=st.session_state.get('ncaaf_private_refresh_ranked',[])
+    if not rows:return
+    st.subheader('Private NCAAF model estimate')
+    st.caption('Ranked by unconditional model cover probability. Price and estimated EV are separate; a higher cover estimate does not establish greater value or profitability. Calibration is unvalidated. Conditional market assumptions are not verified offer admission. PASS — zero stake.')
+    st.dataframe(rows,hide_index=True)
+    st.caption('Original inputs, native model identity, computations and static replay are retained in private custody. Receipt or replay does not refresh the original observation clock.')
+
+
 def render(games=None, candidates=None):
     # publish_panel invokes this only after the constant-time owner token gate.
     if games is None and candidates is None:

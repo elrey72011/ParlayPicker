@@ -38,8 +38,12 @@ def source_hash(path,*,historical=False):
     path=Path(path);relative=path.relative_to(root).as_posix() if path.is_absolute() else path.as_posix()
     current=hashlib.sha256((root/relative).read_bytes().replace(b'\r\n',b'\n')).hexdigest()
     record=HISTORICAL_COMPONENTS.get(relative)
+    if record is not None and current!=record['after_sha256']:
+        from scripts.ncaaf_private_refresh_scope import authenticate
+        successor=authenticate(root)['component_predecessors'].get(relative)
+        require(successor is not None and successor['before_sha256']==record['after_sha256']
+            and current==successor['after_sha256'],'NCAAF_TARGET_RUNTIME_CONFLICT')
     if record is not None:
-        require(current==record['after_sha256'],'NCAAF_TARGET_RUNTIME_CONFLICT')
         if historical:return record['before_sha256']
     return current
 
