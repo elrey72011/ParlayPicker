@@ -1130,3 +1130,32 @@ def test_recorded_afterimage_operation_selects_before_any_fixture_namespace(monk
         assert boundary.sha(prior)==binding['source_reconstructions'][boundary.GUARD]['before_sha256']
         assert boundary.canonical_guard()is native
     assert Path.read_bytes is read and Path.open is opened
+
+
+def test_recorded_profile_afterimage_avoids_an_unrequested_fixture_namespace(monkeypatch):
+    from tests import ncaaf_future_scope_inputs
+    from tests import test_ncaaf_reviewed_target_timing as consumer
+    req=request('test_ncaaf_reviewed_target_timing','test_five_live_costs_preserve_historical_measurement_meanings')
+    plan=boundary.resolve_context(req)
+    assert plan.generation=='recorded-source-afterimages'
+    def forbidden(*args,**kwargs):raise AssertionError('SYNTHETIC_UNREQUESTED_PROFILE_NAMESPACE')
+    monkeypatch.setattr(ncaaf_future_scope_inputs,'_new_released_scope_inputs',forbidden)
+    read,opened=Path.read_bytes,Path.open
+    with boundary.InputOwner(plan)as owner:
+        boundary.apply_selected_inputs(plan,req,owner.patch)
+        path=boundary.ROOT/'scripts/ci_test_file_costs_v1.json';value=path.read_bytes()
+        with path.open('rb')as stream:assert stream.read()==value
+        consumer.test_five_live_costs_preserve_historical_measurement_meanings()
+    assert Path.read_bytes is read and Path.open is opened
+
+
+def test_complete_direct_reader_family_selects_authenticated_operations():
+    binding=json.loads(boundary.physical_bytes(boundary.ROOT/boundary.BINDING))
+    rows=binding['private_delivery_repair']['direct_recorded_reader_family']
+    assert len(rows)==5 and len({(row['path'],row['function'])for row in rows})==5
+    for row in rows:
+        source=boundary.physical_bytes(boundary.ROOT/row['path'])
+        assert boundary.sha(source)==row['source_sha256']
+        req=request(Path(row['path']).stem,row['function'])
+        plan=boundary.resolve_context(req)
+        assert plan.generation==row['generation']

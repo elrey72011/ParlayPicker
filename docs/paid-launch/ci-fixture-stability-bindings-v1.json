@@ -792,6 +792,12 @@
         "sha256": "a5ed8e8553f2ddbf3771e0756a798c8b10bfb82419bf29b58d398d2c40098a14"
       },
       "tests/test_ncaaf_reviewed_target_timing.py": {
+        "call_generations": {
+          "test_five_live_costs_preserve_historical_measurement_meanings": {
+            "function_line": 96,
+            "generation": "recorded-source-afterimages"
+          }
+        },
         "fixtures": {},
         "generation": "future",
         "guard_source_generation": "released-future-v1",
@@ -1635,6 +1641,43 @@
     ],
     "bootstrap_source_sha256": "3720e55ec37baae7dcf53d5eb3b3436fcc69ae41df820a110900965945adb306",
     "compiled_plan": "Immutable code and byte transformations only; fresh dictionaries every execution; combined32MiB retention bound; physical authentication before every warm hit.",
+    "direct_recorded_reader_family": [
+      {
+        "function": "test_current_successor_has_exact_preimages_without_relaxing_limits",
+        "generation": "stability",
+        "line": 102,
+        "path": "tests/test_ncaaf_chronology_capacity.py",
+        "source_sha256": "fd7a2385f9013312f1605bc248274a82af47a19802f09d20ec456d045a2df3a0"
+      },
+      {
+        "function": "test_historical_input_projection_is_exact_and_restores_global_state",
+        "generation": "stability",
+        "line": 193,
+        "path": "tests/test_ncaaf_chronology_capacity.py",
+        "source_sha256": "fd7a2385f9013312f1605bc248274a82af47a19802f09d20ec456d045a2df3a0"
+      },
+      {
+        "function": "test_current_successor_has_exact_preimages_without_relaxing_limits",
+        "generation": "stability",
+        "line": 101,
+        "path": "tests/test_ncaaf_chronology_fixture_scope.py",
+        "source_sha256": "2efee4ea3274422c5fca61c526da1f8b19d630697c86d53a9b66d39952b7a0e5"
+      },
+      {
+        "function": "test_current_sources_have_exact_preimages_and_unknown_bytes_stay_unknown",
+        "generation": "recorded-source-afterimages",
+        "line": 78,
+        "path": "tests/test_ncaaf_reviewed_target_scope.py",
+        "source_sha256": "a5ed8e8553f2ddbf3771e0756a798c8b10bfb82419bf29b58d398d2c40098a14"
+      },
+      {
+        "function": "test_five_live_costs_preserve_historical_measurement_meanings",
+        "generation": "recorded-source-afterimages",
+        "line": 96,
+        "path": "tests/test_ncaaf_reviewed_target_timing.py",
+        "source_sha256": "e06c9aee9adaca2ef4317df10c3f89d87231dab7e15d93483c6369c525f14329"
+      }
+    ],
     "fixture_template_required_native_input": {
       "blob": "efa69e2f228f0c44f2a5084e3becdd181a6e831d",
       "consumer": "tests/test_ci_fixture_stability_scope.py::sealed_template",
@@ -1653,12 +1696,20 @@
             "generation": "recorded-source-afterimages"
           }
         }
+      },
+      "tests/test_ncaaf_reviewed_target_timing.py": {
+        "call_generations": {
+          "test_five_live_costs_preserve_historical_measurement_meanings": {
+            "function_line": 96,
+            "generation": "recorded-source-afterimages"
+          }
+        }
       }
     },
     "native_reconstruction_blob": "efa69e2f228f0c44f2a5084e3becdd181a6e831d",
     "original_AppTest_default_timeout": 3,
-    "parent": "896cb7b10811ccfae220ea31510637da99a88ac6",
-    "parent_tree": "c4aa5fd78800a778c97f7e930dd18d0e5a9aae6f",
+    "parent": "8744b19d3a43414fbd9c181200aea5f5cadb430b",
+    "parent_tree": "9c934cb11be9ac896ac2ebc64748ada2dbc64828",
     "predecessor_reuse": "Reuse the existing authenticated_predecessor immutable-byte mechanism in the two future fixture call sites; preserve physical guard/scope/binding authentication and output validation on every warm call. Legacy reader does not construct the unused future predecessor.",
     "production_changes": false,
     "read_api_ownership": "One owned reentrant adapter exposes the existing exact selected byte view through Path.read_bytes/open/read_text for declared repository inputs. No extra source authority, cache or expected hash; restore depth on rejection/interruption.",
@@ -1872,7 +1923,7 @@
       "tests/historical_scope_input_boundary.py": "4b238fae5b60055cf3d1793865493c5dae97bb61de3d758a1e4f70c1441e6b2f",
       "tests/test_apptest_owned_script.py": "849dd7e99980905011330e4ce73985ad93a4d27960a00d23fa930e06aad9db27",
       "tests/test_ci_fixture_stability_scope.py": "cf4008cba0a45b2f5dd7fb40884cd7424c45bb97c1e0d1b685502b105d750db6",
-      "tests/test_historical_scope_input_boundary.py": "332f8cc9c6e4a51940d056930f1440cb96572ee37ce59413df3997169efb488c",
+      "tests/test_historical_scope_input_boundary.py": "95ea86a63c75583a78578bdf67ab078d8e71228cfe409a7bda3611e69c484388",
       "tests/test_locked_picks.py": "cdc5d494b8d59ed4c91fda6741625063a2de287eb3ecfe1429566ca9a97b4a1c",
       "tests/test_mlb_prospective.py": "354c72225d7218f566863449a377147615ff44c66467e46b4ecd2ca43d0c407c"
     }
@@ -1881,8 +1932,8 @@
   "read_consistency_capacity_amendment_sha256": "d1e57722658d927bd202b21d9fcd3ace85b051609b2bad6ed07577ad0b8ddae1",
   "reviewed_blobs": {
     ".github/workflows/ci.yml": "60c536767a7d8b0a83c1537834fc38a422c31dae",
-    "docs/paid-launch/ci-fixture-stability-v1.md": "c15c72ba545a13795c9d4de9044553af202a23ef",
-    "scripts/ci_fixture_stability_scope.py": "00240ddfd8cbccefc5b3119791430b5bfec52c17",
+    "docs/paid-launch/ci-fixture-stability-v1.md": "92aab108f39ae79bb1e2166bbc06f412429b981d",
+    "scripts/ci_fixture_stability_scope.py": "1f964c687b09c4044c5302d611d64a226d87c172",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
     "tests/apptest_owned_script.py": "dee53f63e681d24db37aabffef3c71572a15fb94",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
@@ -1902,7 +1953,7 @@
     "tests/test_estimate_scope_policy.py": "fa4d5f6b2ebfb1c60bb9cc9a4ceec34f606bc9c4",
     "tests/test_football_catalog_scope.py": "4b4789a96bf10cb434298c929a1102dfc27b6558",
     "tests/test_football_research_scope.py": "b4f49f7784d71aea6986c65e88f528afc7203024",
-    "tests/test_historical_scope_input_boundary.py": "e4f78cd28c68fb38b6d1f7c7869ab89e02ddee0c",
+    "tests/test_historical_scope_input_boundary.py": "29a39b5d1a99d40383fe260953194740e6180826",
     "tests/test_home_runline_scope_policy.py": "f57fbcbc4d1c4caadfe2944d66868766131d5a24",
     "tests/test_locked_picks.py": "8c40b2dfec364cb873f58b867f3216e642bb97ad",
     "tests/test_mlb_prospective.py": "0999b269648d9eaad4c324da4d15c8ad2f93c071",
