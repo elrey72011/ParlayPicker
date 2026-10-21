@@ -64,6 +64,20 @@ def test_private_refresh_native_storage_export_replay_and_display(synthetic,monk
         assert r['estimated_ev_per_unit']==pytest.approx(r['cover']*(1+100/110)+r['push']-1)
         assert r['applicability']=='UNVERIFIED_CONDITIONAL_RESEARCH' and r['stake']==0
     assert len(updates['ncaaf_private_refresh_receipts'])==2
+    assert updates['best_picks_df'].cover.tolist()==[row['cover'] for row in ranked]
+    assert 'calibrated_probability' not in updates['best_picks_df']
+    result=updates['ncaaf_private_refresh_result'];path=__import__('pathlib').Path(result['path'])
+    raw=path.read_bytes();csv=__import__('pathlib').Path(result['csv_path'])
+    assert refresh.read_private_export(raw,root=tmp_path,database=tmp_path/'ncaaf-private-refresh.sqlite')==ranked
+    altered=json.loads(raw);altered['payload']['rows'][0]['cover']=0.
+    with pytest.raises(ValueError):
+        refresh.read_private_export(owner.model.encode(stage.seal(altered['payload'])),root=tmp_path,database=tmp_path/'ncaaf-private-refresh.sqlite')
+    original_csv=csv.read_bytes()
+    try:
+        csv.write_bytes(original_csv+b'ALTERED')
+        with pytest.raises(ValueError):
+            refresh.read_private_export(raw,root=tmp_path,database=tmp_path/'ncaaf-private-refresh.sqlite')
+    finally:csv.write_bytes(original_csv)
     assert value==before
     assert list(tmp_path.glob('*.inference-attempts.jsonl'))
     again,_,errors=refresh.pipeline(dict(ncaaf_private_refresh_selection=value))

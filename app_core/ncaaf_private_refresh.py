@@ -15,6 +15,7 @@ from app_core import ncaaf_pipeline_evidence as evidence
 from app_core import ncaaf_staged_acquisition as stage
 
 VERSION='ncaaf-normal-private-refresh-selection-v1'
+RESULT_VERSION='ncaaf-normal-private-refresh-result-v1'
 require=model.require
 
 
@@ -64,8 +65,13 @@ def ranking(analysis):
         metadata=json.loads(source['ml_estimate_metadata'])['ncaaf_inputs']['payload']
         packet=metadata['original_packet'];q=pair._observation(packet)['quote']
         p=display['outcome_probabilities'];price=q['price']
+        observation=pair._observation(packet)
         decimal=1+price/100 if price>0 else 1+100/abs(price)
-        rows.append(dict(side='home' if q['market_type']=='spread_home' else 'away',
+        rows.append(dict(event=deepcopy(observation['event']),
+            model_artifact_sha256=observation['model']['compatibility']['artifact_sha256'],
+            model_binding_sha256=observation['model']['compatibility']['binding_sha256'],
+            inference_time=display['inference_time'],market_observed_at=q['recorded_at'],
+            side='home' if q['market_type']=='spread_home' else 'away',
             line=q['point'],price=price,cover=p['cover'],push=p['push'],loss=p['loss'],
             conditional_on_no_push=display['conditional_no_push'],
             estimated_ev_per_unit=p['cover']*decimal+p['push']-1,
@@ -91,17 +97,77 @@ def run(selection):
     analysis=pair.admitted_analysis(packet,rows,authorization=value['authorization'],custody_root=root)
     exports=pair.capture_exports(analysis,custody_root=root,database=root/'ncaaf-private-refresh.sqlite')
     ranked=ranking(analysis)
-    # Static replay from SQLite is required before reporting success.
-    from app_core import research_replay
+    # The qualified wagering card deliberately withholds private probabilities.
+    # Export an explicit research view, derived again from retained originals.
+    replayed=replay_ranked([saved['receipt'] for saved in exports],database=root/'ncaaf-private-refresh.sqlite')
+    require(replayed==ranked,'NCAAF_PRIVATE_REFRESH_REPLAY')
+    basename=value['authorization']['sha256']+'.private-refresh'
+    csv=private_csv(ranked)
+    stage._exclusive(root/(basename+'.csv'),csv)
+    import hashlib
+    view=stage.seal(dict(version=RESULT_VERSION,rows=ranked,
+        export_receipts=[saved['receipt'] for saved in exports],
+        csv_name=basename+'.csv',csv_sha256=hashlib.sha256(csv).hexdigest(),
+        ranking_criterion='unconditional_model_cover',calibration='UNVALIDATED',
+        applicability='UNVERIFIED_CONDITIONAL_RESEARCH',wager_action='PASS',stake=0))
+    stage._exclusive(root/(basename+'.json'),model.encode(view))
+    require(read_private_export(model.encode(view),root=root,database=root/'ncaaf-private-refresh.sqlite')==ranked,
+        'NCAAF_PRIVATE_REFRESH_REPLAY')
     for saved in exports:
-        _,originals=research_replay.read_export(saved['receipt']['export_id'],path=root/'ncaaf-private-refresh.sqlite')
+        saved['private_result']=dict(path=str(root/(basename+'.json')),sha256=view['sha256'],
+            csv_path=str(root/(basename+'.csv')),csv_sha256=view['payload']['csv_sha256'])
+    return analysis,exports,ranked
+
+
+def replay_ranked(receipts,*,database):
+    from app_core import research_replay
+    require(isinstance(receipts,list) and len(receipts)==2,'NCAAF_PRIVATE_REFRESH_REPLAY')
+    rows=[]
+    for receipt in receipts:
+        _,originals=research_replay.read_export(receipt['export_id'],path=database)
         require(bool(originals),'NCAAF_PRIVATE_REFRESH_REPLAY')
         for original in originals.values():
             frame=research_replay.frame_from_payload(original['original']['producer'])
-            for row in frame.to_dict('records'):
-                if owner.is_private_source(row):
-                    require(evidence.diagnose(row)==dict(status='COMPLETE',reason='AVAILABLE'),'NCAAF_PRIVATE_REFRESH_REPLAY')
-    return analysis,exports,ranked
+            rows.extend(row for row in frame.to_dict('records') if owner.is_private_source(row))
+    require(len(rows)==2,'NCAAF_PRIVATE_REFRESH_REPLAY')
+    # ranking validates every native receipt and the shared pair contract.
+    return ranking(pd.DataFrame(rows))
+
+
+def private_csv(rows):
+    flattened=[]
+    for row in rows:
+        value={key:row[key] for key in ('side','line','price','cover','push','loss',
+            'estimated_ev_per_unit','selection','input_sha256','result_sha256',
+            'model_artifact_sha256','model_binding_sha256','inference_time',
+            'market_observed_at','applicability','calibration','wager_action','stake')}
+        value.update(home_team=row['event']['home_team'],away_team=row['event']['away_team'],
+            kickoff_utc=row['event']['start_utc'],canonical_event_id=row['event']['canonical_event_id'],
+            conditional_cover_given_no_push=row['conditional_on_no_push']['value'],
+            conditional_no_push_state=row['conditional_on_no_push']['state'],
+            period=row['assumptions']['period'],settlement=row['assumptions']['settlement'],
+            ranking_criterion='unconditional_model_cover')
+        flattened.append(value)
+    return pd.DataFrame(flattened).to_csv(index=False).encode('utf-8')
+
+
+def read_private_export(raw,*,root,database):
+    import hashlib,re
+    require(isinstance(raw,bytes) and 0<len(raw)<=stage.MAX_BUNDLE,'NCAAF_PRIVATE_REFRESH_LIMIT')
+    view=json.loads(raw);stage._envelope(view);p=view['payload']
+    require(set(p)=={'version','rows','export_receipts','csv_name','csv_sha256',
+        'ranking_criterion','calibration','applicability','wager_action','stake'}
+        and p['version']==RESULT_VERSION and p['ranking_criterion']=='unconditional_model_cover'
+        and p['calibration']=='UNVALIDATED' and p['applicability']=='UNVERIFIED_CONDITIONAL_RESEARCH'
+        and p['wager_action']=='PASS' and p['stake']==0,'NCAAF_PRIVATE_REFRESH_REPLAY')
+    require(isinstance(p['csv_name'],str) and re.fullmatch(r'[0-9a-f]{64}\.private-refresh\.csv',p['csv_name']),
+        'NCAAF_PRIVATE_REFRESH_REPLAY')
+    rows=replay_ranked(p['export_receipts'],database=database)
+    require(rows==p['rows'],'NCAAF_PRIVATE_REFRESH_REPLAY')
+    csv=(Path(root)/p['csv_name']).read_bytes()
+    require(hashlib.sha256(csv).hexdigest()==p['csv_sha256'] and csv==private_csv(rows),
+        'NCAAF_PRIVATE_REFRESH_REPLAY')
+    return rows
 
 
 def pipeline(controls):
@@ -116,9 +182,10 @@ def pipeline(controls):
         analysis,exports,ranked=run(controls['ncaaf_private_refresh_selection'])
     except (ValueError,TypeError,KeyError,OSError):
         return updates,[],['UNAVAILABLE: private NCAAF requires complete current evidence, exact review, separately configured inference authority and verified custody.']
-    updates.update(analysis_df=analysis,best_picks_df=pd.concat([x['card'] for x in exports],ignore_index=True),
+    updates.update(analysis_df=analysis,best_picks_df=pd.DataFrame(ranked),
         pipeline_status='PRIVATE_CONDITIONAL_RESEARCH',ncaaf_private_refresh_ranked=ranked,
         ncaaf_private_refresh_receipts=[x['receipt'] for x in exports],
+        ncaaf_private_refresh_result=exports[0]['private_result'],
         diagnostics=dict(private_research=True,ranking_criterion='unconditional_model_cover',
                          evidence_label=controls['ncaaf_private_refresh_selection']['packet']['payload']['evidence_label']))
     return updates,[],[]

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 BINDING='docs/paid-launch/ncaaf-private-refresh-bindings-v1.json'
-_BINDING_SHA256='28a979160808aa8b5aff8c54dcff675d4e55fb407b55d5c3a1fc763d8018ca32'
+_BINDING_SHA256='828ad26c59d7ca494c44a945a184a10c028294920c6631bd1619a9031e37d704'
 
 
 def physical(path):
