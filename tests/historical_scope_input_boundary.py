@@ -1100,6 +1100,30 @@ def capacity_input_records(plan):
         records[relative]['successor']=record
     return records
 
+def current_capacity_input(plan,relative,raw):
+    """Authenticate the current edge before an unchanged historical contract.
+
+    This performs fresh authentication on every read. It neither projects the
+    physical reader nor caches a validation verdict or historical module.
+    """
+    records=capacity_input_records(plan)
+    if plan.role is not Role.HISTORICAL or relative not in records or type(raw)is not bytes:
+        raise ValueError('CI_CAPACITY_INPUT_NOT_AUTHENTICATED')
+    binding_raw=physical_bytes(ROOT/BINDING)
+    if sha(binding_raw)!=plan.binding_sha256:raise ValueError('HISTORICAL_BINDING_CHANGED')
+    binding=json.loads(binding_raw)
+    from tests import ci_fixture_stability_inputs as inputs
+    row=inputs.PRIVATE_DELIVERY_SOURCE_RECORDS.get(relative)
+    if row is None:return raw
+    declared=binding['private_delivery_repair']['source_edits'].get(relative)
+    if (json.loads(json.dumps({key:value for key,value in row.items()if key!='compressed'}))!=declared
+            or sha(raw.replace(b'\r\n',b'\n'))!=row['after_sha256']):
+        raise ValueError('CI_PRIVATE_DELIVERY_GENERATION_CHANGED')
+    value=inputs.private_delivery_predecessor_source(relative,raw)
+    if sha(value)!=row['before_sha256']:raise ValueError('CI_PRIVATE_DELIVERY_GENERATION_CHANGED')
+    return value
+
+
 def install_capacity_input_view(plan,patch):
     if plan.role is not Role.HISTORICAL:return False
     patch=owned_api_patch(patch,plan)
@@ -1116,16 +1140,7 @@ def install_capacity_input_view(plan,patch):
             raise ValueError('CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED')
         return value
     def image(relative,raw):
-        from tests import ci_fixture_stability_inputs as inputs
-        # Normalize only the reviewed current-budget edge before the original
-        # thirteen/twelve/eleven contracts. Physical bytes must be current.
-        row=inputs.PRIVATE_DELIVERY_SOURCE_RECORDS.get(relative)
-        if row is not None:
-            declared=json.loads(physical_bytes(ROOT/BINDING))['private_delivery_repair']['source_edits'].get(relative)
-            if (json.loads(json.dumps({key:value for key,value in row.items()if key!='compressed'}))!=declared
-                    or sha(raw.replace(b'\r\n',b'\n'))!=row['after_sha256']):
-                raise ValueError('CI_PRIVATE_DELIVERY_GENERATION_CHANGED')
-            raw=inputs.private_delivery_predecessor_source(relative,raw)
+        raw=current_capacity_input(plan,relative,raw)
         row=records[relative];successor=row.get('successor')
         # Physical source must be the current authenticated generation. Only
         # the selected immutable edge(s) may produce a historical view.

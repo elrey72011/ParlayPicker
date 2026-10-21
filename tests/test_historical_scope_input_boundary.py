@@ -728,6 +728,9 @@ def test_capacity_historical_profile_and_nested_current_gate():
     # Both authenticated edges retain their exact inputs, not regenerated hashes.
     for relative,row in inputs.CAPACITY_SUCCESSOR_RECORDS.items():
         current_source=boundary.physical_bytes(boundary.ROOT/relative)
+        current_source=boundary.current_capacity_input(boundary.resolve_context(
+            request('test_ci_fixture_stability_scope','test_complete_profile_refresh_preserves_all_prior_rows_and_measurements')),
+            relative,current_source)
         twelve=inputs.capacity_successor_source(relative,current_source)
         assert boundary.sha(current_source)==row['after_sha256']
         assert boundary.sha(twelve)==row['before_sha256']
@@ -1271,7 +1274,7 @@ def test_warmed_object_stream_rejects_missing_or_corrupt_required_objects(tmp_pa
     assert module.git_bytes is native
 
 
-@pytest.mark.parametrize('damage',[None,'workflow','binding'])
+@pytest.mark.parametrize('damage',[None,'workflow','binding','binding_whitespace'])
 def test_current_ci_budget_uses_exact_authenticated_historical_edge(monkeypatch,damage):
     import base64,zlib
     from tests import ci_fixture_stability_inputs as inputs
@@ -1289,7 +1292,7 @@ def test_current_ci_budget_uses_exact_authenticated_historical_edge(monkeypatch,
             actual=boundary.physical_bytes
             def altered(p):
                 value=actual(p)
-                return value+b'UNREVIEWED' if Path(p)==(path if damage=='workflow' else boundary.ROOT/boundary.BINDING) else value
+                return value+(b'\n' if damage=='binding_whitespace' else b'UNREVIEWED') if Path(p)==(path if damage=='workflow' else boundary.ROOT/boundary.BINDING) else value
             monkeypatch.setattr(boundary,'physical_bytes',altered)
             with pytest.raises((ValueError,__import__('json').JSONDecodeError)):path.read_bytes()
     assert Path.open is opened and Path.read_bytes is read
