@@ -153,10 +153,11 @@ def _project_quote(rows,meta,q,terms, *, owner_reviewed=False):
                         and all(q[key]==v[key] for key in set(q)&set(v)), 'NCAAF_CUSTODY_QUOTE_CONFLICT')
                     declarations={}
                     for key in ('operator','listing_id','product'):
-                        require(q.get(key) and terms.get(key)==q[key], 'NCAAF_CUSTODY_QUOTE_CONFLICT')
+                        conditional = q.get('period_source')=='ncaaf-private-mathematical-assumptions-v1'
+                        require(terms.get(key)==q.get(key) and (q.get(key) or conditional and key in {'product','listing_id'} and q.get(key) is None), 'NCAAF_CUSTODY_QUOTE_CONFLICT')
                         present=[(path,value[key]) for path,value in (('book',b),('market',m),('outcome',o)) if key in value]
                         require(all(value==q[key] for _,value in present), 'NCAAF_CUSTODY_QUOTE_CONFLICT')
-                        declarations[key]=dict(value=q[key],source_paths=[path+'.'+key for path,_ in present] or [('owner_reviewed_terms_review.' if owner_reviewed else 'independently_accepted_terms_review.')+key])
+                        declarations[key]=dict(value=q[key],source_paths=[path+'.'+key for path,_ in present] or [('private_mathematical_assumption_unverified.' if conditional else 'owner_reviewed_terms_review.' if owner_reviewed else 'independently_accepted_terms_review.')+key])
                     matches.append(dict(event_index=i,book_index=j,market_index=k,outcome_index=l,
                         provider_clock_path=('market.last_update' if m.get('last_update') else 'book.last_update'),
                         quote_sha256=model.digest(q),terms_sha256=model.digest(terms),listing_declarations=declarations))

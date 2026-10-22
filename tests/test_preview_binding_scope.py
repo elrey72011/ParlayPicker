@@ -27,6 +27,8 @@ def prepared(tmp_path_factory):
     old_root=guard.ROOT
     with blocked_network():
         git(repo,'init','-q');git(repo,'config','user.name','Offline Test');git(repo,'config','user.email','offline@example.invalid');git(repo,'config','core.autocrlf','false')
+        git(repo,'config','gc.auto','0')
+        git(repo,'config','maintenance.auto','false')
         write(repo,guard.GUARD_PATH,original);write(repo,'core/protected.py',b'FROZEN = True\n')
         write(repo,'README.md',b'Synthetic exact successor fixture\n')
         write(repo,'.github/workflows/paid-launch.yml',b'name: frozen synthetic workflow\n')
@@ -59,6 +61,7 @@ def prepared(tmp_path_factory):
         policy=scope.make_policy(guard,binding,implementation)
         write(repo,guard.PREVIEW_BINDING_POLICY_PATH,json.dumps(policy,indent=2).encode()+b'\n')
         candidate=commit(repo,'policy-only seal');guard.ROOT=old_root
+        git(repo,'gc','--prune=never')
     return repo,binding,implementation,candidate,policy
 
 

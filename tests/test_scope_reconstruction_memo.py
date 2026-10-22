@@ -31,6 +31,31 @@ def test_exact_bytes_context_and_source_change(tmp_path):
     with pytest.raises(ValueError,match='SYNTHETIC_SOURCE_CHANGED'):method(body)
 
 
+
+
+
+
+@pytest.mark.parametrize('failure',[None,ValueError,KeyboardInterrupt])
+def test_fixture_memos_are_released_on_success_failure_and_interruption(tmp_path,failure):
+    from types import SimpleNamespace
+    from tests import historical_scope_input_boundary as boundary
+    g,body=synthetic(tmp_path/'owned.py');h.install(g)
+    memo=g._nfl_odds_timing_base_source.reconstruction_memo
+    request=SimpleNamespace(module=SimpleNamespace(__file__=str(boundary.ROOT/'tests/test_ncaaf_coverage_scope_policy.py')),
+        node=SimpleNamespace(originalname='test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'))
+    plan=boundary.resolve_context(request)
+    def run():
+        with boundary.InputOwner(plan):
+            boundary.own_reconstruction_memos(g)
+            assert g._nfl_odds_timing_base_source(body)==b'predecessor source\n'
+            assert memo.entries and memo.retained_bytes
+            if failure is not None:raise failure('SYNTHETIC_INTERRUPTION')
+    if failure is None:run()
+    else:
+        with pytest.raises(failure,match='SYNTHETIC_INTERRUPTION'):run()
+    assert not memo.entries and memo.retained_bytes==0
+
+
 def test_changed_delegate_does_not_borrow_cached_result(tmp_path):
     g,body=synthetic(tmp_path/'one.py');h.install(g)
     method=g._nfl_odds_timing_base_source;method(body)
