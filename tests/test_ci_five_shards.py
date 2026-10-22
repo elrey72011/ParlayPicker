@@ -72,7 +72,7 @@ def test_five_shard_gate_uploads_and_reconciles_all_five(tmp_path):
     shards=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']
     assert shards['strategy']['matrix']['shard']==[str(i) for i in range(1,14)]
     assert shards['strategy']['fail-fast']=='false'
-    assert shards['timeout-minutes']=='40'
+    assert shards['timeout-minutes']=='45'
     assert '--shards 13' in shards['steps'][-2]['run']
     upload=shards['steps'][-1]
     assert upload['if']=='${{ !cancelled() }}'

@@ -1323,7 +1323,7 @@ def test_current_ci_budget_uses_exact_authenticated_historical_edge(monkeypatch,
         boundary.install_capacity_input_view(plan,owner.patch)
         assert path.read_bytes()==expected
         assert boundary.physical_bytes(path)==current
-        assert b'timeout-minutes: 40' in current and current!=expected
+        assert b'timeout-minutes: 45' in current and current!=expected
         if damage is not None:
             actual=boundary.physical_bytes
             def altered(p):
