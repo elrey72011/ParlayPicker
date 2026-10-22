@@ -51,7 +51,7 @@
       "before_blob": "b23341dd550c7d08d3a98fad67ef4b26d5a7250d"
     },
     "docs/paid-launch/ci-fixture-stability-bindings-v1.json": {
-      "after_blob": "361dac68c388c15a1a1fee0b66f4c13f3e8d2e88",
+      "after_blob": "73ad58be728065d5809bf12578e448c470bb3e06",
       "before_blob": null
     },
     "docs/paid-launch/ci-fixture-stability-v1.md": {
@@ -67,11 +67,11 @@
       "before_blob": null
     },
     "scripts/check_launch_change_scope.py": {
-      "after_blob": "8c2eb5a9754fe190d1bc1f4b0080bfdf01c9075a",
+      "after_blob": "4eefc751c16e3aefe23c86f78e8499acb4209fc2",
       "before_blob": "27c6f2ee96f7742a514774270fd4b353f5274d7d"
     },
     "scripts/ci_fixture_stability_scope.py": {
-      "after_blob": "5214a0c22755aeed8c56d1c2af85574171773598",
+      "after_blob": "3a3e4c6917e3afb220f747762b17e0bda5156f06",
       "before_blob": null
     },
     "scripts/ci_test_file_costs_v1.json": {
@@ -95,7 +95,7 @@
       "before_blob": "a19e4070b50fd1e6f300bd4509003464ee6b7ab3"
     },
     "tests/ci_fixture_stability_inputs.py": {
-      "after_blob": "22cc4825a7cc1f17bd7911f3bc9ae1cd6ec75594",
+      "after_blob": "9dc774ee0b973448ac1e87acf237c5f5bf3d2aa1",
       "before_blob": null
     },
     "tests/historical_scope_input_boundary.py": {
@@ -123,7 +123,7 @@
       "before_blob": null
     },
     "tests/test_ci_five_shards.py": {
-      "after_blob": "e0e9d8d5bb86560f203f48e506542465bbc931f3",
+      "after_blob": "a30ad77cf96e0817e2d1c927db4d4605eac38259",
       "before_blob": "35ae03fbc3139c38fb4decd6280c0a0d14c5e3e4"
     },
     "tests/test_ci_fixture_stability_scope.py": {
@@ -131,7 +131,7 @@
       "before_blob": null
     },
     "tests/test_ci_six_shards.py": {
-      "after_blob": "ff54adbdc8f9369fe889d92e076d5834020f8e2d",
+      "after_blob": "ec7bb44b3ac9c8b5302502d9d694a4be41176c5d",
       "before_blob": "c1e848957484ee80ddec81ac3bcc35b2ebf23bdb"
     },
     "tests/test_ci_test_shards.py": {
@@ -163,7 +163,7 @@
       "before_blob": "8feb0d09dfc9b65d404baa35f5b12130684f8495"
     },
     "tests/test_historical_scope_input_boundary.py": {
-      "after_blob": "7e733d7d655f42180418eb5f6e442042465f27ce",
+      "after_blob": "d0563607b9d468dddab8a4f20e308b63e36fd3ae",
       "before_blob": null
     },
     "tests/test_home_runline_scope_policy.py": {
@@ -211,7 +211,7 @@
       "before_blob": "4727872f579c211d456d2a07a17915ddc5bb21dd"
     },
     "tests/test_ncaaf_staged_ci_capacity.py": {
-      "after_blob": "f8789b360da9cf6601d847e3cd09b3fbd0cc1ee7",
+      "after_blob": "e65b718d3f13cdb2b7e72eae7b0a1a78dede0f89",
       "before_blob": "86c5782b4606abb8deb3437b8d2de90baaa36967"
     },
     "tests/test_nfl_admission_scope.py": {
@@ -275,8 +275,8 @@
       "before_blob": "52d61c2570b31f0df07dd77d539b7dc820d3b5f5"
     }
   },
-  "implementation_commit": "7366faf87b29c0d1e1d60e0ac418984d56274bfd",
-  "implementation_tree": "8364c1252ba522ddbe3111ca08951e5f7952a444",
+  "implementation_commit": "e1f432666c5ac7cb7671ad24dfbdac991eebce2d",
+  "implementation_tree": "be4181edb19a9c25581c87ef1a74dde437baa5e7",
   "measured_capacity_amendment_sha256": "dd6e6859971a5b7d3938d9a92a648bed04e94f14b1c2ffdc535e143b54cee9b8",
   "policy_version": "ci-fixture-stability-v1",
   "proposal_sha256": "261bb913276725605a4b142458b0be536002cac9af327ec17187da2dde1b359d",
