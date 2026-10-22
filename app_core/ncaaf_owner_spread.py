@@ -19,9 +19,21 @@ from app_core import ncaaf_staged_evidence as staged, ncaaf_future_target as ali
 
 VERSION = "ncaaf-owner-integer-inputs-v1"
 HALF_VERSION = "ncaaf-owner-named-half-point-inputs-v1"
-INPUT_VERSIONS = {VERSION, HALF_VERSION}
+CONDITIONAL_INTEGER = "ncaaf-private-conditional-integer-inputs-v1"
+CONDITIONAL_HALF = "ncaaf-private-conditional-half-point-inputs-v1"
+CONDITIONAL_VERSIONS = {CONDITIONAL_INTEGER, CONDITIONAL_HALF}
+INPUT_VERSIONS = {VERSION, HALF_VERSION} | CONDITIONAL_VERSIONS
 RESULT_VERSIONS = {"ncaaf-owner-integer-result-v1", "ncaaf-owner-named-half-point-result-v1"}
+RESULT_VERSIONS |= {"ncaaf-private-conditional-integer-result-v1", "ncaaf-private-conditional-half-point-result-v1"}
 RESULT_VERSION = "ncaaf-owner-integer-result-v1"
+
+
+def integer(packet):
+    return packet['payload']['version'] in {VERSION, CONDITIONAL_INTEGER}
+
+
+def conditional(packet):
+    return packet['payload']['version'] in CONDITIONAL_VERSIONS
 SUBJECT_VERSION = "ncaaf-owner-spread-subject-v4"
 REVIEW_VERSION = "ncaaf-owner-spread-verification-v4"
 OWNER = "Robert Velarde"
@@ -38,7 +50,7 @@ require = model.require
 def subject_hash(packet):
     p = packet["payload"]
     return model.digest(dict(version=SUBJECT_VERSION,
-        evidence_label=p["evidence_label"], custody_packet=p["custody_packet"],
+        evidence_label=p["evidence_label"], **({"private_contract": p["version"]} if conditional(packet) else {}), custody_packet=p["custody_packet"],
         dependency_review=p["dependency_review"], alias_review=p["alias_review"], staged_binding=p["staged_binding"]))
 
 
@@ -74,6 +86,7 @@ class ReviewPolicy:
     def __init__(self, packet):
         p = packet["payload"]
         self.packet = packet
+        self.conditional_research = conditional(packet)
         self.c = p["custody_packet"]["payload"]
         self.o = self.c["native_packet"]["payload"]["observation"]["payload"]
         self.dependency_review = p["dependency_review"]
@@ -93,7 +106,7 @@ class ReviewPolicy:
 
     def target_contract(self,kind,line):
         from app_core.ncaaf_spread_mass import target_contract
-        return target_contract(kind,line,integer=self.packet['payload']['version']==VERSION)
+        return target_contract(kind,line,integer=integer(self.packet))
 
     def mapping(self, value):
         return self._owner(value) and value == self.o["mapping_review"]
@@ -162,7 +175,9 @@ def view(packet):
 
 
 def result_version(packet):
-    return RESULT_VERSION if packet["payload"]["version"]==VERSION else "ncaaf-owner-named-half-point-result-v1"
+    if conditional(packet):
+        return "ncaaf-private-conditional-integer-result-v1" if integer(packet) else "ncaaf-private-conditional-half-point-result-v1"
+    return RESULT_VERSION if integer(packet) else "ncaaf-owner-named-half-point-result-v1"
 
 
 def accepted_dependencies(packet, approval, at):

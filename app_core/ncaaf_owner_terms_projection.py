@@ -42,7 +42,7 @@ def transport_facts(game,book,market,outcome):
     expected=(q['provider_event_id'],'americanfootball_ncaaf',q['event_home_team'],q['event_away_team'],q['event_start_utc'],q['book'],'spreads',q['event_home_team'] if q['market_type']=='spread_home' else q['event_away_team'],q['point'],q['price'],q['recorded_at'])
     if identity!=expected:return None
     require(market.get('period') in (None,'',t['period']) and market.get('settlement_rules') in (None,'',t['settlement']), 'NCAAF_CUSTODY_QUOTE_CONFLICT')
-    if q['period_source']=='ncaaf-owner-applicable-spread-terms-v3':
+    if q['period_source'] in ('ncaaf-owner-applicable-spread-terms-v3','ncaaf-private-mathematical-assumptions-v1'):
         return dict(period=t['period'],period_source=q['period_source'],rules=t['settlement'],rules_source=q['rules_source'])
     return dict(period=t['period'],period_source=VERSION,rules=t['settlement'],rules_source=VERSION)
 

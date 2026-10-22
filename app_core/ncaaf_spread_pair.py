@@ -28,6 +28,12 @@ def subject(packet):
     return model.digest({k:v for k,v in packet['payload'].items() if k!='owner_review'})
 
 
+CONDITIONAL_INTEGER_VERSION='ncaaf-private-conditional-integer-pair-inputs-v1'
+CONDITIONAL_HALF_VERSION='ncaaf-private-conditional-half-point-pair-inputs-v1'
+VERSIONS |= {CONDITIONAL_INTEGER_VERSION,CONDITIONAL_HALF_VERSION}
+RESULT_VERSIONS.update({CONDITIONAL_INTEGER_VERSION:'ncaaf-private-conditional-integer-pair-result-v1',
+                       CONDITIONAL_HALF_VERSION:'ncaaf-private-conditional-half-point-pair-result-v1'})
+
 def _pack(value,pool,key=None):
     if key in CARRIERS and isinstance(value,str):
         base64.b64decode(value,validate=True)
@@ -60,7 +66,7 @@ def prepare(home,away,*,prepared_at):
         require(isinstance(packet,dict) and set(packet)=={'payload','sha256'} and model.digest(packet['payload'])==packet['sha256'], 'NCAAF_PAIR_INPUT')
         v=deepcopy(packet['payload']);v['owner_review']=None
         subjects[side]=owner.subject_hash(dict(payload=v));children[side]=_pack(v,pool)
-    version=INTEGER_VERSION if home['payload']['version']==owner.VERSION else HALF_VERSION
+    version=(CONDITIONAL_INTEGER_VERSION if owner.integer(home) else CONDITIONAL_HALF_VERSION) if owner.conditional(home) else INTEGER_VERSION if owner.integer(home) else HALF_VERSION
     require(home['payload']['version']==away['payload']['version'] and home['payload']['version'] in owner.INPUT_VERSIONS,'NCAAF_PAIR_INPUT')
     packet=stage.seal(dict(version=version,evidence_label=home['payload']['evidence_label'],prepared_at=prepared_at,
         shared_bytes=pool,children=children,child_subjects=subjects,owner_review=None))
@@ -119,7 +125,7 @@ def load(packet):
     prepared,reviewed=history.timestamp(p.get('prepared_at')),history.timestamp(r['reviewed_at'])
     require(prepared is not None and reviewed is not None and prepared<=reviewed,'NCAAF_PAIR_REVIEW_CLOCK')
     cs=children(packet)
-    expected=owner.VERSION if p['version']==INTEGER_VERSION else owner.HALF_VERSION
+    expected={INTEGER_VERSION:owner.VERSION,HALF_VERSION:owner.HALF_VERSION,CONDITIONAL_INTEGER_VERSION:owner.CONDITIONAL_INTEGER,CONDITIONAL_HALF_VERSION:owner.CONDITIONAL_HALF}[p['version']]
     for child in cs.values():
         require(child['payload']['version']==expected and child['payload']['owner_review']['reviewed_at']==r['reviewed_at'], 'NCAAF_PAIR_REVIEW')
         owner.load(child)

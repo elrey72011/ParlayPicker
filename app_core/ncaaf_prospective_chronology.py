@@ -152,15 +152,19 @@ def subject_hash(payload):
 
 def check_chronology(p, inference_at, *, review_policy=None):
     q, review = p["quote"], p.get("source_review")
+    conditional = review_policy is not None and getattr(review_policy, "conditional_research", False)
     require(isinstance(review, dict) and set(review) == {"version", "terms_review", "quote_observation", "offer_verification", "owner_verification" if review_policy is not None else "acceptance"}
             and review["version"] == (review_policy.OFFER_VERSION if review_policy is not None else REVIEW_VERSION), "NCAAF_CHRONOLOGY_SCHEMA")
     terms, observed, verified, accepted = [review[k] for k in
         ("terms_review", "quote_observation", "offer_verification", "owner_verification" if review_policy is not None else "acceptance")]
     require(isinstance(terms, dict) and set(terms) == set("review_id reviewer reviewed_at effective_from effective_until operator product listing_id period settlement rule_edition rules_document_sha256 rights_document_sha256 permitted_uses provider_clock_field provider_clock_meaning".split()),
             "NCAAF_CHRONOLOGY_SCHEMA")
-    require(all(isinstance(terms[k], str) and terms[k].strip() for k in terms if k != "permitted_uses"), "NCAAF_CHRONOLOGY_SCHEMA")
+    unavailable = {'product','listing_id','rule_edition','rules_document_sha256'} if conditional else set()
+    require(all(isinstance(terms[k], str) and terms[k].strip() for k in terms
+        if k != "permitted_uses" and k not in unavailable)
+        and all(terms[k] is None for k in unavailable), "NCAAF_CHRONOLOGY_SCHEMA")
     require(all(len(terms[k]) == 64 and all(c in "0123456789abcdef" for c in terms[k])
-        for k in ("rules_document_sha256", "rights_document_sha256")), "NCAAF_CHRONOLOGY_SCHEMA")
+        for k in (("rights_document_sha256",) if conditional else ("rules_document_sha256", "rights_document_sha256"))), "NCAAF_CHRONOLOGY_SCHEMA")
     require((review_policy.terms(terms) if review_policy is not None else
         ACCEPTED_TERMS_REVIEWS.get(terms["review_id"]) == model.digest(terms)), "NCAAF_ADVANCE_TERMS_NOT_ACCEPTED")
     require(all(terms[k] == q.get(k) for k in ("operator", "product", "listing_id", "period"))
