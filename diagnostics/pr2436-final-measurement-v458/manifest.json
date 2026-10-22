@@ -1,0 +1,230 @@
+{
+  "schema": "authorized-final-source-measurement-v458",
+  "prepared_at": "2026-10-22T01:00:01.984815+00:00",
+  "status": "PREPARED_HELD_FOR_REMAINING_LOCAL_PREREQUISITES",
+  "source_head": "0546d06e4a613e98a77163c030b65c44094b9ad3",
+  "source_tree": "cb86672d2a4d9bbaaecea8cfd1e11cff65c4d481",
+  "implementation": "e1f432666c5ac7cb7671ad24dfbdac991eebce2d",
+  "tested_merge": "1aa947e932c8e81f1615cc6c93ffaa4cf3b97d36",
+  "ordered_parents": [
+    "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+    "0546d06e4a613e98a77163c030b65c44094b9ad3"
+  ],
+  "main": "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+  "published_pr_head": "b6af3a7ab41eeb8f6e4387a30b83945704698536",
+  "source_checkout_depth": 1,
+  "required_immutable_git_objects": [
+    "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+    "3bfb62123bf550ee5727bd039b6f63c7cb1625d5",
+    "85d8a3d71327035e2466938855884f9faf936cd7",
+    "55ecf5aa115462e8b61d6761d120d3226abc07ff",
+    "c2c4155d3e78df752d26ff58958900ecbbb68bec",
+    "dee3a1ec069a9276732eddeb436b06d9099ed73e",
+    "55363384275c9d3143cfe833f94a74a18b04ff40",
+    "569155e59c0fbe9c06c9fcd0a9e8f26040d8a120",
+    "896cb7b10811ccfae220ea31510637da99a88ac6",
+    "e7919ba207f3a1c8d46ddb6ebaa5193771bd5595",
+    "8744b19d3a43414fbd9c181200aea5f5cadb430b",
+    "dc053413795f6033f6bf8b02e3d83fcb2017250e",
+    "54e7f748f337f9e5834a7222df6279967a68407d",
+    "2c3cdbc837282cb40f158bc90e29ebce157269c2",
+    "87575dd54416f8fb32935ff85a6da608517b7d2d",
+    "a1bba27bc1d274f20ea86d0e8e9914c87d54f16f",
+    "0b745f6702ea0ec7d23ec3e4869c466bf68d279f",
+    "c5276189f9e8507a01f05dc6d126b272ea65a54e",
+    "f72226fefbf8c9a857dbf805bb2e2cf8d64c48da",
+    "7366faf87b29c0d1e1d60e0ac418984d56274bfd",
+    "1837184b4b5998facf5e6bebe194d2ed320cf313",
+    "e1f432666c5ac7cb7671ad24dfbdac991eebce2d",
+    "0546d06e4a613e98a77163c030b65c44094b9ad3"
+  ],
+  "source_ref": "diag/pr2436-final-measurement-source-v458",
+  "tools_ref": "diag/pr2436-final-measurement-tools-v458",
+  "collected_count": 8756,
+  "assignment_sha256": "59565b4652530a8102f61b5714335003dbc7564b9ce9b3b474a755bccc6b58b3",
+  "profile_sha256": "42aaeee9f4179d3d9526da43d6987eb7eb8b3c554830e1b14389716463376c00",
+  "shards": 13,
+  "phase_counts": {
+    "completefiles": 328
+  },
+  "job_cap_seconds": 2700,
+  "active_phase_cap_seconds": 2400,
+  "retention_reserve_seconds": 90,
+  "retries": 0,
+  "budget_basis": {
+    "current_complete_file_timings": [
+      {
+        "path": "tests/test_apptest_owned_script.py",
+        "count": 5,
+        "phase_seconds": {
+          "setup": 0.08850039995741099,
+          "call": 2.0310388999059796,
+          "teardown": 0.0015777000226080418
+        },
+        "raw_seconds": 2.1211169998859987
+      },
+      {
+        "path": "tests/test_drive_history_harness.py",
+        "count": 3,
+        "phase_seconds": {
+          "setup": 0.04818769998382777,
+          "call": 6.154448399785906,
+          "teardown": 0.0012335999635979533
+        },
+        "raw_seconds": 6.203869699733332
+      },
+      {
+        "path": "tests/test_drive_history_loading.py",
+        "count": 33,
+        "phase_seconds": {
+          "setup": 0.6292470997432247,
+          "call": 8.380513999727555,
+          "teardown": 0.028081799508072436
+        },
+        "raw_seconds": 9.037842898978852
+      },
+      {
+        "path": "tests/test_historical_scope_input_boundary.py",
+        "count": 137,
+        "phase_seconds": {
+          "setup": 2.6100863000610843,
+          "call": 181.80497570033185,
+          "teardown": 0.04412520083133131
+        },
+        "raw_seconds": 184.45918720122427
+      },
+      {
+        "path": "tests/test_immutable_git_fixture.py",
+        "count": 5,
+        "phase_seconds": {
+          "setup": 0.08539200003724545,
+          "call": 4.879825199954212,
+          "teardown": 0.0017161999130621552
+        },
+        "raw_seconds": 4.966933399904519
+      },
+      {
+        "path": "tests/test_ncaaf_coverage_scope_policy.py",
+        "count": 48,
+        "phase_seconds": {
+          "setup": 175.36407509981655,
+          "call": 48.36607799981721,
+          "teardown": 0.043408099678345025
+        },
+        "raw_seconds": 223.7735611993121
+      },
+      {
+        "path": "tests/test_ncaaf_private_normal_refresh.py",
+        "count": 20,
+        "phase_seconds": {
+          "setup": 0.3880230003269389,
+          "call": 356.5537377001019,
+          "teardown": 0.006991000263951719
+        },
+        "raw_seconds": 356.9487517006928
+      },
+      {
+        "path": "tests/test_ncaaf_reviewed_target_pipeline.py",
+        "count": 39,
+        "phase_seconds": {
+          "setup": 0.6619342003250495,
+          "call": 420.57275940000545,
+          "teardown": 0.01274150051176548
+        },
+        "raw_seconds": 421.24743510084227
+      },
+      {
+        "path": "tests/test_shared_git_fixture_lifecycle.py",
+        "count": 4,
+        "phase_seconds": {
+          "setup": 26.943849099916406,
+          "call": 15.760750000015832,
+          "teardown": 0.0017371999565511942
+        },
+        "raw_seconds": 42.70633629988879
+      }
+    ],
+    "current_raw_test_phase_seconds": 1251.465034500463,
+    "measured_phases_with_15_percent": 1439.1847896755323,
+    "stage1_retained_profile_floor_seconds": 3.3557,
+    "stage1_additional_unmeasured_allowance_seconds": 34.5,
+    "seven_platform_controls_additional_unmeasured_allowance_seconds": 483,
+    "collection_with_variance_seconds": 42.842975035053676,
+    "framework_reporting_seconds": 15.0,
+    "setup_dependency_and_immutable_fetch_allowance_seconds": 300,
+    "artifact_hash_upload_retention_reserve_seconds": 90,
+    "estimated_active_phase_seconds": 2017.8834647105862,
+    "estimated_whole_job_seconds": 2407.883464710586,
+    "whole_job_unallocated_seconds": 292.11653528941406,
+    "not_runtime_guarantee": true,
+    "not_release_capacity_clearance": true,
+    "complete_final_combined_result_sha256": "c8e47ad28f565880153bb1148b0f4374870e43da1152ae29fca484c2ff8be802"
+  },
+  "prerequisites": [
+    "Final clean-shallow combined correctness",
+    "Original 304 and 263 ordered sequences",
+    "Cold launch and native current contexts",
+    "Legacy 14 positive APIs and 20 negative controls outside pytest",
+    "Exact PR/push entrypoints",
+    "Exact collection/quoting and deliberate observer-failure controls",
+    "Complete workload estimate within 45-minute job cap with retention reserve"
+  ],
+  "python": "3.12.15",
+  "pip": "26.2.2",
+  "os": "ubuntu-24.04",
+  "network": "Existing application conftest external blocking; synthetic credentials; Chrome background/resolver blocking unchanged. Dependency and immutable Git-object retrieval precede application execution.",
+  "instrumentation": "Passive nested fixture timing and fixed repository-only failure metadata through io.FileIO; no application patches.",
+  "release_coverage": false,
+  "data_sha256": {
+    "completefiles.json": "db4ec857911a759e4b0e05aa4c007b147c55f438542c7c7cdf094ae0a8a769de",
+    "constraints.txt": "e93984a44f959e4d15cf0326646791ffd74ad21d1def8a028939736fa3aac576",
+    "fixture_profile.py": "a900b80c5bbc43ea6b1f2261bde97a7393e3089ea39148efdda07634ca3f6c5b",
+    "full-inventory.json": "909af9a12d8c0ec68b39048ec37433b3dfdec79b6cf90a5d72275b916a8127ba",
+    "hash_artifacts.py": "25fe79f3ac1ccbeacb8cc7207065266a8fb525213f666e4cb4b5e1b387bb9e6e",
+    "observe.py": "782a87ab29222ae0a4afe58c1bc876149f2fda6922c41cad2fd3d6c05319a41e",
+    "run.py": "0495a27a519977df24f21ccc66087f2923d8acd1c3181132260e819a5ebd441a",
+    "setup_context.py": "a2b9468aea1692fe17614fd3b03de7399915d30ca13f9fa6fe1feb13d96f01b7",
+    "source-proof.json": "f8e3b18a59cff8f82d8da7d7c3d236cadc81e043fe0c85b941170cb549037c3b",
+    "workflow.yml": "a45bf2bd26e7dcd8ff90661d57ab9ce00f500fc52ea9f7c2f666e8d871643dcb"
+  },
+  "amendment": "Use consolidated engineering authority for up to two new 45-minute measurements. Prior f722 tools were never published or dispatched. This is the corrected shared-afterimage seal; first job contains complete affected files and controls, second planned job is the exact native assignment containing the complete pipeline file. No allowance reset, retry, application change or release coverage.",
+  "publication_prerequisites": "Current local650 and actual304/263 contexts, entrypoints, noGit legacy14/20, cold paid3 and actual-artifact synthetic Refresh must complete with no unexpected failures. Exact matched Windows failures remain failed pending these exact Ubuntu controls and required release checks. Verify tool/source/ref/dependency pins before dispatch.",
+  "second_job": {
+    "native_shard": 9,
+    "count": 756,
+    "reason": "Complete source-intake and exact native ordered consumers, subject to first-job findings and its own completed budget/preflight. Within the same second existing allowance."
+  },
+  "new_jobs_consumed": 0,
+  "total_new_jobs_authorized": 2,
+  "release_cycle": "ONE_UNSPENT_HELD",
+  "selection_change": {
+    "prior_unpublished_source": "1837184b4b5998facf5e6bebe194d2ed320cf313",
+    "current_source": "0546d06e4a613e98a77163c030b65c44094b9ad3",
+    "new_boundary_regressions": 6,
+    "all_prior_identities_preserved": true,
+    "exact_platform_controls_preserved": 7,
+    "earlier_tools_never_published": true,
+    "authority": "Latest consolidated owner engineering scope: two one-shot <=45-minute measurement jobs total and one existing conditional release cycle, no retries; no source/operational authority inferred from this tool manifest."
+  },
+  "complete_files": [
+    "tests/test_apptest_owned_script.py",
+    "tests/test_drive_history_harness.py",
+    "tests/test_drive_history_loading.py",
+    "tests/test_football_stage1.py",
+    "tests/test_historical_scope_input_boundary.py",
+    "tests/test_immutable_git_fixture.py",
+    "tests/test_ncaaf_coverage_scope_policy.py",
+    "tests/test_ncaaf_private_normal_refresh.py",
+    "tests/test_ncaaf_reviewed_target_pipeline.py",
+    "tests/test_shared_git_fixture_lifecycle.py"
+  ],
+  "exact_platform_controls": [
+    "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[spread_away]",
+    "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[spread_home]",
+    "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[total_over]",
+    "tests/test_ncaaf_normal_pipeline.py::test_native_half_point_normal_pipeline_capture_export_and_browser[total_under]",
+    "tests/test_football_v3_feasibility.py::FeasibilityTests::test_empty_authenticated_restore_is_fail_closed_and_read_only",
+    "tests/test_mlb_nhl_research_bindings.py::test_two_mlb_totals_reject_unverified_novig_values_capture_export_browser[False]",
+    "tests/test_mlb_nhl_research_bindings.py::test_two_mlb_totals_reject_unverified_novig_values_capture_export_browser[True]"
+  ]
+}
