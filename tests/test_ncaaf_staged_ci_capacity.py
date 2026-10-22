@@ -96,7 +96,7 @@ def test_current_nine_way_configuration_keeps_original_limits():
     workflow=yaml.load((ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)
     shard=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']
     assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,14)]
-    assert shard['timeout-minutes']=='30' and shard['strategy']['fail-fast']=='false'
+    assert shard['timeout-minutes']=='40' and shard['strategy']['fail-fast']=='false'
     assert '--shards 13' in shard['steps'][-2]['run'] and '--shards 13' in gate['steps'][-1]['run']
     assert shard['steps'][-1]['with']['if-no-files-found']=='error'
     assert gate['steps'][0]['run']=='test "$SHARD_RESULT" = success'

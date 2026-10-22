@@ -425,7 +425,7 @@
         "fixtures": {},
         "generation": "future",
         "guard_source_generation": "released-future-v1",
-        "sha256": "d535cfff4a2851cc82e3422383e73239f0d65a49fd8b1f42fc7a4ba4f4c6eed3"
+        "sha256": "520136f23da952edb7044810e82359afb51d329714e28084a26dba824488e8fb"
       },
       "tests/test_ci_timing_profile.py": {
         "fixtures": {},
@@ -646,7 +646,7 @@
             "generation": "stability",
             "input_sha256": "dfb06ab43ea6682ffc6da470c6f3316714ab1adf070329372012f1a72bb31c8a",
             "path": "tests/test_ncaaf_staged_ci_capacity.py",
-            "physical_sha256": "7c16b2a69f7f484c6dfbb82b89c8bfd8cca35a7e40c18c01bc92eddf24c22336"
+            "physical_sha256": "24af6a8b7bb4a7863774abafaaff4bf74e4f13dca760d8e56754a0611abef886"
           }
         }
       },
@@ -842,7 +842,7 @@
         "fixtures": {},
         "generation": "future",
         "guard_source_generation": "released-future-v1",
-        "sha256": "7c16b2a69f7f484c6dfbb82b89c8bfd8cca35a7e40c18c01bc92eddf24c22336"
+        "sha256": "24af6a8b7bb4a7863774abafaaff4bf74e4f13dca760d8e56754a0611abef886"
       },
       "tests/test_ncaaf_staged_scope.py": {
         "fixtures": {},
@@ -1687,7 +1687,7 @@
         "proposal_sha256": "3db30397da4071e5f4ece1db641607cd8e93fc50d02a6806fc4edf3715379b01",
         "scope": "New integration-test wait only; every pre-existing test and production/provider deadline preserved"
       },
-      "recorded_at": "2026-10-21T23:04:55.818759+00:00",
+      "recorded_at": "2026-10-22T00:05:24.972566+00:00",
       "release_cycle": "UNSPENT_HELD"
     },
     "direct_recorded_reader_family": [
@@ -1839,8 +1839,8 @@
     },
     "native_reconstruction_blob": "efa69e2f228f0c44f2a5084e3becdd181a6e831d",
     "original_AppTest_default_timeout": 3,
-    "parent": "f72226fefbf8c9a857dbf805bb2e2cf8d64c48da",
-    "parent_tree": "2a1fd67a95f032e8aeea9f4abaf661112e0bb60c",
+    "parent": "1837184b4b5998facf5e6bebe194d2ed320cf313",
+    "parent_tree": "ecd9e2303d402bf037bb391c63482709b2bb87ad",
     "predecessor_reuse": "Reuse the existing authenticated_predecessor immutable-byte mechanism in the two future fixture call sites; preserve physical guard/scope/binding authentication and output validation on every warm call. Legacy reader does not construct the unused future predecessor.",
     "production_changes": false,
     "read_api_ownership": "One owned reentrant adapter exposes the existing exact selected byte view through Path.read_bytes/open/read_text for declared repository inputs. No extra source authority, cache or expected hash; restore depth on rejection/interruption.",
@@ -2203,6 +2203,19 @@
           ]
         ]
       },
+      "tests/test_ci_five_shards.py": {
+        "after_sha256": "c3f503a6e8c18be74a5bad3b9e9c1317e311cce4c34e93b3c8acd568e8fc9888",
+        "before_git_blob": "e0e9d8d5bb86560f203f48e506542465bbc931f3",
+        "before_sha256": "dcb98767c1f1189b93976e29d79aa4b162284326a7d1699476ffe7a405e792c3",
+        "bytes": 4722,
+        "edits": [
+          [
+            "    workflow=yaml.load((runner.ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)\n    shards=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']\n    assert shards['strategy']['matrix']['shard']==[str(i) for i in range(1,14)]\n    assert shards['strategy']['fail-fast']=='false'\n    assert shards['timeout-minutes']=='30'\n    assert '--shards 13' in shards['steps'][-2]['run']\n    upload=shards['steps'][-1]\n    assert upload['if']=='${{ !cancelled() }}'\n    assert upload['with']['if-no-files-found']=='error'\n",
+            "    workflow=yaml.load((runner.ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)\n    shards=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']\n    assert shards['strategy']['matrix']['shard']==[str(i) for i in range(1,14)]\n    assert shards['strategy']['fail-fast']=='false'\n    assert shards['timeout-minutes']=='40'\n    assert '--shards 13' in shards['steps'][-2]['run']\n    upload=shards['steps'][-1]\n    assert upload['if']=='${{ !cancelled() }}'\n    assert upload['with']['if-no-files-found']=='error'\n",
+            1
+          ]
+        ]
+      },
       "tests/test_ci_fixture_stability_scope.py": {
         "after_sha256": "2968c509bce25c8390d423a66fcc6009748d982e7d807c12d6c0b365a786b744",
         "before_git_blob": "f4b120e700064b03709fa29b2849d3767e438f0b",
@@ -2222,6 +2235,19 @@
           [
             "    assert after['tests/test_football_stage1.py']==before['tests/test_football_stage1.py']\n    assert runner.load_profile(runner.DEFAULT_PROFILE)['sha256']==scope.sha(raw)\n    workflow=(ROOT/'.github/workflows/ci.yml').read_text()\n    assert 'shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]' in workflow\n    assert workflow.count('--shards 13')==2 and 'timeout-minutes: 30' in workflow\n",
             "    assert after['tests/test_football_stage1.py']==before['tests/test_football_stage1.py']\n    assert runner.load_profile(runner.DEFAULT_PROFILE)['sha256']==scope.sha(raw)\n    workflow=(ROOT/'.github/workflows/ci.yml').read_text()\n    assert 'shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]' in workflow\n    assert workflow.count('--shards 13')==2 and 'timeout-minutes: 40' in workflow\n",
+            1
+          ]
+        ]
+      },
+      "tests/test_ci_six_shards.py": {
+        "after_sha256": "520136f23da952edb7044810e82359afb51d329714e28084a26dba824488e8fb",
+        "before_git_blob": "ff54adbdc8f9369fe889d92e076d5834020f8e2d",
+        "before_sha256": "d535cfff4a2851cc82e3422383e73239f0d65a49fd8b1f42fc7a4ba4f4c6eed3",
+        "bytes": 5767,
+        "edits": [
+          [
+            "    import yaml\n    workflow=yaml.load((runner.ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)\n    shard=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']\n    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,14)]\n    assert shard['strategy']['fail-fast']=='false' and shard['timeout-minutes']=='30'\n    assert '--shards 13' in shard['steps'][-2]['run'] and '--shards 13' in gate['steps'][-1]['run']\n    assert shard['steps'][-1]['if']=='${{ !cancelled() }}'\n    assert shard['steps'][-1]['with']['if-no-files-found']=='error'\n    assert gate['needs']=='full-suite-tests' and gate['steps'][0]['run']=='test \"$SHARD_RESULT\" = success'\n",
+            "    import yaml\n    workflow=yaml.load((runner.ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)\n    shard=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']\n    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,14)]\n    assert shard['strategy']['fail-fast']=='false' and shard['timeout-minutes']=='40'\n    assert '--shards 13' in shard['steps'][-2]['run'] and '--shards 13' in gate['steps'][-1]['run']\n    assert shard['steps'][-1]['if']=='${{ !cancelled() }}'\n    assert shard['steps'][-1]['with']['if-no-files-found']=='error'\n    assert gate['needs']=='full-suite-tests' and gate['steps'][0]['run']=='test \"$SHARD_RESULT\" = success'\n",
             1
           ]
         ]
@@ -2317,6 +2343,19 @@
             1
           ]
         ]
+      },
+      "tests/test_ncaaf_staged_ci_capacity.py": {
+        "after_sha256": "24af6a8b7bb4a7863774abafaaff4bf74e4f13dca760d8e56754a0611abef886",
+        "before_git_blob": "f8789b360da9cf6601d847e3cd09b3fbd0cc1ee7",
+        "before_sha256": "7c16b2a69f7f484c6dfbb82b89c8bfd8cca35a7e40c18c01bc92eddf24c22336",
+        "bytes": 10006,
+        "edits": [
+          [
+            "def test_current_nine_way_configuration_keeps_original_limits():\n    workflow=yaml.load((ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)\n    shard=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']\n    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,14)]\n    assert shard['timeout-minutes']=='30' and shard['strategy']['fail-fast']=='false'\n    assert '--shards 13' in shard['steps'][-2]['run'] and '--shards 13' in gate['steps'][-1]['run']\n    assert shard['steps'][-1]['with']['if-no-files-found']=='error'\n    assert gate['steps'][0]['run']=='test \"$SHARD_RESULT\" = success'\n\n",
+            "def test_current_nine_way_configuration_keeps_original_limits():\n    workflow=yaml.load((ROOT/'.github/workflows/ci.yml').read_text(),Loader=yaml.BaseLoader)\n    shard=workflow['jobs']['full-suite-tests'];gate=workflow['jobs']['full-suite']\n    assert shard['strategy']['matrix']['shard']==[str(i) for i in range(1,14)]\n    assert shard['timeout-minutes']=='40' and shard['strategy']['fail-fast']=='false'\n    assert '--shards 13' in shard['steps'][-2]['run'] and '--shards 13' in gate['steps'][-1]['run']\n    assert shard['steps'][-1]['with']['if-no-files-found']=='error'\n    assert gate['steps'][0]['run']=='test \"$SHARD_RESULT\" = success'\n\n",
+            1
+          ]
+        ]
       }
     },
     "source_parent": "55ecf5aa115462e8b61d6761d120d3226abc07ff",
@@ -2341,14 +2380,17 @@
       "tests/historical_scope_input_boundary.py": "aa558545e616392d1532fe17c771bbb21a6950728d8435dc2dac42e4495810f0",
       "tests/immutable_git_fixture.py": "1df555edb1c4fbf1d5809b6c614f57617998ee7261ac21c65e5a5004b99565c6",
       "tests/test_apptest_owned_script.py": "849dd7e99980905011330e4ce73985ad93a4d27960a00d23fa930e06aad9db27",
+      "tests/test_ci_five_shards.py": "c3f503a6e8c18be74a5bad3b9e9c1317e311cce4c34e93b3c8acd568e8fc9888",
       "tests/test_ci_fixture_stability_scope.py": "2968c509bce25c8390d423a66fcc6009748d982e7d807c12d6c0b365a786b744",
+      "tests/test_ci_six_shards.py": "520136f23da952edb7044810e82359afb51d329714e28084a26dba824488e8fb",
       "tests/test_ci_test_shards.py": "9be92599019afbb71f722727802042627757ff368be6ae2aad609330d8b38dea",
-      "tests/test_historical_scope_input_boundary.py": "1c46bc3a9a7e6680bcaeda4121e508857d5effdf1eab3555b8c664db40c31ef6",
+      "tests/test_historical_scope_input_boundary.py": "0c75e2e5ddde07255f8d264f62fb8c92f2a8686aeb9640d90d7f94f14e7a5082",
       "tests/test_immutable_git_fixture.py": "5124c6709d58fd3b3dd7c38c22c3fe65ffd26a9b66f3beb7ad8b662b40459e3e",
       "tests/test_locked_picks.py": "cdc5d494b8d59ed4c91fda6741625063a2de287eb3ecfe1429566ca9a97b4a1c",
       "tests/test_mlb_prospective.py": "354c72225d7218f566863449a377147615ff44c66467e46b4ecd2ca43d0c407c",
       "tests/test_ncaaf_coverage_scope_policy.py": "39ecd57a48c348e410e68d9ec8259d5773b31619421ee0ae2943b90ef87c8cd0",
       "tests/test_ncaaf_private_normal_refresh.py": "3a8ff3c0bd0b28db7b2b9bbc41f365f2feadfe568442c6e7adfb413dba7b0d29",
+      "tests/test_ncaaf_staged_ci_capacity.py": "24af6a8b7bb4a7863774abafaaff4bf74e4f13dca760d8e56754a0611abef886",
       "tests/test_scope_reconstruction_memo.py": "2e92943ddf9f4f11e36a2c503d53d09ccabec365a85650e43798899f848a1b6f"
     }
   },
@@ -2369,22 +2411,22 @@
     "docs/paid-launch/ci-fixture-stability-v1.md": "6f243c8b0200afda03b05d86e9b9662e942f7d54",
     "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "f0079e64558853105ea025a793060669546f7da9",
     "docs/private-ncaaf-refresh-v1.md": "5f07086cf236044869d39cbc3f7417a8f5429ee8",
-    "scripts/ci_fixture_stability_scope.py": "5214a0c22755aeed8c56d1c2af85574171773598",
+    "scripts/ci_fixture_stability_scope.py": "3a3e4c6917e3afb220f747762b17e0bda5156f06",
     "scripts/ci_test_file_costs_v1.json": "6fc40c822df1ee6d0c2cf648d12ccc0bf03d3daa",
     "scripts/ncaaf_private_refresh_scope.py": "4546b2839aab2538f3ce45baa7936485786dbb29",
     "streamlit_app.py": "bfe4fb3181aed7408dbc0fdb3b79d9165f1d8271",
     "tests/apptest_owned_script.py": "dee53f63e681d24db37aabffef3c71572a15fb94",
     "tests/ci_fixture_scope_inputs.py": "ac82f378e74c0b43cce643b0fcb3a0d79c153b97",
-    "tests/ci_fixture_stability_inputs.py": "22cc4825a7cc1f17bd7911f3bc9ae1cd6ec75594",
+    "tests/ci_fixture_stability_inputs.py": "9dc774ee0b973448ac1e87acf237c5f5bf3d2aa1",
     "tests/historical_scope_input_boundary.py": "9de8a9bd1bd71c3ff51c0742abdfda4b3442173a",
     "tests/immutable_git_fixture.py": "41b9504c81df95f9da486f8eab035d79af9b432f",
     "tests/ncaaf_future_scope_inputs.py": "62afedb4b096884be14e80ed86fa6ac13a249a53",
     "tests/ncaaf_staged_capacity_fixtures.py": "254a671c1d360879fedcbfbd316fed232d410fca",
     "tests/ncaaf_transport_scope_inputs.py": "ed5f7dda6d92de6a9c723a4382b6d6e3f4daf11a",
     "tests/test_apptest_owned_script.py": "fd180c307148dc69097b11b17220d4230bc938b6",
-    "tests/test_ci_five_shards.py": "e0e9d8d5bb86560f203f48e506542465bbc931f3",
+    "tests/test_ci_five_shards.py": "a30ad77cf96e0817e2d1c927db4d4605eac38259",
     "tests/test_ci_fixture_stability_scope.py": "f5e78f908d771c5e285639db7de1832843c12e59",
-    "tests/test_ci_six_shards.py": "ff54adbdc8f9369fe889d92e076d5834020f8e2d",
+    "tests/test_ci_six_shards.py": "ec7bb44b3ac9c8b5302502d9d694a4be41176c5d",
     "tests/test_ci_test_shards.py": "fd602888e7cdfa63965ca3289dfe59a862480631",
     "tests/test_drive_history_harness.py": "e2a487b44828048c96e21b30d92f7514db30ab47",
     "tests/test_drive_history_loading.py": "4100091f2a1a953f6a9ba94f915567ac241609d5",
@@ -2392,7 +2434,7 @@
     "tests/test_estimate_scope_policy.py": "fa4d5f6b2ebfb1c60bb9cc9a4ceec34f606bc9c4",
     "tests/test_football_catalog_scope.py": "4b4789a96bf10cb434298c929a1102dfc27b6558",
     "tests/test_football_research_scope.py": "b4f49f7784d71aea6986c65e88f528afc7203024",
-    "tests/test_historical_scope_input_boundary.py": "7e733d7d655f42180418eb5f6e442042465f27ce",
+    "tests/test_historical_scope_input_boundary.py": "d0563607b9d468dddab8a4f20e308b63e36fd3ae",
     "tests/test_home_runline_scope_policy.py": "f57fbcbc4d1c4caadfe2944d66868766131d5a24",
     "tests/test_immutable_git_fixture.py": "ed3e323b3b68caee6b523774a323289d2a6967a1",
     "tests/test_locked_picks.py": "8c40b2dfec364cb873f58b867f3216e642bb97ad",
@@ -2404,7 +2446,7 @@
     "tests/test_ncaaf_pilot_scope.py": "627a55ae76450519bed2e45e280df3e5a59fbc26",
     "tests/test_ncaaf_private_normal_refresh.py": "2c92fbd7de2c0445f48d4b68e31d36bcf137bd41",
     "tests/test_ncaaf_research_scope.py": "1b39f489667e192de89569b7e576ce36e94f949a",
-    "tests/test_ncaaf_staged_ci_capacity.py": "f8789b360da9cf6601d847e3cd09b3fbd0cc1ee7",
+    "tests/test_ncaaf_staged_ci_capacity.py": "e65b718d3f13cdb2b7e72eae7b0a1a78dede0f89",
     "tests/test_nfl_admission_scope.py": "5d5733beed4ab8125f60aacd97e6f2d55caad38a",
     "tests/test_nfl_calibration_scope.py": "7dc2fe64c0c03b73e88be8bc5e87c64df09ee38f",
     "tests/test_nfl_inputs_scope.py": "b6a6b73088787f22496d7fa577b24de8269a256c",

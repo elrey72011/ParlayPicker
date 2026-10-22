@@ -1346,6 +1346,40 @@ def test_final_binding_covers_every_transitive_physical_source():
     assert edges and len(edges)==len(set(edges))
 
 
+@pytest.mark.parametrize('relative,function',[
+    ('tests/test_ci_five_shards.py','test_five_shard_gate_uploads_and_reconciles_all_five'),
+    ('tests/test_ci_six_shards.py','test_six_way_current_gate_preserves_limits_and_all_artifacts'),
+    ('tests/test_ncaaf_staged_ci_capacity.py','test_current_nine_way_configuration_keeps_original_limits'),
+])
+@pytest.mark.parametrize('damage',[None,'source'])
+def test_current_budget_consumers_keep_live_gates_and_frozen_predecessors(tmp_path,monkeypatch,relative,function,damage):
+    import base64,importlib,zlib
+    from tests import ci_fixture_stability_inputs as inputs
+    module=importlib.import_module('tests.'+Path(relative).stem)
+    target=getattr(module,function)
+    native_plan=boundary.resolve_context(request(Path(relative).stem,function))
+    assert native_plan.role in {boundary.Role.LIVE,boundary.Role.NATIVE}
+    historical=boundary.resolve_context(request('test_ncaaf_coverage_scope_policy','test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception'))
+    path=boundary.ROOT/relative;current=boundary.physical_bytes(path)
+    expected=zlib.decompress(base64.b85decode(inputs.CAPACITY_SOURCE_RECORDS[relative]['compressed']))
+    opened,read=Path.open,Path.read_bytes
+    with boundary.InputOwner(historical) as outer:
+        boundary.install_capacity_input_view(historical,outer.patch)
+        assert path.read_bytes()==expected
+        with boundary.InputOwner(native_plan):
+            assert path.read_bytes()==current
+            if relative=='tests/test_ci_five_shards.py':target(tmp_path)
+            else:target()
+        assert path.read_bytes()==expected
+        assert boundary.physical_bytes(path)==current
+        if damage is not None:
+            actual=boundary.physical_bytes
+            with monkeypatch.context() as changed:
+                changed.setattr(boundary,'physical_bytes',lambda p:actual(p)+b'UNREVIEWED' if Path(p)==path else actual(p))
+                with pytest.raises(ValueError):path.read_bytes()
+    assert Path.open is opened and Path.read_bytes is read
+
+
 def test_bootstrap_reuses_verified_bytes_through_live_predecessor_checks(monkeypatch,released_bootstrap_owner):
     import types
     from tests.ncaaf_future_scope_inputs import _new_released_scope_inputs
