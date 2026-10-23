@@ -259,7 +259,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 # rank within each group and every actual approved ticket.
                 retained_authority = any(isinstance(final.get(name), dict) and final[name].get(flag) is True
                     for name, flag in (('wager_contract', 'production_eligible'), ('controlled_trial_contract', 'trial_eligible')))
-                if league == 'NCAAF' and not retained_authority and not (text(final, 'Bettable').lower() in {'true', '1', 'yes'} and (number(final, 'Play_Stake') or 0) > 0):
+                if league == 'NCAAF' and len(pool) > 1 and not retained_authority and not (text(final, 'Bettable').lower() in {'true', '1', 'yes'} and (number(final, 'Play_Stake') or 0) > 0):
                     pool.sort(key=lambda c: not _compatible_ncaaf_research(c))
                 if league == 'NFL' and not retained_authority and not (text(final, 'Bettable').lower() in {'true', '1', 'yes'} and (number(final, 'Play_Stake') or 0) > 0):
                     pool.sort(key=lambda c: not _complete_nfl_private(c))

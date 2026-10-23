@@ -17,7 +17,13 @@ def test_private_board_revalidates_ordering_and_rejects_later_mutation(synthetic
     monkeypatch.setattr(exporting,'CAPTURE',(NOW+timedelta(seconds=1)).isoformat())
     monkeypatch.setattr('app_core.candidate_chronology.now_utc',lambda:NOW)
     saved=exporting.exported(monkeypatch,tmp_path/'export',analysis)
-    original=boards._compatible_ncaaf_research;calls=[]
+    from app_core import ncaaf_pipeline_evidence as adapter
+    original=boards._compatible_ncaaf_research;calls=[];auth=[]
+    diagnose=adapter.diagnose
+    def authenticated(source,*args,**kwargs):
+        auth.append(source.get('candidate_id'))
+        return diagnose(source,*args,**kwargs)
+    monkeypatch.setattr(adapter,'diagnose',authenticated)
     def observed(source):
         calls.append(source.get('candidate_id'))
         return original(source)
@@ -28,15 +34,15 @@ def test_private_board_revalidates_ordering_and_rejects_later_mutation(synthetic
         return json.loads(frame.iloc[0].research_display)
     first=display(saved['captured'])
     assert first['probability']==pytest.approx(.636830651175619)
-    assert calls and len(calls)==len(set(calls))
+    assert calls==[] and auth  # A singleton needs no priority ordering; display still authenticates.
     changed=saved['captured'].copy(deep=True)
     for index in changed.index:
         metadata=json.loads(changed.at[index,'ml_estimate_metadata'])
         if mutation=='result_hash':metadata['ncaaf_inputs']['sha256']='0'*64
         else:metadata['ncaaf_inputs']['payload']['original_packet']['sha256']='0'*64
         changed.at[index,'ml_estimate_metadata']=json.dumps(metadata)
-    calls.clear()
+    calls.clear();auth.clear()
     assert display(changed)['probability'] is None
-    assert calls
+    assert calls==[] and auth
     assert display(saved['captured'])['probability']==first['probability']
     assert packet==before
