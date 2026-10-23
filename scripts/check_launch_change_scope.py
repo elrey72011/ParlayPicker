@@ -7,11 +7,40 @@ import sys
 import types
 
 ROOT=Path(__file__).resolve().parents[1]
+
+_FILTERED_HISTORY_PREDECESSOR_IMAGES={} # Pure byte transformations, owned by this current guard.
+_FILTERED_HISTORY_LEGACY_IMAGES={}
+import base64,zlib
+_FILTERED_HISTORY_NATIVE_B85DECODE=base64.b85decode
+_FILTERED_HISTORY_NATIVE_B85CODE=getattr(base64.b85decode,'__code__',None)
+_FILTERED_HISTORY_NATIVE_DECOMPRESS=zlib.decompressobj
+_FILTERED_HISTORY_BINDING_SHA256='303be520dcace97af86efc775079ef4d37ad428114eaa05df743cd536631655e'
+def _filtered_history_module():
+    # Authenticate before executing the selected successor helper.
+    import io
+    with io.FileIO(ROOT/'docs/research/ncaaf-filtered-history-bindings-v1.json','r') as stream: binding_raw=stream.read(8*1024*1024+1)
+    if hashlib.sha256(binding_raw).hexdigest()!=_FILTERED_HISTORY_BINDING_SHA256:raise ValueError('NCAAF_FILTERED_BINDING_CHANGED')
+    record=json.loads(binding_raw);relative='scripts/ncaaf_filtered_history_scope.py'
+    with io.FileIO(ROOT/relative,'r') as stream: source=stream.read(8*1024*1024+1).replace(b'\r\n',b'\n')
+    if source.count(_FILTERED_HISTORY_BINDING_SHA256.encode())!=1 or hashlib.sha256(source.replace(_FILTERED_HISTORY_BINDING_SHA256.encode(),b'0'*64)).hexdigest()!=record['components'][relative]:
+        raise ValueError('NCAAF_FILTERED_SOURCE_CHANGED')
+    module=types.ModuleType('exact_filtered_history_scope');module.__file__=str(ROOT/relative)
+    exec(compile(source,module.__file__,'exec'),module.__dict__);module.authenticate(ROOT)
+    module._PREDECESSOR_IMAGES=_FILTERED_HISTORY_PREDECESSOR_IMAGES
+    module._LEGACY_GUARD_IMAGES=_FILTERED_HISTORY_LEGACY_IMAGES
+    module._NATIVE_B85DECODE=_FILTERED_HISTORY_NATIVE_B85DECODE
+    module._NATIVE_B85CODE=_FILTERED_HISTORY_NATIVE_B85CODE
+    module._NATIVE_DECOMPRESS=_FILTERED_HISTORY_NATIVE_DECOMPRESS
+    return module
+
+if __name__=='__main__':raise SystemExit(_filtered_history_module().main())
 _CI_STABILITY_BINDING_SHA256='a42948babc5372d0af500c836917afc36315b3951bada66bf9b3137cd2559251'
 _CI_STABILITY_GUARD_SHA256='59ba5d368a58a9c755830049d056442569268a0c424333986af1edd6002b856d'
 
 def _ci_fixture_module():
     with open(ROOT/'scripts/check_launch_change_scope.py','rb') as stream: source=stream.read().replace(b'\r\n',b'\n')
+    selected=_filtered_history_module()
+    source=selected.predecessor_source(ROOT,'scripts/check_launch_change_scope.py',source)
     if source.count(_CI_STABILITY_GUARD_SHA256.encode())!=1 or hashlib.sha256(source.replace(_CI_STABILITY_GUARD_SHA256.encode(),b'0'*64)).hexdigest()!=_CI_STABILITY_GUARD_SHA256:
         raise ValueError('SUCCESSOR_GUARD_REVIEWED_BYTES_CHANGED')
     with open(ROOT/'docs/paid-launch/ci-fixture-stability-bindings-v1.json','rb') as stream: raw=stream.read().replace(b'\r\n',b'\n')
@@ -22,6 +51,7 @@ def _ci_fixture_module():
         raise ValueError('SUCCESSOR_SCOPE_MODULE_CHANGED')
     module=types.ModuleType('exact_ci_fixture_stability_scope');module.__file__=str(path)
     exec(compile(content,str(path),'exec'),module.__dict__)
+    module.previous_guard=selected.preserve_guard_reader(module.previous_guard,ROOT)
     return module,binding
 
 # Only immutable, authenticated predecessor source is supplied during its own
@@ -55,14 +85,22 @@ def _ncaaf_future_guard_matches(source):
     except (OSError,ValueError,KeyError,TypeError):return False
 
 
-def _ci_authenticated_source_input():
+def _ci_current_source_input():
     module,binding=_ci_fixture_module()
     with open(ROOT/'scripts/check_launch_change_scope.py','rb') as stream:
         source=stream.read().replace(b'\r\n',b'\n')
     return source,binding
 
 
-_ci_module.install_legacy_source_bridge(globals(),_ci_authenticated_source_input)
+def _ci_authenticated_source_input():
+    # Explicit legacy decoder contract: authenticate physical current bytes,
+    # then select exactly its reviewed 3e744bb input and matching old binding.
+    # Physical readers and current runtime authentication remain independent.
+    source,binding=_ci_current_source_input()
+    selected=_filtered_history_module()
+    return selected.predecessor_source(ROOT,'scripts/check_launch_change_scope.py',source),binding
+
+_ci_module.install_legacy_source_bridge(globals(),_ci_current_source_input)
 
 def main() -> int:
     parser=argparse.ArgumentParser()

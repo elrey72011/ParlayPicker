@@ -40,8 +40,13 @@ def source_hash(path,*,historical=False):
     record=HISTORICAL_COMPONENTS.get(relative)
     if record is not None and current!=record['after_sha256']:
         from scripts.ncaaf_private_refresh_scope import authenticate
-        successor=authenticate(root)['component_predecessors'].get(relative)
-        require(successor is not None and successor['before_sha256']==record['after_sha256']
+        binding=authenticate(root)
+        successor=binding['component_predecessors'].get(relative)
+        expected=record['after_sha256']
+        if binding.get('version')=='ncaaf-filtered-history-source-binding-v1':
+            from scripts.ncaaf_filtered_history_scope import predecessor_generation
+            expected=predecessor_generation(root,binding,relative,expected)
+        require(successor is not None and successor['before_sha256']==expected
             and current==successor['after_sha256'],'NCAAF_TARGET_RUNTIME_CONFLICT')
     if record is not None:
         if historical:return record['before_sha256']
@@ -58,12 +63,12 @@ def text(value):
     return isinstance(value,str) and 0<len(value.strip())<=2048 and value==value.strip()
 
 
-def check_runtime_receipt(r):
+def check_runtime_receipt(r,*,filtered=False,fresh=False):
     require(isinstance(r,dict) and set(r)=={'code_head','interpreter_sha256','operation_manifest_sha256','sources'}
         and isinstance(r['code_head'],str) and len(r['code_head'])==40 and all(c in '0123456789abcdef' for c in r['code_head'])
         and all(isinstance(r[k],str) and len(r[k])==64 and all(c in '0123456789abcdef' for c in r[k])
                 for k in ('interpreter_sha256','operation_manifest_sha256'))
-        and isinstance(r['sources'],dict) and set(r['sources'])==set(RUNTIME_SOURCES)
+        and isinstance(r['sources'],dict) and set(r['sources'])==set(runtime_sources(filtered,fresh=fresh))
         and all(isinstance(v,str) and len(v)==64 and all(c in '0123456789abcdef' for c in v) for v in r['sources'].values()),
         'NCAAF_TARGET_RUNTIME_RECEIPT')
 
@@ -76,10 +81,15 @@ RUNTIME_SOURCES=('app_core/ncaaf_reviewed_target.py','app_core/ncaaf_reviewed_st
     'scripts/ncaaf_reviewed_target_operator.py')
 
 
-def runtime_receipt(code_head,operation_manifest_sha256):
+def runtime_sources(filtered=False,*,fresh=False):
+    require(not fresh or filtered,'NCAAF_TARGET_RUNTIME_RECEIPT')
+    return RUNTIME_SOURCES + (('app_core/ncaaf_filtered_history.py','scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py') if filtered else ()) + (('app_core/ncaaf_fresh_history.py',) if fresh else ())
+
+
+def runtime_receipt(code_head,operation_manifest_sha256,*,filtered=False,fresh=False):
     root=Path(__file__).resolve().parents[1]
     return dict(code_head=code_head,interpreter_sha256=hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest(),
-        operation_manifest_sha256=operation_manifest_sha256,sources={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in RUNTIME_SOURCES})
+        operation_manifest_sha256=operation_manifest_sha256,sources={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in runtime_sources(filtered,fresh=fresh)})
 
 
 def canonical(t):
@@ -125,7 +135,7 @@ def inventory_time_matches(item,actual):
     return actual.astimezone(ZoneInfo(item['calendar_zone'])).date().isoformat()==item['calendar_date']
 
 
-def validate_target(value,t,at,*,label):
+def _validate_target(value,t,at,*,label):
     c=canonical(t);now=instant(at)
     require(isinstance(value,dict) and set(value)=={'version','evidence_label','sport','season','canonical_target','references','history_inventory','owner_review'}
             and value['version']==VERSION and value['evidence_label']==label
@@ -148,7 +158,11 @@ def validate_target(value,t,at,*,label):
             and all(g['source_sha256'] in hashes for g in inv['qualifying_games']),'NCAAF_TARGET_CUTOFF')
     reviewed=prior._review(value['owner_review'],value,at,dict(named_event=c,source_basis=refs,history_inventory=inv))
     require(all(v<=reviewed for v in clocks) and reviewed<=now<instant(c['start_utc']),'NCAAF_TARGET_REVIEW_CLOCK')
-    return deepcopy(value)
+    return value
+
+
+def validate_target(value,t,at,*,label):
+    return deepcopy(_validate_target(value,t,at,label=label))
 
 
 def requests(t,kind,manifest):
@@ -235,7 +249,7 @@ def same_target(left,right):
 def check_mapping(event,schedule,crosswalk,review,*,as_of,review_policy):
     packet=review_policy.packet['payload'];value=packet['alias_review']
     from app_core import ncaaf_reviewed_staged as staged
-    require(packet['staged_binding']['payload']['version']==staged.BINDING_VERSION,'NCAAF_TARGET_VERSION_CONFLICT')
+    require(packet['staged_binding']['payload']['version'] in {staged.BINDING_VERSION,'ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5'},'NCAAF_TARGET_VERSION_CONFLICT')
     t=dict(value['target_manifest']['canonical_target'],provider_event_id=event.get('provider_event_id'),
         provider_home_team=event.get('home_team'),provider_away_team=event.get('away_team'))
     game=validate_identity(value,at=as_of.isoformat(),target=t,label=packet['evidence_label'])

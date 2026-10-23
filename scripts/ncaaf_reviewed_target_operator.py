@@ -83,15 +83,17 @@ def preflight(manifest,manifest_hash,configuration_hash,*,at):
     require(isinstance(m['runtime'],dict),'NCAAF_TARGET_RUNTIME_RECEIPT')
     verify_checkout(m['runtime'].get('code_head'))
     stage,target=application()
-    target.check_runtime_receipt(m['runtime'])
+    filtered='app_core/ncaaf_filtered_history.py' in m['runtime'].get('sources',{})
+    fresh_runtime='app_core/ncaaf_fresh_history.py' in m['runtime'].get('sources',{})
+    target.check_runtime_receipt(m['runtime'],filtered=filtered,fresh=fresh_runtime)
     # The control receipt binds the manifest subject without a circular future
     # configuration-file hash. The exact file hash remains a reviewed argument.
     identity=stage.model.digest({k:v for k,v in m.items() if k!='runtime'})
-    require(m['runtime']==target.runtime_receipt(m['runtime']['code_head'],identity),'NCAAF_TARGET_RUNTIME_CONFLICT')
+    require(m['runtime']==target.runtime_receipt(m['runtime']['code_head'],identity,filtered=filtered,fresh=fresh_runtime),'NCAAF_TARGET_RUNTIME_CONFLICT')
     current=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,stderr=subprocess.DEVNULL,text=True).strip()
     require(current==m['runtime']['code_head'],'NCAAF_TARGET_RUNTIME_CONFLICT')
     plan,_=load(m['plan'],stage.MAX_BUNDLE);p=stage.validate_plan(plan,executable=True)
-    require(p['version'] in {target.HISTORY_PLAN,target.QUOTE_PLAN},'NCAAF_TARGET_OPERATOR_VERSION')
+    require(p['version'] in {target.HISTORY_PLAN,target.QUOTE_PLAN,'ncaaf-filtered-history-stage-plan-v4','ncaaf-filtered-final-quote-stage-plan-v4','ncaaf-fresh-filtered-history-stage-plan-v5','ncaaf-fresh-filtered-final-quote-stage-plan-v5'},'NCAAF_TARGET_OPERATOR_VERSION')
     config,cr=load(m['configuration'],128*1024)
     require(hashlib.sha256(cr).hexdigest()==configuration_hash,'NCAAF_TARGET_OPERATOR_CONFIGURATION')
     c=stage.configuration(plan,cr,configuration_hash,at=at)['payload']
@@ -99,7 +101,12 @@ def preflight(manifest,manifest_hash,configuration_hash,*,at):
     require(a==c['authorization'] and c['runtime']==m['runtime'] and c['custody']['root']==m['custody_root'],
         'NCAAF_TARGET_OPERATOR_CONFIGURATION')
     now=target.instant(at);w=p['execution_window']
-    require(target.instant(c['review']['reviewed_at'])<target.instant(m['setup_cutoff'])<target.instant(w['not_before'])
+    if filtered:
+        require(target.instant(c['review']['reviewed_at'])<target.instant(m['setup_cutoff'])
+            and target.instant(w['not_before'])<=now<=target.instant(m['latest_start'])
+            and target.instant(m['setup_cutoff'])+timedelta(minutes=5)<=target.instant(w['not_after'])
+            and target.instant(m['latest_start'])+timedelta(seconds=120)<=target.instant(w['not_after']), 'NCAAF_TARGET_OPERATOR_WINDOW')
+    else:require(target.instant(c['review']['reviewed_at'])<target.instant(m['setup_cutoff'])<target.instant(w['not_before'])
         <=now<=target.instant(m['latest_start'])
         and target.instant(m['latest_start'])+timedelta(seconds=60)<=target.instant(w['not_after']),
         'NCAAF_TARGET_OPERATOR_WINDOW')
