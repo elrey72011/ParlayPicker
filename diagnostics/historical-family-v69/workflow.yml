@@ -1,0 +1,62 @@
+name: Paired historical-family qualification v69
+on:
+  push:
+    branches: [diag/ncaaf-historical-family-tools-v69]
+permissions:
+  contents: read
+jobs:
+  one-bounded-measurement:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Record clock
+        run: |
+          echo "PP_DIAG_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+          mkdir -p diagnostic-evidence
+          git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+        with:
+          path: diagnostic-tools
+          persist-credentials: false
+      - name: Verify retained main and tested source
+        run: |
+          test "$(git ls-remote https://github.com/elrey72011/ParlayPicker.git refs/heads/main | cut -f1)" = 3e744bb3376c19688f38e1546c50443db7188ff8
+          test "$(git ls-remote https://github.com/elrey72011/ParlayPicker.git refs/heads/diag/ncaaf-fresh-history-capacity-source-v53 | cut -f1)" = cc54def8f207a6e969773be7e14866809ca48dfe
+      - uses: actions/checkout@v5
+        with:
+          ref: 3e744bb3376c19688f38e1546c50443db7188ff8
+          path: baseline
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: cc54def8f207a6e969773be7e14866809ca48dfe
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.15"
+      - name: Install retained-main dependency versions
+        run: |
+          python -m pip install "pip==26.2.2"
+          python -m pip install -r candidate/requirements.txt pytest -c diagnostic-tools/diagnostics/historical-family-v69/constraints.txt
+      - name: Authenticate both source contexts
+        run: |
+          python -I -B diagnostic-tools/diagnostics/historical-family-v69/setup_context.py --root baseline --subject baseline --out diagnostic-evidence
+          python -I -B diagnostic-tools/diagnostics/historical-family-v69/setup_context.py --root candidate --subject candidate --out diagnostic-evidence
+      - name: Measure exact paired family workload once
+        run: >-
+          python -I -B diagnostic-tools/diagnostics/historical-family-v69/run.py
+          --baseline baseline --candidate candidate --out diagnostic-evidence/execution --job-start "$PP_DIAG_JOB_START"
+      - name: Hash complete or partial evidence
+        if: ${{ always() }}
+        run: python diagnostic-tools/diagnostics/historical-family-v69/hash_artifacts.py diagnostic-evidence
+      - name: Retain evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-family-qualification-v69
+          path: diagnostic-evidence
+          retention-days: 14
+          if-no-files-found: error

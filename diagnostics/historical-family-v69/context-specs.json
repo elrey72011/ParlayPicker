@@ -1,0 +1,281 @@
+[
+  {
+    "path": "tests/test_ncaaf_compatibility_scope.py",
+    "node": "test_exact_seal_and_ci_merge_preserve_predecessor",
+    "shape": {
+      "generation": "transport-future",
+      "guard_source_generation": "released-future-v1"
+    },
+    "covered_consumers": [
+      "tests/test_canonical_download_scope.py",
+      "tests/test_ci_scheduling_scope.py",
+      "tests/test_ci_timing_scope.py",
+      "tests/test_drive_history_scope_policy.py",
+      "tests/test_export_scope.py",
+      "tests/test_football_catalog_scope.py",
+      "tests/test_football_document_ci_closure_scope.py",
+      "tests/test_football_document_ci_performance_scope.py",
+      "tests/test_football_document_fixture_report_scope.py",
+      "tests/test_football_document_html_scope.py",
+      "tests/test_football_document_io_scope.py",
+      "tests/test_football_document_metadata_scope.py",
+      "tests/test_football_document_predecessor_fixture_scope.py",
+      "tests/test_football_document_remote_fixture_scope.py",
+      "tests/test_football_document_six_capacity_scope.py",
+      "tests/test_football_document_socket_scope.py",
+      "tests/test_launch_scope_integration.py",
+      "tests/test_mlb_nhl_research_scope.py",
+      "tests/test_ncaaf_cloud_backup_scope.py",
+      "tests/test_ncaaf_compatibility_scope.py",
+      "tests/test_ncaaf_coverage_scope_policy.py",
+      "tests/test_ncaaf_custody_scope.py",
+      "tests/test_ncaaf_normal_scope.py",
+      "tests/test_ncaaf_owner_scope.py",
+      "tests/test_ncaaf_pilot_discovery_scope.py",
+      "tests/test_ncaaf_pilot_scope.py",
+      "tests/test_ncaaf_research_scope.py",
+      "tests/test_ncaaf_schedule_scope_policy.py",
+      "tests/test_ncaaf_socket_scope.py",
+      "tests/test_ncaaf_staged_capacity_scope.py",
+      "tests/test_ncaaf_staged_scope.py",
+      "tests/test_ncaaf_terms_scope.py",
+      "tests/test_nfl_admission_scope.py",
+      "tests/test_nfl_diagnostics_scope.py",
+      "tests/test_nfl_document_scope.py",
+      "tests/test_nfl_inputs_scope.py",
+      "tests/test_nfl_interpretation_scope.py",
+      "tests/test_nfl_listing_cost_scope.py",
+      "tests/test_nfl_listing_immutable_scope.py",
+      "tests/test_nfl_listing_metadata_scope.py",
+      "tests/test_nfl_native_scope.py",
+      "tests/test_nfl_observed_scope.py",
+      "tests/test_nfl_odds_listing_scope.py",
+      "tests/test_nfl_odds_scope.py",
+      "tests/test_nfl_odds_socket_scope.py",
+      "tests/test_nfl_owner_scope.py",
+      "tests/test_nfl_pdf_ci_scope.py",
+      "tests/test_nfl_pdf_fixture_scope.py",
+      "tests/test_nfl_pdf_margin_scope.py",
+      "tests/test_nfl_pdf_scope.py",
+      "tests/test_nfl_pdf_timing_scope.py",
+      "tests/test_nfl_provenance_scope.py",
+      "tests/test_nfl_reconcile_performance_scope.py",
+      "tests/test_nfl_scenario_scope.py",
+      "tests/test_nfl_scoring_scope.py",
+      "tests/test_nfl_ui_scope.py",
+      "tests/test_nhl_puck_line_scope.py",
+      "tests/test_performance_recap_scope.py",
+      "tests/test_pick_board_scope.py",
+      "tests/test_preview_binding_scope.py",
+      "tests/test_producer_provenance_scope.py",
+      "tests/test_provider_health_scope_policy.py",
+      "tests/test_readiness_dashboard_scope.py",
+      "tests/test_remote_canonical_scope.py",
+      "tests/test_remote_continuation_scope.py",
+      "tests/test_scope_fixture_isolation.py",
+      "tests/test_scope_git_batch.py",
+      "tests/test_scope_git_reads.py",
+      "tests/test_scope_guard_bootstrap.py",
+      "tests/test_scope_guard_scan.py",
+      "tests/test_scope_reconstruction_memo.py",
+      "tests/test_slate_audit_scope.py",
+      "tests/test_source_contract_scope.py",
+      "tests/test_source_intake_scope.py",
+      "tests/test_sweet_spot_export_scope.py",
+      "tests/test_theover_fade_scope.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_chronology_fixture_scope.py",
+    "node": "test_exact_successor_and_ordered_tested_merge",
+    "shape": {
+      "generation": "stability",
+      "guard_source_generation": "released-future-v1"
+    },
+    "covered_consumers": [
+      "tests/test_ci_scheduling_fixture_scope.py",
+      "tests/test_ncaaf_chronology_fixture_scope.py"
+    ]
+  },
+  {
+    "path": "tests/test_dfs_scope_policy.py",
+    "node": "test_exact_candidate_and_ci_merge_pass_with_no_new_test_exception",
+    "shape": {
+      "generation": "transport-future",
+      "guard_source_generation": "legacy-drive-after-v1"
+    },
+    "covered_consumers": [
+      "tests/test_dfs_scope_policy.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_staged_ci_capacity.py",
+    "node": "test_exact_43_material_upward_costs_and_retained_metadata",
+    "shape": {
+      "generation": "future",
+      "guard_source_generation": "released-future-v1"
+    },
+    "covered_consumers": [
+      "tests/test_football_document_ci_closure.py",
+      "tests/test_football_document_ci_performance.py",
+      "tests/test_football_document_predecessor_fixture.py",
+      "tests/test_ncaaf_socket_ci_costs.py",
+      "tests/test_ncaaf_staged_ci_capacity.py",
+      "tests/test_nfl_pdf_timing_costs.py",
+      "tests/test_nfl_seven_predecessor_inputs.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_chronology_capacity.py",
+    "node": "test_exact_successor_and_ordered_tested_merge",
+    "shape": {
+      "generation": "stability",
+      "guard_source_generation": "released-future-v1",
+      "transitive_modules": {
+        "tests.test_ci_test_shards": {
+          "generation": "stability",
+          "input_sha256": "e2ef99d3c6015197a87628ebac3a4d4e75c0e1b2613cf222c42f11696b06c3fa",
+          "path": "tests/test_ci_test_shards.py",
+          "physical_sha256": "2b1dd7e769e468da70c4d7c7b0128d777420d719bae8acf95443b96a19bbae1b"
+        },
+        "tests.test_ncaaf_reviewed_target_timing": {
+          "generation": "stability",
+          "input_sha256": "e06c9aee9adaca2ef4317df10c3f89d87231dab7e15d93483c6369c525f14329",
+          "path": "tests/test_ncaaf_reviewed_target_timing.py",
+          "physical_sha256": "e06c9aee9adaca2ef4317df10c3f89d87231dab7e15d93483c6369c525f14329"
+        },
+        "tests.test_ncaaf_staged_ci_capacity": {
+          "generation": "stability",
+          "input_sha256": "dfb06ab43ea6682ffc6da470c6f3316714ab1adf070329372012f1a72bb31c8a",
+          "path": "tests/test_ncaaf_staged_ci_capacity.py",
+          "physical_sha256": "81a105a5fff42146260104a584c66add94dd554d50df4f2b2d6872f29df83ee5"
+        }
+      }
+    },
+    "covered_consumers": [
+      "tests/test_ncaaf_chronology_capacity.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_chronology_fixture_copy.py",
+    "node": "test_actual_chronology_template_copy_survives_controlled_real_repack",
+    "shape": {
+      "generation": "future",
+      "guard_source_generation": "released-future-v1",
+      "requested_historical_fixtures": {
+        "ncaaf_released_scope_inputs": "ncaaf-future"
+      }
+    },
+    "covered_consumers": [
+      "tests/test_ncaaf_chronology_fixture_copy.py",
+      "tests/test_ncaaf_future_fixture_copy.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_chronology_scope.py",
+    "node": "test_exact_successor_and_ordered_ci_merge",
+    "shape": {
+      "generation": "transport-future",
+      "guard_source_generation": "released-future-v1",
+      "source_inputs": {
+        "app_core/ncaaf_pipeline_evidence.py": "7fdb9d01149f2e9ee19ee4092ed342ad11107d6cbca570450f964b6df2f9f49a"
+      }
+    },
+    "covered_consumers": [
+      "tests/test_ncaaf_chronology_scope.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_postmerge_scope.py",
+    "node": "test_actual_cli_entrypoint_uses_workflow_environment_and_preserves_contexts",
+    "shape": {
+      "generation": "transport",
+      "guard_source_generation": "released-future-v1"
+    },
+    "covered_consumers": [
+      "tests/test_ncaaf_future_spread_scope.py",
+      "tests/test_ncaaf_postmerge_scope.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_reviewed_target_scope.py",
+    "node": "test_exact_pr_push_and_ordered_tested_merge_contexts",
+    "shape": {
+      "call_generations": {
+        "test_current_sources_have_exact_preimages_and_unknown_bytes_stay_unknown": {
+          "function_line": 78,
+          "generation": "recorded-source-afterimages"
+        }
+      },
+      "generation": "transport-future",
+      "guard_source_generation": "released-future-v1"
+    },
+    "covered_consumers": [
+      "tests/test_ncaaf_reviewed_target_scope.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_reviewed_target_scope.py",
+    "node": "test_current_sources_have_exact_preimages_and_unknown_bytes_stay_unknown",
+    "shape": {
+      "call_generations": {
+        "test_current_sources_have_exact_preimages_and_unknown_bytes_stay_unknown": {
+          "function_line": 78,
+          "generation": "recorded-source-afterimages"
+        }
+      },
+      "generation": "transport-future",
+      "guard_source_generation": "released-future-v1",
+      "operation": "test_current_sources_have_exact_preimages_and_unknown_bytes_stay_unknown"
+    },
+    "covered_consumers": [
+      "tests/test_ncaaf_reviewed_target_scope.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_reviewed_target_timing.py",
+    "node": "test_only_three_measured_advisory_entries_change_and_metadata_stays_frozen",
+    "shape": {
+      "call_generations": {
+        "test_five_live_costs_preserve_historical_measurement_meanings": {
+          "function_line": 96,
+          "generation": "recorded-source-afterimages"
+        }
+      },
+      "generation": "future",
+      "guard_source_generation": "released-future-v1"
+    },
+    "covered_consumers": [
+      "tests/test_ncaaf_reviewed_target_timing.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_reviewed_target_timing.py",
+    "node": "test_five_live_costs_preserve_historical_measurement_meanings",
+    "shape": {
+      "call_generations": {
+        "test_five_live_costs_preserve_historical_measurement_meanings": {
+          "function_line": 96,
+          "generation": "recorded-source-afterimages"
+        }
+      },
+      "generation": "future",
+      "guard_source_generation": "released-future-v1",
+      "operation": "test_five_live_costs_preserve_historical_measurement_meanings"
+    },
+    "covered_consumers": [
+      "tests/test_ncaaf_reviewed_target_timing.py"
+    ]
+  },
+  {
+    "path": "tests/test_ncaaf_transport_scope.py",
+    "node": "test_exact_successor_and_ordered_tested_merge",
+    "shape": {
+      "generation": "fixture",
+      "guard_source_generation": "released-future-v1"
+    },
+    "covered_consumers": [
+      "tests/test_ncaaf_transport_scope.py"
+    ]
+  }
+]

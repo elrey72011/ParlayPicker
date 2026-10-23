@@ -1,0 +1,12 @@
+{
+  "paired_retained_completed_xml_seconds": 1153.464,
+  "candidate_extra_setup_allowance": 492.04217138399997,
+  "setup_allowance_note": "Adds a full observed current autouse maximum per candidate case and a full cold module-wrapper allowance for every constructor. Deliberately retains already included baseline setup; not a claim these costs all occur together.",
+  "context_probe_allowance": 250.0,
+  "context_allowance_measured_ubuntu": false,
+  "variability": 0.15,
+  "expected_active_seconds": 2179.8320970915997,
+  "environment_collection_reporting_upload_allowance": 232,
+  "total_forecast_seconds": 2411.8320970915997,
+  "context_estimate_note": "250 seconds is an explicit planning allowance informed by completed local context probes, not an equivalent Ubuntu measurement or runtime guarantee."
+}

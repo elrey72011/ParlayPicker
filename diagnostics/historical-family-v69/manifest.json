@@ -1,0 +1,94 @@
+{
+  "schema": "PREPARED_UNAUTHORIZED_PAIRED_FAMILY_MEASUREMENT_V69",
+  "prepared_at": "2026-10-23T18:27:09.731905+00:00",
+  "sources": {
+    "baseline": {
+      "source_head": "3e744bb3376c19688f38e1546c50443db7188ff8",
+      "tested_head": "3e744bb3376c19688f38e1546c50443db7188ff8",
+      "tree": "c3defb60b65607928d0527311747f15590eff854",
+      "parents": [
+        "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "aeed88fa49ce483240d727f22e5d18aa1e86bdc4"
+      ],
+      "count": 8756,
+      "assignment_sha256": "59565b4652530a8102f61b5714335003dbc7564b9ce9b3b474a755bccc6b58b3",
+      "profile_sha256": "42aaeee9f4179d3d9526da43d6987eb7eb8b3c554830e1b14389716463376c00",
+      "required_objects": [
+        "3e744bb3376c19688f38e1546c50443db7188ff8",
+        "8b79b0a0eead4f63a041a551283a4b6be2980d72",
+        "aeed88fa49ce483240d727f22e5d18aa1e86bdc4",
+        "c02fd900bb1bbb7594a46014292d54e7572d8a31"
+      ]
+    },
+    "candidate": {
+      "source_head": "dddf4dbea0e120df47b9fa3996ca35fe2add3d92",
+      "tested_head": "cc54def8f207a6e969773be7e14866809ca48dfe",
+      "tree": "ce4a5e543503745eb02f756225daff9ef16b9381",
+      "parents": [
+        "3e744bb3376c19688f38e1546c50443db7188ff8",
+        "dddf4dbea0e120df47b9fa3996ca35fe2add3d92"
+      ],
+      "count": 8882,
+      "assignment_sha256": "f74bb7110f53ef2f6ea3223d5de9a022a2718183482e1f2bd065d2e3dd9926e6",
+      "profile_sha256": "c148ac4b63a280df6289aa73ebd5ed0013ed1b32f5797d03383ca4c11aadcd41",
+      "required_objects": [
+        "3e744bb3376c19688f38e1546c50443db7188ff8",
+        "e89ae00cb6dd585c9a8c4b03724bb380ec918bfe",
+        "dddf4dbea0e120df47b9fa3996ca35fe2add3d92"
+      ]
+    }
+  },
+  "subject_order": [
+    "baseline-views",
+    "baseline-cases",
+    "candidate-views",
+    "candidate-cases"
+  ],
+  "distinct_test_identities": 39,
+  "test_executions": 78,
+  "expected_pytest_phase_outcomes": 234,
+  "context_probes": 26,
+  "warm_binding_rejections": 10,
+  "constructors": 28,
+  "shared_routing_shapes": 11,
+  "explicit_operation_contracts": 2,
+  "job_limit_seconds": 2700,
+  "active_cap_seconds": 2400,
+  "retention_reserve_seconds": 90,
+  "retries": 0,
+  "python": "3.12.15",
+  "pip": "26.2.2",
+  "os": "ubuntu-24.04",
+  "dependency_basis": "87 versions from cleared-main execution. Three explicit differences from the older diagnostic pins are recorded; neither requirements nor application runtime is modified.",
+  "application_source_changes": 0,
+  "provider_requests": 0,
+  "release_coverage": false,
+  "authorized": false,
+  "tools_ref": "diag/ncaaf-historical-family-tools-v69",
+  "publication": "Only a new exact absent-ref-leased tools branch after fresh approval. Existing tested source merge remains unchanged.",
+  "stop_conditions": [
+    "main/source/tool/dependency drift",
+    "first unexpected failure",
+    "incomplete phase or identity accounting",
+    "active/job budget exhaustion",
+    "view or owner restoration mismatch"
+  ],
+  "data_sha256": {
+    "baseline-inventory.json": "909af9a12d8c0ec68b39048ec37433b3dfdec79b6cf90a5d72275b916a8127ba",
+    "baseline-proof.json": "a036a925202c79ded07a914e88398156403dd40f4a7047cb1af7a0073f001391",
+    "baseline.json": "d045cd88469db37837c0a2b5bced1da835a6721b73e550e450e86245ed6e81e9",
+    "budget.json": "0e356b349c0ad28da7a779f1802effa9651726a25d1c7bf05fefd22736b1a47d",
+    "candidate-inventory.json": "9602651af8c5b29f0e4a2e371314149ffd930b628c33998e904e49721628c665",
+    "candidate-proof.json": "8fd3adb2ebaa40469ecc1cc659a5bfe7b1dc1790428987171cd4db15fe3f74ce",
+    "candidate.json": "d045cd88469db37837c0a2b5bced1da835a6721b73e550e450e86245ed6e81e9",
+    "constraints.txt": "1437919622d8bcc5daf6be52b72d46022a0cbb4a92162b35483f9eacd76f3d8f",
+    "context-specs.json": "0e7faee538fce0d6f9d63883b4a42c4c22e01ebe0c5508fb20c64dd2b6364579",
+    "fixture_profile.py": "a900b80c5bbc43ea6b1f2261bde97a7393e3089ea39148efdda07634ca3f6c5b",
+    "hash_artifacts.py": "25fe79f3ac1ccbeacb8cc7207065266a8fb525213f666e4cb4b5e1b387bb9e6e",
+    "observe.py": "754a2b7c29e9f0d7254a376463bb7cc6ed9af4a9d22f082e23afcf614f68ad51",
+    "run.py": "5fedf56d26b89b6377ade7314cebf89cb8b9d4c3db306b76c21f6eea0087cb9a",
+    "setup_context.py": "0d0e3db4fb5b5e1d4e0dd086ee13bfd81287eff3ccf74756a3e24fb97cde1781",
+    "views.py": "3ed6ad91a5a0d806e2c9ce63791450680fbe520f19fea223667ba4af40ffc396",
+    "workflow.yml": "ae8895fde718949567d5f868c18f92eba3ed6cba0dacf5bc61937663496c8eb3"
+  }
+}
