@@ -165,14 +165,20 @@ class HttpsTransport:
     Runner retains only a credential-free request. HTTP exceptions are never
     logged; caller exposes stable codes only. Stream reads honor remaining time.
     """
-    def __init__(self, credentials, *, diagnostics=None):
+    def __init__(self, credentials, *, diagnostics=None, filtered_history_policy=None):
         self.credentials=credentials
         self.diagnostics=diagnostics
+        self.filtered_history_policy=filtered_history_policy
 
     def __call__(self, request, limits, deadline, monotonic):
         require(request['host']==HOSTS.get(request['provider']),'NCAAF_PILOT_HOST')
-        custody._metadata(dict(provider=request['provider'],endpoint=request['endpoint'],request_scope=request['params'],status=200,
-            representation=custody.REPRESENTATION,content_type='application/json',complete=True,received_at='2000-01-01T00:00:00Z',receipt_clock_meaning=custody.RECEIPT_MEANING))
+        if self.filtered_history_policy is None:
+            custody._metadata(dict(provider=request['provider'],endpoint=request['endpoint'],request_scope=request['params'],status=200,
+                representation=custody.REPRESENTATION,content_type='application/json',complete=True,received_at='2000-01-01T00:00:00Z',receipt_clock_meaning=custody.RECEIPT_MEANING))
+        else:
+            from app_core.ncaaf_filtered_history import RequestPolicy
+            require(type(self.filtered_history_policy) is RequestPolicy,'NCAAF_PILOT_REQUEST_POLICY')
+            self.filtered_history_policy.check(request,limits)
         require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
         cancelled=threading.Event()
         if self.diagnostics is not None:self.diagnostics.enter('credential_lookup')
@@ -208,14 +214,16 @@ class HttpsTransport:
             _timed(lambda:conn.request('GET','/'+request['endpoint']+'?'+urlencode(params),headers=headers),min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,close)
             if self.diagnostics is not None:self.diagnostics.wrote_request()
             require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
-            conn.sock.settimeout(min(limits['read_seconds'],deadline-monotonic()))
+            header_deadline=(min(deadline,monotonic()+limits['read_seconds']) if self.filtered_history_policy is None
+                else self.filtered_history_policy.headers(monotonic(),deadline))
+            conn.sock.settimeout(max(.001,header_deadline-monotonic()))
             if self.diagnostics is not None:self.diagnostics.enter('response_headers')
-            response=_timed(conn.getresponse,min(deadline,monotonic()+limits['read_seconds']),monotonic,cancelled,close)
+            response=_timed(conn.getresponse,header_deadline,monotonic,cancelled,close)
             if self.diagnostics is not None:self.diagnostics.observed_status(response.status)
             require(monotonic()<deadline,'NCAAF_PILOT_DEADLINE')
-        except Exception as exc:
+        except BaseException as exc:
             close()
-            if isinstance(exc,ValueError) and str(exc)=='NCAAF_PILOT_DEADLINE':raise
+            if not isinstance(exc,Exception) or isinstance(exc,ValueError) and str(exc)=='NCAAF_PILOT_DEADLINE':raise
             raise ValueError('NCAAF_PILOT_TRANSPORT_FAILURE') from None
         class Stream:
             status=response.status

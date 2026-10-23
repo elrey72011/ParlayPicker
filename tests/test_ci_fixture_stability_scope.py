@@ -14,7 +14,7 @@ from scripts import ci_fixture_stability_scope as scope
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
+from tests.historical_scope_input_boundary import reviewed_current_input as _reviewed_input
 
 def raw_git(root, *args):
     return subprocess.check_output(['git', *args], cwd=root, stderr=subprocess.PIPE, timeout=30)
@@ -38,7 +38,7 @@ def sealed_template(tmp_path_factory):
     git(root, 'config', 'user.email', 'synthetic@example.invalid')
     git(root, 'config', 'core.autocrlf', 'false'); git(root, 'config', 'core.longpaths', 'true')
     git(root, 'config', 'gc.auto', '0'); git(root, 'config', 'maintenance.auto', 'false')
-    current_guard = (ROOT/scope.GUARD).read_bytes().replace(b'\r\n', b'\n')
+    current_guard = _reviewed_input(scope.GUARD).replace(b'\r\n', b'\n')
     write(scope.GUARD, scope.previous_guard(current_guard, binding))
     manifest='docs/paid-launch/launch-baseline-manifest.json'
     write(manifest, (ROOT/manifest).read_bytes().replace(b'\r\n', b'\n'))
@@ -53,7 +53,7 @@ def sealed_template(tmp_path_factory):
     b = deepcopy(binding); b['base']=base; b['base_tree']=tree; b['ordered_base_parents']=[]
     for path in b['paths']:
         if path in (scope.GUARD, scope.BINDING):continue
-        value=(ROOT/path).read_bytes().replace(b'\r\n', b'\n')
+        value=_reviewed_input(path).replace(b'\r\n', b'\n')
         if path=='tests/ci_fixture_stability_inputs.py':
             value=value.replace(inputs.BASE.encode(),base.encode())
         write(path,value)
@@ -150,11 +150,11 @@ def test_live_mutations_and_rehashed_claims_reject(case,attack):
 def test_exact_preimages_and_live_input_isolation(monkeypatch):
     from tests import ci_fixture_stability_inputs as inputs
     binding=json.loads((ROOT/scope.BINDING).read_bytes())
-    source=(ROOT/scope.GUARD).read_bytes().replace(b'\r\n',b'\n')
+    source=_reviewed_input(scope.GUARD).replace(b'\r\n',b'\n')
     old=scope.previous_guard(source,binding)
     assert len(source)<=scope.MAX_SOURCE and scope.sha(old)==binding['predecessor_guard']['sha256']
     for path,row in inputs.RECORDS.items():
-        value=(ROOT/path).read_bytes().replace(b'\r\n',b'\n')
+        value=_reviewed_input(path).replace(b'\r\n',b'\n')
         assert scope.sha(inputs.original_source(path,value))==row['before_sha256']
         assert inputs.original_source(path,value+b'UNREVIEWED')==value+b'UNREVIEWED'
     native=Path.open
@@ -202,7 +202,7 @@ def test_authenticated_bootstrap_restores_method_after_injected_compile_failure(
 def test_bootstrap_authenticates_helper_before_execution(tmp_path):
     root=tmp_path/'SYNTHETIC-bootstrap'
     for name in (scope.GUARD,scope.BINDING,'scripts/ci_fixture_stability_scope.py'):
-        path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes((ROOT/name).read_bytes())
+        path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(_reviewed_input(name))
     marker=root/'SYNTHETIC_UNREVIEWED_EXECUTION'
     path=root/'scripts/ci_fixture_stability_scope.py'
     path.write_text('from pathlib import Path\nPath('+repr(str(marker))+').write_text("UNREVIEWED")\n')
@@ -234,7 +234,7 @@ def test_historical_guard_view_keeps_verified_loader_across_alias_replacement(mo
 def test_successor_adapter_preserves_authenticated_intermediate_source_forms():
     from scripts import check_launch_change_scope as live,ncaaf_chronology_capacity_scope as historical
     binding=json.loads((ROOT/scope.BINDING).read_bytes())
-    prior=scope.previous_guard((ROOT/scope.GUARD).read_bytes().replace(b'\r\n',b'\n'),binding)
+    prior=scope.previous_guard(_reviewed_input(scope.GUARD).replace(b'\r\n',b'\n'),binding)
     inherited=json.loads((ROOT/historical.BINDING).read_bytes())
     intermediate=historical.predecessor_guard(prior,live,inherited)
     assert intermediate!=prior
@@ -537,10 +537,10 @@ def test_direct_open_projection_is_exact_and_restored_for_historical_reader():
     assert Path.open is before_open and Path.read_bytes is before_read
 
 
-def test_current_measured_capacity_profile_preserves_history():
+def test_current_measured_capacity_profile_preserves_history(tmp_path):
     from tests import ci_fixture_stability_inputs as inputs
     from scripts import run_ci_tests as runner
-    raw=(ROOT/inputs.PROFILE).read_bytes()
+    raw=_reviewed_input(inputs.PROFILE);runner=SimpleNamespace(DEFAULT_PROFILE=tmp_path/'authenticated-profile.json',load_profile=runner.load_profile);runner.DEFAULT_PROFILE.write_bytes(raw)
     previous=inputs.capacity_predecessor_source(inputs.PROFILE,raw)
     assert scope.sha(previous)=='6ea7580a2d3098c6906fd111c8d0f32bda7e3daec321e4717fa58aa03ba42cba'
     old=json.loads(previous);current=json.loads(raw)

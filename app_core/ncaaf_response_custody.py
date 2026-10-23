@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from types import MappingProxyType
 
 from app_core import ncaaf_compatible_pipeline as native
 from app_core import ncaaf_prospective_chronology as chronology
@@ -39,6 +40,32 @@ NCAAF_CUSTODY_COMPUTATION_CONFLICT NCAAF_CUSTODY_CREDENTIAL_FIELD
 NCAAF_CUSTODY_INPUT_STALE'''.split()) | native.REASONS
 require = model.require
 
+# Immutable normalization of fixed schema keys, never user values or verdicts.
+# Unknown keys are normalized afresh. Forbidden-key membership and every nested
+# value scan still execute on each call, including after a prior successful read.
+_KEY_PATTERN = re.compile('[^a-z]')
+_VALUE_PATTERN = re.compile(r'(?i)(?:bearer\s+\S+|api[_-]?key\s*[=:]|-----BEGIN [A-Z ]*PRIVATE KEY)')
+_SCHEMA_KEYS = MappingProxyType({k:_KEY_PATTERN.sub('',k.lower()) for k in '''
+version payload sha256 evidence_label target home_school away_school venue start_utc
+neutral_site provider_event_id provider_home_team provider_away_team requests id
+provider host endpoint params max_attempts limits execution_window not_before
+not_after authorization_expires_at advance_permissions collection_authorization_ref
+custody_id parent_history_sha256 prequote_sha256 unresolved filtered_history season
+conference home_team away_team scoring_histories budget header_ceiling_seconds
+history_active_seconds market_reserve_seconds calendar_date calendar_zone opponent
+source_sha256 target_evidence identity_review sport canonical_target references
+history_inventory owner_review url representation observed_at locator excerpt facts
+yardage_weeks cutoff_utc qualifying_games side week reviewer reviewed_at
+subject_sha256 qualifications conclusions conclusion evidence_sha256 finding year
+seasonType classification team body_b64 body_sha256 body_bytes metadata status
+complete received_at receipt_clock_meaning requested_at request_scope
+'''.split()})
+
+
+def _credential_key(key):
+    known=_SCHEMA_KEYS.get(key) if type(key) is str else None
+    return known if known is not None else _KEY_PATTERN.sub('',key.lower())
+
 def implementation():
     """Separate installed reader/projector identity; frozen collectors unchanged."""
     root = Path(__file__).resolve().parents[1]
@@ -59,14 +86,14 @@ def _constant(_):
 
 def _credentials(value):
     if isinstance(value,dict):
-        require(not any(re.sub('[^a-z]','',k.lower()) in {
+        require(not any(_credential_key(k) in {
             'apikey','authorization','accesstoken','refreshtoken','clientsecret','password',
             'privatekey','credentials','cookie','setcookie'} for k in value), 'NCAAF_CUSTODY_CREDENTIAL_FIELD')
         for v in value.values(): _credentials(v)
     elif isinstance(value,list):
         for v in value: _credentials(v)
     elif isinstance(value,str):
-        require(re.search(r'(?i)(?:bearer\s+\S+|api[_-]?key\s*[=:]|-----BEGIN [A-Z ]*PRIVATE KEY)',value) is None,
+        require(_VALUE_PATTERN.search(value) is None,
             'NCAAF_CUSTODY_CREDENTIAL_FIELD')
 
 def _parse(raw):
@@ -226,11 +253,14 @@ def verify(packet,approval,at, *, review_policy=None):
     _,index=native.objects(n,history.timestamp(at), review_policy=review_policy)
     bodies=[];hashes=set();consumed=set();quote_count=0;total=0;clocks=[]
     terms=o['source_review']['terms_review'];permission=dependency_review['permissions_review']
+    owned_projection=None
     for item in p['response_objects']:
         require(isinstance(item,dict) and set(item)=={'payload','sha256'} and isinstance(item['payload'],dict), 'NCAAF_CUSTODY_SCHEMA')
         v=item['payload']
+        filtered=v.get('version')=='ncaaf-filtered-original-response-v2'
         require(set(v)==set('version metadata body_b64 body_bytes body_sha256 projection_version projection_implementation projection'.split())
-            and v['version']==OBJECT_VERSION and v['projection_version']==PROJECTION_VERSION, 'NCAAF_CUSTODY_SCHEMA')
+            and ((v['version']==OBJECT_VERSION and v['projection_version']==PROJECTION_VERSION)
+                 or (filtered and review_policy is not None and v['projection_version']=='ncaaf-exact-selected-game-projection-v2')), 'NCAAF_CUSTODY_SCHEMA')
         require(model.digest(v)==item['sha256'], 'NCAAF_CUSTODY_INTEGRITY')
         require(v['projection_implementation']==implementation(), 'NCAAF_CUSTODY_RUNTIME_CHANGED')
         require(isinstance(v['body_b64'],str) and 0 < len(v['body_b64']) <= ((MAX_BODY_BYTES+2)//3)*4, 'NCAAF_CUSTODY_LIMIT')
@@ -240,19 +270,37 @@ def verify(packet,approval,at, *, review_policy=None):
         total+=len(raw)
         require(total <= MAX_TOTAL_BODY_BYTES and v['body_sha256'] not in hashes, 'NCAAF_CUSTODY_LIMIT')
         hashes.add(v['body_sha256'])
-        meta=v['metadata'];_metadata(meta);rows=_parse(raw)
+        meta=v['metadata']
+        if not filtered:_metadata(meta)
+        rows=_parse(raw)
         receipt=history.timestamp(meta['received_at']);now=history.timestamp(at)
         require(now is not None and receipt<=now, 'NCAAF_CUSTODY_CLOCK_CONFLICT')
         if meta['provider']=='cfbd':
             # Projection cannot restart the original input's 24-hour age.
             require(0 <= (now-receipt).total_seconds() <= 86400, 'NCAAF_CUSTODY_INPUT_STALE')
-            sha=v['projection'].get('native_sha256');batch=index.get(sha)
-            require(batch is not None and sha not in consumed, 'NCAAF_CUSTODY_PROJECTION_CONFLICT')
-            computed=_project_cfbd(rows,meta,batch);consumed.add(sha)
-            projection_at=history.timestamp(batch['retrieved_at'])
+            if filtered:
+                from app_core import ncaaf_filtered_history as selected
+                if owned_projection is None:
+                    owned_projection=selected._response_projection(
+                        review_policy.packet['payload']['staged_binding']['payload']['history'],at=at)
+                consumed.update(selected.verify_response(item,review_policy,index,at,_owned_projection=owned_projection))
+                state=owned_projection[1]
+                projection_at=max(history.timestamp(b['retrieved_at']) for b in state['batches'])
+                computed=v['projection']  # Exact full-object equality was checked against the reprojected originals.
+            else:
+                sha=v['projection'].get('native_sha256');batch=index.get(sha)
+                require(batch is not None and sha not in consumed, 'NCAAF_CUSTODY_PROJECTION_CONFLICT')
+                computed=_project_cfbd(rows,meta,batch);consumed.add(sha)
+                projection_at=history.timestamp(batch['retrieved_at'])
             require(receipt<=projection_at, 'NCAAF_CUSTODY_CLOCK_CONFLICT')
             reviewed,start,end=[history.timestamp(permission[k]) for k in ('reviewed_at','effective_from','effective_until')]
-            require(reviewed<receipt and start<=receipt<end and now<end, 'NCAAF_CUSTODY_PERMISSION_CLOCK_CONFLICT')
+            if filtered and v['projection']['original_index']==0 and not selected.is_fresh(review_policy.packet['payload']['staged_binding']['payload']['history']['payload']['plan']['payload']):
+                # The old diagnostic collection grant precedes this old receipt.
+                # A distinct later, exact reuse grant is verified by its reader;
+                # it neither rewrites collection authority nor refreshes input age.
+                selected.parent(review_policy.packet['payload']['staged_binding']['payload']['history']['payload']['plan']['payload'],at=at)
+                require(start<=now<end,'NCAAF_CUSTODY_PERMISSION_CLOCK_CONFLICT')
+            else:require(reviewed<receipt and start<=receipt<end and now<end, 'NCAAF_CUSTODY_PERMISSION_CLOCK_CONFLICT')
             clocks.append(projection_at)
         else:
             computed=_project_quote(rows,meta,o['quote'],terms, owner_reviewed=review_policy is not None);quote_count+=1

@@ -98,7 +98,7 @@ class ReviewPolicy:
 
     def check_mapping(self, *args, **kwargs):
         p=self.packet['payload']
-        if p['staged_binding']['payload'].get('version')=='ncaaf-reviewed-staged-evidence-v3':
+        if p['staged_binding']['payload'].get('version') in {'ncaaf-reviewed-staged-evidence-v3','ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5'}:
             from app_core.ncaaf_reviewed_target import check_mapping
             return check_mapping(*args, **kwargs, review_policy=self)
         from app_core.ncaaf_future_target import check_mapping
@@ -182,6 +182,10 @@ def result_version(packet):
 
 def accepted_dependencies(packet, approval, at):
     load(packet)
+    return _accepted_dependencies(packet, approval, at)
+
+
+def _accepted_dependencies(packet, approval, at):
     policy = ReviewPolicy(packet)
     reviewed = history.timestamp(packet["payload"]["owner_review"]["reviewed_at"])
     require(history.timestamp(at) is not None and reviewed < history.timestamp(at), "NCAAF_OWNER_REVIEW_CLOCK_CONFLICT")
@@ -193,6 +197,12 @@ def infer(packet, at):
     from app_core import ncaaf_pipeline_evidence as adapter
     require(adapter.private_research_selected(), "NCAAF_PRIVATE_RESEARCH_NOT_SELECTED")
     load(packet)
+    return _infer(packet, at)
+
+
+def _infer(packet, at):
+    from app_core import ncaaf_pipeline_evidence as adapter
+    require(adapter.private_research_selected(), "NCAAF_PRIVATE_RESEARCH_NOT_SELECTED")
     policy = ReviewPolicy(packet)
     accepted_dependencies(packet, None, at)
     from app_core import ncaaf_spread_execution as execution, ncaaf_spread_mass as mass
@@ -220,6 +230,10 @@ def infer(packet, at):
 
 def inspect_result(packet, saved, at):
     load(packet)
+    return _inspect_result(packet, saved, at)
+
+
+def _inspect_result(packet, saved, at):
     policy = ReviewPolicy(packet)
     accepted_dependencies(packet, None, at)
     require(isinstance(saved, dict) and set(saved) == {"payload", "sha256"}
@@ -287,14 +301,14 @@ def admitted_analysis(packet, source, *, inventory=None, authorization=None, cus
 
 # Only this explicit successor selects reviewed scope interpretation. This
 # creates no acceptance and never changes the original response or v1 context.
-def _with_scope(fn):
+def _with_scope(fn,implementation):
     @wraps(fn)
     def checked(packet,*args,**kwargs):
         load(packet)
         with projection.selected(packet):
-            return fn(packet,*args,**kwargs)
+            return implementation(packet,*args,**kwargs)
     return checked
 
-accepted_dependencies=_with_scope(accepted_dependencies)
-infer=_with_scope(infer)
-inspect_result=_with_scope(inspect_result)
+accepted_dependencies=_with_scope(accepted_dependencies,_accepted_dependencies)
+infer=_with_scope(infer,_infer)
+inspect_result=_with_scope(inspect_result,_inspect_result)

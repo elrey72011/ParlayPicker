@@ -37,6 +37,7 @@ class InputContextPlan:
     generated_contract: str = ''
     generated_path: str = ''
     generated_parent: str = ''
+    physical_consumer_sha256: str = ''
 
 
 def physical_bytes(path):
@@ -48,6 +49,43 @@ def physical_bytes(path):
     return value
 
 
+
+def _authenticated_consumer_source(relative, raw=None):
+    """Physical identity first; exact recorded program for legacy call sites."""
+    raw=physical_bytes(ROOT/relative) if raw is None else raw
+    old=json.loads(physical_bytes(ROOT/BINDING))['historical_input_boundary']['consumers'].get(relative)
+    if old is None:raise ValueError('HISTORICAL_CONSUMER_NOT_AUTHENTICATED')
+    if sha(raw)==old['sha256']:return raw
+    path=ROOT/'docs/research/ncaaf-filtered-history-bindings-v1.json'
+    if not path.is_file():raise ValueError('HISTORICAL_CONSUMER_SOURCE_CHANGED')
+    declaration=json.loads(physical_bytes(path)).get('consumer_input_adapters',{}).get(relative)
+    if declaration is None or sha(raw)!=declaration.get('physical_sha256'):
+        raise ValueError('HISTORICAL_CONSUMER_SOURCE_CHANGED')
+    selected=canonical_guard()._filtered_history_module();binding=selected.authenticate(ROOT)
+    if binding['consumer_input_adapters'].get(relative)!=declaration:
+        raise ValueError('HISTORICAL_CONSUMER_SOURCE_CHANGED')
+    prior=selected.predecessor_source(ROOT,relative,raw)
+    if sha(prior)!=old['sha256'] or declaration['reviewed_sha256']!=old['sha256']:
+        raise ValueError('HISTORICAL_CONSUMER_SOURCE_CHANGED')
+    return prior
+
+
+def reviewed_current_input(relative):
+    """Explicit frozen-fixture read; never a Path override or operational grant."""
+    caller=sys._getframe(1)
+    try:consumer=Path(caller.f_code.co_filename).resolve().relative_to(ROOT).as_posix()
+    except ValueError:raise ValueError('HISTORICAL_CURRENT_INPUT_NOT_AUTHENTICATED') from None
+    selected=canonical_guard()._filtered_history_module();binding=selected.authenticate(ROOT)
+    record=binding.get('consumer_input_adapters',{}).get(consumer)
+    if (record is None or record['generation']!='reviewed-3e744bb-fixture-input-v1'
+        or sha(physical_bytes(ROOT/consumer))!=record['physical_sha256']
+        or [caller.f_code.co_name,caller.f_lineno] not in record['calls']
+        or relative not in record['paths']):
+        raise ValueError('HISTORICAL_CURRENT_INPUT_NOT_AUTHENTICATED')
+    _authenticated_consumer_source(consumer)
+    return selected.predecessor_source(ROOT,relative,physical_bytes(ROOT/relative))
+
+
 def generation_input(plan, relative, supplied=None):
     """Physical source -> exact declared generation, each edge authenticated."""
     authenticate_plan(plan)
@@ -55,7 +93,7 @@ def generation_input(plan, relative, supplied=None):
     target = binding['consumers'][plan.consumer].get('source_inputs', {}).get(relative)
     if target is None:
         return None
-    source = physical_bytes(ROOT / relative).replace(b'\r\n', b'\n')
+    source = _filtered_source_parent(relative,physical_bytes(ROOT / relative).replace(b'\r\n', b'\n'))
     from scripts.ncaaf_reviewed_target_scope import previous_source
     permitted = {sha(source)}
     for path, expected in binding['source_generations'].items():
@@ -140,7 +178,12 @@ def fixture_alias_identity(binding,constructor,definition,alias,scope,consumer):
     matches=[r for r in rows if (r['constructor'],r['fixture'],r['alias'],r['scope'],r['consumer'])
              ==(constructor,definition,alias,scope,consumer)]
     if len(matches)!=1:raise ValueError('HISTORICAL_FIXTURE_ALIAS_NOT_AUTHENTICATED')
-    record=matches[0];source=physical_bytes(ROOT/consumer)
+    record=matches[0]
+    try:source=_authenticated_consumer_source(consumer)
+    except ValueError as exc:
+        if str(exc)=='HISTORICAL_CONSUMER_SOURCE_CHANGED':
+            raise ValueError('HISTORICAL_FIXTURE_ALIAS_SOURCE_CHANGED') from None
+        raise
     if sha(source)!=record['consumer_sha256']:
         raise ValueError('HISTORICAL_FIXTURE_ALIAS_SOURCE_CHANGED')
     # Authenticate the actual import site, not a mutable alias object's identity.
@@ -381,7 +424,8 @@ def resolve_context(request, *, phase='call', fixture='', historical=False):
         if historical:
             raise ValueError('HISTORICAL_CONSUMER_NOT_AUTHENTICATED')
         return InputContextPlan(Role.LIVE, relative, sha(physical_bytes(path)), node, phase, fixture, 'current', sha(binding_raw))
-    if sha(physical_bytes(path)) != record['sha256']:
+    role = Role.NATIVE if native_context(path.stem, node) else Role.HISTORICAL
+    if sha(_authenticated_consumer_source(relative,physical_bytes(path))) != record['sha256']:
         raise ValueError('HISTORICAL_CONSUMER_SOURCE_CHANGED')
     definition=caller=caller_sha=''
     if phase in {'session', 'module'}:
@@ -403,9 +447,8 @@ def resolve_context(request, *, phase='call', fixture='', historical=False):
             except ValueError:raise ValueError('HISTORICAL_FIXTURE_ALIAS_NOT_AUTHENTICATED') from None
             caller_sha=fixture_alias_identity(binding,relative,definition,fixture,phase,caller)
     name = path.stem
-    role = Role.NATIVE if native_context(name, node) else Role.HISTORICAL
-    generation = declared_input_generation(record,node,phase,physical_bytes(path)) if role is Role.HISTORICAL else 'current'
-    plan = InputContextPlan(role, relative, record['sha256'], node, phase, fixture, generation, sha(binding_raw),definition,caller,caller_sha)
+    generation = declared_input_generation(record,node,phase,_authenticated_consumer_source(relative,physical_bytes(path))) if role is Role.HISTORICAL else 'current'
+    plan = InputContextPlan(role, relative, record['sha256'], node, phase, fixture, generation, sha(binding_raw),definition,caller,caller_sha,physical_consumer_sha256=sha(physical_bytes(path)))
     if role is Role.HISTORICAL:
         selected_reader_generation(binding, plan)
     authenticate_plan(plan)
@@ -424,12 +467,14 @@ def authenticate_plan(plan):
         record = data.get('historical_input_boundary', {}).get('consumers', {}).get(plan.consumer)
         if record is None:
             raise ValueError('HISTORICAL_CONSUMER_NOT_AUTHENTICATED')
-        if plan.source_sha256 != record['sha256'] or sha(physical_bytes(ROOT/plan.consumer))!=record['sha256']:
+        if (plan.source_sha256 != record['sha256']
+            or (plan.physical_consumer_sha256 and sha(physical_bytes(ROOT/plan.consumer))!=plan.physical_consumer_sha256)
+            or sha(_authenticated_consumer_source(plan.consumer))!=record['sha256']):
             raise ValueError('HISTORICAL_CONSUMER_SOURCE_CHANGED')
         if plan.phase not in {'call', 'session', 'module'} or (plan.phase == 'call' and plan.fixture):
             raise ValueError('HISTORICAL_FIXTURE_CALLSITE_NOT_AUTHENTICATED')
         expected_role = Role.NATIVE if native_context(Path(plan.consumer).stem, plan.node) else Role.HISTORICAL
-        expected_generation = declared_input_generation(record,plan.node,plan.phase,physical_bytes(ROOT/plan.consumer)) if expected_role is Role.HISTORICAL else 'current'
+        expected_generation = declared_input_generation(record,plan.node,plan.phase,_authenticated_consumer_source(plan.consumer)) if expected_role is Role.HISTORICAL else 'current'
         if plan.role is not expected_role or plan.generation != expected_generation:
             raise ValueError('HISTORICAL_CONTEXT_GENERATION_CHANGED')
         if plan.phase in {'module','session'}:
@@ -649,7 +694,11 @@ def execute_released_bootstrap(source, module, live, binding):
     if scope.blob(helper) != current['reviewed_blobs']['tests/ncaaf_future_scope_inputs.py']:
         raise ValueError('HISTORICAL_BOOTSTRAP_HELPER_CHANGED')
     boundary = physical_bytes(ROOT / 'tests/historical_scope_input_boundary.py').replace(b'\r\n', b'\n')
-    if scope.blob(boundary) != current['reviewed_blobs']['tests/historical_scope_input_boundary.py']:
+    # Authenticate the actual current bytes through the successor, then compare
+    # the explicitly selected parent with this unchanged frozen input contract.
+    # Keep actual physical bytes in the immutable-plan key below.
+    parent_boundary=_filtered_source_parent('tests/historical_scope_input_boundary.py',boundary)
+    if scope.blob(parent_boundary) != current['reviewed_blobs']['tests/historical_scope_input_boundary.py']:
         raise ValueError('HISTORICAL_BOOTSTRAP_HELPER_CHANGED')
     key = (physical, scope.canonical(current), source, helper,
            physical_bytes(ROOT / 'scripts/ci_fixture_stability_scope.py').replace(b'\r\n', b'\n'),
@@ -1100,6 +1149,61 @@ def capacity_input_records(plan):
         records[relative]['successor']=record
     return records
 
+
+def _filtered_source_parent(relative,raw):
+    """Pure exact successor decoding after the caller selects its contract.
+
+    This never installs a view or changes physical_bytes. The current factory
+    authenticates physical binding/helper bytes before executing its decoder.
+    Unknown supplied generations remain for the unchanged strict reader.
+    """
+    live=canonical_guard()
+    factory=getattr(live,'_filtered_history_module',None)
+    if factory is None:return raw
+    scope=factory()
+    return scope.predecessor_source(ROOT,relative,raw)
+
+
+def install_filtered_successor_input_view(plan,patch):
+    """One owned parent layer, selected before any historical construction."""
+    if plan.role is not Role.HISTORICAL:return False
+    authenticate_plan(plan)
+    if not _ACTIVE or _ACTIVE[-1].plan!=plan:
+        raise ValueError('HISTORICAL_API_OWNER_REQUIRED')
+    live=canonical_guard();factory=getattr(live,'_filtered_history_module',None)
+    if factory is None:return False
+    scope=factory();binding=scope.authenticate(ROOT)
+    paths=set(binding['component_predecessors'])
+    # The declared guard readers and their legacy bridge own this generation.
+    # An earlier generic parent view would change the bridge's current input.
+    paths.discard(GUARD)
+    owner=_ACTIVE[-1];patch=owned_api_patch(patch,plan)
+    opened=Path.open
+    def owns():return bool(_ACTIVE) and _ACTIVE[-1] is owner
+    def selected(path):
+        try:relative=path.resolve().relative_to(ROOT).as_posix()
+        except ValueError:return None
+        return relative if relative in paths else None
+    def value(path,relative):
+        authenticate_plan(plan)
+        return _filtered_source_parent(relative,physical_bytes(path))
+    def parent_open(path,mode='r',*args,**kwargs):
+        relative=selected(path)
+        if not owns() or relative is None or mode not in ('r','rb'):
+            return opened(path,mode,*args,**kwargs)
+        raw=value(path,relative)
+        if mode=='rb':return io.BytesIO(raw)
+        encoding=kwargs.get('encoding',args[1]if len(args)>1 else None)or'utf-8'
+        if encoding=='locale':
+            import locale
+            encoding=locale.getencoding()
+        return io.TextIOWrapper(io.BytesIO(raw),encoding=encoding,
+            errors=kwargs.get('errors',args[2]if len(args)>2 else None),
+            newline=kwargs.get('newline',args[3]if len(args)>3 else None))
+    patch.setattr(Path,'open',parent_open)
+    return True
+
+
 def current_source_input(plan,relative,raw):
     """Remove only the exact authenticated private successor input layer.
 
@@ -1113,13 +1217,16 @@ def current_source_input(plan,relative,raw):
     binding_raw=physical_bytes(ROOT/BINDING)
     if sha(binding_raw)!=plan.binding_sha256:raise ValueError('HISTORICAL_BINDING_CHANGED')
     binding=json.loads(binding_raw)
+    # Match the required input generation, separately from current physical
+    # authentication. Do not describe the selected bytes as physical reads.
+    raw=_filtered_source_parent(relative,raw)
     from tests import ci_fixture_stability_inputs as inputs
     row=inputs.PRIVATE_DELIVERY_SOURCE_RECORDS.get(relative)
     declared=binding['private_delivery_repair']['source_edits'].get(relative)
     if row is None and declared is None:return raw
     if (not isinstance(row,dict) or not isinstance(declared,dict)
             or json.loads(json.dumps({key:value for key,value in row.items()if key!='compressed'}))!=declared
-            or sha(physical_bytes(ROOT/relative))!=row['after_sha256']):
+            or sha(_filtered_source_parent(relative,physical_bytes(ROOT/relative)))!=row['after_sha256']):
         raise ValueError('CI_PRIVATE_DELIVERY_GENERATION_CHANGED')
     if sha(raw)!=row['after_sha256']:return raw
     value=inputs.private_delivery_predecessor_source(relative,raw)
@@ -1136,6 +1243,13 @@ def current_capacity_input(plan,relative,raw):
     return current_source_input(plan,relative,raw)
 
 
+_CAPACITY_IMAGES={}
+_CAPACITY_IMAGE_LIMIT=16*1024*1024
+_CAPACITY_NATIVE_B85=base64.b85decode
+_CAPACITY_NATIVE_B85_CODE=getattr(base64.b85decode,'__code__',None)
+_CAPACITY_NATIVE_DECOMPRESS=zlib.decompressobj
+
+
 def install_capacity_input_view(plan,patch):
     if plan.role is not Role.HISTORICAL:return False
     patch=owned_api_patch(patch,plan)
@@ -1145,11 +1259,28 @@ def install_capacity_input_view(plan,patch):
         digest=sha(raw.replace(b'\r\n',b'\n'))
         if digest==row['before_sha256']:return raw
         if digest!=row['after_sha256']:raise ValueError('CI_CAPACITY_INPUT_GENERATION_CHANGED')
-        z=zlib.decompressobj();value=z.decompress(base64.b85decode(row['compressed']),8*1024*1024+1)
+        key=(plan.binding_sha256,plan.source_sha256,plan.generation,digest,
+             sha(row['compressed'].encode()),row['bytes'],row['before_sha256'],row['before_git_blob'])
+        compatible=(_CAPACITY_NATIVE_B85_CODE is not None and base64.b85decode is _CAPACITY_NATIVE_B85
+            and getattr(base64.b85decode,'__code__',None) is _CAPACITY_NATIVE_B85_CODE
+            and getattr(_CAPACITY_NATIVE_B85,'__globals__',None) is base64.__dict__
+            and zlib.decompressobj is _CAPACITY_NATIVE_DECOMPRESS and isinstance(zlib.decompressobj,types.BuiltinFunctionType))
+        value=_CAPACITY_IMAGES.get(key,_ABSENT)if compatible else _ABSENT
+        if value is _ABSENT:
+            z=zlib.decompressobj();value=z.decompress(base64.b85decode(row['compressed']),8*1024*1024+1)
+            if not z.eof or z.unused_data:
+                raise ValueError('CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED')
+        if type(value)is not bytes:
+            raise ValueError('CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED')
         identity=hashlib.sha1(b'blob '+str(len(value)).encode()+b'\0'+value).hexdigest()
-        if not (z.eof and not z.unused_data and len(value)==row['bytes']<=8*1024*1024
+        if not (len(value)==row['bytes']<=8*1024*1024
                 and sha(value)==row['before_sha256'] and identity==row['before_git_blob']):
             raise ValueError('CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED')
+        if compatible and key not in _CAPACITY_IMAGES and len(value)+4096<=_CAPACITY_IMAGE_LIMIT:
+            while _CAPACITY_IMAGES and (len(_CAPACITY_IMAGES)>=8
+                or sum(len(v)+4096 for v in _CAPACITY_IMAGES.values())+len(value)+4096>_CAPACITY_IMAGE_LIMIT):
+                _CAPACITY_IMAGES.pop(next(iter(_CAPACITY_IMAGES)))
+            _CAPACITY_IMAGES[key]=value
         return value
     def image(relative,raw):
         raw=current_capacity_input(plan,relative,raw)
@@ -1273,6 +1404,7 @@ def apply_selected_inputs(plan, request, patch):
     if plan.generated_contract:
         _install_generated_source_input(plan,patch,live)
         return True
+    install_filtered_successor_input_view(plan,patch)
     install_capacity_input_view(plan,patch)
     records=json.loads(physical_bytes(ROOT/BINDING))['historical_input_boundary'].get('helper_preimages',{})
     if records:
@@ -1308,3 +1440,39 @@ def apply_selected_inputs(plan, request, patch):
     install_consistent_read_apis(plan,patch,live)
     install_transitive_module_inputs(plan,patch)
     return True
+
+
+def _install_filtered_immutable_input_api():
+    """Preserve the explicit predecessor API, including calls before ownership.
+
+    This pure byte adapter installs no Path view and confers no fixture or
+    operational authority. Selected parent transitions authenticate physical
+    inputs; unregistered inputs retain the original API's identity behavior.
+    The unchanged reader still checks its frozen edge and mutable records.
+    Existing aliases of original_source resolve this same module-global API.
+    """
+    from functools import wraps
+    from tests import ci_fixture_stability_inputs as inputs
+    previous=inputs.capacity_predecessor_source
+    registered=frozenset().union(*(getattr(inputs,name) for name in (
+        'RECORDS','CAPACITY_SOURCE_RECORDS','CAPACITY_SUCCESSOR_RECORDS',
+        'FIXTURE_INITIALIZER_SOURCE_RECORDS','PRIVATE_DELIVERY_SOURCE_RECORDS')))
+    @wraps(previous)
+    def authenticated_parent(relative,raw):
+        selected=_filtered_source_parent(relative,raw) if relative in registered else raw
+        return previous(relative,selected)
+    inputs.capacity_predecessor_source=authenticated_parent
+    # The explicit immutable reader API compares its input generation before
+    # falling back to original_source. Normalize this exact reviewed successor
+    # first, so that fallback cannot bypass the original binding/input checks.
+    previous_reader=inputs.reader_source
+    @wraps(previous_reader)
+    def authenticated_reader(relative,current,nodeid):
+        record=inputs.EXACT_READER_INPUTS.get(nodeid)
+        if record is not None and relative==record['path']:
+            current=_filtered_source_parent(relative,current)
+        return previous_reader(relative,current,nodeid)
+    inputs.reader_source=authenticated_reader
+
+
+_install_filtered_immutable_input_api()

@@ -147,3 +147,91 @@ def test_legacy_synthetic_chronology_is_calendar_independent_and_local(
         body(tmp_path, local)
         assert store.datetime is _SyntheticStoreClock
     assert store.datetime is WallClock
+
+
+@pytest.mark.parametrize("scenario", ["empty", "valid", "missing_table", "database_error", "hash_error"])
+def test_legacy_reader_explicitly_closes_its_owned_connection(tmp_path, monkeypatch, scenario):
+    import json
+    import sqlite3
+    from app_core import prospective_legacy_view as view
+    path = tmp_path / "SYNTHETIC-owned-reader.sqlite3"
+    native_connect = sqlite3.connect
+    if scenario == "database_error":
+        path.write_bytes(b"SYNTHETIC not a SQLite database")
+    else:
+        db = native_connect(path)
+        try:
+            if scenario != "missing_table":
+                db.execute("CREATE TABLE records (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+            if scenario in {"valid", "hash_error"}:
+                raw = json.dumps({"SYNTHETIC": True}, sort_keys=True)
+                key = hashlib.sha256(raw.encode()).hexdigest() if scenario == "valid" else "SYNTHETIC-wrong-hash"
+                db.execute("INSERT INTO records VALUES (?, ?)", (key, raw))
+                db.commit()
+        finally:
+            db.close()
+    before = path.read_bytes()
+    owned = []
+    calls = []
+    def observed_connect(*args, **kwargs):
+        calls.append((args, kwargs))
+        connection = native_connect(*args, **kwargs)
+        owned.append(connection)  # Deliberately keep a reference: GC is not the contract.
+        return connection
+    monkeypatch.setattr(sqlite3, "connect", observed_connect)
+    try:
+        if scenario == "missing_table":
+            with pytest.raises(ValueError, match="legacy evidence table missing"):
+                view._records(path, "records")
+        elif scenario == "database_error":
+            with pytest.raises(sqlite3.DatabaseError):
+                view._records(path, "records")
+        elif scenario == "hash_error":
+            with pytest.raises(ValueError, match="legacy evidence hash mismatch"):
+                view._records(path, "records")
+        else:
+            rows = view._records(path, "records")
+            assert len(rows) == (1 if scenario == "valid" else 0)
+        assert len(owned) == len(calls) == 1
+        assert calls[0][0][0] == path.resolve().as_uri() + "?mode=ro" and calls[0][1] == {"uri": True}
+        assert path.read_bytes() == before
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            owned[0].execute("SELECT 1")
+        path.unlink()  # Exact test-owned file; must work while the closed object is retained.
+        assert not path.exists()
+    finally:
+        for connection in owned:
+            connection.close()
+
+
+def test_legacy_owned_connection_closes_after_interruption(tmp_path, monkeypatch):
+    import sqlite3
+    from app_core import prospective_legacy_view as view
+    path = tmp_path / "SYNTHETIC-interrupted-reader.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute("CREATE TABLE records (id TEXT, payload TEXT)")
+    connection.commit()
+    connection.close()
+    native = sqlite3.connect
+    events = []
+    class Interrupted:
+        def __init__(self, *args, **kwargs):
+            self.db = native(*args, **kwargs)
+        def __enter__(self):
+            self.db.__enter__()
+            events.append("transaction-enter")
+            return self
+        def execute(self, *args):
+            raise KeyboardInterrupt()
+        def __exit__(self, *error):
+            events.append(("transaction-exit", error[0]))
+            return self.db.__exit__(*error)
+        def close(self):
+            events.append("close")
+            self.db.close()
+    monkeypatch.setattr(sqlite3, "connect", Interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        view._records(path, "records")
+    assert events == ["transaction-enter", ("transaction-exit", KeyboardInterrupt), "close"]
+    path.unlink()
+    assert not path.exists()
