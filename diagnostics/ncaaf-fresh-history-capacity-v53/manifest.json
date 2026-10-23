@@ -1,0 +1,51 @@
+{
+  "schema": "PREPARED_NOT_AUTHORIZED_FINAL_CAPACITY_DIAGNOSTIC_V53",
+  "prepared_at": "2026-10-23T15:27:14.114741+00:00",
+  "source_head": "dddf4dbea0e120df47b9fa3996ca35fe2add3d92",
+  "implementation": "e89ae00cb6dd585c9a8c4b03724bb380ec918bfe",
+  "source_tree": "ce4a5e543503745eb02f756225daff9ef16b9381",
+  "tested_merge": "cc54def8f207a6e969773be7e14866809ca48dfe",
+  "ordered_parents": [
+    "3e744bb3376c19688f38e1546c50443db7188ff8",
+    "dddf4dbea0e120df47b9fa3996ca35fe2add3d92"
+  ],
+  "main": "3e744bb3376c19688f38e1546c50443db7188ff8",
+  "source_checkout_depth": 1,
+  "required_immutable_git_objects": [
+    "3e744bb3376c19688f38e1546c50443db7188ff8",
+    "e89ae00cb6dd585c9a8c4b03724bb380ec918bfe",
+    "dddf4dbea0e120df47b9fa3996ca35fe2add3d92"
+  ],
+  "source_ref": "diag/ncaaf-fresh-history-capacity-source-v53",
+  "tools_ref": "diag/ncaaf-fresh-history-capacity-tools-v53",
+  "collected_count": 8882,
+  "assignment_sha256": "f74bb7110f53ef2f6ea3223d5de9a022a2718183482e1f2bd065d2e3dd9926e6",
+  "profile_sha256": "c148ac4b63a280df6289aa73ebd5ed0013ed1b32f5797d03383ca4c11aadcd41",
+  "shards": 13,
+  "phase_counts": {
+    "native5": 663
+  },
+  "job_cap_seconds": 2700,
+  "active_phase_cap_seconds": 2400,
+  "retention_reserve_seconds": 90,
+  "retries": 0,
+  "python": "3.12.15",
+  "pip": "26.2.2",
+  "os": "ubuntu-24.04",
+  "network": "Package/immutable Git setup only; external application transports blocked by unchanged conftest; no provider keys or requests.",
+  "instrumentation": "Existing passive fixture-body/setup timing and fixed repository-only metadata, raw FileIO evidence; no application monkeypatch for measurement.",
+  "release_coverage": false,
+  "authorization": false,
+  "data_sha256": {
+    "constraints.txt": "e93984a44f959e4d15cf0326646791ffd74ad21d1def8a028939736fa3aac576",
+    "fixture_profile.py": "a900b80c5bbc43ea6b1f2261bde97a7393e3089ea39148efdda07634ca3f6c5b",
+    "full-inventory.json": "9602651af8c5b29f0e4a2e371314149ffd930b628c33998e904e49721628c665",
+    "hash_artifacts.py": "25fe79f3ac1ccbeacb8cc7207065266a8fb525213f666e4cb4b5e1b387bb9e6e",
+    "native5.json": "e57ebdd56e7988ec686ff95c031dca8811e0d0b04556e87ec1b9b5672cd6269b",
+    "observe.py": "8182aa39c4d17b5c1e288616c811e15ee406b76da961f258bc8c602c5edc0387",
+    "run.py": "193b7c7f583ca4eb92b1b41074b0ae44cfad92bea7cb71afcf03afc3522e5ad0",
+    "setup_context.py": "a2b9468aea1692fe17614fd3b03de7399915d30ca13f9fa6fe1feb13d96f01b7",
+    "source-proof.json": "6743d1699de227d7f3ead8445be5e881771bf65d7ae184e552f86a78fa0d3a76",
+    "workflow.yml": "066e2d76a9dc5a0320fa240c850c183f977a891da0a345ab50f097ddfe4b0f5c"
+  }
+}

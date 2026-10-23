@@ -1,0 +1,57 @@
+name: Fresh-history final capacity measurement v53
+on:
+  push:
+    branches: [diag/ncaaf-fresh-history-capacity-tools-v53]
+permissions:
+  contents: read
+jobs:
+  one-bounded-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Record job clock
+        run: |
+          echo "PP_DIAG_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+          mkdir -p diagnostic-evidence
+          git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+        with:
+          path: diagnostic-tools
+          persist-credentials: false
+      - name: Verify unchanged release pins
+        run: |
+          test "$(git ls-remote https://github.com/elrey72011/ParlayPicker.git refs/heads/main | cut -f1)" = 3e744bb3376c19688f38e1546c50443db7188ff8
+      - uses: actions/checkout@v5
+        with:
+          ref: cc54def8f207a6e969773be7e14866809ca48dfe
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.15"
+      - name: Install unchanged pinned dependencies
+        run: |
+          python -m pip install "pip==26.2.2"
+          python -m pip install -r source/requirements.txt pytest -c diagnostic-tools/diagnostics/ncaaf-fresh-history-capacity-v53/constraints.txt
+      - name: Verify installed offline browser
+        run: |
+          command -v google-chrome
+          google-chrome --version
+      - name: Authenticate exact source and required immutable objects
+        run: python diagnostic-tools/diagnostics/ncaaf-fresh-history-capacity-v53/setup_context.py source diagnostic-evidence
+      - name: Run exact final native shard 5 ordered sequence
+        run: >-
+          python -I -B diagnostic-tools/diagnostics/ncaaf-fresh-history-capacity-v53/run.py
+          --root source --out diagnostic-evidence/execution --job-start "$PP_DIAG_JOB_START"
+      - name: Hash retained complete or partial evidence
+        if: ${{ always() }}
+        run: python diagnostic-tools/diagnostics/ncaaf-fresh-history-capacity-v53/hash_artifacts.py diagnostic-evidence
+      - name: Retain diagnostic evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncaaf-fresh-history-capacity-v53
+          path: diagnostic-evidence
+          retention-days: 14
+          if-no-files-found: error
