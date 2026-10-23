@@ -298,7 +298,7 @@ def predict(source, *, inventory=None):
     return result
 
 
-def diagnose(source, item=None):
+def diagnose(source, item=None, *, _comparison=None):
     """Static provenance checks. Never replay or recalculate historical features."""
     try:
         item = item if item is not None else json.loads(source.get("ml_estimate_metadata", ""))
@@ -306,7 +306,7 @@ def diagnose(source, item=None):
         p = saved["payload"]
         require(set(saved) == {"payload", "sha256"} and digest(p) == saved["sha256"], "NCAAF_PACKET_INTEGRITY")
         if p.get("version") in RESULT_VERSIONS:
-            return _diagnose_compatible(source, item, p)
+            return _diagnose_compatible(source, item, p, _comparison=_comparison)
         require(p["version"] == VERSION, "NCAAF_PACKET_SCHEMA")
         require(p["scientific_acceptance"] is False and p["wagering_authority"] is False and p["live_stake"] == 0,
                 "NCAAF_AUTHORITY_FORBIDDEN")
@@ -389,7 +389,8 @@ def compatible_reader_binding(packet=None):
     return binding
 
 
-def _diagnose_compatible(source, item, p):
+def _diagnose_compatible(source, item, p, *, _comparison=None):
+    comparison=None
     require(p["scientific_acceptance"] is False and p["wagering_authority"] is False and p["live_stake"] == 0,
             "NCAAF_AUTHORITY_FORBIDDEN")
     if p["status"] != "success":
@@ -422,7 +423,7 @@ def _diagnose_compatible(source, item, p):
             require(actual is None or actual==masses[key],'NCAAF_PROBABILITY_BINDING_CONFLICT')
         if computation['execution_receipt']['authorization']['payload']['max_computations']==2:
             from app_core.ncaaf_spread_pair import inspect_row
-            inspect_row(packet,p)
+            comparison=inspect_row(packet,p)
     expected = "ncaaf-research-v1:" + checked["model"]["original_record"]["data"]["artifact_hash"] + ":ridge"
     require(source.get("ml_probability_source") == expected and item["predictor_id"] == fact(expected), "NCAAF_ARTIFACT_TARGET_CONFLICT")
     original = dict(item)
@@ -430,6 +431,9 @@ def _diagnose_compatible(source, item, p):
     from app_core.research_estimate_trace import origin_rejection
     origin_source = _projection(packet).presentation(packet,source) if packet['payload']['version'] in owner_spread.INPUT_VERSIONS | {owner_terms.VERSION,owner_staged.VERSION} else source
     require(origin_rejection(dict(origin_source, ml_estimate_metadata=encode(original))) is None, "NCAAF_EVENT_OFFER_CONFLICT")
+    # A caller-owned return channel for this one successful validation only.
+    # No verdict or mutable input is retained between public invocations.
+    if _comparison is not None and comparison is not None:_comparison.append(comparison)
     return dict(status="COMPLETE", reason="AVAILABLE")
 
 

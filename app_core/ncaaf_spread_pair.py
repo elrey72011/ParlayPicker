@@ -135,7 +135,8 @@ def load(packet):
     return cs
 
 
-def inspect_result(packet,saved):
+def _inspect_result(packet,saved):
+    # Own one freshly authenticated child view for this validation call.
     cs=load(packet);r=stage._envelope(saved)
     require(set(r)=={'version','status','pair_input_sha256','shared_input_binding','children','comparison','finalized_at','authorization_journal_b64','authorization_journal_sha256','wager_action','live_stake','scientific_acceptance'}
         and r['version']==RESULT_VERSIONS[packet['payload']['version']] and r['status']=='COMPLETE'
@@ -160,7 +161,11 @@ def inspect_result(packet,saved):
     prefixes=[base64.b64decode(p['journal_prefix_b64'],validate=True) for p in proofs]
     require(prefixes[1].startswith(prefixes[0]) and raw==prefixes[1]+model.encode(dict(kind='finish',status='COMPLETE',attempted=2,completed=2,
         accepted=False,wager_action='PASS',live_stake=0))+b'\n','NCAAF_PAIR_RESULT')
-    return deepcopy(r)
+    return cs,deepcopy(r)
+
+
+def inspect_result(packet,saved):
+    return _inspect_result(packet,saved)[1]
 
 
 def admitted_analysis(packet,sources,*,authorization,custody_root,inventory=None):
@@ -209,7 +214,7 @@ def admitted_analysis(packet,sources,*,authorization,custody_root,inventory=None
 def inspect_row(child,metadata):
     saved=metadata.get('paired_spread_comparison')
     require(isinstance(saved,dict) and set(saved)=={'input','result'},'NCAAF_PAIR_INCOMPLETE')
-    cs=load(saved['input']);r=inspect_result(saved['input'],saved['result'])
+    cs,r=_inspect_result(saved['input'],saved['result'])
     sides=[s for s in SIDES if cs[s]==child]
     require(len(sides)==1 and r['children'][sides[0]]==metadata['computation'],'NCAAF_PAIR_RESULT')
     return deepcopy(r['comparison'])
@@ -217,13 +222,15 @@ def inspect_row(child,metadata):
 
 def private_display(source):
     from app_core import ncaaf_pipeline_evidence as adapter
-    require(adapter.diagnose(source)==dict(status='COMPLETE',reason='AVAILABLE'),'NCAAF_SPREAD_DISPLAY_UNAVAILABLE')
-    p=json.loads(source['ml_estimate_metadata'])['ncaaf_inputs']['payload']
+    metadata=json.loads(source['ml_estimate_metadata']);comparison=[]
+    require(adapter.diagnose(source,metadata,_comparison=comparison)==dict(status='COMPLETE',reason='AVAILABLE'),'NCAAF_SPREAD_DISPLAY_UNAVAILABLE')
+    p=metadata['ncaaf_inputs']['payload']
+    require(len(comparison)==(1 if 'paired_spread_comparison' in p else 0),'NCAAF_SPREAD_DISPLAY_UNAVAILABLE')
     require(p['original_packet']['payload']['version'] in owner.INPUT_VERSIONS,'NCAAF_SPREAD_DISPLAY_UNAVAILABLE')
     masses=mass.normalize(p['outcome_probabilities'])
     return dict(version='ncaaf-owner-spread-private-display-v1',labels=['OWNER_REVIEWED','PRIVATE_RESEARCH','UNCALIBRATED'],
         outcome_probabilities=masses,conditional_no_push=mass.conditional_no_push(masses),
-        comparison=inspect_row(p['original_packet'],p) if 'paired_spread_comparison' in p else None,
+        comparison=comparison[0] if comparison else None,
         input_sha256=p['original_packet']['sha256'],result_sha256=p['computation']['sha256'],
         inference_time=p['inference_time'],wager_action='PASS',live_stake=0,ev=None,edge=None)
 

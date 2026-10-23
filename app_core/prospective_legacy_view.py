@@ -6,6 +6,7 @@ copies research rows into the new validation store or grants wager authority.
 
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime
 import hashlib
 import json
@@ -40,7 +41,7 @@ def _records(path, table):
         return []
     if table not in {"records", "receipts", "outcomes", "observations"}:
         raise ValueError("unsupported legacy table")
-    with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db, db:
         try:
             if table == "records":
                 rows = db.execute("SELECT id,payload FROM records ORDER BY rowid").fetchall()

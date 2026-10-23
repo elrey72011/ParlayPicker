@@ -80,9 +80,9 @@ def test_books_and_reprices_do_not_inflate_independent_n_or_write_authority(tmp_
         assert reports["baselines"]["scopes"][key]["status"] == "NOT_EVALUATED"
     assert reports["training_audit"]["scopes"]["NCAAF/SPREAD"]["legal_independent_n"] == 0
     sources = reports["training_audit"]["historical_candidate_sources"]
-    assert any(item["source"] == "data/master_all_sports.csv" and item["scope"] == "NFL/UNASSIGNED"
+    assert any(Path(item["source"]).as_posix() == "data/master_all_sports.csv" and item["scope"] == "NFL/UNASSIGNED"
                and item["source_rows"] == 16 and item["training_ready"] == 0 for item in sources)
-    assert any(item["source"] == "data/master_all_sports.csv" and item["scope"] == "NCAAF/UNASSIGNED"
+    assert any(Path(item["source"]).as_posix() == "data/master_all_sports.csv" and item["scope"] == "NCAAF/UNASSIGNED"
                and item["source_rows"] == 65 and item["training_ready"] == 0 for item in sources)
     with evidence.connect(path) as db:
         after = {t: db.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in before}
