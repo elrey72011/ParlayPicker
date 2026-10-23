@@ -1,9 +1,9 @@
 {
-  "amendment_sha256": "5f4ba73f2aa325a55c04a58218d9b72682ae18c17b0a291064f6a746cc81911b",
+  "amendment_sha256": "392aeb3b7db7de6b26e1522d4bcd53082a867ff559eb88aa94bd2bf9ac5c6b35",
   "base": "795a2ea53a70ba8e96284a466404a6a42c848fa9",
   "base_tree": "85f25488a2330f8810ce3c320eba5a2d7d146802",
-  "binding_sha256": "8a23067c4088addf0b34b39e595e06ec77219a666aa763f55f54613d4372c730",
-  "implementation_commit": "500180042453856871c4a2914ba99f3700293ebe",
+  "binding_sha256": "aee72d6a98f256f0132b3be5202418f9d910c956a455dde97462763fbd8f7169",
+  "implementation_commit": "6dad096da34250e26047cc5f9ac1d57d73155cef",
   "implementation_paths": [
     "app_core/per_game_boards.py",
     "scripts/ncaaf_filtered_history_scope.py",
@@ -13,6 +13,6 @@
     "tests/test_ui_display_revalidation.py",
     "docs/research/ui-display-revalidation-v1.md"
   ],
-  "implementation_tree": "67cf81aae98ca7d2f4d00fdf593f07ea7b367a99",
+  "implementation_tree": "f6f5648cd7b8ce775fd89542fa666401d67b8c44",
   "version": "ui-display-revalidation-seal-v1"
 }
