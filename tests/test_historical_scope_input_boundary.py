@@ -335,8 +335,14 @@ def test_all_registered_fixture_sites_match_authenticated_physical_definitions()
     import ast
     data=json.loads(boundary.physical_bytes(boundary.ROOT/boundary.BINDING))
     for relative,record in data['historical_input_boundary']['consumers'].items():
-        source=boundary.physical_bytes(boundary.ROOT/relative)
+        physical=boundary.physical_bytes(boundary.ROOT/relative)
+        source=boundary._authenticated_consumer_source(relative,physical)
         assert boundary.sha(source)==record['sha256']
+        if source!=physical:
+            from scripts import ncaaf_filtered_history_scope as successor
+            adapter=successor.authenticate(boundary.ROOT)['consumer_input_adapters'][relative]
+            assert boundary.sha(physical)==adapter['physical_sha256']
+            assert boundary.sha(source)==adapter['reviewed_sha256']==record['sha256']
         expected={}
         for node in ast.parse(source).body:
             if not isinstance(node,ast.FunctionDef):continue

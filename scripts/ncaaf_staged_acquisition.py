@@ -31,7 +31,7 @@ def bounded(path, limit):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=['plan', 'execute', 'prepare', 'join'])
+    parser.add_argument('operation', choices=['plan', 'execute', 'prepare', 'join', 'readback'])
     parser.add_argument('input', type=Path)
     parser.add_argument('--authorization', type=Path)
     parser.add_argument('--controlled-bindings', type=Path)
@@ -53,7 +53,7 @@ def main(argv=None):
             control=json.loads(control_raw)
             if not isinstance(control,dict) or not isinstance(control.get('payload'),dict):
                 raise ValueError('NCAAF_STAGED_CONFIGURATION')
-            if control.get('payload',{}).get('version')=='ncaaf-reviewed-controlled-bindings-v3':
+            if control.get('payload',{}).get('version') in {'ncaaf-reviewed-controlled-bindings-v3','ncaaf-filtered-controlled-bindings-v4','ncaaf-fresh-filtered-controlled-bindings-v5'}:
                 runtime=control['payload']['runtime'];path=Path(__file__).resolve().parent/'ncaaf_reviewed_target_operator.py'
                 source=path.read_bytes()
                 if hashlib.sha256(source).hexdigest()!=runtime['sources']['scripts/ncaaf_reviewed_target_operator.py']:
@@ -67,6 +67,14 @@ def main(argv=None):
         value = load(args.input)
         if args.operation == 'plan':
             print(json.dumps(lane.planning(value), sort_keys=True)); return 0
+        if args.operation == 'readback':
+            b=lane.read_bundle(value,complete=False)
+            if args.custody_root:
+                lane.verify_journal(args.custody_root,value)
+                from app_core import ncaaf_transport_diagnostics as observations
+                dr=bounded(args.custody_root/(b['plan']['sha256']+'.transport-diagnostics.json'),32*1024)
+                observations.read(args.custody_root,value,dr,hashlib.sha256(dr).hexdigest())
+            print(json.dumps(dict(status=b['status'],attempts=b['attempts'],readback='PASS',inference=False)));return 0
         if args.operation == 'prepare':
             if not args.model or not args.output: parser.error('--model and --output required')
             result = evidence.prepare(value, model_packet=load(args.model), prepared_at=lane.transport.utc())
@@ -84,17 +92,31 @@ def main(argv=None):
             lane.require(load(args.authorization, 128*1024) == approval, 'NCAAF_STAGED_AUTHORIZATION')
             if not sys.stdin.isatty(): raise ValueError('NCAAF_STAGED_PRIVATE_TERMINAL_REQUIRED')
             provider = 'cfbd' if lane.is_history(value['payload']) else 'odds_api'
+            filtered=value['payload']['version'] in {'ncaaf-filtered-history-stage-plan-v4','ncaaf-fresh-filtered-history-stage-plan-v5'}
+            if filtered:
+                lane.require(args.transport_diagnostics,'NCAAF_STAGED_DIAGNOSTIC_SELECTION')
+                from app_core import ncaaf_filtered_history as filtered_history
+                filtered_history.verify_parent_files(args.custody_root,value['payload'])
             # One private entry per stage; never arguments/environment/files/logs.
             secret = getpass.getpass(provider+' key (private, memory only): ')
+            if filtered:
+                # Input time is outside active acquisition, but wall authority
+                # still requires a full minute of completion margin.
+                now=lane.timestamp(lane.transport.utc())
+                cutoff=lane.timestamp(value['payload']['execution_window']['not_after'])
+                if (cutoff-now).total_seconds()<=60:
+                    secret=None
+                    raise ValueError('NCAAF_STAGED_DEADLINE')
             observation = None
             options = {}
             if args.transport_diagnostics:
                 from app_core import ncaaf_transport_diagnostics as diagnostics
                 observation = diagnostics.Collector()
                 options['diagnostics'] = observation
+            if filtered:options['filtered_history_policy']=filtered_history.RequestPolicy(filtered_history.policy_contract(value['payload']))
             transport = lane.transport.HttpsTransport(lambda selected: secret if selected == provider else None, **options)
             result = lane.acquire(value, approval, root=args.custody_root, transport=transport,
-                history_bundle=load(args.history) if args.history else None, prequote=load(args.prequote) if args.prequote else None, wall=lane.transport.utc, **options)
+                history_bundle=load(args.history) if args.history else None, prequote=load(args.prequote) if args.prequote else None, wall=lane.transport.utc, **({k:v for k,v in options.items() if k!='filtered_history_policy'}))
             secret = None; transport._secret = None
         summary = dict(status=result['payload']['status'], reason=result['payload']['reason'], attempts=result['payload']['attempts'], bundle_sha256=result['sha256'])
         if args.transport_diagnostics:

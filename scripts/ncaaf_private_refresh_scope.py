@@ -4,8 +4,10 @@ import io
 import json
 from pathlib import Path
 
-BINDING='docs/paid-launch/ncaaf-private-refresh-bindings-v1.json'
+LEGACY_BINDING='docs/paid-launch/ncaaf-private-refresh-bindings-v1.json'
+BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 _BINDING_SHA256='be717669ffc2955633ad3b00b05edacea5833e710d4d27a0f84c74e4941c16c6'
+_FILTERED_HISTORY_BINDING_SHA256='e0228faed7f07159c1afe02a688859330c73884d5400a13b951b641aaf6b383a'
 
 
 def physical(path):
@@ -15,7 +17,19 @@ def physical(path):
 
 def authenticate(root):
     root=Path(root)
-    raw=physical(root/BINDING)
+    selected=root/BINDING
+    if selected.is_file():
+        raw=physical(selected)
+        if hashlib.sha256(raw).hexdigest()!=_FILTERED_HISTORY_BINDING_SHA256:
+            raise ValueError('NCAAF_FILTERED_BINDING_CHANGED')
+        binding=json.loads(raw);relative='scripts/ncaaf_filtered_history_scope.py'
+        source=physical(root/relative)
+        if source.count(_FILTERED_HISTORY_BINDING_SHA256.encode())!=1 or hashlib.sha256(source.replace(_FILTERED_HISTORY_BINDING_SHA256.encode(),b'0'*64)).hexdigest()!=binding['components'][relative]:
+            raise ValueError('NCAAF_FILTERED_SOURCE_CHANGED')
+        namespace={'__file__':str(root/relative),'__name__':'exact_filtered_refresh_source'}
+        exec(compile(source,str(root/relative),'exec'),namespace)
+        return namespace['authenticate'](root)
+    raw=physical(root/LEGACY_BINDING)
     if hashlib.sha256(raw).hexdigest()!=_BINDING_SHA256:
         raise ValueError('NCAAF_PRIVATE_REFRESH_BINDING_CHANGED')
     binding=json.loads(raw)

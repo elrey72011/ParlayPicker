@@ -298,3 +298,15 @@ def test_unselected_cli_keeps_legacy_call_contract_and_creates_no_sidecar(tmp_pa
     assert set(output)=={'status','reason','attempts','bundle_sha256'}
     assert output['status']=='CAPTURED_UNREVIEWED' and output['attempts']==4
     assert not (tmp_path/(p['sha256']+'.transport-diagnostics.json')).exists()
+
+
+def test_filtered_continuation_sidecar_links_parent_without_rewriting_its_failure(tmp_path,monkeypatch):
+    from test_ncaaf_filtered_history import capture
+    bundle,connections,_=capture(monkeypatch,tmp_path)
+    value=bundle['payload'];path=tmp_path/(value['plan']['sha256']+'.transport-diagnostics.json')
+    raw=path.read_bytes();checked=diagnostic.read(tmp_path,bundle,raw,hashlib.sha256(raw).hexdigest())
+    assert len(connections)==2 and value['prior_active_seconds']==12.594
+    from app_core import ncaaf_filtered_history as selected
+    _,parent=selected.parent(value['plan']['payload'],at=value['started_at'])
+    assert parent['original_reason']=='PROBE_HEADER_PRODUCTION_LIMIT' and parent['original_production_timing_suitable'] is False
+    assert checked['bundle_sha256']==bundle['sha256']
