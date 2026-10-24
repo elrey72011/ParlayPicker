@@ -30,6 +30,7 @@ def context(monkeypatch, root):
             custody_root=str(root),setup_cutoff='2026-10-17T17:59:59Z',latest_start='2026-10-17T18:10:00Z',history=None,prequote=None)
         c['runtime']['operation_manifest_sha256']=stage.model.digest(m)
         m['runtime']=deepcopy(c['runtime']);operation.update(stage.seal(m))
+        c['review']['reviewed_at']=a['payload']['authorized_at']
         c['review']['subject_sha256']=stage.model.digest({k:v for k,v in c.items() if k!='review'})
         raw=encode(stage.seal(c))
         patch.setattr(stage,'AUTHORIZED_CONFIGURATIONS',{plan['sha256']:dict(file_sha256=sha(raw),file_b64=base64.b64encode(raw).decode())})

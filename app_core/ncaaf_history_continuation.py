@@ -90,6 +90,8 @@ def _read_parent(p, *, at, review_required):
         and approval['derivation_template_sha256'] == pins['template']
         and approval['owner'] == target.OWNER
         and approval['decision'] == 'APPROVED_CONSOLIDATED_FRESH_HISTORY_CAPTURE'
+        and target.instant(approval['received_at']) == target.instant(b['authorization']['payload']['authorized_at'])
+        and target.instant(approval['received_at']) == target.instant(c['payload']['review']['reviewed_at'])
         and target.instant(approval['received_at']) <= target.instant(b['started_at']), 'NCAAF_CONTINUATION_APPROVAL')
     readback, release = [decode(blobs[k]) for k in ('application_readback', 'release')]
     require(readback['status'] == 'INDEPENDENT_READBACK_PASS'
@@ -138,8 +140,15 @@ def _read_parent(p, *, at, review_required):
     filtered.validate_statistics(b['objects'][1], contract, scoring)
     # Authenticate the failed request too; no lost attempt or reset accounting.
     events = [decode(line) for line in blobs['journal'].splitlines()]
-    require([e['request'] for e in events if e['kind'] == 'attempt'] == old['requests']
+    attempts=[e for e in events if e['kind']=='attempt']
+    require([e['request'] for e in attempts] == old['requests']
         and events[-1]['stage_active_seconds'] == b['active_seconds'], 'NCAAF_CONTINUATION_ACCOUNTING')
+    last=target.instant(b['started_at'])
+    for index,event in enumerate(attempts,1):
+        require(set(event)=={'kind','attempt','request','requested_at'} and event['attempt']==index
+            and last<=target.instant(event['requested_at'])<=target.instant(report['finished_at']), 'NCAAF_CONTINUATION_ACCOUNTING')
+        stage._authorization(old,b['plan']['sha256'],b['authorization'],event['requested_at'],trusted=False)
+        last=target.instant(event['requested_at'])
     remaining(b['active_seconds'], prior_bytes=b['original_bytes'])
     return b, dict(original_bytes=b['original_bytes'], charged_active_seconds=b['active_seconds'])
 
