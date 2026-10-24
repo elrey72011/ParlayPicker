@@ -17,6 +17,8 @@ UNKNOWN = 'UNKNOWN'
 PHASES = frozenset(('credential_lookup', 'connect_dns_tcp_tls', 'request_write',
                     'response_headers', 'response_body_read', 'body_validation'))
 HASH = re.compile(r'[0-9a-f]{64}\Z')
+SOURCE_PATHS = ('app_core/ncaaf_transport_diagnostics.py', 'app_core/ncaaf_pilot.py',
+    'app_core/ncaaf_staged_acquisition.py', 'scripts/ncaaf_staged_acquisition.py')
 FIELDS = frozenset(('version', 'plan_sha256', 'authorization_sha256',
     'configuration_file_sha256', 'bundle_sha256', 'bundle_file_sha256',
     'journal_sha256', 'source_sha256', 'status', 'reason', 'active_seconds',
@@ -35,9 +37,7 @@ def finite(value):
 
 def sources():
     root = Path(__file__).resolve().parents[1]
-    return {p: hashlib.sha256((root/p).read_bytes()).hexdigest() for p in (
-        'app_core/ncaaf_transport_diagnostics.py', 'app_core/ncaaf_pilot.py',
-        'app_core/ncaaf_staged_acquisition.py', 'scripts/ncaaf_staged_acquisition.py')}
+    return {p: hashlib.sha256((root/p).read_bytes()).hexdigest() for p in SOURCE_PATHS}
 
 
 class Collector:
@@ -93,12 +93,15 @@ class Collector:
 
 
 def checked(value):
+    return _checked(value, expected_sources=sources())
+
+
+def _checked(value, *, expected_sources):
     from app_core.ncaaf_staged_acquisition import SAFE_CODES
     require(isinstance(value, dict) and set(value) == FIELDS and value['version'] == VERSION)
     for key in ('plan_sha256', 'authorization_sha256', 'configuration_file_sha256',
                 'bundle_sha256', 'bundle_file_sha256', 'journal_sha256'):
         require(type(value[key]) is str and HASH.fullmatch(value[key]))
-    expected_sources = sources()
     require(value['source_sha256'] == expected_sources)
     require(value['status'] in {'INCOMPLETE', 'CAPTURED_UNREVIEWED'}
         and value['reason'] in SAFE_CODES | {None, 'NCAAF_STAGED_ACQUISITION_FAILURE'}

@@ -98,7 +98,7 @@ class ReviewPolicy:
 
     def check_mapping(self, *args, **kwargs):
         p=self.packet['payload']
-        if p['staged_binding']['payload'].get('version') in {'ncaaf-reviewed-staged-evidence-v3','ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5'}:
+        if p['staged_binding']['payload'].get('version') in {'ncaaf-reviewed-staged-evidence-v3','ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5','ncaaf-continuation-staged-evidence-v6'}:
             from app_core.ncaaf_reviewed_target import check_mapping
             return check_mapping(*args, **kwargs, review_policy=self)
         from app_core.ncaaf_future_target import check_mapping

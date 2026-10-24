@@ -40,7 +40,7 @@ def batches(bundle):
 
 
 def prepare(bundle, *, model_packet, prepared_at):
-    if bundle.get('payload',{}).get('version') in {'ncaaf-reviewed-history-unaccepted-v3','ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5'}:
+    if bundle.get('payload',{}).get('version') in {'ncaaf-reviewed-history-unaccepted-v3','ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5','ncaaf-history-continuation-unaccepted-v6'}:
         from app_core.ncaaf_reviewed_staged import prepare as selected
         return selected(bundle,model_packet=model_packet,prepared_at=prepared_at)
     if bundle.get('payload',{}).get('version')=='ncaaf-named-history-unaccepted-v2':
@@ -88,11 +88,13 @@ def prequote_subject(value):
 
 
 def prequote_review_subjects(p, bundle):
-    if bundle.get('payload',{}).get('version') in {'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5'}:
+    if bundle.get('payload',{}).get('version') in {'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5','ncaaf-history-continuation-unaccepted-v6'}:
         from app_core import ncaaf_filtered_history as filtered
         objects=filtered.history_objects(bundle['payload'],at=p['prepared_at'])
         values=prequote_review_subjects(p,{'payload':dict(bundle['payload'],version='DERIVED_REVIEW_SUBJECT_ONLY',objects=objects)})
-        values['model_and_source_basis']=model.digest(dict(prior=values['model_and_source_basis'],filtered_contract=bundle['payload']['plan']['payload']['filtered_history']))
+        basis=dict(prior=values['model_and_source_basis'],filtered_contract=bundle['payload']['plan']['payload']['filtered_history'])
+        if stages.is_continuation(bundle['payload']['plan']['payload']):basis['continuation']=bundle['payload']['plan']['payload']['continuation']
+        values['model_and_source_basis']=model.digest(basis)
         return values
     return dict(confirmed_event=model.digest(dict(event=p['event'], schedule=p['schedule'])),
         original_histories=model.digest([o['body_sha256'] for o in bundle['payload']['objects']]),
@@ -101,7 +103,7 @@ def prequote_review_subjects(p, bundle):
 
 
 def validate_prequote(value, bundle, *, at, review_required=False):
-    if value.get('payload',{}).get('version') in {'ncaaf-reviewed-prequote-features-v3','ncaaf-filtered-prequote-features-v4','ncaaf-fresh-filtered-prequote-features-v5'}:
+    if value.get('payload',{}).get('version') in {'ncaaf-reviewed-prequote-features-v3','ncaaf-filtered-prequote-features-v4','ncaaf-fresh-filtered-prequote-features-v5','ncaaf-continuation-prequote-features-v6'}:
         from app_core.ncaaf_reviewed_staged import validate_prequote as selected
         return selected(value,bundle,at=at,review_required=review_required)
     if value.get('payload',{}).get('version')=='ncaaf-named-prequote-features-v2':
@@ -132,7 +134,7 @@ def validate_prequote(value, bundle, *, at, review_required=False):
 
 
 def join(history_bundle, prequote, quote_bundle):
-    if quote_bundle.get('payload',{}).get('version') in {'ncaaf-reviewed-final-quote-unaccepted-v3','ncaaf-filtered-final-quote-unaccepted-v4','ncaaf-fresh-filtered-final-quote-unaccepted-v5'}:
+    if quote_bundle.get('payload',{}).get('version') in {'ncaaf-reviewed-final-quote-unaccepted-v3','ncaaf-filtered-final-quote-unaccepted-v4','ncaaf-fresh-filtered-final-quote-unaccepted-v5','ncaaf-continuation-final-quote-unaccepted-v6'}:
         from app_core.ncaaf_reviewed_staged import join as selected
         return selected(history_bundle,prequote,quote_bundle)
     if quote_bundle.get('payload',{}).get('version')=='ncaaf-reviewed-final-quote-unaccepted-v2':
@@ -159,7 +161,7 @@ def join(history_bundle, prequote, quote_bundle):
 
 
 def validate_binding(value, packet, *, at):
-    if value.get('payload',{}).get('version') in {'ncaaf-reviewed-staged-evidence-v3','ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5'}:
+    if value.get('payload',{}).get('version') in {'ncaaf-reviewed-staged-evidence-v3','ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5','ncaaf-continuation-staged-evidence-v6'}:
         from app_core.ncaaf_reviewed_staged import validate_binding as selected
         return selected(value,packet,at=at)
     if value.get('payload',{}).get('version')=='ncaaf-named-staged-evidence-v2':
