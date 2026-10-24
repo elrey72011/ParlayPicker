@@ -1,18 +1,28 @@
 {
-  "amendment_sha256": "392aeb3b7db7de6b26e1522d4bcd53082a867ff559eb88aa94bd2bf9ac5c6b35",
-  "base": "795a2ea53a70ba8e96284a466404a6a42c848fa9",
-  "base_tree": "85f25488a2330f8810ce3c320eba5a2d7d146802",
-  "binding_sha256": "aee72d6a98f256f0132b3be5202418f9d910c956a455dde97462763fbd8f7169",
-  "implementation_commit": "6dad096da34250e26047cc5f9ac1d57d73155cef",
+  "authorization_record_sha256": "c2fd6d224a12520b8aabce5bda7e6499edc2316abf9d0ad564e1c121480752bb",
+  "base": "91f1d0c4f82a568d4c0142e14f1ec8f2a32de64a",
+  "base_tree": "fbb36f8cce2e1bce227c672b34711aaa1fa31115",
+  "binding_sha256": "31f3a63683304fda14a482040f578195e076b05d415e98cc1964c2b0ef4cc6ae",
+  "implementation_commit": "fb2ed301b0dc619235b7d5d3297efb56e0b1ee3b",
   "implementation_paths": [
-    "app_core/per_game_boards.py",
-    "scripts/ncaaf_filtered_history_scope.py",
-    "scripts/check_launch_change_scope.py",
-    "scripts/ncaaf_private_refresh_scope.py",
+    "app_core/ncaaf_filtered_history.py",
+    "app_core/ncaaf_history_continuation.py",
+    "app_core/ncaaf_owner_spread.py",
+    "app_core/ncaaf_reviewed_staged.py",
+    "app_core/ncaaf_reviewed_target.py",
+    "app_core/ncaaf_staged_acquisition.py",
+    "app_core/ncaaf_staged_evidence.py",
+    "app_core/ncaaf_transport_diagnostics.py",
     "docs/research/ncaaf-filtered-history-bindings-v1.json",
-    "tests/test_ui_display_revalidation.py",
-    "docs/research/ui-display-revalidation-v1.md"
+    "docs/research/ncaaf-history-continuation-v6.md",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ncaaf_filtered_history_scope.py",
+    "scripts/ncaaf_private_refresh_scope.py",
+    "scripts/ncaaf_reviewed_target_operator.py",
+    "scripts/ncaaf_staged_acquisition.py",
+    "tests/test_ncaaf_filtered_history.py",
+    "tests/test_ncaaf_history_continuation.py"
   ],
-  "implementation_tree": "f6f5648cd7b8ce775fd89542fa666401d67b8c44",
-  "version": "ui-display-revalidation-seal-v1"
+  "implementation_tree": "70be5abec4941eb9580799c3ffeb26feceea2a2e",
+  "version": "ncaaf-history-continuation-seal-v6"
 }
