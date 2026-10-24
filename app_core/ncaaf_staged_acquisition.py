@@ -67,6 +67,11 @@ def configuration(plan, raw, expected_hash, *, at):
             and isinstance(d['root'], str) and (Path(d['root']).is_absolute() or PureWindowsPath(d['root']).is_absolute()) and isinstance(d['storage_receipt_sha256'], str)
             and len(d['storage_receipt_sha256']) == 64, 'NCAAF_STAGED_CUSTODY')
     _authorize(plan, p['authorization'], at, trusted=False)
+    if is_continuation(plan['payload']):
+        from app_core.ncaaf_history_continuation import material
+        original_files,_=material(plan['payload'])
+        original_control=json.loads(original_files['configuration'],object_pairs_hook=custody._unique,parse_constant=custody._constant)
+        require(p['custody']==original_control['payload']['custody'],'NCAAF_STAGED_PARENT_CUSTODY')
     account=p['account']; provider=plan['payload']['requests'][0]['provider']
     require(isinstance(account, dict) and set(account) == set('provider included_remaining observed_at valid_until evidence_sha256 no_paid_overage reviewer'.split())
             and account['provider'] == provider and account['reviewer'] == 'Robert Velarde'

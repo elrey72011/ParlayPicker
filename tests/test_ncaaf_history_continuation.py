@@ -194,13 +194,12 @@ def test_parent_expiry_and_unmodified_incomplete_rejection(monkeypatch,tmp_path)
 
 
 def selection(synthetic,monkeypatch,root,line):
-    with monkeypatch.context() as patch:
-        patch.setattr(fixtures,'context',context)
-        patch.setattr(fixtures,'capture',capture)
-        patch.setattr(fixtures,'configure',configure)
-        # Context's spent parent remains on the original clock; only new stage
-        # capture selects Clock. The downstream quote sets its own explicit wall.
-        return fixtures.filtered_selection(synthetic,patch,root,line)
+    monkeypatch.setattr(fixtures,'context',context)
+    monkeypatch.setattr(fixtures,'capture',capture)
+    monkeypatch.setattr(fixtures,'configure',configure)
+    # Keep the synthetic inference grants/clock and cleanup owned by the test,
+    # through Refresh and replay. Stage capture uses its own bounded inner view.
+    return fixtures.filtered_selection(synthetic,monkeypatch,root,line)
 
 
 @pytest.mark.parametrize('line',[-7,-3.5])

@@ -7,7 +7,7 @@ from pathlib import Path
 LEGACY_BINDING='docs/paid-launch/ncaaf-private-refresh-bindings-v1.json'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 _BINDING_SHA256='be717669ffc2955633ad3b00b05edacea5833e710d4d27a0f84c74e4941c16c6'
-_FILTERED_HISTORY_BINDING_SHA256='9e439099a19f73ea9e10b631a98aded5c27e4cdd0ff6ac6f740b10f66ab3ab50'
+_FILTERED_HISTORY_BINDING_SHA256='71e8d2c326c0cd053342035d3975db5aa05844d4200f834f01febb4d05b52721'
 
 
 def physical(path):
