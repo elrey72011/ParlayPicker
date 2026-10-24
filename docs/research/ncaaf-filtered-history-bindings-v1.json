@@ -345,15 +345,18 @@
     "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "be717669ffc2955633ad3b00b05edacea5833e710d4d27a0f84c74e4941c16c6",
     "docs/research/ncaaf-filtered-history-completion-v1.md": "f8cd60944af262e350ee1b99835f9ea91ffa24f03407e63844d1f4fc4cf0d0e8",
     "docs/research/ncaaf-history-continuation-v6.md": "91a6ca8eadafcc07d2a7d7de8aeccdb5213a45a13837c9a9909bd1d73ef29c51",
+    "docs/research/public-refresh-harness-repair-v1.md": "431ddbc7f03c84f6d503178ad4a7c0dc5f12a44f0613b6e3baecd8725c6200dd",
     "docs/research/ui-display-revalidation-v1.md": "367e33698d34fcaac05d2711fd4bb537461c96eca0622dbefa95887aed3077de",
     "scripts/check_launch_change_scope.py": "4fce27df09b797820c1d551eaabbed01522b2529096acf951f15a8494ef4d9e2",
     "scripts/ci_test_file_costs_v1.json": "c148ac4b63a280df6289aa73ebd5ed0013ed1b32f5797d03383ca4c11aadcd41",
-    "scripts/ncaaf_filtered_history_scope.py": "676d9bd38df6debb58abcabeafbdd2c2010189f1a26d6118c0468e849f4da3a1",
+    "scripts/ncaaf_filtered_history_scope.py": "118cb924271225843657e035cc0ddf75c2453ce53b4bcdff1c50ca7ae6fe3af9",
     "scripts/ncaaf_private_refresh_scope.py": "0decd4f5ec6d7c8f652e1b2a9eb4d564f66b6719aa266221249b9d9a7f2543d0",
     "scripts/ncaaf_reviewed_target_operator.py": "e88c2e6dfbfddece9a52fd9221be2fe162a73f7f81a264d4a1bb0ad5b0254a06",
     "scripts/ncaaf_staged_acquisition.py": "5361d463f7aa53b92302b9a3e7cdd21ba4bea2f27022955e40569c35128358af",
+    "scripts/public_refresh_harness_scope.py": "69a7ccbbb30a8632c6001433fd30ff583bed447570b13d01249924b37d597468",
     "streamlit_app.py": "0a8e221684fca28e87a8383d872024c8a50c8a91a458b3b4afa573068f0be8ec",
     "tests/historical_scope_input_boundary.py": "137499e153707a920179ac5a406dd84659b262672774ec7e85b2272f00606e78",
+    "tests/public_refresh.cjs": "50c159256edf751158736884e5e6979c56b7d3af87bee17b8a38aea6736e666b",
     "tests/test_ci_fixture_stability_scope.py": "f2403d1edd5aece98389cda79b398b32db65b3149b931092f6dd80cd922ffb4d",
     "tests/test_football_stage2.py": "094cc9f468a24ce11cb16094929e18b7c68156f33f34cd5f42d8b0de403a4700",
     "tests/test_historical_scope_input_boundary.py": "ad7a4277820ef49156c720aa633980225f56b6f66a23c54d2541d39595e1642b",
@@ -363,6 +366,7 @@
     "tests/test_ncaaf_history_continuation.py": "24548a77409cd340b498787059b27a170180fbea88cfd974f65ca68d174887df",
     "tests/test_ncaaf_transport_diagnostics.py": "62a1a18e6fa16d1508d2b29df5f18d6db5f8f1ae5953c68b85b35c37be3e88fd",
     "tests/test_prospective_legacy_view.py": "1929f1a3884b9e62a049688d8907a01f650af33c6856e3ec6edbd299fbfa35d7",
+    "tests/test_public_refresh.py": "5735669265d1c5e9ba4d24ce0163d83fbf87362963f7fa6b79e220a9cdae048d",
     "tests/test_ui_display_revalidation.py": "58251b30115adf4446b5ecbfa5143f44fdf015ae0de61be0bd15fdddc27ed9c6"
   },
   "consumer_input_adapters": {
@@ -544,6 +548,28 @@
   ],
   "predecessor_refresh_binding_sha256": "be717669ffc2955633ad3b00b05edacea5833e710d4d27a0f84c74e4941c16c6",
   "proposal_sha256": "4ba2ecdeaadc156070e3b402182a7eaa6cd4f6d4ea015dabb6aa2028a154f5a0",
+  "public_refresh_harness": {
+    "authorization_record_sha256": "431ddbc7f03c84f6d503178ad4a7c0dc5f12a44f0613b6e3baecd8725c6200dd",
+    "base": "9c98c958725d06a6f9f9e0dbe90c0a76597cedb9",
+    "base_tree": "fa949eeb4589638c5bd5a2429866816cbe6856f7",
+    "implementation_paths": [
+      "docs/research/ncaaf-filtered-history-bindings-v1.json",
+      "docs/research/public-refresh-harness-repair-v1.md",
+      "scripts/check_launch_change_scope.py",
+      "scripts/ncaaf_filtered_history_scope.py",
+      "scripts/ncaaf_private_refresh_scope.py",
+      "scripts/public_refresh_harness_scope.py",
+      "tests/public_refresh.cjs",
+      "tests/test_public_refresh.py"
+    ],
+    "inherited_policy_sha256": "a5f0830f4b68c161396c327af5f3e1383bda5a1525f4dd9e09e4e44ac3248794",
+    "ordered_parents": [
+      "91f1d0c4f82a568d4c0142e14f1ec8f2a32de64a",
+      "31ea66dd35542e11f0841524f45b7c89e1fc519a"
+    ],
+    "original_js_assertion_body_sha256": "9376a8d3f8c3bbf7f7149386a4037f23baf1812b745fef1b7ed1478c8d60430e",
+    "original_python_test_sha256": "028f6b5930305fd5afa52dce1b7d90fc18c808df24409241df3398650ef8027c"
+  },
   "report_compatibility_repair_sha256": "699d925f526091bb700f7bc0274566d4759dc4d92c0eff0256b85bb441b5fc51",
   "seal_path": "docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json",
   "shared_boundary_amendment_sha256": "162061ae1a7240680f915a9f16ea585cff70a619a69c49d99a0e46c14600a53b",
