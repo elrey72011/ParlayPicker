@@ -17,7 +17,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='c78633929570804763247e78f2545692cd707a082854315a8114be01f7958fd1'
+_BINDING_SHA256='b47a64ff81735c163f841d9ea0a1ffa670833be1650081e12e299cff03adcfd6'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -289,6 +289,7 @@ def validate(root,comparison_base=None,manifest=None):
 def _validate_continuation(root,b,comparison_base,manifest):
     c=b['history_continuation'];base=c['base']
     require(set(c)=={'authorization_record_sha256','base','base_tree','ordered_parents','implementation_paths','inherited_policy_sha256'},'CONTINUATION_SCOPE_CHANGED')
+    require(c['authorization_record_sha256']==b['components']['docs/research/ncaaf-history-continuation-v6.md'],'CONTINUATION_SCOPE_CHANGED')
     require(base=='91f1d0c4f82a568d4c0142e14f1ec8f2a32de64a'
         and c['base_tree']=='fbb36f8cce2e1bce227c672b34711aaa1fa31115'
         and git(root,'rev-parse',base+'^{tree}')==c['base_tree']
@@ -307,7 +308,10 @@ def _validate_continuation(root,b,comparison_base,manifest):
     for index,commit in enumerate(lineage):
         expected_parent=lineage[index+1] if index+1<len(lineage) else base
         require(git(root,'show','-s','--format=%P',commit).split()==[expected_parent], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
-        require(set(git(root,'diff','--name-only',expected_parent,commit).splitlines())<=set(c['implementation_paths']), 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+        # Local qualification may preserve an earlier policy-only seal as an
+        # ancestor. The final implementation must still restore the exact base
+        # policy, and the tested head must have the one exact final seal below.
+        require(set(git(root,'diff','--name-only',expected_parent,commit).splitlines())<=set(c['implementation_paths'])|{POLICY}, 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
     inherited=git(root,'show',base+':'+POLICY,raw=True)
     require(sha(inherited)==c['inherited_policy_sha256'] and git(root,'show',implementation+':'+POLICY,raw=True)==inherited,'INHERITED_POLICY_CHANGED')
     changed=set(git(root,'diff','--name-only',base,implementation).splitlines())

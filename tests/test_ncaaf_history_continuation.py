@@ -25,8 +25,8 @@ def context(monkeypatch, root):
     operation = {}
     def old_configure(plan, patch, custody):
         a, raw = native_configure(plan, patch, custody); c=json.loads(raw)['payload']
-        m=dict(version='ncaaf-reviewed-target-operation-v1',plan=str(root/'SYNTHETIC-old-plan.json'),
-            authorization=str(root/'SYNTHETIC-old-auth.json'),configuration=str(root/'SYNTHETIC-old-config.json'),
+        m=dict(version='ncaaf-reviewed-target-operation-v1',plan=str(root/'SYNTHETIC-retained-plan.json'),
+            authorization=str(root/'SYNTHETIC-retained-authorization.json'),configuration=str(root/'SYNTHETIC-retained-configuration.json'),
             custody_root=str(root),setup_cutoff='2026-10-17T17:59:59Z',latest_start='2026-10-17T18:10:00Z',history=None,prequote=None)
         c['runtime']['operation_manifest_sha256']=stage.model.digest(m)
         m['runtime']=deepcopy(c['runtime']);operation.update(stage.seal(m))
@@ -42,6 +42,7 @@ def context(monkeypatch, root):
     b=stage.read_bundle(parent,complete=False)
     assert b['status']=='INCOMPLETE' and b['attempts']==3 and len(b['objects'])==2
     blobs=dict(bundle=encode(parent),journal=base64.b64decode(b['journal_b64']),
+        plan=encode(p),stage_claim=(root/fresh.claim_name(p['payload'])).read_bytes(),
         diagnostics=(root/(p['sha256']+'.transport-diagnostics.json')).read_bytes(),configuration=control,
         authorization=encode(b['authorization']),operation=encode(operation),derivation=encode(dict(label='SYNTHETIC derivation only')),
         template=encode(dict(label='SYNTHETIC separate derivation template')),
@@ -57,6 +58,12 @@ def context(monkeypatch, root):
     blobs['claim']=encode(claim)
     blobs['application_readback']=encode(dict(status='INDEPENDENT_READBACK_PASS',configuration_file_sha256=sha(control),
         plan_sha256=p['sha256'],package_sha256=sha(blobs['method']),actual_approval_at='2026-10-17T17:50:00Z',at='2026-10-17T17:59:00Z'))
+    blobs['native_readback']=encode(dict(version='actual-exclusive-history-application-v1',configuration_applied=True,claims_created=False,
+        provider_requests=0,inference=False,approval_file_sha256=sha(blobs['approval']),package_sha256=sha(blobs['method']),
+        plan_sha256=p['sha256'],authorization_sha256=b['authorization']['sha256'],configuration_file_sha256=sha(control),
+        configuration_subject_sha256=json.loads(control)['payload']['review']['subject_sha256'],
+        actual_approval_at='2026-10-17T17:50:00Z',at='2026-10-17T17:59:00Z',
+        files={k:dict(path=str(root/('SYNTHETIC-retained-'+k+'.json')),sha256=sha(blobs[k])) for k in ('plan','authorization','configuration','operation')}))
     report=dict(claim,claim_sha256=sha(blobs['claim']),bundle_file_sha256=sha(blobs['bundle']),bundle_sha256=parent['sha256'],
         journal_sha256=sha(blobs['journal']),diagnostics_file_sha256=sha(blobs['diagnostics']),provider_attempts=3,status=b['status'],
         reason=b['reason'],retry=False,readback='PASS',finished_at='2026-10-17T18:00:01.500000Z')
@@ -68,7 +75,11 @@ def context(monkeypatch, root):
     value['advance_permissions'][0]['requests_sha256']=stage.model.digest(value['requests'])
     material=dict(blobs_b64={k:base64.b64encode(v).decode() for k,v in blobs.items()},pins={k:sha(v) for k,v in blobs.items()},
         custody_names={k:'SYNTHETIC-retained-'+k+'.json' for k in blobs})
-    for key,name in material['custody_names'].items():(root/name).write_bytes(blobs[key])
+    material['custody_names']['stage_claim']=fresh.claim_name(p['payload'])
+    for key,name in material['custody_names'].items():
+        path=root/name
+        if path.exists():assert path.read_bytes()==blobs[key]
+        else:path.write_bytes(blobs[key])
     value['continuation']=dict(version='ncaaf-spent-history-parent-v6',parent=material,budget=deepcopy(continuation.POLICY),review={})
     value['continuation']['review']=dict(reviewer=target.OWNER,reviewed_at='2026-10-17T18:00:02Z',subject_sha256=continuation.subject(value),
         finding='SYNTHETIC exact parent and amended cumulative budget review; never a real owner answer.')
@@ -129,7 +140,7 @@ def test_actual_single_request_join_and_original_clocks(monkeypatch,tmp_path,cli
     assert all((tmp_path/name).read_bytes()==raw for name,raw in before.items())
 
 
-@pytest.mark.parametrize('attack',['bundle','journal','diagnostics','claim','report','configuration','authorization','operation','method','approval','derivation','template','application_readback','release'])
+@pytest.mark.parametrize('attack',['bundle','journal','diagnostics','claim','stage_claim','plan','native_readback','report','configuration','authorization','operation','method','approval','derivation','template','application_readback','release'])
 def test_altered_parent_material_rejects_before_dispatch(monkeypatch,tmp_path,attack):
     p,_=context(monkeypatch,tmp_path);p['payload']['continuation']['parent']['blobs_b64'][attack]=base64.b64encode(b'{}').decode()
     with pytest.raises(ValueError,match='INTEGRITY|LINKAGE'):stage.validate_plan(stage.seal(p['payload']),executable=True)

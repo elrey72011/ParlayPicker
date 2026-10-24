@@ -15,7 +15,8 @@ it is not a claim that the owner approved an invented proposal hash.
 V6 accepts exactly the third request of one authenticated fresh V5 history plan
 that spent three attempts, retained its first two complete originals and ended
 INCOMPLETE / NCAAF_STAGED_DEADLINE. It never modifies or resumes that parent.
-The parent plan, authorization, controlled configuration, operator manifest,
+The parent plan file, native spent claim, operator claim, native application
+read-back, authorization, controlled configuration, operator manifest,
 method, approval, derivation, independent read-back, release receipt, terminal
 report, claim, journal and diagnostics are pinned as exact original bytes.
 A separate qualified reuse review binds those pins, target, source and budget.
@@ -68,6 +69,11 @@ limits and release assertions intact. Publish and consume the one full CI cycle
 only after correctness and credible capacity pass. Required checks, artifacts,
 outcomes, ordered tested-merge parents, tree equality and actual headroom must
 all pass. A failed prerequisite keeps CI unspent.
+
+An earlier local policy-only seal may remain preserved in the linear engineering
+history. Before the final seal, the implementation restores the exact baseline
+policy. Only the final authenticated seal can pass dispatch validation; no
+intermediate head is published as qualified evidence.
 
 Operational use requires a later exact method/configuration/manual-execution
 approval for one included request, zero Odds requests and zero extra spending.

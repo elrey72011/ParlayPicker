@@ -9,7 +9,7 @@ from copy import deepcopy
 from decimal import Decimal
 import io
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from app_core import ncaaf_filtered_history as filtered, ncaaf_fresh_history as fresh
 from app_core import ncaaf_history as history, ncaaf_reviewed_target as target
@@ -22,7 +22,7 @@ PREQUOTE = 'ncaaf-continuation-prequote-features-v6'
 BINDING = 'ncaaf-continuation-staged-evidence-v6'
 CONFIGURATION = 'ncaaf-continuation-controlled-bindings-v6'
 POLICY = dict(cumulative_active_seconds=120, market_reserve_seconds=20, header_ceiling_seconds=30)
-MATERIALS = frozenset(('bundle', 'journal', 'diagnostics', 'claim', 'report',
+MATERIALS = frozenset(('bundle', 'journal', 'diagnostics', 'claim', 'stage_claim', 'plan', 'native_readback', 'report',
     'configuration', 'authorization', 'operation', 'method', 'approval',
     'derivation', 'template', 'application_readback', 'release'))
 require = filtered.require
@@ -78,6 +78,8 @@ def _read_parent(p, *, at, review_required):
         and filtered.sha(blobs['configuration']) == b['control_receipt']['file_sha256']
         and base64.b64decode(b['control_receipt']['file_b64'], validate=True) == blobs['configuration']
         and decode(blobs['authorization']) == b['authorization'], 'NCAAF_CONTINUATION_LINKAGE')
+    require(decode(blobs['plan'])==b['plan'] and decode(blobs['stage_claim'])==dict(plan_sha256=b['plan']['sha256'])
+        and p['continuation']['parent']['custody_names']['stage_claim']==fresh.claim_name(old), 'NCAAF_CONTINUATION_CLAIM')
     report, claim, method, approval = [decode(blobs[k]) for k in ('report', 'claim', 'method', 'approval')]
     operation = decode(blobs['operation'])
     require(stage._envelope(operation)['runtime'] == c['payload']['runtime']
@@ -94,6 +96,22 @@ def _read_parent(p, *, at, review_required):
         and target.instant(approval['received_at']) == target.instant(c['payload']['review']['reviewed_at'])
         and target.instant(approval['received_at']) <= target.instant(b['started_at']), 'NCAAF_CONTINUATION_APPROVAL')
     readback, release = [decode(blobs[k]) for k in ('application_readback', 'release')]
+    native=decode(blobs['native_readback'])
+    require(native['version']=='actual-exclusive-history-application-v1' and native['configuration_applied'] is True
+        and native['claims_created'] is False and native['provider_requests']==0 and native['inference'] is False
+        and native['approval_file_sha256']==pins['approval'] and native['package_sha256']==pins['method']
+        and native['plan_sha256']==b['plan']['sha256'] and native['authorization_sha256']==b['authorization']['sha256']
+        and native['configuration_file_sha256']==pins['configuration']
+        and native['configuration_subject_sha256']==c['payload']['review']['subject_sha256']
+        and target.instant(native['actual_approval_at'])==target.instant(approval['received_at'])
+        and target.instant(approval['received_at'])<=target.instant(native['at'])<=target.instant(b['started_at'])
+        and set(native['files'])=={'plan','authorization','configuration','operation'}, 'NCAAF_CONTINUATION_READBACK')
+    for key,value in native['files'].items():
+        path_type=PureWindowsPath if '\\' in value['path'] else PurePosixPath
+        path=path_type(value['path'])
+        require(value['sha256']==pins[key] and path.parent==path_type(c['payload']['custody']['root'])
+            and path.name==p['continuation']['parent']['custody_names'][key]
+            and (key=='operation' or value['path']==operation['payload'][key]), 'NCAAF_CONTINUATION_READBACK')
     require(readback['status'] == 'INDEPENDENT_READBACK_PASS'
         and readback['configuration_file_sha256'] == pins['configuration']
         and readback['plan_sha256'] == b['plan']['sha256']
