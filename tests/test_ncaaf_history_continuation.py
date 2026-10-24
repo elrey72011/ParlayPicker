@@ -288,3 +288,83 @@ def test_continuation_actual_normal_refresh_button(synthetic,monkeypatch,tmp_pat
     selected,root,_=selection(synthetic,monkeypatch,tmp_path,-7)
     monkeypatch.setattr(normal,'selection',lambda *args,**kwargs:selected)
     normal.test_actual_normal_refresh_button_uses_private_caller(synthetic,monkeypatch,root)
+
+
+def test_binding_preparation_is_owned_and_each_read_authenticates(synthetic,monkeypatch,tmp_path):
+    from app_core import ncaaf_reviewed_staged as reviewed,ncaaf_spread_pair as pair
+    selected,root,_=selection(synthetic,monkeypatch,tmp_path,-7)
+    child=pair.children(selected['packet'])['home'];value=child['payload']['staged_binding']
+    before=deepcopy(value);native=reviewed.prepare;calls=[]
+    def observed(*args,**kwargs):
+        calls.append(kwargs['prepared_at']);return native(*args,**kwargs)
+    monkeypatch.setattr(reviewed,'prepare',observed)
+    first=reviewed.validate_binding(value,child,at=legacy.NOW.isoformat())
+    assert len(calls)==1
+    first['ordered_features'][0]='changed returned snapshot'
+    second=reviewed.validate_binding(value,child,at=legacy.NOW.isoformat())
+    assert len(calls)==2 and second['ordered_features'][0]!='changed returned snapshot'
+    assert value==before
+    # A warm call does not bless changed original, control, journal, model or review bytes.
+    for attack in ('original','configuration','journal','model','review'):
+        changed=deepcopy(value['payload'])
+        if attack=='original':changed['history']['payload']['objects'][0]['body_b64']='eA=='
+        elif attack=='configuration':changed['history']['payload']['control_receipt']['file_sha256']='0'*64
+        elif attack=='journal':changed['history']['payload']['journal_b64']='eA=='
+        elif attack=='model':changed['prequote']['payload']['model']['compatibility']['artifact_sha256']='0'*64
+        else:changed['prequote']['payload']['history_review']['subject_sha256']='0'*64
+        with pytest.raises(ValueError):reviewed.validate_binding(stage.seal(changed),child,at=legacy.NOW.isoformat())
+    assert reviewed.validate_binding(value,child,at=legacy.NOW.isoformat())==second
+    assert not list(root.glob('*.inference-attempts.jsonl'))
+
+
+def test_binding_preserves_quote_and_current_clock_checks(synthetic,monkeypatch,tmp_path):
+    from app_core import ncaaf_reviewed_staged as reviewed,ncaaf_spread_pair as pair
+    selected,root,_=selection(synthetic,monkeypatch,tmp_path,-7)
+    child=pair.children(selected['packet'])['home'];value=child['payload']['staged_binding']
+    quote_at=value['payload']['quote']['payload']['objects'][0]['requested_at']
+    native=reviewed._prequote_clocks_and_review;clocks=[]
+    def observed(*args,**kwargs):
+        clocks.append((kwargs['at'],kwargs.get('review_required',False)))
+        return native(*args,**kwargs)
+    monkeypatch.setattr(reviewed,'_prequote_clocks_and_review',observed)
+    reviewed.validate_binding(value,child,at=legacy.NOW.isoformat())
+    assert clocks==[(quote_at,True),(legacy.NOW.isoformat(),False)]
+    for expired in ('2026-10-18T18:30:05Z',value['payload']['prequote']['payload']['event']['start_utc']):
+        clocks.clear()
+        with pytest.raises(ValueError,match='NCAAF_STAGED_INPUT_CLOCK'):
+            reviewed.validate_binding(value,child,at=expired)
+        assert clocks==[(quote_at,True),(expired,False)]
+    reviewed.validate_binding(value,child,at=legacy.NOW.isoformat())
+    assert not list(root.glob('*.inference-attempts.jsonl'))
+
+
+def test_binding_nested_evaluation_interruption_leaves_no_reuse(synthetic,monkeypatch,tmp_path):
+    from app_core import ncaaf_reviewed_staged as reviewed,ncaaf_spread_pair as pair
+    selected,root,_=selection(synthetic,monkeypatch,tmp_path,-7)
+    child=pair.children(selected['packet'])['home'];value=child['payload']['staged_binding'];before=deepcopy(value)
+    native=reviewed._prequote_clocks_and_review;inner=[]
+    def nested(*args,**kwargs):
+        if not kwargs.get('review_required',False):
+            with monkeypatch.context() as local:
+                local.setattr(reviewed,'_prequote_clocks_and_review',native)
+                inner.append(reviewed.validate_binding(value,child,at=legacy.NOW.isoformat()))
+            raise KeyboardInterrupt('SYNTHETIC interruption after inner validation')
+        return native(*args,**kwargs)
+    with monkeypatch.context() as local:
+        local.setattr(reviewed,'_prequote_clocks_and_review',nested)
+        with pytest.raises(KeyboardInterrupt,match='SYNTHETIC interruption'):
+            reviewed.validate_binding(value,child,at=legacy.NOW.isoformat())
+    assert reviewed._prequote_clocks_and_review is native and value==before and len(inner)==1
+    assert reviewed.validate_binding(value,child,at=legacy.NOW.isoformat())==inner[0]
+    assert not list(root.glob('*.inference-attempts.jsonl'))
+
+
+def test_continuation_refresh_one_use_survives_revalidation(synthetic,monkeypatch,tmp_path):
+    from app_core import ncaaf_private_refresh as refresh
+    selected,root,_=selection(synthetic,monkeypatch,tmp_path,-7)
+    updates,warnings,errors=refresh.pipeline(dict(ncaaf_private_refresh_selection=selected))
+    assert not warnings and not errors and updates['pipeline_status']=='PRIVATE_CONDITIONAL_RESEARCH'
+    journals=list(root.glob('*.inference-attempts.jsonl'));assert len(journals)==1
+    original=journals[0].read_bytes()
+    again,_,errors=refresh.pipeline(dict(ncaaf_private_refresh_selection=selected))
+    assert errors and again['pipeline_status']=='UNAVAILABLE' and journals[0].read_bytes()==original

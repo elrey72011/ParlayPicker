@@ -89,3 +89,28 @@ compared with the authenticated 91f1d0c base. Altered assertions still reject.
 Within one owned bundle read the parent is authenticated once and its local
 snapshot is reused for linked checks. Each later public read authenticates
 again; no validation decision or mutable module is cached.
+
+## October 24 Refresh repair successor
+
+The owner authorizes the focused follow-up after the preserved b9964af release
+failed its continuation AppTest completion wait. That Ubuntu delay remains
+unexplained. Code and local attribution demonstrate a separate duplicate:
+binding validation reconstructs the prequote inside join and immediately again
+at the evaluation clock. One owned validation now authenticates and constructs
+once, then independently evaluates the existing quote-request and current-time
+clock and substantive-review checks. Public later reads reconstruct and
+authenticate again. Returned snapshots are independent; no acceptance verdict,
+mutable historical module, caller trust flag or cross-call cache is introduced.
+
+The exact original 180-second AppTest budget, production deadlines, prediction
+mathematics and all assertions remain. Related regression and binding changes,
+one optional diagnostic-only Ubuntu job and one conditional complete final-head
+cycle are authorized for this successor, with no retries. A one-time forecast-
+only dispatch exception applies after demonstrated matched end-to-end benefit,
+combined correctness and comparison with the prior complete run's 668-second
+minimum actual headroom, including added regression costs. It does not waive
+the 120-second actual reserve, any required check, artifact or exact-once result.
+Earlier failed-cycle authorization remains consumed, not reset. No operational
+configuration, provider request, authentic inference, merge or deployment is
+authorized. The exact implementation paths and policy-only seal are bound by
+the existing authenticated controls.

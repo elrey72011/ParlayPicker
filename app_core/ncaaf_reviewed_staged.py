@@ -100,6 +100,10 @@ def validate_prequote(value,bundle,*,at,review_required=False):
     p=stage._envelope(value); expected=prepare(bundle,model_packet=p['model'],prepared_at=p['prepared_at'])['payload']
     require(set(p)==set(expected) and {k:v for k,v in p.items() if k!='history_review'}=={k:v for k,v in expected.items() if k!='history_review'},
         'NCAAF_STAGED_PREQUOTE_CONFLICT')
+    return _prequote_clocks_and_review(value,p,bundle,at=at,review_required=review_required)
+
+
+def _prequote_clocks_and_review(value,p,bundle,*,at,review_required=False):
     now,prepared,start=[history.timestamp(x) for x in (at,p['prepared_at'],p['event']['start_utc'])]
     require(now is not None and prepared<=now<start and all(0<=(now-history.timestamp(t)).total_seconds()<=86400 for t in p['source_receipts']),
         'NCAAF_STAGED_INPUT_CLOCK')
@@ -139,12 +143,16 @@ def validate_quote_parent(h,p,prequote,*,at):
 
 
 def join(history_bundle,prequote,quote_bundle):
+    return _join_with_prequote(history_bundle,prequote,quote_bundle)[0]
+
+
+def _join_with_prequote(history_bundle,prequote,quote_bundle):
     h=stage.read_bundle(history_bundle);q=stage.read_bundle(quote_bundle);p=q['plan']['payload']
     filtered=h['version'] in {'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5','ncaaf-history-continuation-unaccepted-v6'}
     require((h['version']==target.HISTORY_BUNDLE and q['version']==target.QUOTE_BUNDLE or filtered and q['version'] in {'ncaaf-filtered-final-quote-unaccepted-v4','ncaaf-fresh-filtered-final-quote-unaccepted-v5','ncaaf-continuation-final-quote-unaccepted-v6'})
         and p['parent_history_sha256']==history_bundle['sha256'] and p['prequote_sha256']==prequote['sha256']
         and h['evidence_label']==q['evidence_label'] and h['plan']['payload']['custody_id']==p['custody_id'], 'NCAAF_STAGED_PARENT')
-    validate_quote_parent(h,p,prequote,at=q['objects'][0]['requested_at'])
+    pref=validate_quote_parent(h,p,prequote,at=q['objects'][0]['requested_at'])
     require(history.timestamp(prequote['payload']['history_review']['reviewed_at'])<=history.timestamp(q['authorization']['payload']['authorized_at']),
         'NCAAF_STAGED_PREQUOTE_AUTHORIZATION_CLOCK')
     import json
@@ -155,14 +163,19 @@ def join(history_bundle,prequote,quote_bundle):
         and h['prior_active_seconds']+h['active_seconds']+q['active_seconds']<stage.active_limit(p),'NCAAF_STAGED_COMBINED_LIMIT')
     value=stage.seal(dict(version=('ncaaf-continuation-staged-evidence-v6' if stage.is_continuation(p) else 'ncaaf-fresh-filtered-staged-evidence-v5' if p['version']=='ncaaf-fresh-filtered-final-quote-stage-plan-v5' else 'ncaaf-filtered-staged-evidence-v4') if filtered else BINDING_VERSION,history=deepcopy(history_bundle),prequote=deepcopy(prequote),quote=deepcopy(quote_bundle)))
     require(len(model.encode(value))<=stage.MAX_BUNDLE,'NCAAF_STAGED_BUNDLE_LIMIT')
-    return value
+    return value,pref
 
 
 def validate_binding(value,packet,*,at):
-    b=stage._envelope(value)
-    require(set(b)=={'version','history','prequote','quote'} and b['version'] in {BINDING_VERSION,'ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5','ncaaf-continuation-staged-evidence-v6'}
-        and value==join(b['history'],b['prequote'],b['quote']),'NCAAF_STAGED_BINDING_CONFLICT')
-    pref=validate_prequote(b['prequote'],b['history'],at=at)
+    # One owned envelope for this validation only; each public call authenticates
+    # again. No accepted verdict, mutable module or cross-call cache is retained.
+    owned=deepcopy(value);b=stage._envelope(owned)
+    require(set(b)=={'version','history','prequote','quote'} and b['version'] in {BINDING_VERSION,'ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5','ncaaf-continuation-staged-evidence-v6'},'NCAAF_STAGED_BINDING_CONFLICT')
+    joined,pref=_join_with_prequote(b['history'],b['prequote'],b['quote'])
+    require(owned==joined,'NCAAF_STAGED_BINDING_CONFLICT')
+    # join freshly authenticated the same feature reconstruction. Retain the
+    # second evaluation-clock and substantive-review checks at the caller's at.
+    pref=_prequote_clocks_and_review(b['prequote'],pref,b['history'],at=at)
     p=packet['payload'];c=p['custody_packet']['payload'];n=c['native_packet']['payload'];o=n['observation']['payload']
     identity=b['quote']['payload']['plan']['payload']['identity_review']
     require(o['quote']['book']=='draftkings' and p['alias_review']==identity and p['evidence_label']==pref['evidence_label']
