@@ -17,6 +17,8 @@ UNKNOWN = 'UNKNOWN'
 PHASES = frozenset(('credential_lookup', 'connect_dns_tcp_tls', 'request_write',
                     'response_headers', 'response_body_read', 'body_validation'))
 HASH = re.compile(r'[0-9a-f]{64}\Z')
+SOURCE_PATHS = ('app_core/ncaaf_transport_diagnostics.py', 'app_core/ncaaf_pilot.py',
+    'app_core/ncaaf_staged_acquisition.py', 'scripts/ncaaf_staged_acquisition.py')
 FIELDS = frozenset(('version', 'plan_sha256', 'authorization_sha256',
     'configuration_file_sha256', 'bundle_sha256', 'bundle_file_sha256',
     'journal_sha256', 'source_sha256', 'status', 'reason', 'active_seconds',
@@ -35,9 +37,7 @@ def finite(value):
 
 def sources():
     root = Path(__file__).resolve().parents[1]
-    return {p: hashlib.sha256((root/p).read_bytes()).hexdigest() for p in (
-        'app_core/ncaaf_transport_diagnostics.py', 'app_core/ncaaf_pilot.py',
-        'app_core/ncaaf_staged_acquisition.py', 'scripts/ncaaf_staged_acquisition.py')}
+    return {p: hashlib.sha256((root/p).read_bytes()).hexdigest() for p in SOURCE_PATHS}
 
 
 class Collector:

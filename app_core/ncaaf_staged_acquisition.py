@@ -417,7 +417,10 @@ def acquire(plan, authorization, *, root, transport, history_bundle=None, prequo
             code = safe if safe in SAFE_CODES else 'NCAAF_STAGED_ACQUISITION_FAILURE'
             if diagnostics is not None:diagnostics.finish(code,complete=attempts>0 and len(objects)==attempts)
         elapsed = monotonic()-started_mono
-        if not math.isfinite(elapsed) or elapsed < last_elapsed or prior_active+elapsed >= active_limit(p) or (filtered and is_history(p) and elapsed>=selected.history_ceiling(p)):
+        if is_continuation(p):
+            try:continuation_remaining(prior_active,elapsed,prior_bytes=prior_bytes,added_bytes=total-prior_bytes,reserve_seconds=20 if is_history(p) else 0)
+            except ValueError:code='NCAAF_STAGED_DEADLINE'
+        if not math.isfinite(elapsed) or elapsed < last_elapsed or prior_active+elapsed >= active_limit(p) or (filtered and is_history(p) and not is_continuation(p) and elapsed>=selected.history_ceiling(p)):
             code = 'NCAAF_STAGED_DEADLINE'
         status = 'CAPTURED_UNREVIEWED' if code is None and len(objects) == len(p['requests']) else 'INCOMPLETE'
         append(journal, dict(kind='finish', status=status, reason=code, attempts=attempts, stage_active_seconds=elapsed))
@@ -522,7 +525,10 @@ def read_bundle(bundle, *, complete=True):
             _,parent=filtered.parent(p,at=b['started_at'])
             require(b['prior_original_bytes']==parent['original_bytes'] and b['prior_active_seconds']==parent['charged_active_seconds'],'NCAAF_STAGED_PARENT')
             if complete:
-                require(b['active_seconds']<filtered.history_ceiling(p),'NCAAF_STAGED_COMBINED_LIMIT')
+                if is_continuation(p):
+                    from app_core.ncaaf_history_continuation import remaining
+                    remaining(parent['charged_active_seconds'],b['active_seconds'],prior_bytes=parent['original_bytes'],added_bytes=total,reserve_seconds=20)
+                else:require(b['active_seconds']<filtered.history_ceiling(p),'NCAAF_STAGED_COMBINED_LIMIT')
                 filtered.project_bundle(b,at=b['objects'][-1]['metadata']['received_at'])
         else:require(b['prior_original_bytes'] == b['prior_active_seconds'] == 0, 'NCAAF_STAGED_PARENT')
     if complete:

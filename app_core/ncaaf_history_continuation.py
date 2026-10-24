@@ -117,7 +117,7 @@ def _read_parent(p, *, at, review_required):
     # Old diagnostics authenticate against the old, already bound runtime. The
     # ordinary diagnostics reader still requires current physical sources.
     d = stage._envelope(decode(blobs['diagnostics']))
-    expected = {k:c['payload']['runtime']['sources'][k] for k in diagnostics.sources()}
+    expected = {k:c['payload']['runtime']['sources'][k] for k in diagnostics.SOURCE_PATHS}
     diagnostics._checked(d, expected_sources=expected)
     require(d['plan_sha256'] == b['plan']['sha256'] and d['authorization_sha256'] == b['authorization']['sha256']
         and d['configuration_file_sha256'] == pins['configuration'] and d['bundle_sha256'] == envelope['sha256']
@@ -221,10 +221,12 @@ def validate_response(obj, p, *, at, objects):
 
 def project_bundle(b, *, at):
     require(len(b['objects']) == 1, 'FILTERED_YARDAGE_COVERAGE')
-    old, _ = parent(b['plan']['payload'], at=at)
+    old, facts = parent(b['plan']['payload'], at=at)
+    require(b['prior_active_seconds'] == facts['charged_active_seconds']
+        and b['prior_original_bytes'] == facts['original_bytes'], 'NCAAF_CONTINUATION_ACCOUNTING')
     # The projection uses the unchanged original reader; its inputs are the
     # three authentic objects with their own original metadata and clocks.
-    return fresh.project_bundle(dict(plan=old['plan'], objects=history_objects(b, at=at)), at=at)
+    return fresh.project_bundle(dict(plan=old['plan'], objects=deepcopy(old['objects'])+deepcopy(b['objects'])), at=at)
 
 
 def history_ceiling(p):
