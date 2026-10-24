@@ -98,7 +98,8 @@ def _read_parent(p, *, at, review_required):
     readback, release = [decode(blobs[k]) for k in ('application_readback', 'release')]
     native=decode(blobs['native_readback'])
     require(native['version']=='actual-exclusive-history-application-v1' and native['configuration_applied'] is True
-        and native['claims_created'] is False and native['provider_requests']==0 and native['inference'] is False
+        and type(native['claims_created']) is int and native['claims_created']==0
+        and type(native['provider_requests']) is int and native['provider_requests']==0 and native['inference'] is False
         and native['approval_file_sha256']==pins['approval'] and native['package_sha256']==pins['method']
         and native['plan_sha256']==b['plan']['sha256'] and native['authorization_sha256']==b['authorization']['sha256']
         and native['configuration_file_sha256']==pins['configuration']

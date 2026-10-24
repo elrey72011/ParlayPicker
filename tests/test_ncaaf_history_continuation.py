@@ -58,7 +58,7 @@ def context(monkeypatch, root):
     blobs['claim']=encode(claim)
     blobs['application_readback']=encode(dict(status='INDEPENDENT_READBACK_PASS',configuration_file_sha256=sha(control),
         plan_sha256=p['sha256'],package_sha256=sha(blobs['method']),actual_approval_at='2026-10-17T17:50:00Z',at='2026-10-17T17:59:00Z'))
-    blobs['native_readback']=encode(dict(version='actual-exclusive-history-application-v1',configuration_applied=True,claims_created=False,
+    blobs['native_readback']=encode(dict(version='actual-exclusive-history-application-v1',configuration_applied=True,claims_created=0,
         provider_requests=0,inference=False,approval_file_sha256=sha(blobs['approval']),package_sha256=sha(blobs['method']),
         plan_sha256=p['sha256'],authorization_sha256=b['authorization']['sha256'],configuration_file_sha256=sha(control),
         configuration_subject_sha256=json.loads(control)['payload']['review']['subject_sha256'],
