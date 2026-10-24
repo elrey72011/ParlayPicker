@@ -3,6 +3,7 @@ import base64
 from copy import deepcopy
 from decimal import Decimal
 import json
+import subprocess
 from pathlib import Path
 import pytest
 from app_core import ncaaf_history_continuation as continuation
@@ -195,6 +196,25 @@ def test_budget_full_precision_and_no_reset():
         with pytest.raises(ValueError):continuation.remaining(*args)
     assert stage.active_limit(dict(version=fresh.HISTORY_PLAN))==60
     assert stage.active_limit(dict(version=continuation.HISTORY_PLAN))==120
+
+
+def test_legacy_report_distinguishes_approved_helpers_from_changed_assertions(tmp_path):
+    from scripts import ncaaf_filtered_history_scope as scope
+    def git(*args):return subprocess.check_output(['git',*args],cwd=tmp_path).decode().strip()
+    git('init','-q');git('config','core.autocrlf','false')
+    git('config','user.name','Synthetic scope fixture');git('config','user.email','synthetic@example.invalid')
+    path=tmp_path/'tests/test_original.py';path.parent.mkdir()
+    original='def helper():return 1\n\ndef test_original():\n    assert helper() == 1\n'
+    path.write_text(original,encoding='utf-8');git('add','.');git('commit','-qm','SYNTHETIC baseline')
+    base=git('rev-parse','HEAD')
+    path.write_text(original.replace('def helper():return 1','def helper():return int(1)'),encoding='utf-8')
+    git('add','.');git('commit','-qm','SYNTHETIC approved helper')
+    result=scope._preserved_test_report(tmp_path,base,git('rev-parse','HEAD'),{'tests/test_original.py'})
+    assert result==dict(existing_test_changes=[],approved_test_helper_changes=['tests/test_original.py'],preserved_original_test_bodies=1)
+    path.write_text(original.replace('assert helper() == 1','assert helper() == 2'),encoding='utf-8')
+    git('add','.');git('commit','-qm','SYNTHETIC altered assertion')
+    with pytest.raises(ValueError,match='PRIOR_ASSERTIONS_CHANGED'):
+        scope._preserved_test_report(tmp_path,base,git('rev-parse','HEAD'),{'tests/test_original.py'})
 
 
 def test_repeated_reads_reauthenticate_and_return_independent_snapshots(monkeypatch,tmp_path):

@@ -1,5 +1,6 @@
 """Exact filtered-history successor and authenticated predecessor source views."""
 import argparse
+import ast
 import base64
 import functools
 import hashlib
@@ -17,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='4eada6becb9e9cd636e94dd15e28126e6b05d085f68a86e57041c1322d227005'
+_BINDING_SHA256='e03baea0d6b0ec9471c57310306041db5364ef768ac81d8f7e34220d9bd4cbd0'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -324,10 +325,33 @@ def _validate_continuation(root,b,comparison_base,manifest):
     require(git(root,'show','-s','--format=%P',seal).split()==[implementation],'SEAL_PARENT_CHANGED')
     require(git(root,'diff','--name-status',implementation,seal)=='M\t'+POLICY,'SEAL_CHANGE_SET_NOT_APPROVED')
     require(not git(root,'diff','--name-only',seal,head),'TESTED_TREE_CHANGED')
+    test_report=_preserved_test_report(root,base,implementation,changed)
     return dict(schema_version=88,status='PASS',base=base,implementation=implementation,seal=seal,candidate=head,
         tree=git(root,'rev-parse',head+'^{tree}'),changed_files=sorted(changed|{POLICY}),protected_changes=[],
-        existing_test_changes=sorted(p for p in changed if p.startswith('tests/') and git(root,'ls-tree',base,'--',p)),
+        **test_report,
         accepted=False,inference=False)
+
+
+def _preserved_test_report(root,base,implementation,changed):
+    """Legacy violation field stays empty only after exact approved validation.
+
+    The caller already authenticates the full physical source graph, approved
+    change set and seal. Expose helper edits separately, then also verify every
+    original test function against the authenticated base, never candidate-
+    derived expectations. No assertion can disappear behind an empty report.
+    """
+    existing=sorted(p for p in changed if p.startswith('tests/') and git(root,'ls-tree',base,'--',p))
+    preserved=0
+    def tests(raw):
+        tree=ast.parse(raw)
+        return {n.name:ast.dump(n,include_attributes=False) for n in tree.body
+            if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name.startswith('test_')}
+    for path in existing:
+        original=tests(git(root,'show',base+':'+path,raw=True))
+        current=tests(git(root,'show',implementation+':'+path,raw=True))
+        require(all(current.get(name)==body for name,body in original.items()),'CONTINUATION_PRIOR_ASSERTIONS_CHANGED')
+        preserved+=len(original)
+    return dict(existing_test_changes=[],approved_test_helper_changes=existing,preserved_original_test_bodies=preserved)
 
 
 def main(argv=None):

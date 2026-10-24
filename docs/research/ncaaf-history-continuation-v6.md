@@ -80,3 +80,12 @@ intermediate head is published as qualified evidence.
 Operational use requires a later exact method/configuration/manual-execution
 approval for one included request, zero Odds requests and zero extra spending.
 No old approval, command, claim or expiry is reset or transferred.
+
+The protected-scope report retains the existing paid-lane violation field.
+Only after authenticating the exact approved files, ancestry and seal does it
+report no unapproved existing-test changes. Approved helper-only paths remain
+visible separately and in changed_files; every original test-function AST is
+compared with the authenticated 91f1d0c base. Altered assertions still reject.
+Within one owned bundle read the parent is authenticated once and its local
+snapshot is reused for linked checks. Each later public read authenticates
+again; no validation decision or mutable module is cached.
