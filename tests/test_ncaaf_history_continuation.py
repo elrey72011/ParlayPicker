@@ -70,6 +70,7 @@ def context(monkeypatch, root):
     value['continuation']=dict(version='ncaaf-spent-history-parent-v6',parent=material,budget=deepcopy(continuation.POLICY),review={})
     value['continuation']['review']=dict(reviewer=target.OWNER,reviewed_at='2026-10-17T18:00:02Z',subject_sha256=continuation.subject(value),
         finding='SYNTHETIC exact parent and amended cumulative budget review; never a real owner answer.')
+    monkeypatch.setattr(filtered,'private_files',lambda paths:True) # Synthetic files only, not a real custody assertion.
     return stage.seal(value),[bodies[2]]
 
 
