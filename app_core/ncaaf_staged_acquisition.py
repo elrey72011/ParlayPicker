@@ -45,6 +45,10 @@ def _lookup(name, key):
 
 def configuration(plan, raw, expected_hash, *, at):
     """Validate a typed control envelope, distinct from original-response JSON."""
+    return _configuration(plan, raw, expected_hash, at=at)
+
+
+def _configuration(plan, raw, expected_hash, *, at, owned_plan=None, owned_parent=None):
     require(isinstance(raw, bytes) and 0 < len(raw) <= 128*1024 and hashlib.sha256(raw).hexdigest() == expected_hash,
             'NCAAF_STAGED_CONFIGURATION')
     c = json.loads(raw, object_pairs_hook=custody._unique, parse_constant=custody._constant); p = _envelope(c)
@@ -66,11 +70,21 @@ def configuration(plan, raw, expected_hash, *, at):
     require(set(d) == {'id', 'root', 'storage_receipt_sha256'} and d['id'] == plan['payload']['custody_id']
             and isinstance(d['root'], str) and (Path(d['root']).is_absolute() or PureWindowsPath(d['root']).is_absolute()) and isinstance(d['storage_receipt_sha256'], str)
             and len(d['storage_receipt_sha256']) == 64, 'NCAAF_STAGED_CUSTODY')
-    _authorize(plan, p['authorization'], at, trusted=False)
+    if owned_plan is None:
+        _authorize(plan, p['authorization'], at, trusted=False)
+    else:
+        # Private immediate use by read_bundle, after authenticating an owned
+        # snapshot. Public configuration/dispatch still validate from scratch.
+        require(owned_plan == plan['payload'] and model.digest(owned_plan) == plan['sha256'], 'NCAAF_STAGED_INTEGRITY')
+        _authorization(owned_plan, plan['sha256'], p['authorization'], at, trusted=False)
     if is_continuation(plan['payload']):
-        from app_core.ncaaf_history_continuation import material
-        original_files,_=material(plan['payload'])
-        original_control=json.loads(original_files['configuration'],object_pairs_hook=custody._unique,parse_constant=custody._constant)
+        if owned_parent is None:
+            from app_core.ncaaf_history_continuation import material
+            original_files,_=material(plan['payload'])
+            original_control=json.loads(original_files['configuration'],object_pairs_hook=custody._unique,parse_constant=custody._constant)
+        else:
+            original_control=json.loads(base64.b64decode(owned_parent['control_receipt']['file_b64'],validate=True),
+                object_pairs_hook=custody._unique,parse_constant=custody._constant)
         require(p['custody']==original_control['payload']['custody'],'NCAAF_STAGED_PARENT_CUSTODY')
     account=p['account']; provider=plan['payload']['requests'][0]['provider']
     require(isinstance(account, dict) and set(account) == set('provider included_remaining observed_at valid_until evidence_sha256 no_paid_overage reviewer'.split())
@@ -465,11 +479,17 @@ def read_bundle(bundle, *, complete=True):
     # read. Recheck its hash after copying; no prior decision is cached.
     expected_sha256=bundle['sha256'];b=deepcopy(b)
     require(model.digest(b)==expected_sha256,'NCAAF_STAGED_INTEGRITY')
-    p = validate_plan(b['plan'], executable=True)
+    continuation_parent = continuation_facts = None
+    if is_continuation(b['plan']['payload']):
+        from app_core import ncaaf_history_continuation as continuation
+        p, continuation_parent, continuation_facts = continuation._validated_plan(b['plan'], executable=True)
+    else:
+        p = validate_plan(b['plan'], executable=True)
     control = b['control_receipt']
     require(isinstance(control, dict) and set(control) == {'file_sha256', 'file_b64'} and isinstance(control['file_b64'], str)
             and len(control['file_b64']) <= ((128*1024+2)//3)*4, 'NCAAF_STAGED_CONFIGURATION_REQUIRED')
-    c = configuration(b['plan'], base64.b64decode(control['file_b64'], validate=True), control['file_sha256'], at=b['started_at'])['payload']
+    c = _configuration(b['plan'], base64.b64decode(control['file_b64'], validate=True), control['file_sha256'],
+        at=b['started_at'], owned_plan=p if continuation_parent is not None else None, owned_parent=continuation_parent)['payload']
     require(c['authorization'] == b['authorization'], 'NCAAF_STAGED_CONFIGURATION')
     require(b['version'] == (bundle_version(p)) and b['evidence_label'] == p['evidence_label']
             and all(b[k] is False for k in ('accepted', 'inference', 'scientific_acceptance', 'wagering_authority'))
@@ -522,14 +542,21 @@ def read_bundle(bundle, *, complete=True):
     if is_history(p):
         if p['version'] in {'ncaaf-filtered-history-stage-plan-v4','ncaaf-fresh-filtered-history-stage-plan-v5','ncaaf-history-continuation-stage-plan-v6'}:
             from app_core import ncaaf_filtered_history as filtered
-            _,parent=filtered.parent(p,at=b['started_at'])
+            if continuation_parent is not None:
+                continuation._parent_clock(p,continuation_parent,at=b['started_at'])
+                parent=continuation_facts
+            else:
+                _,parent=filtered.parent(p,at=b['started_at'])
             require(b['prior_original_bytes']==parent['original_bytes'] and b['prior_active_seconds']==parent['charged_active_seconds'],'NCAAF_STAGED_PARENT')
             if complete:
                 if is_continuation(p):
                     from app_core.ncaaf_history_continuation import remaining
                     remaining(parent['charged_active_seconds'],b['active_seconds'],prior_bytes=parent['original_bytes'],added_bytes=total,reserve_seconds=20)
                 else:require(b['active_seconds']<filtered.history_ceiling(p),'NCAAF_STAGED_COMBINED_LIMIT')
-                filtered.project_bundle(b,at=b['objects'][-1]['metadata']['received_at'])
+                if continuation_parent is not None:
+                    continuation._project_from_parent(b,continuation_parent,parent,at=b['objects'][-1]['metadata']['received_at'])
+                else:
+                    filtered.project_bundle(b,at=b['objects'][-1]['metadata']['received_at'])
         else:require(b['prior_original_bytes'] == b['prior_active_seconds'] == 0, 'NCAAF_STAGED_PARENT')
     if complete:
         require(b['active_seconds']+b['prior_active_seconds'] < active_limit(p), 'NCAAF_STAGED_COMBINED_LIMIT')

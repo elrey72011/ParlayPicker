@@ -197,6 +197,20 @@ def test_budget_full_precision_and_no_reset():
     assert stage.active_limit(dict(version=continuation.HISTORY_PLAN))==120
 
 
+def test_repeated_reads_reauthenticate_and_return_independent_snapshots(monkeypatch,tmp_path):
+    bundle,_,_=capture(monkeypatch,tmp_path)
+    first=stage.read_bundle(bundle)
+    first['objects'][0]['body_b64']='changed returned snapshot'
+    assert stage.read_bundle(bundle)['objects'][0]['body_b64']!='changed returned snapshot'
+    changed=deepcopy(bundle['payload'])
+    material=changed['plan']['payload']['continuation']['parent']['blobs_b64']
+    material['bundle']=base64.b64encode(b'{}').decode()
+    changed['plan']=stage.seal(changed['plan']['payload'])
+    with pytest.raises(ValueError,match='PARENT_INTEGRITY'):
+        stage.read_bundle(stage.seal(changed))
+    assert stage.read_bundle(bundle)['objects']==bundle['payload']['objects']
+
+
 def test_parent_expiry_and_unmodified_incomplete_rejection(monkeypatch,tmp_path):
     p,_=context(monkeypatch,tmp_path);old,_=continuation.parent(p['payload'],at='2026-10-17T18:01:00Z')
     with pytest.raises(ValueError,match='INCOMPLETE'):stage.read_bundle(stage.seal(old))

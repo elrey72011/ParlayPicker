@@ -151,15 +151,7 @@ def _read_parent(p, *, at, review_required):
         and d['active_seconds'] == b['active_seconds'] and len(d['attempts']) == 3
         and d['status'] == b['status'] and d['reason'] == b['reason']
         and [a['complete_original'] for a in d['attempts']] == [True, True, False], 'NCAAF_CONTINUATION_DIAGNOSTICS')
-    now = target.instant(at)
-    if review_required:
-        r = p['continuation']['review']
-        require(set(r) == {'reviewer', 'reviewed_at', 'subject_sha256', 'finding'}
-            and r['reviewer'] == target.OWNER and r['subject_sha256'] == subject(p)
-            and target.instant(report['finished_at']) <= target.instant(r['reviewed_at']) < now
-            and type(r['finding']) is str and len(r['finding'].strip()) >= 32, 'NCAAF_CONTINUATION_REVIEW')
-    require(all(0 <= (now-target.instant(o['metadata']['received_at'])).total_seconds() <= 86400
-        for o in b['objects']) and now < target.instant(p['target']['start_utc']), 'NCAAF_STAGED_INPUT_CLOCK')
+    _parent_clock(p, b, at=at, review_required=review_required, finished_at=report['finished_at'])
     scoring, contract = fresh.scoring_contract(old, b['objects'][0], at=at)
     filtered.validate_statistics(b['objects'][1], contract, scoring)
     # Authenticate the failed request too; no lost attempt or reset accounting.
@@ -175,6 +167,20 @@ def _read_parent(p, *, at, review_required):
         last=target.instant(event['requested_at'])
     remaining(b['active_seconds'], prior_bytes=b['original_bytes'])
     return b, dict(original_bytes=b['original_bytes'], charged_active_seconds=b['active_seconds'])
+
+
+def _parent_clock(p, b, *, at, review_required=True, finished_at=None):
+    """Recheck clocks on this call's owned, authenticated parent snapshot."""
+    now = target.instant(at)
+    if review_required:
+        r = p['continuation']['review']
+        require(set(r) == {'reviewer', 'reviewed_at', 'subject_sha256', 'finding'}
+            and r['reviewer'] == target.OWNER and r['subject_sha256'] == subject(p)
+            and (finished_at is None or target.instant(finished_at) <= target.instant(r['reviewed_at']))
+            and target.instant(r['reviewed_at']) < now
+            and type(r['finding']) is str and len(r['finding'].strip()) >= 32, 'NCAAF_CONTINUATION_REVIEW')
+    require(all(0 <= (now-target.instant(o['metadata']['received_at'])).total_seconds() <= 86400
+        for o in b['objects']) and now < target.instant(p['target']['start_utc']), 'NCAAF_STAGED_INPUT_CLOCK')
 
 
 def parent(p, *, at):
@@ -204,10 +210,15 @@ def remaining(prior_active, added_active=0, *, prior_bytes=0, added_bytes=0, res
 
 
 def validate_plan(plan, *, executable=False):
+    return _validated_plan(plan, executable=executable)[0]
+
+
+def _validated_plan(plan, *, executable=False):
+    """One owned result for an immediate read; never retained between calls."""
     from app_core import ncaaf_staged_acquisition as stage
     p = stage._envelope(plan)
     require(selected(p) and 'continuation' in p, 'NCAAF_CONTINUATION_SCHEMA')
-    parent_value, _ = parent(p, at=p['execution_window']['not_before'])
+    parent_value, facts = parent(p, at=p['execution_window']['not_before'])
     old = parent_value['plan']['payload']
     expected = [old['requests'][2]] if p['version'] == HISTORY_PLAN else target.requests(p['target'], target.QUOTE_PLAN, p['target_evidence'])
     require(p['requests'] == expected and p['limits'] == dict(stage.LIMITS, shared_active_seconds=120),
@@ -219,7 +230,7 @@ def validate_plan(plan, *, executable=False):
     view['limits'] = deepcopy(stage.LIMITS)
     if p['version'] == HISTORY_PLAN:view['requests'] = deepcopy(old['requests'])
     fresh.validate_plan(stage.seal(view), executable=executable)
-    return deepcopy(p)
+    return deepcopy(p), parent_value, facts
 
 
 def verify_parent_files(root, p, *, security=True):
@@ -258,8 +269,15 @@ def validate_response(obj, p, *, at, objects):
 
 
 def project_bundle(b, *, at):
-    require(len(b['objects']) == 1, 'FILTERED_YARDAGE_COVERAGE')
     old, facts = parent(b['plan']['payload'], at=at)
+    return _project_from_parent(b, old, facts, at=at)
+
+
+def _project_from_parent(b, old, facts, *, at):
+    # Only read_bundle supplies its own just-authenticated snapshot here. No
+    # caller-visible trust token, mutable module or validation cache is used.
+    _parent_clock(b['plan']['payload'], old, at=at)
+    require(len(b['objects']) == 1, 'FILTERED_YARDAGE_COVERAGE')
     require(b['prior_active_seconds'] == facts['charged_active_seconds']
         and b['prior_original_bytes'] == facts['original_bytes'], 'NCAAF_CONTINUATION_ACCOUNTING')
     # The projection uses the unchanged original reader; its inputs are the
