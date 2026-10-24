@@ -24,7 +24,7 @@ CONFIGURATION = 'ncaaf-continuation-controlled-bindings-v6'
 POLICY = dict(cumulative_active_seconds=120, market_reserve_seconds=20, header_ceiling_seconds=30)
 MATERIALS = frozenset(('bundle', 'journal', 'diagnostics', 'claim', 'report',
     'configuration', 'authorization', 'operation', 'method', 'approval',
-    'derivation', 'application_readback', 'release'))
+    'derivation', 'template', 'application_readback', 'release'))
 require = filtered.require
 
 
@@ -59,7 +59,7 @@ def subject(p):
         target_manifest=p['target_evidence'], source=p['filtered_history']))
 
 
-def parent(p, *, at):
+def _read_parent(p, *, at, review_required):
     from app_core import ncaaf_staged_acquisition as stage
     from app_core import ncaaf_transport_diagnostics as diagnostics
     blobs, pins = material(p)
@@ -87,7 +87,7 @@ def parent(p, *, at):
         and method['derivation_sha256'] == pins['derivation']
         and method['release_clearance_receipt_sha256'] == pins['release'], 'NCAAF_CONTINUATION_METHOD')
     require(approval['package_sha256'] == pins['method']
-        and approval['derivation_template_sha256'] == pins['derivation']
+        and approval['derivation_template_sha256'] == pins['template']
         and approval['owner'] == target.OWNER
         and approval['decision'] == 'APPROVED_CONSOLIDATED_FRESH_HISTORY_CAPTURE'
         and target.instant(approval['received_at']) <= target.instant(b['started_at']), 'NCAAF_CONTINUATION_APPROVAL')
@@ -125,11 +125,13 @@ def parent(p, *, at):
         and d['active_seconds'] == b['active_seconds'] and len(d['attempts']) == 3
         and d['status'] == b['status'] and d['reason'] == b['reason']
         and [a['complete_original'] for a in d['attempts']] == [True, True, False], 'NCAAF_CONTINUATION_DIAGNOSTICS')
-    r = p['continuation']['review']; now = target.instant(at)
-    require(set(r) == {'reviewer', 'reviewed_at', 'subject_sha256', 'finding'}
-        and r['reviewer'] == target.OWNER and r['subject_sha256'] == subject(p)
-        and target.instant(report['finished_at']) <= target.instant(r['reviewed_at']) < now
-        and type(r['finding']) is str and len(r['finding'].strip()) >= 32, 'NCAAF_CONTINUATION_REVIEW')
+    now = target.instant(at)
+    if review_required:
+        r = p['continuation']['review']
+        require(set(r) == {'reviewer', 'reviewed_at', 'subject_sha256', 'finding'}
+            and r['reviewer'] == target.OWNER and r['subject_sha256'] == subject(p)
+            and target.instant(report['finished_at']) <= target.instant(r['reviewed_at']) < now
+            and type(r['finding']) is str and len(r['finding'].strip()) >= 32, 'NCAAF_CONTINUATION_REVIEW')
     require(all(0 <= (now-target.instant(o['metadata']['received_at'])).total_seconds() <= 86400
         for o in b['objects']) and now < target.instant(p['target']['start_utc']), 'NCAAF_STAGED_INPUT_CLOCK')
     scoring, contract = fresh.scoring_contract(old, b['objects'][0], at=at)
@@ -140,6 +142,21 @@ def parent(p, *, at):
         and events[-1]['stage_active_seconds'] == b['active_seconds'], 'NCAAF_CONTINUATION_ACCOUNTING')
     remaining(b['active_seconds'], prior_bytes=b['original_bytes'])
     return b, dict(original_bytes=b['original_bytes'], charged_active_seconds=b['active_seconds'])
+
+
+def parent(p, *, at):
+    """Operational readers always require the exact separately recorded review."""
+    return _read_parent(p,at=at,review_required=True)
+
+
+def inspect_parent(p, *, at):
+    """Read-only preparation facts; supplies no review or acquisition authority."""
+    b,facts=_read_parent(p,at=at,review_required=False)
+    return dict(facts,plan_sha256=b['plan']['sha256'],attempts=b['attempts'],status=b['status'],reason=b['reason'],
+        original_receipts=[o['metadata']['received_at'] for o in b['objects']],
+        original_sha256=[o['body_sha256'] for o in b['objects']],
+        continuation_seconds=str(remaining(facts['charged_active_seconds'],prior_bytes=facts['original_bytes'])),
+        provider_receipt='UNKNOWN',credit_consumption='UNKNOWN',configuration_applied=False,provider_requests=0,inference=False)
 
 
 def remaining(prior_active, added_active=0, *, prior_bytes=0, added_bytes=0, reserve_seconds=20):

@@ -43,12 +43,13 @@ def context(monkeypatch, root):
     blobs=dict(bundle=encode(parent),journal=base64.b64decode(b['journal_b64']),
         diagnostics=(root/(p['sha256']+'.transport-diagnostics.json')).read_bytes(),configuration=control,
         authorization=encode(b['authorization']),operation=encode(operation),derivation=encode(dict(label='SYNTHETIC derivation only')),
+        template=encode(dict(label='SYNTHETIC separate derivation template')),
         release=encode(dict(status='RELEASE_CLEARANCE_PASS',main=json.loads(control)['payload']['runtime']['code_head'],
             checks=dict(expected=23,passed=23),artifacts=dict(expected=20,verified=20),
             application_outcomes=dict(native_reconciliation=dict(status='PASS')))))
     method=dict(native_operation_file_sha256=sha(blobs['operation']),derivation_sha256=sha(blobs['derivation']),release_clearance_receipt_sha256=sha(blobs['release']))
     blobs['method']=encode(method)
-    blobs['approval']=encode(dict(package_sha256=sha(blobs['method']),derivation_template_sha256=sha(blobs['derivation']),
+    blobs['approval']=encode(dict(package_sha256=sha(blobs['method']),derivation_template_sha256=sha(blobs['template']),
         owner=target.OWNER,decision='APPROVED_CONSOLIDATED_FRESH_HISTORY_CAPTURE',received_at='2026-10-17T17:50:00Z'))
     claim=dict(version='ncaaf-reviewed-target-operation-v1',configuration_file_sha256=sha(control),
         manifest_file_sha256=sha(blobs['operation']),plan_sha256=p['sha256'])
@@ -127,7 +128,7 @@ def test_actual_single_request_join_and_original_clocks(monkeypatch,tmp_path,cli
     assert all((tmp_path/name).read_bytes()==raw for name,raw in before.items())
 
 
-@pytest.mark.parametrize('attack',['bundle','journal','diagnostics','claim','report','configuration','authorization','operation','method','approval','derivation','application_readback','release'])
+@pytest.mark.parametrize('attack',['bundle','journal','diagnostics','claim','report','configuration','authorization','operation','method','approval','derivation','template','application_readback','release'])
 def test_altered_parent_material_rejects_before_dispatch(monkeypatch,tmp_path,attack):
     p,_=context(monkeypatch,tmp_path);p['payload']['continuation']['parent']['blobs_b64'][attack]=base64.b64encode(b'{}').decode()
     with pytest.raises(ValueError,match='INTEGRITY|LINKAGE'):stage.validate_plan(stage.seal(p['payload']),executable=True)
@@ -148,6 +149,7 @@ def test_wrong_successor_contract_rejects(monkeypatch,tmp_path,attack):
 
 @pytest.mark.parametrize('scenario,reason',[({'header':30.1},'NCAAF_PILOT_DEADLINE'),({'body':10.1},'NCAAF_PILOT_DEADLINE'),
     ({'connect':10.1},'NCAAF_PILOT_DEADLINE'),({'declared':1},'NCAAF_PILOT_INCOMPLETE_BODY'),
+    ({'connect':9.9,'write':9.9,'header':29.9,'body':9.9},'NCAAF_STAGED_DEADLINE'),
     ({'cancel':'interrupt'},'NCAAF_STAGED_ACQUISITION_FAILURE')])
 def test_failure_is_spent_and_cannot_make_second_successor(monkeypatch,tmp_path,scenario,reason):
     p,bodies=context(monkeypatch,tmp_path)
@@ -191,6 +193,20 @@ def test_parent_expiry_and_unmodified_incomplete_rejection(monkeypatch,tmp_path)
         with pytest.raises(ValueError,match='CUSTODY'):continuation.verify_parent_files(tmp_path,p['payload'],security=False)
     finally:(tmp_path/name).write_bytes(before)
     assert continuation.verify_parent_files(tmp_path,p['payload'],security=False)
+
+
+def test_readonly_inspection_is_not_authority_and_custody_cannot_move(monkeypatch,tmp_path):
+    p,_=context(monkeypatch,tmp_path)
+    _,raw=configure(p,monkeypatch,tmp_path)
+    control=json.loads(raw)['payload'];control['custody']['root']=str(tmp_path/'different-root')
+    control['review']['subject_sha256']=stage.model.digest({k:v for k,v in control.items() if k!='review'})
+    changed=encode(stage.seal(control))
+    with pytest.raises(ValueError,match='PARENT_CUSTODY'):
+        stage.configuration(p,changed,sha(changed),at='2026-10-17T18:00:03Z')
+    p['payload']['continuation']['review']={}
+    facts=continuation.inspect_parent(p['payload'],at='2026-10-17T18:01:00Z')
+    assert facts['attempts']==3 and facts['provider_requests']==0 and facts['status']=='INCOMPLETE'
+    with pytest.raises(ValueError,match='REVIEW'):stage.validate_plan(stage.seal(p['payload']),executable=True)
 
 
 def selection(synthetic,monkeypatch,root,line):
