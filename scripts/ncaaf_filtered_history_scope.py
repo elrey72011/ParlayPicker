@@ -17,7 +17,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='aee72d6a98f256f0132b3be5202418f9d910c956a455dde97462763fbd8f7169'
+_BINDING_SHA256='fb22fec76585d07984050ca51b7b73e0b7e4e35d903cdd67e07d173770533beb'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -227,6 +227,12 @@ def _historical_validate(root,comparison_base=None,manifest=None):
 
 
 def make_policy(root,b,implementation):
+    continuation=b.get('history_continuation')
+    if continuation is not None:
+        return dict(version='ncaaf-history-continuation-seal-v6',authorization_record_sha256=continuation['authorization_record_sha256'],
+            base=continuation['base'],base_tree=continuation['base_tree'],implementation_commit=implementation,
+            implementation_tree=git(root,'rev-parse',implementation+'^{tree}'),binding_sha256=_BINDING_SHA256,
+            implementation_paths=continuation['implementation_paths'])
     repair=b.get('ui_display_repair')
     if repair is None:return _historical_make_policy(root,b,implementation)
     return dict(version='ui-display-revalidation-seal-v1',amendment_sha256=repair['amendment_sha256'],
@@ -237,6 +243,7 @@ def make_policy(root,b,implementation):
 
 def validate(root,comparison_base=None,manifest=None):
     root=Path(root);b=authenticate(root);repair=b.get('ui_display_repair')
+    if b.get('history_continuation') is not None:return _validate_continuation(root,b,comparison_base,manifest)
     if repair is None:return _historical_validate(root,comparison_base,manifest)
     require(set(repair)=={'amendment_sha256','base','base_tree','reviewed_head','ordered_parents','implementation_paths','implementation_parent','predecessor_tree','inherited_policy_sha256'},'UI_SCOPE_CONTRACT_CHANGED')
     require(repair['base']=='795a2ea53a70ba8e96284a466404a6a42c848fa9'
@@ -277,6 +284,46 @@ def validate(root,comparison_base=None,manifest=None):
     return dict(schema_version=87,status='PASS',amendment_sha256=repair['amendment_sha256'],base=base,
         implementation=implementation,seal=seal,candidate=head,tree=git(root,'rev-parse',head+'^{tree}'),
         changed_files=sorted(changed|{POLICY}),protected_changes=[],existing_test_changes=[],accepted=False,inference=False)
+
+
+def _validate_continuation(root,b,comparison_base,manifest):
+    c=b['history_continuation'];base=c['base']
+    require(set(c)=={'authorization_record_sha256','base','base_tree','ordered_parents','implementation_paths','inherited_policy_sha256'},'CONTINUATION_SCOPE_CHANGED')
+    require(base=='91f1d0c4f82a568d4c0142e14f1ec8f2a32de64a'
+        and c['base_tree']=='fbb36f8cce2e1bce227c672b34711aaa1fa31115'
+        and git(root,'rev-parse',base+'^{tree}')==c['base_tree']
+        and git(root,'show','-s','--format=%P',base).split()==c['ordered_parents'],'CONTINUATION_BASE_CHANGED')
+    original=git(root,'show',BASE+':'+b['baseline_manifest'],raw=True)
+    require(sha(original)==b['baseline_manifest_sha256'],'NCAAF_FILTERED_MANIFEST_CHANGED')
+    require(manifest is None or Path(manifest).resolve()==(root/b['baseline_manifest']).resolve(),'MANIFEST_PATH_NOT_APPROVED')
+    require(comparison_base in {None,base,BASE,json.loads(original)['base_sha']},'COMPARISON_BASE_NOT_APPROVED')
+    require(not git(root,'diff','--name-only') and not git(root,'diff','--cached','--name-only')
+        and not git(root,'ls-files','--others','--exclude-standard'),'UNAUTHORIZED_CHECKOUT_CHANGE')
+    policy=json.loads(git(root,'show','HEAD:'+POLICY,raw=True));implementation=policy['implementation_commit']
+    require(policy==make_policy(root,b,implementation),'EXACT_POLICY_BINDINGS_CHANGED')
+    require(git(root,'merge-base',base,implementation)==base,'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    lineage=git(root,'rev-list','--first-parent',base+'..'+implementation).splitlines()
+    require(1<=len(lineage)<=32,'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    for index,commit in enumerate(lineage):
+        expected_parent=lineage[index+1] if index+1<len(lineage) else base
+        require(git(root,'show','-s','--format=%P',commit).split()==[expected_parent], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
+        require(set(git(root,'diff','--name-only',expected_parent,commit).splitlines())<=set(c['implementation_paths']), 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+    inherited=git(root,'show',base+':'+POLICY,raw=True)
+    require(sha(inherited)==c['inherited_policy_sha256'] and git(root,'show',implementation+':'+POLICY,raw=True)==inherited,'INHERITED_POLICY_CHANGED')
+    changed=set(git(root,'diff','--name-only',base,implementation).splitlines())
+    require(changed==set(c['implementation_paths']) and len(changed)==len(c['implementation_paths']),'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+    head=git(root,'rev-parse','HEAD');parents=git(root,'show','-s','--format=%P',head).split()
+    if len(parents)==2:
+        require(parents==[base,parents[1]],'TESTED_MERGE_PARENTS_CHANGED');seal=parents[1]
+        require(git(root,'rev-parse',seal+'^{tree}')==git(root,'rev-parse',head+'^{tree}'),'TESTED_TREE_CHANGED')
+    else:seal=head
+    require(git(root,'show','-s','--format=%P',seal).split()==[implementation],'SEAL_PARENT_CHANGED')
+    require(git(root,'diff','--name-status',implementation,seal)=='M\t'+POLICY,'SEAL_CHANGE_SET_NOT_APPROVED')
+    require(not git(root,'diff','--name-only',seal,head),'TESTED_TREE_CHANGED')
+    return dict(schema_version=88,status='PASS',base=base,implementation=implementation,seal=seal,candidate=head,
+        tree=git(root,'rev-parse',head+'^{tree}'),changed_files=sorted(changed|{POLICY}),protected_changes=[],
+        existing_test_changes=sorted(p for p in changed if p.startswith('tests/') and git(root,'ls-tree',base,'--',p)),
+        accepted=False,inference=False)
 
 
 def main(argv=None):

@@ -15,7 +15,7 @@ require=model.require
 
 
 def batches(bundle):
-    if bundle.get('payload',{}).get('version') in {'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5'}:
+    if bundle.get('payload',{}).get('version') in {'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5','ncaaf-history-continuation-unaccepted-v6'}:
         from app_core import ncaaf_filtered_history as filtered
         b=stage.read_bundle(bundle)
         return filtered.project_bundle(b,at=b['objects'][-1]['metadata']['received_at'])[0]['batches']
@@ -42,10 +42,13 @@ def runtime():
 
 def prepare(bundle,*,model_packet,prepared_at):
     b=stage.read_bundle(bundle);p=b['plan']['payload'];t=p['target'];now=history.timestamp(prepared_at)
-    filtered=b['version'] in {'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5'}
-    require(b['version'] in {target.HISTORY_BUNDLE,'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5'} and now is not None and now<history.timestamp(t['start_utc'])
+    filtered=b['version'] in {'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5','ncaaf-history-continuation-unaccepted-v6'}
+    require(b['version'] in {target.HISTORY_BUNDLE,'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5','ncaaf-history-continuation-unaccepted-v6'} and now is not None and now<history.timestamp(t['start_utc'])
         and all(history.timestamp(o['metadata']['received_at']) is not None and 0<=(now-history.timestamp(o['metadata']['received_at'])).total_seconds()<=86400 for o in b['objects']),
         'NCAAF_STAGED_INPUT_CLOCK')
+    if filtered:
+        from app_core.ncaaf_filtered_history import history_objects
+        require(all(0<=(now-history.timestamp(o['metadata']['received_at'])).total_seconds()<=86400 for o in history_objects(b,at=prepared_at)), 'NCAAF_STAGED_INPUT_CLOCK')
     checked=model.load_model(model_packet)
     require(checked['compatibility']['family']=='spread','NCAAF_STAGED_MODEL_TARGET')
     data=batches(bundle); games=data[0]['records'];start=history.timestamp(t['start_utc'])
@@ -87,7 +90,7 @@ def prepare(bundle,*,model_packet,prepared_at):
     event=dict(sport='NCAAF',canonical_event_id='cfbd:'+str(game['id']),schedule_game_id=game['id'],
         home_school=t['home_school'],away_school=t['away_school'],home_id=game['homeId'],away_id=game['awayId'],
         venue=t['venue'],start_utc=t['start_utc'],neutral_site=t['neutral_site'],provider_event_id=None)
-    return stage.seal(dict(version=('ncaaf-fresh-filtered-prequote-features-v5' if selected.is_fresh(p) else 'ncaaf-filtered-prequote-features-v4') if filtered else VERSION,evidence_label=b['evidence_label'],history_bundle_sha256=bundle['sha256'],event=event,
+    return stage.seal(dict(version=('ncaaf-continuation-prequote-features-v6' if stage.is_continuation(p) else 'ncaaf-fresh-filtered-prequote-features-v5' if selected.is_fresh(p) else 'ncaaf-filtered-prequote-features-v4') if filtered else VERSION,evidence_label=b['evidence_label'],history_bundle_sha256=bundle['sha256'],event=event,
         schedule=[game],prepared_at=prepared_at,source_receipts=[o['metadata']['received_at'] for o in all_originals],publisher_availability='UNKNOWN',
         availability_basis='seven_day_lag_proxy',feature_cutoff=(start-timedelta(days=7)).isoformat(),feature_names=research.FEATURES,target_manifest=deepcopy(p['target_evidence']),
         ordered_features=values,history_row=row,model=deepcopy(model_packet),runtime=runtime(),history_review=None,accepted=False,inference=False))
@@ -121,7 +124,8 @@ def validate_quote_parent(h,p,prequote,*,at):
     pref=validate_prequote(prequote,stage.seal(h),at=at,review_required=True)
     require(target.same_target(h['plan']['payload']['target'],p['target'])
         and h['plan']['payload']['target_evidence']==p['target_evidence']
-        and h['plan']['payload'].get('filtered_history')==p.get('filtered_history'),'NCAAF_STAGED_PARENT')
+        and h['plan']['payload'].get('filtered_history')==p.get('filtered_history')
+        and h['plan']['payload'].get('continuation')==p.get('continuation'),'NCAAF_STAGED_PARENT')
     game=target.validate_identity(p['identity_review'],at=at,target=p['target'],label=p['evidence_label'])
     require(pref['schedule']==[game],'NCAAF_FRESH_IDENTITY_CONFLICT')
     obj=target.discovery_original(p['identity_review']['discovery'],p['evidence_label'])
@@ -136,8 +140,8 @@ def validate_quote_parent(h,p,prequote,*,at):
 
 def join(history_bundle,prequote,quote_bundle):
     h=stage.read_bundle(history_bundle);q=stage.read_bundle(quote_bundle);p=q['plan']['payload']
-    filtered=h['version'] in {'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5'}
-    require((h['version']==target.HISTORY_BUNDLE and q['version']==target.QUOTE_BUNDLE or filtered and q['version'] in {'ncaaf-filtered-final-quote-unaccepted-v4','ncaaf-fresh-filtered-final-quote-unaccepted-v5'})
+    filtered=h['version'] in {'ncaaf-filtered-history-unaccepted-v4','ncaaf-fresh-filtered-history-unaccepted-v5','ncaaf-history-continuation-unaccepted-v6'}
+    require((h['version']==target.HISTORY_BUNDLE and q['version']==target.QUOTE_BUNDLE or filtered and q['version'] in {'ncaaf-filtered-final-quote-unaccepted-v4','ncaaf-fresh-filtered-final-quote-unaccepted-v5','ncaaf-continuation-final-quote-unaccepted-v6'})
         and p['parent_history_sha256']==history_bundle['sha256'] and p['prequote_sha256']==prequote['sha256']
         and h['evidence_label']==q['evidence_label'] and h['plan']['payload']['custody_id']==p['custody_id'], 'NCAAF_STAGED_PARENT')
     validate_quote_parent(h,p,prequote,at=q['objects'][0]['requested_at'])
@@ -148,15 +152,15 @@ def join(history_bundle,prequote,quote_bundle):
     require(controls[0]['custody']==controls[1]['custody'],'NCAAF_STAGED_PARENT_CUSTODY')
     require(q['prior_original_bytes']==h['original_bytes']+h['prior_original_bytes'] and q['prior_active_seconds']==h['active_seconds']+h['prior_active_seconds']
         and h['prior_original_bytes']+h['original_bytes']+q['original_bytes']<=stage.LIMITS['max_combined_original_bytes']
-        and h['prior_active_seconds']+h['active_seconds']+q['active_seconds']<60,'NCAAF_STAGED_COMBINED_LIMIT')
-    value=stage.seal(dict(version=('ncaaf-fresh-filtered-staged-evidence-v5' if p['version']=='ncaaf-fresh-filtered-final-quote-stage-plan-v5' else 'ncaaf-filtered-staged-evidence-v4') if filtered else BINDING_VERSION,history=deepcopy(history_bundle),prequote=deepcopy(prequote),quote=deepcopy(quote_bundle)))
+        and h['prior_active_seconds']+h['active_seconds']+q['active_seconds']<stage.active_limit(p),'NCAAF_STAGED_COMBINED_LIMIT')
+    value=stage.seal(dict(version=('ncaaf-continuation-staged-evidence-v6' if stage.is_continuation(p) else 'ncaaf-fresh-filtered-staged-evidence-v5' if p['version']=='ncaaf-fresh-filtered-final-quote-stage-plan-v5' else 'ncaaf-filtered-staged-evidence-v4') if filtered else BINDING_VERSION,history=deepcopy(history_bundle),prequote=deepcopy(prequote),quote=deepcopy(quote_bundle)))
     require(len(model.encode(value))<=stage.MAX_BUNDLE,'NCAAF_STAGED_BUNDLE_LIMIT')
     return value
 
 
 def validate_binding(value,packet,*,at):
     b=stage._envelope(value)
-    require(set(b)=={'version','history','prequote','quote'} and b['version'] in {BINDING_VERSION,'ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5'}
+    require(set(b)=={'version','history','prequote','quote'} and b['version'] in {BINDING_VERSION,'ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5','ncaaf-continuation-staged-evidence-v6'}
         and value==join(b['history'],b['prequote'],b['quote']),'NCAAF_STAGED_BINDING_CONFLICT')
     pref=validate_prequote(b['prequote'],b['history'],at=at)
     p=packet['payload'];c=p['custody_packet']['payload'];n=c['native_packet']['payload'];o=n['observation']['payload']
@@ -167,7 +171,7 @@ def validate_binding(value,packet,*,at):
         'NCAAF_STAGED_BINDING_CONFLICT')
     expected=[dict(sha256=hashlib.sha256(model.encode(v)).hexdigest(),bytes_b64=base64.b64encode(model.encode(v)).decode()) for v in batches(b['history'])]
     require(n['dependency_objects']==expected,'NCAAF_STAGED_BINDING_CONFLICT')
-    if b['version'] in {'ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5'}:
+    if b['version'] in {'ncaaf-filtered-staged-evidence-v4','ncaaf-fresh-filtered-staged-evidence-v5','ncaaf-continuation-staged-evidence-v6'}:
         from app_core import ncaaf_filtered_history as filtered
         originals=filtered.history_objects(b['history']['payload'],at=at)+b['quote']['payload']['objects']
         require(c['response_objects'][:-1]==filtered.response_objects(b['history'],at=at),'NCAAF_STAGED_BINDING_CONFLICT')

@@ -53,7 +53,7 @@ def main(argv=None):
             control=json.loads(control_raw)
             if not isinstance(control,dict) or not isinstance(control.get('payload'),dict):
                 raise ValueError('NCAAF_STAGED_CONFIGURATION')
-            if control.get('payload',{}).get('version') in {'ncaaf-reviewed-controlled-bindings-v3','ncaaf-filtered-controlled-bindings-v4','ncaaf-fresh-filtered-controlled-bindings-v5'}:
+            if control.get('payload',{}).get('version') in {'ncaaf-reviewed-controlled-bindings-v3','ncaaf-filtered-controlled-bindings-v4','ncaaf-fresh-filtered-controlled-bindings-v5','ncaaf-continuation-controlled-bindings-v6'}:
                 runtime=control['payload']['runtime'];path=Path(__file__).resolve().parent/'ncaaf_reviewed_target_operator.py'
                 source=path.read_bytes()
                 if hashlib.sha256(source).hexdigest()!=runtime['sources']['scripts/ncaaf_reviewed_target_operator.py']:
@@ -92,7 +92,7 @@ def main(argv=None):
             lane.require(load(args.authorization, 128*1024) == approval, 'NCAAF_STAGED_AUTHORIZATION')
             if not sys.stdin.isatty(): raise ValueError('NCAAF_STAGED_PRIVATE_TERMINAL_REQUIRED')
             provider = 'cfbd' if lane.is_history(value['payload']) else 'odds_api'
-            filtered=value['payload']['version'] in {'ncaaf-filtered-history-stage-plan-v4','ncaaf-fresh-filtered-history-stage-plan-v5'}
+            filtered=value['payload']['version'] in {'ncaaf-filtered-history-stage-plan-v4','ncaaf-fresh-filtered-history-stage-plan-v5','ncaaf-history-continuation-stage-plan-v6'}
             if filtered:
                 lane.require(args.transport_diagnostics,'NCAAF_STAGED_DIAGNOSTIC_SELECTION')
                 from app_core import ncaaf_filtered_history as filtered_history

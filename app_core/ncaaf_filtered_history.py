@@ -334,6 +334,9 @@ def material(p):
 
 
 def parent(p,*,at):
+    if is_continuation(p):
+        from app_core.ncaaf_history_continuation import parent as selected
+        return selected(p,at=at)
     if is_fresh(p):return None,dict(original_bytes=0,charged_active_seconds=0)
     context=p['filtered_history'];blobs,pins=material(p);c=context['contract']
     original,facts=read_scoring_parent(blobs,pins,c,at=at)
@@ -370,6 +373,9 @@ def venue_bridge(p,*,at):
 def validate_plan(plan,*,executable=False):
     from app_core import ncaaf_reviewed_target as target,ncaaf_staged_acquisition as stage
     p=stage._envelope(plan)
+    if is_continuation(p):
+        from app_core.ncaaf_history_continuation import validate_plan as selected
+        return selected(plan,executable=executable)
     if is_fresh(p):
         from app_core.ncaaf_fresh_history import validate_plan as selected
         return selected(plan,executable=executable)
@@ -440,6 +446,9 @@ def private_files(paths):
 
 def verify_parent_files(root,p,*,security=True):
     from pathlib import Path
+    if is_continuation(p):
+        from app_core.ncaaf_history_continuation import verify_parent_files as selected
+        return selected(root,p,security=security)
     if is_fresh(p):return True # No imported parent files exist in this version.
     blobs,pins=material(p);names=p['filtered_history']['parent']['custody_names']
     require(set(names)==set(pins),'FILTERED_PARENT_CUSTODY')
@@ -458,6 +467,9 @@ def verify_parent_files(root,p,*,security=True):
 
 
 def continuation_claim_name(p):
+    if is_continuation(p):
+        from app_core.ncaaf_history_continuation import claim_name
+        return claim_name(p)
     if is_fresh(p):
         from app_core.ncaaf_fresh_history import claim_name
         return claim_name(p)
@@ -476,6 +488,9 @@ def metadata(meta,c):
 
 
 def validate_response(obj,p,*,at,objects=None):
+    if is_continuation(p):
+        from app_core.ncaaf_history_continuation import validate_response as selected
+        return selected(obj,p,at=at,objects=objects)
     if is_fresh(p):
         from app_core.ncaaf_fresh_history import validate_response as selected
         return selected(obj,p,at=at,objects=objects)
@@ -502,6 +517,9 @@ def validate_statistics(obj,c,scoring):
 
 def project_bundle(b,*,at):
     p=b['plan']['payload']
+    if is_continuation(p):
+        from app_core.ncaaf_history_continuation import project_bundle as selected
+        return selected(b,at=at)
     if is_fresh(p):
         from app_core.ncaaf_fresh_history import project_bundle as selected
         return selected(b,at=at)
@@ -512,6 +530,9 @@ def project_bundle(b,*,at):
 
 
 def history_objects(b,*,at):
+    if is_continuation(b['plan']['payload']):
+        from app_core.ncaaf_history_continuation import history_objects as selected
+        return selected(b,at=at)
     if is_fresh(b['plan']['payload']):return deepcopy(b['objects'])
     scoring,_=parent(b['plan']['payload'],at=at);blobs,_=material(b['plan']['payload'])
     original=json.loads(blobs['bundle'],object_pairs_hook=custody._unique)['payload']['objects'][0]
@@ -543,7 +564,7 @@ def response_objects(history_bundle,*,at):
 
 def verify_response(item,policy,index,at,*,_owned_projection=None):
     packet=policy.packet['payload'];binding=packet['staged_binding']['payload']
-    require(binding['version'] in {BINDING,'ncaaf-fresh-filtered-staged-evidence-v5'},'FILTERED_BINDING')
+    require(binding['version'] in {BINDING,'ncaaf-fresh-filtered-staged-evidence-v5','ncaaf-continuation-staged-evidence-v6'},'FILTERED_BINDING')
     expected,state=(_response_projection(binding['history'],at=at)
         if _owned_projection is None else _owned_projection)
     supplied=packet['custody_packet']['payload']['response_objects']
@@ -555,8 +576,13 @@ def verify_response(item,policy,index,at,*,_owned_projection=None):
     return hashes
 
 
+def is_continuation(p):
+    from app_core.ncaaf_history_continuation import selected
+    return selected(p)
+
+
 def is_fresh(p):
-    return p.get('version') in {'ncaaf-fresh-filtered-history-stage-plan-v5','ncaaf-fresh-filtered-final-quote-stage-plan-v5'}
+    return p.get('version') in {'ncaaf-fresh-filtered-history-stage-plan-v5','ncaaf-history-continuation-stage-plan-v6','ncaaf-fresh-filtered-final-quote-stage-plan-v5','ncaaf-continuation-final-quote-stage-plan-v6'}
 
 
 def policy_contract(p):
@@ -564,4 +590,7 @@ def policy_contract(p):
 
 
 def history_ceiling(p):
+    if is_continuation(p):
+        from app_core.ncaaf_history_continuation import history_ceiling as selected
+        return selected(p)
     return 40 if is_fresh(p) else 27.406

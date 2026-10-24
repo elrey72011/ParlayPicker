@@ -93,12 +93,15 @@ class Collector:
 
 
 def checked(value):
+    return _checked(value, expected_sources=sources())
+
+
+def _checked(value, *, expected_sources):
     from app_core.ncaaf_staged_acquisition import SAFE_CODES
     require(isinstance(value, dict) and set(value) == FIELDS and value['version'] == VERSION)
     for key in ('plan_sha256', 'authorization_sha256', 'configuration_file_sha256',
                 'bundle_sha256', 'bundle_file_sha256', 'journal_sha256'):
         require(type(value[key]) is str and HASH.fullmatch(value[key]))
-    expected_sources = sources()
     require(value['source_sha256'] == expected_sources)
     require(value['status'] in {'INCOMPLETE', 'CAPTURED_UNREVIEWED'}
         and value['reason'] in SAFE_CODES | {None, 'NCAAF_STAGED_ACQUISITION_FAILURE'}

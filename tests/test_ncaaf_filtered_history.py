@@ -98,6 +98,9 @@ def configure(p,monkeypatch,root):
     a['payload']['authorized_at']='2026-10-17T18:20:00Z' if quote else '2026-10-17T17:50:00Z';a=stage.seal(a['payload'])
     c.update(version='ncaaf-fresh-filtered-controlled-bindings-v5' if filtered.is_fresh(p['payload']) else 'ncaaf-filtered-controlled-bindings-v4',authorization=a,
         runtime=target.runtime_receipt(c['runtime']['code_head'],'a'*64,filtered=True,fresh=filtered.is_fresh(p['payload'])))
+    if stage.is_continuation(p['payload']):
+        c['version']='ncaaf-continuation-controlled-bindings-v6'
+        c['runtime']=target.runtime_receipt(c['runtime']['code_head'],'a'*64,filtered=True,fresh=True,continuation=True)
     c['review']['reviewed_at']='2026-10-17T18:25:00Z' if quote else '2026-10-17T17:55:00Z'
     c['review']['subject_sha256']=stage.model.digest({k:v for k,v in c.items() if k!='review'})
     raw=encoded(stage.seal(c))
@@ -291,6 +294,8 @@ def filtered_selection(synthetic,monkeypatch,root,line):
     ident=legacy.identity(monkeypatch,discovered,pref);pref=legacy.review_prequote(pref,b)
     q=legacy.plan(target.QUOTE_PLAN,b,pref,ident)['payload']
     q.update(version='ncaaf-fresh-filtered-final-quote-stage-plan-v5' if filtered.is_fresh(p['payload']) else filtered.QUOTE_PLAN,filtered_history=deepcopy(p['payload']['filtered_history']))
+    if stage.is_continuation(p['payload']):
+        q.update(version='ncaaf-continuation-final-quote-stage-plan-v6',limits=deepcopy(p['payload']['limits']),continuation=deepcopy(p['payload']['continuation']))
     qp=stage.seal(q);authorization,control=configure(qp,monkeypatch,completed)
     clock=Clock();clock.wall=lambda:'2026-10-17T18:30:01Z';collector=observations.Collector()
     from test_ncaaf_pilot import Stream
