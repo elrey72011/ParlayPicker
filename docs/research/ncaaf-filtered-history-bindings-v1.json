@@ -349,7 +349,7 @@
     "docs/research/ui-display-revalidation-v1.md": "367e33698d34fcaac05d2711fd4bb537461c96eca0622dbefa95887aed3077de",
     "scripts/check_launch_change_scope.py": "4fce27df09b797820c1d551eaabbed01522b2529096acf951f15a8494ef4d9e2",
     "scripts/ci_test_file_costs_v1.json": "c148ac4b63a280df6289aa73ebd5ed0013ed1b32f5797d03383ca4c11aadcd41",
-    "scripts/ncaaf_filtered_history_scope.py": "118cb924271225843657e035cc0ddf75c2453ce53b4bcdff1c50ca7ae6fe3af9",
+    "scripts/ncaaf_filtered_history_scope.py": "014130db00456b03c5b0efc6723ea3d032816be380f1aa34dff1c432457626fc",
     "scripts/ncaaf_private_refresh_scope.py": "0decd4f5ec6d7c8f652e1b2a9eb4d564f66b6719aa266221249b9d9a7f2543d0",
     "scripts/ncaaf_reviewed_target_operator.py": "e88c2e6dfbfddece9a52fd9221be2fe162a73f7f81a264d4a1bb0ad5b0254a06",
     "scripts/ncaaf_staged_acquisition.py": "5361d463f7aa53b92302b9a3e7cdd21ba4bea2f27022955e40569c35128358af",
