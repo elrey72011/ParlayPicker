@@ -44,6 +44,11 @@ def material(p):
         and set(m) == {'blobs_b64', 'pins', 'custody_names'}
         and set(m['blobs_b64']) == set(m['pins']) == set(m['custody_names']) == MATERIALS,
         'NCAAF_CONTINUATION_PARENT_SCHEMA')
+    # Typed collection-authorization artifacts are opaque, separately checked
+    # originals, not HTTP authorization headers. New free-text fields retain
+    # the ordinary credential rejection instead of inheriting that exception.
+    filtered.custody._credentials(dict(review=c['review'],budget=c['budget'],
+        custody_names=list(m['custody_names'].values())))
     require(all(type(v) is str and len(v) <= filtered.MAX_BUNDLE*4//3+4
         for v in m['blobs_b64'].values()), 'FILTERED_BODY_LIMIT')
     blobs = {k: base64.b64decode(v, validate=True) for k, v in m['blobs_b64'].items()}

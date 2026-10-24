@@ -146,7 +146,7 @@ def test_altered_parent_material_rejects_before_dispatch(monkeypatch,tmp_path,at
     with pytest.raises(ValueError,match='INTEGRITY|LINKAGE'):stage.validate_plan(stage.seal(p['payload']),executable=True)
 
 
-@pytest.mark.parametrize('attack',['target','request','limit','review','clock','custody','source'])
+@pytest.mark.parametrize('attack',['target','request','limit','review','clock','custody','source','credential'])
 def test_wrong_successor_contract_rejects(monkeypatch,tmp_path,attack):
     p,_=context(monkeypatch,tmp_path);v=p['payload']
     if attack=='target':v['target']['home_school']='SYNTHETIC wrong school'
@@ -155,6 +155,7 @@ def test_wrong_successor_contract_rejects(monkeypatch,tmp_path,attack):
     elif attack=='review':v['continuation']['review']['subject_sha256']='0'*64
     elif attack=='clock':v['continuation']['review']['reviewed_at']='2026-10-17T18:00:04Z'
     elif attack=='custody':v['custody_id']+='-wrong'
+    elif attack=='credential':v['continuation']['review']['finding']='Bearer SYNTHETIC_FORBIDDEN_CREDENTIAL_VALUE_ONLY'
     else:v['filtered_history']['conference']='CUSA'
     with pytest.raises(ValueError):stage.validate_plan(stage.seal(v),executable=True)
 
