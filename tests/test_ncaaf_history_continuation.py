@@ -167,6 +167,7 @@ def test_failure_is_spent_and_cannot_make_second_successor(monkeypatch,tmp_path,
     p,bodies=context(monkeypatch,tmp_path)
     b,connections,_=capture(monkeypatch,tmp_path,p=p,stats=bodies,scenarios=[scenario])
     assert b['payload']['status']=='INCOMPLETE' and b['payload']['reason']==reason and b['payload']['attempts']==1
+    assert continuation.claim_name(p['payload'])==continuation.parent(p['payload'],at='2026-10-17T18:01:00Z')[0]['plan']['sha256']+'.history-continuation-claim-v6.json'
     assert all(c.closed for c in connections)
     with pytest.raises(ValueError,match='ALREADY_SPENT'):capture(monkeypatch,tmp_path,p=p,stats=bodies)
     other=deepcopy(p['payload']);other['collection_authorization_ref']+='-duplicate';other=stage.seal(other)

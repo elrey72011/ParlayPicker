@@ -231,7 +231,12 @@ def verify_parent_files(root, p, *, security=True):
 
 
 def claim_name(p):
-    return p['continuation']['parent']['pins']['bundle']+'.history-continuation-claim-v6.json'
+    from app_core import ncaaf_staged_acquisition as stage
+    blobs,_=material(p);b=stage._envelope(decode(blobs['bundle']))
+    stage._envelope(b['plan'])
+    # The spent operation identity is stable even under a different JSON file
+    # representation. New plan references cannot create another dispatch slot.
+    return b['plan']['sha256']+'.history-continuation-claim-v6.json'
 
 
 def history_objects(b, *, at):

@@ -27,8 +27,10 @@ For the retained Georgia State–Arkansas State operation the only additional
 request is GET /games/teams with year=2026, seasonType=regular and team=Georgia
 State. Its released request descriptor and encoding are preserved. No conference
 or weekly response is substituted. No other successor may spend the same parent:
-a durable exclusive claim is keyed by its complete parent bundle file digest,
-not by the successor's freely chosen plan identity. It survives interruption.
+a durable exclusive claim is keyed by its authenticated original operation plan,
+not by the successor's freely chosen identity or a JSON file representation.
+It survives interruption. The exact parent bundle file digest remains separately
+authenticated together with every retained control and original response.
 
 V6 alone allows 120 cumulative active acquisition seconds, including all three
 old attempts and a separately authorized later market stage. History completion
