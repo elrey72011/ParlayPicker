@@ -259,7 +259,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 # rank within each group and every actual approved ticket.
                 retained_authority = any(isinstance(final.get(name), dict) and final[name].get(flag) is True
                     for name, flag in (('wager_contract', 'production_eligible'), ('controlled_trial_contract', 'trial_eligible')))
-                if league == 'NCAAF' and not retained_authority and not (text(final, 'Bettable').lower() in {'true', '1', 'yes'} and (number(final, 'Play_Stake') or 0) > 0):
+                if league == 'NCAAF' and len(pool) > 1 and not retained_authority and not (text(final, 'Bettable').lower() in {'true', '1', 'yes'} and (number(final, 'Play_Stake') or 0) > 0):
                     pool.sort(key=lambda c: not _compatible_ncaaf_research(c))
                 if league == 'NFL' and not retained_authority and not (text(final, 'Bettable').lower() in {'true', '1', 'yes'} and (number(final, 'Play_Stake') or 0) > 0):
                     pool.sort(key=lambda c: not _complete_nfl_private(c))
@@ -269,7 +269,9 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 exact_final=[c for c in pool if text(c,'best_pick')==text(final,'best_pick') and number(c,'odds_american')==number(final,'odds_american') and text(c,'market_type')==text(final,'market_type')]
                 selected=exact_final[0] if family=='overall' and isinstance(authority_contract,dict) and len(exact_final)==1 else pool[0]
                 reason='Highest-ranked '+family+' candidate in this game'
-                if not retained_authority and _compatible_ncaaf_research(pool[0]) and not _compatible_ncaaf_research(selected):
+                # The fallback cannot replace a candidate with itself. Its ordering
+                # was authenticated above; display validation below remains independent.
+                if not retained_authority and selected is not pool[0] and _compatible_ncaaf_research(pool[0]) and not _compatible_ncaaf_research(selected):
                     selected = pool[0]
                     reason = 'Identity-bound compatible NCAAF research estimate; no wagering authority'
             elif (family=='overall' or family_of(final)==family) and (not novig_only or public_quote(final, college_fallback, nfl_fallback=nfl_fallback, research_fallback=research_fallback)):

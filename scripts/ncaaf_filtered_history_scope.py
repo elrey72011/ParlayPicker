@@ -17,7 +17,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='303be520dcace97af86efc775079ef4d37ad428114eaa05df743cd536631655e'
+_BINDING_SHA256='aee72d6a98f256f0132b3be5202418f9d910c956a455dde97462763fbd8f7169'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -191,13 +191,13 @@ def git(root,*args,raw=False):
     return result if raw else result.decode().strip()
 
 
-def make_policy(root,b,implementation):
+def _historical_make_policy(root,b,implementation):
     return dict(version='ncaaf-filtered-history-seal-v1',proposal_sha256=PROPOSAL,shared_boundary_amendment_sha256=AMENDMENT,base=BASE,base_tree=BASE_TREE,
         implementation_commit=implementation,implementation_tree=git(root,'rev-parse',implementation+'^{tree}'),
         binding_sha256=_BINDING_SHA256,implementation_paths=b['implementation_paths'])
 
 
-def validate(root,comparison_base=None,manifest=None):
+def _historical_validate(root,comparison_base=None,manifest=None):
     root=Path(root);b=authenticate(root)
     original=git(root,'show',BASE+':'+b['baseline_manifest'],raw=True)
     require(sha(original)==b['baseline_manifest_sha256'],'NCAAF_FILTERED_MANIFEST_CHANGED')
@@ -223,6 +223,60 @@ def validate(root,comparison_base=None,manifest=None):
     return dict(schema_version=86,status='PASS',proposal_sha256=PROPOSAL,base=BASE,implementation=implementation,
         seal=seal,candidate=head,tree=git(root,'rev-parse',head+'^{tree}'),changed_files=sorted(changed|{POLICY}),
         protected_changes=[],existing_test_changes=[],accepted=False,inference=False)
+
+
+
+def make_policy(root,b,implementation):
+    repair=b.get('ui_display_repair')
+    if repair is None:return _historical_make_policy(root,b,implementation)
+    return dict(version='ui-display-revalidation-seal-v1',amendment_sha256=repair['amendment_sha256'],
+        base=repair['base'],base_tree=repair['base_tree'],implementation_commit=implementation,
+        implementation_tree=git(root,'rev-parse',implementation+'^{tree}'),
+        binding_sha256=_BINDING_SHA256,implementation_paths=repair['implementation_paths'])
+
+
+def validate(root,comparison_base=None,manifest=None):
+    root=Path(root);b=authenticate(root);repair=b.get('ui_display_repair')
+    if repair is None:return _historical_validate(root,comparison_base,manifest)
+    require(set(repair)=={'amendment_sha256','base','base_tree','reviewed_head','ordered_parents','implementation_paths','implementation_parent','predecessor_tree','inherited_policy_sha256'},'UI_SCOPE_CONTRACT_CHANGED')
+    require(repair['base']=='795a2ea53a70ba8e96284a466404a6a42c848fa9'
+        and repair['base_tree']=='85f25488a2330f8810ce3c320eba5a2d7d146802'
+        and repair['reviewed_head']=='b711dca0febcb858233a7c72ea5c27685dc00716', 'UI_BASE_CHANGED')
+    base=repair['base'];base_tree=repair['base_tree']
+    require(git(root,'rev-parse',base+'^{tree}')==base_tree
+        and git(root,'show','-s','--format=%P',base).split()==repair['ordered_parents']
+        and git(root,'rev-parse',repair['reviewed_head']+'^{tree}')==base_tree,'UI_BASE_CHANGED')
+    original=git(root,'show',BASE+':'+b['baseline_manifest'],raw=True)
+    require(sha(original)==b['baseline_manifest_sha256'],'NCAAF_FILTERED_MANIFEST_CHANGED')
+    require(manifest is None or Path(manifest).resolve()==(root/b['baseline_manifest']).resolve(),'MANIFEST_PATH_NOT_APPROVED')
+    require(comparison_base in {None,base,BASE,json.loads(original)['base_sha']},'COMPARISON_BASE_NOT_APPROVED')
+    require(not git(root,'diff','--name-only') and not git(root,'diff','--cached','--name-only')
+        and not git(root,'ls-files','--others','--exclude-standard'),'UNAUTHORIZED_CHECKOUT_CHANGE')
+    policy=json.loads(git(root,'show','HEAD:'+POLICY,raw=True));implementation=policy['implementation_commit']
+    require(policy==make_policy(root,b,implementation),'EXACT_POLICY_BINDINGS_CHANGED')
+    parent=repair['implementation_parent']
+    require(parent=='13766dac2b02d99399dce37464e1e72e00784de7'
+        and git(root,'rev-parse',parent+'^{tree}')==repair['predecessor_tree']
+        and git(root,'merge-base',base,parent)==base
+        and git(root,'show','-s','--format=%P',implementation).split()==[parent],'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    inherited=git(root,'show',parent+':'+POLICY,raw=True)
+    require(sha(inherited)==repair['inherited_policy_sha256']
+        and git(root,'show',implementation+':'+POLICY,raw=True)==inherited,'INHERITED_POLICY_CHANGED')
+    changed=set(git(root,'diff','--name-only',base,implementation).splitlines())
+    # Only the exact authenticated prior policy is inherited by this linear continuation.
+    changed.discard(POLICY)
+    require(changed==set(repair['implementation_paths']) and len(changed)==len(repair['implementation_paths']),'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+    head=git(root,'rev-parse','HEAD');parents=git(root,'show','-s','--format=%P',head).split()
+    if len(parents)==2:
+        require(parents==[base,parents[1]],'TESTED_MERGE_PARENTS_CHANGED');seal=parents[1]
+        require(git(root,'rev-parse',seal+'^{tree}')==git(root,'rev-parse',head+'^{tree}'),'TESTED_TREE_CHANGED')
+    else:seal=head
+    require(git(root,'show','-s','--format=%P',seal).split()==[implementation],'SEAL_PARENT_CHANGED')
+    require(git(root,'diff','--name-status',implementation,seal)=='M\t'+POLICY,'SEAL_CHANGE_SET_NOT_APPROVED')
+    require(git(root,'diff','--name-only',seal,head)=='','TESTED_TREE_CHANGED')
+    return dict(schema_version=87,status='PASS',amendment_sha256=repair['amendment_sha256'],base=base,
+        implementation=implementation,seal=seal,candidate=head,tree=git(root,'rev-parse',head+'^{tree}'),
+        changed_files=sorted(changed|{POLICY}),protected_changes=[],existing_test_changes=[],accepted=False,inference=False)
 
 
 def main(argv=None):
