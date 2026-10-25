@@ -1,9 +1,24 @@
 {
-  "authorization_sha256": "4c9b6328c338681efc569c16118e29c65afc1e927caf38bc2c18d74234b82b0b",
+  "authorization_sha256": "b7c4e97ddbf66115caf9eef749700708ccd3c145813b0a79f53c41fcddfeec70",
   "base": "792abe61a8e00992290abe752eb17825b7bbd0b6",
   "base_tree": "de0f0762b784321cdda4fc8a72a6bfc773a96f13",
-  "binding_sha256": "50db20d264ac368716df08dc44f148cc9aef83631320c4f37db1f0e93bbeb95b",
-  "implementation_commit": "bb94d651c8b84f22eaa07ed52a25317ce8a43ccc",
+  "binding_sha256": "b0938b62f50425cee9cfed287aa501cd3531d790f10e06b69a0e75b88df8be5b",
+  "correction": {
+    "correction_parent": "ecdde1d3594d75a11d24c3d29e8e631964ec2434",
+    "correction_paths": [
+      "app/ui/nfl_saved_scenarios.py",
+      "docs/paid-launch/nfl-saved-scenarios-v1.md",
+      "docs/research/ncaaf-filtered-history-bindings-v1.json",
+      "scripts/check_launch_change_scope.py",
+      "scripts/ncaaf_filtered_history_scope.py",
+      "scripts/ncaaf_private_refresh_scope.py",
+      "scripts/nfl_saved_scenario_scope.py",
+      "tests/test_nfl_saved_scenario_scope.py",
+      "tests/test_nfl_saved_scenarios.py"
+    ],
+    "previous_policy_sha256": "d3645b9fe7633c9bc3206e59454eda1eff62087340c8c00013714fa47098cc4e"
+  },
+  "implementation_commit": "626d4a59a0304d08459ed9f27d0f9712b957b0c1",
   "implementation_paths": [
     "app/ui/nfl_private_research.py",
     "app/ui/nfl_saved_scenarios.py",
@@ -17,7 +32,7 @@
     "tests/test_nfl_saved_scenario_scope.py",
     "tests/test_nfl_saved_scenarios.py"
   ],
-  "implementation_tree": "f506642433ae8c3a21f7ae999a66d2547a21461c",
+  "implementation_tree": "5b67de605f500e386dff62366bba613a18ab0615",
   "unchanged_blobs": {
     ".claude/hooks/session-start.sh": "816a136921c447731323dc1688c1770be5840421",
     ".claude/settings.json": "e06b0338e2585d90e2529cddfd6cbfba1234e79b",
