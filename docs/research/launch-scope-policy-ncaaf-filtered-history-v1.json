@@ -1,19 +1,21 @@
 {
-  "authorization_record_sha256": "431ddbc7f03c84f6d503178ad4a7c0dc5f12a44f0613b6e3baecd8725c6200dd",
-  "base": "9c98c958725d06a6f9f9e0dbe90c0a76597cedb9",
-  "base_tree": "fa949eeb4589638c5bd5a2429866816cbe6856f7",
-  "binding_sha256": "3ea0e3f4ce673d8cef082f77b5146f4e5d5f1e8b3c818ee55dffe8867f4edc29",
-  "implementation_commit": "0c0849f968720a9f45d4a3b1aedea64701caaf8b",
+  "authorization_record_sha256": "1a0ed334a5df95b2dd7441415a3fe7aa72ef267bd1db4f9b43fe838a3625ba5d",
+  "base": "311b924ffe4a4732738bafd2d24222c7a0b40459",
+  "base_tree": "8a5b1066fcb81ce79da3791e982b9731a192c055",
+  "binding_sha256": "2120605e490bb310f9d39e3256d43c8f4c3f3f28b836d21d98b274657271569c",
+  "implementation_commit": "b06ff90a87c5e92075560a5565d0af9c2d129a92",
   "implementation_paths": [
+    "app_core/ncaaf_reviewed_target.py",
     "docs/research/ncaaf-filtered-history-bindings-v1.json",
-    "docs/research/public-refresh-harness-repair-v1.md",
+    "docs/research/ncaaf-retained-discovery-compatibility-v1.md",
     "scripts/check_launch_change_scope.py",
     "scripts/ncaaf_filtered_history_scope.py",
     "scripts/ncaaf_private_refresh_scope.py",
-    "scripts/public_refresh_harness_scope.py",
-    "tests/public_refresh.cjs",
-    "tests/test_public_refresh.py"
+    "scripts/ncaaf_retained_discovery_scope.py",
+    "tests/ncaaf_retained_discovery_fixtures.py",
+    "tests/test_ncaaf_retained_discovery.py"
   ],
-  "implementation_tree": "f2e8527a2e3397ec54313512b1182fea85915a1f",
-  "version": "public-refresh-harness-seal-v1"
+  "implementation_tree": "73facf4093ec3322265483a636ecc1734f384d12",
+  "prepared_patch_sha256": "21220627c68436076d2dd1949836a786c463114a4253c1375241c87ac0010b58",
+  "version": "ncaaf-retained-discovery-seal-v1"
 }
