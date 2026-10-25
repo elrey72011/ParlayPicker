@@ -27,7 +27,22 @@ OWNER=prior.OWNER
 require=model.require
 subject=prior.subject
 provider_target=prior.provider_target
-discovery_original=prior.discovery_original
+DISCOVERY_RETAINED_VIEW = 'ncaaf-prospective-discovery-retained-view-v1'
+
+
+def discovery_original(value,label):
+    """A retained view may hold an authenticated prospective acquisition.
+
+    Preserve the original bundle, plan, control and journal labels/bytes. The
+    native predecessor authenticates the complete acquisition under its own
+    declared PROSPECTIVE contract. This is not source/offer acceptance.
+    """
+    if label=='RETAINED' and isinstance(value,dict):
+        bundle=value.get('bundle')
+        payload=bundle.get('payload') if isinstance(bundle,dict) else None
+        if isinstance(payload,dict) and payload.get('evidence_label')=='PROSPECTIVE':
+            return prior.discovery_original(value,'PROSPECTIVE')
+    return prior.discovery_original(value,label)
 
 # Exact immutable predecessor/current pairs, generated with successor bindings.
 HISTORICAL_COMPONENTS = {'app_core/ncaaf_staged_acquisition.py': {'before_sha256': 'a5ae1d18641cd549cf9853180cee522a49e6d8c3be5ca0c55b9bf79fd4fe3c6b', 'after_sha256': 'c3b1ecb9977808ab04283deca095d0cdc2ea14605494eeda4528efc62968378d'}, 'app_core/ncaaf_staged_evidence.py': {'before_sha256': '42bd522232a54457b3794c3748e326fe2e38d25180d59ea3618c3217cbcfab6c', 'after_sha256': 'e832cc334af972581b5f1472cbb598cfa1e6e0ff3886a21d244128f43f81722b'}, 'app_core/ncaaf_owner_spread.py': {'before_sha256': '647853f7025308f74b2c1abe8990e43bc8a5a0f62b3e7719bc177621aaaa6f98', 'after_sha256': 'caef9dd13839c0dea41800aa80d8e48b19621df43ef767696a347be80b4eecfe'}, 'app_core/ncaaf_pipeline_evidence.py': {'before_sha256': '8c14aa0e76ca6fe61daa5511bce55dbecb2ef1c165866a261a3a19521833b1da', 'after_sha256': '3171c6a9fd74244c86ed10a21b175623ced7ab10f899fdbca40c4d5aaa7d19ba'}}  # REVIEWED_COMPONENTS
@@ -205,7 +220,7 @@ def validate_identity(value,*,at,target,label):
     require(isinstance(value,dict) and set(value)=={'version','evidence_label','target_manifest','discovery','schedule','crosswalk','source_references','owner_review'}
             and value['version']==IDENTITY_VERSION and value['evidence_label']==label,'NCAAF_TARGET_IDENTITY_SCHEMA')
     manifest=value['target_manifest'];validate_target(manifest,target,at,label=label);c=canonical(target)
-    obj=prior.discovery_original(value['discovery'],label)
+    obj=discovery_original(value['discovery'],label)
     q=obj['metadata']['request_scope'];expected=requests(target,QUOTE_PLAN,manifest)[0]['params']
     require(q==expected,'NCAAF_TARGET_IDENTITY_REQUEST')
     rows=custody._parse(base64.b64decode(obj['body_b64'],validate=True))
