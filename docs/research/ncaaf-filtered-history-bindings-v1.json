@@ -159,6 +159,12 @@
   "combined_implementation_scope_sha256": "3790d0606f101c177299497571541597916da383c6039967f5e680d22b944c8a",
   "combined_scope_record_sha256": "6b5e5e2cb50e5dd6493696a55e3e9eb5f7b723240d420c5abe8182dc7c7f8ce5",
   "component_predecessors": {
+    "app/ui/nfl_private_research.py": {
+      "after_sha256": "9df14eaa377a665cf413f214e31518787b66ec6bf721c7181436b1073da44988",
+      "before_b85": "c-pmD+iv4H5`E8C5C#^qF}4Hr?#u$o`XNXwn4qVVAWkw11cpG%w9ScbBT7j;jRxi;_6zq*_7q9cQY<Cz&W>NYMN!3KT~3{<^m@IU^g$$}6)(hsse-R$vO1jS>5~#U<H>@F=PZ(;ELbiIE)%gB$s{Warb3bMT&9eNg-nxiuh%<}ahB$IRpf%l5x(IH4+qOUjTz6fAWU<??51QH1z9d1ad42QWg!&p7LRfvl29BR94y2VXC@1g_d_Tm7ucyL7il5}M+XeQCt0i^ehdw{-sW8ydF<ls7nVLHA|K@tD4uY&TqwcwaP1A5-M^Te@kmv|=!Xl<BkY}!)Nn1rhk5$k_imMNR){uCiAaQGt;=68{OjP_zdQGT^*`!EwP_U2co3V3SHGf_?G4;%bOz7Jc2NBK{O;t&hp?%Ca(((UOOt3bW>e!2rgc#)%_Sar#O52A;+Vm}AuLU%OHyX8icRoHD6)dXjAM2JeKVe86I9Q|@1;<rJBOH!l8VKpD%hjQ<#NM{HC+_`gd0Rs3|YEdihRf-sR~jfFC(FbEE9Pwm4f1U;E!BJd@kYbjgA*>cea%9Sh7-VE|%o<FpXgut|NtAq<D_Vig+9{m6mxZpxg@Q<lHQVJd$(sKv#O=E9eLvcv-Arhhj6XnX=5Hlv}?oWh4T#Kq28jTjgKG19>as;e#mPtzwgj$-VcRN)vC^;yfd+cA#9+QS-7W$a~}_vYb6hi?)&Ij#x;g17MP*g$p!X%&HDgP-M59O*tvNT9neS$T!Ue`kAv}g(`{0B)V@-7_UU}$fHv92SZ~Ed#lM!UW&nvFnz2wsS?`Tq)H+1R3J5Z85R9qMHjg0m#@3xoJtgeG8cWL?7gSf{KJnwc{8L=btbG5iKK6y2JBzkk3XOMJGeSI{p8<Fhs=YWgDP>%YA`+h+5ddvbzSHF<*74V(5yAS5YLoAtba!a^Yc7K65Jq0?0-LrjsD-@sO6lopjZ8F?T#v#Ma2K6k>q%r*-K=fVow4oLxB>mc>=x14cO>%3_QGtM-X7jd>zAu(x91E*9EOXF^0s|kdTPyq6IoU0}Pd)+CtYNWk>jLbuum>weGE>9%lOZ2MP<)ct$B#rHue=v-{aWXEx}{;G(8d!^WH%w55(x2k-NK?GCepZx0D!;m`#|)8|cB-#5%`PxiLKtm;6uEuMrjWPd`Mrt)O#V8~GR$>7^B#<C#YpH#oaXppVFS=rg@)5rdn-Si971PED*otH2_?x(}riCaj%N>XLywH;o4gmi{cN^O7%^G+{6U;X0W_+GmXu;ml#hv<7R>h~erslxyL^FPdEKM<iIElh^Zkp@8~!v{|r%q+${hus4zBv|&m0e)S_$D+t(*!QmaldcsNH9`KRb6ZLwWZC<&y<z>;>}dSqZ(n<z@*S(VO{ywN7~|g^iUsOanb?{gfgW6)OsD#qe~3IKY<ZwXivyJ_C~lAxQ3=w-G?~lFIp~m%Hl(W>d+o|l&bln*k78k%p7!YY&cB|XUtUnaeW7?BnF_r~!!ic@7};<#bW@EUfAWU4ZAOFc-T(Byw)_93kuEFftwaGmfWDey0k=e$(yjHQ<~KQcPoR|If1!{WQodrwW9C1Dz*t%%6XZ^YcZ8W4(Z^kyWI0<dVovqXGBtRBZl~7RVeV;oP$6T%ZZAGvAaai>TFAEf$iyBTBh)%UyuiaPb>qE$N$2PYuyx1M9~yp9;P|L*JG=hg*j2O5&dz@{{k&N2?D%nC-(KaZ$_Q5<1sG|r3VRD<&dLPG#>m>-W>=Td$LwZ}Tu>#s)39zl7q~GJtx1K$h|Bo@Y5%{_WEH=k>|l9-x}8OQqcywtYB~h=BX71}mNnV8rTk8wHuW(;2G5j>Vj*eeNTaVk>E5IMBe1Uk_CGLh%udt9EZ{46i&Mr*jZ<Y5p{<Rnu~1+-$L#EGT2(-vP$QAXI5))mWtkv(9TL3Eta{LdQ5rtDj0bZ=H^d7~<f&r1Na^tW-rlE5_LfV#J=zI!S0B%6SeD5ImjH~f#0dA&GXUWr%-yoqLe?R!-h4LT4A!7ZPurTv*Jc$Wb8l7ZdS8#~D`R@7)iDz%+iD5DbSr00Ged-+8d&rPjp0IV-Kf#)^`;ay#_|P?M_{2uL_=qX?NG#6;+RaZ64(zDM}#&NN!DW#&9J&=Al31KqX9HDv5P}T4)B^1agV`=BGHu2m5}ckdH8ynm5LA@2r8G-_RKY*x}7u<YvkYE=k<xlnM=>5$+;9@0EU_n&Cvb&qsR$+hZIZA6sKWAr0c4?tI2UaTBr(DHN8OIgplIj!3@NI5S`GA68;?UvqIReiSI%))#OHQ`qCcelnNp&btV8-cxQCLj7CM9O}4$#BcAsSF{<m2+%WFVk%n{6UNendx!*j;a0h<JAfx*BeS?g)-l?h8!s{3W>>&Wr3DOW-89E!@6fw@ytna<ZeoZD}VLjpeu5pAOpgxDMOeLH_4MO&@d+@Rie|5C*(r$yDzMRyr$CMS?*?I!C%UFYgay~%6!#6rSXK3y!#Mx=9ZFRV9qSRL4k!#*+hnTxmGl8HGJVv)hWa5?Ga)rbVDxC1@&7Jdq+t|2R>(+@1p`F{%dAjx*nZTY1rJca9ruf_7x{bP8N^VWvjG<;`Uzdp~{-$O`;Hm)SG8b%%D_fB7%J=43w4&!#m0E2&=Vh{2`oEEIRi@1900G%{yz^bDGh~<3w{z${Is6T2XvOT8ht-*HCt@YGGZR~#VG1jBc|k--^~IJuS>d~P&Kh2#Z;Zsg`KQ%Ld(USM+3nQ79!;<O)AO@)?3teW7bn-}m#q_EH+ZSfMKr02(c?#sS(@2Pw&&2LPHIlOnF_TdO!J*xiqkcQX?CT}{?d&B+~~O8rBHqYbV@AC1T08TadhhfqJm7%$eTox3}dQ#82xu3+xQNd?S3>_+WCXb?~v{Gw()w36)@o;3tEC_fx=DrzDEGTzHWB~VIS>+n^-%ZQZ-hDT)f~Dr-f!z3G6?yCsCI`5g53?Ku|wfHCZlX|BxAE#qiR^v%L)6_|UBHf?TDm_ZQ;OYasGJpr5b)",
+      "before_bytes": 7634,
+      "before_sha256": "6ea82114252b3c3727b3ad056ed46cb366877dbe114966cced859b5a96943f66"
+    },
     "app_core/ncaaf_owner_spread.py": {
       "after_sha256": "5aa05a6c869033882dd30b5631046f8aaa9bc4bf355ab76b1fe2eb12e3c5e1be",
       "before_b85": "c-pl)U325MweR{B81_L@F0D!0-aaIkck0^O#;s%T*xK!6G#U;}K^AL@WC>7SCEfqtbMOt4lDtW}4{MRYIR`l3=KzeNX#S}#@+=qRp?YGCxTs!BwkCCx@2Oy<VVuz>+s?=x+p~t`<(kzD{woEcS;lHX%Z$xNqX(9;ycPghWsLK@d?wkJWiOo2lF*`IbbSD9S=FooJrZfg9A4~m_WB(G@}<OIvu0B@J3bOyD#*6o0koPF!{6te3)XPLtF{3uG1)KyR5)2vK}pq+4Cn}Wex=W>!8OoUY^x?0huP?HOB*09Shg+mj22{1iyQ!}2G=2IUJ|ioc|*8p@=V0RUe|0x+d}Z!D2k%drm1!$tLg*EcXid^Fst!djcnR76IE4kGyK}nnyWEd*C{Z8nV~YHbd&NL8I;22c02_Z{*z@QuYhr!xTlc@*;2kO@+b57PYy$;kngHBE8zXErXqjJ3*ZJKmak92f$Zz5<SflvE~>Qz(mzju8A1h1>%3+~UNVF%;oY8{0)(CN8n?O!lG~;#tD<^VRPEC#_$_Eh)kpyS^CZg!=*T(+-2wq;a*66ytS4+*(Kaj<w0UL%he2H^XM8mJIDdG&xxXU`iR4siGtEU_3id4j)~(<d`){Jr_m{Wt(j(JLx?}5$EiE<|bp^0K+|~Wv_00l+E^pJDyT$yk^9Kj6ZSx|l%5{#4L5m^UJ`P;RX$0rjp||k}czzyOUrf3LKaXzi-hWsGfcke#e9n9(|0Y9}Mi2AH54RzLL5_o_f^p)C<1;*VGe7sR|J$KI#o_^CXBc{%=rI*?5Tnrud=JqBlbU8POiaHW5%>pQt8Gf6-Yv&9JrosPk5|hvxKa+w7_R`(WBP#DK5GKr(ti<=LHRv?_{-nsS4VfNyxs+GpU}fy?Ee@6dp_RG|8WKY2<IDc;kaB0b^nh$Wgsesk&mpP5ND#%<KlAh0re)5Q&NR~ehnj6_wVO8@c!ZE<K<!wLyz;zhpX?S(dA+>M?k%R8w^Su8B-jHB8_2W%Lw~KGXV_Rum)YonmA`tu3fO(9gw?O(IU6_cL170WZ)_Y+UQnR;#hP=wp>0c0|1Zq69cC#CJ>13t}ZX%rT*5^$E)w>KU|Wb5iJam)Vtf8tHo$w&duG`{SWVN=ZpCehO68AtG{>QyZlS<?icCf{1!;fugQ@)_jk8H2K0Zpzn)vn9oo`h%oyx?#vx-7lj(HSuz$5VIQB#ZvzdO@Dy{V@#dsO&bPW(%p(Cx((aP6$g>IccGcG1;$Oa}_*^`b+#}W$v8QG@=ePTsYFQf2Hw2H}BUrm0Fw6lPaREh=^DEgMbWQ{*seJ1&!H4;{EMt=T0jZF|v)d-Rb-vBAQETd4_Ayt}&(|a#*aWcGlll*5K*8%ehloT>6oDsf>Rv;0@dAoBh0v@tI!mJZb$J&dvA+8L8at?Nk=0ap52uU1legiNNhC$$9SzumbhRN7zfo3?;XHa)q3DdG=q>_}QvnrTXE~DxRR=1b#r$0w)kW?Bgg-)`OEC;v;Z?^RJ|NEzC<%v(RAExQ#BUuKj*%Q-r<!dDPk#q;?56UY9td@};7zC|0AdeKhSPGs-6l@2W`WXJzR)PUwOu8c~LAR)vk;-g`Na?BIV|O{19<sZ~u3QK87sefi;XO6^a}Ea8%WIS6KEVEjieh9zpd2B4jBubH7P3-m9f)cJr3WUAkj4VzsTA|x3DqGggAEL!8pzlO<cH6=MYOuC0FxmPa@+4KDCiE>)Glo?XFLulCkM<>IjzalL5DHzfMQ*UVbx|M5CL7Wwstx;Yo6L9@{bDWblTH_HQA4by@OEvaef9?S#FoC27MECjiE#Q{x6U7hmSHDI0NsMFBhJNaG2h`gK%~lhqSv3rM(vLdj5WXcRjzm`tc03)2c3ts}GNh`|BUy%>Mw`WLNU<Xr!XbhNNj;<|0ieoE4jx1RnmhPnKp6Kr=OL=Y@k_3`|WM0=;xUG<M+L=JD-(bm|K5l>a~D^)0rZYf`Hj@K_-nIAib|w1DX{ba()PGfhmZVKPh(W3ZKwl&+Q!;BFb@4n>u{B$10NBJyOWgV!YIdC8^ePc$4ZYAW+u`C|5r8K}n6L{pL&{UDux2%^jJnaFqGyy&i;I3#jG(<vsz82Rt2l6hN@JtPyu^iIBlikxFI_410pe3eT)weo5eI{{LwdN~dwFP1WPrd*P(Y^F&vR(4|eb)jG{OeDY9|6%-Xu;-xVFf*ML&28OG(2a;-a{&@9hj90ueaAXENNefu<<^}k3@sz<Xq;TcFJFKaog!n?TqV30;CYNKAx~;UOVtgr9Y!_1&<?)tQoH0VrC8U_iK(GI9r3LtR5Gccean!r+OE_TXA@`x%A@p?D~~Oh3H>%i&SY7Rrb~@}1HwI*Gn{%k>N2SPmv$^cQokYKQ+7-J@9g_Dbsd3z1JaobXLPMOeSG(_1VeY$ZRE(}*!S&f+;{HSSTF@=g8eWP=3-(p+0P^2wfC@jk<mwdI;EGy%v+N&yL|X~qa&K0E$G#*<;L`$Osx%j>eT4)rjs|on||zumx}f7IVi)BSz&b-GR?2|u_Ea7N%fR&|3LQgqKEn7^5$-SjYJ-Qyjy%fU))?ppN}vr=&KlJNp}q#^UH-Gm(o0#DJ2?cFLXS=`ZEm}emVsk*j<v4!KTUC{U}z?^l=U|Jf95I*d|Sl2^D(P=vF{-)dsZCW6vxMeRl3xR@LKG?A~xJq}qZ7FEgkH_$w`5g12E<fFVga>E}ldM9vsvZ^iWkR8ASF;Odx-oBm>G<2qTC_TV(fGYl=@eC-|}&vU<J=IG`DG0}2-(L#C5Awgx4r;?@>=MgZkw6&uN34yy8dV<$8?U;{ozs`nW8=cOvKhG|I)lXCV^UPl4WZgjaXSofk8Q4fZ<`O%Y^R;TEHA)aqRaFd4nc)d!J(*4iSLw4!uE6V8$LC$8Q4xc#D;l+_PUGIE-w~XgKh$bH<GwrHXk*K|VF((2w27!(l+zBFYu4uL%u$Q*CUwoi8=9)<3wf(1KOJVSYnkgUV4r70GjuY@4#v@M8zi$_Fi8KrJU~Z!e?v<NzVcFq-X3~Y8Lm|44>HC%bU~PN*0$+ICZlK)jn7LZ;|P@D=G_fM9)DIBvz)5--9y}6|I#kPw~B(5y<uw+<o^@$&7a}`^_!$(+*Yh=8hJ1WTwe~9rc>9d>sY7qdKg7|p~GmKyaj<OxpZ^7#effgCWm)BJpnS523i_#OxJsa-k9!MI$x5b>ef6~{``m#f(C<XQ+RSQd|nN>G`9A82~wpzk#~n^QK%LK54|nE7v%pEt2mOlkd0t9-E)dC3Nsy*9;W@#eo22%NBm59_-3`*JDk;-Kav<c!Zlf)HzCN#y6KuZ%~2gu6Cgs=`H7QbkMtKEt0U6RdAB<J`qI;OfAgId@EH<kZx3kJs1`Zsr?r-xaa&fIo*rhKnkRl)_Qqt~s#r46M;j1hm=<<iSC|9z@xelSCgOCQ3<7+Cz8+20``b8~x>GS7)NJ%Jhqvgqbz8oSj+Hg$3dY82izm@j7n=0-r{IziT~pAQCXj=EH#0}Wrrn)F^$%GCTTdL5PoB4HHva-GJFUs63v$orwygVh>=VmcbA!!3#H8Qc!;5I}SK_r3XHV=oH=ZUoWTk(V5gaNo*2LsB2b7%drEM4;@WpgS1&&MnSX;6$QN8<T21ZAbe`p#CJ}+}fgVsqnHc{9`b8uerB=aTj4Kf#`^ihS58i`~>a6Ly)z*EFll?y?q+Z{IIVLMOo4=_(2VHvEGkcd~v%A;Szx1$X#G8Km!9^LA|sGzQO0>xDnOxTu_TrNnqvoZDw89^o=G5?!4P1VE;z^s1#ogL&4FT6McZAteuFDPC+^tOD4o-{(5bEeG^-Mcw~F*iPj!yjG`1tL1_O^)}jf}%1}^<+$J5t+#PF($s(c4s_i-Md$18U6Nlue1V`oWA0*^b^%*$<lD7p~%!7)e>B)cU0aAz`{J3Tx$s9v41XCR%zYxtx}$Wfr*0gR_QGRyxWeJBF}g-Zc86JtAN`QL0VLtk7FxmtM5|5dbbGNk#+KpLOcie0Hy>qAom;?^cRysOnPb*+tjc{Zf+B&_BOFWAV&bPgo@r@K0ZQeRiMd$ykA)Ibr_}w9hg)$Enux|uxzDPLDy7`O<g=Pwu-N<tJWg_H5td3#Dam^RIebcP36ls_LPHNE63Jp73-JQ+PWD?cx6nllvudqE#k(O{ieGV*m-Ep&WZ!`9kRr(33jY+*y6~5MGYGe=^04hB8E-jm<<dleW2~0mU|cSf__z}K{xD2%~YSux*6PYsa@n}x^-`8)HPji>XSX{a@~r32`XUPFa4V3%L-F!=`m!r_aZwBQBOe99)@Iu14qP!Lw!j_eNp(b)BPOjuFSY6PC5GZn{3K@G;_HsNW=#G)0vE{aW6gNIiIW94gjb{XlQCTW_bg{Z`$YijMq<Q<F_Qkqu@>&f(@r&cIoF5x;JKLj#cA9r!!t9Nw6%fA>#pOgmaIE{s2i=AIF1k4Dp>y1;$ERkMAGmm)GeJpu<*J<7uai(7ZIE3pdf%F5nyt^c*N2&b%ca%5XT00C}d;UM#+y0K#OzCVP#I?D!3kssxpjn5aMQ`s||&I%~kJoH1{kJ?I8R3@9X9{LE>`1jVnSz9aG=jgxgHtNP~#SPj(&@WI~b3u+Mr1S`g`isbnp*Thu^YgeQYl=B^~&5%GJ<a-=*hZ=^Ls-KdoYk9#5pu%S&#1wsE=Yx!(B5-8@@rnatYJ!+t3en_Gtzg|6K`%%8U(>c(?{Xof0xEXkxl3-;USskV=Er!_S2c%3XFSTg{-jbw_0FghB%?yU@^3in@9Ol&Z}tk2ra{EEsoLkQ{E`6tatqE=nJWmfC|EO7HwkX@7bfRe7hC5=CB~eX=D>vpgVi>NSbbiwt{B%hsb3^C`ge(M2hKRZc&e%w!VA0=T2{>t0?JRUA)*4ctnjKeHEXFF%?P{^3QK@rk^wVyHPEaH+$xb?N4X2ULW-aJ(KTRwMk=5*MM1EeBbQ^=u9-12TvJU&<zH*SM5R-$*T1^e5?1rtFZxbMCY_cvm=L6|X>VSxk2QK(b+?t1sw>nxdCj(~Ur;@2H#Yw`zgwj0YG}ueZ5q16gQ0poy9O(JhmVt`yZ)yzt!!hh5rZ8<&w9ttfFhMsQ*iy`X}ENS!|VRNZIwP>rA8^A4f%%Q=6n&8r#3Ivb|g0K3n@KyV}@c)BG)jZ=wjGUu!PBcF`Z$na5A0cyuxooshD^ST8?payi$x>xNRe%>33$5+_{|zv>b*R1<%2kV;!^YVLr|?%(lM3+ce%ZW1j@1VpbK~qR?-DRi8`;9b}N#Lb<%cyUbFMTIRBU;1Qinv9GNFgD$RYZ97c%*JP>m5<;Et++yj@eBb63+Ug+FG(5&CJI5I6+RVwo$6|gCjnCe68EF$^INffU+UsjBwraz%G3%Laj@n(2ZUZ%0G{L1SZP)tL_>`4Tq;7a8x;ZP>7^FND-)ilWV=ISHo#D!tfhC)Ts~(h3fr>EXD#ZjppDn*$&4z;R)F`Y9twAQZ9EY{Zc=ao_-Gd7)T*8H>Jz4su?Qq3tb<>qPdC~8bVlMIYSIbh`XaX~x#;GeZGXHPOG+&!5x%%q5x{o{lpZ+IX@}^GW`#<T8+ZvFJr{)|1zo&vgBhMpvBKI1Tg3;#|zqU~hu#>vUNu$y4$bDHHRJ>&-+VeKU@83aV)RwqAK2e<lJa%eo{NP;LB3S@9pfX>smzDqB1;$eKJw~>rC2TFs1kCp+7^U~$7>_iQIZlcuqw3$urqnj@XZa;MK8H7~nF(gGy5l==x4IYctXaA*)SXH84g!7ll}CsTq{pMtVDg>#yBnM_9Z4GqCdxNB;1{Ny8UE08^dA;#89o",
@@ -294,6 +300,8 @@
   },
   "components": {
     "app/ui/ncaaf_pipeline_research.py": "b9bb6c8b60499cba5342ec445b85498969ba82c6d4c96beb8bcc0afbce1321aa",
+    "app/ui/nfl_private_research.py": "9df14eaa377a665cf413f214e31518787b66ec6bf721c7181436b1073da44988",
+    "app/ui/nfl_saved_scenarios.py": "757bcf3ebd2a9557da5a9440d92596f4afe3923faf9a05cbefa025b6429ff798",
     "app_core/market_probability_model.py": "5cd25936548870df4bca01b929d4c2df72c7c905b4f32f6f7d7efe07c1c3cd63",
     "app_core/ncaaf_closing.py": "6bf53e32024b16148312f7f5fe0f8ef90b5b71771fa9525bcb23b56336c39861",
     "app_core/ncaaf_cloud_backup.py": "61546d5bdc5d0853af32be8f5bb2e089ef1063116d651e3eba312c6317573f67",
@@ -336,6 +344,7 @@
     "app_core/ncaaf_staged_acquisition.py": "264cae2c367cafe6f158f1eba3ba19e08df552c90830f0e534c01846c58f638f",
     "app_core/ncaaf_staged_evidence.py": "f5aa9d3c8d4b4f82ee07338e0dbe7929472f01140c47519be3c9373a94f244bd",
     "app_core/ncaaf_transport_diagnostics.py": "700fd2d9d9b8f8a348184284ca93e352dd4645ea3a52d07b88e94688ab214065",
+    "app_core/nfl_saved_scenarios.py": "3c83e2d1b90ef92eef7846b0d37e411f52aa2629fb8d4578f7cae7d4f398ccbd",
     "app_core/per_game_boards.py": "afc0eb9321d9cbefe0ea8e2a8b3791c28611c4d95ea8a62305955d49a5ee0f51",
     "app_core/prediction_evidence.py": "9efc2894abd37736f45fa9601cb1627ecafea2b97d19bf7d9928904e60b2f01e",
     "app_core/producer_provenance.py": "6272fc842bf339382e5fc454da0200160aaaa0ce0e8b7de50db535b00bb0d0fe",
@@ -343,6 +352,7 @@
     "app_core/research_display.py": "895fa4540235dc5d14681dd71b8652ab04b35fdfef8d1503187c83d873d6080e",
     "app_core/research_replay.py": "c2899015295a146b0e5cd8682549146fce6c4023ea30e6149718b63cbd898f93",
     "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "be717669ffc2955633ad3b00b05edacea5833e710d4d27a0f84c74e4941c16c6",
+    "docs/paid-launch/nfl-saved-scenarios-v1.md": "b7c4e97ddbf66115caf9eef749700708ccd3c145813b0a79f53c41fcddfeec70",
     "docs/research/ncaaf-filtered-history-completion-v1.md": "f8cd60944af262e350ee1b99835f9ea91ffa24f03407e63844d1f4fc4cf0d0e8",
     "docs/research/ncaaf-history-continuation-v6.md": "91a6ca8eadafcc07d2a7d7de8aeccdb5213a45a13837c9a9909bd1d73ef29c51",
     "docs/research/ncaaf-retained-discovery-compatibility-v1.md": "1a0ed334a5df95b2dd7441415a3fe7aa72ef267bd1db4f9b43fe838a3625ba5d",
@@ -350,11 +360,12 @@
     "docs/research/ui-display-revalidation-v1.md": "367e33698d34fcaac05d2711fd4bb537461c96eca0622dbefa95887aed3077de",
     "scripts/check_launch_change_scope.py": "4fce27df09b797820c1d551eaabbed01522b2529096acf951f15a8494ef4d9e2",
     "scripts/ci_test_file_costs_v1.json": "c148ac4b63a280df6289aa73ebd5ed0013ed1b32f5797d03383ca4c11aadcd41",
-    "scripts/ncaaf_filtered_history_scope.py": "1c3c7b6353f68fff0955a8fc508d1638eae370ac383f13ba8f9d16a8884f5b0e",
+    "scripts/ncaaf_filtered_history_scope.py": "88d12bf1749fffce86d5b2e746d6aa7c87508608d4f425a4fe9a614c2623d886",
     "scripts/ncaaf_private_refresh_scope.py": "0decd4f5ec6d7c8f652e1b2a9eb4d564f66b6719aa266221249b9d9a7f2543d0",
     "scripts/ncaaf_retained_discovery_scope.py": "4148647508cd690a3bf0fd1ff60fe4f3de78a140d4e7029c5b810766811fc957",
     "scripts/ncaaf_reviewed_target_operator.py": "e88c2e6dfbfddece9a52fd9221be2fe162a73f7f81a264d4a1bb0ad5b0254a06",
     "scripts/ncaaf_staged_acquisition.py": "5361d463f7aa53b92302b9a3e7cdd21ba4bea2f27022955e40569c35128358af",
+    "scripts/nfl_saved_scenario_scope.py": "0b98c6cd23278d198a92f344738f93b9a085a343afd72e37c2cabbfa58a32da8",
     "scripts/public_refresh_harness_scope.py": "69a7ccbbb30a8632c6001433fd30ff583bed447570b13d01249924b37d597468",
     "streamlit_app.py": "0a8e221684fca28e87a8383d872024c8a50c8a91a458b3b4afa573068f0be8ec",
     "tests/historical_scope_input_boundary.py": "137499e153707a920179ac5a406dd84659b262672774ec7e85b2272f00606e78",
@@ -369,6 +380,8 @@
     "tests/test_ncaaf_history_continuation.py": "24548a77409cd340b498787059b27a170180fbea88cfd974f65ca68d174887df",
     "tests/test_ncaaf_retained_discovery.py": "80f8d5e526032a11c42bc9d5ad7d6437707facc93fc7571e0e24b2169e1f8744",
     "tests/test_ncaaf_transport_diagnostics.py": "62a1a18e6fa16d1508d2b29df5f18d6db5f8f1ae5953c68b85b35c37be3e88fd",
+    "tests/test_nfl_saved_scenario_scope.py": "ac3ef0d99749ea59198365ae40cab044eaa7f421cd40ebdc7fd32487acec5a51",
+    "tests/test_nfl_saved_scenarios.py": "ac962ace9e3563c7dcbcf0dbcdcbb03e78473f5e180ae51466803672f1fc2e48",
     "tests/test_prospective_legacy_view.py": "1929f1a3884b9e62a049688d8907a01f650af33c6856e3ec6edbd299fbfa35d7",
     "tests/test_public_refresh.py": "5735669265d1c5e9ba4d24ce0163d83fbf87362963f7fa6b79e220a9cdae048d",
     "tests/test_ui_display_revalidation.py": "58251b30115adf4446b5ecbfa5143f44fdf015ae0de61be0bd15fdddc27ed9c6"
@@ -596,6 +609,37 @@
       "9ad14bed575a1713eced5d0d54774e69f898e11e"
     ],
     "prepared_patch_sha256": "21220627c68436076d2dd1949836a786c463114a4253c1375241c87ac0010b58"
+  },
+  "saved_nfl_scenario_viewer": {
+    "authorization_sha256": "b7c4e97ddbf66115caf9eef749700708ccd3c145813b0a79f53c41fcddfeec70",
+    "base": "792abe61a8e00992290abe752eb17825b7bbd0b6",
+    "base_tree": "de0f0762b784321cdda4fc8a72a6bfc773a96f13",
+    "correction_parent": "ecdde1d3594d75a11d24c3d29e8e631964ec2434",
+    "correction_paths": [
+      "app/ui/nfl_saved_scenarios.py",
+      "docs/paid-launch/nfl-saved-scenarios-v1.md",
+      "docs/research/ncaaf-filtered-history-bindings-v1.json",
+      "scripts/check_launch_change_scope.py",
+      "scripts/ncaaf_filtered_history_scope.py",
+      "scripts/ncaaf_private_refresh_scope.py",
+      "scripts/nfl_saved_scenario_scope.py",
+      "tests/test_nfl_saved_scenario_scope.py",
+      "tests/test_nfl_saved_scenarios.py"
+    ],
+    "implementation_paths": [
+      "app/ui/nfl_private_research.py",
+      "app/ui/nfl_saved_scenarios.py",
+      "app_core/nfl_saved_scenarios.py",
+      "docs/paid-launch/nfl-saved-scenarios-v1.md",
+      "docs/research/ncaaf-filtered-history-bindings-v1.json",
+      "scripts/check_launch_change_scope.py",
+      "scripts/ncaaf_filtered_history_scope.py",
+      "scripts/ncaaf_private_refresh_scope.py",
+      "scripts/nfl_saved_scenario_scope.py",
+      "tests/test_nfl_saved_scenario_scope.py",
+      "tests/test_nfl_saved_scenarios.py"
+    ],
+    "previous_policy_sha256": "d3645b9fe7633c9bc3206e59454eda1eff62087340c8c00013714fa47098cc4e"
   },
   "seal_path": "docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json",
   "shared_boundary_amendment_sha256": "162061ae1a7240680f915a9f16ea585cff70a619a69c49d99a0e46c14600a53b",
