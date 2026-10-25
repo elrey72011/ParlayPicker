@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='3ea0e3f4ce673d8cef082f77b5146f4e5d5f1e8b3c818ee55dffe8867f4edc29'
+_BINDING_SHA256='4bd3f6164bcf3b6d9291f38e32a17432d7d7a899e8c4ee6f9ea6fdc6b8657ae5'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -235,7 +235,17 @@ def _public_harness_module(root,b):
     return selected
 
 
+def _retained_discovery_module(root,b):
+    relative='scripts/ncaaf_retained_discovery_scope.py';source=physical(Path(root)/relative)
+    require(sha(source)==b['components'][relative],'RETAINED_DISCOVERY_SCOPE_CHANGED')
+    module=types.ModuleType('exact_retained_discovery_scope');module.__file__=str(Path(root)/relative)
+    exec(compile(source,module.__file__,'exec'),module.__dict__)
+    return module
+
+
 def make_policy(root,b,implementation):
+    if b.get('retained_discovery_compatibility') is not None:
+        return _retained_discovery_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     if b.get('public_refresh_harness') is not None:
         return _public_harness_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     continuation=b.get('history_continuation')
@@ -254,6 +264,8 @@ def make_policy(root,b,implementation):
 
 def validate(root,comparison_base=None,manifest=None):
     root=Path(root);b=authenticate(root);repair=b.get('ui_display_repair')
+    if b.get('retained_discovery_compatibility') is not None:
+        return _retained_discovery_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('public_refresh_harness') is not None:
         return _public_harness_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('history_continuation') is not None:return _validate_continuation(root,b,comparison_base,manifest)
