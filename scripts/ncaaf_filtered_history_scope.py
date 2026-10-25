@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='2120605e490bb310f9d39e3256d43c8f4c3f3f28b836d21d98b274657271569c'
+_BINDING_SHA256='50db20d264ac368716df08dc44f148cc9aef83631320c4f37db1f0e93bbeb95b'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -243,7 +243,17 @@ def _retained_discovery_module(root,b):
     return module
 
 
+def _saved_scenario_module(root,b):
+    relative='scripts/nfl_saved_scenario_scope.py';source=physical(Path(root)/relative)
+    require(sha(source)==b['components'][relative],'SAVED_VIEWER_SCOPE_CHANGED')
+    module=types.ModuleType('exact_saved_scenario_scope');module.__file__=str(Path(root)/relative)
+    exec(compile(source,module.__file__,'exec'),module.__dict__)
+    return module
+
+
 def make_policy(root,b,implementation):
+    if b.get('saved_nfl_scenario_viewer') is not None:
+        return _saved_scenario_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     if b.get('retained_discovery_compatibility') is not None:
         return _retained_discovery_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     if b.get('public_refresh_harness') is not None:
@@ -264,6 +274,8 @@ def make_policy(root,b,implementation):
 
 def validate(root,comparison_base=None,manifest=None):
     root=Path(root);b=authenticate(root);repair=b.get('ui_display_repair')
+    if b.get('saved_nfl_scenario_viewer') is not None:
+        return _saved_scenario_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('retained_discovery_compatibility') is not None:
         return _retained_discovery_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('public_refresh_harness') is not None:

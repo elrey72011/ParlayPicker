@@ -53,6 +53,9 @@ def render_scenario():
     """Same owner-token panel, separate explicit action; no general live analysis."""
     from app_core import nfl_scenario_research as scenario, research_replay
     with st.expander('Private NFL sporting scenario', expanded=False):
+        from app.ui.nfl_saved_scenarios import render as render_saved_scenarios
+        render_saved_scenarios()
+        st.divider()
         enabled = st.checkbox('Enable user-specified NFL scenario', value=False, key='nfl_scenario_enabled')
         st.caption('Full-game final points including overtime, conditional on a completed sporting result. No observed offer, price, EV, edge or blend. Integer handicaps unavailable. Staging creates no owner review. Execution is a separate explicit action using retained inputs only.')
         upload = st.file_uploader('Existing owner-reviewed sporting-scenario packet', type=['json'], key='nfl_scenario_upload')
