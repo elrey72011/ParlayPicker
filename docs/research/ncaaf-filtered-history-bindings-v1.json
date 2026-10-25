@@ -367,7 +367,7 @@
     "tests/test_ncaaf_filtered_history_scope.py": "9954766186678d0aa814f76bb177bd1ea53884a1319e97c1f81d55f3ab4fb9ba",
     "tests/test_ncaaf_fresh_history.py": "53b5fc2a6dff5fb093f253c209dec373b356de8160291c128075835c679eee85",
     "tests/test_ncaaf_history_continuation.py": "24548a77409cd340b498787059b27a170180fbea88cfd974f65ca68d174887df",
-    "tests/test_ncaaf_retained_discovery.py": "d7e111d8e465213f7f6f561256075eb54a4ac8f52d75632eb4d82a76cd4acadf",
+    "tests/test_ncaaf_retained_discovery.py": "80f8d5e526032a11c42bc9d5ad7d6437707facc93fc7571e0e24b2169e1f8744",
     "tests/test_ncaaf_transport_diagnostics.py": "62a1a18e6fa16d1508d2b29df5f18d6db5f8f1ae5953c68b85b35c37be3e88fd",
     "tests/test_prospective_legacy_view.py": "1929f1a3884b9e62a049688d8907a01f650af33c6856e3ec6edbd299fbfa35d7",
     "tests/test_public_refresh.py": "5735669265d1c5e9ba4d24ce0163d83fbf87362963f7fa6b79e220a9cdae048d",
