@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='b0938b62f50425cee9cfed287aa501cd3531d790f10e06b69a0e75b88df8be5b'
+_BINDING_SHA256='84a97bcca548455c4aa3a195fee16fd05e9a0e54c913439bb604d19985efa962'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -251,7 +251,17 @@ def _saved_scenario_module(root,b):
     return module
 
 
+def _saved_zip_module(root,b):
+    relative='scripts/nfl_saved_zip_scope.py';source=physical(Path(root)/relative)
+    require(sha(source)==b['components'][relative],'SAVED_ZIP_SCOPE_CHANGED')
+    module=types.ModuleType('exact_saved_zip_scope');module.__file__=str(Path(root)/relative)
+    exec(compile(source,module.__file__,'exec'),module.__dict__)
+    return module
+
+
 def make_policy(root,b,implementation):
+    if b.get('saved_nfl_scenario_zip_viewer') is not None:
+        return _saved_zip_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     if b.get('saved_nfl_scenario_viewer') is not None:
         return _saved_scenario_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     if b.get('retained_discovery_compatibility') is not None:
@@ -274,6 +284,8 @@ def make_policy(root,b,implementation):
 
 def validate(root,comparison_base=None,manifest=None):
     root=Path(root);b=authenticate(root);repair=b.get('ui_display_repair')
+    if b.get('saved_nfl_scenario_zip_viewer') is not None:
+        return _saved_zip_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('saved_nfl_scenario_viewer') is not None:
         return _saved_scenario_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('retained_discovery_compatibility') is not None:
