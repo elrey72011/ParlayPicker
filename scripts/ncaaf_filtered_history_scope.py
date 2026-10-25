@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='619f23e5190d36f8df24f31487aebabc626b4e8bf6ec0a22183ac0daf591ee99'
+_BINDING_SHA256='3ea0e3f4ce673d8cef082f77b5146f4e5d5f1e8b3c818ee55dffe8867f4edc29'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -227,7 +227,17 @@ def _historical_validate(root,comparison_base=None,manifest=None):
 
 
 
+def _public_harness_module(root,b):
+    relative='scripts/public_refresh_harness_scope.py';source=physical(Path(root)/relative)
+    require(sha(source)==b['components'][relative],'PUBLIC_REFRESH_SCOPE_CHANGED')
+    selected=types.ModuleType('exact_public_refresh_harness_scope');selected.__file__=str(Path(root)/relative)
+    exec(compile(source,selected.__file__,'exec'),selected.__dict__)
+    return selected
+
+
 def make_policy(root,b,implementation):
+    if b.get('public_refresh_harness') is not None:
+        return _public_harness_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     continuation=b.get('history_continuation')
     if continuation is not None:
         return dict(version='ncaaf-history-continuation-seal-v6',authorization_record_sha256=continuation['authorization_record_sha256'],
@@ -244,6 +254,8 @@ def make_policy(root,b,implementation):
 
 def validate(root,comparison_base=None,manifest=None):
     root=Path(root);b=authenticate(root);repair=b.get('ui_display_repair')
+    if b.get('public_refresh_harness') is not None:
+        return _public_harness_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('history_continuation') is not None:return _validate_continuation(root,b,comparison_base,manifest)
     if repair is None:return _historical_validate(root,comparison_base,manifest)
     require(set(repair)=={'amendment_sha256','base','base_tree','reviewed_head','ordered_parents','implementation_paths','implementation_parent','predecessor_tree','inherited_policy_sha256'},'UI_SCOPE_CONTRACT_CHANGED')
