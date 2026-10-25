@@ -16,6 +16,10 @@ def render():
     st.subheader('View saved NFL scenarios')
     st.caption('Static replay only. Loading saved results never runs a calculation, '
                'Refresh, provider request or public publication. Postgame viewing preserves the original calculation clock.')
+    if not st.checkbox('Show saved NFL scenarios', value=False, key='nfl_saved_show'):
+        st.session_state['nfl_saved_loaded'] = []
+        st.session_state['nfl_saved_selected'] = []
+        return
     current_store = str(saved.store_path())
     st.caption('Configured private store: ' + current_store)
     if st.session_state.get('nfl_saved_store') != current_store:

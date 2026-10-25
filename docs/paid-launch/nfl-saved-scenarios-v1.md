@@ -14,11 +14,19 @@ training, scheduling, wagering, public publishing, or operational changes.
 
 1. Open **Workspace → Preview & Publish** and enter the publishing token.
 2. Expand **Private NFL sporting scenario**.
-3. Under **View saved NFL scenarios**, select the existing records you want.
+3. Under **View saved NFL scenarios**, enable **Show saved NFL scenarios**,
+   then select the existing records you want.
 4. Click **Load saved results**. Both opposing saved scenarios can appear
    together; changing the selection clears the old display until loaded.
 5. Download each original private evidence ZIP if needed. A fresh session
    lists the configured store again; no packet upload or new Run is needed.
+
+Saved browsing is default-off. The control-flow return precedes store-path
+resolution, catalog/reader calls and download preparation. Correct-token entry
+or unrelated remote-export controls cannot activate it; a collapsed expander
+alone is not the guard. Deactivation clears loaded selections. Once activated,
+the store is checked and the catalog/results are freshly authenticated on each
+rerender; no cached acceptance verdict replaces validation.
 
 Saved viewing is separate from the enable/stage/confirm/Run controls. It never
 sets their state or calls their action. The existing outer token gate remains
@@ -63,3 +71,22 @@ browser interaction and renderer-only verification must be reported distinctly.
 
 Preserve all source evidence, Monday's NFL backup, Delaware–WKU controls/window
 and the MLB pause. No operational allowance is spent by this change.
+
+## Owner-authorized correction after the first CI cycle
+
+Preserve head `ecdde1d3594d75a11d24c3d29e8e631964ec2434` and its failure evidence.
+The complete shard-8 log includes PytestUnhandledThreadExceptionWarning with
+render_publish_panel → render_scenario → saved viewer → catalog →
+scenario_store_ready → sqlite3.connect → the original assertion
+"Remote export must not create/hydrate/query SQLite". The three-second timeout
+was the visible test failure, not evidence that its limit needed increasing.
+
+The owner authorized this directly related default-off guard, combined local
+validation in the original ordered context, necessary exact scope bindings and
+publication to the same draft PR, then ONE additional complete final-head CI
+cycle after local and capacity checks pass. Preserve the original remote tests,
+SQLite prohibition, timeout and assertions. No viewer mock, reader change,
+prediction, operational change, cancellation/rerun, extra hosted diagnostic,
+merge or deployment is authorized. The first cycle must finish and its evidence
+be reconciled before the new cycle. Correction commits append to the retained
+head; a separate policy-only seal binds the corrected implementation.

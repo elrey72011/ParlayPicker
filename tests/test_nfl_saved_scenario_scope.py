@@ -67,3 +67,26 @@ def test_unreviewed_changes_are_rejected(sealed, attack):
     else:
         bad = git('commit-tree', git('rev-parse', seal + '^{tree}'), '-p', seal, '-p', b['saved_nfl_scenario_viewer']['base'], '-m', 'wrong parents'); git('checkout', '-q', bad)
     with pytest.raises(ValueError): assess(sealed)
+
+
+def test_correction_appends_to_preserved_failed_head_and_seals_only_policy(sealed, monkeypatch):
+    import hashlib
+    root, b, stamp, git, write, commit, old_seal = sealed
+    monkeypatch.setattr(scope, 'CORRECTION_PARENT', old_seal)
+    prior = (root / scope.POLICY).read_bytes()
+    c = b['saved_nfl_scenario_viewer']
+    c.update(correction_parent=old_seal, correction_paths=sorted(scope.CORRECTION_PATHS),
+             previous_policy_sha256=hashlib.sha256(prior).hexdigest())
+    next_stamp = 'b' * 64
+    for path in scope.CORRECTION_PATHS:
+        value = (b'SYNTHETIC unchanged logic ' + next_stamp.encode() + b'\n') if path in {
+            'scripts/check_launch_change_scope.py', 'scripts/ncaaf_private_refresh_scope.py'} else b'SYNTHETIC correction\n'
+        write(path, value)
+    implementation = commit('synthetic related correction')
+    write(scope.POLICY, json.dumps(scope.make_policy(root, b, implementation, next_stamp)).encode())
+    commit('synthetic corrected policy only')
+    assert scope.validate(root, b, None, None, binding_sha=next_stamp)['status'] == 'PASS'
+    assert git('show', old_seal + ':' + scope.POLICY).encode() == prior
+    c['previous_policy_sha256'] = '0' * 64
+    with pytest.raises(ValueError, match='INHERITED_POLICY_CHANGED'):
+        scope.validate(root, b, None, None, binding_sha=next_stamp)

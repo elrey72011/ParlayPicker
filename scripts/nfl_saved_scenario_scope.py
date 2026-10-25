@@ -17,6 +17,8 @@ PATHS = {
     'scripts/ncaaf_private_refresh_scope.py', 'scripts/nfl_saved_scenario_scope.py',
 }
 OLD_STAMP = b'2120605e490bb310f9d39e3256d43c8f4c3f3f28b836d21d98b274657271569c'
+CORRECTION_PARENT = 'ecdde1d3594d75a11d24c3d29e8e631964ec2434'
+CORRECTION_PATHS = PATHS - {'app/ui/nfl_private_research.py', 'app_core/nfl_saved_scenarios.py'}
 
 
 def require(ok, code):
@@ -39,17 +41,22 @@ def blobs(root, rev):
 
 def make_policy(root, binding, implementation, binding_sha):
     c = binding['saved_nfl_scenario_viewer']
-    return dict(version='nfl-saved-scenario-viewer-seal-v1', base=c['base'], base_tree=c['base_tree'],
+    policy = dict(version='nfl-saved-scenario-viewer-seal-v1', base=c['base'], base_tree=c['base_tree'],
         authorization_sha256=c['authorization_sha256'], binding_sha256=binding_sha,
         implementation_commit=implementation, implementation_tree=text(root, 'rev-parse', implementation + '^{tree}'),
         implementation_paths=c['implementation_paths'],
         unchanged_blobs={p: v for p, v in blobs(root, c['base']).items() if p not in c['implementation_paths']})
+    if c.get('correction_parent') is not None:
+        policy['correction'] = {k: c[k] for k in ('correction_parent', 'correction_paths', 'previous_policy_sha256')}
+    return policy
 
 
 def validate(root, binding, comparison_base, manifest, *, binding_sha):
     root = Path(root)
     c = binding['saved_nfl_scenario_viewer']
-    require(set(c) == {'base', 'base_tree', 'implementation_paths', 'authorization_sha256'}, 'SAVED_VIEWER_SCOPE_CHANGED')
+    correction = c.get('correction_parent') is not None
+    fields = {'base', 'base_tree', 'implementation_paths', 'authorization_sha256'}
+    require(set(c) == fields | ({'correction_parent', 'correction_paths', 'previous_policy_sha256'} if correction else set()), 'SAVED_VIEWER_SCOPE_CHANGED')
     require(c['base'] == BASE and c['base_tree'] == TREE
             and text(root, 'rev-parse', BASE + '^{tree}') == TREE, 'SAVED_VIEWER_BASE_CHANGED')
     require(set(c['implementation_paths']) == PATHS and len(c['implementation_paths']) == len(PATHS), 'SAVED_VIEWER_PATHS_CHANGED')
@@ -61,8 +68,20 @@ def validate(root, binding, comparison_base, manifest, *, binding_sha):
     require(c['authorization_sha256'] == binding['components']['docs/paid-launch/nfl-saved-scenarios-v1.md'], 'SAVED_VIEWER_AUTHORIZATION_CHANGED')
     policy = json.loads(git(root, 'show', 'HEAD:' + POLICY))
     implementation = policy['implementation_commit']
-    require(text(root, 'show', '-s', '--format=%P', implementation).split() == [BASE], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
-    require(set(text(root, 'diff', '--name-only', BASE, implementation).splitlines()) == PATHS, 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+    if correction:
+        require(c['correction_parent'] == CORRECTION_PARENT
+                and set(c['correction_paths']) == CORRECTION_PATHS
+                and len(c['correction_paths']) == len(CORRECTION_PATHS), 'SAVED_VIEWER_CORRECTION_CHANGED')
+        require(text(root, 'show', '-s', '--format=%P', implementation).split() == [CORRECTION_PARENT]
+                and text(root, 'merge-base', BASE, CORRECTION_PARENT) == BASE, 'IMPLEMENTATION_PARENT_NOT_APPROVED')
+        prior = git(root, 'show', CORRECTION_PARENT + ':' + POLICY)
+        require(hashlib.sha256(prior).hexdigest() == c['previous_policy_sha256']
+                and git(root, 'show', implementation + ':' + POLICY) == prior, 'INHERITED_POLICY_CHANGED')
+        require(set(text(root, 'diff', '--name-only', CORRECTION_PARENT, implementation).splitlines()) == CORRECTION_PATHS,
+                'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
+    else:
+        require(text(root, 'show', '-s', '--format=%P', implementation).split() == [BASE], 'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    require(set(text(root, 'diff', '--name-only', BASE, implementation).splitlines()) == PATHS | ({POLICY} if correction else set()), 'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
     require(policy == make_policy(root, binding, implementation, binding_sha), 'EXACT_POLICY_BINDINGS_CHANGED')
     before = blobs(root, BASE)
     require(POLICY not in before, 'SUCCESSOR_POLICY_ALREADY_EXISTS')
@@ -81,7 +100,7 @@ def validate(root, binding, comparison_base, manifest, *, binding_sha):
     else:
         seal = head
     require(text(root, 'show', '-s', '--format=%P', seal).split() == [implementation]
-            and text(root, 'diff', '--name-status', implementation, seal) == 'A\t' + POLICY, 'SEAL_CHANGE_SET_NOT_APPROVED')
+            and text(root, 'diff', '--name-status', implementation, seal) == ('M\t' if correction else 'A\t') + POLICY, 'SEAL_CHANGE_SET_NOT_APPROVED')
     actual = blobs(root, 'HEAD')
     require(set(actual) == set(before) | (PATHS - set(before)) | {POLICY}, 'UNREVIEWED_PATH')
     require(all(actual.get(p) == v for p, v in policy['unchanged_blobs'].items()), 'IMMUTABLE_FILE_CHANGED')

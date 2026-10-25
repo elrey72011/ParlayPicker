@@ -84,6 +84,8 @@ def test_real_controls_both_switch_and_fresh_session_are_static(monkeypatch, tmp
         assert not at.exception
         assert at.button(key='nfl_scenario_run').disabled
         assert not at.checkbox(key='nfl_scenario_enabled').value
+        assert not at.checkbox(key='nfl_saved_show').value
+        at.checkbox(key='nfl_saved_show').check().run()
         keys = [v[0]['export_id'] for v in values]
         at.multiselect(key='nfl_saved_selected').set_value(keys).run()
         at.button(key='nfl_saved_load').click().run()
@@ -99,6 +101,8 @@ def test_real_controls_both_switch_and_fresh_session_are_static(monkeypatch, tmp
         assert [m.value for m in at.metric] == ['58.00%']
         fresh = AppTest.from_function(app, default_timeout=30).run()
         assert not fresh.metric
+        assert not fresh.checkbox(key='nfl_saved_show').value
+        fresh.checkbox(key='nfl_saved_show').check().run()
         fresh.multiselect(key='nfl_saved_selected').set_value(keys).run()
         fresh.button(key='nfl_saved_load').click().run()
         assert not fresh.exception and [m.value for m in fresh.metric] == ['42.00%', '58.00%']
@@ -149,6 +153,7 @@ def test_missing_store_is_not_initialized(monkeypatch, tmp_path):
     monkeypatch.setenv('PARLAYPICKER_EVIDENCE_DIR', str(tmp_path / 'absent'))
     with readonly(monkeypatch):
         at = AppTest.from_function(app, default_timeout=30).run()
+        at.checkbox(key='nfl_saved_show').check().run()
         assert not at.exception and not at.metric
         assert any('NFL_SCENARIO_STORE_UNAVAILABLE' in x.value for x in at.info)
     assert not (tmp_path / 'absent').exists()
@@ -159,7 +164,8 @@ def test_unauthorized_owner_cannot_list_or_load(monkeypatch):
         from app.ui.publish_panel import render_publish_panel
         render_publish_panel(None, None)
     monkeypatch.setenv('PARLAYPICKER_PUBLISH_TOKEN', 'SYNTHETIC-owner-token-12345')
-    monkeypatch.setattr(saved, 'catalog', lambda: pytest.fail('Unauthorized store read'))
+    for name in ('store_path', 'catalog', 'load', 'private_download'):
+        monkeypatch.setattr(saved, name, lambda *a, **k: pytest.fail('Unauthorized store read'))
     with readonly(monkeypatch):
         at = AppTest.from_function(protected_app, default_timeout=30).run()
         assert not at.exception and not at.metric
@@ -171,10 +177,44 @@ def test_changed_configured_store_clears_loaded_results(monkeypatch, tmp_path):
     path, values = records(monkeypatch, tmp_path)
     with readonly(monkeypatch):
         at = AppTest.from_function(app, default_timeout=30).run()
+        at.checkbox(key='nfl_saved_show').check().run()
         at.multiselect(key='nfl_saved_selected').set_value([values[0][0]['export_id']]).run()
         at.button(key='nfl_saved_load').click().run()
         assert len(at.metric) == 1
         monkeypatch.setenv('PARLAYPICKER_EVIDENCE_DIR', str(tmp_path / 'other-store'))
         at.run()
+        assert not at.exception and not at.metric
+        assert at.session_state['nfl_saved_loaded'] == []
+
+
+def test_correct_token_and_remote_controls_leave_viewer_inactive(monkeypatch):
+    from test_remote_canonical_continuation import test_owner_scope_changes_invalidate_zip_and_wrong_token_has_no_controls
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append(True)
+        pytest.fail('Inactive viewer must not access saved storage')
+    monkeypatch.setattr(sqlite3, 'connect', forbidden)
+    for name in ('store_path', 'catalog', 'load', 'private_download'):
+        monkeypatch.setattr(saved, name, forbidden)
+    # Execute every original assertion and its original three-second deadline.
+    # The new viewer itself is not mocked or removed from the owner panel.
+    with readonly(monkeypatch):
+        test_owner_scope_changes_invalidate_zip_and_wrong_token_has_no_controls(monkeypatch)
+    assert calls == []
+
+
+def test_deactivation_precedes_store_resolution_even_with_loaded_receipts(monkeypatch, tmp_path):
+    _, values = records(monkeypatch, tmp_path)
+    with readonly(monkeypatch):
+        at = AppTest.from_function(app, default_timeout=30).run()
+        at.checkbox(key='nfl_saved_show').check().run()
+        at.multiselect(key='nfl_saved_selected').set_value([values[0][0]['export_id']]).run()
+        at.button(key='nfl_saved_load').click().run()
+        assert len(at.metric) == 1
+        def forbidden(*args, **kwargs):
+            pytest.fail('Deactivated viewer accessed storage')
+        for name in ('store_path', 'catalog', 'load', 'private_download'):
+            monkeypatch.setattr(saved, name, forbidden)
+        at.checkbox(key='nfl_saved_show').uncheck().run()
         assert not at.exception and not at.metric
         assert at.session_state['nfl_saved_loaded'] == []

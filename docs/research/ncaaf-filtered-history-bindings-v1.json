@@ -301,7 +301,7 @@
   "components": {
     "app/ui/ncaaf_pipeline_research.py": "b9bb6c8b60499cba5342ec445b85498969ba82c6d4c96beb8bcc0afbce1321aa",
     "app/ui/nfl_private_research.py": "9df14eaa377a665cf413f214e31518787b66ec6bf721c7181436b1073da44988",
-    "app/ui/nfl_saved_scenarios.py": "c8a2a3dd8b2801da3b44abd60520d6de64c26bd0aaea78ee4545363c61c257a7",
+    "app/ui/nfl_saved_scenarios.py": "757bcf3ebd2a9557da5a9440d92596f4afe3923faf9a05cbefa025b6429ff798",
     "app_core/market_probability_model.py": "5cd25936548870df4bca01b929d4c2df72c7c905b4f32f6f7d7efe07c1c3cd63",
     "app_core/ncaaf_closing.py": "6bf53e32024b16148312f7f5fe0f8ef90b5b71771fa9525bcb23b56336c39861",
     "app_core/ncaaf_cloud_backup.py": "61546d5bdc5d0853af32be8f5bb2e089ef1063116d651e3eba312c6317573f67",
@@ -352,7 +352,7 @@
     "app_core/research_display.py": "895fa4540235dc5d14681dd71b8652ab04b35fdfef8d1503187c83d873d6080e",
     "app_core/research_replay.py": "c2899015295a146b0e5cd8682549146fce6c4023ea30e6149718b63cbd898f93",
     "docs/paid-launch/ncaaf-private-refresh-bindings-v1.json": "be717669ffc2955633ad3b00b05edacea5833e710d4d27a0f84c74e4941c16c6",
-    "docs/paid-launch/nfl-saved-scenarios-v1.md": "4c9b6328c338681efc569c16118e29c65afc1e927caf38bc2c18d74234b82b0b",
+    "docs/paid-launch/nfl-saved-scenarios-v1.md": "b7c4e97ddbf66115caf9eef749700708ccd3c145813b0a79f53c41fcddfeec70",
     "docs/research/ncaaf-filtered-history-completion-v1.md": "f8cd60944af262e350ee1b99835f9ea91ffa24f03407e63844d1f4fc4cf0d0e8",
     "docs/research/ncaaf-history-continuation-v6.md": "91a6ca8eadafcc07d2a7d7de8aeccdb5213a45a13837c9a9909bd1d73ef29c51",
     "docs/research/ncaaf-retained-discovery-compatibility-v1.md": "1a0ed334a5df95b2dd7441415a3fe7aa72ef267bd1db4f9b43fe838a3625ba5d",
@@ -365,7 +365,7 @@
     "scripts/ncaaf_retained_discovery_scope.py": "4148647508cd690a3bf0fd1ff60fe4f3de78a140d4e7029c5b810766811fc957",
     "scripts/ncaaf_reviewed_target_operator.py": "e88c2e6dfbfddece9a52fd9221be2fe162a73f7f81a264d4a1bb0ad5b0254a06",
     "scripts/ncaaf_staged_acquisition.py": "5361d463f7aa53b92302b9a3e7cdd21ba4bea2f27022955e40569c35128358af",
-    "scripts/nfl_saved_scenario_scope.py": "3e97f72207bf9b012998e99312c3c7d829c74290b4a8093f7f21ba227af71bf4",
+    "scripts/nfl_saved_scenario_scope.py": "0b98c6cd23278d198a92f344738f93b9a085a343afd72e37c2cabbfa58a32da8",
     "scripts/public_refresh_harness_scope.py": "69a7ccbbb30a8632c6001433fd30ff583bed447570b13d01249924b37d597468",
     "streamlit_app.py": "0a8e221684fca28e87a8383d872024c8a50c8a91a458b3b4afa573068f0be8ec",
     "tests/historical_scope_input_boundary.py": "137499e153707a920179ac5a406dd84659b262672774ec7e85b2272f00606e78",
@@ -380,8 +380,8 @@
     "tests/test_ncaaf_history_continuation.py": "24548a77409cd340b498787059b27a170180fbea88cfd974f65ca68d174887df",
     "tests/test_ncaaf_retained_discovery.py": "80f8d5e526032a11c42bc9d5ad7d6437707facc93fc7571e0e24b2169e1f8744",
     "tests/test_ncaaf_transport_diagnostics.py": "62a1a18e6fa16d1508d2b29df5f18d6db5f8f1ae5953c68b85b35c37be3e88fd",
-    "tests/test_nfl_saved_scenario_scope.py": "e1dbf8052e1fa186b930a7951e50aa1b6e9f6a0f7cd1a6d5e0d456b8225ad638",
-    "tests/test_nfl_saved_scenarios.py": "9d40b3fb865fee85609a3f2bc637812bb098d6446316774b1c4e52f652709c59",
+    "tests/test_nfl_saved_scenario_scope.py": "ac3ef0d99749ea59198365ae40cab044eaa7f421cd40ebdc7fd32487acec5a51",
+    "tests/test_nfl_saved_scenarios.py": "ac962ace9e3563c7dcbcf0dbcdcbb03e78473f5e180ae51466803672f1fc2e48",
     "tests/test_prospective_legacy_view.py": "1929f1a3884b9e62a049688d8907a01f650af33c6856e3ec6edbd299fbfa35d7",
     "tests/test_public_refresh.py": "5735669265d1c5e9ba4d24ce0163d83fbf87362963f7fa6b79e220a9cdae048d",
     "tests/test_ui_display_revalidation.py": "58251b30115adf4446b5ecbfa5143f44fdf015ae0de61be0bd15fdddc27ed9c6"
@@ -611,9 +611,21 @@
     "prepared_patch_sha256": "21220627c68436076d2dd1949836a786c463114a4253c1375241c87ac0010b58"
   },
   "saved_nfl_scenario_viewer": {
-    "authorization_sha256": "4c9b6328c338681efc569c16118e29c65afc1e927caf38bc2c18d74234b82b0b",
+    "authorization_sha256": "b7c4e97ddbf66115caf9eef749700708ccd3c145813b0a79f53c41fcddfeec70",
     "base": "792abe61a8e00992290abe752eb17825b7bbd0b6",
     "base_tree": "de0f0762b784321cdda4fc8a72a6bfc773a96f13",
+    "correction_parent": "ecdde1d3594d75a11d24c3d29e8e631964ec2434",
+    "correction_paths": [
+      "app/ui/nfl_saved_scenarios.py",
+      "docs/paid-launch/nfl-saved-scenarios-v1.md",
+      "docs/research/ncaaf-filtered-history-bindings-v1.json",
+      "scripts/check_launch_change_scope.py",
+      "scripts/ncaaf_filtered_history_scope.py",
+      "scripts/ncaaf_private_refresh_scope.py",
+      "scripts/nfl_saved_scenario_scope.py",
+      "tests/test_nfl_saved_scenario_scope.py",
+      "tests/test_nfl_saved_scenarios.py"
+    ],
     "implementation_paths": [
       "app/ui/nfl_private_research.py",
       "app/ui/nfl_saved_scenarios.py",
@@ -626,7 +638,8 @@
       "scripts/nfl_saved_scenario_scope.py",
       "tests/test_nfl_saved_scenario_scope.py",
       "tests/test_nfl_saved_scenarios.py"
-    ]
+    ],
+    "previous_policy_sha256": "d3645b9fe7633c9bc3206e59454eda1eff62087340c8c00013714fa47098cc4e"
   },
   "seal_path": "docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json",
   "shared_boundary_amendment_sha256": "162061ae1a7240680f915a9f16ea585cff70a619a69c49d99a0e46c14600a53b",
