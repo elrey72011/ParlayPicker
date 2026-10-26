@@ -43,6 +43,9 @@ plotly>=5.0.0
 # Durable prediction evidence (Google Workspace Shared Drive)
 google-auth>=2.0,<3
 
+# Private NFL workflow: durable atomic claims/results; same existing service pin.
+psycopg[binary]==3.2.10
+
 # Direct cPanel publication over pinned SSH
 paramiko>=3.5,<5
 
