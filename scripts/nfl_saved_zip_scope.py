@@ -65,7 +65,23 @@ def _owner_gate_module(root, binding):
     return module
 
 
+def _workflow_module(root, binding):
+    import io
+    import types
+    path = Path(root) / 'scripts/nfl_workflow_scope.py'
+    with io.FileIO(path, 'r') as stream:
+        raw = stream.read(8 * 1024 * 1024 + 1)
+    require(len(raw) <= 8 * 1024 * 1024, 'NFL_WORKFLOW_SCOPE_LIMIT')
+    raw = raw.replace(b'\r\n', b'\n')
+    require(hashlib.sha256(raw).hexdigest() == binding['components']['scripts/nfl_workflow_scope.py'], 'NFL_WORKFLOW_SCOPE_CHANGED')
+    module = types.ModuleType('exact_nfl_workflow_scope'); module.__file__ = str(path)
+    exec(compile(raw, str(path), 'exec'), module.__dict__)
+    return module
+
+
 def make_policy(root, binding, implementation, binding_sha):
+    if binding.get('private_nfl_streamlit_workflow') is not None:
+        return _workflow_module(root, binding).make_policy(root, binding, implementation, binding_sha)
     if binding.get('saved_nfl_zip_owner_gate_correction') is not None:
         return _owner_gate_module(root, binding).make_policy(root, binding, implementation, binding_sha)
     c = binding['saved_nfl_scenario_zip_viewer']
@@ -78,6 +94,8 @@ def make_policy(root, binding, implementation, binding_sha):
 
 
 def validate(root, binding, comparison_base, manifest, *, binding_sha):
+    if binding.get('private_nfl_streamlit_workflow') is not None:
+        return _workflow_module(root, binding).validate(root, binding, comparison_base, manifest, binding_sha=binding_sha)
     if binding.get('saved_nfl_zip_owner_gate_correction') is not None:
         return _owner_gate_module(root, binding).validate(root, binding, comparison_base, manifest, binding_sha=binding_sha)
     root = Path(root); c = binding['saved_nfl_scenario_zip_viewer']

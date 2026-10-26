@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 from app_core.per_game_boards import per_game_board
 from app.ui.nfl_saved_viewer_state import revoke as revoke_saved_viewer
+from app.ui.nfl_workflow_state import revoke as revoke_nfl_workflow
 from app_core.public_board import build_package
 from scripts.publish_board import ROOT, render, publish_package, production_source_fingerprint
 
@@ -56,13 +57,17 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
     token = str(setting('PARLAYPICKER_PUBLISH_TOKEN'))
     if len(token) < 16:
         revoke_saved_viewer(getattr(st, 'session_state', {}))
+        revoke_nfl_workflow(getattr(st, 'session_state', {}))
         st.info('Publishing is locked. Configure PARLAYPICKER_PUBLISH_TOKEN with at least 16 characters in Streamlit secrets or the local environment. Never put it in the repository.')
         return
     supplied = st.text_input('Publishing token', type='password', key='publication_token')
     if not hmac.compare_digest(supplied.encode(), token.encode()):
         revoke_saved_viewer(getattr(st, 'session_state', {}))
+        revoke_nfl_workflow(getattr(st, 'session_state', {}))
         st.info('Enter the publishing token to preview or publish.')
         return
+    from app.ui.nfl_private_workflow import render as render_nfl_workflow
+    render_nfl_workflow(setting)
     from app.ui.canonical_evidence_download import render as render_canonical_download
     render_canonical_download(setting)
     from app.ui.remote_canonical_download import render as render_remote_canonical_download
