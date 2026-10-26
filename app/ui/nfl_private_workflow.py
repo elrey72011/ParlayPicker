@@ -41,8 +41,6 @@ def eastern(value):
 
 
 def render(setting, *, service_factory=None):
-    from app.ui.nfl_hosted_storage_diagnostic import render as render_diagnostic
-    return render_diagnostic(setting)
     st.subheader('Guided private NFL forecasts')
     st.caption('Select games, review original evidence, authorize bounded actions and reopen saved forecasts here. No normal Refresh, JSON packets or routine ZIP transfer.')
     state=getattr(st,'session_state',None)
