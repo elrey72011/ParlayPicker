@@ -51,7 +51,23 @@ def blobs(root, rev):
             for m,p in [line.split('\t', 1)]}
 
 
+def _owner_gate_module(root, binding):
+    import io
+    import types
+    path = Path(root) / 'scripts/nfl_zip_owner_gate_scope.py'
+    with io.FileIO(path, 'r') as stream:
+        raw = stream.read(8 * 1024 * 1024 + 1)
+    require(len(raw) <= 8 * 1024 * 1024, 'OWNER_GATE_SCOPE_LIMIT')
+    raw = raw.replace(b'\r\n', b'\n')
+    require(hashlib.sha256(raw).hexdigest() == binding['components']['scripts/nfl_zip_owner_gate_scope.py'], 'OWNER_GATE_SCOPE_CHANGED')
+    module = types.ModuleType('exact_zip_owner_gate_scope'); module.__file__ = str(path)
+    exec(compile(raw, str(path), 'exec'), module.__dict__)
+    return module
+
+
 def make_policy(root, binding, implementation, binding_sha):
+    if binding.get('saved_nfl_zip_owner_gate_correction') is not None:
+        return _owner_gate_module(root, binding).make_policy(root, binding, implementation, binding_sha)
     c = binding['saved_nfl_scenario_zip_viewer']
     return dict(version='nfl-saved-scenario-zip-seal-v1', base=c['base'], base_tree=c['base_tree'],
         authorization_sha256=c['authorization_sha256'], catalog_sha256=c['catalog_sha256'],
@@ -62,6 +78,8 @@ def make_policy(root, binding, implementation, binding_sha):
 
 
 def validate(root, binding, comparison_base, manifest, *, binding_sha):
+    if binding.get('saved_nfl_zip_owner_gate_correction') is not None:
+        return _owner_gate_module(root, binding).validate(root, binding, comparison_base, manifest, binding_sha=binding_sha)
     root = Path(root); c = binding['saved_nfl_scenario_zip_viewer']
     require(set(c) == {'base','base_tree','authorization_sha256','catalog_sha256','implementation_paths'}, 'SAVED_ZIP_SCOPE_CHANGED')
     require(c['base'] == BASE and c['base_tree'] == TREE and text(root, 'rev-parse', BASE + '^{tree}') == TREE, 'SAVED_ZIP_BASE_CHANGED')
