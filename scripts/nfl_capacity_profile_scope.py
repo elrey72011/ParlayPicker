@@ -1,4 +1,4 @@
-"""Capacity-only successor: exact predecessor inputs and unchanged release limits."""
+"""Exact test-browser lifecycle successor preserving both failed capacity heads."""
 import base64
 import copy
 import hashlib
@@ -20,11 +20,18 @@ FAILED_HEAD = 'c15f4f4bf14be37ce62dbceebc92eb8dd197f373'
 FAILED_TREE = '0c36b9cd64aadde41b31b309e23b7f06b723a769'
 FAILED_IMPLEMENTATION = 'c82fbe614449a0a3195244eb83bcf99aff23352b'
 PROFILE = 'scripts/ci_test_file_costs_v1.json'
+BROWSER_AUTHORIZATION = 'docs/paid-launch/browser-harness-ownership-v1.md'
+PREVIOUS_HEAD = '803d678bf69cbd7de1393080285ac4e5ac692ca8'
+PREVIOUS_TREE = '2b8d788d36154dfceb231e105843b45f0dde0cce'
+PREVIOUS_IMPLEMENTATION = 'c39b3ff6c5e9ddb4a03f7f3fecb4ebf4dfc2b409'
+BROWSER_HELPER = 'tests/test_research_probability_browser.py'
+BROWSER_PATHS = {BROWSER_HELPER, BROWSER_AUTHORIZATION, 'tests/browser_process_owner.py',
+                 'tests/browser_process_windows.py', 'tests/test_browser_process_owner.py'}
 NORMALIZED = {'scripts/check_launch_change_scope.py', 'scripts/ncaaf_private_refresh_scope.py', 'scripts/ncaaf_filtered_history_scope.py'}
 PATHS = {BINDING, AUTHORIZATION, LEDGER, PROFILE, *NORMALIZED,
          'scripts/nfl_capacity_profile_scope.py', 'tests/nfl_capacity_profile_inputs.py',
          'tests/test_nfl_capacity_profile.py', 'tests/test_ncaaf_filtered_history_scope.py',
-         CORRECTION, 'tests/nfl_capacity_import_owner.py', 'tests/test_nfl_capacity_fixture_isolation.py'}
+         CORRECTION, 'tests/nfl_capacity_import_owner.py', 'tests/test_nfl_capacity_fixture_isolation.py'} | BROWSER_PATHS
 MAX_SOURCE = 8 * 1024 * 1024
 
 HISTORY_ADDITION = '''_CAPACITY_IMAGES={} # Reauthenticated immutable bytes, never an acceptance cache.
@@ -112,6 +119,19 @@ def fixture_source():
         qualification='Modified isolated fixture draft at the recorded checkout HEAD; not a clean tested tree or Linux final-head timing. Scheduling cost is a conservative separate estimate.')
 
 
+def browser_cost():
+    return dict(path='tests/test_browser_process_owner.py',kind='estimated',profiled_tests=12,seconds=57.5,
+        references=['2446-browser-owner-controls'],completed_measurements=[],
+        estimate_basis='Test-only native lifecycle controls. Conservative 50s allowance times unchanged1.15; Windows nine-control draft run2.26s is not Linux timing or an exact final-file measurement.')
+
+
+def browser_source():
+    return dict(kind='completed_offline_junit',platform='Windows',tests=9,elapsed_seconds=2.26,
+        checkout_commit=PREVIOUS_HEAD,checkout_worktree_clean=False,checkout_tree_verified=False,
+        junit_sha256='d337ec3fa88c61d2edb3477a69c095209f2d2ce014ad262c7bac3641d7c5fe2d',
+        qualification='Nine controls in modified isolated draft; not clean-tree/Linux final-head timing. Scheduling uses a separate conservative estimate.')
+
+
 def normalized(path, raw, stamp):
     raw=raw.replace(b'\r\n',b'\n')
     if path in NORMALIZED:
@@ -152,7 +172,8 @@ def history_successor(old):
 
 def make_policy(root,binding,implementation,binding_sha):
     c=binding['nfl_capacity_profile']
-    return dict(version='nfl-capacity-profile-seal-v2',base=BASE,base_tree=TREE,
+    return dict(version='nfl-browser-harness-seal-v3',base=BASE,base_tree=TREE,
+        previous_head=PREVIOUS_HEAD,previous_tree=PREVIOUS_TREE,browser_authorization_sha256=c['browser_authorization_sha256'],
         failed_head=FAILED_HEAD,failed_tree=FAILED_TREE,correction_sha256=c['correction_sha256'],
         authorization_sha256=c['authorization_sha256'],binding_sha256=binding_sha,
         implementation_commit=implementation,implementation_tree=text(root,'rev-parse',implementation+'^{tree}'),
@@ -163,16 +184,24 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha,preserved_test_
     root=Path(root);c=binding['nfl_capacity_profile']
     require(c==dict(base=BASE,base_tree=TREE,ordered_parents=PARENTS,prior_binding_sha256=OLD_STAMP,
         authorization_sha256=binding['components'][AUTHORIZATION],ledger_sha256=binding['components'][LEDGER],implementation_paths=sorted(PATHS),
-        correction_sha256=binding['components'][CORRECTION],failed_head=FAILED_HEAD,failed_tree=FAILED_TREE),'NFL_CAPACITY_SCOPE_CHANGED')
+        correction_sha256=binding['components'][CORRECTION],failed_head=FAILED_HEAD,failed_tree=FAILED_TREE,
+        browser_authorization_sha256=binding['components'][BROWSER_AUTHORIZATION],previous_head=PREVIOUS_HEAD,previous_tree=PREVIOUS_TREE),'NFL_CAPACITY_SCOPE_CHANGED')
     require(text(root,'rev-parse',FAILED_HEAD+'^{tree}')==FAILED_TREE
         and text(root,'show','-s','--format=%P',FAILED_HEAD).split()==[FAILED_IMPLEMENTATION]
         and text(root,'show','-s','--format=%P',FAILED_IMPLEMENTATION).split()==[BASE], 'NFL_CAPACITY_FAILED_EVIDENCE_CHANGED')
+    require(text(root,'rev-parse',PREVIOUS_HEAD+'^{tree}')==PREVIOUS_TREE
+        and text(root,'show','-s','--format=%P',PREVIOUS_HEAD).split()==[PREVIOUS_IMPLEMENTATION]
+        and text(root,'show','-s','--format=%P',PREVIOUS_IMPLEMENTATION).split()==[FAILED_HEAD], 'BROWSER_FAILED_EVIDENCE_CHANGED')
+    for path in (LEDGER,AUTHORIZATION,CORRECTION,'tests/test_nfl_capacity_profile.py',
+                 'tests/test_ncaaf_filtered_history_scope.py','tests/nfl_capacity_profile_inputs.py',
+                 'tests/nfl_capacity_import_owner.py','tests/test_nfl_capacity_fixture_isolation.py'):
+        require(git(root,'show',PREVIOUS_HEAD+':'+path)==(root/path).read_bytes(),'BROWSER_PRIOR_FIXTURE_CHANGED')
     for path in (LEDGER,AUTHORIZATION,'tests/test_nfl_capacity_profile.py'):
         require(git(root,'show',FAILED_HEAD+':'+path)==(root/path).read_bytes(),'NFL_CAPACITY_RETAINED_INPUT_CHANGED')
-    old_profile=json.loads(git(root,'show',FAILED_HEAD+':'+PROFILE));new_profile=json.loads((root/PROFILE).read_bytes())
+    old_profile=json.loads(git(root,'show',PREVIOUS_HEAD+':'+PROFILE));new_profile=json.loads((root/PROFILE).read_bytes())
     require({k:v for k,v in new_profile.items() if k not in ('files','sources')}=={k:v for k,v in old_profile.items() if k not in ('files','sources')}
-        and new_profile['sources']==dict(old_profile['sources'],**{'2446-windows-owner-regressions':fixture_source()})
-        and new_profile['files']==old_profile['files']+[fixture_cost()], 'NFL_CAPACITY_RETAINED_INPUT_CHANGED')
+        and new_profile['sources']==dict(old_profile['sources'],**{'2446-browser-owner-controls':browser_source()})
+        and new_profile['files']==old_profile['files']+[browser_cost()], 'NFL_CAPACITY_RETAINED_INPUT_CHANGED')
     require(text(root,'rev-parse',BASE+'^{tree}')==TREE and text(root,'show','-s','--format=%P',BASE).split()==PARENTS,'NFL_CAPACITY_BASE_CHANGED')
     inherited=json.loads(git(root,'show',BASE+':'+binding['baseline_manifest']))
     require(comparison_base in (None,BASE,inherited['base_sha']),'COMPARISON_BASE_NOT_APPROVED')
@@ -196,9 +225,9 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha,preserved_test_
         wanted=history_successor(old) if path.endswith('/ncaaf_filtered_history_scope.py') else old
         require(normalized(path,new,binding_sha)==normalized(path,wanted,OLD_STAMP),'INHERITED_GUARD_LOGIC_CHANGED')
     policy=json.loads(git(root,'show','HEAD:'+POLICY));implementation=policy['implementation_commit']
-    require(text(root,'show','-s','--format=%P',implementation).split()==[FAILED_HEAD],'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    require(text(root,'show','-s','--format=%P',implementation).split()==[PREVIOUS_HEAD],'IMPLEMENTATION_PARENT_NOT_APPROVED')
     require(set(text(root,'diff','--name-only',BASE,implementation).splitlines())==PATHS|{POLICY},'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
-    require(git(root,'show',implementation+':'+POLICY)==git(root,'show',FAILED_HEAD+':'+POLICY),'NFL_CAPACITY_FAILED_EVIDENCE_CHANGED')
+    require(git(root,'show',implementation+':'+POLICY)==git(root,'show',PREVIOUS_HEAD+':'+POLICY),'NFL_CAPACITY_FAILED_EVIDENCE_CHANGED')
     require(policy==make_policy(root,binding,implementation,binding_sha),'EXACT_POLICY_BINDINGS_CHANGED')
     head=text(root,'rev-parse','HEAD');parents=text(root,'show','-s','--format=%P',head).split();seal=head
     if len(parents)==2:
@@ -220,7 +249,15 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha,preserved_test_
     preserved=preserved_test_report(root,BASE,implementation,PATHS)
     adaptations={path:dict(before_sha256=sha(original),after_sha256=sha(wanted),
         before_blob=before[path],after_blob=actual[path],authorization=CORRECTION,authorization_sha256=c['correction_sha256'])}
-    return dict(schema_version=96,status='PASS',base=BASE,implementation=implementation,seal=seal,candidate=head,
+    browser_before=git(root,'show',PREVIOUS_HEAD+':'+BROWSER_HELPER)
+    browser_wanted=browser_before.replace(b'import pytest\n',b'import pytest\nfrom tests.browser_process_owner import retain_browser_failure, run_browser\n',1)
+    browser_wanted=browser_wanted.replace(b'def inspect_browser(',b'@retain_browser_failure\ndef inspect_browser(',1)
+    browser_wanted=browser_wanted.replace(b'    run=subprocess.run(command,capture_output=True,\n        timeout=40,creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)\n',b'    run=run_browser(command,directory)\n',1)
+    require(git(root,'show',implementation+':'+BROWSER_HELPER)==browser_wanted,'BROWSER_PRIOR_ASSERTIONS_CHANGED')
+    adaptations[BROWSER_HELPER]=dict(before_sha256=sha(browser_before),after_sha256=sha(browser_wanted),
+        before_blob=before[BROWSER_HELPER],after_blob=actual[BROWSER_HELPER],authorization=BROWSER_AUTHORIZATION,
+        authorization_sha256=c['browser_authorization_sha256'])
+    return dict(schema_version=97,status='PASS',base=BASE,implementation=implementation,seal=seal,candidate=head,
         tree=text(root,'rev-parse',head+'^{tree}'),changed_files=sorted(PATHS|{POLICY}),protected_changes=[],
         **preserved,approved_fixture_test_adaptations=adaptations,new_existing_test_exceptions=[],
         accepted=False,inference=False,inherited_runtime_and_readers_unchanged=True)
