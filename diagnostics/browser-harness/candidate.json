@@ -1,0 +1,30 @@
+{
+  "base": "f6a7506dc3300fbcf390dbcdd00f0688dba073a4",
+  "changed_paths": [
+    "docs/paid-launch/browser-harness-ownership-v1.md",
+    "docs/paid-launch/launch-scope-policy-nfl-capacity-profile-v1.json",
+    "docs/paid-launch/nfl-capacity-fixture-correction-v1.md",
+    "docs/paid-launch/nfl-capacity-profile-v1.md",
+    "docs/paid-launch/nfl-capacity-timing-ledger-v1.json",
+    "docs/research/ncaaf-filtered-history-bindings-v1.json",
+    "scripts/check_launch_change_scope.py",
+    "scripts/ci_test_file_costs_v1.json",
+    "scripts/ncaaf_filtered_history_scope.py",
+    "scripts/ncaaf_private_refresh_scope.py",
+    "scripts/nfl_capacity_profile_scope.py",
+    "tests/browser_process_owner.py",
+    "tests/browser_process_windows.py",
+    "tests/nfl_capacity_import_owner.py",
+    "tests/nfl_capacity_profile_inputs.py",
+    "tests/test_browser_process_owner.py",
+    "tests/test_ncaaf_filtered_history_scope.py",
+    "tests/test_nfl_capacity_fixture_isolation.py",
+    "tests/test_nfl_capacity_profile.py",
+    "tests/test_research_probability_browser.py"
+  ],
+  "earlier_failed_head": "c15f4f4bf14be37ce62dbceebc92eb8dd197f373",
+  "failed_head": "803d678bf69cbd7de1393080285ac4e5ac692ca8",
+  "head": "4766ecd09e4982f9112522ab4e204f72e65b3b2b",
+  "implementation": "dce285c4deb15d78fa83c6e8f2109b5eff26155b",
+  "tree": "845668d8bef32351269ab6b67bc185feb199ea11"
+}

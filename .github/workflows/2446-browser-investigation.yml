@@ -1,12 +1,12 @@
 name: 2446 bounded browser investigation
 on:
   push:
-    branches: [codex/2446-browser-investigation-once]
+    branches: [codex/2446-browser-investigation-successor]
 permissions:
   contents: read
 jobs:
   browser-investigation:
-    if: ${{ github.ref == 'refs/heads/codex/2446-browser-investigation-once' && github.run_attempt == 1 }}
+    if: ${{ github.ref == 'refs/heads/codex/2446-browser-investigation-successor' && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

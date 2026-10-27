@@ -6,8 +6,16 @@ import hashlib,json,os,signal,subprocess,sys,time
 WORKSPACE=Path(os.environ['GITHUB_WORKSPACE']).resolve()
 OUT=WORKSPACE/'browser-evidence';OUT.mkdir(exist_ok=False)
 BASELINE=WORKSPACE/'baseline-app';CANDIDATE=WORKSPACE/'candidate-app'
+PHASE='LOADING_INPUTS'
+(OUT/'startup.json').write_text(json.dumps(dict(phase=PHASE,python=sys.version,started_at=datetime.now(timezone.utc).isoformat()),indent=2)+'\n')
+def retain_startup_failure(kind,error,trace):
+    (OUT/'startup-failure.json').write_text(json.dumps(dict(phase=PHASE,exception_class=kind.__name__,
+        raw_exception_retained=False,automatic_retries=0),indent=2)+'\n')
+    sys.__excepthook__(kind,error,trace)
+sys.excepthook=retain_startup_failure
 SPEC=json.loads((Path(__file__).parent/'selection.json').read_bytes())
 IDENTITY=json.loads((Path(__file__).parent/'candidate.json').read_bytes())
+PHASE='VERIFYING_CHECKOUTS'
 sys.path.insert(0,str(CANDIDATE))
 from tests.browser_process_owner import run_owned
 
