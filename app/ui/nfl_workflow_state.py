@@ -3,7 +3,9 @@
 
 def revoke(state, *, keep_enabled=False):
     for key in list(state):
-        if str(key).startswith('nfl_workflow_') and not (keep_enabled and key=='nfl_workflow_enabled'):
+        if str(key).startswith('nfl_workflow_') and not (keep_enabled and key in {
+                'nfl_workflow_enabled', 'nfl_workflow_diag_enabled',
+                'nfl_workflow_diag_spent', 'nfl_workflow_diag_result'}):
             del state[key]
 
 

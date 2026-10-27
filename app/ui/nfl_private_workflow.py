@@ -46,6 +46,10 @@ def render(setting, *, service_factory=None):
     state=getattr(st,'session_state',None)
     if state is None:
         return  # Lightweight historical owner-panel consumers have no session.
+    if st.checkbox('Show private NFL storage diagnostic',value=False,key='nfl_workflow_diag_enabled'):
+        from app.ui.nfl_storage_diagnostic import render as render_storage_diagnostic
+        render_storage_diagnostic(setting,state)
+        return  # The normal workflow must not connect while the diagnostic is open.
     if not st.checkbox('Enable guided private NFL workflow',value=False,key='nfl_workflow_enabled'):
         revoke(state,keep_enabled=True)
         return  # Actual control-flow guard BEFORE storage/provider imports.
