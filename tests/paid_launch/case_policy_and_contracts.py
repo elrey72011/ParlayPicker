@@ -195,3 +195,165 @@ def test_live_key_is_rejected_when_live_billing_is_disabled():
     }
     with pytest.raises(ValueError, match="live Stripe key is forbidden"):
         Settings.from_env(environment)
+
+
+# Synthetic signed OIDC tokens exercise the service's real JOSE interfaces.
+@pytest.fixture(scope="module")
+def authlib_rsa_keys():
+    from authlib.jose import JsonWebKey
+    key = JsonWebKey.generate_key("RSA", 2048, is_private=True, options={"kid": "synthetic-authlib"})
+    return key, {"keys": [key.as_dict(is_private=False)]}
+
+
+def authlib_complete_fixture(monkeypatch, keys, changes=None, *, signature="valid"):
+    """Only HTTP and database boundaries are synthetic; JOSE is unmodified."""
+    import asyncio
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    import httpx
+    from authlib.jose import jwt
+    from services.subscriber import auth
+
+    now = datetime.now(timezone.utc)
+    claims = {"iss": "https://issuer.example.test", "aud": "synthetic-client", "sub": "synthetic-subject",
+              "nonce": "synthetic-nonce", "exp": int(now.timestamp()) + 600,
+              "iat": int(now.timestamp()) - 60, "groups": [], "amr": [],
+              "email": "synthetic@example.test", "email_verified": True}
+    claims.update(changes or {})
+    for name in [name for name, value in claims.items() if value is None]:
+        del claims[name]
+    encoded = jwt.encode({"alg": "RS256", "kid": "synthetic-authlib"}, claims, keys[0]).decode()
+    if signature == "invalid":
+        parts = encoded.split(".")
+        parts[2] = ("A" if parts[2][0] != "A" else "B") + parts[2][1:]
+        encoded = ".".join(parts)
+    config = SimpleNamespace(oidc_issuer="https://issuer.example.test", oidc_client_id="synthetic-client",
+        oidc_client_secret="synthetic-only", oidc_callback_url="https://app.example.test/auth/callback",
+        oidc_admin_group="owners", session_hours=12)
+    created = []; requests = []; state_updates = []
+
+    class Login:
+        def fetchone(self):
+            return {"consumed_at": None, "expires_at": now + timedelta(minutes=10),
+                    "nonce": "synthetic-nonce", "code_verifier": "synthetic-pkce",
+                    "redirect_after": "https://app.example.test/account"}
+
+    class Database:
+        @contextmanager
+        def transaction(self):
+            yield self
+
+        def execute(self, sql, params):
+            if sql.startswith("SELECT * FROM subscriber.oidc_login"):
+                return Login()
+            assert sql.startswith("UPDATE subscriber.oidc_login SET consumed_at=")
+            state_updates.append(params)
+
+    def create_session(db, **kwargs):
+        created.append(kwargs)
+        return "synthetic-session", "synthetic-csrf"
+
+    monkeypatch.setattr(auth, "create_customer_session", create_session)
+
+    def transport(request):
+        requests.append(request)
+        assert request.url.host == "issuer.example.test"
+        if request.url.path == "/.well-known/openid-configuration":
+            return httpx.Response(200, json={"issuer": config.oidc_issuer,
+                "token_endpoint": config.oidc_issuer + "/token", "jwks_uri": config.oidc_issuer + "/jwks"})
+        if request.url.path == "/token":
+            assert request.method == "POST" and b"code_verifier=synthetic-pkce" in request.content
+            return httpx.Response(200, json={"id_token": encoded})
+        assert request.url.path == "/jwks"
+        return httpx.Response(200, json=keys[1])
+
+    async def complete():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            return await auth.OidcClient(config, client).complete(Database(), state="synthetic-state", code="synthetic-code")
+
+    return lambda: asyncio.run(complete()), created, requests, state_updates
+
+
+@pytest.mark.parametrize("claims,role,strength", [
+    ({}, "CUSTOMER", "oidc"),
+    ({"groups": ["owners"], "amr": ["mfa"]}, "OWNER", "mfa"),
+    ({"groups": ["owners"], "amr": ["pwd"]}, "CUSTOMER", "oidc"),
+    ({"groups": ["customers"], "amr": ["mfa"], "role": "OWNER", "admin": True}, "CUSTOMER", "oidc"),
+    ({"groups": ["not-owners"], "amr": ["mfa"]}, "CUSTOMER", "oidc"),
+    ({"aud": ["another-client", "synthetic-client"]}, "CUSTOMER", "oidc"),
+])
+def test_authlib_real_oidc_valid_and_privilege_boundaries(monkeypatch, authlib_rsa_keys, claims, role, strength):
+    run, created, requests, state = authlib_complete_fixture(monkeypatch, authlib_rsa_keys, claims)
+    assert run() == ("synthetic-session", "synthetic-csrf", "https://app.example.test/account")
+    assert len(created) == 1 and created[0]["role"] == role and created[0]["auth_strength"] == strength
+    assert created[0]["issuer"] == "https://issuer.example.test" and created[0]["subject"] == "synthetic-subject"
+    assert len(requests) == 3 and len(state) == 1
+
+
+@pytest.mark.parametrize("claims,signature,error", [
+    ({}, "invalid", "BadSignatureError"),
+    ({"iss": "https://other.example.test"}, "valid", "InvalidClaimError"),
+    ({"aud": "other-client"}, "valid", "InvalidClaimError"),
+    ({"nonce": "other-nonce"}, "valid", "InvalidClaimError"),
+    ({"nonce": "other-nonce", "nonce_supported": False}, "valid", "InvalidClaimError"),
+    ({"nonce": None}, "valid", "MissingClaimError"),
+    ({"exp": 1}, "valid", "ExpiredTokenError"),
+    ({"exp": None}, "valid", "MissingClaimError"),
+    ({"exp": True}, "valid", "InvalidClaimError"),
+    ({"nbf": True}, "valid", "InvalidClaimError"),
+    ({"iat": True}, "valid", "InvalidClaimError"),
+])
+def test_authlib_real_oidc_rejects_invalid_token(monkeypatch, authlib_rsa_keys, claims, signature, error):
+    from authlib.jose import errors
+    run, created, requests, state = authlib_complete_fixture(monkeypatch, authlib_rsa_keys, claims, signature=signature)
+    with pytest.raises(getattr(errors, error)):
+        run()
+    assert created == [] and len(requests) == 3 and len(state) == 1
+
+
+@pytest.mark.parametrize("claims", [
+    {"groups": "not-owners", "amr": ["mfa"]},
+    {"groups": {"owners": True}, "amr": ["mfa"]},
+    {"groups": ["owners"], "amr": "mfa"},
+    {"groups": ["owners"], "amr": ["mfa", 1]},
+])
+def test_authlib_real_oidc_rejects_malformed_privilege_claims(monkeypatch, authlib_rsa_keys, claims):
+    run, created, _, state = authlib_complete_fixture(monkeypatch, authlib_rsa_keys, claims)
+    with pytest.raises(ValueError, match="OIDC_PRIVILEGE_CLAIMS_INVALID"):
+        run()
+    assert created == [] and len(state) == 1
+
+
+def test_authlib_empty_hmac_and_asymmetric_key_confusion_rejected(authlib_rsa_keys):
+    import base64,hashlib,hmac,json
+    from authlib.jose import jwt
+    encode = lambda raw: base64.urlsafe_b64encode(raw).rstrip(b"=")
+    signing = encode(b'{"alg":"HS256"}') + b"." + encode(b'{"sub":"synthetic"}')
+    forged = signing + b"." + encode(hmac.new(b"", signing, hashlib.sha256).digest())
+    with pytest.raises(ValueError):
+        jwt.decode(forged, b"")
+    public = authlib_rsa_keys[0].as_pem(is_private=False)
+    with pytest.raises(ValueError):
+        jwt.encode({"alg": "HS256"}, {"sub": "synthetic"}, public)
+
+
+def test_authlib_empty_signature_collection_rejected(authlib_rsa_keys):
+    from authlib.jose import JsonWebSignature
+    from authlib.jose.errors import BadSignatureError,DecodeError
+    with pytest.raises((BadSignatureError, DecodeError, ValueError)):
+        JsonWebSignature().deserialize_json({"payload": "e30", "signatures": []}, authlib_rsa_keys[0])
+
+
+@pytest.mark.parametrize("relative,expected", [('services/subscriber/requirements.txt', 'fe8228774ff9e7b34c8bb2d88000ef4233d71bfc5cfa5bb4a9811c33f314366d'), ('services/subscriber/auth.py', '9a01cdee0153a81a54809115f534f9e4114a53b017efdba3499a6833ad769159'), ('tests/paid_launch/case_policy_and_contracts.py', 'fcd7c95a43aa796aa8605df690084c612578ec5cbc9ee6f4ec9116d8b22f12bf')])
+def test_authlib_successor_preserves_independent_predecessor_bytes(relative, expected):
+    import hashlib
+    from pathlib import Path
+    from scripts import ncaaf_filtered_history_scope as history
+    root = Path(__file__).resolve().parents[2]
+    binding = history.authenticate(root)
+    current = history.physical(root / relative)
+    prior = history.capacity_predecessor(binding, relative, current)
+    assert hashlib.sha256(prior).hexdigest() == expected
+    assert prior != current
+    changed = current + b"SYNTHETIC_UNAUTHORIZED_CHANGE"
+    assert history.capacity_predecessor(binding, relative, changed) == changed

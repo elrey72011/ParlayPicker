@@ -1,4 +1,4 @@
-"""Exact test-browser lifecycle successor preserving both failed capacity heads."""
+"""Exact isolated-service Authlib successor preserving capacity/browser evidence."""
 import base64
 import copy
 import hashlib
@@ -32,6 +32,16 @@ PATHS = {BINDING, AUTHORIZATION, LEDGER, PROFILE, *NORMALIZED,
          'scripts/nfl_capacity_profile_scope.py', 'tests/nfl_capacity_profile_inputs.py',
          'tests/test_nfl_capacity_profile.py', 'tests/test_ncaaf_filtered_history_scope.py',
          CORRECTION, 'tests/nfl_capacity_import_owner.py', 'tests/test_nfl_capacity_fixture_isolation.py'} | BROWSER_PATHS
+AUTHLIB_PREVIOUS_HEAD = '4766ecd09e4982f9112522ab4e204f72e65b3b2b'
+AUTHLIB_PREVIOUS_TREE = '845668d8bef32351269ab6b67bc185feb199ea11'
+AUTHLIB_PREVIOUS_IMPLEMENTATION = 'dce285c4deb15d78fa83c6e8f2109b5eff26155b'
+AUTHLIB_AUTHORIZATION = 'docs/paid-launch/authlib-isolated-service-correction-v1.md'
+AUTHLIB_REQUIREMENTS = 'services/subscriber/requirements.txt'
+AUTHLIB_RUNTIME = 'services/subscriber/auth.py'
+AUTHLIB_CASES = 'tests/paid_launch/case_policy_and_contracts.py'
+AUTHLIB_APPEND_SHA256 = '938c1cc8432939efc3aa5ba95c3750a86c29d6db90e3e0d587a52bcb28b95d7f'
+AUTHLIB_PATHS = {AUTHLIB_AUTHORIZATION, AUTHLIB_REQUIREMENTS, AUTHLIB_RUNTIME, AUTHLIB_CASES}
+PATHS = PATHS | AUTHLIB_PATHS
 MAX_SOURCE = 8 * 1024 * 1024
 
 HISTORY_ADDITION = '''_CAPACITY_IMAGES={} # Reauthenticated immutable bytes, never an acceptance cache.
@@ -172,7 +182,9 @@ def history_successor(old):
 
 def make_policy(root,binding,implementation,binding_sha):
     c=binding['nfl_capacity_profile']
-    return dict(version='nfl-browser-harness-seal-v3',base=BASE,base_tree=TREE,
+    return dict(version='nfl-authlib-security-seal-v4',base=BASE,base_tree=TREE,
+        authlib_previous_head=AUTHLIB_PREVIOUS_HEAD,authlib_previous_tree=AUTHLIB_PREVIOUS_TREE,
+        authlib_authorization_sha256=c['authlib_authorization_sha256'],
         previous_head=PREVIOUS_HEAD,previous_tree=PREVIOUS_TREE,browser_authorization_sha256=c['browser_authorization_sha256'],
         failed_head=FAILED_HEAD,failed_tree=FAILED_TREE,correction_sha256=c['correction_sha256'],
         authorization_sha256=c['authorization_sha256'],binding_sha256=binding_sha,
@@ -185,13 +197,27 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha,preserved_test_
     require(c==dict(base=BASE,base_tree=TREE,ordered_parents=PARENTS,prior_binding_sha256=OLD_STAMP,
         authorization_sha256=binding['components'][AUTHORIZATION],ledger_sha256=binding['components'][LEDGER],implementation_paths=sorted(PATHS),
         correction_sha256=binding['components'][CORRECTION],failed_head=FAILED_HEAD,failed_tree=FAILED_TREE,
-        browser_authorization_sha256=binding['components'][BROWSER_AUTHORIZATION],previous_head=PREVIOUS_HEAD,previous_tree=PREVIOUS_TREE),'NFL_CAPACITY_SCOPE_CHANGED')
+        browser_authorization_sha256=binding['components'][BROWSER_AUTHORIZATION],previous_head=PREVIOUS_HEAD,previous_tree=PREVIOUS_TREE,
+        authlib_authorization_sha256=binding['components'][AUTHLIB_AUTHORIZATION],authlib_previous_head=AUTHLIB_PREVIOUS_HEAD,authlib_previous_tree=AUTHLIB_PREVIOUS_TREE),'NFL_CAPACITY_SCOPE_CHANGED')
     require(text(root,'rev-parse',FAILED_HEAD+'^{tree}')==FAILED_TREE
         and text(root,'show','-s','--format=%P',FAILED_HEAD).split()==[FAILED_IMPLEMENTATION]
         and text(root,'show','-s','--format=%P',FAILED_IMPLEMENTATION).split()==[BASE], 'NFL_CAPACITY_FAILED_EVIDENCE_CHANGED')
     require(text(root,'rev-parse',PREVIOUS_HEAD+'^{tree}')==PREVIOUS_TREE
         and text(root,'show','-s','--format=%P',PREVIOUS_HEAD).split()==[PREVIOUS_IMPLEMENTATION]
         and text(root,'show','-s','--format=%P',PREVIOUS_IMPLEMENTATION).split()==[FAILED_HEAD], 'BROWSER_FAILED_EVIDENCE_CHANGED')
+    require(text(root,'rev-parse',AUTHLIB_PREVIOUS_HEAD+'^{tree}')==AUTHLIB_PREVIOUS_TREE
+        and text(root,'show','-s','--format=%P',AUTHLIB_PREVIOUS_HEAD).split()==[AUTHLIB_PREVIOUS_IMPLEMENTATION]
+        and text(root,'show','-s','--format=%P',AUTHLIB_PREVIOUS_IMPLEMENTATION).split()==[PREVIOUS_HEAD], 'AUTHLIB_PREVIOUS_EVIDENCE_CHANGED')
+    for path in PATHS-{BINDING,*NORMALIZED,'scripts/nfl_capacity_profile_scope.py',*AUTHLIB_PATHS}:
+        require(git(root,'show',AUTHLIB_PREVIOUS_HEAD+':'+path)==(root/path).read_bytes(),'AUTHLIB_UNRELATED_SOURCE_CHANGED')
+    previous_requirements=git(root,'show',AUTHLIB_PREVIOUS_HEAD+':'+AUTHLIB_REQUIREMENTS)
+    require(previous_requirements.count(b'authlib==1.8.0')==1 and (root/AUTHLIB_REQUIREMENTS).read_bytes()==previous_requirements.replace(b'authlib==1.8.0',b'authlib==1.9.1',1),'AUTHLIB_PIN_CHANGE_NOT_APPROVED')
+    previous_auth=git(root,'show',AUTHLIB_PREVIOUS_HEAD+':'+AUTHLIB_RUNTIME)
+    old_claims=b'        amr = set(claims.get("amr", []))\n'
+    new_claims=b'        amr_claim = claims.get("amr", [])\n        if not (isinstance(groups, list) and all(isinstance(value, str) for value in groups)\n                and isinstance(amr_claim, list) and all(isinstance(value, str) for value in amr_claim)):\n            raise ValueError("OIDC_PRIVILEGE_CLAIMS_INVALID")\n        amr = set(amr_claim)\n'
+    require(previous_auth.count(old_claims)==1 and (root/AUTHLIB_RUNTIME).read_bytes()==previous_auth.replace(old_claims,new_claims,1),'AUTHLIB_RUNTIME_CHANGE_NOT_APPROVED')
+    previous_cases=git(root,'show',AUTHLIB_PREVIOUS_HEAD+':'+AUTHLIB_CASES);current_cases=(root/AUTHLIB_CASES).read_bytes()
+    require(current_cases.startswith(previous_cases) and sha(current_cases[len(previous_cases):])==AUTHLIB_APPEND_SHA256,'AUTHLIB_CASE_ADDITIONS_CHANGED')
     for path in (LEDGER,AUTHORIZATION,CORRECTION,'tests/test_nfl_capacity_profile.py',
                  'tests/test_ncaaf_filtered_history_scope.py','tests/nfl_capacity_profile_inputs.py',
                  'tests/nfl_capacity_import_owner.py','tests/test_nfl_capacity_fixture_isolation.py'):
@@ -217,7 +243,7 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha,preserved_test_
     for path in PATHS-{BINDING}:
         raw=(root/path).read_bytes().replace(b'\r\n',b'\n');require(len(raw)<=MAX_SOURCE,'NFL_CAPACITY_SIZE_LIMIT')
         components[path]=sha(normalized(path,raw,binding_sha))
-        if path in prior['components'] and path in before:
+        if path in before and (path in prior['components'] or path in AUTHLIB_PATHS):
             old=git(root,'show',BASE+':'+path);records[path]=dict(before_sha256=sha(old),before_bytes=len(old),before_b85=base64.b85encode(zlib.compress(old,9)).decode(),after_sha256=components[path])
     require(binding['components']==components and binding['nfl_capacity_predecessors']==records,'NFL_CAPACITY_COMPONENTS_CHANGED')
     for path in NORMALIZED:
@@ -225,9 +251,9 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha,preserved_test_
         wanted=history_successor(old) if path.endswith('/ncaaf_filtered_history_scope.py') else old
         require(normalized(path,new,binding_sha)==normalized(path,wanted,OLD_STAMP),'INHERITED_GUARD_LOGIC_CHANGED')
     policy=json.loads(git(root,'show','HEAD:'+POLICY));implementation=policy['implementation_commit']
-    require(text(root,'show','-s','--format=%P',implementation).split()==[PREVIOUS_HEAD],'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    require(text(root,'show','-s','--format=%P',implementation).split()==[AUTHLIB_PREVIOUS_HEAD],'IMPLEMENTATION_PARENT_NOT_APPROVED')
     require(set(text(root,'diff','--name-only',BASE,implementation).splitlines())==PATHS|{POLICY},'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
-    require(git(root,'show',implementation+':'+POLICY)==git(root,'show',PREVIOUS_HEAD+':'+POLICY),'NFL_CAPACITY_FAILED_EVIDENCE_CHANGED')
+    require(git(root,'show',implementation+':'+POLICY)==git(root,'show',AUTHLIB_PREVIOUS_HEAD+':'+POLICY),'NFL_CAPACITY_FAILED_EVIDENCE_CHANGED')
     require(policy==make_policy(root,binding,implementation,binding_sha),'EXACT_POLICY_BINDINGS_CHANGED')
     head=text(root,'rev-parse','HEAD');parents=text(root,'show','-s','--format=%P',head).split();seal=head
     if len(parents)==2:
@@ -257,7 +283,13 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha,preserved_test_
     adaptations[BROWSER_HELPER]=dict(before_sha256=sha(browser_before),after_sha256=sha(browser_wanted),
         before_blob=before[BROWSER_HELPER],after_blob=actual[BROWSER_HELPER],authorization=BROWSER_AUTHORIZATION,
         authorization_sha256=c['browser_authorization_sha256'])
-    return dict(schema_version=97,status='PASS',base=BASE,implementation=implementation,seal=seal,candidate=head,
+    adaptations[AUTHLIB_CASES]=dict(before_sha256=sha(previous_cases),after_sha256=sha(current_cases),
+        before_blob=before[AUTHLIB_CASES],after_blob=actual[AUTHLIB_CASES],authorization=AUTHLIB_AUTHORIZATION,
+        authorization_sha256=c['authlib_authorization_sha256'])
+    service_changes={p:dict(before_sha256=sha(git(root,'show',AUTHLIB_PREVIOUS_HEAD+':'+p)),after_sha256=sha((root/p).read_bytes()),
+        authorization=AUTHLIB_AUTHORIZATION,authorization_sha256=c['authlib_authorization_sha256']) for p in (AUTHLIB_REQUIREMENTS,AUTHLIB_RUNTIME)}
+    return dict(schema_version=98,status='PASS',base=BASE,implementation=implementation,seal=seal,candidate=head,
+        approved_service_changes=service_changes,
         tree=text(root,'rev-parse',head+'^{tree}'),changed_files=sorted(PATHS|{POLICY}),protected_changes=[],
         **preserved,approved_fixture_test_adaptations=adaptations,new_existing_test_exceptions=[],
         accepted=False,inference=False,inherited_runtime_and_readers_unchanged=True)
