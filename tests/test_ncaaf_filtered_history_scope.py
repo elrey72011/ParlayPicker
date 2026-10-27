@@ -7,6 +7,8 @@ from scripts import ncaaf_filtered_history_scope as scope
 from app_core import ncaaf_filtered_history as filtered,ncaaf_pilot as pilot,ncaaf_response_custody as custody
 from test_ncaaf_filtered_history import context
 
+from tests.nfl_capacity_profile_inputs import historical_filtered_profile_generation
+
 ROOT=Path(__file__).resolve().parents[1]
 
 
@@ -372,7 +374,7 @@ def test_parent_layer_does_not_shadow_a_later_owned_open():
     assert Path.read_bytes is read and Path.open is opened
 
 
-def test_legacy_fixture_adapter_is_exact_and_live_inputs_stay_current():
+def test_legacy_fixture_adapter_is_exact_and_live_inputs_stay_current(historical_filtered_profile_generation):
     from tests import historical_scope_input_boundary as boundary
     from types import SimpleNamespace
     binding=scope.authenticate(ROOT);consumer='tests/test_ci_fixture_stability_scope.py'
@@ -409,7 +411,7 @@ def test_advisory_profile_before_rejects_unreviewed_supplied_bytes():
         scope.advisory_profile_before(ROOT,raw+b'\nUNREVIEWED')
 
 
-def test_fresh_cost_normalization_authenticates_fixed_prior_rows_and_rejects_other_generations():
+def test_fresh_cost_normalization_authenticates_fixed_prior_rows_and_rejects_other_generations(historical_filtered_profile_generation):
     current=scope.physical(ROOT/'scripts/ci_test_file_costs_v1.json')
     prior=scope.fresh_advisory_profile_before(ROOT,current)
     assert scope.sha(prior)=='253a8551db604bd01c5304b7f74e61faaf9bb221ec5ab2b3ae6a2f05a1713bb4'
