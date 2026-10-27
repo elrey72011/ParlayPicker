@@ -30,6 +30,7 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import urlparse, parse_qs
 import zipfile
+from logical_watchdog import logical_watchdogs
 
 HERE=Path(__file__).resolve().parent
 sys.path.insert(0,str(HERE))
@@ -607,7 +608,7 @@ class FunctionalTests(unittest.TestCase):
                 if str(path).endswith('slice-01-result.json'): clock[0]=2
                 return result
             with patch.object(self.m,'verified_record',consumed_result): self.m.capture_block(self.fx.spec)
-        with patch.object(self.m,'time',SimpleNamespace(monotonic=lambda:clock[0],sleep=lambda _:None)): result,phases=self.inline_supervisor(consumed)
+        with logical_watchdogs(self.m), patch.object(self.m,'time',SimpleNamespace(monotonic=lambda:clock[0],sleep=lambda _:None)): result,phases=self.inline_supervisor(consumed)
         self.assertEqual(result,2);self.assertEqual(phases,['capture-block']);self.assertEqual(self.report()['cumulative_objects'],8)
     def test_V06_materialization_and_assessment_stage_wall_guards(self):
         self.configured(materialization_wall_seconds=1,assessment_wall_seconds=1);clock=[0.0]

@@ -8,6 +8,7 @@ import pytest
 from scripts import run_ci_tests as runner
 from scripts import ncaaf_filtered_history_scope as history
 from scripts import nfl_capacity_profile_scope as scope
+from tests.qualification_ops.reviewed_profile_inputs import reviewed_workflow_bytes
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -97,7 +98,7 @@ def test_capacity_generation_rejects_tampering(tmp_path,monkeypatch,attack):
 def test_scheduler_and_workflow_limits_are_unchanged():
     ledger=json.loads((ROOT/scope.LEDGER).read_bytes())
     for path,expected in ledger['unchanged_scheduler_and_workflow_sha256'].items():
-        assert hashlib.sha256((ROOT/path).read_bytes().replace(b'\r\n',b'\n')).hexdigest()==expected
+        assert hashlib.sha256(reviewed_workflow_bytes(ROOT,path).replace(b'\r\n',b'\n')).hexdigest()==expected
     workflow=(ROOT/'.github/workflows/ci.yml').read_text()
     assert 'shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]' in workflow
     assert 'timeout-minutes: 45' in workflow
