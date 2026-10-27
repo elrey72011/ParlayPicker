@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: Record diagnostic job budget
+        run: echo "BROWSER_DIAGNOSTIC_JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
         with:
           path: diagnostic-tools

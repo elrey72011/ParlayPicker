@@ -35,7 +35,9 @@ for mode,root,group in [('baseline',BASELINE,'10'),('baseline',BASELINE,'9'),('c
     files=SPEC['prefixes'][group]['files'] if group!='shared' else ['tests/test_research_probability_browser.py','tests/test_browser_process_owner.py']
     plans.append(dict(mode=mode,root=str(root),group=group,files=files))
 (OUT/'frozen-plan.json').write_text(json.dumps(plans,indent=2)+'\n')
-deadline=time.monotonic()+2280  # leave at least two minutes before the 40-minute step bound.
+job_started=float(os.environ['BROWSER_DIAGNOSTIC_JOB_STARTED'])
+whole_job_remaining=max(0,2700-(time.time()-job_started)-180)
+deadline=time.monotonic()+min(2280,whole_job_remaining)
 completed=[]
 for plan in plans:
     name=plan['mode']+'-'+plan['group'];folder=OUT/name;folder.mkdir()
