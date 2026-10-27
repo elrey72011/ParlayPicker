@@ -2,9 +2,13 @@
   "authorization_sha256": "b6d8eb78e0489507a1eab3218b9b11c7f0a8254e38bcf2e173551d6014755cbf",
   "base": "f6a7506dc3300fbcf390dbcdd00f0688dba073a4",
   "base_tree": "5bc678e613ec381c07f67110ee5f568f8961ff2f",
-  "binding_sha256": "c9d9d50e19f4e8a20d0a23ef9a32137be1020b90d7425c0d43511e6b6bf1b247",
-  "implementation_commit": "c82fbe614449a0a3195244eb83bcf99aff23352b",
+  "binding_sha256": "475e2d57d4ae6902543153d76528d32a740e715aa1ae6fd7625a96b439434f73",
+  "correction_sha256": "09be70c0330fbafa8870e66adcb4019ea66eccdd57dc51484516aa795517f638",
+  "failed_head": "c15f4f4bf14be37ce62dbceebc92eb8dd197f373",
+  "failed_tree": "0c36b9cd64aadde41b31b309e23b7f06b723a769",
+  "implementation_commit": "c39b3ff6c5e9ddb4a03f7f3fecb4ebf4dfc2b409",
   "implementation_paths": [
+    "docs/paid-launch/nfl-capacity-fixture-correction-v1.md",
     "docs/paid-launch/nfl-capacity-profile-v1.md",
     "docs/paid-launch/nfl-capacity-timing-ledger-v1.json",
     "docs/research/ncaaf-filtered-history-bindings-v1.json",
@@ -13,11 +17,13 @@
     "scripts/ncaaf_filtered_history_scope.py",
     "scripts/ncaaf_private_refresh_scope.py",
     "scripts/nfl_capacity_profile_scope.py",
+    "tests/nfl_capacity_import_owner.py",
     "tests/nfl_capacity_profile_inputs.py",
     "tests/test_ncaaf_filtered_history_scope.py",
+    "tests/test_nfl_capacity_fixture_isolation.py",
     "tests/test_nfl_capacity_profile.py"
   ],
-  "implementation_tree": "9372680e284d94296c24c8ef9b8fa6ddf24ef34f",
+  "implementation_tree": "9c8ee2c4ed426f4ae45d464e53b267a91f64a692",
   "unchanged_blobs": {
     ".claude/hooks/session-start.sh": "816a136921c447731323dc1688c1770be5840421",
     ".claude/settings.json": "e06b0338e2585d90e2529cddfd6cbfba1234e79b",
@@ -1949,5 +1955,5 @@
     "web/subscriber/subscriber.css": "6638c1e4abac57542bdecf6d73507272623a1040",
     "web/subscriber/subscriber.js": "b34d8170d6b667c0cf87512b6132bd614bb53168"
   },
-  "version": "nfl-capacity-profile-seal-v1"
+  "version": "nfl-capacity-profile-seal-v2"
 }
