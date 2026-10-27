@@ -47,7 +47,13 @@ sys.addaudithook(audit)
 def pytest_collection_modifyitems(config,items):
     # Match release CI's full-suite import/collection state before selecting
     # the fixed original complete-file prefix. Do not narrow collection itself.
-    files=json.loads(os.environ['BROWSER_PROBE_FILES']);order={p:n for n,p in enumerate(files)}
+    try:
+        manifest=json.loads(Path(os.environ['BROWSER_PROBE_MANIFEST']).read_bytes())
+        plan=next(p for p in manifest['required_contexts'] if p['name']==os.environ['BROWSER_PROBE_CONTEXT'])
+        files=plan['files'];order={p:n for n,p in enumerate(files)}
+    except BaseException as error:
+        (ROOT/'selection-failure.json').write_text(json.dumps(dict(phase='LOADING_SELECTION',exception_class=type(error).__name__,raw_exception_retained=False))+'\n')
+        raise pytest.UsageError('FROZEN_SELECTION_INPUT_INVALID') from None
     selected=[];other=[]
     for index,item in enumerate(items):
         path=Path(item.path).resolve().relative_to(Path(config.rootpath).resolve()).as_posix()
@@ -57,6 +63,9 @@ def pytest_collection_modifyitems(config,items):
     record=dict(collected_count=len(items),selected_count=len(selected),files=files,
         selected_nodeids=[row[2].nodeid for row in selected],full_collection_before_selection=True)
     (ROOT/'selection-receipt.json').write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
+    if record['collected_count']!=plan['expected_collected_count'] or record['selected_nodeids']!=plan['expected_nodeids'] or record['selected_count']!=plan['expected_count']:
+        (ROOT/'selection-failure.json').write_text(json.dumps(dict(phase='VALIDATING_SELECTION',category='FROZEN_SELECTION_MISMATCH',raw_exception_retained=False))+'\n')
+        raise pytest.UsageError('FROZEN_SELECTION_MISMATCH')
     items[:]=[row[2] for row in selected]
 
 def pytest_runtest_setup(item):
@@ -65,7 +74,7 @@ def pytest_runtest_setup(item):
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item,call):
     result=yield;report=result.get_result()
-    if report.when not in ('call','setup'):return
+    if report.when not in ('call','setup','teardown'):return
     row=dict(nodeid=item.nodeid,when=report.when,outcome=report.outcome,duration=report.duration,at=time.time(),native_launches=len(LAUNCHES),owned_browser_processes=processes())
     if call.excinfo is not None:
         error=call.excinfo.value;row['exception_class']=type(error).__name__

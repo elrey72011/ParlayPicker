@@ -11,7 +11,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Record diagnostic job budget
-        run: echo "BROWSER_DIAGNOSTIC_JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+        run: |
+          mkdir -p browser-evidence
+          printf '%s\n' '{"phase":"WORKFLOW_STARTED","automatic_retries":0}' > browser-evidence/workflow-startup.json
+          echo "BROWSER_DIAGNOSTIC_JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
         with:
           path: diagnostic-tools
@@ -41,7 +44,9 @@ jobs:
           PARLAYPICKER_NFL_ACQUISITION_ENABLED: 'false'
           PARLAYPICKER_NFL_INFERENCE_ENABLED: 'false'
           PYTHONUNBUFFERED: '1'
-        run: python -B diagnostic-tools/diagnostics/browser-harness/browser_harness_diagnostic.py
+        run: |
+          python -B -m pytest diagnostic-tools/diagnostics/browser-harness/qualification_contracts.py -c /dev/null --rootdir=diagnostic-tools/diagnostics/browser-harness --confcutdir=diagnostic-tools/diagnostics/browser-harness -p no:cacheprovider -q --junitxml=browser-evidence/package-contracts.xml > browser-evidence/package-contracts.log 2>&1
+          python -B diagnostic-tools/diagnostics/browser-harness/browser_harness_diagnostic.py
       - name: Retain bounded evidence even on failure
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
