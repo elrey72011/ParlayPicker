@@ -2,12 +2,14 @@
   "authorization_sha256": "b6d8eb78e0489507a1eab3218b9b11c7f0a8254e38bcf2e173551d6014755cbf",
   "base": "f6a7506dc3300fbcf390dbcdd00f0688dba073a4",
   "base_tree": "5bc678e613ec381c07f67110ee5f568f8961ff2f",
-  "binding_sha256": "475e2d57d4ae6902543153d76528d32a740e715aa1ae6fd7625a96b439434f73",
+  "binding_sha256": "67f815f7aefd724818ae60ac04147612e72164e8321da9e59922874070673fba",
+  "browser_authorization_sha256": "6d2cc2daeb97eed52d4d1a7dcd5a32345cc700d496e4fa76478d16ab34839e39",
   "correction_sha256": "09be70c0330fbafa8870e66adcb4019ea66eccdd57dc51484516aa795517f638",
   "failed_head": "c15f4f4bf14be37ce62dbceebc92eb8dd197f373",
   "failed_tree": "0c36b9cd64aadde41b31b309e23b7f06b723a769",
-  "implementation_commit": "c39b3ff6c5e9ddb4a03f7f3fecb4ebf4dfc2b409",
+  "implementation_commit": "dce285c4deb15d78fa83c6e8f2109b5eff26155b",
   "implementation_paths": [
+    "docs/paid-launch/browser-harness-ownership-v1.md",
     "docs/paid-launch/nfl-capacity-fixture-correction-v1.md",
     "docs/paid-launch/nfl-capacity-profile-v1.md",
     "docs/paid-launch/nfl-capacity-timing-ledger-v1.json",
@@ -17,13 +19,19 @@
     "scripts/ncaaf_filtered_history_scope.py",
     "scripts/ncaaf_private_refresh_scope.py",
     "scripts/nfl_capacity_profile_scope.py",
+    "tests/browser_process_owner.py",
+    "tests/browser_process_windows.py",
     "tests/nfl_capacity_import_owner.py",
     "tests/nfl_capacity_profile_inputs.py",
+    "tests/test_browser_process_owner.py",
     "tests/test_ncaaf_filtered_history_scope.py",
     "tests/test_nfl_capacity_fixture_isolation.py",
-    "tests/test_nfl_capacity_profile.py"
+    "tests/test_nfl_capacity_profile.py",
+    "tests/test_research_probability_browser.py"
   ],
-  "implementation_tree": "9c8ee2c4ed426f4ae45d464e53b267a91f64a692",
+  "implementation_tree": "03d70a419567f89a29836904f954570af1ceeab0",
+  "previous_head": "803d678bf69cbd7de1393080285ac4e5ac692ca8",
+  "previous_tree": "2b8d788d36154dfceb231e105843b45f0dde0cce",
   "unchanged_blobs": {
     ".claude/hooks/session-start.sh": "816a136921c447731323dc1688c1770be5840421",
     ".claude/settings.json": "e06b0338e2585d90e2529cddfd6cbfba1234e79b",
@@ -1863,7 +1871,6 @@
     "tests/test_research_cycle_audit.py": "485d5c158071d045206e88ece661887765e6f1fd",
     "tests/test_research_parlays.py": "a24ee8e8ed006b957cbe1da838fcad2b4d7e04a0",
     "tests/test_research_performance.py": "b2c153d11c998fbb6a8153f409733c51c7cb4fac",
-    "tests/test_research_probability_browser.py": "da7b4c7a27d29512afcd828a30ce46fabedd4d44",
     "tests/test_research_probability_display.py": "2d9e33a51ba28b4eca77072c65405394574afe17",
     "tests/test_research_probability_producer.py": "06511653ef41c773072fe739bd1ca4bb60d3f72c",
     "tests/test_research_scheduler.py": "32bc1a62bbfdc9ec19b736b8b75f3556c90381e1",
@@ -1955,5 +1962,5 @@
     "web/subscriber/subscriber.css": "6638c1e4abac57542bdecf6d73507272623a1040",
     "web/subscriber/subscriber.js": "b34d8170d6b667c0cf87512b6132bd614bb53168"
   },
-  "version": "nfl-capacity-profile-seal-v2"
+  "version": "nfl-browser-harness-seal-v3"
 }
