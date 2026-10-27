@@ -18,10 +18,11 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='a2a84b3f99a1db55fd72a1ea68368656601a5c42ed19b63ab7e3a935c1ccafef'
+_BINDING_SHA256='8299469daafde02230899e0f3641c9df6ca16ee8ddc040b3273afc8b048d2ee6'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
+_DIAGNOSTIC_IMAGES={} # Same bounded, reauthenticated predecessor bytes; no cached verdicts.
 _LEGACY_GUARD_IMAGES={}
 _LEGACY_IMAGE_LIMIT=16*1024*1024
 _NATIVE_B85DECODE=base64.b85decode
@@ -77,6 +78,9 @@ def authenticate(root):
     require(all(isinstance(p,str) and not Path(p).is_absolute() and '..' not in Path(p).parts and chr(92) not in p for p in adapter['paths'])
         and all(isinstance(c,list) and len(c)==2 and isinstance(c[0],str) and isinstance(c[1],int) and c[1]>0 for c in adapter['calls']),
         'NCAAF_FILTERED_CONSUMER_ADAPTER_CHANGED')
+    for relative in b.get('nfl_storage_diagnostic_predecessors',{}):
+        require(relative in b['components'],'NFL_DIAGNOSTIC_PREDECESSOR_CHANGED')
+        diagnostic_predecessor(b,relative,physical(root/relative))
     return b
 
 
@@ -91,8 +95,30 @@ def predecessor_generation(root,binding,relative,expected):
     return prior['after_sha256']
 
 
+def diagnostic_predecessor(binding,relative,raw):
+    """Peel authenticated predecessor bytes; never cache a validation verdict."""
+    record=binding.get('nfl_storage_diagnostic_predecessors',{}).get(relative)
+    if record is None:return raw
+    supplied=raw.replace(b'\r\n',b'\n')
+    if relative in NORMALIZED and supplied.count(_BINDING_SHA256.encode())!=1:return raw
+    if sha(normalized(relative,supplied))!=record['after_sha256']:return raw
+    key=(_BINDING_SHA256,relative,record['after_sha256'],record['before_sha256'],record['before_bytes'],record['before_b85'])
+    old=_DIAGNOSTIC_IMAGES.get(key)
+    if old is None:
+        z=zlib.decompressobj();old=z.decompress(base64.b85decode(record['before_b85']),MAX_SOURCE+1)
+        require(z.eof and not z.unused_data and type(old) is bytes and len(old)==record['before_bytes']<=MAX_SOURCE
+            and sha(old)==record['before_sha256'],'NFL_DIAGNOSTIC_PREDECESSOR_CHANGED')
+        while _DIAGNOSTIC_IMAGES and (len(_DIAGNOSTIC_IMAGES)>=16 or
+                sum(len(value) for value in _DIAGNOSTIC_IMAGES.values())+len(old)>_LEGACY_IMAGE_LIMIT):
+            _DIAGNOSTIC_IMAGES.pop(next(iter(_DIAGNOSTIC_IMAGES)))
+        if len(old)<=_LEGACY_IMAGE_LIMIT:_DIAGNOSTIC_IMAGES[key]=old
+    require(type(old) is bytes and len(old)==record['before_bytes']<=MAX_SOURCE
+        and sha(old)==record['before_sha256'],'NFL_DIAGNOSTIC_PREDECESSOR_CHANGED')
+    return old
+
+
 def predecessor_source(root,relative,raw):
-    b=authenticate(root);record=b['component_predecessors'].get(relative)
+    b=authenticate(root);raw=diagnostic_predecessor(b,relative,raw);record=b['component_predecessors'].get(relative)
     if record is None:return raw
     # An already older supplied view is left to its original strict reader.
     actual=sha(raw.replace(b'\r\n',b'\n'))
@@ -100,7 +126,10 @@ def predecessor_source(root,relative,raw):
     # normalize() is strict for PHYSICAL current source. Supplied older views
     # need not carry this successor's stamp and belong to their strict reader.
     supplied=raw.replace(b'\r\n',b'\n')
-    if relative in NORMALIZED and supplied.count(_BINDING_SHA256.encode())!=1:return raw
+    if relative in NORMALIZED and supplied.count(_BINDING_SHA256.encode())!=1:
+        prior=b.get('nfl_storage_diagnostic',{}).get('prior_binding_sha256','').encode()
+        if not prior or supplied.count(prior)!=1:return raw
+        supplied=supplied.replace(prior,_BINDING_SHA256.encode())
     if sha(normalized(relative,supplied))!=record['after_sha256']:return raw
     key=(_BINDING_SHA256,relative,record['after_sha256'],record['before_sha256'],record['before_bytes'],record['before_b85'])
     old=_PREDECESSOR_IMAGES.get(key)

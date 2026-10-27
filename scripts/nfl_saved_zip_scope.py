@@ -79,7 +79,23 @@ def _workflow_module(root, binding):
     return module
 
 
+def _storage_diagnostic_module(root, binding):
+    import io
+    import types
+    path = Path(root) / 'scripts/nfl_storage_diag_scope.py'
+    with io.FileIO(path, 'r') as stream:
+        raw = stream.read(8 * 1024 * 1024 + 1)
+    require(len(raw) <= 8 * 1024 * 1024, 'NFL_DIAGNOSTIC_SCOPE_LIMIT')
+    raw = raw.replace(b'\r\n', b'\n')
+    require(hashlib.sha256(raw).hexdigest() == binding['components']['scripts/nfl_storage_diag_scope.py'], 'NFL_DIAGNOSTIC_SCOPE_CHANGED')
+    module = types.ModuleType('exact_nfl_storage_diag_scope'); module.__file__ = str(path)
+    exec(compile(raw, str(path), 'exec'), module.__dict__)
+    return module
+
+
 def make_policy(root, binding, implementation, binding_sha):
+    if binding.get('nfl_storage_diagnostic') is not None:
+        return _storage_diagnostic_module(root, binding).make_policy(root, binding, implementation, binding_sha)
     if binding.get('private_nfl_streamlit_workflow') is not None:
         return _workflow_module(root, binding).make_policy(root, binding, implementation, binding_sha)
     if binding.get('saved_nfl_zip_owner_gate_correction') is not None:
@@ -94,6 +110,8 @@ def make_policy(root, binding, implementation, binding_sha):
 
 
 def validate(root, binding, comparison_base, manifest, *, binding_sha):
+    if binding.get('nfl_storage_diagnostic') is not None:
+        return _storage_diagnostic_module(root, binding).validate(root, binding, comparison_base, manifest, binding_sha=binding_sha)
     if binding.get('private_nfl_streamlit_workflow') is not None:
         return _workflow_module(root, binding).validate(root, binding, comparison_base, manifest, binding_sha=binding_sha)
     if binding.get('saved_nfl_zip_owner_gate_correction') is not None:
