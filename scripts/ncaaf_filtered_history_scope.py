@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='c9d9d50e19f4e8a20d0a23ef9a32137be1020b90d7425c0d43511e6b6bf1b247'
+_BINDING_SHA256='475e2d57d4ae6902543153d76528d32a740e715aa1ae6fd7625a96b439434f73'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -371,7 +371,7 @@ def make_policy(root,b,implementation):
 def validate(root,comparison_base=None,manifest=None):
     root=Path(root);b=authenticate(root);repair=b.get('ui_display_repair')
     if b.get('nfl_capacity_profile') is not None:
-        return _capacity_scope_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
+        return _capacity_scope_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256,preserved_test_report=_preserved_test_report)
     if b.get('saved_nfl_scenario_zip_viewer') is not None:
         return _saved_zip_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('saved_nfl_scenario_viewer') is not None:

@@ -2,17 +2,29 @@
 from pathlib import Path
 import types
 import pytest
+from tests.nfl_capacity_import_owner import predecessor_imports
 
 
-@pytest.fixture
-def historical_filtered_profile_generation(tmp_path, monkeypatch, request):
+@pytest.fixture(autouse=True)
+def historical_filtered_profile_generation(request):
+    if (request.module.__name__.split('.')[-1]!='test_ncaaf_filtered_history_scope'
+        or request.node.name not in {
+            'test_legacy_fixture_adapter_is_exact_and_live_inputs_stay_current',
+            'test_fresh_cost_normalization_authenticates_fixed_prior_rows_and_rejects_other_generations'}):
+        yield
+        return
+    historical=request.getfixturevalue('tmp_path')/'SYNTHETIC-authenticated-f6a7506-inputs'
+    with predecessor_imports(historical), pytest.MonkeyPatch.context() as monkeypatch:
+        yield from historical_generation(request, historical, monkeypatch)
+
+
+def historical_generation(request, historical, monkeypatch):
     from scripts import ncaaf_filtered_history_scope as current
     root=Path(__file__).resolve().parents[1]
     binding=current.authenticate(root)
     prior_raw=current.capacity_parent_binding(binding)
     import json
     prior=json.loads(prior_raw)
-    historical=tmp_path/'SYNTHETIC-authenticated-f6a7506-inputs'
     for relative in set(prior['components'])|{current.BINDING}:
         raw=prior_raw if relative==current.BINDING else current.capacity_predecessor(binding,relative,current.physical(root/relative))
         path=historical/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(raw)
