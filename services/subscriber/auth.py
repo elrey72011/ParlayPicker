@@ -145,7 +145,11 @@ class OidcClient:
         email = str(claims.get("email", "")).strip().lower() or None
         verified = claims.get("email_verified") is True
         groups = claims.get("groups", [])
-        amr = set(claims.get("amr", []))
+        amr_claim = claims.get("amr", [])
+        if not (isinstance(groups, list) and all(isinstance(value, str) for value in groups)
+                and isinstance(amr_claim, list) and all(isinstance(value, str) for value in amr_claim)):
+            raise ValueError("OIDC_PRIVILEGE_CLAIMS_INVALID")
+        amr = set(amr_claim)
         is_admin = self.settings.oidc_admin_group in groups and bool(amr & {"mfa", "otp", "hwk"})
         role = "OWNER" if is_admin else "CUSTOMER"
         auth_strength = "mfa" if is_admin else "oidc"

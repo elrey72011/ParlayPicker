@@ -7,6 +7,8 @@ from scripts import ncaaf_filtered_history_scope as scope
 from app_core import ncaaf_filtered_history as filtered,ncaaf_pilot as pilot,ncaaf_response_custody as custody
 from test_ncaaf_filtered_history import context
 
+from tests.nfl_capacity_profile_inputs import historical_filtered_profile_generation
+
 ROOT=Path(__file__).resolve().parents[1]
 
 

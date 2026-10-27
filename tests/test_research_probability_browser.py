@@ -11,6 +11,7 @@ import subprocess
 
 import pandas as pd
 import pytest
+from tests.browser_process_owner import retain_browser_failure, run_browser
 from app_core.public_board import build_package,validate_package
 from scripts.publish_board import render
 from test_research_probability_display import NOW,source,package_for
@@ -21,6 +22,7 @@ def browser_binary():
                 r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"]
     return next((str(p) for p in candidates if p and Path(p).is_file()),None)
 
+@retain_browser_failure
 def inspect_browser(package, directory, clock, *, screenshot=False, rendered_html=None):
     binary=browser_binary()
     if binary is None:
@@ -60,8 +62,7 @@ evidence.textContent=JSON.stringify(report);document.body.append(evidence);
     if screenshot:
         command+=["--screenshot="+str(directory/"preview.png"),"--hide-scrollbars"]
     command.append(target.resolve().as_uri())
-    run=subprocess.run(command,capture_output=True,
-        timeout=40,creationflags=subprocess.CREATE_NO_WINDOW if os.name=="nt" else 0)
+    run=run_browser(command,directory)
     try:
         output=run.stdout.decode("utf-8")
     except UnicodeDecodeError:

@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='24d9bc417f9cb323f35395191d394fd6423b72ac924b7040b4bbf45f92a813db'
+_BINDING_SHA256='ebf3be5fadba750afd2e99465d7d6d0caef579d559bafc522f1d619e581facf7'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -95,12 +95,65 @@ def predecessor_generation(root,binding,relative,expected):
     return prior['after_sha256']
 
 
-def diagnostic_predecessor(binding,relative,raw):
-    """Peel authenticated predecessor bytes; never cache a validation verdict."""
-    record=binding.get('nfl_storage_diagnostic_predecessors',{}).get(relative)
+_CAPACITY_IMAGES={} # Reauthenticated immutable bytes, never an acceptance cache.
+
+
+def capacity_predecessor(binding,relative,raw):
+    record=binding.get('nfl_capacity_predecessors',{}).get(relative)
     if record is None:return raw
     supplied=raw.replace(b'\r\n',b'\n')
     if relative in NORMALIZED and supplied.count(_BINDING_SHA256.encode())!=1:return raw
+    if sha(normalized(relative,supplied))!=record['after_sha256']:return raw
+    key=(_BINDING_SHA256,relative,record['after_sha256'],record['before_sha256'],record['before_bytes'],record['before_b85'])
+    old=_CAPACITY_IMAGES.get(key)
+    if old is None:
+        z=zlib.decompressobj();old=z.decompress(base64.b85decode(record['before_b85']),MAX_SOURCE+1)
+        require(z.eof and not z.unused_data,'NFL_CAPACITY_PREDECESSOR_CHANGED')
+        while _CAPACITY_IMAGES and (len(_CAPACITY_IMAGES)>=16 or sum(map(len,_CAPACITY_IMAGES.values()))+len(old)>_LEGACY_IMAGE_LIMIT):
+            _CAPACITY_IMAGES.pop(next(iter(_CAPACITY_IMAGES)))
+        if len(old)<=_LEGACY_IMAGE_LIMIT:_CAPACITY_IMAGES[key]=old
+    require(type(old)is bytes and len(old)==record['before_bytes']<=MAX_SOURCE
+        and sha(old)==record['before_sha256'],'NFL_CAPACITY_PREDECESSOR_CHANGED')
+    return old
+
+
+def capacity_parent_binding(binding):
+    record=binding['nfl_capacity_parent_binding']
+    components=(json.dumps(record['before_components'],sort_keys=True,separators=(',',':'))).encode()
+    key=(_BINDING_SHA256,'parent-binding',record['before_sha256'],record['before_bytes'],sha(components))
+    raw=_CAPACITY_IMAGES.get(key)
+    if raw is None:
+        prior=json.loads(json.dumps(binding))
+        for field in ('nfl_capacity_profile','nfl_capacity_parent_binding','nfl_capacity_predecessors'):prior.pop(field,None)
+        prior['components']=record['before_components']
+        raw=(json.dumps(prior,sort_keys=True,indent=2,allow_nan=False)+'\n').encode()
+        while _CAPACITY_IMAGES and (len(_CAPACITY_IMAGES)>=16 or sum(map(len,_CAPACITY_IMAGES.values()))+len(raw)>_LEGACY_IMAGE_LIMIT):
+            _CAPACITY_IMAGES.pop(next(iter(_CAPACITY_IMAGES)))
+        if len(raw)<=_LEGACY_IMAGE_LIMIT:_CAPACITY_IMAGES[key]=raw
+    require(type(raw)is bytes and len(raw)==record['before_bytes']<=MAX_SOURCE
+        and sha(raw)==record['before_sha256']=='24d9bc417f9cb323f35395191d394fd6423b72ac924b7040b4bbf45f92a813db',
+        'NFL_CAPACITY_PREDECESSOR_CHANGED')
+    return raw
+
+
+def _capacity_scope_module(root,binding):
+    relative='scripts/nfl_capacity_profile_scope.py';source=physical(Path(root)/relative)
+    require(sha(source)==binding['components'][relative],'NFL_CAPACITY_SCOPE_CHANGED')
+    module=types.ModuleType('exact_nfl_capacity_profile_scope');module.__file__=str(Path(root)/relative)
+    exec(compile(source,module.__file__,'exec'),module.__dict__)
+    return module
+
+
+def diagnostic_predecessor(binding,relative,raw):
+    """Peel authenticated predecessor bytes; never cache a validation verdict."""
+    raw=capacity_predecessor(binding,relative,raw)
+    record=binding.get('nfl_storage_diagnostic_predecessors',{}).get(relative)
+    if record is None:return raw
+    supplied=raw.replace(b'\r\n',b'\n')
+    if relative in NORMALIZED and supplied.count(_BINDING_SHA256.encode())!=1:
+        prior=binding.get('nfl_capacity_profile',{}).get('prior_binding_sha256','').encode()
+        if not prior or supplied.count(prior)!=1:return raw
+        supplied=supplied.replace(prior,_BINDING_SHA256.encode())
     if sha(normalized(relative,supplied))!=record['after_sha256']:return raw
     key=(_BINDING_SHA256,relative,record['after_sha256'],record['before_sha256'],record['before_bytes'],record['before_b85'])
     old=_DIAGNOSTIC_IMAGES.get(key)
@@ -118,7 +171,7 @@ def diagnostic_predecessor(binding,relative,raw):
 
 
 def predecessor_source(root,relative,raw):
-    b=authenticate(root);raw=diagnostic_predecessor(b,relative,raw);record=b['component_predecessors'].get(relative)
+    b=authenticate(root);raw=capacity_predecessor(b,relative,raw);raw=diagnostic_predecessor(b,relative,raw);record=b['component_predecessors'].get(relative)
     if record is None:return raw
     # An already older supplied view is left to its original strict reader.
     actual=sha(raw.replace(b'\r\n',b'\n'))
@@ -149,6 +202,7 @@ def advisory_profile_before(root,current):
     """Explicit authenticated510-row predecessor for current preservation checks."""
     b=authenticate(root);path='scripts/ci_test_file_costs_v1.json'
     require(sha(current)==b['components'][path],'NCAAF_FILTERED_PROFILE_PARENT_CHANGED')
+    current=capacity_predecessor(b,path,current)
     record=b['advisory_profile_before']
     require(set(record)=={'file_sha256','before_bytes','before_b85'}
         and record['file_sha256']=='3facc49a21124b179b5546d829389381122ef36e3cc70ee90650af5b658d112a'
@@ -166,6 +220,7 @@ def fresh_advisory_profile_before(root,current):
     """Remove only the measured fresh-file row; authenticate fixed534-row bytes."""
     b=authenticate(root);path='scripts/ci_test_file_costs_v1.json'
     require(sha(current)==b['components'][path],'NCAAF_FILTERED_PROFILE_PARENT_CHANGED')
+    current=capacity_predecessor(b,path,current)
     record=b['fresh_advisory_addition']
     require(set(record)=={'before_profile_sha256','entry_sha256','source_key','source_sha256'}
         and record['before_profile_sha256']=='253a8551db604bd01c5304b7f74e61faaf9bb221ec5ab2b3ae6a2f05a1713bb4',
@@ -289,6 +344,8 @@ def _saved_zip_module(root,b):
 
 
 def make_policy(root,b,implementation):
+    if b.get('nfl_capacity_profile') is not None:
+        return _capacity_scope_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     if b.get('saved_nfl_scenario_zip_viewer') is not None:
         return _saved_zip_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     if b.get('saved_nfl_scenario_viewer') is not None:
@@ -313,6 +370,8 @@ def make_policy(root,b,implementation):
 
 def validate(root,comparison_base=None,manifest=None):
     root=Path(root);b=authenticate(root);repair=b.get('ui_display_repair')
+    if b.get('nfl_capacity_profile') is not None:
+        return _capacity_scope_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256,preserved_test_report=_preserved_test_report)
     if b.get('saved_nfl_scenario_zip_viewer') is not None:
         return _saved_zip_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('saved_nfl_scenario_viewer') is not None:
