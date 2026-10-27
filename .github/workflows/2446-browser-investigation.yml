@@ -1,0 +1,52 @@
+name: 2446 bounded browser investigation
+on:
+  push:
+    branches: [codex/2446-browser-investigation-once]
+permissions:
+  contents: read
+jobs:
+  browser-investigation:
+    if: ${{ github.ref == 'refs/heads/codex/2446-browser-investigation-once' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: diagnostic-tools
+          fetch-depth: 1
+      - uses: actions/checkout@v5
+        with:
+          ref: 803d678bf69cbd7de1393080285ac4e5ac692ca8
+          path: baseline-app
+          fetch-depth: 1
+      - uses: actions/checkout@v5
+        with:
+          ref: 4766ecd09e4982f9112522ab4e204f72e65b3b2b
+          path: candidate-app
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: candidate-app/requirements.txt
+      - name: Install unchanged released dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r candidate-app/requirements.txt pytest
+      - name: Fixed baseline and candidate contexts once with partial evidence
+        timeout-minutes: 40
+        env:
+          PARLAYPICKER_NFL_ACQUISITION_ENABLED: 'false'
+          PARLAYPICKER_NFL_INFERENCE_ENABLED: 'false'
+          PYTHONUNBUFFERED: '1'
+        run: python -B diagnostic-tools/diagnostics/browser-harness/browser_harness_diagnostic.py
+      - name: Retain bounded evidence even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-harness-investigation-once
+          path: |
+            browser-evidence/**
+            !browser-evidence/**/tmp/**
+          retention-days: 7
+          if-no-files-found: warn
