@@ -1,14 +1,18 @@
 {
+  "authlib_authorization_sha256": "07b62afa63bb340bfe34770cd6f4f0df3ee54d550ed587a0774af3b88c4965d8",
+  "authlib_previous_head": "4766ecd09e4982f9112522ab4e204f72e65b3b2b",
+  "authlib_previous_tree": "845668d8bef32351269ab6b67bc185feb199ea11",
   "authorization_sha256": "b6d8eb78e0489507a1eab3218b9b11c7f0a8254e38bcf2e173551d6014755cbf",
   "base": "f6a7506dc3300fbcf390dbcdd00f0688dba073a4",
   "base_tree": "5bc678e613ec381c07f67110ee5f568f8961ff2f",
-  "binding_sha256": "67f815f7aefd724818ae60ac04147612e72164e8321da9e59922874070673fba",
+  "binding_sha256": "ebf3be5fadba750afd2e99465d7d6d0caef579d559bafc522f1d619e581facf7",
   "browser_authorization_sha256": "6d2cc2daeb97eed52d4d1a7dcd5a32345cc700d496e4fa76478d16ab34839e39",
   "correction_sha256": "09be70c0330fbafa8870e66adcb4019ea66eccdd57dc51484516aa795517f638",
   "failed_head": "c15f4f4bf14be37ce62dbceebc92eb8dd197f373",
   "failed_tree": "0c36b9cd64aadde41b31b309e23b7f06b723a769",
-  "implementation_commit": "dce285c4deb15d78fa83c6e8f2109b5eff26155b",
+  "implementation_commit": "4dd46bca931c873d729220583d11a67d2d6ec781",
   "implementation_paths": [
+    "docs/paid-launch/authlib-isolated-service-correction-v1.md",
     "docs/paid-launch/browser-harness-ownership-v1.md",
     "docs/paid-launch/nfl-capacity-fixture-correction-v1.md",
     "docs/paid-launch/nfl-capacity-profile-v1.md",
@@ -19,17 +23,20 @@
     "scripts/ncaaf_filtered_history_scope.py",
     "scripts/ncaaf_private_refresh_scope.py",
     "scripts/nfl_capacity_profile_scope.py",
+    "services/subscriber/auth.py",
+    "services/subscriber/requirements.txt",
     "tests/browser_process_owner.py",
     "tests/browser_process_windows.py",
     "tests/nfl_capacity_import_owner.py",
     "tests/nfl_capacity_profile_inputs.py",
+    "tests/paid_launch/case_policy_and_contracts.py",
     "tests/test_browser_process_owner.py",
     "tests/test_ncaaf_filtered_history_scope.py",
     "tests/test_nfl_capacity_fixture_isolation.py",
     "tests/test_nfl_capacity_profile.py",
     "tests/test_research_probability_browser.py"
   ],
-  "implementation_tree": "03d70a419567f89a29836904f954570af1ceeab0",
+  "implementation_tree": "94b29cc9e8fd0030946ce1ca5c6500431a21a689",
   "previous_head": "803d678bf69cbd7de1393080285ac4e5ac692ca8",
   "previous_tree": "2b8d788d36154dfceb231e105843b45f0dde0cce",
   "unchanged_blobs": {
@@ -1320,7 +1327,6 @@
     "services/subscriber/Dockerfile": "0bf89025f5429ac84224d1c2767063563b81376c",
     "services/subscriber/__init__.py": "31b49d3643288c6409c7e7d05cbfd363e011c427",
     "services/subscriber/app.py": "c168c31226c681b06704b63dde570a5cf0f39cc1",
-    "services/subscriber/auth.py": "2596e4ca88ebcabb3be3c7ed5f41750d8e1e67c9",
     "services/subscriber/billing.py": "e2c15bc5e4141cf54d5d5934ce6ba95b9ebc1bfe",
     "services/subscriber/canonical.py": "65715ca822f8bffd666325ad0dc7a2c477f94c94",
     "services/subscriber/contracts.py": "6998c6871adda71431973ac3befe6719b951087d",
@@ -1329,7 +1335,6 @@
     "services/subscriber/migrate.py": "6fa61b897f45e8a6ee25bf507ded19e29429064f",
     "services/subscriber/migrations/0001_customer_service.sql": "fa8786177082eaaba1dec8cba44feae12448c912",
     "services/subscriber/repository.py": "e9cbe78df12dc4049713a78c7258ed55bc5a9f63",
-    "services/subscriber/requirements.txt": "1df96a2b3ec4bfcb3d6097e1ca0eda5b07378eca",
     "services/subscriber/settings.py": "89e01117c63755c826ffae8cb68b4ffc2b18cb76",
     "services/subscriber/worker/__init__.py": "d477d0676445ed585da37bc51507d9dff1aefa92",
     "services/subscriber/worker/__main__.py": "03b6e0f302b00c457ca2a29ffc6a0641345e0012",
@@ -1380,7 +1385,6 @@
     "tests/nfl_workflow_fixtures.py": "00b401d3cae0ea6385a3dfcff1b0f5e39c0bb85d",
     "tests/paid_launch/case_isolation_and_scope.py": "07f384d25e5df32d3ff6141765d9bc80d0e23b1e",
     "tests/paid_launch/case_nfl_workflow_store.py": "b08d74c21e2833d0a264c92983d859aa6f5f9cd4",
-    "tests/paid_launch/case_policy_and_contracts.py": "964236fd6bc7e549084fa136e66a909919043d7d",
     "tests/paid_launch/case_postgres_api.py": "d61116b8a588731bc044bf5b0d7d03d05663536f",
     "tests/paid_launch/case_subscriber_completion.py": "a95ef9b3c95a1b535fdf425fd2c975bee157ff68",
     "tests/paid_launch/conftest.py": "fb85765e77c3a6a53105adcd166ac5cdfa36f61d",
@@ -1962,5 +1966,5 @@
     "web/subscriber/subscriber.css": "6638c1e4abac57542bdecf6d73507272623a1040",
     "web/subscriber/subscriber.js": "b34d8170d6b667c0cf87512b6132bd614bb53168"
   },
-  "version": "nfl-browser-harness-seal-v3"
+  "version": "nfl-authlib-security-seal-v4"
 }
