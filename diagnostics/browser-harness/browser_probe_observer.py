@@ -43,6 +43,22 @@ def audit(event,args):
 
 sys.addaudithook(audit)
 
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config,items):
+    # Match release CI's full-suite import/collection state before selecting
+    # the fixed original complete-file prefix. Do not narrow collection itself.
+    files=json.loads(os.environ['BROWSER_PROBE_FILES']);order={p:n for n,p in enumerate(files)}
+    selected=[];other=[]
+    for index,item in enumerate(items):
+        path=Path(item.path).resolve().relative_to(Path(config.rootpath).resolve()).as_posix()
+        (selected if path in order else other).append((path,index,item))
+    selected.sort(key=lambda row:(order[row[0]],row[1]))
+    config.hook.pytest_deselected(items=[row[2] for row in other])
+    record=dict(collected_count=len(items),selected_count=len(selected),files=files,
+        selected_nodeids=[row[2].nodeid for row in selected],full_collection_before_selection=True)
+    (ROOT/'selection-receipt.json').write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
+    items[:]=[row[2] for row in selected]
+
 def pytest_runtest_setup(item):
     append('before-tests.jsonl',dict(nodeid=item.nodeid,at=time.time(),owned_browser_processes=processes(),native_launches=len(LAUNCHES)))
 

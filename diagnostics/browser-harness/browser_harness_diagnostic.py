@@ -54,8 +54,9 @@ for plan in plans:
         completed.append(dict(name=name,status='NOT_STARTED_BUDGET_EXHAUSTED'));break
     env=os.environ.copy();env['BROWSER_PROBE_EVIDENCE']=str(folder)
     env['PYTHONPATH']=str(Path(__file__).parent)
+    env['BROWSER_PROBE_FILES']=json.dumps(plan['files'])
     env['PARLAYPICKER_NFL_ACQUISITION_ENABLED']=env['PARLAYPICKER_NFL_INFERENCE_ENABLED']='false'
-    command=[sys.executable,'-B','-m','pytest','-q','-p','browser_probe_observer',*plan['files'],
+    command=[sys.executable,'-B','-m','pytest','-q','-p','browser_probe_observer','tests',
         '--basetemp='+str(folder/'tmp'),'--junitxml='+str(folder/'tests.xml'),'--durations=20']
     (folder/'command.json').write_text(json.dumps(dict(command=command,started_at=datetime.now(timezone.utc).isoformat()),indent=2)+'\n')
     began=time.monotonic();status='COMPLETE';code=None
