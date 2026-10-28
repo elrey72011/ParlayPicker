@@ -91,6 +91,10 @@ def exercise_widgets(tmp_path,monkeypatch,*,line):
     path=tmp_path/'SYNTHETIC-ui.sqlite3';code=application(path,line=line,advancing=True)
     app=tmp_path/'SYNTHETIC-control-app.py';app.write_text(code,encoding='utf-8')
     at=AppTest.from_file(app,default_timeout=20).run()
+    # Native completion uses its own clock. Keep it on the same synthetic
+    # timeline as preparation/inference, even after this fixed fixture date.
+    monkeypatch.setattr('app_core.nfl_scenario_research.now',
+                        lambda: at.session_state['SYNTHETIC_provider'].clock().isoformat())
     assert not path.exists()
     at.text_input(key='publication_token').input(TOKEN).run()
     assert not path.exists()  # Correct token alone must not access any database.
