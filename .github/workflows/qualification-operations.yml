@@ -61,6 +61,10 @@ jobs:
             test-results/collection.json
             test-results/combined.json
             test-results/combined.xml
+            test-results/diagnostics/*-receipt.json
+            test-results/diagnostics/*-outcomes.json
+            test-results/diagnostics/*-events.jsonl
+            test-results/diagnostics/*-child.log
           if-no-files-found: error
           retention-days: 14
 

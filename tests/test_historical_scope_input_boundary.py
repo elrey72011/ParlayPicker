@@ -1411,3 +1411,45 @@ def test_bootstrap_reuses_verified_bytes_through_live_predecessor_checks(monkeyp
     with pytest.raises(ValueError,match='PREVIOUS_GUARD_LOGIC_CHANGED'):
         boundary.execute_released_bootstrap(source,rejected,live,binding)
     assert not hasattr(rejected,'_ncaaf_custody_predecessor')
+
+
+@pytest.mark.parametrize('warm',[False,True],ids=['cold-transition','warm-transition'])
+def test_qualification_workflow_transition_reauthenticates_and_restores(monkeypatch,warm):
+    from tests import ci_fixture_stability_inputs as inputs
+    path='.github/workflows/ci.yml'
+    raw=boundary.physical_bytes(boundary.ROOT/path)
+    # Independently established from the retained 2472bc05 Git object, not from
+    # the candidate's transition descriptor or a regenerated current workflow.
+    expected_parent='c0cd7d53bce0861904ddf14c309ecfa77db9b7f68dac09f1c76681738c844e6b'
+    assert len(raw)==5640 and boundary.sha(raw)=='fbdeed4c90de527232293ced8caa2e56a116b931bb99475ea8e78ca4a4eb69a0'
+    if not warm:
+        monkeypatch.setattr(boundary,'_LIVE_GUARD',None)
+    parent=boundary._filtered_source_parent(path,raw)
+    assert len(parent)==5596 and boundary.sha(parent)==expected_parent
+    if warm:
+        assert inputs.capacity_successor_source(path,raw)==inputs.capacity_successor_source(path,parent)
+    mutated=json.loads(json.dumps(inputs.CAPACITY_SUCCESSOR_RECORDS))
+    mutated[path]['before_git_blob']='0'*40
+    with monkeypatch.context() as patch:
+        patch.setattr(inputs,'CAPACITY_SUCCESSOR_RECORDS',mutated)
+        with pytest.raises(ValueError,match='CI_CAPACITY_AUTHENTICATED_PREDECESSOR_CHANGED'):
+            inputs.capacity_successor_source(path,raw)
+        unknown=raw+b'UNREVIEWED'
+        assert inputs.capacity_successor_source(path,unknown)==unknown
+    assert inputs.capacity_successor_source(path,raw)==inputs.capacity_successor_source(path,parent)
+    historical=request('test_ci_fixture_stability_scope','test_complete_profile_refresh_preserves_all_prior_rows_and_measurements')
+    current=request('test_ci_test_shards','test_reviewed_workflow_preserves_limits_production_safety_and_three_shard_gate')
+    old=boundary.resolve_context(historical);native=boundary.resolve_context(current)
+    opened,reader=Path.open,Path.read_bytes
+    with pytest.raises(RuntimeError,match='SYNTHETIC_QUALIFICATION_NESTED_FAILURE'):
+        with boundary.InputOwner(old) as owner:
+            assert boundary.apply_selected_inputs(old,historical,owner.patch)
+            assert b'--shards 11' in (boundary.ROOT/path).read_bytes()
+            with boundary.InputOwner(native) as inner:
+                assert not boundary.apply_selected_inputs(native,current,inner.patch)
+                assert (boundary.ROOT/path).read_bytes()==raw
+            assert b'--shards 11' in (boundary.ROOT/path).read_bytes()
+            raise RuntimeError('SYNTHETIC_QUALIFICATION_NESTED_FAILURE')
+    assert Path.open is opened and Path.read_bytes is reader
+    assert (boundary.ROOT/path).read_bytes()==raw
+    assert not boundary._ACTIVE[1:]

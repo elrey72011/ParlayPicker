@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='ebf3be5fadba750afd2e99465d7d6d0caef579d559bafc522f1d619e581facf7'
+_BINDING_SHA256='a44f34e170c593ae5de31043896297074a16da686c6c476930060cdbb95d1bbc'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -124,7 +124,7 @@ def capacity_parent_binding(binding):
     raw=_CAPACITY_IMAGES.get(key)
     if raw is None:
         prior=json.loads(json.dumps(binding))
-        for field in ('nfl_capacity_profile','nfl_capacity_parent_binding','nfl_capacity_predecessors'):prior.pop(field,None)
+        for field in ('nfl_capacity_profile','nfl_capacity_parent_binding','nfl_capacity_predecessors','qualification_release_repair'):prior.pop(field,None)
         prior['components']=record['before_components']
         raw=(json.dumps(prior,sort_keys=True,indent=2,allow_nan=False)+'\n').encode()
         while _CAPACITY_IMAGES and (len(_CAPACITY_IMAGES)>=16 or sum(map(len,_CAPACITY_IMAGES.values()))+len(raw)>_LEGACY_IMAGE_LIMIT):
@@ -343,7 +343,17 @@ def _saved_zip_module(root,b):
     return module
 
 
+def _qualification_scope_module(root,b):
+    relative='scripts/qualification_repair_scope.py';source=physical(Path(root)/relative)
+    require(sha(source)==b['components'][relative],'QUALIFICATION_SCOPE_CHANGED')
+    module=types.ModuleType('exact_qualification_repair_scope');module.__file__=str(Path(root)/relative)
+    exec(compile(source,module.__file__,'exec'),module.__dict__)
+    return module
+
+
 def make_policy(root,b,implementation):
+    if b.get('qualification_release_repair') is not None:
+        return _qualification_scope_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     if b.get('nfl_capacity_profile') is not None:
         return _capacity_scope_module(root,b).make_policy(root,b,implementation,_BINDING_SHA256)
     if b.get('saved_nfl_scenario_zip_viewer') is not None:
@@ -370,6 +380,8 @@ def make_policy(root,b,implementation):
 
 def validate(root,comparison_base=None,manifest=None):
     root=Path(root);b=authenticate(root);repair=b.get('ui_display_repair')
+    if b.get('qualification_release_repair') is not None:
+        return _qualification_scope_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256)
     if b.get('nfl_capacity_profile') is not None:
         return _capacity_scope_module(root,b).validate(root,b,comparison_base,manifest,binding_sha=_BINDING_SHA256,preserved_test_report=_preserved_test_report)
     if b.get('saved_nfl_scenario_zip_viewer') is not None:

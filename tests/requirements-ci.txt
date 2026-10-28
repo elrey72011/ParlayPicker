@@ -1,0 +1,2 @@
+# Test-only runner identity; not a production dependency.
+pytest==9.1.1
