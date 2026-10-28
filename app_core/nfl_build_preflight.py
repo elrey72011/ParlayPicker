@@ -12,6 +12,7 @@ import sys
 import types
 
 MODULES = ('app_core.nfl_build_preflight', 'app.ui.nfl_storage_diagnostic',
+           'app_core.nfl_diagnostic_receipts',
            'app_core.nfl_storage_diagnostic', 'app_core.nfl_workflow_store',
            'app_core.nfl_private_workflow', 'app.ui.publish_panel')
 SOURCE_DEPENDENCIES = ('streamlit_app.py', 'app/ui/nfl_private_workflow.py',

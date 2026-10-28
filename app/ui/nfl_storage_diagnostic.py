@@ -1,6 +1,34 @@
 """Explicit owner-only entry point for the private NFL storage diagnostic."""
-from datetime import datetime, timezone
 import streamlit as st
+from app_core import nfl_diagnostic_receipts as receipts
+
+
+def _invoke(setting, state):
+    # A callback runs before render recomputes the button's disabled state.
+    # Authentication and the independent guard also reject stale/repeated events.
+    try:
+        from app_core.nfl_private_workflow import authenticate
+        access = authenticate(state.get('publication_token', ''), str(setting('PARLAYPICKER_PUBLISH_TOKEN')))
+    except Exception:
+        return
+    started = receipts.claim(state)
+    if started is None:
+        return
+    try:
+        receipts.emit(started)  # retained before imports, connection work or display
+        from app_core.nfl_storage_diagnostic import diagnose
+        state['nfl_workflow_diag_result'] = {**started, 'stage': 'DIAGNOSTIC_STARTED'}
+        receipts.emit(state['nfl_workflow_diag_result'])
+        result = receipts.sanitize(diagnose(setting, access, state.get('nfl_workflow_diag_expected_host', '')))
+    except Exception as exc:
+        # No returned instrumentation means the connect count is UNKNOWN, not zero.
+        result = receipts.unknown_failure('DIAGNOSTIC_UNAVAILABLE', exc)
+    except BaseException as exc:
+        # Streamlit interruption/stop and interpreter interruption retain a spent
+        # receipt. Re-raise control flow; no rerender may resume the operation.
+        receipts.finish(state, started, receipts.unknown_failure('INTERRUPTED_UNKNOWN', exc), 'INTERRUPTED_UNKNOWN')
+        raise
+    receipts.finish(state, started, result, 'COMPLETED' if result['status'] == 'PASS' else 'FAILED')
 
 
 def render(setting, state):
@@ -23,21 +51,17 @@ def render(setting, state):
     expected_host = st.text_input('Verified production direct hostname', type='password',
                                   key='nfl_workflow_diag_expected_host',
                                   help='Enter the privately verified host only; it is never displayed in results.')
-    spent = bool(state.get('nfl_workflow_diag_spent', False))
-    if st.button('Run one read-only NFL storage diagnostic', disabled=spent or not expected_host.strip(), key='nfl_workflow_diag_run'):
-        # Record the attempt before importing or opening anything. A rerun cannot repeat it.
-        invoked_at = datetime.now(timezone.utc).isoformat()
-        state['nfl_workflow_diag_spent'] = True
-        try:
-            from app_core.nfl_private_workflow import authenticate
-            from app_core.nfl_storage_diagnostic import diagnose
-            access = authenticate(state.get('publication_token', ''), str(setting('PARLAYPICKER_PUBLISH_TOKEN')))
-            state['nfl_workflow_diag_result'] = diagnose(setting, access, expected_host)
-        except Exception:
-            state['nfl_workflow_diag_result'] = {'status': 'STOPPED', 'attempted_connections': 0,
-                'failure': {'phase': 'OWNER_OR_IMPORT', 'exception_class': None,
-                            'sqlstate': None, 'category': 'DIAGNOSTIC_UNAVAILABLE'}}
-        state['nfl_workflow_diag_result']['invoked_at'] = invoked_at
+    spent = bool(state.get(receipts.GUARD) or state.get('nfl_workflow_diag_spent', False))
+    st.button('Run one read-only NFL storage diagnostic', disabled=spent or not expected_host.strip(),
+              key='nfl_workflow_diag_run', on_click=_invoke, args=(setting, state))
     result = state.get('nfl_workflow_diag_result')
     if isinstance(result, dict):
+        if result.get('outcome') == 'STARTED':
+            st.warning('Invocation started, but no terminal receipt is retained. Outcome and connection '
+                       'counts are UNKNOWN. Do not run again. Interruption may prevent finalization.')
+        st.caption('Retained invocation evidence. Viewing or reopening it does not rerun the check. '
+                   'A STARTED receipt without a terminal receipt has an unknown outcome; never retry it.')
         st.json(result)
+    elif spent:
+        st.caption('This session has already spent its storage-check action. Private receipt display '
+                   'was cleared with authorization; no new check will run. Retain the server-log receipt.')
