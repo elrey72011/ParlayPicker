@@ -16,8 +16,8 @@
   },
   {
     "path": "identity.json",
-    "bytes": 1868,
-    "sha256": "93f0c576355a91d92b4b828ec378df59d5d6d7f6a745848e61e84af57acbd2ba"
+    "bytes": 1818,
+    "sha256": "405ce125918da61215411e53e1b4c2490b1658fbd875711312bd6d8a9b5279d2"
   },
   {
     "path": "launch.py",
@@ -36,8 +36,8 @@
   },
   {
     "path": "selection.json",
-    "bytes": 160303,
-    "sha256": "9fb4e2e2fddecd4531eea61fc6b00a4f6921faacea785b30370015db0d19fd5f"
+    "bytes": 159021,
+    "sha256": "f39269ea00dfadfe71509562f48fe4c6fd4088f5e11e0ee5888632b177e642de"
   },
   {
     "path": "synthetic_settings.py",
