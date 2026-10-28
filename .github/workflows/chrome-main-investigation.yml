@@ -43,7 +43,7 @@ jobs:
           PARLAYPICKER_NFL_ACQUISITION_ENABLED: 'false'
           PARLAYPICKER_NFL_INFERENCE_ENABLED: 'false'
           PYTHONUNBUFFERED: '1'
-          CHROME_PACKAGE_MANIFEST_SHA256: 3ad6ba3fe7ed015ff32e0cc919dda3310efb989f56a3509d706a79677b13f292
+          CHROME_PACKAGE_MANIFEST_SHA256: 24e72390c1e4f748692d8ba8c5f281b56c8bd05abfc465359ffa266f71073c3f
         run: |
           python -B -m pytest diagnostic-tools/diagnostics/chrome-main/package_contracts.py -c /dev/null --rootdir=diagnostic-tools/diagnostics/chrome-main --confcutdir=diagnostic-tools/diagnostics/chrome-main -p no:cacheprovider -q --junitxml=chrome-evidence/package-contracts.xml > chrome-evidence/package-contracts.log 2>&1
           python -B diagnostic-tools/diagnostics/chrome-main/launch.py "$GITHUB_WORKSPACE/chrome-evidence" "$GITHUB_WORKSPACE/application"

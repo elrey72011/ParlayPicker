@@ -1,4 +1,15 @@
-One bounded Ubuntu investigation, not a release cycle or a product correction.
+LOCAL SUCCESSOR PROPOSAL ONLY. No second Ubuntu job is authorized or dispatched.
+Preserve failed published tooling 2e7ef73bcdf8e1cff63256f1699210a1222f8784,
+run 40757636359 and artifact SHA-256
+92350d083389d6f30cf13d8d7355aa32f590bb071160ae19b1da501d2ff9cb63.
+All 218 shared-context failures explicitly reported Socket path too long.
+The diagnostic's long TMPDIR caused quick Chrome aborts, not the historical
+40-second timeout. This locally prepared correction gives Chrome an owned short
+/tmp root and preserves the long pytest/evidence paths separately. It validates
+a conservative socket-path budget before dispatch and cleans only its owned root.
+No application or released browser helper changes; historical cause UNKNOWN.
+
+One bounded Ubuntu investigation proposal, not a release/product correction.
 
 Immutable application: ad5662c99b6529fddc1f40dbaac6853563e01c8e
 Tree: de1ab55c0e4dce2a539ebc859df8f2acfd069ce3

@@ -76,3 +76,47 @@ def test_selection_rejects_reorder_and_preserves_full_collection(tmp_path,monkey
     # Exact full list is deliberately not fabricated from the selected subset.
     with pytest.raises(AssertionError):module.pytest_collection_modifyitems(None,Config(),[Item(n) for n in module.CONTEXT['expected_nodeids']])
     assert not (tmp_path/'selection.json').exists()
+
+def load_transport():
+    spec=importlib.util.spec_from_file_location('short_transport',ROOT/'transport_temp.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
+
+def test_observed_long_socket_path_rejects_before_browser():
+    module=load_transport()
+    observed='/home/runner/work/ParlayPicker/ParlayPicker/chrome-evidence/isolated/tmp'
+    with pytest.raises(ValueError,match='^CHROME_TRANSPORT_TMP_PATH_TOO_LONG$'):module.verify_budget(observed)
+    module.verify_budget('/tmp/pc-12345678')
+
+@pytest.mark.parametrize('exceptional',[False,True])
+def test_short_owned_transport_root_cleans_and_preserves_unrelated(exceptional):
+    import tempfile
+    module=load_transport()
+    parent=Path(os.environ.get('CHROME_LOCAL_SHORT_PARENT','/tmp'));parent.mkdir(parents=True,exist_ok=True)
+    sentinel=tempfile.NamedTemporaryFile(prefix='unrelated-',dir=parent,delete=False);sentinel.close();sentinel=Path(sentinel.name)
+    root=None
+    try:
+        try:
+            with module.short_transport_tmp(parent) as root:
+                assert root.is_dir() and sentinel.exists()
+                (root/'owned.txt').write_text('synthetic')
+                if exceptional:raise RuntimeError('SYNTHETIC_CONTEXT_FAILURE')
+        except RuntimeError as error:
+            assert exceptional and error.args==('SYNTHETIC_CONTEXT_FAILURE',)
+        assert root is not None and not root.exists() and sentinel.exists()
+    finally:sentinel.unlink()
+
+def test_overlong_root_is_removed_on_pre_yield_failure(tmp_path):
+    module=load_transport();parent=tmp_path/('owned-'+'x'*90);parent.mkdir()
+    before=list(parent.iterdir())
+    with pytest.raises(ValueError,match='^CHROME_TRANSPORT_TMP_PATH_TOO_LONG$'):
+        with module.short_transport_tmp(parent):raise AssertionError('Must not yield')
+    assert list(parent.iterdir())==before
+
+def test_transport_and_evidence_locations_stay_separate():
+    import ast
+    tree=ast.parse((ROOT/'probe.py').read_bytes())
+    assignments=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr=='update']
+    environments=[n for n in assignments if {k.arg for k in n.keywords}>={'TMP','TEMP','TMPDIR'}]
+    assert len(environments)==1
+    assert all(ast.unparse(k.value)=='str(transport_tmp)' for k in environments[0].keywords if k.arg in ('TMP','TEMP','TMPDIR'))
+    assert "'--basetemp='+str(folder/'tmp/pytest')" in (ROOT/'probe.py').read_text()

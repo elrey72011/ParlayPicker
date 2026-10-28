@@ -99,7 +99,9 @@ def runtime():
         runner={n:os.environ.get(n) for n in ('ImageOS','ImageVersion','RUNNER_OS','RUNNER_ARCH')},resources=proc,
         dependencies=sorted((d.metadata['Name'],d.version) for d in importlib.metadata.distributions()))
 
-def run(app,out):
+def run(app,out,*,transport_tmp):
+    from transport_temp import verify_budget
+    verify_budget(transport_tmp);assert transport_tmp.is_dir()
     root=Path(__file__).resolve().parent;spec=json.loads((root/'selection.json').read_bytes());frozen=json.loads((root/'identity.json').read_bytes())
     save(out/'phase.json',dict(phase='VERIFYING_CHECKOUTS',at=datetime.now(timezone.utc).isoformat()))
     assert git(app,'rev-parse','HEAD')==frozen['base'] and git(app,'rev-parse','HEAD^{tree}')==frozen['tree']
@@ -121,7 +123,7 @@ def run(app,out):
         save(out/'phase.json',dict(phase='EXECUTING',context=plan['name'],at=datetime.now(timezone.utc).isoformat()))
         if deadline-time.monotonic()<60:break
         env=os.environ.copy();env.update(PYTHONPATH=str(root),CAPACITY_LOCAL_SESSION_ROOT=str(folder/'tmp'),CHROME_OBSERVATION_ROOT=str(folder/'observation'),
-            CHROME_CONTEXT=plan['name'],CHROME_SELECTION_RECEIPT=str(folder/'selection-receipt.json'),CHROME_PHASE_PROBE='1' if plan['phase_probe'] else '0',TMP=str(folder/'tmp'),TEMP=str(folder/'tmp'),TMPDIR=str(folder/'tmp'))
+            CHROME_CONTEXT=plan['name'],CHROME_SELECTION_RECEIPT=str(folder/'selection-receipt.json'),CHROME_PHASE_PROBE='1' if plan['phase_probe'] else '0',TMP=str(transport_tmp),TEMP=str(transport_tmp),TMPDIR=str(transport_tmp))
         command=[sys.executable,'-B','-m','pytest','-q','-p','chrome_main_observer','-p','chrome_main_selection',
             plan['expected_nodeids'][0] if plan['mode']=='isolated' else 'tests','--basetemp='+str(folder/'tmp/pytest'),'--junitxml='+str(folder/'tests.xml'),'--durations=20']
         began=time.monotonic();save(folder/'command.json',dict(command=command,at=datetime.now(timezone.utc).isoformat(),automatic_retries=0));capture=dict(bytes=0,retained=0,error=None);timeout=False;code=None
