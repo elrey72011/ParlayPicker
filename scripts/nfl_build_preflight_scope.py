@@ -75,7 +75,20 @@ def binding_successor(root, stamp):
     return b
 
 
+def _receipt_scope(root, binding):
+    import types
+    path = Path(root) / 'scripts/nfl_diagnostic_receipt_scope.py'
+    with path.open('rb') as stream: raw = stream.read(8 * 1024 * 1024 + 1)
+    require(len(raw) <= 8 * 1024 * 1024 and sha(raw.replace(b'\r\n', b'\n')) ==
+            binding['components']['scripts/nfl_diagnostic_receipt_scope.py'], 'RECEIPT_SCOPE_CHANGED')
+    module = types.ModuleType('exact_nfl_diagnostic_receipt_scope'); module.__file__ = str(path)
+    exec(compile(raw, str(path), 'exec'), module.__dict__)
+    return module
+
+
 def make_policy(root,binding,implementation,binding_sha):
+    if binding.get('qualification_release_repair', {}).get('build_preflight', {}).get('receipt_successor') is not None:
+        return _receipt_scope(root, binding).make_policy(root, binding, implementation, binding_sha)
     return dict(version='nfl-build-preflight-seal-v1',base=BASE,base_tree=TREE,ordered_parents=PARENTS,
         binding_sha256=binding_sha,authorization_sha256=binding['components'][AUTHORIZATION],
         implementation_commit=implementation,implementation_tree=text(root,'rev-parse',implementation+'^{tree}'),
@@ -84,6 +97,8 @@ def make_policy(root,binding,implementation,binding_sha):
 
 
 def validate(root,binding,comparison_base,manifest,*,binding_sha):
+    if binding.get('qualification_release_repair', {}).get('build_preflight', {}).get('receipt_successor') is not None:
+        return _receipt_scope(root, binding).validate(root, binding, comparison_base, manifest, binding_sha=binding_sha)
     root=Path(root)
     require(text(root,'rev-parse',BASE+'^{tree}')==TREE and text(root,'show','-s','--format=%P',BASE).split()==PARENTS,
             'BUILD_PREFLIGHT_BASE_CHANGED')
