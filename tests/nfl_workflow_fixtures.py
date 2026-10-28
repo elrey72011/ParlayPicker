@@ -24,10 +24,21 @@ class Stream:
         pass
 
 
+class SyntheticClock:
+    """Explicit fixture time; optional tiny progress preserves strict ordering."""
+    def __init__(self,anchor,*,advancing=False):
+        self.value=anchor;self.step=timedelta(microseconds=1000 if advancing else 0)
+
+    def __call__(self):
+        value=self.value;self.value+=self.step
+        return value
+
+
 class SyntheticProvider:
-    def __init__(self, *, anchor=None):
+    def __init__(self, *, anchor=None, clock=None):
         self.calls=[];self.line=2.5;self.price=-110;self.wrong=False;self.stale=False;self.fail=False
-        current=anchor or datetime.now(timezone.utc)
+        self.clock=clock or (lambda: datetime.now(timezone.utc))
+        current=anchor or self.clock()
         self.rows=[];self.targets=[]
         for index,(home,away) in enumerate([('DAL','BUF'),('PHI','KC')]):
             for past in range(6):
@@ -55,7 +66,7 @@ class SyntheticProvider:
         row,start=next((row,start) for row,start in self.targets if start==kickoff)
         home=self.names[row['home_team']];away=self.names[row['away_team']]
         if self.wrong:home,away=away,home
-        updated=datetime.now(timezone.utc)-timedelta(minutes=20 if self.stale else 0)
+        updated=self.clock()-timedelta(minutes=20 if self.stale else 0)
         body=json.dumps([dict(id='SYNTHETIC-ODDS-'+row['game_id'],sport_key='americanfootball_nfl',
             commence_time=start.strftime('%Y-%m-%dT%H:%M:%SZ'),home_team=home,away_team=away,
             bookmakers=[dict(key='novig',markets=[dict(key='spreads',last_update=updated.isoformat(),
@@ -66,7 +77,7 @@ class SyntheticProvider:
         assert b'SYNTHETIC' in body
 
 
-def make_workflow(path, *, provider=None):
+def make_workflow(path, *, provider=None, clock=None):
     provider=provider or SyntheticProvider()
     path=Path(path).resolve()
     if path.exists():
@@ -77,7 +88,8 @@ def make_workflow(path, *, provider=None):
         store=Store.synthetic_fixture(path,KEY)
     access=authenticate(TOKEN,TOKEN)
     service=Workflow(store,access,allow_acquisition=True,allow_inference=True,
-        score_transport=provider.scores,market_transport=provider)
+        score_transport=provider.scores,market_transport=provider,
+        **({"clock":clock} if clock is not None else {}))
     return service,provider
 
 

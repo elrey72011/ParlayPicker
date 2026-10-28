@@ -1,14 +1,18 @@
 """Synthetic evidence tests; provider facts are never backfilled by these tests."""
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 import csv
 import copy
 from io import BytesIO
 import json
+import os
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 from app_core import football_stage1 as stage1
 from app_core import prospective_evidence as evidence
@@ -44,11 +48,44 @@ def odds_event(*, start=START, updated=None, price=-110, line=-3.5, sport_key="a
                     {"name": "Under", "point": 44.0, "price": -110}]}]}]}
 
 
+@contextmanager
+def _owned_sqlite_connections(root):
+    """Close only connections created for this fixture's temporary directory."""
+    root = Path(root).resolve(strict=True)
+    incoming = sqlite3.connect
+
+    def belongs(database):
+        try:
+            value = os.fsdecode(os.fspath(database))
+            if value == ':memory:':
+                return False
+            if value.startswith('file:'):
+                uri = urlsplit(value)
+                if uri.netloc not in ('', 'localhost'):
+                    return False
+                value = url2pathname(uri.path)
+            return Path(value).resolve().is_relative_to(root)
+        except (TypeError, ValueError, OSError):
+            return False
+
+    with ExitStack() as owned:
+        def connect(database, *args, **kwargs):
+            connection = incoming(database, *args, **kwargs)
+            if belongs(database):
+                owned.callback(connection.close)
+            return connection
+        # The incoming constructor/guard is always called. Restore it even when
+        # the body or one close fails; ExitStack still closes every owned handle.
+        with patch.object(sqlite3, 'connect', connect):
+            yield
+
+
 class FootballStage1Test(unittest.TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / "canonical.sqlite3"
+        self.enterContext(_owned_sqlite_connections(self.temp.name))
 
     def rows(self, table):
         with evidence.connect(self.path) as db:
@@ -562,6 +599,57 @@ class FootballStage1Test(unittest.TestCase):
         refreshed = cycle._readiness(self.path, denominator, NOW, {"401": completed})
         self.assertEqual(refreshed["completed_games_in_window"], 1)
         self.assertEqual(refreshed["completed_games_with_result"], 1)
+
+
+    def test_owned_sqlite_fixture_closes_only_created_handles_and_restores_api(self):
+        incoming = sqlite3.connect
+        root = Path(self.temp.name) / 'SYNTHETIC-owned'
+        root.mkdir()
+        prior = sqlite3.connect(root / 'prior.sqlite3')
+        for failure in (None, AssertionError, RuntimeError, KeyboardInterrupt):
+            with self.subTest(failure=failure):
+                try:
+                    with _owned_sqlite_connections(root):
+                        created = sqlite3.connect(root / 'created.sqlite3')
+                        readonly = sqlite3.connect((root / 'created.sqlite3').as_uri()+'?mode=ro', uri=True)
+                        unrelated = sqlite3.connect(Path(self.temp.name) / 'outside.sqlite3')
+                        if failure is not None:
+                            raise failure('SYNTHETIC-owned-body-failure')
+                except BaseException as error:
+                    if failure is None:
+                        raise
+                    self.assertIs(type(error), failure)
+                else:
+                    self.assertIsNone(failure)
+                self.assertIs(sqlite3.connect, incoming)
+                for connection in (created, readonly):
+                    with self.assertRaises(sqlite3.ProgrammingError):
+                        connection.execute('SELECT 1')
+                self.assertEqual(prior.execute('SELECT 1').fetchone(), (1,))
+                self.assertEqual(unrelated.execute('SELECT 1').fetchone(), (1,))
+                unrelated.close()
+        with self.assertRaises(FileNotFoundError):
+            with _owned_sqlite_connections(root / 'missing'):
+                self.fail('An absent fixture root must fail before installing a constructor')
+        self.assertIs(sqlite3.connect, incoming)
+        closed = []
+        class SyntheticConnection:
+            def __init__(self, name, fails=False):
+                self.name, self.fails = name, fails
+            def close(self):
+                closed.append(self.name)
+                if self.fails:
+                    raise RuntimeError('SYNTHETIC-close-failure')
+        handles = iter([SyntheticConnection('first', True), SyntheticConnection('second')])
+        with patch.object(sqlite3, 'connect', side_effect=lambda *a, **k: next(handles)) as original:
+            with self.assertRaisesRegex(RuntimeError, 'SYNTHETIC-close-failure'):
+                with _owned_sqlite_connections(root):
+                    sqlite3.connect(root / 'first.sqlite3')
+                    sqlite3.connect(root / 'second.sqlite3')
+            self.assertIs(sqlite3.connect, original)
+        self.assertEqual(closed, ['second', 'first'])
+        self.assertIs(sqlite3.connect, incoming)
+        prior.close()
 
 
 if __name__ == "__main__":

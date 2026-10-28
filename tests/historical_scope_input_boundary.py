@@ -1127,6 +1127,8 @@ def capacity_input_records(plan):
         raise ValueError('HISTORICAL_BINDING_CHANGED')
     binding=json.loads(binding_raw)
     relative='tests/ci_fixture_stability_inputs.py';raw=physical_bytes(ROOT/relative)
+    # Authenticate the reviewed successor before comparing the frozen helper blob.
+    raw=_filtered_source_parent(relative,raw)
     identity=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
     if identity!=binding['reviewed_blobs'][relative]:
         raise ValueError('CI_CAPACITY_INPUT_HELPER_CHANGED')
