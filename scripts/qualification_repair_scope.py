@@ -105,7 +105,21 @@ def binding_successor(root, stamp):
     return binding
 
 
+def _build_preflight_scope(root,binding):
+    import io
+    import types
+    relative='scripts/nfl_build_preflight_scope.py'
+    with io.FileIO(Path(root)/relative,'r') as stream:raw=stream.read(8*1024*1024+1)
+    require(len(raw)<=8*1024*1024 and sha(raw.replace(b'\r\n',b'\n'))==binding['components'][relative],
+            'BUILD_PREFLIGHT_SCOPE_CHANGED')
+    module=types.ModuleType('exact_nfl_build_preflight_scope');module.__file__=str(Path(root)/relative)
+    exec(compile(raw,module.__file__,'exec'),module.__dict__)
+    return module
+
+
 def make_policy(root, binding, implementation, binding_sha):
+    if binding.get('qualification_release_repair',{}).get('build_preflight') is not None:
+        return _build_preflight_scope(root,binding).make_policy(root,binding,implementation,binding_sha)
     return dict(version='qualification-context-correction-seal-v2', previous_head=PREVIOUS_HEAD, previous_tree=PREVIOUS_TREE,
         correction_authorization_sha256=binding['components'][CORRECTION_AUTHORIZATION], correction_paths=sorted(CORRECTION_PATHS), base=BASE, base_tree=TREE,
         ordered_parents=PARENTS, authorization_sha256=binding['components'][AUTHORIZATION],
@@ -115,6 +129,8 @@ def make_policy(root, binding, implementation, binding_sha):
 
 
 def validate(root, binding, comparison_base, manifest, *, binding_sha):
+    if binding.get('qualification_release_repair',{}).get('build_preflight') is not None:
+        return _build_preflight_scope(root,binding).validate(root,binding,comparison_base,manifest,binding_sha=binding_sha)
     root = Path(root)
     require(text(root, 'rev-parse', BASE + '^{tree}') == TREE
         and text(root, 'show', '-s', '--format=%P', BASE).split() == PARENTS, 'QUALIFICATION_BASE_CHANGED')

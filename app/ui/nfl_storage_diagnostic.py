@@ -4,6 +4,20 @@ import streamlit as st
 
 
 def render(setting, state):
+    st.caption('Build preflight makes no database or provider connection and does not spend or reset the storage-check allowance. Compare the observed revision and loaded-code findings with the cleared release before a storage check.')
+    if st.button('Read running NFL build information (no connection)', key='nfl_workflow_build_run'):
+        try:
+            from app_core.nfl_private_workflow import authenticate
+            from app_core.nfl_build_preflight import inspect_build
+            access = authenticate(state.get('publication_token', ''), str(setting('PARLAYPICKER_PUBLISH_TOKEN')))
+            state['nfl_workflow_build_result'] = inspect_build(access)
+        except Exception:
+            state['nfl_workflow_build_result'] = {'status': 'UNVERIFIED',
+                'failure': {'phase': 'OWNER_OR_IMPORT', 'category': 'BUILD_EVIDENCE_UNAVAILABLE'}}
+    build = state.get('nfl_workflow_build_result')
+    if isinstance(build, dict):
+        st.caption('Last explicit build observation; rerendering does not recheck it. Read again after a deployment or restart.')
+        st.json(build)
     st.caption('One read-only storage check. It does not acquire data or calculate a forecast. '
                'Run only with current owner authorization; do not retry an interrupted attempt.')
     expected_host = st.text_input('Verified production direct hostname', type='password',
