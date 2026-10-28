@@ -1,0 +1,42 @@
+One bounded Ubuntu investigation, not a release cycle or a product correction.
+
+Immutable application: ad5662c99b6529fddc1f40dbaac6853563e01c8e
+Tree: de1ab55c0e4dce2a539ebc859df8f2acfd069ce3
+Tooling published only on codex/chrome-main-diagnostic-once; no PR event.
+All existing release workflows restrict pushes to main. One new exact-branch
+workflow has one Ubuntu job, 45-minute total timeout and run_attempt == 1.
+
+Five predetermined contexts, one execution each, in fresh Python processes:
+isolated target; full collection/target; full collection/exact 128-case prefix;
+separately labelled phase-observed exact prefix; complete 19 shared-helper files.
+All full-collection cases verify 9,194 identities and their original order before
+filtering. The 953 shared cases preserve full-collection ordering.
+
+The first three and fifth retain original page, launch arguments and deadline.
+The fourth adds --enable-logging=stderr and minimal temporary console markers
+only to distinguish page execution, inspector/report completion and process exit.
+Its original input is saved/restored. It is not unmodified-baseline qualification
+and is not a proposed production/harness correction. No speculative flags.
+
+Original 40-second Chrome deadline, assertions, independent owned profiles,
+owned process cleanup and repository offline network blockers remain unchanged.
+Package failure contracts run before the contexts. A startup receipt is written
+before checkout and again before optional Python imports/JSON. Evidence is retained
+on failures; missing/duplicate/substituted outcomes fail closed. Completeness and
+test success are separate. No retries. Zero provider/operational-database credentials
+or calls. Existing synthetic local fixtures remain permitted. No Streamlit plugin
+is preloaded in Linux; empty secrets locations are checked before test collection.
+
+Slower retained complete shared-file costs: 744.513 seconds, including fixture
+setup/call/teardown once. Budget includes 15% variability, 175 seconds collection,
+150 seconds other contexts, 420 seconds setup, 240 seconds retention reserve:
+1,841.190 seconds projected, below 2,700. Actual timeouts remain fail outcomes.
+Runner stops before the remaining retention reserve, never stretches deadlines.
+
+Artifact allowlist: startup/runtime/selection/commands/JUnit/events, bounded
+console/browser outputs, synthetic rendered target page, process and cleanup
+observations, hashes of those public synthetic diagnostic records. Excludes all
+tmp directories and data archives; no authentic private records or secrets.
+
+A pass does not establish the historical cause. If no mechanism is demonstrated,
+the product repair and conditional PR release cycle remain held.

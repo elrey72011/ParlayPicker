@@ -1,0 +1,59 @@
+name: Bounded main Chrome investigation
+on:
+  push:
+    branches: [codex/chrome-main-diagnostic-once]
+permissions:
+  contents: read
+jobs:
+  investigate-once:
+    if: ${{ github.ref == 'refs/heads/codex/chrome-main-diagnostic-once' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Retain startup before checkout or optional inputs
+        run: |
+          mkdir -p chrome-evidence
+          printf '{"phase":"WORKFLOW_STARTED","at":"%s","automatic_retries":0}\n' "$(date -u +%FT%TZ)" > chrome-evidence/workflow-startup.json
+          echo "CHROME_JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v5
+        timeout-minutes: 2
+        with:
+          path: diagnostic-tools
+          fetch-depth: 1
+      - uses: actions/checkout@v5
+        timeout-minutes: 2
+        with:
+          ref: ad5662c99b6529fddc1f40dbaac6853563e01c8e
+          path: application
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        timeout-minutes: 3
+        with:
+          python-version: '3.12.15'
+          cache: pip
+          cache-dependency-path: |
+            application/requirements.txt
+            application/tests/requirements-ci.txt
+      - name: Install unchanged reviewed application test dependencies
+        timeout-minutes: 8
+        run: python -m pip install -r application/requirements.txt -r application/tests/requirements-ci.txt
+      - name: Validate committed package and run each context once
+        timeout-minutes: 36
+        env:
+          PARLAYPICKER_NFL_ACQUISITION_ENABLED: 'false'
+          PARLAYPICKER_NFL_INFERENCE_ENABLED: 'false'
+          PYTHONUNBUFFERED: '1'
+          CHROME_PACKAGE_MANIFEST_SHA256: e45fbf7f5b1ace6a0b944c43159c294294f3cbbbf48269ae4fe5fc6d25c023d7
+        run: |
+          python -B -m pytest diagnostic-tools/diagnostics/chrome-main/package_contracts.py -c /dev/null --rootdir=diagnostic-tools/diagnostics/chrome-main --confcutdir=diagnostic-tools/diagnostics/chrome-main -p no:cacheprovider -q --junitxml=chrome-evidence/package-contracts.xml > chrome-evidence/package-contracts.log 2>&1
+          python -B diagnostic-tools/diagnostics/chrome-main/launch.py "$GITHUB_WORKSPACE/chrome-evidence" "$GITHUB_WORKSPACE/application"
+      - name: Retain only bounded synthetic investigation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-main-investigation-once
+          path: |
+            chrome-evidence/**
+            !chrome-evidence/**/tmp/**
+          retention-days: 7
+          if-no-files-found: error

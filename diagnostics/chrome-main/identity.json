@@ -1,0 +1,50 @@
+{
+  "base": "ad5662c99b6529fddc1f40dbaac6853563e01c8e",
+  "tree": "de1ab55c0e4dce2a539ebc859df8f2acfd069ce3",
+  "unavailable_predecessor": "3fb9302463f44589ea0d2c75b2ed100bf2f596d0",
+  "sources": {
+    "tests/browser_process_owner.py": {
+      "bytes": 8031,
+      "sha256": "af959427dce8ce3c91173be1bc70122edc8143147d44d043d58ec414cb9123c4"
+    },
+    "tests/browser_process_windows.py": {
+      "bytes": 6374,
+      "sha256": "4670458d6f907b5eb057034518243628fb2df7f541460a5b91d208e0b36d400d"
+    },
+    "tests/test_research_probability_browser.py": {
+      "bytes": 13055,
+      "sha256": "644053c1b35a41f3ab569cc190c4b89644b180f26689babb595d9c09bd3e135a"
+    },
+    "tests/test_estimate_availability.py": {
+      "bytes": 12301,
+      "sha256": "8642536163bc0c8050ff8f162fa5134a5bace228310f5a39133b3de9b4f09b6c"
+    },
+    "tests/conftest.py": {
+      "bytes": 2744,
+      "sha256": "ba1e5ecae108783e0ac418da99dde549e6963f3a116170fe3f7d0a6bd6f46164"
+    },
+    "requirements.txt": {
+      "bytes": 1039,
+      "sha256": "0128f4b0392d3a0d29f477ad9ae48b7b3b601fc7c6551af4623bac17a19eb50c"
+    },
+    "tests/requirements-ci.txt": {
+      "bytes": 72,
+      "sha256": "d3bf3fd2125c27db8762bc620c29bfe6830310ff31d834ee12b668493b9a3971"
+    }
+  },
+  "diagnostic_only": true,
+  "production_correction": "NOT_ESTABLISHED",
+  "automatic_retries": 0,
+  "maximum_jobs": 1,
+  "maximum_job_minutes": 45,
+  "chrome_execution_seconds": 40,
+  "shared_slower_case_seconds": 744.513,
+  "projection": {
+    "variability_multiplier": 1.15,
+    "collection_seconds": 175,
+    "other_context_seconds": 150,
+    "setup_seconds": 420,
+    "retention_reserve_seconds": 240
+  },
+  "interpretation": "A passing baseline or separately labelled instrumentation condition does not establish historical cause or qualify a product correction."
+}

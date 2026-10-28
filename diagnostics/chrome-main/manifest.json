@@ -1,0 +1,47 @@
+[
+  {
+    "path": "chrome_main_observer.py",
+    "bytes": 8497,
+    "sha256": "f3a37090e7f781abf75ffe607349066b615c58b3332612b3c92a8c7f70f1481f"
+  },
+  {
+    "path": "chrome_main_selection.py",
+    "bytes": 1167,
+    "sha256": "85de227f0c8bb57f2bcb33b9b081e090f8301b1d043c424ce35b26af59c4a42e"
+  },
+  {
+    "path": "DECISION.txt",
+    "bytes": 2715,
+    "sha256": "5beec21803159734467224aff86f593f9c688add55179266ffda18d5ea3ccfc0"
+  },
+  {
+    "path": "identity.json",
+    "bytes": 1868,
+    "sha256": "93f0c576355a91d92b4b828ec378df59d5d6d7f6a745848e61e84af57acbd2ba"
+  },
+  {
+    "path": "launch.py",
+    "bytes": 1155,
+    "sha256": "086ddf06a49eae3f95d285e2eccdee32f122750a038b3ff2b995b2b355c4d200"
+  },
+  {
+    "path": "package_contracts.py",
+    "bytes": 5523,
+    "sha256": "5d8f4dbf58de50c976c20a2777280e35d54d6fec9be48222c9e3e9b1a4ecf6ca"
+  },
+  {
+    "path": "probe.py",
+    "bytes": 12527,
+    "sha256": "1e428452093a7b6b8f94922fb12f34e0545f3e3a4aa1a6c011d4dd5369ba4e89"
+  },
+  {
+    "path": "selection.json",
+    "bytes": 160303,
+    "sha256": "9fb4e2e2fddecd4531eea61fc6b00a4f6921faacea785b30370015db0d19fd5f"
+  },
+  {
+    "path": "synthetic_settings.py",
+    "bytes": 471,
+    "sha256": "6a0eef5978192312fd58b51e3811aae62557855b6d5541a4a2757ac6cd5dcecc"
+  }
+]
