@@ -1,4 +1,9 @@
-LOCAL SUCCESSOR PROPOSAL ONLY. No second Ubuntu job is authorized or dispatched.
+AUTHORIZED SUCCESSOR: one new bounded Ubuntu job, no retries or release cycle.
+Owner authorized finalizing the reviewed local correction 326a752ff1552b80ce491262b130441fc28c3bda
+with private temporary-directory checks, committed-package verification and an
+isolated-first startup gate. The original 17 offline results remain preserved;
+11 additional cases cover the new gate, private mode/ownership and final inventory.
+Main's original 40-second timeout remains UNKNOWN. No product patch is proposed.
 Preserve failed published tooling 2e7ef73bcdf8e1cff63256f1699210a1222f8784,
 run 40757636359 and artifact SHA-256
 92350d083389d6f30cf13d8d7355aa32f590bb071160ae19b1da501d2ff9cb63.
@@ -8,6 +13,13 @@ The diagnostic's long TMPDIR caused quick Chrome aborts, not the historical
 /tmp root and preserves the long pytest/evidence paths separately. It validates
 a conservative socket-path budget before dispatch and cleans only its owned root.
 No application or released browser helper changes; historical cause UNKNOWN.
+Before Chrome dispatch, the transport root must be current-user-owned with
+POSIX mode 0700. Its budget includes the generated Chrome directory and socket
+filename; the profile path is separate. Evidence is retained outside that root.
+The first isolated run must confirm native DOM output and normal browser exit
+before broader contexts are admitted. Setup defects or unconfirmed startup stop
+the plan and leave unstarted contexts explicit. A real assertion failure remains
+failed even if browser startup was valid. Cleanup is included in final hashes.
 
 One bounded Ubuntu investigation proposal, not a release/product correction.
 

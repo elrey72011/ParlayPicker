@@ -53,6 +53,43 @@ def assess(folder,plan,code,timeout=False):
         started=len(started),completed=len(completed),unconfirmed=max(0,len(plan['expected_nodeids'])-len(completed)),
         counts=counts,issues=sorted(set(issues)),native= native)
 
+def startup_gate(folder,result):
+    """Only observed native renderer completion admits broader selections.
+
+    A substantive assertion failure stays failed even if browser startup worked.
+    An unknown startup, incomplete evidence or setup defect stops the plan.
+    """
+    records=result.get('native',[])
+    stderr=b''.join(p.read_bytes()[:65536] for p in (folder/'observation').glob('*-browser-process.stderr')).lower()
+    categories=[(b'socket path too long','SOCKET_PATH_TOO_LONG'),(b'no usable sandbox','BROWSER_SANDBOX_UNAVAILABLE'),
+        (b'error while loading shared libraries','MISSING_BROWSER_LIBRARY'),(b'cannot open shared object file','MISSING_BROWSER_LIBRARY')]
+    category=next((label for marker,label in categories if marker in stderr),None)
+    if any(r.get('exception_class')== 'FileNotFoundError' for r in records):category='MISSING_EXECUTABLE'
+    outputs=list((folder/'observation').glob('*-browser-process.stdout'))
+    import re
+    dom=bool(len(outputs)==1 and re.search(br'<pre\b[^>]*id="probability-test-result"[^>]*>.*?</pre>',outputs[0].read_bytes(),re.S))
+    native_ok=len(records)==1 and records[0].get('spawned') is True and records[0].get('direct_returncode')==0 and dom
+    admitted=category is None and native_ok and result.get('execution_complete') is True
+    return dict(status='PASS_BROWSER_STARTUP' if admitted else 'STOP_DIAGNOSTIC_SETUP_FAILURE' if category else 'STOP_STARTUP_UNCONFIRMED',
+        safe_category=category or ('NATIVE_RENDERER_COMPLETED' if admitted else 'NO_CONFIRMED_NATIVE_COMPLETION'),
+        continue_broader_contexts=admitted,complete_dom_report_observed=dom,substantive_test_passed=result.get('tests_passed') is True,
+        historical_timeout_cause='UNKNOWN',automatic_retries=0)
+
+def guarded_plans(plans,results,out):
+    assert plans and plans[0]['name']=='isolated' and plans[0]['mode']=='isolated'
+    for index,plan in enumerate(plans):
+        assert len(results)==index,'Missing context result; no broader dispatch'
+        if index==1:
+            gate=startup_gate(out/plans[0]['name'],results[0]);save(out/'browser-startup-gate.json',gate)
+            if not gate['continue_broader_contexts']:return
+        if index and 'CONTEXT_TIMEOUT' in results[-1]['issues']:return
+        yield plan
+
+def inventory(out):
+    records=[dict(path=p.relative_to(out).as_posix(),bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest())
+        for p in out.rglob('*') if p.is_file() and 'tmp' not in p.relative_to(out).parts and p.name!='file-identities.json']
+    save(out/'file-identities.json',records)
+
 def owned_processes(folder):
     rows={};owned=set();needle=str(folder.resolve()).encode()
     for path in Path('/proc').iterdir():
@@ -100,8 +137,9 @@ def runtime():
         dependencies=sorted((d.metadata['Name'],d.version) for d in importlib.metadata.distributions()))
 
 def run(app,out,*,transport_tmp):
-    from transport_temp import verify_budget
+    from transport_temp import verify_budget,protection
     verify_budget(transport_tmp);assert transport_tmp.is_dir()
+    save(out/'transport-temp.json',protection(transport_tmp))
     root=Path(__file__).resolve().parent;spec=json.loads((root/'selection.json').read_bytes());frozen=json.loads((root/'identity.json').read_bytes())
     save(out/'phase.json',dict(phase='VERIFYING_CHECKOUTS',at=datetime.now(timezone.utc).isoformat()))
     assert git(app,'rev-parse','HEAD')==frozen['base'] and git(app,'rev-parse','HEAD^{tree}')==frozen['tree']
@@ -118,7 +156,7 @@ def run(app,out,*,transport_tmp):
     assert not (app/'.streamlit/secrets.toml').exists()
     save(out/'runtime.json',runtime());save(out/'checkouts.json',dict(application_commit=git(app,'rev-parse','HEAD'),application_tree=git(app,'rev-parse','HEAD^{tree}'),tooling_commit=git(root,'rev-parse','HEAD'),source_bindings_verified=True,shallow=True,predecessor_absent=True))
     deadline=time.monotonic()+min(2100,max(0,2700-(time.time()-float(os.environ['CHROME_JOB_STARTED']))-240));results=[]
-    for plan in spec['contexts']:
+    for plan in guarded_plans(spec['contexts'],results,out):
         folder=out/plan['name'];folder.mkdir();(folder/'tmp').mkdir()
         save(out/'phase.json',dict(phase='EXECUTING',context=plan['name'],at=datetime.now(timezone.utc).isoformat()))
         if deadline-time.monotonic()<60:break
@@ -154,11 +192,10 @@ def run(app,out,*,transport_tmp):
         if cleanup['running_before'] or cleanup['running_after'] or reader.is_alive() or capture['error'] or capture['bytes']!=capture['retained']:
             result.update(execution_complete=False,tests_passed=False);result['issues'].append('INCOMPLETE_CAPTURE_OR_OWNED_FALLBACK_REQUIRED')
         results.append(result);save(folder/'result.json',result);save(out/'progress.json',results);print(json.dumps(result),flush=True)
-        if timeout:break
     complete=[r['name'] for r in results]==[p['name'] for p in spec['contexts']] and all(r['execution_complete'] for r in results)
     summary=dict(execution_complete=complete,all_tests_passed=complete and all(r['tests_passed'] for r in results),results=results,
+        not_started_contexts=[p['name'] for p in spec['contexts'][len(results):]],
         historical_cause='UNKNOWN',product_correction='NOT_ESTABLISHED',release_qualification=False,automatic_retries=0)
     save(out/'summary.json',summary)
-    records=[dict(path=p.relative_to(out).as_posix(),bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in out.rglob('*') if p.is_file() and 'tmp' not in p.relative_to(out).parts]
-    save(out/'file-identities.json',records)
+    inventory(out)
     return 0 if summary['all_tests_passed'] else 2

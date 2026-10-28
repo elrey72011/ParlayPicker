@@ -14,7 +14,7 @@ try:
         path=root/row['path'];data=path.read_bytes()
         assert path.resolve().is_relative_to(root) and len(data)==row['bytes']
         assert hashlib.sha256(data).hexdigest()==row['sha256']
-    from probe import run
+    from probe import run,inventory
     from transport_temp import short_transport_tmp
     transport=None
     try:
@@ -24,6 +24,7 @@ try:
         if transport is not None:
             with open(os.path.join(out,'transport-temp-cleanup.json'),'w',encoding='utf-8') as stream:
                 json.dump(dict(owned_root_removed=not transport.exists()),stream)
+            inventory(Path(out))
 except BaseException as error:
     # No raw exception strings: dependencies/inputs can fail before the runner.
     import json
