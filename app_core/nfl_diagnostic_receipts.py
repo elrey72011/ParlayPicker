@@ -1,7 +1,9 @@
 """Small sanitized lifecycle receipts; no settings, connections or private bodies."""
 from datetime import datetime, timezone
+import errno
 import json
 import re
+import socket
 import sys
 import threading
 import uuid
@@ -19,11 +21,17 @@ _PHASES = {'SETTINGS', 'DRIVER_IMPORT', 'CONNECTION_SETTINGS_PARSE', 'INSTRUMENT
 _CATEGORIES = {'AUTHENTICATION_REJECTED', 'PERMISSION_DENIED', 'RELATION_MISSING',
                'QUERY_CANCELLED', 'RELEASED_CHECK_REJECTED', 'CONNECTION_FAILURE_UNCLASSIFIED',
                'FAILURE_UNCLASSIFIED', 'SECOND_CONNECTION_ATTEMPT_BLOCKED', 'DIAGNOSTIC_BUSY',
-               'SETTINGS_CHECK_FAILED', 'EXISTING_TRACE_UNSUPPORTED', 'DIAGNOSTIC_UNAVAILABLE'}
+               'SETTINGS_CHECK_FAILED', 'EXISTING_TRACE_UNSUPPORTED', 'DIAGNOSTIC_UNAVAILABLE',
+               'TLS_VERIFICATION_FAILED', 'ADDRESS_RESOLUTION_FAILURE', 'CONNECTION_TIMEOUT',
+               'CONNECTION_REFUSED', 'NETWORK_UNREACHABLE'}
 _CLASSES = {'OperationalError', 'InterfaceError', 'ProgrammingError', 'DatabaseError',
             'InsufficientPrivilege', 'UndefinedTable', 'QueryCanceled', 'InvalidPassword',
             'InvalidCatalogName', 'WorkflowError', 'ImportError', 'ModuleNotFoundError',
-            'ValueError', 'TypeError', 'OSError', 'OTHER_EXCEPTION'}
+            'ValueError', 'TypeError', 'OSError', 'OTHER_EXCEPTION', 'ConnectionTimeout',
+            'TimeoutError', 'ConnectionRefusedError', 'gaierror', 'SSLCertVerificationError'}
+_WINERRORS = {2, 5, 87, 121, 123, 995, 10013, 10022, 10024, 10035, 10038,
+              10048, 10049, 10050, 10051, 10052, 10053, 10054, 10055,
+              10060, 10061, 10064, 10065, 11001, 11002, 11003, 11004}
 
 
 def now():
@@ -44,6 +52,21 @@ def unknown_failure(category, exc=None):
     return {'status': 'STOPPED', 'attempted_connections': 'UNKNOWN', 'driver_attempts': 'UNKNOWN',
             'failure': {'phase': 'UI_DIAGNOSTIC', 'exception_class': name,
                         'sqlstate': sqlstate, 'category': category}}
+
+
+def _failure(value):
+    state = value.get('sqlstate')
+    clean = {'phase': value.get('phase') if type(value.get('phase')) is str and value['phase'] in _PHASES else 'UNKNOWN',
+             'exception_class': value.get('exception_class') if type(value.get('exception_class')) is str and value['exception_class'] in _CLASSES else 'UNKNOWN',
+             'sqlstate': state if type(state) is str and re.fullmatch('[0-9A-Z]{5}', state) else None,
+             'category': value.get('category') if type(value.get('category')) is str and value['category'] in _CATEGORIES else 'FAILURE_UNCLASSIFIED'}
+    for key, allowed in (('os_errno', errno.errorcode), ('os_winerror', _WINERRORS)):
+        if key in value:
+            number = value[key]
+            dns_codes = {socket.EAI_AGAIN, socket.EAI_FAIL, socket.EAI_NONAME, socket.EAI_SERVICE,
+                         socket.EAI_SOCKTYPE, socket.EAI_FAMILY, socket.EAI_MEMORY, socket.EAI_BADFLAGS}
+            clean[key] = number if type(number) is int and (number in allowed or key == 'os_errno' and number in dns_codes) else None
+    return clean
 
 
 def sanitize(result):
@@ -68,14 +91,10 @@ def sanitize(result):
         clean['runtime']['libpq'] = value if type(value) is int and 0 <= value < 10000000 else 'UNKNOWN'
         value = runtime.get('checkout_head')
         clean['runtime']['checkout_head'] = value if type(value) is str and re.fullmatch('[0-9a-f]{40}', value) else 'UNKNOWN'
-    failure = result.get('failure')
-    if type(failure) is dict:
-        state = failure.get('sqlstate')
-        clean['failure'] = {
-            'phase': failure.get('phase') if failure.get('phase') in _PHASES else 'UNKNOWN',
-            'exception_class': failure.get('exception_class') if failure.get('exception_class') in _CLASSES else 'UNKNOWN',
-            'sqlstate': state if type(state) is str and re.fullmatch('[0-9A-Z]{5}', state) else None,
-            'category': failure.get('category') if failure.get('category') in _CATEGORIES else 'FAILURE_UNCLASSIFIED'}
+    for key in ('failure', 'first_connect_failure', 'blocked_attempt'):
+        failure = result.get(key)
+        if type(failure) is dict:
+            clean[key] = _failure(failure)
     if type(result.get('second_attempt_blocked')) is bool:
         clean['second_attempt_blocked'] = result['second_attempt_blocked']
     return clean
