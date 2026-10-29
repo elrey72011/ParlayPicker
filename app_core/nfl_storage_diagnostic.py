@@ -3,11 +3,14 @@
 No acquisition, inference, database initialization or retry is performed here.
 """
 import ast
+import errno
 import hmac
 import inspect
 import logging
 import os
 import re
+import socket
+import ssl
 import subprocess
 import sys
 import threading
@@ -21,8 +24,12 @@ _SETTINGS = {'PARLAYPICKER_NFL_DATABASE_URL', 'PARLAYPICKER_NFL_STORE_KEY',
 _CLASSES = {'OperationalError', 'InterfaceError', 'ProgrammingError', 'DatabaseError',
             'InsufficientPrivilege', 'UndefinedTable', 'QueryCanceled', 'InvalidPassword',
             'InvalidCatalogName', 'WorkflowError', 'ImportError', 'ModuleNotFoundError',
-            'ValueError', 'TypeError', 'OSError'}
+            'ValueError', 'TypeError', 'OSError', 'ConnectionTimeout', 'TimeoutError',
+            'ConnectionRefusedError', 'gaierror', 'SSLCertVerificationError'}
 _CHILD_ENV = {'PATH', 'HOME', 'USERPROFILE', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL'}
+_WINERRORS = {2, 5, 87, 121, 123, 995, 10013, 10022, 10024, 10035, 10038,
+              10048, 10049, 10050, 10051, 10052, 10053, 10054, 10055,
+              10060, 10061, 10064, 10065, 11001, 11002, 11003, 11004}
 _IDENTITY_SQL = ("SELECT current_user = 'nfl_app', current_database() = 'neondb', "
     "current_setting('transaction_read_only') = 'on', "
     "has_schema_privilege(current_user,'nfl_private','USAGE'), "
@@ -59,6 +66,63 @@ def safe_error(phase, exc):
     else:
         category = 'FAILURE_UNCLASSIFIED'
     return {'phase': phase, 'exception_class': name, 'sqlstate': state, 'category': category}
+
+
+def _os_code(exc, name, allowed):
+    try:
+        value = getattr(exc, name, None)
+    except Exception:
+        return None
+    dns_codes = {socket.EAI_AGAIN, socket.EAI_FAIL, socket.EAI_NONAME, socket.EAI_SERVICE,
+                 socket.EAI_SOCKTYPE, socket.EAI_FAMILY, socket.EAI_MEMORY, socket.EAI_BADFLAGS}
+    return value if type(value) is int and (value in allowed or name == 'errno' and value in dns_codes) else None
+
+
+def driver_failure(exc):
+    """Project one error immediately; never retain its object, args or message.
+
+    SQLSTATE/typed OS errors take priority. Libpq normally exposes transport
+    detail only as text: inspect bounded standard clauses in memory, exporting
+    a fixed category alone. Unrecognized wording remains unclassified.
+    """
+    result = safe_error('CONNECT', exc)
+    result['os_errno'] = _os_code(exc, 'errno', errno.errorcode)
+    result['os_winerror'] = _os_code(exc, 'winerror', _WINERRORS)
+    if result['category'] != 'CONNECTION_FAILURE_UNCLASSIFIED':
+        return result
+    number, win = result['os_errno'], result['os_winerror']
+    if isinstance(exc, ssl.SSLCertVerificationError):
+        category = 'TLS_VERIFICATION_FAILED'
+    elif isinstance(exc, socket.gaierror) or win in {11001, 11002, 11003, 11004}:
+        category = 'ADDRESS_RESOLUTION_FAILURE'
+    elif isinstance(exc, TimeoutError) or number == errno.ETIMEDOUT or win in {121, 10060}:
+        category = 'CONNECTION_TIMEOUT'
+    elif number == errno.ECONNREFUSED or win == 10061:
+        category = 'CONNECTION_REFUSED'
+    elif number in {errno.ENETUNREACH, errno.EHOSTUNREACH} or win in {10051, 10065}:
+        category = 'NETWORK_UNREACHABLE'
+    else:
+        category = 'CONNECTION_FAILURE_UNCLASSIFIED'
+        try:
+            message = str(exc)
+            if len(message) <= 8192:
+                # No captured text groups or excerpts are returned or logged.
+                if re.search(r'(?:^|failed: )SSL error: certificate verify failed(?:\r?\n|$)', message):
+                    category = 'TLS_VERIFICATION_FAILED'
+                elif re.search(r'(?:^|\n|failed: )(?:connection )?timeout expired(?:\r?\n|$)', message):
+                    category = 'CONNECTION_TIMEOUT'
+                elif re.search(r'^could not translate host name "[^\r\n]*" to address:', message):
+                    category = 'ADDRESS_RESOLUTION_FAILURE'
+                elif re.search(r'(?:^|failed: )Connection refused(?:\r?\n|$)', message):
+                    category = 'CONNECTION_REFUSED'
+                elif re.search(r'(?:^|failed: )(?:Network is unreachable|No route to host)(?:\r?\n|$)', message):
+                    category = 'NETWORK_UNREACHABLE'
+                elif re.search(r'(?:^|failed: )FATAL:  password authentication failed for user "[^\r\n]*"(?:\r?\n|$)', message):
+                    category = 'AUTHENTICATION_REJECTED'
+        except Exception:
+            pass
+    result['category'] = category
+    return result
 
 
 def runtime(psycopg):
@@ -103,6 +167,8 @@ class FailureTrace:
         self.record = None
         self.connect_calls = 0
         self.connect_code = getattr(getattr(connect, '__func__', connect), '__code__', None)
+        driver = getattr(getattr(connect, '__func__', connect), '__globals__', {}).get('e')
+        self.driver_error = getattr(driver, 'Error', None)
         self.attempt_code = getattr(getattr(attempt, '__func__', attempt), '__code__', None)
         if (self.connect_code is None or self.attempt_code is None or
                 '_connect_gen' not in self.connect_code.co_names or
@@ -126,14 +192,27 @@ class FailureTrace:
         if code is self.attempt_code and event == 'call' and frame not in self.attempt_frames:
             if self.attempt_frames:
                 self.report['second_attempt_blocked'] = True
-                self.record = {'phase': 'CONNECT', 'exception_class': None, 'sqlstate': None,
-                               'category': 'SECOND_CONNECTION_ATTEMPT_BLOCKED'}
+                blocked = {'phase': 'CONNECT', 'exception_class': None, 'sqlstate': None,
+                           'category': 'SECOND_CONNECTION_ATTEMPT_BLOCKED'}
+                self.report['blocked_attempt'] = blocked
+                if self.record is None:
+                    self.record = blocked
                 raise RuntimeError('SECOND_CONNECTION_ATTEMPT_BLOCKED')
             self.attempt_frames.add(frame)
         if code is self.connect_code and event == 'call':
             self.connect_calls += 1
             if self.connect_calls > 1:
                 raise RuntimeError('SECOND_CONNECTION_REJECTED')
+        if (code is self.connect_code and event == 'exception'
+                and ((isinstance(self.driver_error, type) and isinstance(arg[1], self.driver_error))
+                     or isinstance(arg[1], OSError))
+                and 'first_connect_failure' not in self.report):
+            # Observe the error propagated into the actual driver's try/except,
+            # before its loop handles it. StopIteration from successful generator
+            # completion and ordinary yield/resume events are not driver errors.
+            first = driver_failure(arg[1])
+            self.report['first_connect_failure'] = first
+            self.record = first
         if code is self.connect_code and event == 'return' and arg is not None:
             try:
                 if len(self.attempt_frames) != 1:

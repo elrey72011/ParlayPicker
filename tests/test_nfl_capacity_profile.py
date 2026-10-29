@@ -102,3 +102,6 @@ def test_scheduler_and_workflow_limits_are_unchanged():
     workflow=(ROOT/'.github/workflows/ci.yml').read_text()
     assert 'shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]' in workflow
     assert 'timeout-minutes: 45' in workflow
+
+
+from tests.nfl_profile_generation_inputs import historical_profile_generation
