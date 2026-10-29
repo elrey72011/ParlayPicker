@@ -79,7 +79,7 @@ def actual(monkeypatch, packet):
             return [deepcopy(game)] if sport=="americanfootball_ncaaf" else []
     inventory=ns.inventory_from_events([("FBS",[schedule_event("9",q["event_start_utc"],q["event_home_team"],q["event_away_team"])]),
         ("FCS",[schedule_event("10",q["event_start_utc"],"McNeese Cowboys","Other FCS")])],
-        "2026-10-30","2026-10-30",complete=True)
+        "2026-10-30","2026-10-30",complete=True,observed_at=AT.isoformat())
     monkeypatch.setattr(ns,"fetch_schedule",lambda *a:deepcopy(inventory))
     monkeypatch.setattr(odds_api,"TheOddsAPIClient",Client)
     monkeypatch.setattr(odds_api,"filter_games_today_only",lambda games:games)

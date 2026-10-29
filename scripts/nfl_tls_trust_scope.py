@@ -85,7 +85,20 @@ def binding_successor(root, stamp):
     return binding
 
 
+def _clock_scope(root,binding):
+    import types
+    path=Path(root)/'scripts/nfl_tls_clock_scope.py'
+    with path.open('rb') as stream:raw=stream.read(8*1024*1024+1)
+    require(len(raw)<=8*1024*1024 and sha(raw.replace(b'\r\n',b'\n'))==
+        binding['components']['scripts/nfl_tls_clock_scope.py'],'CLOCK_SCOPE_CHANGED')
+    module=types.ModuleType('exact_nfl_tls_clock_scope');module.__file__=str(path)
+    exec(compile(raw,str(path),'exec'),module.__dict__)
+    return module
+
+
 def make_policy(root, binding, implementation, binding_sha):
+    if metadata(binding).get('tls_trust_successor',{}).get('clock_fixture_successor') is not None:
+        return _clock_scope(root,binding).make_policy(root,binding,implementation,binding_sha)
     return dict(version='nfl-tls-trust-preflight-seal-v1', base=BASE, base_tree=TREE,
         ordered_parents=PARENTS, binding_sha256=binding_sha,
         authorization_sha256=binding['components'][AUTHORIZATION],
@@ -96,6 +109,8 @@ def make_policy(root, binding, implementation, binding_sha):
 
 
 def validate(root, binding, comparison_base, manifest, *, binding_sha):
+    if metadata(binding).get('tls_trust_successor',{}).get('clock_fixture_successor') is not None:
+        return _clock_scope(root,binding).validate(root,binding,comparison_base,manifest,binding_sha=binding_sha)
     root = Path(root)
     require(text(root,'rev-parse',BASE+'^{tree}') == TREE and
         text(root,'show','-s','--format=%P',BASE).split() == PARENTS, 'TLS_BASE_CHANGED')
