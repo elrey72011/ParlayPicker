@@ -11,7 +11,7 @@ import subprocess
 import sys
 import types
 
-MODULES = ('app_core.nfl_build_preflight', 'app.ui.nfl_storage_diagnostic',
+MODULES = ('app_core.nfl_build_preflight', 'app_core.nfl_tls_trust', 'app.ui.nfl_storage_diagnostic',
            'app_core.nfl_diagnostic_receipts',
            'app_core.nfl_storage_diagnostic', 'app_core.nfl_workflow_store',
            'app_core.nfl_private_workflow', 'app.ui.publish_panel')
@@ -179,6 +179,8 @@ def inspect_build(access):
             observed = runtime(psycopg)  # Released version sanitization; makes no connection.
             report['runtime'].update({k:observed[k] for k in ('python','psycopg','libpq')})
             report['runtime_checkout_head'] = observed['checkout_head']
+            from app_core.nfl_tls_trust import inspect_trust
+            report['tls_trust'] = inspect_trust(access, psycopg)
         phase = 'GIT'
         root = Path(__file__).resolve().parents[1]
         commit = _git(root, 'rev-parse', 'HEAD').decode().strip()

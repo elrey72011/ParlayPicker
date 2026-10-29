@@ -87,7 +87,25 @@ def binding_successor(root, stamp):
     return binding
 
 
+
+def _tls_scope(root, binding):
+    import types
+    path = Path(root)/'scripts/nfl_tls_trust_scope.py'
+    with path.open('rb') as stream: raw = stream.read(8*1024*1024+1)
+    require(len(raw) <= 8*1024*1024 and sha(raw.replace(b'\r\n',b'\n')) ==
+        binding['components']['scripts/nfl_tls_trust_scope.py'], 'TLS_SCOPE_CHANGED')
+    module = types.ModuleType('exact_nfl_tls_trust_scope'); module.__file__ = str(path)
+    exec(compile(raw,str(path),'exec'),module.__dict__)
+    return module
+
+
+def _tls_metadata(binding):
+    return binding.get('qualification_release_repair',{}).get('build_preflight',{}).get('receipt_successor',{}).get('first_driver_successor',{}).get('capacity_context_successor',{}).get('tls_trust_successor')
+
+
 def make_policy(root, binding, implementation, binding_sha):
+    if _tls_metadata(binding) is not None:
+        return _tls_scope(root,binding).make_policy(root,binding,implementation,binding_sha)
     return dict(version='nfl-first-driver-capacity-seal-v1', base=BASE, base_tree=TREE, main=MAIN,
         ordered_predecessor_parents=PARENTS, binding_sha256=binding_sha,
         predecessor_policy_sha256=sha(git(root, 'show', BASE + ':docs/paid-launch/launch-scope-policy-nfl-first-driver-failure-v1.json')),
@@ -97,6 +115,8 @@ def make_policy(root, binding, implementation, binding_sha):
 
 
 def validate(root, binding, comparison_base, manifest, *, binding_sha):
+    if _tls_metadata(binding) is not None:
+        return _tls_scope(root,binding).validate(root,binding,comparison_base,manifest,binding_sha=binding_sha)
     root = Path(root)
     require(text(root, 'rev-parse', BASE + '^{tree}') == TREE and
             text(root, 'show', '-s', '--format=%P', BASE).split() == PARENTS and

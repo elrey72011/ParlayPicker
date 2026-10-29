@@ -76,6 +76,10 @@ def historical_view(root, consumer, destination):
             elif path in sources: raw = record_bytes(sources[path])
             else:
                 raw = current.physical(root / path)
+                successor = metadata.get('tls_trust_successor', {})
+                if path in successor.get('historical_sources', {}):
+                    require(sha(raw) == binding['components'][path])
+                    raw = record_bytes(successor['historical_sources'][path])
                 if path in current.NORMALIZED:
                     require(raw.count(stamp) == 1)
                     raw = raw.replace(stamp, PARENT.encode())
