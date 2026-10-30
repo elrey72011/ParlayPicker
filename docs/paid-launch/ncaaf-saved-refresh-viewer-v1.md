@@ -36,3 +36,15 @@ all older costs/sources and1.15 variability stay unchanged. Local Windows timing
 is an explicit conservative cross-platform estimate, not Linux execution evidence.
 Frozen predecessor byte lengths/hashes are independently taken from the exact
 base Git objects and pinned so application tests need no unavailable shallow object.
+
+## Timing provenance correction
+
+The owner authorized a fast-forward correction from failed published head
+fb263da5f67ee55f33ee184c0ecde744a729df5e. The retained local Git object,
+sealed-checkout record, unchanged measured file bytes and complete JUnit report
+identify9ebf8a3085effa7bfeab663f0ca97f2e2e1d513f as the measured checkout.
+Only its missing checkout_commit field is added to the new timing source.
+All timing values, estimated classification,1.15 variability and historical
+predecessor images remain unchanged. Necessary successor bindings authenticate
+the preserved failed head and this exact correction; no viewer/model/store
+behavior, test assertion, identity or operational authority changes.
