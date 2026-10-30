@@ -12,6 +12,7 @@ import streamlit as st
 from app_core.per_game_boards import per_game_board
 from app.ui.nfl_saved_viewer_state import revoke as revoke_saved_viewer
 from app.ui.nfl_workflow_state import revoke as revoke_nfl_workflow
+from app.ui.ncaaf_saved_refresh import revoke as revoke_ncaaf_saved
 from app_core.public_board import build_package
 from scripts.publish_board import ROOT, render, publish_package, production_source_fingerprint
 
@@ -58,12 +59,14 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
     if len(token) < 16:
         revoke_saved_viewer(getattr(st, 'session_state', {}))
         revoke_nfl_workflow(getattr(st, 'session_state', {}))
+        revoke_ncaaf_saved(getattr(st, 'session_state', {}))
         st.info('Publishing is locked. Configure PARLAYPICKER_PUBLISH_TOKEN with at least 16 characters in Streamlit secrets or the local environment. Never put it in the repository.')
         return
     supplied = st.text_input('Publishing token', type='password', key='publication_token')
     if not hmac.compare_digest(supplied.encode(), token.encode()):
         revoke_saved_viewer(getattr(st, 'session_state', {}))
         revoke_nfl_workflow(getattr(st, 'session_state', {}))
+        revoke_ncaaf_saved(getattr(st, 'session_state', {}))
         st.info('Enter the publishing token to preview or publish.')
         return
     from app.ui.nfl_private_workflow import render as render_nfl_workflow
@@ -77,6 +80,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
     from app.ui.ncaaf_pipeline_research import render as render_ncaaf_pipeline_research
     st.session_state['ncaaf_private_captured_views'] = (games, candidates)
     render_ncaaf_pipeline_research()
+    from app.ui.ncaaf_saved_refresh import render as render_ncaaf_saved
+    render_ncaaf_saved(setting)
     from app.ui.nfl_private_research import render as render_nfl_private
     render_nfl_private(candidates)
     from app.ui.activation_panel import render as render_activation
@@ -122,7 +127,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
         return min(values) if values else None
     game_date, prop_date = describe_dates(games), describe_dates(props)
     st.caption('Game analysis (UTC): ' + str(game_date or 'Unknown') +
-               ' · Player props (UTC): ' + str(prop_date or 'Not run'))
+               ' Â· Player props (UTC): ' + str(prop_date or 'Not run'))
     if prop_date and pd.Timestamp.now(tz='UTC') - pd.Timestamp(prop_date) > pd.Timedelta(minutes=QUOTE_MAX_AGE_MINUTES):
         st.warning(f'Saved player props are older than {QUOTE_MAX_AGE_MINUTES} minutes. Run Player Props to refresh them before including them as current selections.')
     dfs = dfs or {}
@@ -212,7 +217,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None, *, lazy_histor
     if publish_results_requested:
         from app.ui.sftp_publish import publish_action
         st.info(publish_action(package, setting))
-    st.write(f"{len(package['games']['overall'])} games · {len(package['props'])} props · {len(package['dfs'])} DFS lineups")
+    st.write(f"{len(package['games']['overall'])} games Â· {len(package['props'])} props Â· {len(package['dfs'])} DFS lineups")
     private_trace = saved.get('private_candidate_trace')
     if private_trace:
         with st.expander('Private candidate-to-release diagnostics', expanded=False):
