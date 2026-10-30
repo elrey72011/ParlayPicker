@@ -84,7 +84,20 @@ def binding_successor(root,stamp):
     return binding
 
 
+def _saved_scope(root,binding):
+    path=Path(root)/'scripts/ncaaf_saved_refresh_scope.py'
+    source=path.read_bytes().replace(b'\r\n',b'\n')
+    require(sha(source)==binding['components']['scripts/ncaaf_saved_refresh_scope.py'],
+        'NCAAF_SAVED_SCOPE_CHANGED')
+    namespace={'__file__':str(path),'__name__':'exact_ncaaf_saved_refresh_scope'}
+    exec(compile(source,str(path),'exec'),namespace)
+    return namespace
+
+
 def make_policy(root,binding,implementation,binding_sha):
+    if metadata(binding).get('clock_fixture_successor',{}).get('ncaaf_saved_refresh_successor') is not None:
+        return _saved_scope(root,binding)['make_policy'](root,binding,implementation,binding_sha)
+
     return dict(version='nfl-tls-clock-fixture-seal-v1',base=BASE,base_tree=TREE,main=MAIN,
         predecessor_parents=PREDECESSOR_PARENTS,binding_sha256=binding_sha,
         predecessor_policy_sha256=sha(git(root,'show',BASE+':docs/paid-launch/launch-scope-policy-nfl-tls-trust-v1.json')),
@@ -94,6 +107,9 @@ def make_policy(root,binding,implementation,binding_sha):
 
 
 def validate(root,binding,comparison_base,manifest,*,binding_sha):
+    if metadata(binding).get('clock_fixture_successor',{}).get('ncaaf_saved_refresh_successor') is not None:
+        return _saved_scope(root,binding)['validate'](root,binding,comparison_base,manifest,binding_sha=binding_sha)
+
     root=Path(root)
     require(text(root,'rev-parse',BASE+'^{tree}')==TREE and
         text(root,'show','-s','--format=%P',BASE).split()==PREDECESSOR_PARENTS and
