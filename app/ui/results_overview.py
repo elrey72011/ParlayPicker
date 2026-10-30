@@ -47,6 +47,9 @@ def render_evidence_overview():
             {'Evidence': 'General Drive sync (this process)', 'Status': remote['status'], 'Latest recorded time (UTC)': remote.get('last_success_at') or 'Not recorded'},
         ]).set_index('Evidence'))
         st.caption('A general-store sync does not verify the separate sport stores or the scheduler. Missing timestamps mean unknown, not a successful update.')
+        if not st.session_state.get('legacy_prospective_market_tools', False):
+            st.caption('Enable Show legacy prospective and market tools in Settings & research to inspect the separate legacy sport stores.')
+            return
         from app_core import mlb_prospective, ncaaf_prospective, nfl_market
         for sport, module in [('MLB', mlb_prospective), ('NCAAF', ncaaf_prospective), ('NFL', nfl_market)]:
             st.markdown('**'+sport+' research evidence**')

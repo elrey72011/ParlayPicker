@@ -79,8 +79,12 @@ def historical_view(root, consumer, destination):
                 successor = metadata.get('tls_trust_successor', {})
                 clock = successor.get('clock_fixture_successor', {})
                 saved = clock.get('ncaaf_saved_refresh_successor', {})
-                if path in saved.get('historical_sources', {}):
+                startup = saved.get('sidebar_startup_successor', {})
+                if path in startup.get('historical_sources', {}):
                     require(sha(raw) == binding['components'][path])
+                    raw = record_bytes(startup['historical_sources'][path])
+                if path in saved.get('historical_sources', {}):
+                    require(sha(raw) == startup.get('prior_component_sha256', {}).get(path, binding['components'][path]))
                     raw = record_bytes(saved['historical_sources'][path])
                 if path in clock.get('historical_sources', {}):
                     require(sha(raw) == saved.get('prior_component_sha256', {}).get(path, binding['components'][path]))

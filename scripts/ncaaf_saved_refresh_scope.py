@@ -75,6 +75,8 @@ def binding_successor(root,stamp):
         provenance_correction=dict(preserved_head=PRESERVED_HEAD,preserved_tree=PRESERVED_TREE,prior_binding_sha256=PRESERVED_BINDING,measured_checkout=MEASURED_CHECKOUT))
     return b
 def make_policy(root,binding,implementation,binding_sha):
+    if metadata(binding).get('ncaaf_saved_refresh_successor',{}).get('sidebar_startup_successor') is not None:
+        return _sidebar_scope(root,binding)['make_policy'](root,binding,implementation,binding_sha)
     return dict(version='ncaaf-saved-refresh-seal-v1',base=BASE,base_tree=TREE,
         ordered_parents=PARENTS,binding_sha256=binding_sha,
         preserved_head=PRESERVED_HEAD,preserved_tree=PRESERVED_TREE,preserved_binding_sha256=PRESERVED_BINDING,correction_paths=sorted(CORRECTION_PATHS),
@@ -82,7 +84,16 @@ def make_policy(root,binding,implementation,binding_sha):
         authorization_sha256=binding['components'][AUTHORIZATION],implementation_commit=implementation,
         implementation_tree=text(root,'rev-parse',implementation+'^{tree}'),implementation_paths=sorted(PATHS),
         unchanged_blobs={p:v for p,v in blobs(root,BASE).items() if p not in PATHS})
+def _sidebar_scope(root,binding):
+    path=Path(root)/'scripts/ncaaf_sidebar_startup_scope.py';source=path.read_bytes().replace(b'\r\n',b'\n')
+    require(sha(source)==binding['components']['scripts/ncaaf_sidebar_startup_scope.py'],'SIDEBAR_SCOPE_CHANGED')
+    namespace={'__file__':str(path),'__name__':'exact_sidebar_startup_scope'}
+    exec(compile(source,str(path),'exec'),namespace)
+    return namespace
+
 def validate(root,binding,comparison_base,manifest,*,binding_sha):
+    if metadata(binding).get('ncaaf_saved_refresh_successor',{}).get('sidebar_startup_successor') is not None:
+        return _sidebar_scope(root,binding)['validate'](root,binding,comparison_base,manifest,binding_sha=binding_sha)
     root=Path(root)
     require(text(root,'rev-parse',BASE+'^{tree}')==TREE and text(root,'show','-s','--format=%P',BASE).split()==PARENTS,'NCAAF_SAVED_BASE_CHANGED')
     inherited=json.loads(git(root,'show',BASE+':'+binding['baseline_manifest']))
