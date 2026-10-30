@@ -389,13 +389,15 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         from app.ui.ncaaf_history import render_ncaaf_history
 
         render_ncaaf_history()
-        from app.ui.ncaaf_prospective import render_ncaaf_prospective
+        if st.checkbox("Show legacy prospective and market tools", value=False,
+                       key="legacy_prospective_market_tools"):
+            from app.ui.ncaaf_prospective import render_ncaaf_prospective
 
-        render_ncaaf_prospective()
-        from app.ui.mlb_prospective import render_mlb_prospective
-        render_mlb_prospective()
-        from app.ui.nfl_market import render_nfl_market
-        render_nfl_market()
+            render_ncaaf_prospective()
+            from app.ui.mlb_prospective import render_mlb_prospective
+            render_mlb_prospective()
+            from app.ui.nfl_market import render_nfl_market
+            render_nfl_market()
     if advanced.button("🔄 Sync Historical Rosters"):
         with st.spinner("Syncing rosters from The Odds API..."):
             try:
