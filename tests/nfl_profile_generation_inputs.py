@@ -37,6 +37,13 @@ def record_bytes(record):
 
 
 def parent_binding(binding, metadata):
+    startup = metadata.get('tls_trust_successor', {}).get('clock_fixture_successor', {}).get(
+        'ncaaf_saved_refresh_successor', {}).get('sidebar_startup_successor')
+    if startup is not None:
+        # Restore the authenticated outer edge before reconstructing this older
+        # generation. In particular, it must not inherit newly added UI edges.
+        from scripts.ncaaf_sidebar_startup_scope import parent_binding as sidebar_parent
+        binding = json.loads(sidebar_parent(binding))
     prior = json.loads(json.dumps(binding))
     del prior['qualification_release_repair']['build_preflight']['receipt_successor']['first_driver_successor']['capacity_context_successor']
     record = metadata['historical_parent_binding']
@@ -93,6 +100,12 @@ def historical_view(root, consumer, destination):
                     require(sha(raw) == clock.get('prior_component_sha256', {}).get(path, binding['components'][path]))
                     raw = record_bytes(successor['historical_sources'][path])
                 if path in current.NORMALIZED:
+                    if path == 'scripts/ncaaf_filtered_history_scope.py' and startup:
+                        # The older reader is independently pinned. Remove only
+                        # this successor's exact, authenticated parent adapter.
+                        from scripts.ncaaf_sidebar_startup_scope import HISTORY_PARENT_ADAPTER
+                        require(raw.count(HISTORY_PARENT_ADAPTER) == 1)
+                        raw = raw.replace(HISTORY_PARENT_ADAPTER, b'', 1)
                     require(raw.count(stamp) == 1)
                     raw = raw.replace(stamp, PARENT.encode())
             if path in prior['components']:

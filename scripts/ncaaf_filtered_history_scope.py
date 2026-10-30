@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='5f6f24ee77c2daeb7832e6bad5eba57c22a81635a96c9134052ff1fc9907c78c'
+_BINDING_SHA256='b5b240bfd806da5d5e786ecdd1ec6679b9d8677267e026d87516b7a373cf26ba'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -118,6 +118,13 @@ def capacity_predecessor(binding,relative,raw):
 
 
 def capacity_parent_binding(binding):
+    generation=binding.get('qualification_release_repair',{})
+    for name in ('build_preflight','receipt_successor','first_driver_successor','capacity_context_successor',
+                 'tls_trust_successor','clock_fixture_successor','ncaaf_saved_refresh_successor'):
+        generation=generation.get(name,{})
+    if generation.get('sidebar_startup_successor') is not None:
+        from scripts.ncaaf_sidebar_startup_scope import parent_binding as sidebar_parent
+        binding=json.loads(sidebar_parent(binding))
     record=binding['nfl_capacity_parent_binding']
     components=(json.dumps(record['before_components'],sort_keys=True,separators=(',',':'))).encode()
     key=(_BINDING_SHA256,'parent-binding',record['before_sha256'],record['before_bytes'],sha(components))

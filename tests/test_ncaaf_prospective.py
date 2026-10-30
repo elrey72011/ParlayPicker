@@ -58,7 +58,8 @@ def test_capture_and_grade_exact_id_then_first_selection(tmp_path):
     path=tmp_path/'p.sqlite3'
     frozen=model()
     frozen['id']=store.insert({'schema':1,'kind':'model','created_at':frozen['created_at'],'data':frozen['data']},path)
-    with patch.object(p,'utcnow',return_value=NOW):
+    with patch.object(p,'utcnow',return_value=NOW), patch.object(store,'datetime',wraps=datetime) as storage_clock:
+        storage_clock.now.side_effect=[NOW,NOW+timedelta(microseconds=1)]
         _, info=p.capture(inputs(),frozen,'secret',get=Mock(return_value=response([event()])),path=path)
         assert info['saved_games']==1
         _,info=p.capture(inputs(),frozen,'secret',get=Mock(return_value=response([event()])),path=path)
@@ -68,7 +69,8 @@ def test_capture_and_grade_exact_id_then_first_selection(tmp_path):
     assert q['live_stake']==0 and q['no_vig_probability'] is not None
     assert 'secret' not in json.dumps(captured)
     final=dict(inputs()['batches'][0]['records'][-1],completed=True,homePoints=35,awayPoints=20)
-    with patch.object(p,'utcnow',return_value=NOW+timedelta(days=2)):
+    with patch.object(p,'utcnow',return_value=NOW+timedelta(days=2)), patch.object(store,'datetime',wraps=datetime) as storage_clock:
+        storage_clock.now.return_value=NOW+timedelta(days=2)
         info=p.grade('key',path=path,get=Mock(return_value=response([final])))
     assert info['graded']==1
     report=p.report(path)
@@ -77,6 +79,18 @@ def test_capture_and_grade_exact_id_then_first_selection(tmp_path):
     with store.connect(path) as db:
         with pytest.raises(sqlite3.IntegrityError):
             db.execute('DELETE FROM records')
+
+
+def test_storage_independently_enforces_pregame_cutoff_at_write_time(tmp_path):
+    kickoff=NOW+timedelta(days=1)
+    for offset,expected in ((-1,1),(0,0),(1,0)):
+        path=tmp_path/('write-'+str(offset)+'.sqlite3')
+        # The capture clock remains pregame; the independent storage clock is
+        # deliberately before, exactly at, or after kickoff.
+        with patch.object(p,'utcnow',return_value=NOW), patch.object(store,'datetime',wraps=datetime) as storage_clock:
+            storage_clock.now.return_value=kickoff+timedelta(seconds=offset)
+            store.save('capture',{'events':[{'start':kickoff.isoformat()}]},path)
+        assert len(store.records(path)[0]['data']['events'])==expected
 
 
 @pytest.mark.parametrize('change', ['started','stale','future_quote','ambiguous','no_stats'])
