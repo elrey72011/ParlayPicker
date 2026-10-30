@@ -1,9 +1,9 @@
 {
-  "authorization_sha256": "c4a1ac3211bdeb02d33cf82fab15eb6f7f653a336ae090a2cdbece31c1107ede",
+  "authorization_sha256": "1b55298bc37b7783bdea78e126690f39ef93f1d4a106677d4ce7f2c4c5d74ec1",
   "base": "e5d3b4d5e79115d42093adcd2708c0413df75a66",
   "base_tree": "b9b638cdb184782eb98d7c599dbce1dbbb067290",
-  "binding_sha256": "3dc0bcb5ba9fe910a648e38ca960a99925ba4bd5f8f5a43ebe839cf74a0bcffd",
-  "implementation_commit": "8b2d0ab401d1e0ebf610296819e73f57e0a5ac12",
+  "binding_sha256": "800fccd91488ea1ee036e35904f33d11ade21badbe548152bc3c60fab7779f18",
+  "implementation_commit": "8a273b66d45374d2e6a5c18ab724d871bfccd268",
   "implementation_paths": [
     "app/ui/ncaaf_saved_refresh.py",
     "app/ui/publish_panel.py",
@@ -19,7 +19,7 @@
     "tests/test_ncaaf_saved_refresh_preparation.py",
     "tests/test_ncaaf_saved_refresh_scope.py"
   ],
-  "implementation_tree": "7a9b4698a754a891378a1cd0a77aafcb07e52620",
+  "implementation_tree": "84e178a0a00a22ee6722bc6bca8f0298eeb689da",
   "ordered_parents": [
     "c548ddb2693b64c94942ff315eed93e3fcb2f56e",
     "262f44cfe2323f5fde31a4497f94b2e80da1d46b"
