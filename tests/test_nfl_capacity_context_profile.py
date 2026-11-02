@@ -92,3 +92,6 @@ def test_historical_view_rejects_tampering_and_restores_owned_state(tmp_path, mo
     monkeypatch.setattr(inputs, 'load_module', native)
     record = {'compressed_b85': base64.b85encode(zlib.compress(b'UNREVIEWED')).decode(), 'bytes': 10, 'sha256': '0' * 64}
     with pytest.raises(ValueError, match='NFL_PROFILE_GENERATION_CHANGED'): inputs.record_bytes(record)
+
+
+from tests.nfl_profile_generation_inputs import historical_context_profile_generation
