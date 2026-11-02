@@ -1,0 +1,15 @@
+{
+  "actual_ci_reserves": "UNKNOWN",
+  "binding_sha256": "09133e71dac41f8c47bf6ffc470aa1d1dc5d6daaa55bcd946892db773671e734",
+  "ci_authority": false,
+  "historical_crash": {
+    "cause": "UNKNOWN",
+    "status": "OPEN"
+  },
+  "implementation_commit": "2b3b7ce2c03ddac3cced9d07339cae0136f68832",
+  "implementation_tree": "c8258a7eb97854b2d9aeeaf6d85fdf461148d3c6",
+  "maximum_ci_cycles": 0,
+  "publication_authority": false,
+  "status": "PENDING_LOCAL_NATIVE_LPT_QUALIFICATION",
+  "version": 4
+}
