@@ -5,13 +5,15 @@ import json
 from pathlib import Path
 import subprocess
 import zlib
+import io
+import types
 
 BASE='9fb69bf62c59f595a05478f2fc9cc2ed489840b9'
 TREE='3edaa30fca0853d61d5da8879900b7724af93471'
 OLD_STAMP='b5b240bfd806da5d5e786ecdd1ec6679b9d8677267e026d87516b7a373cf26ba'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 AUTHORIZATION='docs/paid-launch/nfl-account-reset-precision-v1.md'
-POLICY='docs/paid-launch/launch-scope-policy-nfl-account-reset-v1.json'
+POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v1.json'
 PROFILE='scripts/ci_test_file_costs_v1.json'
 TIMING_SOURCE='nfl-account-reset-local-estimate-20261101-v1'
 TIMING_SOURCE_SHA256='fce60bfa3f62a61319a053afc3f4d336780b4c73ef2c3d063bf04766ea8e844b'
@@ -32,11 +34,29 @@ PATHS={BINDING,AUTHORIZATION,PROFILE,'app_core/nfl_private_workflow.py','app/ui/
        'tests/nfl_profile_generation_inputs.py','tests/historical_scope_input_boundary.py',
        'tests/historical_setup_compile.py','tests/test_historical_setup_compile.py',
        'tests/test_historical_program_compile.py','tests/test_authenticated_reader_entry.py',*NORMALIZED}
+PATHS=PATHS|{'.github/workflows/ci-fifteen.yml','scripts/ci_fifteen_scope.py',
+    'docs/paid-launch/launch-scope-policy-nfl-account-reset-v1.json',
+    'docs/paid-launch/ci-fifteen-qualification-inputs-v1.json',
+    'docs/paid-launch/ci-fifteen-inventory-v1.json',
+    'docs/paid-launch/ci-fifteen-local-qualification-v1.md'}
 LIMIT=8*1024*1024
-QUALIFIED_SOURCES={'app/ui/nfl_private_workflow.py': '6daf4985272a084e4fff8b3c9f91b1bd84551546ca116955f8d5b059a3622116', 'app_core/nfl_private_workflow.py': 'ca435b0739ae1b7a2e769144b5c1c3036187797c34f576095a670f65595d0163', 'docs/paid-launch/nfl-account-reset-precision-v1.md': '91a76963f5f7cdd2b499c15bf7a20bcff94cd222654ff2d6d3840e6d213d3331', 'scripts/check_launch_change_scope.py': '86541d2cf000af454ed60a55d174c58644597ea8493e2301bebee4ef7e24edb3', 'scripts/ci_test_file_costs_v1.json': '91379959e127cc38cc76e0845ea481701ff359a99f382eb0281cae5cf72009a0', 'scripts/ncaaf_filtered_history_scope.py': '6d75005330e4b87b00e7c8535b92f25ba622c2d78c7a98c84932c9075ccafb86', 'scripts/ncaaf_private_refresh_scope.py': '0decd4f5ec6d7c8f652e1b2a9eb4d564f66b6719aa266221249b9d9a7f2543d0', 'scripts/ncaaf_sidebar_startup_scope.py': '9a75224dc65c29d8302c81c163af1dc4139a358053d6fe75ed38567f11f7f66a', 'tests/historical_scope_input_boundary.py': 'f91678b7d224ae1759ce619657ce07d26f4915813372b19062a0bccd2e2597dc', 'tests/historical_setup_compile.py': '106a68f23e593b40d5289f6ee1539c643e853ec7d3f548254c414e28504c8e00', 'tests/nfl_profile_generation_inputs.py': '2998f8088f4ca4abb98904e3f286ab53ebc05a8019408ffca9b4fa33843dce47', 'tests/test_authenticated_reader_entry.py': '77adc81cc24417a526203ecbd9d057a316380fdefdd1088da6e06f631875ed78', 'tests/test_historical_program_compile.py': '4d9e9373e10ddaf21f8f3094252bf08b628575061ef726f015e39a3254849a38', 'tests/test_historical_setup_compile.py': 'edc85a8eedf7c24b9908547f88ee96371e68f7695f6fb7efac8d07ea48d59493', 'tests/test_nfl_account_reset.py': 'a94fa1db078479db5c62ed8136ee46edab912d631b0a9a41babea4c86a77224a', 'tests/test_nfl_account_reset_scope.py': 'b1ec553aebdf1eb39432a752e72ff5b2e76da8a38d065e7aa7f5f2509f63c0e7', 'tests/test_nfl_account_reset_ui.py': 'bd33aae1e15dfecbf8ebd85aa696bd5f0fb32c271166f6127ce11f889e7cde17'}
+QUALIFIED_SOURCES={'.github/workflows/ci-fifteen.yml': '8e44af98864d6bd86f883316b18be3a2a232f2c5223d6c4414ffda3bfa4487a1', 'app/ui/nfl_private_workflow.py': '6daf4985272a084e4fff8b3c9f91b1bd84551546ca116955f8d5b059a3622116', 'app_core/nfl_private_workflow.py': 'ca435b0739ae1b7a2e769144b5c1c3036187797c34f576095a670f65595d0163', 'docs/paid-launch/ci-fifteen-inventory-v1.json': '1956765dc42be7cc0d0f5e9ceeef379eec526e948971299deb09f0e7ac7227d5', 'docs/paid-launch/ci-fifteen-local-qualification-v1.md': '855dd2af4455cf02c435ed656c03c874f9f37e0da5b0f3d25064dd2e33d896eb', 'docs/paid-launch/ci-fifteen-qualification-inputs-v1.json': '63254807c43ddf869c6b35b636b52294c2a2c3e7f469dcab4edcdccde4451de1', 'docs/paid-launch/launch-scope-policy-nfl-account-reset-v1.json': '2604ac29099af88224dda7e205bbbc46e4cfe2483cf157e09f1c1df342650f89', 'docs/paid-launch/nfl-account-reset-precision-v1.md': '91a76963f5f7cdd2b499c15bf7a20bcff94cd222654ff2d6d3840e6d213d3331', 'scripts/check_launch_change_scope.py': '2fd81f35197ba453e8ed8aae2312ccdc88a5be28bfe786246ab22057422cb152', 'scripts/ci_fifteen_scope.py': '2e60ea5dbf4c495e497fbff3810be63f2429a9eb65ca994789326fad5c9bae2f', 'scripts/ci_test_file_costs_v1.json': '5513e877c0e467bf8217dce1b041453e942d4610af1c5734e72519cb197ea347', 'scripts/ncaaf_filtered_history_scope.py': '6d75005330e4b87b00e7c8535b92f25ba622c2d78c7a98c84932c9075ccafb86', 'scripts/ncaaf_private_refresh_scope.py': '0decd4f5ec6d7c8f652e1b2a9eb4d564f66b6719aa266221249b9d9a7f2543d0', 'scripts/ncaaf_sidebar_startup_scope.py': '9a75224dc65c29d8302c81c163af1dc4139a358053d6fe75ed38567f11f7f66a', 'tests/historical_scope_input_boundary.py': 'f91678b7d224ae1759ce619657ce07d26f4915813372b19062a0bccd2e2597dc', 'tests/historical_setup_compile.py': '106a68f23e593b40d5289f6ee1539c643e853ec7d3f548254c414e28504c8e00', 'tests/nfl_profile_generation_inputs.py': '2998f8088f4ca4abb98904e3f286ab53ebc05a8019408ffca9b4fa33843dce47', 'tests/test_authenticated_reader_entry.py': '77adc81cc24417a526203ecbd9d057a316380fdefdd1088da6e06f631875ed78', 'tests/test_historical_program_compile.py': '4d9e9373e10ddaf21f8f3094252bf08b628575061ef726f015e39a3254849a38', 'tests/test_historical_setup_compile.py': 'edc85a8eedf7c24b9908547f88ee96371e68f7695f6fb7efac8d07ea48d59493', 'tests/test_nfl_account_reset.py': 'a94fa1db078479db5c62ed8136ee46edab912d631b0a9a41babea4c86a77224a', 'tests/test_nfl_account_reset_scope.py': 'b1ec553aebdf1eb39432a752e72ff5b2e76da8a38d065e7aa7f5f2509f63c0e7', 'tests/test_nfl_account_reset_ui.py': 'bd33aae1e15dfecbf8ebd85aa696bd5f0fb32c271166f6127ce11f889e7cde17'}
 
 
 READER_ENTRY_TRANSITIONS={'scripts/check_launch_change_scope.py': [('def _filtered_history_module():', 'def _filtered_history_module(*, read=None):'), ("exec(compile(source,module.__file__,'exec'),module.__dict__);module.authenticate(ROOT)", "exec(compile(source,module.__file__,'exec'),module.__dict__);current_binding=module.authenticate(ROOT)"), ('    module._NATIVE_DECOMPRESS=_FILTERED_HISTORY_NATIVE_DECOMPRESS\n    return module', "    module._NATIVE_DECOMPRESS=_FILTERED_HISTORY_NATIVE_DECOMPRESS\n    if read is not None:\n        if type(read) is not tuple or len(read)!=2:raise ValueError('NCAAF_FILTERED_READER_ARGUMENT_CHANGED')\n        return module._predecessor_source(current_binding,*read)\n    return module")], 'scripts/ncaaf_filtered_history_scope.py': [("    b=authenticate(root);raw=capacity_predecessor(b,relative,raw);raw=diagnostic_predecessor(b,relative,raw);record=b['component_predecessors'].get(relative)", '    return _predecessor_source(authenticate(root),relative,raw)\n\n\ndef _predecessor_source(b,relative,raw):\n    """Decode only within the entry that just authenticated this binding."""\n    raw=capacity_predecessor(b,relative,raw);raw=diagnostic_predecessor(b,relative,raw);record=b[\'component_predecessors\'].get(relative)')]}
+
+READER_ENTRY_TRANSITIONS['scripts/check_launch_change_scope.py'].append((r"binding_raw=stream.read(8*1024*1024+1)",r"binding_raw=stream.read(8*1024*1024+1).replace(b'\r\n',b'\n')"))
+
+
+def _fifteen_scope():
+    """Fresh authenticated helper; standalone commands need no package import."""
+    root=Path(__file__).resolve().parents[1];relative='scripts/ci_fifteen_scope.py'
+    with io.FileIO(root/relative,'r')as f:raw=f.read(LIMIT+1).replace(b'\r\n',b'\n')
+    require(len(raw)<=LIMIT and sha(raw)==QUALIFIED_SOURCES[relative],'CI_FIFTEEN_HELPER_CHANGED')
+    module=types.ModuleType('exact_ci_fifteen_scope');module.__file__=str(root/relative)
+    exec(compile(raw,module.__file__,'exec'),module.__dict__)
+    return module
+
 
 def reader_entry_parent(path,raw):
     for before,after in READER_ENTRY_TRANSITIONS.get(path,()):
@@ -129,11 +149,16 @@ def binding_successor(root,stamp):
         parent_components={p:prior_components.get(p) for p in components},
         parent_capacity_after={p:prior_edges[p]['after_sha256'] if p in prior_edges else None for p in edges},
         authorization_sha256=components[AUTHORIZATION])
+    b['nfl_account_reset_successor']['ci_fifteen_contract']=_fifteen_scope().make_contract(root,stamp,components)
     require(parent_binding(b)==before,'NFL_ACCOUNT_PARENT_CHANGED')
     return b
 
 
 def verify_profile(root):
+    return _fifteen_scope().verify_profile(root)
+
+
+def verify_thirteen_profile(root):
     before=json.loads(git(root,'show',BASE+':'+PROFILE));after=json.loads((Path(root)/PROFILE).read_bytes())
     retained=after['sources'].get(RETAINED_TIMING_SOURCE)
     require(retained is not None and sha(canonical(retained))==RETAINED_TIMING_SOURCE_SHA256
@@ -173,6 +198,8 @@ def verify_profile(root):
 
 
 def make_policy(root,binding,implementation,binding_sha):
+    if binding['nfl_account_reset_successor'].get('ci_fifteen_contract')is not None:
+        return _fifteen_scope().make_policy(root,binding,implementation,binding_sha)
     return dict(version='nfl-account-reset-authenticated-reader-local-seal-v8',base=BASE,base_tree=TREE,binding_sha256=binding_sha,
         failed_release_head=FAILED_RELEASE_HEAD,failed_release_tree=FAILED_RELEASE_TREE,
         preserved_candidate=PRESERVED_HEAD,preserved_tree=PRESERVED_TREE,preserved_profile_sha256=PRESERVED_PROFILE,
@@ -186,6 +213,8 @@ def make_policy(root,binding,implementation,binding_sha):
 
 
 def validate(root,binding,comparison_base,manifest,*,binding_sha):
+    if binding['nfl_account_reset_successor'].get('ci_fifteen_contract')is not None:
+        return _fifteen_scope().validate(root,binding,comparison_base,manifest,binding_sha=binding_sha)
     root=Path(root)
     require(text(root,'rev-parse',BASE+'^{tree}')==TREE,'NFL_ACCOUNT_BASE_CHANGED')
     require(comparison_base in (None,BASE),'COMPARISON_BASE_NOT_APPROVED')

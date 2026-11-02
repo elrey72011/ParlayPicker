@@ -14,11 +14,11 @@ import base64,zlib
 _FILTERED_HISTORY_NATIVE_B85DECODE=base64.b85decode
 _FILTERED_HISTORY_NATIVE_B85CODE=getattr(base64.b85decode,'__code__',None)
 _FILTERED_HISTORY_NATIVE_DECOMPRESS=zlib.decompressobj
-_FILTERED_HISTORY_BINDING_SHA256='f7bbd9f837b6cb7369b5b2179e682e630ff3eec7519dcd2f6939756d233383ee'
+_FILTERED_HISTORY_BINDING_SHA256='e94a7ead7b59f7bb1d1ac4891bfac987fcfe0448847960bede84b8b95d48ac4b'
 def _filtered_history_module(*, read=None):
     # Authenticate before executing the selected successor helper.
     import io
-    with io.FileIO(ROOT/'docs/research/ncaaf-filtered-history-bindings-v1.json','r') as stream: binding_raw=stream.read(8*1024*1024+1)
+    with io.FileIO(ROOT/'docs/research/ncaaf-filtered-history-bindings-v1.json','r') as stream: binding_raw=stream.read(8*1024*1024+1).replace(b'\r\n',b'\n')
     if hashlib.sha256(binding_raw).hexdigest()!=_FILTERED_HISTORY_BINDING_SHA256:raise ValueError('NCAAF_FILTERED_BINDING_CHANGED')
     record=json.loads(binding_raw);relative='scripts/ncaaf_filtered_history_scope.py'
     with io.FileIO(ROOT/relative,'r') as stream: source=stream.read(8*1024*1024+1).replace(b'\r\n',b'\n')
