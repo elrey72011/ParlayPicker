@@ -70,6 +70,11 @@ def historical_view(root, consumer, destination):
     root, consumer, destination = Path(root).resolve(), Path(consumer).resolve(), Path(destination)
     with predecessor_imports(destination):
         binding = current.authenticate(root)
+        physical_binding = binding
+        account = binding.get('nfl_account_reset_successor', {})
+        if account:
+            from scripts.nfl_account_reset_scope import parent_binding as account_parent
+            binding = json.loads(account_parent(binding))
         metadata = binding['qualification_release_repair']['build_preflight']['receipt_successor']['first_driver_successor']['capacity_context_successor']
         require(consumer == root / CONSUMER)
         sources = metadata['historical_parent_sources']
@@ -83,6 +88,9 @@ def historical_view(root, consumer, destination):
             elif path in sources: raw = record_bytes(sources[path])
             else:
                 raw = current.physical(root / path)
+                if path in account.get('historical_sources', {}):
+                    require(sha(raw) == physical_binding['components'][path])
+                    raw = record_bytes(account['historical_sources'][path])
                 successor = metadata.get('tls_trust_successor', {})
                 clock = successor.get('clock_fixture_successor', {})
                 saved = clock.get('ncaaf_saved_refresh_successor', {})

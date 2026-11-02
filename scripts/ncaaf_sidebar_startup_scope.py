@@ -67,7 +67,18 @@ def history_successor(raw):
     require(raw.count(marker)==1,'INHERITED_GUARD_LOGIC_CHANGED')
     return raw.replace(marker,marker+HISTORY_PARENT_ADAPTER,1)
 
+def _account_scope(root,binding):
+    relative='scripts/nfl_account_reset_scope.py'
+    path=Path(root)/relative;source=path.read_bytes().replace(b'\r\n',b'\n')
+    require(sha(source)==binding['components'][relative],'NFL_ACCOUNT_SCOPE_CHANGED')
+    namespace={'__file__':str(path),'__name__':'exact_nfl_account_reset_scope'}
+    exec(compile(source,str(path),'exec'),namespace)
+    return namespace
+
 def parent_binding(binding):
+    if binding.get('nfl_account_reset_successor') is not None:
+        try:binding=json.loads(_account_scope(Path(__file__).resolve().parents[1],binding)['parent_binding'](binding))
+        except ValueError as exc:raise ValueError('SIDEBAR_PARENT_BINDING_CHANGED') from exc
     m=metadata(binding);prior=json.loads(json.dumps(binding))
     del saved(prior)['sidebar_startup_successor'];prior['components']=m['parent_components']
     prior['component_predecessors']={p:r for p,r in prior['component_predecessors'].items() if p in m['parent_component_predecessor_after_sha256']}
@@ -128,6 +139,8 @@ def binding_successor(root,stamp):
     return b
 
 def make_policy(root,binding,implementation,binding_sha):
+    if binding.get('nfl_account_reset_successor') is not None:
+        return _account_scope(root,binding)['make_policy'](root,binding,implementation,binding_sha)
     return dict(version='sidebar-startup-seal-v2',base=BASE,base_tree=TREE,ordered_parents=PARENTS,binding_sha256=binding_sha,
         preserved_failed_head=FAILED_HEAD,preserved_failed_tree=FAILED_TREE,correction_paths=sorted(CORRECTION_PATHS),
         preserved_failed_policy_sha256=sha(git(root,'show',FAILED_HEAD+':'+POLICY)),
@@ -137,6 +150,8 @@ def make_policy(root,binding,implementation,binding_sha):
         unchanged_blobs={p:v for p,v in blobs(root,BASE).items() if p not in PATHS})
 
 def validate(root,binding,comparison_base,manifest,*,binding_sha):
+    if binding.get('nfl_account_reset_successor') is not None:
+        return _account_scope(root,binding)['validate'](root,binding,comparison_base,manifest,binding_sha=binding_sha)
     root=Path(root)
     require(text(root,'rev-parse',FAILED_HEAD+'^{tree}')==FAILED_TREE,'SIDEBAR_FAILED_EVIDENCE_CHANGED')
     require(text(root,'merge-base',BASE,FAILED_HEAD)==BASE,'SIDEBAR_FAILED_ANCESTRY_CHANGED')

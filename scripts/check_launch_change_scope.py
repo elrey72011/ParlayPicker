@@ -14,8 +14,8 @@ import base64,zlib
 _FILTERED_HISTORY_NATIVE_B85DECODE=base64.b85decode
 _FILTERED_HISTORY_NATIVE_B85CODE=getattr(base64.b85decode,'__code__',None)
 _FILTERED_HISTORY_NATIVE_DECOMPRESS=zlib.decompressobj
-_FILTERED_HISTORY_BINDING_SHA256='b5b240bfd806da5d5e786ecdd1ec6679b9d8677267e026d87516b7a373cf26ba'
-def _filtered_history_module():
+_FILTERED_HISTORY_BINDING_SHA256='f7bbd9f837b6cb7369b5b2179e682e630ff3eec7519dcd2f6939756d233383ee'
+def _filtered_history_module(*, read=None):
     # Authenticate before executing the selected successor helper.
     import io
     with io.FileIO(ROOT/'docs/research/ncaaf-filtered-history-bindings-v1.json','r') as stream: binding_raw=stream.read(8*1024*1024+1)
@@ -25,12 +25,15 @@ def _filtered_history_module():
     if source.count(_FILTERED_HISTORY_BINDING_SHA256.encode())!=1 or hashlib.sha256(source.replace(_FILTERED_HISTORY_BINDING_SHA256.encode(),b'0'*64)).hexdigest()!=record['components'][relative]:
         raise ValueError('NCAAF_FILTERED_SOURCE_CHANGED')
     module=types.ModuleType('exact_filtered_history_scope');module.__file__=str(ROOT/relative)
-    exec(compile(source,module.__file__,'exec'),module.__dict__);module.authenticate(ROOT)
+    exec(compile(source,module.__file__,'exec'),module.__dict__);current_binding=module.authenticate(ROOT)
     module._PREDECESSOR_IMAGES=_FILTERED_HISTORY_PREDECESSOR_IMAGES
     module._LEGACY_GUARD_IMAGES=_FILTERED_HISTORY_LEGACY_IMAGES
     module._NATIVE_B85DECODE=_FILTERED_HISTORY_NATIVE_B85DECODE
     module._NATIVE_B85CODE=_FILTERED_HISTORY_NATIVE_B85CODE
     module._NATIVE_DECOMPRESS=_FILTERED_HISTORY_NATIVE_DECOMPRESS
+    if read is not None:
+        if type(read) is not tuple or len(read)!=2:raise ValueError('NCAAF_FILTERED_READER_ARGUMENT_CHANGED')
+        return module._predecessor_source(current_binding,*read)
     return module
 
 if __name__=='__main__':raise SystemExit(_filtered_history_module().main())

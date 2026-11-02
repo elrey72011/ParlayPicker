@@ -25,6 +25,8 @@ MESSAGES = {
     'NFL_WORKFLOW_OPERATION_EXPIRED':'The approved capture window expired. It was not automatically restarted.',
     'NFL_WORKFLOW_ACQUISITION_NOT_ENABLED':'Acquisition is disabled pending owner-approved deployment and operational configuration.',
     'NFL_WORKFLOW_INFERENCE_NOT_ENABLED':'New calculations are disabled pending owner-approved operational configuration. Saved viewing is separate.',
+    'NFL_WORKFLOW_ACCOUNT_RESET_INVALID':'Enter the reset information actually displayed by your account. A date-only reset keeps its time unknown; do not invent a time or timezone.',
+    'NFL_WORKFLOW_ACCOUNT_EXPIRED':'The account reset may overlap this request window. No request was sent. Verify account evidence that covers the complete operation.',
 }
 
 
@@ -191,15 +193,32 @@ def render_prepare(service):
             predecessors={entry['prepared']['selected']['event']['canonical_event_id']:entry['operation']['id'] for entry in prepared}
             state['nfl_workflow_prepared']=service.prepare(selected,predecessors=predecessors)
             invalidate_review(state);st.rerun()
-    with st.form('nfl_workflow_quote_form_'+scope):
+    precision=st.radio('Account reset information shown by your dashboard',
+        ['Exact date and time (UTC)','Date only'],key='nfl_workflow_reset_precision_'+scope)
+    account_scope=scope+('_date' if precision=='Date only' else '_exact')
+    if precision=='Date only':
+        reset_date=st.date_input('Allowance reset date (as displayed)',value=None,key='nfl_workflow_reset_day_'+scope)
+        reset_zone=st.radio('Timezone shown for that reset date',['UNKNOWN','UTC'],key='nfl_workflow_reset_zone_'+scope)
+        reset_observation=dict(precision='date',date=reset_date.isoformat() if reset_date else None,timezone=reset_zone)
+        account_scope+='_'+digest(reset_observation)
+        st.caption('Actual reset time remains UNKNOWN. For an unknown timezone, requests must finish strictly before the reported date minus 24 hours in UTC. For UTC, they must finish before the start of that date. These are conservative bounds, not observed reset times.')
+        if reset_date:
+            from app_core.nfl_private_workflow import account_reset_evidence
+            _,reset_bound=account_reset_evidence(reset_observation=reset_observation)
+            st.caption('Conservative reset bound (not the actual reset): '+reset_bound+'. The complete capture window must end strictly before this bound.')
+    with st.form('nfl_workflow_quote_form_'+account_scope):
         credit=st.number_input('Verified remaining included Odds credits',min_value=0,max_value=1000000,value=len(operation_ids),step=1,key='nfl_workflow_credit_'+scope)
-        reset_date=st.date_input('Verified allowance reset date (UTC)',value=datetime.now(timezone.utc).date()+timedelta(days=1),key='nfl_workflow_reset_'+scope)
-        reset_time=st.time_input('Verified allowance reset time (UTC)',value=time(0,0),key='nfl_workflow_reset_time_'+scope)
-        private=st.checkbox('I verified current included entitlement and private use for these exact requests.',key='nfl_workflow_private_'+scope)
-        no_overage=st.checkbox('I authorize these bounded requests only, with $0 additional spending, and am ready to review the lines promptly.',key='nfl_workflow_no_overage_'+scope)
+        st.caption('Enter a verified minimum included-credit amount available for these requests. It is retained as a floor, not an exact dashboard balance. The default is not verification.')
+        if precision!='Date only':
+            reset_date=st.date_input('Verified allowance reset date (UTC)',value=datetime.now(timezone.utc).date()+timedelta(days=1),key='nfl_workflow_reset_'+scope)
+            reset_time=st.time_input('Verified allowance reset time (UTC)',value=time(0,0),key='nfl_workflow_reset_time_'+scope)
+        private=st.checkbox('I verified current included entitlement and private use for these exact requests.',key='nfl_workflow_private_'+account_scope)
+        no_overage=st.checkbox('I authorize these bounded requests only, with $0 additional spending, and am ready to review the lines promptly.',key='nfl_workflow_no_overage_'+account_scope)
         acquire=st.form_submit_button('Authorize and capture reviewed NFL lines',disabled=unavailable or not service.allow_acquisition)
     if acquire:
-        service.capture_quotes(operation_ids,remaining_credits=int(credit),reset_at=datetime.combine(reset_date,reset_time,tzinfo=timezone.utc).isoformat(),private_use=private,no_overage=no_overage)
+        reset_args=(dict(reset_observation=reset_observation)
+                    if precision=='Date only' else dict(reset_at=datetime.combine(reset_date,reset_time,tzinfo=timezone.utc).isoformat()))
+        service.capture_quotes(operation_ids,remaining_credits=int(credit),private_use=private,no_overage=no_overage,**reset_args)
         state['nfl_workflow_pair_ids']=[row['id'] for row in service.stage(operation_ids)]
         st.success('Original lines captured. No numerical prediction yet.')
     if st.button('Review captured lines without another request',key='nfl_workflow_review_originals'):

@@ -258,6 +258,9 @@ def capture_generated_parent(config):
     # An inherited node is only an origin hint. All physical sources, exact
     # literal programs, fixture site and binding are authenticated before use.
     import os
+    if hasattr(config,'add_cleanup') and not getattr(config,'_historical_compile_cleanup',False):
+        config.add_cleanup(clear_program_code_pool)
+        config._historical_compile_cleanup=True
     marker=os.environ.get('PYTEST_CURRENT_TEST','')
     rows=json.loads(physical_bytes(ROOT/BINDING)).get('historical_input_boundary',{}).get('generated_fixture_contracts',[])
     if not isinstance(rows,list) or len(rows)>8:
@@ -518,6 +521,40 @@ _BOOTSTRAP_IMAGES = None
 _BOOTSTRAP_PLAN = None
 _BOOTSTRAP_NATIVE_COMPILE = compile
 _BOOTSTRAP_LIMIT = 32 * 1024 * 1024
+_PROGRAM_CODE_POOL = {}  # Immutable code/digest tuples, never module or approval state.
+_PROGRAM_CODE_PROOFS = {} # References to original immutable native-compiler outputs.
+_SETUP_COMPILER_SHA256 = '106a68f23e593b40d5289f6ee1539c643e853ec7d3f548254c414e28504c8e00'
+
+
+def clear_program_code_pool():
+    _PROGRAM_CODE_POOL.clear()
+    _PROGRAM_CODE_PROOFS.clear()
+
+
+def setup_compile_module():
+    relative='tests/historical_setup_compile.py'
+    raw=physical_bytes(ROOT/relative).replace(b'\r\n',b'\n')
+    if sha(raw)!=_SETUP_COMPILER_SHA256:
+        raise ValueError('HISTORICAL_COMPILE_HELPER_CHANGED')
+    helper=types.ModuleType('exact_owned_historical_helper_compilation')
+    helper.__file__=str(ROOT/relative)
+    exec(compile(raw,helper.__file__,'exec'),helper.__dict__)
+    return helper
+
+
+def install_owned_program_compilation(module, chunks, tail, key):
+    if not _ACTIVE or _ACTIVE[-1].plan.role is not Role.HISTORICAL:
+        return None
+    owner=_ACTIVE[-1]
+    helper=setup_compile_module()
+    scope_key=tuple(sha(value) for value in key)+(_SETUP_COMPILER_SHA256,sys.version,
+        sys.implementation.cache_tag,str(sys.flags.optimize))
+    seeds=tuple(code for prefix,assignment,_,_ in chunks for code in (prefix,assignment))+(tail,)
+    adapter=helper.OwnedProgramExecution(module.__file__,scope_key,_PROGRAM_CODE_POOL,
+        owner.patch,lambda:bool(_ACTIVE)and _ACTIVE[-1] is owner,seeds,proofs=_PROGRAM_CODE_PROOFS)
+    owner.resources.append(adapter.clear)
+    adapter.install(module.__dict__)
+    return adapter
 _BOOTSTRAP_GENERATIONS = (
     ('_ncaaf_custody_predecessor', '_ncaaf_custody_parent_guard_source', '_ncaaf_pilot_parent_guard_source',
      '35ac29313e9509efd68894a86e4a98b109a58459605fe589cc6f86159e0dbc64', '0772744a3b07e7a3aa67d889efff45743e4562e4fe8b781e2d2b3d5111424d9d', 1),
@@ -734,6 +771,7 @@ def execute_released_bootstrap(source, module, live, binding):
         actual_digest=_bootstrap_code_digest((chunks,tail))
         if actual_size>_BOOTSTRAP_LIMIT or actual_digest!=cached[4]:
             raise ValueError('HISTORICAL_BOOTSTRAP_PLAN_CHANGED',actual_size,_BOOTSTRAP_LIMIT,cached[4],actual_digest)
+        install_owned_program_compilation(module,chunks,tail,key)
         for prefix,assignment,index,row in chunks:
             exec(prefix,module.__dict__)
             _run_bootstrap_assignment(module,assignment,row[1],source,images[index],row[4])
@@ -774,6 +812,7 @@ def execute_released_bootstrap(source, module, live, binding):
         # Code objects and their constants are immutable. Every use still
         # authenticates physical inputs and executes into new dictionaries.
         _BOOTSTRAP_PLAN=(plan_key,compile,chunks,tail,digest,size)
+    install_owned_program_compilation(module,chunks,tail,key)
     for prefix, assignment, index, row in chunks:
         exec(prefix, module.__dict__)
         _run_bootstrap_assignment(module, assignment, row[1], source, images[index], row[4])
@@ -1162,8 +1201,7 @@ def _filtered_source_parent(relative,raw):
     live=canonical_guard()
     factory=getattr(live,'_filtered_history_module',None)
     if factory is None:return raw
-    scope=factory()
-    return scope.predecessor_source(ROOT,relative,raw)
+    return factory(read=(relative,raw))
 
 
 def install_filtered_successor_input_view(plan,patch):
@@ -1399,6 +1437,26 @@ def install_consistent_read_apis(plan,patch,live):
     patch.setattr(Path,'open',agreed_open)
 
 
+def install_owned_helper_compilation(plan, patch, live):
+    """Recompile neither identical helper; reauthenticate both on every load."""
+    if (plan.role is not Role.HISTORICAL or not _ACTIVE
+            or _ACTIVE[-1].plan != plan or patch is not _ACTIVE[-1].patch):
+        raise ValueError('HISTORICAL_COMPILE_OWNER_REQUIRED')
+    helper = setup_compile_module()
+    existing = vars(live).get('compile', _ABSENT)
+    key = (id(live), 'compile')
+    if key in _ACTIVE[-1].attributes and _ACTIVE[-1].attributes[key][3] is existing:
+        return existing
+    # An unrelated compiler patch keeps its original behavior and ownership.
+    if existing is not _ABSENT:
+        return None
+    callers = (live._filtered_history_module.__code__, live._ci_fixture_module.__code__)
+    compiler = helper.OwnedCompilation(ROOT, callers)
+    _ACTIVE[-1].resources.append(compiler.clear)
+    patch.setattr(live, 'compile', compiler, raising=False)
+    return compiler
+
+
 def apply_selected_inputs(plan, request, patch):
     if plan.role is not Role.HISTORICAL:
         return False
@@ -1406,6 +1464,7 @@ def apply_selected_inputs(plan, request, patch):
     if plan.generated_contract:
         _install_generated_source_input(plan,patch,live)
         return True
+    install_owned_helper_compilation(plan, patch, live)
     install_filtered_successor_input_view(plan,patch)
     install_capacity_input_view(plan,patch)
     records=json.loads(physical_bytes(ROOT/BINDING))['historical_input_boundary'].get('helper_preimages',{})

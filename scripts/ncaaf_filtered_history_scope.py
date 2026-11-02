@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='b5b240bfd806da5d5e786ecdd1ec6679b9d8677267e026d87516b7a373cf26ba'
+_BINDING_SHA256='f7bbd9f837b6cb7369b5b2179e682e630ff3eec7519dcd2f6939756d233383ee'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -178,7 +178,12 @@ def diagnostic_predecessor(binding,relative,raw):
 
 
 def predecessor_source(root,relative,raw):
-    b=authenticate(root);raw=capacity_predecessor(b,relative,raw);raw=diagnostic_predecessor(b,relative,raw);record=b['component_predecessors'].get(relative)
+    return _predecessor_source(authenticate(root),relative,raw)
+
+
+def _predecessor_source(b,relative,raw):
+    """Decode only within the entry that just authenticated this binding."""
+    raw=capacity_predecessor(b,relative,raw);raw=diagnostic_predecessor(b,relative,raw);record=b['component_predecessors'].get(relative)
     if record is None:return raw
     # An already older supplied view is left to its original strict reader.
     actual=sha(raw.replace(b'\r\n',b'\n'))
