@@ -1,0 +1,129 @@
+{
+  "actual_ci_reserves": "UNKNOWN",
+  "assignment": {
+    "exact_once": true,
+    "identities": 9403,
+    "report_sha256": "82d6ea65a50a83e7afae777a7872acf6d13f4ee82b28168a1aea3e0239abcece",
+    "reuse_basis": "All collected test programs,runner,conftest andpytest.ini identical; only subsequent CLI binding normalization and seal metadata differ. Final-head collection independently rechecked after seal.",
+    "sha256": "59f968743e59ba1c0bcbc2292cd38bab6d7799aff0edcc9aab6c53ca6cf908f0",
+    "source_head": "4f1473be4704a0397348192f73fa2ba5c45db81d",
+    "source_tree": "696571d220d48827a7a42ac63567899a11b755ef",
+    "whole_file_ordering": true
+  },
+  "at": "2026-11-02T07:11:55.037865+00:00",
+  "binding_sha256": "e94a7ead7b59f7bb1d1ac4891bfac987fcfe0448847960bede84b8b95d48ac4b",
+  "capacity": {
+    "actual_ci_reserves": "UNKNOWN",
+    "actual_requirement": 120,
+    "minimum_projected": 374.0027055148362,
+    "minimum_stress": 218.7922499999995,
+    "model_only": true,
+    "planning_gate": 180,
+    "report_sha256": "b62caef604a72eac4782797a8e9b5f02e3235ef56f2b7ca46c8ca59e32b020cd"
+  },
+  "ci_authority": false,
+  "contexts": [
+    {
+      "cases": 182,
+      "exit_code": 0,
+      "head": "0be7c5eb8cc32a98180dcb216d3f029f24586870",
+      "implementation_commit": "95a407e07a78bb5dec45b6b5a1f3f6028bd10a76",
+      "implementation_tree": "5020a0e391dc5a4ee3807e48efe04ce81b43b627",
+      "junit_sha256": "b53ae06a4eec881d5fc36e163c78684cdaa3c5222c00cac639a301abe19ef6f1",
+      "name": "normalized-complete182",
+      "progress_sha256": "44ce8f9cbde2fd7207845a2db6fc795a841a9240710f320e02290a17fc888467",
+      "report_sha256": "420aabbce788bdaa06af094b8895995a04c518ed65148c06458b0c5d6692fb71",
+      "tested_tree": "89b02fad9a4137aeb22538a91de6f694d20ca757",
+      "wall_seconds": 606.4217784000211
+    },
+    {
+      "cases": 61,
+      "exit_code": 0,
+      "head": "0be7c5eb8cc32a98180dcb216d3f029f24586870",
+      "implementation_commit": "95a407e07a78bb5dec45b6b5a1f3f6028bd10a76",
+      "implementation_tree": "5020a0e391dc5a4ee3807e48efe04ce81b43b627",
+      "junit_sha256": "9e7fb1c2025a08a620a731ba4566704e2742ef5e80d916310ced2ee7f23a1e82",
+      "name": "normalized-security",
+      "progress_sha256": "47f5e6ba79e58ce9c70e60bc0e2f4604015f895a20ceeeaabc68967ab12cffce",
+      "report_sha256": "1768165390aa07d5fe4fc7d7b1bdbed78588ad46ac460ca4eb85ae5d266db6c6",
+      "tested_tree": "89b02fad9a4137aeb22538a91de6f694d20ca757",
+      "wall_seconds": 33.91652869997779
+    },
+    {
+      "cases": 53,
+      "exit_code": 0,
+      "head": "0be7c5eb8cc32a98180dcb216d3f029f24586870",
+      "implementation_commit": "95a407e07a78bb5dec45b6b5a1f3f6028bd10a76",
+      "implementation_tree": "5020a0e391dc5a4ee3807e48efe04ce81b43b627",
+      "junit_sha256": "80d9a88e5183ae9071e32a03cf70e40b75065c8f2fdd1856822c8ae17b9cd5b8",
+      "name": "normalized-workflow",
+      "progress_sha256": "dbcded3ba461c7e92373f2fdbb4a52a080a541f00adcb4a033ca63596e36c6ec",
+      "report_sha256": "67b456545ac5994a0d997de3eed01c79fc18875e58b7891824e7ae0452cbccd8",
+      "tested_tree": "89b02fad9a4137aeb22538a91de6f694d20ca757",
+      "wall_seconds": 218.1201141999918
+    },
+    {
+      "cases": 15,
+      "exit_code": 0,
+      "head": "0be7c5eb8cc32a98180dcb216d3f029f24586870",
+      "implementation_commit": "95a407e07a78bb5dec45b6b5a1f3f6028bd10a76",
+      "implementation_tree": "5020a0e391dc5a4ee3807e48efe04ce81b43b627",
+      "junit_sha256": "738ff1aa568f2e03679960b919c64d3a05e0200f176a822193ecea5cdcd3c2c2",
+      "name": "normalized-reader",
+      "progress_sha256": "f6451020dc852b677f6b1d09a234d2f31f09a65a10e4d6c8a23fcfc86ef1d2fa",
+      "report_sha256": "07e8ead012242b8395b7ea25afa303f4f94c0822a98c1d4530422a345195fd18",
+      "tested_tree": "89b02fad9a4137aeb22538a91de6f694d20ca757",
+      "wall_seconds": 16.572545300005004
+    },
+    {
+      "cases": 110,
+      "exit_code": 0,
+      "head": "0be7c5eb8cc32a98180dcb216d3f029f24586870",
+      "implementation_commit": "95a407e07a78bb5dec45b6b5a1f3f6028bd10a76",
+      "implementation_tree": "5020a0e391dc5a4ee3807e48efe04ce81b43b627",
+      "junit_sha256": "0a6b68abeffcd236f933f4901e95275386cf5025104123ec991cfad2436fa7b3",
+      "name": "normalized-slate110",
+      "progress_sha256": "891e98a6cf3652a6e1c4ee63e4031d2623ee86aed8fa8c873e67eb62f687266c",
+      "report_sha256": "e951d67af00dadd6dee8a0c5b7c8ae85c205e8db541a7179a1fe3bc08c21059d",
+      "tested_tree": "89b02fad9a4137aeb22538a91de6f694d20ca757",
+      "wall_seconds": 1641.940180799982
+    }
+  ],
+  "current_source_protocol": {
+    "cases": 25,
+    "head": "0be7c5eb8cc32a98180dcb216d3f029f24586870",
+    "passed": 25,
+    "program_sha256": "0997cd5ccdf74361ac62349bab345b17533f5618316295a6f37e11f2a7a4cf14",
+    "report_sha256": "eb4c69c3ddcea54541115fb1e4a9c42f72122d167319f1cc22cf7bbc15776be9",
+    "tree": "89b02fad9a4137aeb22538a91de6f694d20ca757"
+  },
+  "distinct_release_cases_locally_qualified": 421,
+  "historical_crash_cause": "UNKNOWN",
+  "hosted_execution": false,
+  "hosted_prerequisite": "Explicit owner amendment must cover temporary disabling oldci.yml/ID320323816,one leased PR push,new15 cycle and restoration; no such action performed.",
+  "implementation_commit": "95a407e07a78bb5dec45b6b5a1f3f6028bd10a76",
+  "implementation_tree": "5020a0e391dc5a4ee3807e48efe04ce81b43b627",
+  "original_thirteen_evidence": "Unchanged exact source/seal retained as a5430e5 ancestor; oldci.yml physical bytes unchanged. Prior flags do not authorize15.",
+  "publication_authority": false,
+  "seal_metadata_recheck": "Final seal adds only this validation document and policy over the tested implementation tree. Exact final head/tree receives independent standalone,security,protocol and collection read-back;no source change or authentic acceptance is inferred.",
+  "status": "LOCAL_SOURCE_QUALIFIED_FORECAST_GATE_PASS_ACTUAL_CI_UNKNOWN",
+  "synthetic_execution": {
+    "implication": "Only synthetic skipped-report reconciliation is qualified. These are not inherited release skips or proof of skipped functionality.",
+    "passed": 28,
+    "skipped": 2,
+    "skips": [
+      {
+        "classname": "test_SYNTHETIC_fifteen_11",
+        "name": "test_SYNTHETIC_second",
+        "reason": "SYNTHETIC protocol skip, not an inherited release outcome"
+      },
+      {
+        "classname": "test_SYNTHETIC_fifteen_03",
+        "name": "test_SYNTHETIC_second",
+        "reason": "SYNTHETIC protocol skip, not an inherited release outcome"
+      }
+    ]
+  },
+  "synthetic_skips": 2,
+  "version": 1
+}
