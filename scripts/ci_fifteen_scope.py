@@ -17,8 +17,8 @@ PROFILE_SHA256='b4d4bd2fc5c331e51843589733f36e229c0e46c3d261ac50594e282aa5e3e120
 WORKFLOW_SHA256='8e44af98864d6bd86f883316b18be3a2a232f2c5223d6c4414ffda3bfa4487a1'
 ASSIGNMENT_SHA256='4d5bfeea76a87e266d1f0c2ab194d3197d53049a77505ee24a1b8ef0f4f05cbc'
 OLD_POLICY='docs/paid-launch/launch-scope-policy-nfl-account-reset-v1.json'
-POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v5.json'
-VALIDATION='docs/paid-launch/ci-fifteen-validation-v5.json'
+POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v6.json'
+VALIDATION='docs/paid-launch/ci-fifteen-validation-v6.json'
 IMPLEMENTATION_PARENT='5b9d4827fd2965996eca26533b8d568ae046888e'
 IMPLEMENTATION_PARENT_TREE='e2f7e76a64237055b4e9d3b85b1f922f6283fdb5'
 MAIN_PARENT='762cde0e88703a2fada5a2a8ef1bef2ca0a2df12'
@@ -30,8 +30,8 @@ PROFILE_DESCRIPTOR='docs/paid-launch/ci-fifteen-native-lpt-profile-successor-v1.
 PROFILE_DESCRIPTOR_SHA256='6d9958ab48ae8b53ca6705969becb4dea695b617953eeb8e5e03963c565f61c2'
 LOCAL_AUTHORIZATION='docs/paid-launch/ci-fifteen-native-lpt-local-authorization-v1.md'
 OLD_CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v1.json'
-LOCAL_PARENT='012d2a5761b20b775ad9ab232fa7c2df2a33f5d0'
-LOCAL_PARENT_TREE='595eb570be36eaac1365b7f3c9b06d28006c08cd'
+LOCAL_PARENT='839bf9a3b9f1addb3ac7cdfd656167177589be81'
+LOCAL_PARENT_TREE='59c6b679b03959f1013e9263d29619460e4c7c8c'
 PROFILE_CONSUMER='docs/paid-launch/ci-fifteen-retained-profile-input-v1.json'
 CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v3.json'
 INPUTS='docs/paid-launch/ci-fifteen-qualification-inputs-v2.json'
@@ -120,6 +120,8 @@ def verify_profile(root):
     require(text(root,'rev-parse',LOCAL_PARENT+'^{tree}')==LOCAL_PARENT_TREE,'CI_LPT_LOCAL_PARENT_CHANGED')
     for path in ('docs/paid-launch/launch-scope-policy-ci-fifteen-v4.json','docs/paid-launch/ci-fifteen-validation-v4.json','docs/paid-launch/nfl-capacity-context-generation-v2.json'):
         require(physical(Path(root)/path)==git(root,'show',LOCAL_PARENT+':'+path),'CI_LPT_FAILED_SEAL_CHANGED')
+    for path in ('docs/paid-launch/launch-scope-policy-ci-fifteen-v5.json','docs/paid-launch/ci-fifteen-validation-v5.json'):
+        require(physical(Path(root)/path)==git(root,'show',LOCAL_PARENT+':'+path),'CI_LPT_IMPORT_FAILURE_SEAL_CHANGED')
     consumer=json.loads(physical(Path(root)/PROFILE_CONSUMER))
     require(consumer['version']=='exact-pre-lpt-physical-input-v1'
         and consumer['consumer']=='tests/test_ncaaf_sidebar_startup_scope.py'
@@ -224,7 +226,7 @@ def make_policy(root,binding,implementation,binding_sha):
     require(evidence['implementation_commit']==implementation
         and evidence['implementation_tree']==text(root,'rev-parse',implementation+'^{tree}')
         and evidence['binding_sha256']==binding_sha,'CI_FIFTEEN_VALIDATION_SUBJECT_CHANGED')
-    return dict(version='ci-fifteen-native-lpt-local-only-seal-v5',base=scope.BASE,base_tree=scope.TREE,
+    return dict(version='ci-fifteen-native-lpt-local-only-seal-v6',base=scope.BASE,base_tree=scope.TREE,
         predecessor_head=PARENT,predecessor_tree=PARENT_TREE,predecessor_binding_sha256=PARENT_BINDING,
         retained_thirteen_policy_sha256=sha(physical(Path(root)/OLD_POLICY)),
         binding_sha256=binding_sha,implementation_commit=implementation,

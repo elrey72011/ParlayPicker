@@ -2,7 +2,7 @@
 from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
-import base64,hashlib,json,sys,types,zlib
+import base64,hashlib,io,json,re,sys,types,zlib
 import pytest
 from tests.nfl_capacity_import_owner import predecessor_imports
 
@@ -46,10 +46,18 @@ def load(path,name):
     m=types.ModuleType(name);m.__file__=str(path);exec(compile(path.read_bytes(),str(path),'exec'),m.__dict__);return m
 
 def build_physical_view(root,destination):
-    from scripts import check_launch_change_scope as live
-    root=Path(root).resolve();destination=Path(destination)
-    require(root==ROOT and Path(live.ROOT).resolve()==ROOT)
-    current=live._filtered_history_module();binding=current.authenticate(root)
+    root=Path(root).resolve();destination=Path(destination);require(root==ROOT)
+    # Import aliases can belong to a preceding isolated fixture. Bootstrap from
+    # exact physical source,not an ambient package or mutable loaded helper.
+    source_path=root/'scripts/ncaaf_filtered_history_scope.py'
+    with io.FileIO(source_path,'r')as stream:source=stream.read(LIMIT+1).replace(b'\r\n',b'\n')
+    require(len(source)<=LIMIT)
+    matches=re.findall(rb"^_BINDING_SHA256='([0-9a-f]{64})'$",source,re.M)
+    require(len(matches)==1 and source.count(matches[0])==1)
+    require(sha(source.replace(matches[0],b'0'*64))=='6d75005330e4b87b00e7c8535b92f25ba622c2d78c7a98c84932c9075ccafb86')
+    current=types.ModuleType('exact_current_profile_history');current.__file__=str(source_path)
+    exec(compile(source,str(source_path),'exec'),current.__dict__)
+    require(current._BINDING_SHA256.encode()==matches[0]);binding=current.authenticate(root)
     declaration_raw=current.physical(root/DECLARATION)
     require(sha(declaration_raw)==binding['components'][DECLARATION])
     declaration=json.loads(declaration_raw)
