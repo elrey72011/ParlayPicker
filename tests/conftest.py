@@ -77,3 +77,5 @@ def pytest_sessionfinish(session, exitstatus):
 
 # Exact predecessor inputs for historical scope assertions only.
 from ncaaf_future_scope_inputs import ncaaf_released_scope_inputs, exact_released_scope_contract_inputs, pytest_configure
+
+from native_lpt_profile_inputs import retained_native_lpt_profile_generation
