@@ -17,10 +17,13 @@ PROFILE_SHA256='5513e877c0e467bf8217dce1b041453e942d4610af1c5734e72519cb197ea347
 WORKFLOW_SHA256='8e44af98864d6bd86f883316b18be3a2a232f2c5223d6c4414ffda3bfa4487a1'
 ASSIGNMENT_SHA256='59f968743e59ba1c0bcbc2292cd38bab6d7799aff0edcc9aab6c53ca6cf908f0'
 OLD_POLICY='docs/paid-launch/launch-scope-policy-nfl-account-reset-v1.json'
-POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v2.json'
-VALIDATION='docs/paid-launch/ci-fifteen-validation-v2.json'
+POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v3.json'
+VALIDATION='docs/paid-launch/ci-fifteen-validation-v3.json'
 IMPLEMENTATION_PARENT='5b9d4827fd2965996eca26533b8d568ae046888e'
 IMPLEMENTATION_PARENT_TREE='e2f7e76a64237055b4e9d3b85b1f922f6283fdb5'
+MAIN_PARENT='762cde0e88703a2fada5a2a8ef1bef2ca0a2df12'
+MAIN_PARENT_TREE='ac781142ad1f18b8bfb2f4e5ee730bd3705f3416'
+PAID_WORKFLOW='.github/workflows/paid-launch.yml'
 CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v1.json'
 INPUTS='docs/paid-launch/ci-fifteen-qualification-inputs-v1.json'
 INVENTORY='docs/paid-launch/ci-fifteen-inventory-v1.json'
@@ -80,6 +83,26 @@ def verify_profile(root):
         'CI_FIFTEEN_QUALIFICATION_INPUT_CHANGED')
 
 
+
+def main_caller_contract(root):
+    """Exact event-to-base transition; native readers' admitted bases unchanged."""
+    require(text(root,'rev-parse',MAIN_PARENT+'^{tree}')==MAIN_PARENT_TREE,'CI_MAIN_CALLER_PARENT_CHANGED')
+    for path in ('docs/paid-launch/launch-scope-policy-ci-fifteen-v2.json',
+                 'docs/paid-launch/ci-fifteen-validation-v2.json'):
+        require(physical(Path(root)/path)==git(root,'show',MAIN_PARENT+':'+path),
+                'CI_MAIN_CALLER_PRIOR_SEAL_CHANGED')
+    before=git(root,'show',MAIN_PARENT+':'+PAID_WORKFLOW)
+    old=b'        env:\n          BASE_SHA: ${{ github.event.pull_request.base.sha || \'5fb8e13577c3092f1eda4ad9b787368d3f691c71\' }}\n        run: python scripts/check_launch_change_scope.py --base "$BASE_SHA" --json-output protected-code-diff-report.json\n'
+    new=b'        env:\n          SCOPE_EVENT: ${{ github.event_name }}\n          SCOPE_REF: ${{ github.ref }}\n          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}\n        run: |\n          scope_args=()\n          case "$SCOPE_EVENT" in\n            pull_request)\n              test -n "$PR_BASE_SHA"\n              scope_args=(--base "$PR_BASE_SHA")\n              ;;\n            push)\n              test "$SCOPE_REF" = refs/heads/main\n              test -z "$PR_BASE_SHA"\n              ;;\n            *)\n              echo "Unsupported protected-scope event" >&2\n              exit 1\n              ;;\n          esac\n          python scripts/check_launch_change_scope.py "${scope_args[@]}" --json-output protected-code-diff-report.json\n'
+    require(before.count(old)==1,'CI_MAIN_CALLER_PARENT_CHANGED')
+    after=physical(Path(root)/PAID_WORKFLOW)
+    require(after==before.replace(old,new,1),'CI_MAIN_CALLER_TRANSITION_CHANGED')
+    return dict(version=1,predecessor_head=MAIN_PARENT,predecessor_tree=MAIN_PARENT_TREE,
+        workflow=PAID_WORKFLOW,before_sha256=sha(before),after_sha256=sha(after),
+        pr_base='actual_pull_request_base_sha',main_base='native_authenticated_baseline_no_override',
+        push_ref='refs/heads/main',unexpected_event='REJECT',native_allowed_bases_unchanged=True)
+
+
 def make_contract(root,stamp,components):
     root=Path(root);binding='docs/research/ncaaf-filtered-history-bindings-v1.json'
     before=git(root,'show',PARENT+':.github/workflows/ci.yml')
@@ -95,7 +118,7 @@ def make_contract(root,stamp,components):
                  'docs/paid-launch/ci-fifteen-validation-v1.json'):
         require(physical(root/path)==git(root,'show',IMPLEMENTATION_PARENT+':'+path),
             'CI_FIFTEEN_FAILED_SEAL_CHANGED')
-    return dict(version=1,generation='authenticated-a5430e5-thirteen-workflow-v1',
+    contract=dict(version=1,generation='authenticated-a5430e5-thirteen-workflow-v1',
         profile_generation_correction=dict(predecessor_head=IMPLEMENTATION_PARENT,
             predecessor_tree=IMPLEMENTATION_PARENT_TREE,context_record_sha256=components[CONTEXT_RECORD]),
         predecessor_head=PARENT,predecessor_tree=PARENT_TREE,predecessor_binding_sha256=PARENT_BINDING,
@@ -107,11 +130,14 @@ def make_contract(root,stamp,components):
         inventory_sha256=sha(physical(root/INVENTORY)),qualification_inputs_sha256=sha(physical(root/INPUTS)),
         authorization_sha256=components[AUTHORIZATION],planning_gate_seconds=180,required_actual_reserve_seconds=120,
         hosted_authority=False,publication_authority=False)
+    contract['main_caller_successor']=main_caller_contract(root)
+    return contract
 
 
 def validate_topology(root,binding):
     runner=_source_module(root,'scripts/run_ci_tests.py','6be44f5bdf5934dea5784cd1819595e9c8386513fffa0769854e95d4095302fe')
     root=Path(root);metadata=binding['nfl_account_reset_successor']['ci_fifteen_contract']
+    require(metadata.get('main_caller_successor')==main_caller_contract(root),'CI_MAIN_CALLER_CONTRACT_CHANGED')
     require(metadata['shards']==15 and metadata['timeout_seconds']==2700
         and metadata['planning_gate_seconds']==180 and metadata['required_actual_reserve_seconds']==120
         and metadata['hosted_authority']is False and metadata['publication_authority']is False,'CI_FIFTEEN_SCOPE_CHANGED')
@@ -149,11 +175,11 @@ def make_policy(root,binding,implementation,binding_sha):
     require(evidence['implementation_commit']==implementation
         and evidence['implementation_tree']==text(root,'rev-parse',implementation+'^{tree}')
         and evidence['binding_sha256']==binding_sha,'CI_FIFTEEN_VALIDATION_SUBJECT_CHANGED')
-    return dict(version='ci-fifteen-local-only-seal-v2',base=scope.BASE,base_tree=scope.TREE,
+    return dict(version='ci-fifteen-main-caller-local-only-seal-v3',base=scope.BASE,base_tree=scope.TREE,
         predecessor_head=PARENT,predecessor_tree=PARENT_TREE,predecessor_binding_sha256=PARENT_BINDING,
         retained_thirteen_policy_sha256=sha(physical(Path(root)/OLD_POLICY)),
         binding_sha256=binding_sha,implementation_commit=implementation,
-        implementation_tree=evidence['implementation_tree'],implementation_parent=IMPLEMENTATION_PARENT,implementation_paths=sorted(scope.PATHS),
+        implementation_tree=evidence['implementation_tree'],implementation_parent=MAIN_PARENT,implementation_paths=sorted(scope.PATHS),
         unchanged_blobs={p:v for p,v in scope.blobs(root,scope.BASE).items()if p not in scope.PATHS},
         topology=validate_topology(root,binding),validation_sha256=sha(physical(Path(root)/VALIDATION)),
         validation_status=evidence['status'],operational_authority=False,publication_authority=False,
@@ -174,8 +200,8 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha):
     for p in scope.NORMALIZED:
         require(scope.reader_entry_parent(p,scope.normalized(p,physical(root/p),binding_sha))==scope.normalized(p,git(root,'show',scope.BASE+':'+p),scope.OLD_STAMP),'INHERITED_GUARD_LOGIC_CHANGED')
     policy=json.loads(git(root,'show','HEAD:'+POLICY));implementation=policy['implementation_commit']
-    require(text(root,'show','-s','--format=%P',implementation).split()==[IMPLEMENTATION_PARENT]
-        and text(root,'merge-base',scope.BASE,IMPLEMENTATION_PARENT)==scope.BASE,'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    require(text(root,'show','-s','--format=%P',implementation).split()==[MAIN_PARENT]
+        and text(root,'merge-base',scope.BASE,MAIN_PARENT)==scope.BASE,'IMPLEMENTATION_PARENT_NOT_APPROVED')
     require(set(text(root,'diff','--name-only',scope.BASE,implementation).splitlines())==scope.PATHS,'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
     require(policy==make_policy(root,binding,implementation,binding_sha),'EXACT_POLICY_BINDINGS_CHANGED')
     head=text(root,'rev-parse','HEAD');seal=head;parents=text(root,'show','-s','--format=%P',head).split()

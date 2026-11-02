@@ -14,7 +14,7 @@ import base64,zlib
 _FILTERED_HISTORY_NATIVE_B85DECODE=base64.b85decode
 _FILTERED_HISTORY_NATIVE_B85CODE=getattr(base64.b85decode,'__code__',None)
 _FILTERED_HISTORY_NATIVE_DECOMPRESS=zlib.decompressobj
-_FILTERED_HISTORY_BINDING_SHA256='5f1d64778ba98d8ea03517f444f644d1d53de070935879950f2d0d6b640b0bdf'
+_FILTERED_HISTORY_BINDING_SHA256='d84983e285490da3e38128ceeec1b9c907632eeea62596e8e3fe3628d29499a1'
 def _filtered_history_module(*, read=None):
     # Authenticate before executing the selected successor helper.
     import io

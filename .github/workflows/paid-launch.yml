@@ -22,8 +22,26 @@ jobs:
         with: {python-version: "3.12"}
       - name: Verify protected files and existing test expectations
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || '5fb8e13577c3092f1eda4ad9b787368d3f691c71' }}
-        run: python scripts/check_launch_change_scope.py --base "$BASE_SHA" --json-output protected-code-diff-report.json
+          SCOPE_EVENT: ${{ github.event_name }}
+          SCOPE_REF: ${{ github.ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          scope_args=()
+          case "$SCOPE_EVENT" in
+            pull_request)
+              test -n "$PR_BASE_SHA"
+              scope_args=(--base "$PR_BASE_SHA")
+              ;;
+            push)
+              test "$SCOPE_REF" = refs/heads/main
+              test -z "$PR_BASE_SHA"
+              ;;
+            *)
+              echo "Unsupported protected-scope event" >&2
+              exit 1
+              ;;
+          esac
+          python scripts/check_launch_change_scope.py "${scope_args[@]}" --json-output protected-code-diff-report.json
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
