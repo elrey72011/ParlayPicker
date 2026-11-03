@@ -1,0 +1,16 @@
+{
+  "actual_ci_reserves": "UNKNOWN",
+  "binding_sha256": "014a6e1442d6012aae0d806b37f43df0173311c657ff6a7d2b5ab6312b576d91",
+  "capacity_requalification": "REQUIRED_FROM_COMPLETE_UNPROFILED_CONTEXTS",
+  "ci_authority": false,
+  "historical_crash": {
+    "cause": "UNKNOWN",
+    "status": "OPEN"
+  },
+  "implementation_commit": "a8c9057ba1e50ab9659e7abaed1f8aa5e02f9775",
+  "implementation_tree": "85e79627f12f183cdd5dc4bd72d15e478dc90c68",
+  "maximum_ci_cycles": 0,
+  "publication_authority": false,
+  "status": "LOCAL_REFRESH300_QUALIFICATION_PENDING_NO_CI",
+  "version": 13
+}
