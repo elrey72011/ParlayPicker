@@ -8,7 +8,7 @@ from tests.nfl_capacity_import_owner import predecessor_imports
 
 ROOT=Path(__file__).resolve().parents[1]
 CONSUMER='tests/test_ncaaf_sidebar_startup_scope.py'
-DECLARATION='docs/paid-launch/ci-fifteen-retained-profile-input-v3.json'
+DECLARATION='docs/paid-launch/ci-fifteen-retained-profile-input-v4.json'
 OLD_HEAD='cd181088d1c685f377b0b2f3227881131d0f3ca5'
 OLD_BINDING='d84983e285490da3e38128ceeec1b9c907632eeea62596e8e3fe3628d29499a1'
 OLD_PROFILE='5513e877c0e467bf8217dce1b041453e942d4610af1c5734e72519cb197ea347'

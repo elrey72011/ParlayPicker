@@ -14,11 +14,11 @@ PARENT_TREE='7c5afb019fd81eacdff0794728ede6118a00cc49'
 PARENT_BINDING='f7bbd9f837b6cb7369b5b2179e682e630ff3eec7519dcd2f6939756d233383ee'
 PARENT_PROFILE='91379959e127cc38cc76e0845ea481701ff359a99f382eb0281cae5cf72009a0'
 PROFILE_SHA256='c627bacb49c69ab13cbb309bcee1872e2bb22f41eab3248c367ff31f099ea5a2'
-WORKFLOW_SHA256='8e44af98864d6bd86f883316b18be3a2a232f2c5223d6c4414ffda3bfa4487a1'
+WORKFLOW_SHA256='e9a83c926deec4f818b47f465468905c23873dfe288f7e2fa25a5bb4ce36168e'
 ASSIGNMENT_SHA256='ae9043fb6cb21d41165d71dd6d2055be2242e053a9c2a739a9a11121df56dfe7'
 OLD_POLICY='docs/paid-launch/launch-scope-policy-nfl-account-reset-v1.json'
-POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v10.json'
-VALIDATION='docs/paid-launch/ci-fifteen-validation-v10.json'
+POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v11.json'
+VALIDATION='docs/paid-launch/ci-fifteen-validation-v11.json'
 IMPLEMENTATION_PARENT='5b9d4827fd2965996eca26533b8d568ae046888e'
 IMPLEMENTATION_PARENT_TREE='e2f7e76a64237055b4e9d3b85b1f922f6283fdb5'
 MAIN_PARENT='762cde0e88703a2fada5a2a8ef1bef2ca0a2df12'
@@ -34,9 +34,14 @@ LOCAL_PARENT='11a19e3f3a116e7c7bbdeea7f467b25d8240f905'
 FIRST_REWEIGHT_PARENT='7c5ba8a7e506896c52b2242b8bfddb8430a68c03'
 FIRST_REWEIGHT_PARENT_TREE='68688e22dede1cfcc22772f214092005caf48964'
 LOCAL_PARENT_TREE='298c20f81da54c5ce0812e8a31bc1f07b42c48ca'
-PROFILE_CONSUMER='docs/paid-launch/ci-fifteen-retained-profile-input-v3.json'
-CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v6.json'
-INPUTS='docs/paid-launch/ci-fifteen-qualification-inputs-v4.json'
+PROFILE_CONSUMER='docs/paid-launch/ci-fifteen-retained-profile-input-v4.json'
+CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v7.json'
+INPUTS='docs/paid-launch/ci-fifteen-qualification-inputs-v5.json'
+SEAL_PARENT='733bcc826f2a0ebfd7526211b45ffcf6e7ab2091'
+SEAL_PARENT_TREE='5972310679916c367a74338162399fd037f94184'
+JOB_TIMEOUT_SECONDS=3000
+TIMEOUT_RECORD='docs/paid-launch/ci-fifteen-fifty-timeout-v1.json'
+TIMEOUT_RECORD_SHA256='48792108bcf6256a3e785c2e484fcce68eb32269b25d3139290898db6299c932'
 JOB_OVERHEAD_SECONDS=157.13959995999107
 INVENTORY='docs/paid-launch/ci-fifteen-inventory-v1.json'
 AUTHORIZATION='docs/paid-launch/ci-fifteen-local-qualification-v1.md'
@@ -188,6 +193,26 @@ def main_caller_contract(root):
         push_ref='refs/heads/main',unexpected_event='REJECT',native_allowed_bases_unchanged=True)
 
 
+def verify_timeout(root):
+    declaration=json.loads(physical(Path(root)/TIMEOUT_RECORD))
+    require(sha(physical(Path(root)/TIMEOUT_RECORD))==TIMEOUT_RECORD_SHA256
+        and declaration['predecessor_head']==SEAL_PARENT and declaration['predecessor_tree']==SEAL_PARENT_TREE
+        and text(root,'rev-parse',SEAL_PARENT+'^{tree}')==SEAL_PARENT_TREE
+        and declaration['timeout_seconds']==JOB_TIMEOUT_SECONDS==3000
+        and declaration['old_timeout_seconds']==2700 and declaration['shards']==15
+        and declaration['profile_sha256']==PROFILE_SHA256 and declaration['assignment_sha256']==ASSIGNMENT_SHA256
+        and declaration['planning_gate_seconds']==180 and declaration['required_actual_reserve_seconds']==120
+        and declaration['ci_authority']is False and declaration['publication_authority']is False,'CI_FIFTY_AUTHORITY_CHANGED')
+    before=git(root,'show',SEAL_PARENT+':.github/workflows/ci-fifteen.yml')
+    pattern=b'    runs-on: ubuntu-latest\n    timeout-minutes: 45\n'
+    require(before.count(pattern)==1 and sha(before)==declaration['before_workflow_sha256']
+        and physical(Path(root)/'.github/workflows/ci-fifteen.yml')==before.replace(pattern,pattern.replace(b'45',b'50'),1)
+        and declaration['after_workflow_sha256']==WORKFLOW_SHA256,'CI_FIFTY_TRANSITION_CHANGED')
+    require(declaration['prior_hashes']=={'docs/paid-launch/launch-scope-policy-ci-fifteen-v10.json': '4b9e03822186309c84d05de0de3a5386206aa3524d8f4a831cf0a62807d77438', 'docs/paid-launch/ci-fifteen-validation-v10.json': 'eedc5a0e4c03c7475f9ee5b71f38aa71a6d2cedbbc4201efba05348b56be4348', 'docs/paid-launch/ci-fifteen-qualification-inputs-v4.json': '1196cf2c10b2f0f3de4435c686da4059f657091646532c53df35e97e4e0c4f92', 'docs/paid-launch/ci-fifteen-retained-profile-input-v3.json': 'b4224f3c138986b7c18b8c44d95d3adc8ec199aba1c99cd764fc8701e7efe3dd', 'docs/paid-launch/nfl-capacity-context-generation-v6.json': 'ddadd1e33062d5a18dba3e6c4db74626f83a63d96139706b5edba675cba7690e'},'CI_FIFTY_PRIOR_DECLARATION_CHANGED')
+    for path,digest in declaration['prior_hashes'].items():
+        require(sha(physical(Path(root)/path))==digest,'CI_FIFTY_PRIOR_CHANGED')
+
+
 def make_contract(root,stamp,components):
     root=Path(root);binding='docs/research/ncaaf-filtered-history-bindings-v1.json'
     before=git(root,'show',PARENT+':.github/workflows/ci.yml')
@@ -211,7 +236,7 @@ def make_contract(root,stamp,components):
         historical_consumers=consumers,historical_workflow_path='.github/workflows/ci.yml',live_workflow_path='.github/workflows/ci-fifteen.yml',
         old_workflow_state_required_before_push='disabled',workflow_after_sha256=WORKFLOW_SHA256,
         workflow_before=dict(bytes=len(before),sha256=sha(before),compressed_b85=base64.b85encode(zlib.compress(before,9)).decode()),
-        profile_sha256=PROFILE_SHA256,assignment_sha256=ASSIGNMENT_SHA256,shards=15,timeout_seconds=2700,
+        profile_sha256=PROFILE_SHA256,assignment_sha256=ASSIGNMENT_SHA256,shards=15,timeout_seconds=JOB_TIMEOUT_SECONDS,
         inventory_sha256=sha(physical(root/INVENTORY)),qualification_inputs_sha256=sha(physical(root/INPUTS)),
         authorization_sha256=components[AUTHORIZATION],planning_gate_seconds=180,required_actual_reserve_seconds=120,
         hosted_authority=False,publication_authority=False)
@@ -225,7 +250,7 @@ def validate_topology(root,binding):
     runner=_source_module(root,'scripts/run_ci_tests.py','6be44f5bdf5934dea5784cd1819595e9c8386513fffa0769854e95d4095302fe')
     root=Path(root);metadata=binding['nfl_account_reset_successor']['ci_fifteen_contract']
     require(metadata.get('main_caller_successor')==main_caller_contract(root),'CI_MAIN_CALLER_CONTRACT_CHANGED')
-    require(metadata['shards']==15 and metadata['timeout_seconds']==2700
+    require(metadata['shards']==15 and metadata['timeout_seconds']==JOB_TIMEOUT_SECONDS
         and metadata['planning_gate_seconds']==180 and metadata['required_actual_reserve_seconds']==120
         and metadata['hosted_authority']is False and metadata['publication_authority']is False,'CI_FIFTEEN_SCOPE_CHANGED')
     require(sha(physical(root/'.github/workflows/ci-fifteen.yml'))==WORKFLOW_SHA256,'CI_FIFTEEN_WORKFLOW_CHANGED')
@@ -235,7 +260,10 @@ def validate_topology(root,binding):
         'shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]').replace('--shards 13','--shards 15').replace(
         'Reconcile complete test identities and outcomes across all nine shards',
         'Reconcile complete test identities and outcomes across all fifteen shards')
-    # Exact authenticated transition preserves every timeout,runner and safety gate.
+    require(expected.count('    runs-on: ubuntu-latest\n    timeout-minutes: 45\n')==1,'CI_FIFTY_PARENT_TIMEOUT_CHANGED')
+    expected=expected.replace('    runs-on: ubuntu-latest\n    timeout-minutes: 45\n','    runs-on: ubuntu-latest\n    timeout-minutes: 50\n',1)
+    verify_timeout(root)
+    # Only the owner-approved full-suite timeout changes;other jobs and gates remain exact.
     require(physical(root/'.github/workflows/ci-fifteen.yml').decode()==expected,'CI_FIFTEEN_WORKFLOW_CONTRACT_CHANGED')
     values=json.loads(physical(root/INVENTORY));require(type(values)is list and len(values)==len(set(values))==9403,'CI_FIFTEEN_INVENTORY_CHANGED')
     items=[SimpleNamespace(nodeid=n,path=root/n.split('::')[0])for n in values]
@@ -247,7 +275,7 @@ def validate_topology(root,binding):
         profile=runner.load_profile(path)
     rows,files,loads=runner.assignment(items,15,profile,root)
     require(profile['sha256']==PROFILE_SHA256 and runner.digest(rows)==ASSIGNMENT_SHA256,'CI_FIFTEEN_ASSIGNMENT_CHANGED')
-    inputs=json.loads(physical(root/INPUTS));reserves=[2700-JOB_OVERHEAD_SECONDS-v for v in loads]
+    inputs=json.loads(physical(root/INPUTS));reserves=[JOB_TIMEOUT_SECONDS-JOB_OVERHEAD_SECONDS-v for v in loads]
     require(reserves==inputs['projected_reserves']and min(reserves)>=180
         and len(inputs['stress_reserves'])==15 and min(inputs['stress_reserves'])>=180,'CI_FIFTEEN_PLANNING_GATE_FAILED')
     return dict(shards=15,identity_count=9403,whole_files=True,order_preserved=True,
@@ -262,11 +290,11 @@ def make_policy(root,binding,implementation,binding_sha):
     require(evidence['implementation_commit']==implementation
         and evidence['implementation_tree']==text(root,'rev-parse',implementation+'^{tree}')
         and evidence['binding_sha256']==binding_sha,'CI_FIFTEEN_VALIDATION_SUBJECT_CHANGED')
-    return dict(version='ci-fifteen-native-lpt-local-only-seal-v10',base=scope.BASE,base_tree=scope.TREE,
+    return dict(version='ci-fifteen-fifty-local-only-seal-v11',base=scope.BASE,base_tree=scope.TREE,
         predecessor_head=PARENT,predecessor_tree=PARENT_TREE,predecessor_binding_sha256=PARENT_BINDING,
         retained_thirteen_policy_sha256=sha(physical(Path(root)/OLD_POLICY)),
         binding_sha256=binding_sha,implementation_commit=implementation,
-        implementation_tree=evidence['implementation_tree'],implementation_parent=LOCAL_PARENT,implementation_paths=sorted(scope.PATHS),
+        implementation_tree=evidence['implementation_tree'],implementation_parent=SEAL_PARENT,implementation_paths=sorted(scope.PATHS),
         unchanged_blobs={p:v for p,v in scope.blobs(root,scope.BASE).items()if p not in scope.PATHS},
         topology=validate_topology(root,binding),validation_sha256=sha(physical(Path(root)/VALIDATION)),
         validation_status=evidence['status'],operational_authority=False,publication_authority=False,
@@ -287,8 +315,8 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha):
     for p in scope.NORMALIZED:
         require(scope.reader_entry_parent(p,scope.normalized(p,physical(root/p),binding_sha))==scope.normalized(p,git(root,'show',scope.BASE+':'+p),scope.OLD_STAMP),'INHERITED_GUARD_LOGIC_CHANGED')
     policy=json.loads(git(root,'show','HEAD:'+POLICY));implementation=policy['implementation_commit']
-    require(text(root,'show','-s','--format=%P',implementation).split()==[LOCAL_PARENT]
-        and text(root,'merge-base',scope.BASE,LOCAL_PARENT)==scope.BASE,'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    require(text(root,'show','-s','--format=%P',implementation).split()==[SEAL_PARENT]
+        and text(root,'merge-base',scope.BASE,SEAL_PARENT)==scope.BASE,'IMPLEMENTATION_PARENT_NOT_APPROVED')
     require(set(text(root,'diff','--name-only',scope.BASE,implementation).splitlines())==scope.PATHS,'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
     require(policy==make_policy(root,binding,implementation,binding_sha),'EXACT_POLICY_BINDINGS_CHANGED')
     head=text(root,'rev-parse','HEAD');seal=head;parents=text(root,'show','-s','--format=%P',head).split()
