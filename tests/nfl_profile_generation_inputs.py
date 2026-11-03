@@ -147,7 +147,7 @@ def historical_profile_generation(request):
 
 
 CONTEXT_CONSUMER = 'tests/test_nfl_capacity_context_profile.py'
-CONTEXT_RECORD = 'docs/paid-launch/nfl-capacity-context-generation-v4.json'
+CONTEXT_RECORD = 'docs/paid-launch/nfl-capacity-context-generation-v5.json'
 CONTEXT_BINDING = 'ac2abfe85d86f20c9cbbb10be72fdba9a4a61c6c54ab588e4a12bed45fb0167b'
 CONTEXT_APPEND = b'\n\nfrom tests.nfl_profile_generation_inputs import historical_context_profile_generation\n'
 
@@ -162,7 +162,7 @@ def context_view(root, consumer, destination):
         raw = current.physical(root / CONTEXT_RECORD)
         require(sha(raw) == binding['components'][CONTEXT_RECORD])
         record = json.loads(raw)
-        require(record['version'] == 'authenticated-f33-capacity-context-v4'
+        require(record['version'] == 'authenticated-f33-capacity-context-v5'
                 and record['commit'] == 'f33fe07a2870efa606e314eb1441eb0405ce3735'
                 and consumer == root / CONTEXT_CONSUMER)
         before = record_bytes(record['consumer'])

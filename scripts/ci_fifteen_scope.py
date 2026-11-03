@@ -13,12 +13,12 @@ PARENT='a5430e5a93cece580d6645720b41f6a0d922d74a'
 PARENT_TREE='7c5afb019fd81eacdff0794728ede6118a00cc49'
 PARENT_BINDING='f7bbd9f837b6cb7369b5b2179e682e630ff3eec7519dcd2f6939756d233383ee'
 PARENT_PROFILE='91379959e127cc38cc76e0845ea481701ff359a99f382eb0281cae5cf72009a0'
-PROFILE_SHA256='b4d4bd2fc5c331e51843589733f36e229c0e46c3d261ac50594e282aa5e3e120'
+PROFILE_SHA256='c1a89b40def593953bada7aeac9127d0a82aa8ef4ec06469d7b2d0a352566e17'
 WORKFLOW_SHA256='8e44af98864d6bd86f883316b18be3a2a232f2c5223d6c4414ffda3bfa4487a1'
-ASSIGNMENT_SHA256='4d5bfeea76a87e266d1f0c2ab194d3197d53049a77505ee24a1b8ef0f4f05cbc'
+ASSIGNMENT_SHA256='875448de2dcf0ec2526dba54b3b42d03ab19dd230a57dc10fd2bfeb4b5e420a8'
 OLD_POLICY='docs/paid-launch/launch-scope-policy-nfl-account-reset-v1.json'
-POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v8.json'
-VALIDATION='docs/paid-launch/ci-fifteen-validation-v8.json'
+POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v9.json'
+VALIDATION='docs/paid-launch/ci-fifteen-validation-v9.json'
 IMPLEMENTATION_PARENT='5b9d4827fd2965996eca26533b8d568ae046888e'
 IMPLEMENTATION_PARENT_TREE='e2f7e76a64237055b4e9d3b85b1f922f6283fdb5'
 MAIN_PARENT='762cde0e88703a2fada5a2a8ef1bef2ca0a2df12'
@@ -26,15 +26,16 @@ MAIN_PARENT_TREE='ac781142ad1f18b8bfb2f4e5ee730bd3705f3416'
 PAID_WORKFLOW='.github/workflows/paid-launch.yml'
 CAPACITY_PARENT='cd181088d1c685f377b0b2f3227881131d0f3ca5'
 CAPACITY_PARENT_TREE='17d3da40c09f4ae68c3aa60e74dfca2b2f5413db'
-PROFILE_DESCRIPTOR='docs/paid-launch/ci-fifteen-native-lpt-profile-successor-v1.json'
-PROFILE_DESCRIPTOR_SHA256='6d9958ab48ae8b53ca6705969becb4dea695b617953eeb8e5e03963c565f61c2'
+PROFILE_DESCRIPTOR='docs/paid-launch/ci-fifteen-native-lpt-profile-successor-v2.json'
+PROFILE_DESCRIPTOR_SHA256='2fac3cd686129e9f2b3f5f70b35871c8e9b0e8a5e167659fc438539d9c92eff3'
 LOCAL_AUTHORIZATION='docs/paid-launch/ci-fifteen-native-lpt-local-authorization-v1.md'
 OLD_CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v1.json'
-LOCAL_PARENT='31ae99b2bb572a3b18d14f777780f95bc6dda16a'
-LOCAL_PARENT_TREE='ca90da7e599c3c11397c04a724823dba89f57128'
-PROFILE_CONSUMER='docs/paid-launch/ci-fifteen-retained-profile-input-v1.json'
-CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v4.json'
-INPUTS='docs/paid-launch/ci-fifteen-qualification-inputs-v2.json'
+LOCAL_PARENT='7c5ba8a7e506896c52b2242b8bfddb8430a68c03'
+LOCAL_PARENT_TREE='68688e22dede1cfcc22772f214092005caf48964'
+PROFILE_CONSUMER='docs/paid-launch/ci-fifteen-retained-profile-input-v2.json'
+CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v5.json'
+INPUTS='docs/paid-launch/ci-fifteen-qualification-inputs-v3.json'
+JOB_OVERHEAD_SECONDS=157.13959995999107
 INVENTORY='docs/paid-launch/ci-fifteen-inventory-v1.json'
 AUTHORIZATION='docs/paid-launch/ci-fifteen-local-qualification-v1.md'
 HISTORICAL_CONSUMERS=frozenset({
@@ -88,7 +89,8 @@ def verify_profile(root):
     inputs=json.loads(physical(Path(root)/INPUTS))
     require(inputs['profile_sha256']==PROFILE_SHA256 and inputs['predecessor_head']==CAPACITY_PARENT
         and inputs['predecessor_tree']==CAPACITY_PARENT_TREE and inputs['actual_ci_reserves']=='UNKNOWN'
-        and inputs['planning_gate_seconds']==180 and inputs['required_actual_reserve_seconds']==120,
+        and inputs['planning_gate_seconds']==180 and inputs['required_actual_reserve_seconds']==120
+        and inputs['job_overhead_seconds']==JOB_OVERHEAD_SECONDS>=151.10075,
         'CI_FIFTEEN_QUALIFICATION_INPUT_CHANGED')
     require(text(root,'rev-parse',CAPACITY_PARENT+'^{tree}')==CAPACITY_PARENT_TREE,'CI_LPT_PARENT_CHANGED')
     declaration=json.loads(physical(Path(root)/PROFILE_DESCRIPTOR))
@@ -112,6 +114,20 @@ def verify_profile(root):
         and source['checkout_commit']==CAPACITY_PARENT and source['checkout_tree']==CAPACITY_PARENT_TREE
         and source['variability_multiplier']==1.15 and source['fixture_allowance_seconds']==5.0,'CI_LPT_ESTIMATE_CHANGED')
     expected['sources'][declaration['source_tag']]=source
+    extra=declaration['extra_source']
+    require(declaration['reweight_predecessor_head']==LOCAL_PARENT
+        and declaration['reweight_predecessor_tree']==LOCAL_PARENT_TREE
+        and sha(git(root,'show',LOCAL_PARENT+':scripts/ci_test_file_costs_v1.json'))==declaration['reweight_predecessor_profile_sha256']=='b4d4bd2fc5c331e51843589733f36e229c0e46c3d261ac50594e282aa5e3e120'
+        and extra['measured']is False and extra['kind']=='estimated_retained_complete_context_envelope'
+        and extra['checkout_commit']==LOCAL_PARENT and extra['checkout_tree']==LOCAL_PARENT_TREE
+        and extra['variability_multiplier']==1.15 and extra['file_allowance_seconds']==5.0
+        and extra['all_prior_samples_retained']is True
+        and extra['job_overhead_seconds']==JOB_OVERHEAD_SECONDS,'CI_LPT_REWEIGHT_PROVENANCE_CHANGED')
+    expected['sources'][declaration['extra_source_tag']]=extra
+    for path in ('docs/paid-launch/launch-scope-policy-ci-fifteen-v8.json','docs/paid-launch/ci-fifteen-validation-v8.json',
+                 'docs/paid-launch/ci-fifteen-native-lpt-profile-successor-v1.json','docs/paid-launch/ci-fifteen-retained-profile-input-v1.json',
+                 'docs/paid-launch/nfl-capacity-context-generation-v4.json','docs/paid-launch/ci-fifteen-qualification-inputs-v2.json'):
+        require(physical(Path(root)/path)==git(root,'show',LOCAL_PARENT+':'+path),'CI_LPT_REWEIGHT_PRIOR_CHANGED')
     require(json.dumps(expected,sort_keys=True,separators=(',',':'))==json.dumps(after,sort_keys=True,separators=(',',':'))
         and expected==after,'CI_LPT_PROFILE_TRANSITION_CHANGED')
     for path in ('docs/paid-launch/launch-scope-policy-ci-fifteen-v3.json','docs/paid-launch/ci-fifteen-validation-v3.json',
@@ -216,7 +232,7 @@ def validate_topology(root,binding):
         profile=runner.load_profile(path)
     rows,files,loads=runner.assignment(items,15,profile,root)
     require(profile['sha256']==PROFILE_SHA256 and runner.digest(rows)==ASSIGNMENT_SHA256,'CI_FIFTEEN_ASSIGNMENT_CHANGED')
-    inputs=json.loads(physical(root/INPUTS));reserves=[2700-151.10075-v for v in loads]
+    inputs=json.loads(physical(root/INPUTS));reserves=[2700-JOB_OVERHEAD_SECONDS-v for v in loads]
     require(reserves==inputs['projected_reserves']and min(reserves)>=180
         and len(inputs['stress_reserves'])==15 and min(inputs['stress_reserves'])>=180,'CI_FIFTEEN_PLANNING_GATE_FAILED')
     return dict(shards=15,identity_count=9403,whole_files=True,order_preserved=True,
@@ -231,7 +247,7 @@ def make_policy(root,binding,implementation,binding_sha):
     require(evidence['implementation_commit']==implementation
         and evidence['implementation_tree']==text(root,'rev-parse',implementation+'^{tree}')
         and evidence['binding_sha256']==binding_sha,'CI_FIFTEEN_VALIDATION_SUBJECT_CHANGED')
-    return dict(version='ci-fifteen-native-lpt-local-only-seal-v8',base=scope.BASE,base_tree=scope.TREE,
+    return dict(version='ci-fifteen-native-lpt-local-only-seal-v9',base=scope.BASE,base_tree=scope.TREE,
         predecessor_head=PARENT,predecessor_tree=PARENT_TREE,predecessor_binding_sha256=PARENT_BINDING,
         retained_thirteen_policy_sha256=sha(physical(Path(root)/OLD_POLICY)),
         binding_sha256=binding_sha,implementation_commit=implementation,

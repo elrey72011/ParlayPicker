@@ -8,11 +8,11 @@ from tests.nfl_capacity_import_owner import predecessor_imports
 
 ROOT=Path(__file__).resolve().parents[1]
 CONSUMER='tests/test_ncaaf_sidebar_startup_scope.py'
-DECLARATION='docs/paid-launch/ci-fifteen-retained-profile-input-v1.json'
+DECLARATION='docs/paid-launch/ci-fifteen-retained-profile-input-v2.json'
 OLD_HEAD='cd181088d1c685f377b0b2f3227881131d0f3ca5'
 OLD_BINDING='d84983e285490da3e38128ceeec1b9c907632eeea62596e8e3fe3628d29499a1'
 OLD_PROFILE='5513e877c0e467bf8217dce1b041453e942d4610af1c5734e72519cb197ea347'
-CURRENT_PROFILE='b4d4bd2fc5c331e51843589733f36e229c0e46c3d261ac50594e282aa5e3e120'
+CURRENT_PROFILE='c1a89b40def593953bada7aeac9127d0a82aa8ef4ec06469d7b2d0a352566e17'
 LIMIT=8*1024*1024
 def require(ok):
     if not ok:raise ValueError('NATIVE_LPT_HISTORICAL_INPUT_CHANGED')
