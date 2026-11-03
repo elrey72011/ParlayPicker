@@ -1,0 +1,23 @@
+{
+  "actual_ci_reserves": "UNKNOWN",
+  "binding_sha256": "9a851611f4bad537128719c73ba0f41ed98c3d91c474d2b36f1a15b05d24e600",
+  "capacity_report_sha256": "287df350315118eaf47f2e4a08543780d2c6c46f15478f1922ea987ef7707a4b",
+  "capacity_requalification": "PASS_CURRENT_COMPLETE_CONTEXTS",
+  "ci_authority": false,
+  "current_head_qualification_method": "Unchanged authenticated implementation 089e6567436440fed24b9c6bcf36ebee0d223e60; provisional complete contexts plus final metadata-only seal read-back.",
+  "historical_crash": {
+    "cause": "UNKNOWN",
+    "status": "OPEN"
+  },
+  "historical_preimage_proof_sha256": "954839b012fa646bfd93941d2c90d3209dcfdb3a92e340b11ecff56c50bcfd47",
+  "implementation_commit": "089e6567436440fed24b9c6bcf36ebee0d223e60",
+  "implementation_tree": "663acb366d0873eae8eeabf720951c9ab0638879",
+  "local_qualification_checklist_sha256": "856fbe82b2534e5b17ed0fe286078b872027521545eb355330effb223285ba79",
+  "maximum_ci_cycles": 0,
+  "minimum_conservative_reserve": 471.35447457022565,
+  "pipeline_acceptance": false,
+  "publication_authority": false,
+  "runtime_byte_change": "UNKNOWN",
+  "status": "LOCAL_QUALIFIED_FIFTEEN_SIXTY_NO_HOSTED_AUTHORITY",
+  "version": 14
+}
