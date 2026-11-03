@@ -17,8 +17,8 @@ PROFILE_SHA256='c627bacb49c69ab13cbb309bcee1872e2bb22f41eab3248c367ff31f099ea5a2
 WORKFLOW_SHA256='e9a83c926deec4f818b47f465468905c23873dfe288f7e2fa25a5bb4ce36168e'
 ASSIGNMENT_SHA256='ae9043fb6cb21d41165d71dd6d2055be2242e053a9c2a739a9a11121df56dfe7'
 OLD_POLICY='docs/paid-launch/launch-scope-policy-nfl-account-reset-v1.json'
-POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v11.json'
-VALIDATION='docs/paid-launch/ci-fifteen-validation-v11.json'
+POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v12.json'
+VALIDATION='docs/paid-launch/ci-fifteen-validation-v12.json'
 IMPLEMENTATION_PARENT='5b9d4827fd2965996eca26533b8d568ae046888e'
 IMPLEMENTATION_PARENT_TREE='e2f7e76a64237055b4e9d3b85b1f922f6283fdb5'
 MAIN_PARENT='762cde0e88703a2fada5a2a8ef1bef2ca0a2df12'
@@ -34,11 +34,15 @@ LOCAL_PARENT='11a19e3f3a116e7c7bbdeea7f467b25d8240f905'
 FIRST_REWEIGHT_PARENT='7c5ba8a7e506896c52b2242b8bfddb8430a68c03'
 FIRST_REWEIGHT_PARENT_TREE='68688e22dede1cfcc22772f214092005caf48964'
 LOCAL_PARENT_TREE='298c20f81da54c5ce0812e8a31bc1f07b42c48ca'
-PROFILE_CONSUMER='docs/paid-launch/ci-fifteen-retained-profile-input-v4.json'
-CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v7.json'
+PROFILE_CONSUMER='docs/paid-launch/ci-fifteen-retained-profile-input-v5.json'
+CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v8.json'
 INPUTS='docs/paid-launch/ci-fifteen-qualification-inputs-v5.json'
 SEAL_PARENT='733bcc826f2a0ebfd7526211b45ffcf6e7ab2091'
 SEAL_PARENT_TREE='5972310679916c367a74338162399fd037f94184'
+CORRECTION_PARENT='cc3db44cee57a2f042ce22d7539f1c1dce884f54'
+CORRECTION_PARENT_TREE='656a060ef09d4f9e26c2ca6f626c0a27f8dd389a'
+WORKFLOW_INPUT_DESCRIPTOR='docs/paid-launch/ci-fifteen-historical-workflow-input-v1.json'
+WORKFLOW_INPUT_DESCRIPTOR_SHA256='b582df6a6f3839e121c16f91f7a29481a8c2b2046f2bd4c54aee6be8e8654dd8'
 JOB_TIMEOUT_SECONDS=3000
 TIMEOUT_RECORD='docs/paid-launch/ci-fifteen-fifty-timeout-v1.json'
 TIMEOUT_RECORD_SHA256='48792108bcf6256a3e785c2e484fcce68eb32269b25d3139290898db6299c932'
@@ -213,6 +217,32 @@ def verify_timeout(root):
         require(sha(physical(Path(root)/path))==digest,'CI_FIFTY_PRIOR_CHANGED')
 
 
+def verify_historical_workflow_input(root):
+    d=json.loads(physical(Path(root)/WORKFLOW_INPUT_DESCRIPTOR))
+    require(sha(physical(Path(root)/WORKFLOW_INPUT_DESCRIPTOR))==WORKFLOW_INPUT_DESCRIPTOR_SHA256
+        and d['predecessor_head']==CORRECTION_PARENT and d['predecessor_tree']==CORRECTION_PARENT_TREE
+        and text(root,'rev-parse',CORRECTION_PARENT+'^{tree}')==CORRECTION_PARENT_TREE
+        and d['publication_authority']is False and d['ci_authority']is False,'CI_HISTORICAL_WORKFLOW_DESCRIPTOR_CHANGED')
+    require(sha(physical(Path(root)/d['consumer']))==d['consumer_sha256']
+        and d['consumer']=='tests/test_ncaaf_postmerge_scope.py'
+        and d['selected_call']=='test_workflow_fallback_and_command_are_the_real_unchanged_values'
+        and d['generation']=='transport' and d['helper']=='tests/historical_scope_input_boundary.py',
+        'CI_HISTORICAL_WORKFLOW_CONSUMER_CHANGED')
+    old=git(root,'show',CORRECTION_PARENT+':'+d['helper'])
+    anchor=b"    paths=set(binding['component_predecessors'])\n"
+    addition=b"    # Only this frozen call needs the already-authenticated paid-workflow edge.\n    # Live/native callers continue reading the current explicit event routing.\n    if (plan.consumer,plan.node,plan.generation)==('tests/test_ncaaf_postmerge_scope.py',\n            'test_workflow_fallback_and_command_are_the_real_unchanged_values','transport'):\n        paths.add('.github/workflows/paid-launch.yml')\n"
+    require(old.count(anchor)==1 and sha(old)==d['helper_before_sha256']
+        and physical(Path(root)/d['helper'])==old.replace(anchor,anchor+addition,1)
+        and sha(physical(Path(root)/d['helper']))==d['helper_after_sha256'],'CI_HISTORICAL_WORKFLOW_INPUT_CHANGED')
+    require(physical(Path(root)/PAID_WORKFLOW)==git(root,'show',CORRECTION_PARENT+':'+PAID_WORKFLOW)
+        and sha(physical(Path(root)/PAID_WORKFLOW))==d['physical_workflow_sha256'],
+        'CI_MAIN_CALLER_TRANSITION_CHANGED')
+    for path in ('docs/paid-launch/launch-scope-policy-ci-fifteen-v11.json','docs/paid-launch/ci-fifteen-validation-v11.json'):
+        require(physical(Path(root)/path)==git(root,'show',CORRECTION_PARENT+':'+path),'CI_HISTORICAL_WORKFLOW_PRIOR_SEAL_CHANGED')
+    return dict(descriptor_sha256=WORKFLOW_INPUT_DESCRIPTOR_SHA256,predecessor_head=CORRECTION_PARENT,
+        helper_sha256=d['helper_after_sha256'],consumer_sha256=d['consumer_sha256'])
+
+
 def make_contract(root,stamp,components):
     root=Path(root);binding='docs/research/ncaaf-filtered-history-bindings-v1.json'
     before=git(root,'show',PARENT+':.github/workflows/ci.yml')
@@ -241,6 +271,7 @@ def make_contract(root,stamp,components):
         authorization_sha256=components[AUTHORIZATION],planning_gate_seconds=180,required_actual_reserve_seconds=120,
         hosted_authority=False,publication_authority=False)
     contract['main_caller_successor']=main_caller_contract(root)
+    contract['historical_workflow_input_successor']=verify_historical_workflow_input(root)
     contract['native_lpt_profile_successor']=dict(predecessor_head=CAPACITY_PARENT,predecessor_tree=CAPACITY_PARENT_TREE,descriptor_sha256=PROFILE_DESCRIPTOR_SHA256,context_record_sha256=components[CONTEXT_RECORD],local_authorization_sha256=components[LOCAL_AUTHORIZATION],profile_sha256=PROFILE_SHA256,assignment_sha256=ASSIGNMENT_SHA256)
     contract['retained_profile_consumer_generation']=dict(predecessor_head=LOCAL_PARENT,predecessor_tree=LOCAL_PARENT_TREE,logical_head=CAPACITY_PARENT,logical_binding_sha256='d84983e285490da3e38128ceeec1b9c907632eeea62596e8e3fe3628d29499a1',descriptor_sha256=components[PROFILE_CONSUMER],helper_sha256=components['tests/native_lpt_profile_inputs.py'],conftest_sha256=sha(physical(root/'tests/conftest.py')),consumer_sha256=components['tests/test_ncaaf_sidebar_startup_scope.py'])
     return contract
@@ -290,11 +321,11 @@ def make_policy(root,binding,implementation,binding_sha):
     require(evidence['implementation_commit']==implementation
         and evidence['implementation_tree']==text(root,'rev-parse',implementation+'^{tree}')
         and evidence['binding_sha256']==binding_sha,'CI_FIFTEEN_VALIDATION_SUBJECT_CHANGED')
-    return dict(version='ci-fifteen-fifty-local-only-seal-v11',base=scope.BASE,base_tree=scope.TREE,
+    return dict(version='ci-fifteen-historical-workflow-local-only-seal-v12',base=scope.BASE,base_tree=scope.TREE,
         predecessor_head=PARENT,predecessor_tree=PARENT_TREE,predecessor_binding_sha256=PARENT_BINDING,
         retained_thirteen_policy_sha256=sha(physical(Path(root)/OLD_POLICY)),
         binding_sha256=binding_sha,implementation_commit=implementation,
-        implementation_tree=evidence['implementation_tree'],implementation_parent=SEAL_PARENT,implementation_paths=sorted(scope.PATHS),
+        implementation_tree=evidence['implementation_tree'],implementation_parent=CORRECTION_PARENT,implementation_paths=sorted(scope.PATHS),
         unchanged_blobs={p:v for p,v in scope.blobs(root,scope.BASE).items()if p not in scope.PATHS},
         topology=validate_topology(root,binding),validation_sha256=sha(physical(Path(root)/VALIDATION)),
         validation_status=evidence['status'],operational_authority=False,publication_authority=False,
@@ -315,8 +346,8 @@ def validate(root,binding,comparison_base,manifest,*,binding_sha):
     for p in scope.NORMALIZED:
         require(scope.reader_entry_parent(p,scope.normalized(p,physical(root/p),binding_sha))==scope.normalized(p,git(root,'show',scope.BASE+':'+p),scope.OLD_STAMP),'INHERITED_GUARD_LOGIC_CHANGED')
     policy=json.loads(git(root,'show','HEAD:'+POLICY));implementation=policy['implementation_commit']
-    require(text(root,'show','-s','--format=%P',implementation).split()==[SEAL_PARENT]
-        and text(root,'merge-base',scope.BASE,SEAL_PARENT)==scope.BASE,'IMPLEMENTATION_PARENT_NOT_APPROVED')
+    require(text(root,'show','-s','--format=%P',implementation).split()==[CORRECTION_PARENT]
+        and text(root,'merge-base',scope.BASE,CORRECTION_PARENT)==scope.BASE,'IMPLEMENTATION_PARENT_NOT_APPROVED')
     require(set(text(root,'diff','--name-only',scope.BASE,implementation).splitlines())==scope.PATHS,'IMPLEMENTATION_CHANGE_SET_NOT_APPROVED')
     require(policy==make_policy(root,binding,implementation,binding_sha),'EXACT_POLICY_BINDINGS_CHANGED')
     head=text(root,'rev-parse','HEAD');seal=head;parents=text(root,'show','-s','--format=%P',head).split()

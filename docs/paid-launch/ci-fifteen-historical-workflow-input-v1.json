@@ -1,0 +1,23 @@
+{
+  "assertions_unchanged": true,
+  "before_workflow_sha256": "fccb75c4d4b9c9e99037e4888b2f7ad283cdc150e69fb0578ffa7b0ebcd9384b",
+  "ci_authority": false,
+  "consumer": "tests/test_ncaaf_postmerge_scope.py",
+  "consumer_sha256": "cf1262a4ec6bfa3a66532f1a44cbd9bc82549682b8f8d013deb2bf877c2ee8dd",
+  "contract_evidence_sha256": "39282bec36a41a5f5267a6ce8ec3a86ff4f0c65afa541c80e4a388a2e53b8972",
+  "generation": "transport",
+  "helper": "tests/historical_scope_input_boundary.py",
+  "helper_after_sha256": "b863ba3fa2278c679a330bd54f92e3315ad5e5d5e9dbfa090b5bb11bc7736a11",
+  "helper_before_sha256": "f91678b7d224ae1759ce619657ce07d26f4915813372b19062a0bccd2e2597dc",
+  "node": "next(s for s in steps if 'BASE_SHA' in s.get('env',{}))",
+  "physical_workflow_sha256": "00d1d6bbcf893cf38bb8f9ae338e9a4c51de393197f67affe2ef4191d3c46f1a",
+  "predecessor_head": "cc3db44cee57a2f042ce22d7539f1c1dce884f54",
+  "predecessor_tree": "656a060ef09d4f9e26c2ca6f626c0a27f8dd389a",
+  "publication_authority": false,
+  "scope": "BOUNDED_LOCAL_HISTORICAL_INPUT_CORRECTION_ONLY",
+  "selected_call": "test_workflow_fallback_and_command_are_the_real_unchanged_values",
+  "source_scope": "Historical fixture selection only; no current workflow/application/model/storage changes.",
+  "version": 1,
+  "workflow": ".github/workflows/paid-launch.yml",
+  "wrong_base_rejection_unchanged": true
+}

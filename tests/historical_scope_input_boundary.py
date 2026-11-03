@@ -1214,6 +1214,11 @@ def install_filtered_successor_input_view(plan,patch):
     if factory is None:return False
     scope=factory();binding=scope.authenticate(ROOT)
     paths=set(binding['component_predecessors'])
+    # Only this frozen call needs the already-authenticated paid-workflow edge.
+    # Live/native callers continue reading the current explicit event routing.
+    if (plan.consumer,plan.node,plan.generation)==('tests/test_ncaaf_postmerge_scope.py',
+            'test_workflow_fallback_and_command_are_the_real_unchanged_values','transport'):
+        paths.add('.github/workflows/paid-launch.yml')
     # The declared guard readers and their legacy bridge own this generation.
     # An earlier generic parent view would change the bridge's current input.
     paths.discard(GUARD)
