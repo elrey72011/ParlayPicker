@@ -173,7 +173,7 @@ def test_fresh_route_through_actual_normal_refresh_button(synthetic,monkeypatch,
     selection,root,_=continuation.filtered_selection(synthetic,monkeypatch,tmp_path,-7)
     monkeypatch.setattr(normal,'selection',lambda *args,**kwargs:selection)
     # Execute the existing actual button, display, no-implicit-run and rerun
-    # assertions unchanged, with its approved 180-second harness budget.
+    # assertions unchanged; only the Refresh click has the approved 300-second test budget.
     normal.test_actual_normal_refresh_button_uses_private_caller(synthetic,monkeypatch,root)
 
 

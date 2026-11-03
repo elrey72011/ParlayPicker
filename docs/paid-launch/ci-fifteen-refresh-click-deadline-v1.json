@@ -1,0 +1,58 @@
+{
+  "assignment_change": false,
+  "authority_record_sha256": "c111672266c3f18e901c7abee005cedc76ae5db361ac3dc51e9064b1fdaf0c72",
+  "ci_authority": false,
+  "consumers": [
+    {
+      "nodeid": "tests/test_ncaaf_private_normal_refresh.py::test_actual_normal_refresh_button_uses_private_caller",
+      "shard": 4
+    },
+    {
+      "nodeid": "tests/test_ncaaf_history_continuation.py::test_continuation_actual_normal_refresh_button",
+      "shard": 7
+    },
+    {
+      "nodeid": "tests/test_ncaaf_fresh_history.py::test_fresh_route_through_actual_normal_refresh_button",
+      "shard": 15
+    },
+    {
+      "nodeid": "tests/test_ncaaf_retained_discovery.py::test_retained_history_prospective_discovery_actual_refresh_button",
+      "shard": 9
+    }
+  ],
+  "historical_programs": "Exact predecessor programs retained through authenticated capacity-predecessor edges; old contracts/seals unchanged.",
+  "job_timeout_seconds": 3000,
+  "measurement_evidence_manifest_sha256": "1573922a96226618b662a83fc0b7e4e961c4320806703ba6c576c346109ba5d5",
+  "model_change": false,
+  "planning_gate_seconds": 180,
+  "predecessor_head": "dbc906a6359120ca3d72abe0dfb4bad7ac62cde6",
+  "predecessor_tree": "c9da8e1c14a4ee5695674331308a3072cab1bb2f",
+  "production_deadline_change": false,
+  "profile_change": false,
+  "publication_authority": false,
+  "refresh_seconds": 300,
+  "required_actual_reserve_seconds": 120,
+  "scope": "TEST_REFRESH_CLICK_ONLY_300_SECONDS_LOCAL_QUALIFICATION",
+  "shards": 15,
+  "source_changes": {
+    "tests/test_ncaaf_fresh_history.py": {
+      "after_sha256": "c8f1dcec126ef42410e2ddbaf87d10c7b36f9e8ed0ef46ef364e5e04c5274e4e",
+      "after_text": "assertions unchanged; only the Refresh click has the approved 300-second test budget.",
+      "before_sha256": "53b5fc2a6dff5fb093f253c209dec373b356de8160291c128075835c679eee85",
+      "before_text": "assertions unchanged, with its approved 180-second harness budget.",
+      "original_assertions_sha256": "02488d2ad51843b6fd3a899a220f7cef8700feedb4c19876e6b7d907a9a4c786"
+    },
+    "tests/test_ncaaf_private_normal_refresh.py": {
+      "after_sha256": "3254b6ff7c6efb27efee69b79a94df02ba058193a6cbb8486d4baa7b5a886314",
+      "after_text": "next(b for b in app.button if b.label=='Refresh picks').click().run(timeout=300)",
+      "before_sha256": "3a8ff3c0bd0b28db7b2b9bbc41f365f2feadfe568442c6e7adfb413dba7b0d29",
+      "before_text": "next(b for b in app.button if b.label=='Refresh picks').click().run()",
+      "original_assertions_sha256": "53ac9120456d3a198b369c700142c6d5b2d241b38767539066aa7bc8101a55f6"
+    }
+  },
+  "startup_seconds": 180,
+  "static_rerender_seconds": 180,
+  "storage_change": false,
+  "test_identities": 9403,
+  "version": 1
+}
