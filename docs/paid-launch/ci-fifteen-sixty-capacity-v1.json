@@ -1,0 +1,4243 @@
+{
+  "actual_ci_reserves": "UNKNOWN",
+  "assignment_sha256": "ae9043fb6cb21d41165d71dd6d2055be2242e053a9c2a739a9a11121df56dfe7",
+  "assumptions": "Per-file maxima acrossstrata form a conservative envelope,not a compatible empirical population. Finite draws stay withinnewruntime/permissionstrata;legacyunknowncohort samples are fixedmaxfloors. No oldslower result discarded. Transferred estimates for unmeasured files remain estimates;new candidate costs and enclosing limits must qualify.",
+  "ci_authority": false,
+  "classification": "CONSERVATIVE_ESTIMATED_CAPACITY_BOUND_NOT_ACTUAL_CI",
+  "complete_file_allowance": 5.0,
+  "files": [
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.4531,
+      "observations": [],
+      "path": "tests/test_absolute_production_gate.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 38,
+      "legacy_floor": 3.864,
+      "observations": [],
+      "path": "tests/test_activation_reverification.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 4.44705,
+      "observations": [],
+      "path": "tests/test_activation_scheduler_performance.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 1.31215,
+      "observations": [],
+      "path": "tests/test_apptest_owned_script.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 10.757133220028482,
+      "observations": [],
+      "path": "tests/test_authenticated_reader_entry.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.05865,
+      "observations": [],
+      "path": "tests/test_availability_inventory.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.04715,
+      "observations": [],
+      "path": "tests/test_bankroll_simulator_resilience.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 20,
+      "legacy_floor": 0.4071,
+      "observations": [],
+      "path": "tests/test_batter_props.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 4.46085,
+      "observations": [],
+      "path": "tests/test_best_available_candidate_audit.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.11844999999999999,
+      "observations": [],
+      "path": "tests/test_best_duos.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.15065,
+      "observations": [],
+      "path": "tests/test_best_duos_strict.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.0529,
+      "observations": [],
+      "path": "tests/test_best_overall_pick_logic.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 69,
+      "legacy_floor": 34.132,
+      "observations": [],
+      "path": "tests/test_best_picks_calibration_pass.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 22,
+      "legacy_floor": 0.3013,
+      "observations": [],
+      "path": "tests/test_best_picks_export_identity_columns.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.9108,
+      "observations": [],
+      "path": "tests/test_best_picks_full_game_coverage.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.43584999999999996,
+      "observations": [],
+      "path": "tests/test_best_picks_identity_required.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 0.21849999999999997,
+      "observations": [],
+      "path": "tests/test_best_picks_kelly_attach.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.4485,
+      "observations": [],
+      "path": "tests/test_best_picks_match_analysis.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 1.3501,
+      "observations": [],
+      "path": "tests/test_best_picks_novig_priority.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 2.4541,
+      "observations": [],
+      "path": "tests/test_board_diagnostics.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 1.62725,
+      "observations": [],
+      "path": "tests/test_browser_process_owner.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.05865,
+      "observations": [],
+      "path": "tests/test_bucket_calibration.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.02415,
+      "observations": [],
+      "path": "tests/test_calibration.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 1.08445,
+      "observations": [],
+      "path": "tests/test_calibration_promotion.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.5658,
+      "observations": [],
+      "path": "tests/test_calibration_tuning.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 3.48335,
+      "observations": [],
+      "path": "tests/test_calibration_update.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 10.1982,
+      "observations": [],
+      "path": "tests/test_candidate_authority_projection.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.7521,
+      "observations": [],
+      "path": "tests/test_candidate_chronology_hotfix.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.1288,
+      "observations": [],
+      "path": "tests/test_candidate_evidence_serialization.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 0.35535,
+      "observations": [],
+      "path": "tests/test_candidate_generation.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 0.42205,
+      "observations": [],
+      "path": "tests/test_candidate_recap.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.46,
+      "observations": [],
+      "path": "tests/test_candidate_weight_analysis.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 23,
+      "legacy_floor": 4.14,
+      "observations": [],
+      "path": "tests/test_canonical_download.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 68,
+      "legacy_floor": 1042.2392499999999,
+      "observations": [],
+      "path": "tests/test_canonical_download_scope.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 0.10005,
+      "observations": [],
+      "path": "tests/test_card_recovery_emptiness.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0943,
+      "observations": [],
+      "path": "tests/test_chicago_bkn.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 11.085594955063426,
+      "observations": [],
+      "path": "tests/test_ci_five_shards.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 49,
+      "legacy_floor": 167.05704999999998,
+      "observations": [],
+      "path": "tests/test_ci_fixture_stability_scope.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.07245,
+      "observations": [],
+      "path": "tests/test_ci_offline_transports.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 59.410149999999994,
+      "observations": [],
+      "path": "tests/test_ci_scheduling_fixture_copy.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 20,
+      "legacy_floor": 78.18045,
+      "observations": [],
+      "path": "tests/test_ci_scheduling_fixture_scope.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 20,
+      "legacy_floor": 266.9265,
+      "observations": [],
+      "path": "tests/test_ci_scheduling_scope.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 148.73097313477484,
+      "observations": [],
+      "path": "tests/test_ci_six_shards.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 46,
+      "legacy_floor": 11.433053080091486,
+      "observations": [
+        {
+          "artifact_sha256": "532021b0d84e3f846693e1a1e2ff5d30a110d513f8acab999892de67ad278ba7",
+          "cases": 46,
+          "cohort": "new_runtime_permitted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 3.6079625000074884
+        }
+      ],
+      "path": "tests/test_ci_test_shards.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 28.601649999999996,
+      "observations": [],
+      "path": "tests/test_ci_timing_profile.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 91.8252,
+      "observations": [],
+      "path": "tests/test_ci_timing_scope.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 21,
+      "legacy_floor": 190.76775,
+      "observations": [],
+      "path": "tests/test_clock_scope_exception_proposal.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 0.14375,
+      "observations": [],
+      "path": "tests/test_clv_and_backtest.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.0276,
+      "observations": [],
+      "path": "tests/test_college_novig.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 35,
+      "legacy_floor": 0.36455,
+      "observations": [],
+      "path": "tests/test_college_public_grading.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 0.1633,
+      "observations": [],
+      "path": "tests/test_compact_export.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.15985,
+      "observations": [],
+      "path": "tests/test_compact_probability_export.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 24,
+      "legacy_floor": 0.8728499999999999,
+      "observations": [],
+      "path": "tests/test_consistent_spread_book.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 0.29555,
+      "observations": [],
+      "path": "tests/test_consistent_total_book.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.16445,
+      "observations": [],
+      "path": "tests/test_controlled_prop_rollout.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 24,
+      "legacy_floor": 0.92345,
+      "observations": [],
+      "path": "tests/test_controlled_trial.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.10004999999999999,
+      "observations": [],
+      "path": "tests/test_controlled_trial_integration.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.06095,
+      "observations": [],
+      "path": "tests/test_controlled_trial_quality.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.0552,
+      "observations": [],
+      "path": "tests/test_core_engine_updates.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 1.1891,
+      "observations": [],
+      "path": "tests/test_corrupt_odds_guard.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 0.598,
+      "observations": [],
+      "path": "tests/test_current_wagers_trace_and_release.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.5922499999999999,
+      "observations": [],
+      "path": "tests/test_daily_dashboard.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.49449999999999994,
+      "observations": [],
+      "path": "tests/test_dfs_lock_picker.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 35,
+      "legacy_floor": 1.9251,
+      "observations": [],
+      "path": "tests/test_dfs_projection_identity.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 60,
+      "legacy_floor": 293.39374999999995,
+      "observations": [],
+      "path": "tests/test_dfs_scope_policy.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.0253,
+      "observations": [],
+      "path": "tests/test_diagnostics.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 0.89125,
+      "observations": [],
+      "path": "tests/test_draftkings_classic.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 0.7797,
+      "observations": [],
+      "path": "tests/test_draftkings_mlb_classic.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.62215,
+      "observations": [],
+      "path": "tests/test_draftkings_panel.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 5.8857,
+      "observations": [],
+      "path": "tests/test_drive_history_harness.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 33,
+      "legacy_floor": 7.844149999999999,
+      "observations": [],
+      "path": "tests/test_drive_history_loading.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 37,
+      "legacy_floor": 286.83645,
+      "observations": [],
+      "path": "tests/test_drive_history_scope_policy.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.06325,
+      "observations": [],
+      "path": "tests/test_earned_actionable_over.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.02645,
+      "observations": [],
+      "path": "tests/test_edge_instrumentation.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.0644,
+      "observations": [],
+      "path": "tests/test_edge_no_stake_gates.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 1.6375999999999997,
+      "observations": [],
+      "path": "tests/test_empirical_finalist_selection.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 24,
+      "legacy_floor": 0.2737,
+      "observations": [],
+      "path": "tests/test_empirical_tiers.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 0.21505,
+      "observations": [],
+      "path": "tests/test_espn_observed_quotes.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.04255,
+      "observations": [],
+      "path": "tests/test_espn_results_wnba.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 23,
+      "legacy_floor": 30.614149999999995,
+      "observations": [],
+      "path": "tests/test_estimate_availability.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 37,
+      "legacy_floor": 297.0519,
+      "observations": [],
+      "path": "tests/test_estimate_scope_policy.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.07935,
+      "observations": [],
+      "path": "tests/test_evidence_config.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 0.31855,
+      "observations": [],
+      "path": "tests/test_evidence_drive.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 1.3293999999999997,
+      "observations": [],
+      "path": "tests/test_evidence_health.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 1.7733,
+      "observations": [],
+      "path": "tests/test_evidence_remote.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 58.935199999999995,
+      "observations": [],
+      "path": "tests/test_export_scope.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.02415,
+      "observations": [],
+      "path": "tests/test_fallback_ev.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.5336,
+      "observations": [],
+      "path": "tests/test_fallback_slate_keeps_theover_signal.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0092,
+      "observations": [],
+      "path": "tests/test_feature_population.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 0.13915,
+      "observations": [],
+      "path": "tests/test_feature_processing.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 0.1932,
+      "observations": [],
+      "path": "tests/test_fit_blend_weights.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.14835,
+      "observations": [],
+      "path": "tests/test_fit_bucket_stats_recency.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 2.2885,
+      "observations": [],
+      "path": "tests/test_football_catalog_aliases.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 49,
+      "legacy_floor": 648.7563999999999,
+      "observations": [],
+      "path": "tests/test_football_catalog_scope.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.01955,
+      "observations": [],
+      "path": "tests/test_football_coverage.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 96.1055,
+      "observations": [],
+      "path": "tests/test_football_document_ci_closure.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 107.41229999999999,
+      "observations": [],
+      "path": "tests/test_football_document_ci_closure_scope.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 73.5264,
+      "observations": [],
+      "path": "tests/test_football_document_ci_performance.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 93.55019999999999,
+      "observations": [],
+      "path": "tests/test_football_document_ci_performance_scope.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 99.25765,
+      "observations": [],
+      "path": "tests/test_football_document_fixture_report_scope.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 76.57619999999999,
+      "observations": [],
+      "path": "tests/test_football_document_html_fixture_scope.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 83.2255,
+      "observations": [],
+      "path": "tests/test_football_document_html_scope.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 90.5878,
+      "observations": [],
+      "path": "tests/test_football_document_io_scope.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 95.5075,
+      "observations": [],
+      "path": "tests/test_football_document_literals_scope.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 81.73395,
+      "observations": [],
+      "path": "tests/test_football_document_metadata_scope.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 56.25685,
+      "observations": [],
+      "path": "tests/test_football_document_predecessor_fixture.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 95.32005,
+      "observations": [],
+      "path": "tests/test_football_document_predecessor_fixture_scope.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 8.4226,
+      "observations": [],
+      "path": "tests/test_football_document_remote_fixture.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 88.77195,
+      "observations": [],
+      "path": "tests/test_football_document_remote_fixture_scope.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 87.86804999999998,
+      "observations": [],
+      "path": "tests/test_football_document_six_capacity_scope.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 81.2199,
+      "observations": [],
+      "path": "tests/test_football_document_socket_scope.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.046,
+      "observations": [],
+      "path": "tests/test_football_fallback.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.05175,
+      "observations": [],
+      "path": "tests/test_football_feature_capture.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.02645,
+      "observations": [],
+      "path": "tests/test_football_identity_capture.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.01725,
+      "observations": [],
+      "path": "tests/test_football_inventory.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 75,
+      "legacy_floor": 1064.38825,
+      "observations": [],
+      "path": "tests/test_football_research_scope.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 3.9019499999999994,
+      "observations": [],
+      "path": "tests/test_football_side_fallback.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 28,
+      "legacy_floor": 2.8934,
+      "observations": [],
+      "path": "tests/test_football_stage1.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 0.89125,
+      "observations": [],
+      "path": "tests/test_football_stage2.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.44735,
+      "observations": [],
+      "path": "tests/test_football_v3_feasibility.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 2.1275,
+      "observations": [],
+      "path": "tests/test_football_validation_v2.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 0.76245,
+      "observations": [],
+      "path": "tests/test_force_deploy_staking.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 2.2609,
+      "observations": [],
+      "path": "tests/test_game_already_started_guard.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.12419999999999999,
+      "observations": [],
+      "path": "tests/test_game_coverage.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.2668,
+      "observations": [],
+      "path": "tests/test_game_time_est_conversion.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 18,
+      "legacy_floor": 0.66585,
+      "observations": [],
+      "path": "tests/test_gemini_bet_gate.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.01955,
+      "observations": [],
+      "path": "tests/test_gemini_public_evidence.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.01955,
+      "observations": [],
+      "path": "tests/test_gemini_research_batch.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.1518,
+      "observations": [],
+      "path": "tests/test_gemini_review_evidence.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.1196,
+      "observations": [],
+      "path": "tests/test_generate_parlays_no_infinite_loop.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.04715,
+      "observations": [],
+      "path": "tests/test_grade_from_scores.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.0598,
+      "observations": [],
+      "path": "tests/test_grade_props.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.10005,
+      "observations": [],
+      "path": "tests/test_grade_slate_no_play.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.031049999999999998,
+      "observations": [],
+      "path": "tests/test_grade_tiers.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 24.148288554872853,
+      "observations": [],
+      "path": "tests/test_historical_program_compile.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 139,
+      "legacy_floor": 744.8508913814468,
+      "observations": [],
+      "path": "tests/test_historical_scope_input_boundary.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 9.413419629927377,
+      "observations": [],
+      "path": "tests/test_historical_setup_compile.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 52,
+      "legacy_floor": 400.16895,
+      "observations": [],
+      "path": "tests/test_home_runline_scope_policy.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.3323499999999999,
+      "observations": [],
+      "path": "tests/test_hosted_board_reconciliation.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.49105,
+      "observations": [],
+      "path": "tests/test_immutable_git_fixture.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.08739999999999999,
+      "observations": [],
+      "path": "tests/test_imported_recaps.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.38065,
+      "observations": [],
+      "path": "tests/test_jul27_regression_guardrails.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.04485,
+      "observations": [],
+      "path": "tests/test_kalshi_alias_overrides.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.0575,
+      "observations": [],
+      "path": "tests/test_kalshi_diagnostics.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 2.0654,
+      "observations": [],
+      "path": "tests/test_kalshi_direction_veto.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.01955,
+      "observations": [],
+      "path": "tests/test_kalshi_enrich_league_inference.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.1311,
+      "observations": [],
+      "path": "tests/test_kalshi_enrich_markets.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0161,
+      "observations": [],
+      "path": "tests/test_kalshi_enrich_nullable_inputs.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.02185,
+      "observations": [],
+      "path": "tests/test_kalshi_enrich_timeout.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.04485,
+      "observations": [],
+      "path": "tests/test_kalshi_event_date_filter.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.03335,
+      "observations": [],
+      "path": "tests/test_kalshi_event_match_one_sided.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.04715,
+      "observations": [],
+      "path": "tests/test_kalshi_extreme_price_guard.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.0805,
+      "observations": [],
+      "path": "tests/test_kalshi_failure_reasons.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.02875,
+      "observations": [],
+      "path": "tests/test_kalshi_family_inference.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.49334999999999996,
+      "observations": [],
+      "path": "tests/test_kalshi_matching_fixes.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0391,
+      "observations": [],
+      "path": "tests/test_kalshi_merge_game_date_types.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.09315,
+      "observations": [],
+      "path": "tests/test_kalshi_mlb_event_matching.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0092,
+      "observations": [],
+      "path": "tests/test_kalshi_nba_spread.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.05175,
+      "observations": [],
+      "path": "tests/test_kalshi_orientation_and_recap.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.02415,
+      "observations": [],
+      "path": "tests/test_kalshi_series_cache_refresh.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.0989,
+      "observations": [],
+      "path": "tests/test_kalshi_spread_orientation.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.09085,
+      "observations": [],
+      "path": "tests/test_kalshi_totals_line_tolerance.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.0851,
+      "observations": [],
+      "path": "tests/test_kalshi_wrong_game_title_guard.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 23,
+      "legacy_floor": 143.0853,
+      "observations": [],
+      "path": "tests/test_launch_scope_integration.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.0368,
+      "observations": [],
+      "path": "tests/test_league_evaluation.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 3.70875,
+      "observations": [],
+      "path": "tests/test_league_infer_from_base.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.0483,
+      "observations": [],
+      "path": "tests/test_league_recovery_and_kalshi_tolerance.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 35,
+      "legacy_floor": 1.2006,
+      "observations": [],
+      "path": "tests/test_lean_card.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 13.6505,
+      "observations": [],
+      "path": "tests/test_legacy_sidebar_startup.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.08854999999999999,
+      "observations": [],
+      "path": "tests/test_line_drift.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0414,
+      "observations": [],
+      "path": "tests/test_line_drift_diagnostics.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 18,
+      "legacy_floor": 0.9062,
+      "observations": [],
+      "path": "tests/test_live_activation_acceptance.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 67,
+      "legacy_floor": 1.3823,
+      "observations": [],
+      "path": "tests/test_live_wager_contract.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 1.1258499999999998,
+      "observations": [],
+      "path": "tests/test_lock_storage_performance.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.01725,
+      "observations": [],
+      "path": "tests/test_lock_total_input_review.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 24,
+      "legacy_floor": 1.4627999999999999,
+      "observations": [],
+      "path": "tests/test_locked_picks.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 0.092,
+      "observations": [],
+      "path": "tests/test_low_line_over_override.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.50945,
+      "observations": [],
+      "path": "tests/test_market_calibration.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 0.4393,
+      "observations": [],
+      "path": "tests/test_market_probability_model.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 3.07395,
+      "observations": [],
+      "path": "tests/test_matchup_auto_detect_column.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.4071,
+      "observations": [],
+      "path": "tests/test_matchup_identity_fallback.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.0184,
+      "observations": [],
+      "path": "tests/test_meta_model.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 0.7843,
+      "observations": [],
+      "path": "tests/test_minor_improvements.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.01725,
+      "observations": [],
+      "path": "tests/test_ml_flatness_diagnostics.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.8003999999999999,
+      "observations": [],
+      "path": "tests/test_ml_target_guard.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 0.12995,
+      "observations": [],
+      "path": "tests/test_mlb_event_matcher.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.05979999999999999,
+      "observations": [],
+      "path": "tests/test_mlb_history.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 59,
+      "legacy_floor": 0.713,
+      "observations": [],
+      "path": "tests/test_mlb_home_runline_contract.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 1.1741499999999998,
+      "observations": [],
+      "path": "tests/test_mlb_live_model_connection.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 52.22265,
+      "observations": [],
+      "path": "tests/test_mlb_nhl_research_bindings.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 56,
+      "legacy_floor": 929.65885,
+      "observations": [],
+      "path": "tests/test_mlb_nhl_research_scope.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.1909,
+      "observations": [],
+      "path": "tests/test_mlb_pitcher_history.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.06095,
+      "observations": [],
+      "path": "tests/test_mlb_pitcher_stats.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 50,
+      "legacy_floor": 1.90555,
+      "observations": [],
+      "path": "tests/test_mlb_pregame_receipts.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 0.81075,
+      "observations": [],
+      "path": "tests/test_mlb_production_readiness.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.529,
+      "observations": [],
+      "path": "tests/test_mlb_prospective.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.22195,
+      "observations": [],
+      "path": "tests/test_mlb_receipt_audit.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 30,
+      "legacy_floor": 1.83655,
+      "observations": [],
+      "path": "tests/test_mlb_receipt_remote.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0161,
+      "observations": [],
+      "path": "tests/test_mlb_receipt_workflow.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.38065,
+      "observations": [],
+      "path": "tests/test_mlb_research.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.07245,
+      "observations": [],
+      "path": "tests/test_mlb_runline_cover.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 24,
+      "legacy_floor": 2.8278499999999998,
+      "observations": [],
+      "path": "tests/test_mlb_spread_total_model.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 22,
+      "legacy_floor": 1.34665,
+      "observations": [],
+      "path": "tests/test_mlb_spread_total_training.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.09545,
+      "observations": [],
+      "path": "tests/test_mlb_team_stats.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.0943,
+      "observations": [],
+      "path": "tests/test_mlb_total_debias.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 0.12995,
+      "observations": [],
+      "path": "tests/test_mlb_total_direction_conflict.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 0.2553,
+      "observations": [],
+      "path": "tests/test_model_direction.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.028749999999999998,
+      "observations": [],
+      "path": "tests/test_model_validation.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.06325,
+      "observations": [],
+      "path": "tests/test_moneyline_parlay.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 1.0798499999999998,
+      "observations": [],
+      "path": "tests/test_moneyline_wiring.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0092,
+      "observations": [],
+      "path": "tests/test_my_fixes.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.7245,
+      "observations": [],
+      "path": "tests/test_navigation_persistence.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 26,
+      "legacy_floor": 0.6371,
+      "observations": [],
+      "path": "tests/test_nba_stats_reliability.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 31,
+      "legacy_floor": 230.16099999999997,
+      "observations": [],
+      "path": "tests/test_ncaaf_chronology_capacity.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 61.8263,
+      "observations": [],
+      "path": "tests/test_ncaaf_chronology_fixture_copy.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 42.57645,
+      "observations": [],
+      "path": "tests/test_ncaaf_chronology_fixture_scope.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 345.76364357017155,
+      "observations": [
+        {
+          "artifact_sha256": "e1ea637535e074a572da99ec5bf7c9c9be1dacc4f35415ca74725e3ca5231e17",
+          "cases": 15,
+          "cohort": "new_runtime_restricted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 365.7746548000014
+        }
+      ],
+      "path": "tests/test_ncaaf_chronology_scope.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 0.59455,
+      "observations": [],
+      "path": "tests/test_ncaaf_closing.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 30,
+      "legacy_floor": 6.90115,
+      "observations": [],
+      "path": "tests/test_ncaaf_cloud_backup.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 20.1181,
+      "observations": [],
+      "path": "tests/test_ncaaf_cloud_backup_scope.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 118,
+      "legacy_floor": 1656.7808499999999,
+      "observations": [],
+      "path": "tests/test_ncaaf_compatibility_scope.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 49,
+      "legacy_floor": 52.6999,
+      "observations": [],
+      "path": "tests/test_ncaaf_compatible_pipeline.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 48,
+      "legacy_floor": 0.4508,
+      "observations": [],
+      "path": "tests/test_ncaaf_coverage_corrections.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 48,
+      "legacy_floor": 281.81555,
+      "observations": [],
+      "path": "tests/test_ncaaf_coverage_scope_policy.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 338.8534048899921,
+      "observations": [
+        {
+          "artifact_sha256": "e1ea637535e074a572da99ec5bf7c9c9be1dacc4f35415ca74725e3ca5231e17",
+          "cases": 15,
+          "cohort": "new_runtime_restricted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 347.0884606000036
+        }
+      ],
+      "path": "tests/test_ncaaf_custody_scope.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 0.74175,
+      "observations": [],
+      "path": "tests/test_ncaaf_data_access.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 39,
+      "legacy_floor": 443.0741762451216,
+      "observations": [],
+      "path": "tests/test_ncaaf_filtered_history.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 45,
+      "legacy_floor": 48.3966,
+      "observations": [
+        {
+          "artifact_sha256": "532021b0d84e3f846693e1a1e2ff5d30a110d513f8acab999892de67ad278ba7",
+          "cases": 45,
+          "cohort": "new_runtime_permitted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 118.859956899998
+        }
+      ],
+      "path": "tests/test_ncaaf_filtered_history_scope.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 35,
+      "legacy_floor": 613.0320407550112,
+      "observations": [
+        {
+          "artifact_sha256": "e1ea637535e074a572da99ec5bf7c9c9be1dacc4f35415ca74725e3ca5231e17",
+          "cases": 35,
+          "cohort": "new_runtime_restricted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 773.5969023999969
+        }
+      ],
+      "path": "tests/test_ncaaf_fresh_history.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 45.37669999999999,
+      "observations": [],
+      "path": "tests/test_ncaaf_future_fixture_copy.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 20,
+      "legacy_floor": 334.54535,
+      "observations": [],
+      "path": "tests/test_ncaaf_future_spread_scope.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 21,
+      "legacy_floor": 0.74175,
+      "observations": [],
+      "path": "tests/test_ncaaf_history.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 48,
+      "legacy_floor": 896.8206,
+      "observations": [
+        {
+          "artifact_sha256": "9d08b465af328e2af4864d10a560a57c0d1c578a2f1128cb8aa1d1752a549f71",
+          "cases": 48,
+          "cohort": "new_runtime_restricted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 1217.8545515000023
+        }
+      ],
+      "path": "tests/test_ncaaf_history_continuation.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 0.20239999999999997,
+      "observations": [],
+      "path": "tests/test_ncaaf_identity.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 51,
+      "legacy_floor": 0.70495,
+      "observations": [
+        {
+          "artifact_sha256": "532021b0d84e3f846693e1a1e2ff5d30a110d513f8acab999892de67ad278ba7",
+          "cases": 51,
+          "cohort": "new_runtime_permitted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 0.7401092999934917
+        }
+      ],
+      "path": "tests/test_ncaaf_model_compatibility.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 1.33975,
+      "observations": [],
+      "path": "tests/test_ncaaf_named_staging.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 27,
+      "legacy_floor": 34.12855,
+      "observations": [],
+      "path": "tests/test_ncaaf_normal_pipeline.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 203.94099999999997,
+      "observations": [],
+      "path": "tests/test_ncaaf_normal_scope.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 134.66385,
+      "observations": [],
+      "path": "tests/test_ncaaf_observed_spread_pair.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 1.8767999999999998,
+      "observations": [],
+      "path": "tests/test_ncaaf_owner_event_crosswalk.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 21,
+      "legacy_floor": 8.32025,
+      "observations": [],
+      "path": "tests/test_ncaaf_owner_research.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 119.18254999999999,
+      "observations": [],
+      "path": "tests/test_ncaaf_owner_scope.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 4.97605,
+      "observations": [],
+      "path": "tests/test_ncaaf_owner_terms.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 74,
+      "legacy_floor": 36.35265,
+      "observations": [],
+      "path": "tests/test_ncaaf_pilot.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 52,
+      "legacy_floor": 0.72795,
+      "observations": [],
+      "path": "tests/test_ncaaf_pilot_discovery.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 129.70735,
+      "observations": [],
+      "path": "tests/test_ncaaf_pilot_discovery_scope.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 210.41435,
+      "observations": [],
+      "path": "tests/test_ncaaf_pilot_scope.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 1.1454,
+      "observations": [],
+      "path": "tests/test_ncaaf_pilot_setup.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 36,
+      "legacy_floor": 561.1954,
+      "observations": [
+        {
+          "artifact_sha256": "532021b0d84e3f846693e1a1e2ff5d30a110d513f8acab999892de67ad278ba7",
+          "cases": 36,
+          "cohort": "new_runtime_permitted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 653.0361868999989
+        },
+        {
+          "artifact_sha256": "11ffbc7c275ee73621e81eb269b2fe1669c4754f1ffa3e70d0189de584b09d3c",
+          "cases": 36,
+          "cohort": "new_runtime_restricted",
+          "kind": "completed_file_in_failed_context_floor_only",
+          "phase_seconds": 688.8039133999937
+        }
+      ],
+      "path": "tests/test_ncaaf_postmerge_scope.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 20,
+      "legacy_floor": 396.8213,
+      "observations": [
+        {
+          "artifact_sha256": "dd434513a83547702163adb7738464acb8ec2dfddc6e12853f78019403b516c2",
+          "cases": 20,
+          "cohort": "new_runtime_restricted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 724.4894463999954
+        }
+      ],
+      "path": "tests/test_ncaaf_private_normal_refresh.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 26,
+      "legacy_floor": 4.5235,
+      "observations": [],
+      "path": "tests/test_ncaaf_prospective.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 87,
+      "legacy_floor": 27.8898,
+      "observations": [],
+      "path": "tests/test_ncaaf_prospective_chronology.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 0.6854,
+      "observations": [],
+      "path": "tests/test_ncaaf_research.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 41,
+      "legacy_floor": 1.1109,
+      "observations": [],
+      "path": "tests/test_ncaaf_research_contract.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 61,
+      "legacy_floor": 990.9147499999999,
+      "observations": [],
+      "path": "tests/test_ncaaf_research_scope.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 69,
+      "legacy_floor": 25.7278,
+      "observations": [],
+      "path": "tests/test_ncaaf_response_custody.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 23,
+      "legacy_floor": 460.74404999999996,
+      "observations": [
+        {
+          "artifact_sha256": "cd668d9b886b080923a5bf253b48faa2a23b74d3a48da1acd4d22bdcc00d06a2",
+          "cases": 23,
+          "cohort": "new_runtime_restricted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 749.6412909999999
+        }
+      ],
+      "path": "tests/test_ncaaf_retained_discovery.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 26,
+      "legacy_floor": 8.07185,
+      "observations": [],
+      "path": "tests/test_ncaaf_reviewed_target.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 39,
+      "legacy_floor": 268.97695,
+      "observations": [],
+      "path": "tests/test_ncaaf_reviewed_target_pipeline.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 21,
+      "legacy_floor": 128.7747,
+      "observations": [],
+      "path": "tests/test_ncaaf_reviewed_target_scope.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 81.95819999999999,
+      "observations": [],
+      "path": "tests/test_ncaaf_reviewed_target_timing.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 20.910449999999997,
+      "observations": [],
+      "path": "tests/test_ncaaf_reviewed_target_wire_fixture.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 220.0,
+      "observations": [],
+      "path": "tests/test_ncaaf_saved_refresh_preparation.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 30.0,
+      "observations": [],
+      "path": "tests/test_ncaaf_saved_refresh_scope.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 35,
+      "legacy_floor": 0.63825,
+      "observations": [],
+      "path": "tests/test_ncaaf_schedule_coverage.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 9.38745,
+      "observations": [],
+      "path": "tests/test_ncaaf_schedule_fixture_clock.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 26,
+      "legacy_floor": 335.71834999999993,
+      "observations": [],
+      "path": "tests/test_ncaaf_schedule_scope_policy.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 33,
+      "legacy_floor": 1.65485,
+      "observations": [],
+      "path": "tests/test_ncaaf_selection.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 23.100737455065246,
+      "observations": [],
+      "path": "tests/test_ncaaf_sidebar_startup_scope.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 89.43784138476184,
+      "observations": [],
+      "path": "tests/test_ncaaf_socket_ci_costs.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 143.35554986979113,
+      "observations": [],
+      "path": "tests/test_ncaaf_socket_ci_scope.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 34,
+      "legacy_floor": 4.84955,
+      "observations": [],
+      "path": "tests/test_ncaaf_socket_lifecycle.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 71.65995,
+      "observations": [],
+      "path": "tests/test_ncaaf_socket_scope.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 78,
+      "legacy_floor": 280.70005,
+      "observations": [],
+      "path": "tests/test_ncaaf_spread_boundaries.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 54,
+      "legacy_floor": 5.9822999999999995,
+      "observations": [],
+      "path": "tests/test_ncaaf_staged_acquisition.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 18,
+      "legacy_floor": 99.82,
+      "observations": [],
+      "path": "tests/test_ncaaf_staged_capacity_scope.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 25,
+      "legacy_floor": 194.12282185510557,
+      "observations": [],
+      "path": "tests/test_ncaaf_staged_ci_capacity.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.437,
+      "observations": [],
+      "path": "tests/test_ncaaf_staged_document_discovery.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 37,
+      "legacy_floor": 47.86185,
+      "observations": [],
+      "path": "tests/test_ncaaf_staged_evidence.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 92.6578,
+      "observations": [],
+      "path": "tests/test_ncaaf_staged_scope.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.1288,
+      "observations": [],
+      "path": "tests/test_ncaaf_stats_aliases.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 76.71994999999998,
+      "observations": [],
+      "path": "tests/test_ncaaf_terms_scope.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 29,
+      "legacy_floor": 5.359,
+      "observations": [],
+      "path": "tests/test_ncaaf_transport_diagnostics.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 258.29345,
+      "observations": [],
+      "path": "tests/test_ncaaf_transport_scope.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.7682,
+      "observations": [],
+      "path": "tests/test_netlify_publishing.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 41,
+      "legacy_floor": 9.2736,
+      "observations": [],
+      "path": "tests/test_nfl_account_reset.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 23.79943800995243,
+      "observations": [
+        {
+          "artifact_sha256": "532021b0d84e3f846693e1a1e2ff5d30a110d513f8acab999892de67ad278ba7",
+          "cases": 5,
+          "cohort": "new_runtime_permitted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 14.776997299995855
+        }
+      ],
+      "path": "tests/test_nfl_account_reset_scope.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 9.42425,
+      "observations": [],
+      "path": "tests/test_nfl_account_reset_ui.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 23,
+      "legacy_floor": 5.831271749376902,
+      "observations": [],
+      "path": "tests/test_nfl_acquisition_diagnostics.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 38,
+      "legacy_floor": 21.946599999999997,
+      "observations": [],
+      "path": "tests/test_nfl_admission_bindings.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 48,
+      "legacy_floor": 623.6783499999999,
+      "observations": [],
+      "path": "tests/test_nfl_admission_scope.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 22,
+      "legacy_floor": 0.5175,
+      "observations": [],
+      "path": "tests/test_nfl_bounded_acquisition.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 23,
+      "legacy_floor": 6.23355,
+      "observations": [],
+      "path": "tests/test_nfl_build_preflight.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 122.69005,
+      "observations": [],
+      "path": "tests/test_nfl_calibration_evidence.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 35,
+      "legacy_floor": 494.57129999999995,
+      "observations": [],
+      "path": "tests/test_nfl_calibration_scope.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 15.944710540142843,
+      "observations": [
+        {
+          "artifact_sha256": "532021b0d84e3f846693e1a1e2ff5d30a110d513f8acab999892de67ad278ba7",
+          "cases": 3,
+          "cohort": "new_runtime_permitted",
+          "kind": "qualified_complete_context",
+          "phase_seconds": 8.23053620000428
+        }
+      ],
+      "path": "tests/test_nfl_capacity_context_profile.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 88.77195,
+      "observations": [],
+      "path": "tests/test_nfl_capacity_fixture_isolation.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 18.056514189881273,
+      "observations": [],
+      "path": "tests/test_nfl_capacity_profile.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.47034999999999993,
+      "observations": [],
+      "path": "tests/test_nfl_context_export.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 1.71925,
+      "observations": [],
+      "path": "tests/test_nfl_diagnostic_receipts.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 73.57239999999999,
+      "observations": [],
+      "path": "tests/test_nfl_diagnostics_scope.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 59,
+      "legacy_floor": 1.80205,
+      "observations": [],
+      "path": "tests/test_nfl_document_acquisition.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 50,
+      "legacy_floor": 2.8497,
+      "observations": [],
+      "path": "tests/test_nfl_document_html_anchors.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 12.2222,
+      "observations": [],
+      "path": "tests/test_nfl_document_html_pipeline.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 21,
+      "legacy_floor": 50.5632,
+      "observations": [],
+      "path": "tests/test_nfl_document_pipeline.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 121.82475766998249,
+      "observations": [],
+      "path": "tests/test_nfl_document_scope.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 0.87515,
+      "observations": [],
+      "path": "tests/test_nfl_document_socket_lifecycle.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 26,
+      "legacy_floor": 0.3013,
+      "observations": [],
+      "path": "tests/test_nfl_first_driver_failure.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 23,
+      "legacy_floor": 20.9139,
+      "observations": [],
+      "path": "tests/test_nfl_inference_evidence.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.02415,
+      "observations": [],
+      "path": "tests/test_nfl_injury_context.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 51,
+      "legacy_floor": 734.83045,
+      "observations": [],
+      "path": "tests/test_nfl_inputs_scope.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 76.96374999999999,
+      "observations": [],
+      "path": "tests/test_nfl_interpretation_scope.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 22,
+      "legacy_floor": 223.55654999999996,
+      "observations": [],
+      "path": "tests/test_nfl_listing_capacity_scope.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 193.05855,
+      "observations": [],
+      "path": "tests/test_nfl_listing_cost_scope.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 23,
+      "legacy_floor": 247.93655,
+      "observations": [],
+      "path": "tests/test_nfl_listing_immutable_scope.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 20,
+      "legacy_floor": 212.39119999999997,
+      "observations": [],
+      "path": "tests/test_nfl_listing_metadata_scope.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 48,
+      "legacy_floor": 0.6187,
+      "observations": [],
+      "path": "tests/test_nfl_lock_inputs.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 1.1431,
+      "observations": [],
+      "path": "tests/test_nfl_market.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.17364999999999997,
+      "observations": [],
+      "path": "tests/test_nfl_model_validation.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 46,
+      "legacy_floor": 78.0988,
+      "observations": [],
+      "path": "tests/test_nfl_native_provenance.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 32,
+      "legacy_floor": 420.95405,
+      "observations": [],
+      "path": "tests/test_nfl_native_scope.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 27,
+      "legacy_floor": 34.97955,
+      "observations": [],
+      "path": "tests/test_nfl_observed_research.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 97.313,
+      "observations": [],
+      "path": "tests/test_nfl_observed_scope.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 63,
+      "legacy_floor": 2.29655,
+      "observations": [],
+      "path": "tests/test_nfl_odds_acquisition.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 36,
+      "legacy_floor": 1.1684,
+      "observations": [],
+      "path": "tests/test_nfl_odds_listing_acquisition.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 171.07514999999998,
+      "observations": [],
+      "path": "tests/test_nfl_odds_listing_scope.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 217.7364,
+      "observations": [],
+      "path": "tests/test_nfl_odds_scope.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 23,
+      "legacy_floor": 1.52375,
+      "observations": [],
+      "path": "tests/test_nfl_odds_socket_lifecycle.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 77.10635,
+      "observations": [],
+      "path": "tests/test_nfl_odds_socket_scope.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 51,
+      "legacy_floor": 47.60425,
+      "observations": [],
+      "path": "tests/test_nfl_owner_research.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 127.78685,
+      "observations": [],
+      "path": "tests/test_nfl_owner_scope.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 31.894099999999998,
+      "observations": [],
+      "path": "tests/test_nfl_pdf_ci_scope.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 43,
+      "legacy_floor": 45.36175,
+      "observations": [],
+      "path": "tests/test_nfl_pdf_evidence.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 73.4735,
+      "observations": [],
+      "path": "tests/test_nfl_pdf_fixture_scope.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 32,
+      "legacy_floor": 25.54495,
+      "observations": [],
+      "path": "tests/test_nfl_pdf_margin_normalization.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 80.65525,
+      "observations": [],
+      "path": "tests/test_nfl_pdf_margin_scope.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 83.30024999999999,
+      "observations": [],
+      "path": "tests/test_nfl_pdf_reconcile_scope.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 75.82295,
+      "observations": [],
+      "path": "tests/test_nfl_pdf_scope.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 18,
+      "legacy_floor": 123.12015,
+      "observations": [],
+      "path": "tests/test_nfl_pdf_timing_costs.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 78.58179999999999,
+      "observations": [],
+      "path": "tests/test_nfl_pdf_timing_scope.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 18,
+      "legacy_floor": 0.19205,
+      "observations": [],
+      "path": "tests/test_nfl_player_props.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 21,
+      "legacy_floor": 6.3123499999999995,
+      "observations": [],
+      "path": "tests/test_nfl_private_workflow.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 6.55845,
+      "observations": [],
+      "path": "tests/test_nfl_private_workflow_ui.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 38,
+      "legacy_floor": 293.63525,
+      "observations": [],
+      "path": "tests/test_nfl_provenance_scope.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 74.63845,
+      "observations": [],
+      "path": "tests/test_nfl_reconcile_performance_scope.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 83.38995,
+      "observations": [],
+      "path": "tests/test_nfl_reconcile_projection.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 33,
+      "legacy_floor": 46.2668,
+      "observations": [],
+      "path": "tests/test_nfl_research_replay.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 1.1431,
+      "observations": [],
+      "path": "tests/test_nfl_saved_scenario_scope.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 11.4678,
+      "observations": [],
+      "path": "tests/test_nfl_saved_scenarios.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 6.07545,
+      "observations": [],
+      "path": "tests/test_nfl_saved_zip_owner_gate.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 1.64795,
+      "observations": [],
+      "path": "tests/test_nfl_saved_zip_scope.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 43,
+      "legacy_floor": 3.3488,
+      "observations": [],
+      "path": "tests/test_nfl_scenario_research.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 208.3961,
+      "observations": [],
+      "path": "tests/test_nfl_scenario_scope.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 28,
+      "legacy_floor": 1.2719,
+      "observations": [],
+      "path": "tests/test_nfl_scenario_zip.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 3.5972,
+      "observations": [],
+      "path": "tests/test_nfl_scenario_zip_ui.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 44,
+      "legacy_floor": 1.77215,
+      "observations": [],
+      "path": "tests/test_nfl_scoring_acquisition.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 20,
+      "legacy_floor": 65.6305,
+      "observations": [],
+      "path": "tests/test_nfl_scoring_profile.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 95.21999999999998,
+      "observations": [],
+      "path": "tests/test_nfl_scoring_scope.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.02185,
+      "observations": [],
+      "path": "tests/test_nfl_selection.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 48.647299999999994,
+      "observations": [],
+      "path": "tests/test_nfl_seven_predecessor_inputs.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 53,
+      "legacy_floor": 49.8916,
+      "observations": [],
+      "path": "tests/test_nfl_source_interpretation.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 18,
+      "legacy_floor": 2.7369999999999997,
+      "observations": [],
+      "path": "tests/test_nfl_storage_diag_scope.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 0.79235,
+      "observations": [],
+      "path": "tests/test_nfl_storage_diagnostic.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 26,
+      "legacy_floor": 9.407,
+      "observations": [],
+      "path": "tests/test_nfl_tls_trust.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 30.0,
+      "observations": [],
+      "path": "tests/test_nfl_tls_trust_scope.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 30,
+      "legacy_floor": 50.3102,
+      "observations": [],
+      "path": "tests/test_nfl_ui_reblend.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 34,
+      "legacy_floor": 464.9219999999999,
+      "observations": [],
+      "path": "tests/test_nfl_ui_scope.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 2.36095,
+      "observations": [],
+      "path": "tests/test_nfl_workflow_scope.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 2.0447,
+      "observations": [],
+      "path": "tests/test_nfl_zip_owner_gate_scope.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.02185,
+      "observations": [],
+      "path": "tests/test_nhl_pittsburgh_stats_resolution.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 24,
+      "legacy_floor": 26.230349999999998,
+      "observations": [],
+      "path": "tests/test_nhl_puck_line_evidence.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 43,
+      "legacy_floor": 664.815,
+      "observations": [],
+      "path": "tests/test_nhl_puck_line_scope.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.0276,
+      "observations": [],
+      "path": "tests/test_no_bet_display_reasons.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.05405,
+      "observations": [],
+      "path": "tests/test_no_bet_pick_quality.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 1.70085,
+      "observations": [],
+      "path": "tests/test_normalized_ev.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.0368,
+      "observations": [],
+      "path": "tests/test_novig_fetch_no_hardcoded_date.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.0598,
+      "observations": [],
+      "path": "tests/test_novig_half_run.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 1.2098,
+      "observations": [],
+      "path": "tests/test_novig_unmatched_fallback.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 0.12765,
+      "observations": [],
+      "path": "tests/test_odds_api_failures.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.0253,
+      "observations": [],
+      "path": "tests/test_odds_api_key.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0138,
+      "observations": [],
+      "path": "tests/test_odds_api_pagination.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.34615,
+      "observations": [],
+      "path": "tests/test_odds_fill_reverse_match.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0115,
+      "observations": [],
+      "path": "tests/test_odds_source.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.20585,
+      "observations": [],
+      "path": "tests/test_odds_source_calibration.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 3.2844,
+      "observations": [],
+      "path": "tests/test_original_estimates.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 21,
+      "legacy_floor": 0.6371,
+      "observations": [],
+      "path": "tests/test_parlay_accuracy_changes.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.0253,
+      "observations": [],
+      "path": "tests/test_parlay_correlation.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 1.10055,
+      "observations": [],
+      "path": "tests/test_parlay_persistence.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.06785,
+      "observations": [],
+      "path": "tests/test_parlay_safety.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.17825,
+      "observations": [],
+      "path": "tests/test_parlay_ticket_quotes.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.2185,
+      "observations": [],
+      "path": "tests/test_parlay_unique_games.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 2.1275,
+      "observations": [],
+      "path": "tests/test_parlay_validation.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 0.78085,
+      "observations": [],
+      "path": "tests/test_per_game_boards.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.53245,
+      "observations": [],
+      "path": "tests/test_per_game_boards_ui.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.08165,
+      "observations": [],
+      "path": "tests/test_performance_pipeline_wnba.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 10.40175,
+      "observations": [],
+      "path": "tests/test_performance_recap_scope.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 2.875,
+      "observations": [],
+      "path": "tests/test_pick_accuracy.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 41,
+      "legacy_floor": 70.00395,
+      "observations": [],
+      "path": "tests/test_pick_board_origin.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 38,
+      "legacy_floor": 521.0742,
+      "observations": [],
+      "path": "tests/test_pick_board_scope.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.1518,
+      "observations": [],
+      "path": "tests/test_pick_of_day.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.667,
+      "observations": [],
+      "path": "tests/test_pipeline_date_fill_from_base.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 2.3253,
+      "observations": [],
+      "path": "tests/test_pipeline_identity_before_portfolio.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.28404999999999997,
+      "observations": [],
+      "path": "tests/test_pipeline_master_et_kalshi_fixes.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.34385,
+      "observations": [],
+      "path": "tests/test_pipeline_missing_columns.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 0.2691,
+      "observations": [],
+      "path": "tests/test_pitcher_prop_expansion.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.34845,
+      "observations": [],
+      "path": "tests/test_portfolio_calibration_and_caps.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 1.8423,
+      "observations": [],
+      "path": "tests/test_post2352_probability_closure.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 18.90255,
+      "observations": [],
+      "path": "tests/test_post2355_integration_verification.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 3.3235,
+      "observations": [],
+      "path": "tests/test_post2356_priced_value_consistency.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 0.15525,
+      "observations": [],
+      "path": "tests/test_post2357_paid_launch_evidence.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 0.28175,
+      "observations": [],
+      "path": "tests/test_post2357_read_only_census.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.7429,
+      "observations": [],
+      "path": "tests/test_post2357_row_contract_isolation.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.56465,
+      "observations": [],
+      "path": "tests/test_post2360_census_launcher.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 1.47315,
+      "observations": [],
+      "path": "tests/test_post2362_census_closure.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.3818,
+      "observations": [],
+      "path": "tests/test_post2362_external_verification.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 0.38525,
+      "observations": [],
+      "path": "tests/test_post2362_trace_probability_closure.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 29,
+      "legacy_floor": 3.2383999999999995,
+      "observations": [],
+      "path": "tests/test_post2366_eligibility_capacity.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 0.5600499999999999,
+      "observations": [],
+      "path": "tests/test_precision_card.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.51635,
+      "observations": [],
+      "path": "tests/test_prediction_engine_flatness_diagnostics.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.40365,
+      "observations": [],
+      "path": "tests/test_prediction_engine_settingwithcopy.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 109,
+      "legacy_floor": 8.67445,
+      "observations": [],
+      "path": "tests/test_prediction_evidence.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 5.8006,
+      "observations": [],
+      "path": "tests/test_preselection_line_audit_consistency.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 223.43465,
+      "observations": [],
+      "path": "tests/test_preview_binding_scope.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 37,
+      "legacy_floor": 31.7354,
+      "observations": [],
+      "path": "tests/test_preview_coverage_binding.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.0644,
+      "observations": [],
+      "path": "tests/test_price_value.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 4.77825,
+      "observations": [],
+      "path": "tests/test_probability_display_order.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 6.7114,
+      "observations": [],
+      "path": "tests/test_probability_first_selection.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 32,
+      "legacy_floor": 0.3588,
+      "observations": [],
+      "path": "tests/test_probability_integrity_v11.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.05635,
+      "observations": [],
+      "path": "tests/test_probability_semantics.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.0644,
+      "observations": [],
+      "path": "tests/test_probation_portfolio_guard.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 28,
+      "legacy_floor": 35.328,
+      "observations": [],
+      "path": "tests/test_producer_provenance.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 50,
+      "legacy_floor": 375.99825,
+      "observations": [],
+      "path": "tests/test_producer_provenance_scope.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 2.66685,
+      "observations": [],
+      "path": "tests/test_production_card_calibration_guard.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.10924999999999999,
+      "observations": [],
+      "path": "tests/test_productionization_status.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 11,
+      "legacy_floor": 0.2323,
+      "observations": [],
+      "path": "tests/test_prop_calibration.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 0.14834999999999998,
+      "observations": [],
+      "path": "tests/test_prop_grading.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.08855,
+      "observations": [],
+      "path": "tests/test_prop_model.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.0759,
+      "observations": [],
+      "path": "tests/test_prop_odds_ingest.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.0437,
+      "observations": [],
+      "path": "tests/test_prop_performance_recap.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 0.11845,
+      "observations": [],
+      "path": "tests/test_prop_pipeline.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 20,
+      "legacy_floor": 0.68885,
+      "observations": [],
+      "path": "tests/test_prop_runner.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 1.8078,
+      "observations": [],
+      "path": "tests/test_prospective_evidence.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 16,
+      "legacy_floor": 0.22999999999999998,
+      "observations": [],
+      "path": "tests/test_prospective_legacy_view.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.58305,
+      "observations": [],
+      "path": "tests/test_prospective_readiness_report.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 2.64615,
+      "observations": [],
+      "path": "tests/test_prospective_reconciliation.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 1.3017999999999998,
+      "observations": [],
+      "path": "tests/test_prospective_remote.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 22.8298,
+      "observations": [],
+      "path": "tests/test_prospective_research_models.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.1748,
+      "observations": [],
+      "path": "tests/test_prospective_source_view.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.4186,
+      "observations": [],
+      "path": "tests/test_prospective_sync.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 2.12175,
+      "observations": [],
+      "path": "tests/test_prospective_validation_plans.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 34,
+      "legacy_floor": 0.88665,
+      "observations": [],
+      "path": "tests/test_provider_caller_health.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 48,
+      "legacy_floor": 322.6370999999999,
+      "observations": [],
+      "path": "tests/test_provider_health_scope_policy.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.39215,
+      "observations": [],
+      "path": "tests/test_public_assets.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.046,
+      "observations": [],
+      "path": "tests/test_public_betting_fade.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 22,
+      "legacy_floor": 1.55595,
+      "observations": [],
+      "path": "tests/test_public_board.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 5.6764,
+      "observations": [],
+      "path": "tests/test_public_brand.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 0.17825,
+      "observations": [],
+      "path": "tests/test_public_grading_scheduler.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 1.27995,
+      "observations": [],
+      "path": "tests/test_public_history.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.0644,
+      "observations": [],
+      "path": "tests/test_public_parlays.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.08625,
+      "observations": [],
+      "path": "tests/test_public_probability_audit.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 24,
+      "legacy_floor": 1.26385,
+      "observations": [],
+      "path": "tests/test_public_prop_history.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.0598,
+      "observations": [],
+      "path": "tests/test_public_prop_timing.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.0529,
+      "observations": [],
+      "path": "tests/test_public_reconciliation.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.0437,
+      "observations": [],
+      "path": "tests/test_public_record.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 4.88405,
+      "observations": [],
+      "path": "tests/test_public_refresh.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 39,
+      "legacy_floor": 6.21345,
+      "observations": [],
+      "path": "tests/test_publish_authority_wiring.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 3.3511,
+      "observations": [],
+      "path": "tests/test_publish_panel.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 20,
+      "legacy_floor": 0.21735,
+      "observations": [],
+      "path": "tests/test_quote_freshness.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 0.092,
+      "observations": [],
+      "path": "tests/test_ranking_evidence_rebuild.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.0552,
+      "observations": [],
+      "path": "tests/test_raw_book_odds_diag.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 15,
+      "legacy_floor": 1.7112,
+      "observations": [],
+      "path": "tests/test_readiness_dashboard.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 54,
+      "legacy_floor": 569.63295,
+      "observations": [],
+      "path": "tests/test_readiness_dashboard_scope.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.03565,
+      "observations": [],
+      "path": "tests/test_recap_tier_summary.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.0966,
+      "observations": [],
+      "path": "tests/test_recovered_row_value.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.04025,
+      "observations": [],
+      "path": "tests/test_recovery_calibration_gate.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.04485,
+      "observations": [],
+      "path": "tests/test_refresh_calibration.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 10,
+      "legacy_floor": 0.16905,
+      "observations": [],
+      "path": "tests/test_refresh_lock_performance.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.09889999999999999,
+      "observations": [],
+      "path": "tests/test_regression_kalshi_and_results.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 31,
+      "legacy_floor": 2.8635,
+      "observations": [],
+      "path": "tests/test_relock_changes.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 0.43355,
+      "observations": [],
+      "path": "tests/test_remote_canonical_continuation.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 38,
+      "legacy_floor": 0.99475,
+      "observations": [],
+      "path": "tests/test_remote_canonical_download.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 44,
+      "legacy_floor": 645.78135,
+      "observations": [],
+      "path": "tests/test_remote_canonical_scope.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 46,
+      "legacy_floor": 674.01155,
+      "observations": [],
+      "path": "tests/test_remote_continuation_scope.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.0897,
+      "observations": [],
+      "path": "tests/test_research_actions_preflight.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.0966,
+      "observations": [],
+      "path": "tests/test_research_api_budget.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 0.08625,
+      "observations": [],
+      "path": "tests/test_research_cycle_audit.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 26,
+      "legacy_floor": 3.0015,
+      "observations": [],
+      "path": "tests/test_research_parlays.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.08969999999999999,
+      "observations": [],
+      "path": "tests/test_research_performance.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 35,
+      "legacy_floor": 39.4427,
+      "observations": [],
+      "path": "tests/test_research_probability_browser.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 47,
+      "legacy_floor": 2.5472499999999996,
+      "observations": [],
+      "path": "tests/test_research_probability_display.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 27,
+      "legacy_floor": 27.9588,
+      "observations": [],
+      "path": "tests/test_research_probability_producer.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 1.44095,
+      "observations": [],
+      "path": "tests/test_research_scheduler.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 3.7604999999999995,
+      "observations": [],
+      "path": "tests/test_results_clarity.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.0759,
+      "observations": [],
+      "path": "tests/test_results_ingestion.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 1.17645,
+      "observations": [],
+      "path": "tests/test_results_overview.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 28,
+      "legacy_floor": 0.8717,
+      "observations": [],
+      "path": "tests/test_results_parlay_reconciliation.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.23115,
+      "observations": [],
+      "path": "tests/test_reversed_game_dedupe.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.046,
+      "observations": [],
+      "path": "tests/test_run_click_counter.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 25,
+      "legacy_floor": 11.0492,
+      "observations": [],
+      "path": "tests/test_run_readiness.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.91425,
+      "observations": [],
+      "path": "tests/test_sanitization.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.3542,
+      "observations": [],
+      "path": "tests/test_schedule_staleness.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 7.4198,
+      "observations": [],
+      "path": "tests/test_scheduler_recovery.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 12.153199999999998,
+      "observations": [],
+      "path": "tests/test_scope_fixture_isolation.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 17,
+      "legacy_floor": 94.27355,
+      "observations": [],
+      "path": "tests/test_scope_git_batch.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 102.06249999999999,
+      "observations": [],
+      "path": "tests/test_scope_git_reads.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 24.875649999999997,
+      "observations": [],
+      "path": "tests/test_scope_guard_bootstrap.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 60.7292,
+      "observations": [],
+      "path": "tests/test_scope_guard_scan.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 13,
+      "legacy_floor": 109.86903223518748,
+      "observations": [],
+      "path": "tests/test_scope_reconstruction_memo.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.0598,
+      "observations": [],
+      "path": "tests/test_selection_probability_integrity.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 32,
+      "legacy_floor": 5.91905,
+      "observations": [],
+      "path": "tests/test_selector_validation.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.1472,
+      "observations": [],
+      "path": "tests/test_separate_prop_analysis.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 0.9775,
+      "observations": [],
+      "path": "tests/test_sftp_publishing.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 40.47655,
+      "observations": [],
+      "path": "tests/test_shared_git_fixture_lifecycle.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.04255,
+      "observations": [],
+      "path": "tests/test_sidebar_sport_view.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 1.50535,
+      "observations": [],
+      "path": "tests/test_simple_publication_workflow.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 30,
+      "legacy_floor": 2.1574,
+      "observations": [],
+      "path": "tests/test_six_sport_adapters.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 110,
+      "legacy_floor": 2305.032139509931,
+      "observations": [],
+      "path": "tests/test_slate_audit_scope.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 33,
+      "legacy_floor": 1.75375,
+      "observations": [],
+      "path": "tests/test_slate_coverage.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.28405,
+      "observations": [],
+      "path": "tests/test_slate_performance.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 30,
+      "legacy_floor": 0.31625,
+      "observations": [],
+      "path": "tests/test_slate_quality.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 27,
+      "legacy_floor": 32.30695,
+      "observations": [],
+      "path": "tests/test_source_contract_pipeline.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 51,
+      "legacy_floor": 411.2031999999999,
+      "observations": [],
+      "path": "tests/test_source_contract_scope.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 78,
+      "legacy_floor": 212.3061,
+      "observations": [],
+      "path": "tests/test_source_evidence_intake.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 42,
+      "legacy_floor": 628.7855,
+      "observations": [],
+      "path": "tests/test_source_intake_scope.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 1.7514499999999997,
+      "observations": [],
+      "path": "tests/test_speculative_lean_recovery.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 27,
+      "legacy_floor": 0.2783,
+      "observations": [],
+      "path": "tests/test_sport_deployment.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 19,
+      "legacy_floor": 0.598,
+      "observations": [],
+      "path": "tests/test_sport_market_gate.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.046,
+      "observations": [],
+      "path": "tests/test_spread_away_orientation.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 230,
+      "legacy_floor": 163.9555,
+      "observations": [],
+      "path": "tests/test_stale_research_carrier.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.052899999999999996,
+      "observations": [],
+      "path": "tests/test_status_display_labels.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.1219,
+      "observations": [],
+      "path": "tests/test_strategy_lab_kelly_alignment.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 28,
+      "legacy_floor": 2.60935,
+      "observations": [],
+      "path": "tests/test_strategy_lab_realized.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.3174,
+      "observations": [],
+      "path": "tests/test_strategy_lab_top_ev_kelly_safety.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.05175,
+      "observations": [],
+      "path": "tests/test_strategy_lab_top_ev_production_source.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.0943,
+      "observations": [],
+      "path": "tests/test_string_series_categorical_safety.py",
+      "shard": 9
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 2.19765,
+      "observations": [],
+      "path": "tests/test_subscriber_journey.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 1.7894,
+      "observations": [],
+      "path": "tests/test_suspicious_upload_mismatch.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 16.827949999999998,
+      "observations": [],
+      "path": "tests/test_sweet_spot_export_scope.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.01265,
+      "observations": [],
+      "path": "tests/test_sweet_spot_filter.py",
+      "shard": 3
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.023,
+      "observations": [],
+      "path": "tests/test_sweet_spot_segmentation.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.1403,
+      "observations": [],
+      "path": "tests/test_team_mapper.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 8,
+      "legacy_floor": 1.44785,
+      "observations": [],
+      "path": "tests/test_theover_bet_rows_resilience.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 16.1207,
+      "observations": [],
+      "path": "tests/test_theover_fade_scope.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.8705499999999999,
+      "observations": [],
+      "path": "tests/test_theover_overweight_fix.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 0.1035,
+      "observations": [],
+      "path": "tests/test_theover_source_filter.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 12,
+      "legacy_floor": 4.07675,
+      "observations": [],
+      "path": "tests/test_threshold_validation.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.08855,
+      "observations": [],
+      "path": "tests/test_tiered_prop_parlays.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.0506,
+      "observations": [],
+      "path": "tests/test_tighten_thin_actionable_overs.py",
+      "shard": 1
+    },
+    {
+      "collected_tests": 6,
+      "legacy_floor": 1.3984,
+      "observations": [],
+      "path": "tests/test_top_ten_history.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.6049,
+      "observations": [],
+      "path": "tests/test_total_consensus_provenance.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 7,
+      "legacy_floor": 0.2208,
+      "observations": [],
+      "path": "tests/test_total_quality_diagnostics.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.50485,
+      "observations": [],
+      "path": "tests/test_totals_pick_direction.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 24,
+      "legacy_floor": 0.30705,
+      "observations": [],
+      "path": "tests/test_true_parlay_engine_unittest.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 0.10235,
+      "observations": [],
+      "path": "tests/test_true_parlay_public_unittest.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.8073,
+      "observations": [],
+      "path": "tests/test_two_stage_finalist_selection.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 2,
+      "legacy_floor": 17.3788,
+      "observations": [],
+      "path": "tests/test_ui_display_revalidation.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.0276,
+      "observations": [],
+      "path": "tests/test_under_floor_relaxation.py",
+      "shard": 13
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 3.2108,
+      "observations": [],
+      "path": "tests/test_upload_column_aliases_and_game_date_fallback.py",
+      "shard": 10
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 3.0912,
+      "observations": [],
+      "path": "tests/test_upload_header_punctuation_normalization.py",
+      "shard": 11
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 3.0992499999999996,
+      "observations": [],
+      "path": "tests/test_upload_placeholder_identity_fallback.py",
+      "shard": 14
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 3.09695,
+      "observations": [],
+      "path": "tests/test_upload_team_columns_fallback.py",
+      "shard": 5
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.02185,
+      "observations": [],
+      "path": "tests/test_uploader_compat.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 54,
+      "legacy_floor": 0.6991999999999999,
+      "observations": [],
+      "path": "tests/test_wager_integrity_audit.py",
+      "shard": 8
+    },
+    {
+      "collected_tests": 5,
+      "legacy_floor": 0.0575,
+      "observations": [],
+      "path": "tests/test_walk_forward.py",
+      "shard": 6
+    },
+    {
+      "collected_tests": 4,
+      "legacy_floor": 1.7641,
+      "observations": [],
+      "path": "tests/test_win_probability_first_card.py",
+      "shard": 4
+    },
+    {
+      "collected_tests": 3,
+      "legacy_floor": 0.0345,
+      "observations": [],
+      "path": "tests/test_wnba_cold_start_blend.py",
+      "shard": 2
+    },
+    {
+      "collected_tests": 14,
+      "legacy_floor": 0.1495,
+      "observations": [],
+      "path": "tests/test_wnba_kalshi_matching.py",
+      "shard": 12
+    },
+    {
+      "collected_tests": 1,
+      "legacy_floor": 0.0115,
+      "observations": [],
+      "path": "tests/test_wnba_model_features.py",
+      "shard": 7
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.07935,
+      "observations": [],
+      "path": "tests/test_wnba_public_results.py",
+      "shard": 15
+    },
+    {
+      "collected_tests": 9,
+      "legacy_floor": 0.67735,
+      "observations": [],
+      "path": "tests/test_wnba_selection.py",
+      "shard": 15
+    }
+  ],
+  "finite_replay_reserves": [
+    940.6681719501898,
+    1017.3032499550095,
+    1022.450525650002,
+    581.107770905247,
+    1022.4508120297678,
+    1022.0792468156333,
+    513.5331028701271,
+    1022.4471995350891,
+    589.0718163985271,
+    930.6129494952261,
+    957.1532459599975,
+    1022.0692876400499,
+    815.8333439048342,
+    1022.4481679800192,
+    740.8477056548177
+  ],
+  "identities": 9403,
+  "job_overhead_seconds": 221.9446743499978,
+  "multiplier": 1.15,
+  "parent_qualification_manifest_sha256": "8adfd93b29428bd13c409b5a8ccee988d5d4a6fd5b68fefb2af0dc7f0f251578",
+  "planning_gate_seconds": 180,
+  "profile_sha256": "c627bacb49c69ab13cbb309bcee1872e2bb22f41eab3248c367ff31f099ea5a2",
+  "projected_reserves": [
+    940.6681719501898,
+    1017.3032499550095,
+    1022.450525650002,
+    487.8154204702496,
+    1022.4508120297678,
+    1022.0792468156333,
+    513.5331028701271,
+    1022.4471995350891,
+    589.0718163985271,
+    930.6129494952261,
+    957.1532459599975,
+    1022.0692876400499,
+    774.7004584298406,
+    1022.4481679800192,
+    740.8477056548177
+  ],
+  "publication_authority": false,
+  "qualified_local_method_sha256": "060999a8872cbe72124baf3c43d76c1c6b76cabfda7ab8ab9aa335ac19d385ed",
+  "required_actual_reserve_seconds": 120,
+  "retained_input_sha256": "d8c8a26f44dbc5d79a2ff9c11c302758b6aaf56561d142105dbb32551ec1d737",
+  "runtime_binding_sha256": "a214f582accb7e66cac35ed8760c089ed399d472df758b7b1c1ff89e79b102bf",
+  "scenarios": [
+    {
+      "cohort": "new_runtime_restricted",
+      "finite_replay_minima": [
+        940.6681719501898,
+        1022.449425650002,
+        1022.450525650002,
+        581.107770905247,
+        1022.4508120297678,
+        1022.0792468156333,
+        513.5331028701271,
+        1022.4471995350891,
+        589.0718163985271,
+        930.6129494952261,
+        957.1532459599975,
+        1022.0692876400499,
+        1010.629558839833,
+        1022.4481679800192,
+        740.8477056548177
+      ],
+      "limitation": "Onecompleteobservation/fileinthiscohort;replayisdegenerate,noprobability/guaranteeclaim.",
+      "observed_files": [
+        "tests/test_ncaaf_chronology_scope.py",
+        "tests/test_ncaaf_custody_scope.py",
+        "tests/test_ncaaf_fresh_history.py",
+        "tests/test_ncaaf_history_continuation.py",
+        "tests/test_ncaaf_private_normal_refresh.py",
+        "tests/test_ncaaf_retained_discovery.py"
+      ],
+      "seeds": [
+        2454,
+        2455
+      ],
+      "trials_each": 5000,
+      "unobserved_basis": "Fixed legacy conservative estimates,not measurements"
+    },
+    {
+      "cohort": "new_runtime_permitted",
+      "finite_replay_minima": [
+        940.6681719501898,
+        1017.3032499550095,
+        1022.450525650002,
+        929.1569838302439,
+        1022.4508120297678,
+        1022.0792468156333,
+        1022.24523709513,
+        1022.4471995350891,
+        995.4152510485269,
+        1010.490158945056,
+        1022.4515707600094,
+        1022.0692876400499,
+        815.8333439048342,
+        1022.4481679800192,
+        1022.4521026598036
+      ],
+      "limitation": "Onecompleteobservation/fileinthiscohort;replayisdegenerate,noprobability/guaranteeclaim.",
+      "observed_files": [
+        "tests/test_ci_test_shards.py",
+        "tests/test_ncaaf_filtered_history_scope.py",
+        "tests/test_ncaaf_model_compatibility.py",
+        "tests/test_ncaaf_postmerge_scope.py",
+        "tests/test_nfl_account_reset_scope.py",
+        "tests/test_nfl_capacity_context_profile.py"
+      ],
+      "seeds": [
+        2454,
+        2455
+      ],
+      "trials_each": 5000,
+      "unobserved_basis": "Fixed legacy conservative estimates,not measurements"
+    }
+  ],
+  "shards": 15,
+  "source_head": "f635329fa2083f8678969c9b97e8a1a86ad0ef19",
+  "source_tree": "af4b3a2406d01e763544e103c141da7b0d0fe4f9",
+  "stress_reserves": [
+    940.6681719501898,
+    1017.3032499550095,
+    1022.450525650002,
+    487.8154204702496,
+    1022.4508120297678,
+    1022.0792468156333,
+    513.5331028701271,
+    1022.4471995350891,
+    589.0718163985271,
+    930.6129494952261,
+    957.1532459599975,
+    1022.0692876400499,
+    774.7004584298406,
+    1022.4481679800192,
+    740.8477056548177
+  ],
+  "timeout_seconds": 3600,
+  "version": 1,
+  "whole_files": 570
+}
