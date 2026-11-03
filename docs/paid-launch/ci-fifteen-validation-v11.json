@@ -1,0 +1,20 @@
+{
+  "actual_ci_reserves": "UNKNOWN",
+  "binding_sha256": "e924d9496039f8fa5b78355ca121a6f3b72eac98db00bac501c64ee524647e52",
+  "capacity_report_sha256": "610261fd93b74f0f5bd88ff11972c02b1c7cf8f268f0c552ed2b15d45519e87e",
+  "ci_authority": false,
+  "current_head_qualification_method": "Same implementation c3abd76d;provisional source checks plusfinal source-identical metadata-seal readback.",
+  "historical_crash": {
+    "cause": "UNKNOWN",
+    "status": "OPEN"
+  },
+  "implementation_commit": "c3abd76d7695a70ca97b7b616ed2565b737d1b1d",
+  "implementation_tree": "2455aaddae52a3623cca8689196c3c7723a258b2",
+  "local_qualification_checklist_sha256": "4173e7756f2dc7d7d1a8cd60af0cb4b9dfd6b00f6a447a6bc6220458f80501b8",
+  "maximum_ci_cycles": 0,
+  "minimum_conservative_reserve": 405.47324634019697,
+  "pipeline_acceptance": false,
+  "publication_authority": false,
+  "status": "LOCAL_QUALIFIED_FIFTEEN_FIFTY_NO_HOSTED_AUTHORITY",
+  "version": 11
+}
