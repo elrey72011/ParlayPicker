@@ -87,6 +87,13 @@
       "kind": "remove",
       "path": [
         "components",
+        "docs/paid-launch/ci-fifteen-validation-v7.json"
+      ]
+    },
+    {
+      "kind": "remove",
+      "path": [
+        "components",
         "docs/paid-launch/launch-scope-policy-ci-fifteen-v3.json"
       ]
     },
@@ -109,6 +116,13 @@
       "path": [
         "components",
         "docs/paid-launch/launch-scope-policy-ci-fifteen-v6.json"
+      ]
+    },
+    {
+      "kind": "remove",
+      "path": [
+        "components",
+        "docs/paid-launch/launch-scope-policy-ci-fifteen-v7.json"
       ]
     },
     {
@@ -319,6 +333,14 @@
       "path": [
         "nfl_account_reset_successor",
         "components",
+        "docs/paid-launch/ci-fifteen-validation-v7.json"
+      ]
+    },
+    {
+      "kind": "remove",
+      "path": [
+        "nfl_account_reset_successor",
+        "components",
         "docs/paid-launch/launch-scope-policy-ci-fifteen-v3.json"
       ]
     },
@@ -344,6 +366,14 @@
         "nfl_account_reset_successor",
         "components",
         "docs/paid-launch/launch-scope-policy-ci-fifteen-v6.json"
+      ]
+    },
+    {
+      "kind": "remove",
+      "path": [
+        "nfl_account_reset_successor",
+        "components",
+        "docs/paid-launch/launch-scope-policy-ci-fifteen-v7.json"
       ]
     },
     {
@@ -507,6 +537,14 @@
       "path": [
         "nfl_account_reset_successor",
         "parent_components",
+        "docs/paid-launch/ci-fifteen-validation-v7.json"
+      ]
+    },
+    {
+      "kind": "remove",
+      "path": [
+        "nfl_account_reset_successor",
+        "parent_components",
         "docs/paid-launch/launch-scope-policy-ci-fifteen-v3.json"
       ]
     },
@@ -532,6 +570,14 @@
         "nfl_account_reset_successor",
         "parent_components",
         "docs/paid-launch/launch-scope-policy-ci-fifteen-v6.json"
+      ]
+    },
+    {
+      "kind": "remove",
+      "path": [
+        "nfl_account_reset_successor",
+        "parent_components",
+        "docs/paid-launch/launch-scope-policy-ci-fifteen-v7.json"
       ]
     },
     {

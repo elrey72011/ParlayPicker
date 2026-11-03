@@ -92,7 +92,7 @@ def owned_view(module,root,destination):
     import scripts
     with predecessor_imports(destination),pytest.MonkeyPatch.context()as patch:
         for leaf,key in [('ncaaf_filtered_history_scope','history'),('ncaaf_private_refresh_scope','boundary'),('ncaaf_sidebar_startup_scope','successor')]:
-            patch.setitem(sys.modules,'scripts.'+leaf,values[key]);patch.setattr(scripts,leaf,values[key])
+            patch.setitem(sys.modules,'scripts.'+leaf,values[key]);patch.setattr(scripts,leaf,values[key],raising=False)
         for name in ('ROOT','boundary','successor'):patch.setattr(module,name,values[name])
         yield values
 
