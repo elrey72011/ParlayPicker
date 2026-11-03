@@ -1,0 +1,16 @@
+{
+  "actual_ci_reserves": "UNKNOWN_FOR_THIS_SUCCESSOR",
+  "binding_sha256": "c948efe824f849f14a6167b8564f6a155bcfa020d7ccadca2504614a178c68cb",
+  "ci_authority": false,
+  "historical_crash": {
+    "cause": "UNKNOWN",
+    "status": "OPEN"
+  },
+  "implementation_commit": "e9b936dba0552029abeb1349cae470511abde230",
+  "implementation_tree": "d02b79ecf006e301dd2307f025f11eae044493e9",
+  "maximum_ci_cycles": 0,
+  "prior_failed_cycle_minimum_reserve": 317,
+  "publication_authority": false,
+  "status": "PROVISIONAL_HISTORICAL_CORRECTION_TIMEOUT_UNRESOLVED",
+  "version": 12
+}
