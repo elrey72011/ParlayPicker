@@ -13,12 +13,12 @@ PARENT='a5430e5a93cece580d6645720b41f6a0d922d74a'
 PARENT_TREE='7c5afb019fd81eacdff0794728ede6118a00cc49'
 PARENT_BINDING='f7bbd9f837b6cb7369b5b2179e682e630ff3eec7519dcd2f6939756d233383ee'
 PARENT_PROFILE='91379959e127cc38cc76e0845ea481701ff359a99f382eb0281cae5cf72009a0'
-PROFILE_SHA256='c1a89b40def593953bada7aeac9127d0a82aa8ef4ec06469d7b2d0a352566e17'
+PROFILE_SHA256='c627bacb49c69ab13cbb309bcee1872e2bb22f41eab3248c367ff31f099ea5a2'
 WORKFLOW_SHA256='8e44af98864d6bd86f883316b18be3a2a232f2c5223d6c4414ffda3bfa4487a1'
-ASSIGNMENT_SHA256='875448de2dcf0ec2526dba54b3b42d03ab19dd230a57dc10fd2bfeb4b5e420a8'
+ASSIGNMENT_SHA256='ae9043fb6cb21d41165d71dd6d2055be2242e053a9c2a739a9a11121df56dfe7'
 OLD_POLICY='docs/paid-launch/launch-scope-policy-nfl-account-reset-v1.json'
-POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v9.json'
-VALIDATION='docs/paid-launch/ci-fifteen-validation-v9.json'
+POLICY='docs/paid-launch/launch-scope-policy-ci-fifteen-v10.json'
+VALIDATION='docs/paid-launch/ci-fifteen-validation-v10.json'
 IMPLEMENTATION_PARENT='5b9d4827fd2965996eca26533b8d568ae046888e'
 IMPLEMENTATION_PARENT_TREE='e2f7e76a64237055b4e9d3b85b1f922f6283fdb5'
 MAIN_PARENT='762cde0e88703a2fada5a2a8ef1bef2ca0a2df12'
@@ -26,15 +26,17 @@ MAIN_PARENT_TREE='ac781142ad1f18b8bfb2f4e5ee730bd3705f3416'
 PAID_WORKFLOW='.github/workflows/paid-launch.yml'
 CAPACITY_PARENT='cd181088d1c685f377b0b2f3227881131d0f3ca5'
 CAPACITY_PARENT_TREE='17d3da40c09f4ae68c3aa60e74dfca2b2f5413db'
-PROFILE_DESCRIPTOR='docs/paid-launch/ci-fifteen-native-lpt-profile-successor-v2.json'
-PROFILE_DESCRIPTOR_SHA256='2fac3cd686129e9f2b3f5f70b35871c8e9b0e8a5e167659fc438539d9c92eff3'
+PROFILE_DESCRIPTOR='docs/paid-launch/ci-fifteen-native-lpt-profile-successor-v3.json'
+PROFILE_DESCRIPTOR_SHA256='63232ad2a2c5a26466b1d56fdbdb0818f369f0da63a753ae65c3ca11dee12e44'
 LOCAL_AUTHORIZATION='docs/paid-launch/ci-fifteen-native-lpt-local-authorization-v1.md'
 OLD_CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v1.json'
-LOCAL_PARENT='7c5ba8a7e506896c52b2242b8bfddb8430a68c03'
-LOCAL_PARENT_TREE='68688e22dede1cfcc22772f214092005caf48964'
-PROFILE_CONSUMER='docs/paid-launch/ci-fifteen-retained-profile-input-v2.json'
-CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v5.json'
-INPUTS='docs/paid-launch/ci-fifteen-qualification-inputs-v3.json'
+LOCAL_PARENT='11a19e3f3a116e7c7bbdeea7f467b25d8240f905'
+FIRST_REWEIGHT_PARENT='7c5ba8a7e506896c52b2242b8bfddb8430a68c03'
+FIRST_REWEIGHT_PARENT_TREE='68688e22dede1cfcc22772f214092005caf48964'
+LOCAL_PARENT_TREE='298c20f81da54c5ce0812e8a31bc1f07b42c48ca'
+PROFILE_CONSUMER='docs/paid-launch/ci-fifteen-retained-profile-input-v3.json'
+CONTEXT_RECORD='docs/paid-launch/nfl-capacity-context-generation-v6.json'
+INPUTS='docs/paid-launch/ci-fifteen-qualification-inputs-v4.json'
 JOB_OVERHEAD_SECONDS=157.13959995999107
 INVENTORY='docs/paid-launch/ci-fifteen-inventory-v1.json'
 AUTHORIZATION='docs/paid-launch/ci-fifteen-local-qualification-v1.md'
@@ -115,11 +117,11 @@ def verify_profile(root):
         and source['variability_multiplier']==1.15 and source['fixture_allowance_seconds']==5.0,'CI_LPT_ESTIMATE_CHANGED')
     expected['sources'][declaration['source_tag']]=source
     extra=declaration['extra_source']
-    require(declaration['reweight_predecessor_head']==LOCAL_PARENT
-        and declaration['reweight_predecessor_tree']==LOCAL_PARENT_TREE
-        and sha(git(root,'show',LOCAL_PARENT+':scripts/ci_test_file_costs_v1.json'))==declaration['reweight_predecessor_profile_sha256']=='b4d4bd2fc5c331e51843589733f36e229c0e46c3d261ac50594e282aa5e3e120'
+    require(declaration['reweight_predecessor_head']==FIRST_REWEIGHT_PARENT
+        and declaration['reweight_predecessor_tree']==FIRST_REWEIGHT_PARENT_TREE
+        and sha(git(root,'show',FIRST_REWEIGHT_PARENT+':scripts/ci_test_file_costs_v1.json'))==declaration['reweight_predecessor_profile_sha256']=='b4d4bd2fc5c331e51843589733f36e229c0e46c3d261ac50594e282aa5e3e120'
         and extra['measured']is False and extra['kind']=='estimated_retained_complete_context_envelope'
-        and extra['checkout_commit']==LOCAL_PARENT and extra['checkout_tree']==LOCAL_PARENT_TREE
+        and extra['checkout_commit']==FIRST_REWEIGHT_PARENT and extra['checkout_tree']==FIRST_REWEIGHT_PARENT_TREE
         and extra['variability_multiplier']==1.15 and extra['file_allowance_seconds']==5.0
         and extra['all_prior_samples_retained']is True
         and extra['job_overhead_seconds']==JOB_OVERHEAD_SECONDS,'CI_LPT_REWEIGHT_PROVENANCE_CHANGED')
@@ -128,6 +130,19 @@ def verify_profile(root):
                  'docs/paid-launch/ci-fifteen-native-lpt-profile-successor-v1.json','docs/paid-launch/ci-fifteen-retained-profile-input-v1.json',
                  'docs/paid-launch/nfl-capacity-context-generation-v4.json','docs/paid-launch/ci-fifteen-qualification-inputs-v2.json'):
         require(physical(Path(root)/path)==git(root,'show',LOCAL_PARENT+':'+path),'CI_LPT_REWEIGHT_PRIOR_CHANGED')
+    qualified=declaration['qualification_source']
+    require(declaration['qualification_reweight_predecessor_head']==LOCAL_PARENT
+        and declaration['qualification_reweight_predecessor_tree']==LOCAL_PARENT_TREE
+        and sha(git(root,'show',LOCAL_PARENT+':scripts/ci_test_file_costs_v1.json'))==declaration['qualification_reweight_predecessor_profile_sha256']=='c1a89b40def593953bada7aeac9127d0a82aa8ef4ec06469d7b2d0a352566e17'
+        and qualified['measured']is False and qualified['kind']=='estimated_retained_complete_context_envelope'
+        and qualified['checkout_commit']==LOCAL_PARENT and qualified['checkout_tree']==LOCAL_PARENT_TREE
+        and qualified['variability_multiplier']==1.15 and qualified['file_allowance_seconds']==5.0
+        and qualified['all_prior_samples_retained']is True
+        and qualified['job_overhead_seconds']==JOB_OVERHEAD_SECONDS,'CI_LPT_QUALIFIED_CONTEXT_PROVENANCE_CHANGED')
+    expected['sources'][declaration['qualification_source_tag']]=qualified
+    require(declaration['qualification_prior_hashes']=={'docs/paid-launch/launch-scope-policy-ci-fifteen-v9.json': '03e2e92f605c6232d5924701b939f7281d4e9d4e878128e3b4fd6152b07589c0', 'docs/paid-launch/ci-fifteen-validation-v9.json': 'f877bb3bbb4fda55560f54f90034b30a0856b0e46962c6b9bdbf6102f9ad3117', 'docs/paid-launch/ci-fifteen-native-lpt-profile-successor-v2.json': '2fac3cd686129e9f2b3f5f70b35871c8e9b0e8a5e167659fc438539d9c92eff3', 'docs/paid-launch/ci-fifteen-retained-profile-input-v2.json': '71bfcc784ef60ee8777a2a7ab6f7ee30d8aeaa92b0c7e86862a835df9b1a72d2', 'docs/paid-launch/nfl-capacity-context-generation-v5.json': '560c8de2875fe2d634570b1787cbbe9d4b0dcaeceeee3c198fcf50fcde80db6c', 'docs/paid-launch/ci-fifteen-qualification-inputs-v3.json': '274426bf5120961beafe8b1ec642199b4215c3d6f9088df57e72c1c49d0b519c'},'CI_LPT_QUALIFICATION_PRIOR_DECLARATION_CHANGED')
+    for path,digest in declaration['qualification_prior_hashes'].items():
+        require(sha(physical(Path(root)/path))==digest,'CI_LPT_QUALIFICATION_PRIOR_CHANGED')
     require(json.dumps(expected,sort_keys=True,separators=(',',':'))==json.dumps(after,sort_keys=True,separators=(',',':'))
         and expected==after,'CI_LPT_PROFILE_TRANSITION_CHANGED')
     for path in ('docs/paid-launch/launch-scope-policy-ci-fifteen-v3.json','docs/paid-launch/ci-fifteen-validation-v3.json',
@@ -247,7 +262,7 @@ def make_policy(root,binding,implementation,binding_sha):
     require(evidence['implementation_commit']==implementation
         and evidence['implementation_tree']==text(root,'rev-parse',implementation+'^{tree}')
         and evidence['binding_sha256']==binding_sha,'CI_FIFTEEN_VALIDATION_SUBJECT_CHANGED')
-    return dict(version='ci-fifteen-native-lpt-local-only-seal-v9',base=scope.BASE,base_tree=scope.TREE,
+    return dict(version='ci-fifteen-native-lpt-local-only-seal-v10',base=scope.BASE,base_tree=scope.TREE,
         predecessor_head=PARENT,predecessor_tree=PARENT_TREE,predecessor_binding_sha256=PARENT_BINDING,
         retained_thirteen_policy_sha256=sha(physical(Path(root)/OLD_POLICY)),
         binding_sha256=binding_sha,implementation_commit=implementation,
