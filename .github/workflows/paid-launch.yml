@@ -35,13 +35,14 @@ jobs:
             push)
               test "$SCOPE_REF" = refs/heads/main
               test -z "$PR_BASE_SHA"
+              scope_args=(--base HEAD^1)
               ;;
             *)
               echo "Unsupported protected-scope event" >&2
               exit 1
               ;;
           esac
-          python scripts/check_launch_change_scope.py "${scope_args[@]}" --json-output protected-code-diff-report.json
+          python scripts/protected_change_guard.py "${scope_args[@]}" --json-output protected-code-diff-report.json
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:

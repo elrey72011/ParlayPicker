@@ -15,8 +15,48 @@ def physical(path):
         return stream.read().replace(b'\r\n',b'\n')
 
 
+RUNTIME_BINDING='docs/integrity/ncaaf-runtime-binding-v2.json'
+_RUNTIME_BINDING_SHA256='d602d74a6738fed493fbf384cfd00166ea45295c0e4d1614ac346fe6415552c2'
+SELF='scripts/ncaaf_private_refresh_scope.py'
+
+
+def runtime_component_bytes(root,relative):
+    """Bytes hashed for one production component; this file zeroes its own pin."""
+    raw=physical(Path(root)/relative)
+    if relative==SELF:
+        if raw.count(_RUNTIME_BINDING_SHA256.encode())!=1:
+            raise ValueError('NCAAF_RUNTIME_BINDING_CHANGED')
+        raw=raw.replace(_RUNTIME_BINDING_SHA256.encode(),b'0'*64)
+    return raw
+
+
+def authenticate_runtime(root):
+    """Re-baselined runtime check (2026-11-04): production source and frozen
+    evidence only. Tests, workflows and retired seal guards are not runtime."""
+    root=Path(root)
+    raw=physical(root/RUNTIME_BINDING)
+    if hashlib.sha256(raw).hexdigest()!=_RUNTIME_BINDING_SHA256:
+        raise ValueError('NCAAF_RUNTIME_BINDING_CHANGED')
+    runtime=json.loads(raw)
+    if runtime.get('version')!='ncaaf-runtime-binding-v2' or runtime.get('frozen_history_binding')!={'path':BINDING,'sha256':_FILTERED_HISTORY_BINDING_SHA256}:
+        raise ValueError('NCAAF_RUNTIME_BINDING_CHANGED')
+    for relative,expected in runtime['components'].items():
+        p=Path(relative)
+        if p.is_absolute() or '..' in p.parts or '\\' in relative:
+            raise ValueError('NCAAF_RUNTIME_BINDING_CHANGED')
+        if hashlib.sha256(runtime_component_bytes(root,relative)).hexdigest()!=expected:
+            raise ValueError('NCAAF_RUNTIME_SOURCE_CHANGED')
+    history=physical(root/BINDING)
+    if hashlib.sha256(history).hexdigest()!=_FILTERED_HISTORY_BINDING_SHA256:
+        raise ValueError('NCAAF_FILTERED_BINDING_CHANGED')
+    # Callers read immutable predecessor records from the frozen history binding.
+    return json.loads(history)
+
+
 def authenticate(root):
     root=Path(root)
+    if (root/RUNTIME_BINDING).is_file():
+        return authenticate_runtime(root)
     selected=root/BINDING
     if selected.is_file():
         raw=physical(selected)
