@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-FROZEN_PREFIXES = ('docs/paid-launch/', 'docs/research/', 'docs/audits/')
+FROZEN_PREFIXES = ('docs/paid-launch/', 'docs/research/', 'docs/audits/', 'docs/integrity/frozen-sources/')
 # Last head sealed under the retired successor-seal guard. Frozen files that are
 # byte-identical to this commit were already accepted by that guard.
 REBASELINE_COMMIT = '8181ff7d063b75985d51871b263425ba2f012861'

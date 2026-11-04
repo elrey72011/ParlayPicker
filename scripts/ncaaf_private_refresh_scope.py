@@ -16,7 +16,7 @@ def physical(path):
 
 
 RUNTIME_BINDING='docs/integrity/ncaaf-runtime-binding-v2.json'
-_RUNTIME_BINDING_SHA256='d602d74a6738fed493fbf384cfd00166ea45295c0e4d1614ac346fe6415552c2'
+_RUNTIME_BINDING_SHA256='99c7ae0b1d3df6ffba41454d51168dfdfa0fee50ce6729a8722606ca1d45c390'
 SELF='scripts/ncaaf_private_refresh_scope.py'
 
 
@@ -49,8 +49,11 @@ def authenticate_runtime(root):
     history=physical(root/BINDING)
     if hashlib.sha256(history).hexdigest()!=_FILTERED_HISTORY_BINDING_SHA256:
         raise ValueError('NCAAF_FILTERED_BINDING_CHANGED')
-    # Callers read immutable predecessor records from the frozen history binding.
-    return json.loads(history)
+    # Callers read immutable predecessor records from the frozen history binding;
+    # 'components' names exactly the files this authentication depended on.
+    verified=dict(runtime['components'])
+    verified[RUNTIME_BINDING]=_RUNTIME_BINDING_SHA256
+    return dict(json.loads(history),components=verified)
 
 
 def authenticate(root):

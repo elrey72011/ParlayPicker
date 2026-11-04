@@ -315,14 +315,16 @@ def test_reproduce_predecessor_ui_projection_rejection_without_rewriting_stages(
     analysis,_=through_native(monkeypatch,tmp_path)
     monkeypatch.setattr(nfl,"ui_reblend_time",lambda:STAGE)
     row=ui_caller()(analysis).iloc[0].to_dict();original=row["ml_estimate_metadata"]
-    from scripts import check_launch_change_scope as guard
+    frozen=Path(__file__).resolve().parents[1]/"docs/integrity/frozen-sources/research_estimate_trace.predecessor.py.txt"
     current=Path(trace.__file__).read_bytes().replace(b"\r\n",b"\n")
     # CI can have no ancestor objects. Reconstruct the exact reviewed bytes,
     # hash-bound to actual main; never fetch history or alter workflow checkout.
     with monkeypatch.context() as no_history:
         def forbid_git(*a,**kw): raise AssertionError("Predecessor proof must work without Git history")
         no_history.setattr(subprocess,"check_output",forbid_git)
-        previous_bytes=guard._source_intake_previous_main_source("app_core/research_estimate_trace.py",current)
+        # Exact reviewed predecessor, extracted once at the re-baseline commit
+        # 8181ff7 by the retired guard; its hash is asserted unchanged below.
+        previous_bytes=frozen.read_bytes()
     assert hashlib.sha256(previous_bytes).hexdigest()=="8d5639f20af0fd7e6ec6dfead1a24e0e3fd51a46e5f7ef436299e55611086bdb"
     previous=previous_bytes.decode()
     fn=next(n for n in ast.parse(previous).body if isinstance(n,ast.FunctionDef) and n.name=="origin_rejection")

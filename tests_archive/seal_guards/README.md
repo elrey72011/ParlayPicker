@@ -1,6 +1,6 @@
 # Retired successor-seal guard tests (archived 2026-11-04)
 
-These 126 modules tested the per-change successor-seal chain:
+These 128 modules tested the per-change successor-seal chain:
 `scripts/check_launch_change_scope.py`, the `scripts/*_scope.py` guards,
 launch-scope policies, capacity profiles and historical reconstructions. They
 were retired by owner decision when the guard was re-baselined. See
