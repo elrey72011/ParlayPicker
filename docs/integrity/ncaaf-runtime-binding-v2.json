@@ -160,7 +160,7 @@
     "docs/research/public-refresh-harness-repair-v1.md": "431ddbc7f03c84f6d503178ad4a7c0dc5f12a44f0613b6e3baecd8725c6200dd",
     "docs/research/ui-display-revalidation-v1.md": "367e33698d34fcaac05d2711fd4bb537461c96eca0622dbefa95887aed3077de",
     "requirements.txt": "0128f4b0392d3a0d29f477ad9ae48b7b3b601fc7c6551af4623bac17a19eb50c",
-    "scripts/ncaaf_filtered_history_scope.py": "05d10acc87a4596acf767efc158064c7c20259bf9770fe6c8f8f47677f5241f1",
+    "scripts/ncaaf_filtered_history_scope.py": "b6665b3b386ea60491e3e8a17b68d0bee9f9974dddaa553ba6f40699811ae224",
     "scripts/ncaaf_private_refresh_scope.py": "937d50f699266aae48f8a342359df3c8b34264508719b811a62dc86b88ac75b6",
     "scripts/ncaaf_reviewed_target_operator.py": "e88c2e6dfbfddece9a52fd9221be2fe162a73f7f81a264d4a1bb0ad5b0254a06",
     "scripts/ncaaf_staged_acquisition.py": "5361d463f7aa53b92302b9a3e7cdd21ba4bea2f27022955e40569c35128358af",

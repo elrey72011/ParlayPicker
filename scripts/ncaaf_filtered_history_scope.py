@@ -54,6 +54,16 @@ def normalized(relative,raw):
 
 
 def authenticate(root):
+    """Re-baselined 2026-11-04: authenticate the production runtime binding and
+    return the frozen history binding's records (see ncaaf_private_refresh_scope).
+    The retired 265-file seal-chain check remains as _authenticate_seal_chain."""
+    from scripts import ncaaf_private_refresh_scope as runtime
+    if (Path(root)/runtime.RUNTIME_BINDING).is_file():
+        return runtime.authenticate_runtime(root)
+    return _authenticate_seal_chain(root)
+
+
+def _authenticate_seal_chain(root):
     """Physical current bytes are checked on every call; no cached verdicts."""
     root=Path(root);raw=physical(root/BINDING)
     require(sha(raw)==_BINDING_SHA256,'NCAAF_FILTERED_BINDING_CHANGED')

@@ -36,6 +36,7 @@ ARCHIVE_PREFIX = 'tests_archive/'
 REVIEW_PREFIXES = {'production': ('app/', 'app_core/', 'core/', 'services/', 'streamlit_app.py'),
                    'models': ('models/', 'core/models/'),
                    'workflows': ('.github/workflows/',)}
+PROTECTED_RULES = {'FROZEN_EVIDENCE_CHANGED', 'NCAAF_RUNTIME_BINDING_STALE'}
 SKIP_PATTERN = re.compile(rb'pytest\.mark\.(?:skip|skipif|xfail)\b|pytest\.(?:skip|xfail|importorskip)\s*\(')
 
 
@@ -118,6 +119,8 @@ def check(base: str) -> dict:
     return {'schema': 'protected-change-guard-v1', 'base': git('rev-parse', base).decode().strip(),
             'head': git('rev-parse', 'HEAD').decode().strip(),
             'status': 'FAIL' if violations else 'PASS', 'violations': violations,
+            'protected_changes': [v for v in violations if v['rule'] in PROTECTED_RULES],
+            'existing_test_changes': [v for v in violations if v['rule'] not in PROTECTED_RULES],
             'retired_test_modules': sorted(retired), 'changes_for_review': review}
 
 
@@ -130,7 +133,8 @@ def main(argv=None) -> int:
     text = json.dumps(report, indent=2, sort_keys=True)
     if args.json_output:
         args.json_output.write_text(text + '\n', encoding='utf-8')
-    summary = {k: report[k] for k in ('status', 'base', 'head', 'violations')}
+    summary = {k: report[k] for k in ('status', 'base', 'head', 'violations',
+                                      'protected_changes', 'existing_test_changes')}
     summary['retired_test_modules'] = len(report['retired_test_modules'])
     summary['changes_for_review'] = {k: len(v) for k, v in report['changes_for_review'].items()}
     print(json.dumps(summary, indent=2))

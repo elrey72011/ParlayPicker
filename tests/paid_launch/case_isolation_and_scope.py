@@ -37,7 +37,7 @@ def test_release_submit_command_contains_no_lock_drive_or_analysis_imports():
 
 def test_protected_scope_guard_passes_for_additive_work():
     result = subprocess.run(
-        [sys.executable, "scripts/check_launch_change_scope.py"], cwd=ROOT,
+        [sys.executable, "scripts/protected_change_guard.py"], cwd=ROOT,
         text=True, capture_output=True, check=False,
     )
     payload = json.loads(result.stdout)
