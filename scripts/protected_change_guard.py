@@ -6,9 +6,11 @@ Rules, checked against a comparison base (the PR base, or the first parent on ma
    may not be modified or deleted. New evidence files may be added.
 2. Existing test assertions are preserved: in every modified test module, each
    ``assert`` statement present at the base must still be present (additions OK).
-3. No new skips: skip/xfail/importorskip usage in a test module may not increase.
-4. Tests are never silently dropped: a test module may leave ``tests/`` only by
-   moving to ``tests_archive/`` (retained and listed in the report).
+3. No new skips: skip/xfail/importorskip usage (parsed from code, not text) in a
+   test module may not increase; a new collected test module starts from zero.
+4. Tests are never silently dropped: a test module may leave ``tests/``, or be
+   renamed out of pytest discovery (``test_*.py`` / ``*_test.py``), only by moving
+   to ``tests_archive/`` (retained and listed in the report).
 5. The NCAAF production runtime binding must be current
    (``python scripts/rebind_ncaaf_runtime.py --check``).
 
@@ -37,7 +39,10 @@ REVIEW_PREFIXES = {'production': ('app/', 'app_core/', 'core/', 'services/', 'st
                    'models': ('models/', 'core/models/'),
                    'workflows': ('.github/workflows/',)}
 PROTECTED_RULES = {'FROZEN_EVIDENCE_CHANGED', 'NCAAF_RUNTIME_BINDING_STALE'}
-SKIP_PATTERN = re.compile(rb'pytest\.mark\.(?:skip|skipif|xfail)\b|pytest\.(?:skip|xfail|importorskip)\s*\(')
+SKIP_MARKS = {'skip', 'skipif', 'xfail'}
+SKIP_CALLS = {'skip', 'xfail', 'importorskip'}
+# pytest's default python_files: test_*.py and *_test.py (pytest.ini does not override it).
+DISCOVERABLE = re.compile(r'(?:^|/)(?:test_[^/]*|[^/]*_test)\.py$')
 
 
 def git(*args: str) -> bytes:
@@ -60,8 +65,28 @@ def assertions(source: bytes) -> Counter:
     return Counter(ast.dump(node, include_attributes=False) for node in ast.walk(tree) if isinstance(node, ast.Assert))
 
 
+def skip_count(source: bytes) -> int:
+    """Skip/xfail markers and calls in code (parsed, so text inside strings is ignored)."""
+    def is_pytest(node: ast.AST) -> bool:
+        return isinstance(node, ast.Name) and node.id == 'pytest'
+    count = 0
+    for node in ast.walk(ast.parse(source)):
+        if (isinstance(node, ast.Attribute) and node.attr in SKIP_MARKS and isinstance(node.value, ast.Attribute)
+                and node.value.attr == 'mark' and is_pytest(node.value.value)):
+            count += 1
+        elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr in SKIP_CALLS and is_pytest(node.func.value)):
+            count += 1
+    return count
+
+
 def is_test_module(path: str) -> bool:
     return path.endswith('.py') and (path.startswith(TEST_PREFIX) or path.startswith(ARCHIVE_PREFIX))
+
+
+def is_discoverable(path: str) -> bool:
+    """Collected by the CI test run: under tests/ with a pytest default file name."""
+    return path.startswith(TEST_PREFIX) and bool(DISCOVERABLE.search(path))
 
 
 def changes(base: str) -> list[tuple[str, str, str | None]]:
@@ -95,9 +120,20 @@ def check(base: str) -> dict:
             if status == 'M' and sealed_at_rebaseline(old):
                 continue
             violations.append({'rule': 'FROZEN_EVIDENCE_CHANGED', 'path': old, 'status': status})
-        if not is_test_module(old) or status == 'A':
+        if status == 'A':
+            # A new collected test module starts from zero skips.
+            if is_discoverable(new):
+                try:
+                    if skip_count((ROOT / new).read_bytes()):
+                        violations.append({'rule': 'TEST_SKIP_ADDED', 'path': new})
+                except SyntaxError:
+                    violations.append({'rule': 'TEST_MODULE_UNPARSEABLE', 'path': new})
             continue
-        if status == 'D' or (new and not is_test_module(new)):
+        if not is_test_module(old):
+            continue
+        archived = new is not None and new.startswith(ARCHIVE_PREFIX)
+        if status == 'D' or (new and not is_test_module(new)) or (
+                is_discoverable(old) and not is_discoverable(new) and not archived):
             violations.append({'rule': 'TEST_MODULE_REMOVED', 'path': old})
             continue
         if old.startswith(TEST_PREFIX) and new.startswith(ARCHIVE_PREFIX):
@@ -106,12 +142,13 @@ def check(base: str) -> dict:
         after = (ROOT / new).read_bytes()
         try:
             lost = assertions(before) - assertions(after)
+            more_skips = skip_count(after) > skip_count(before)
         except SyntaxError:
             violations.append({'rule': 'TEST_MODULE_UNPARSEABLE', 'path': new})
             continue
         if lost:
             violations.append({'rule': 'TEST_ASSERTION_REMOVED_OR_CHANGED', 'path': new, 'count': sum(lost.values())})
-        if len(SKIP_PATTERN.findall(after)) > len(SKIP_PATTERN.findall(before)):
+        if more_skips:
             violations.append({'rule': 'TEST_SKIP_ADDED', 'path': new})
     stale = runtime_binding_problem()
     if stale:

@@ -82,3 +82,28 @@ def test_stale_runtime_binding_fails(repo, monkeypatch):
 
 def test_real_runtime_binding_is_current():
     assert guard.runtime_binding_problem() is None
+
+
+def test_rename_out_of_pytest_discovery_fails(repo):
+    _git(repo, 'mv', 'tests/test_x.py', 'tests/helper_x.py')
+    assert _commit_and_check(repo)[1] == {'TEST_MODULE_REMOVED'}
+
+
+def test_rename_between_discoverable_names_passes(repo):
+    _git(repo, 'mv', 'tests/test_x.py', 'tests/test_y.py')
+    assert _commit_and_check(repo)[:2] == ('PASS', set())
+
+
+@pytest.mark.parametrize('body', [
+    'import pytest\n@pytest.mark.skip\ndef test_b():\n    assert True\n',
+    'import pytest\ndef test_b():\n    pytest.xfail("later")\n',
+    'import pytest\nyaml = pytest.importorskip("yaml")\n',
+])
+def test_new_test_module_with_skip_fails(repo, body):
+    (repo / 'tests/test_new.py').write_text(body)
+    assert _commit_and_check(repo)[1] == {'TEST_SKIP_ADDED'}
+
+
+def test_skip_text_inside_a_string_is_not_a_skip(repo):
+    (repo / 'tests/test_new.py').write_text('def test_b():\n    assert "@pytest.mark.skip" != "pytest.skip("\n')
+    assert _commit_and_check(repo)[:2] == ('PASS', set())
