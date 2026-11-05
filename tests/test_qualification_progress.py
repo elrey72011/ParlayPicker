@@ -45,3 +45,41 @@ def test_panel_renders_a_loaded_report():
     assert not at.exception
     assert any("Closest to qualifying: NCAAB SPREAD" in m.value for m in at.markdown)
     assert len(at.dataframe) == 1
+
+
+def test_latest_report_reads_the_newest_artifact_zip():
+    import io
+    import json
+    import zipfile
+
+    def archive(report):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as bundle:
+            bundle.writestr("market-readiness.json", json.dumps(report))
+            bundle.writestr("market-readiness.md", "| table |")
+        return buffer.getvalue()
+
+    class Response:
+        def __init__(self, payload=None, content=b""):
+            self.payload, self.content = payload, content
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.payload
+
+    calls = []
+
+    def get(url, **kwargs):
+        calls.append((url, kwargs.get("headers", {}).get("Authorization")))
+        if url.endswith("/artifacts"):
+            return Response({"artifacts": [
+                {"created_at": "2026-11-04T11:20:00Z", "archive_download_url": "old", "expired": False},
+                {"created_at": "2026-11-05T11:20:00Z", "archive_download_url": "new", "expired": False},
+                {"created_at": "2026-11-06T11:20:00Z", "archive_download_url": "gone", "expired": True}]})
+        return Response(content=archive({"research_bindings": [], "from": url}))
+
+    report, created = qp.latest_report("owner/repo", "t0ken", get)
+    assert report["from"] == "new" and created == "2026-11-05T11:20:00Z"
+    assert all(auth == "Bearer t0ken" for _, auth in calls)
