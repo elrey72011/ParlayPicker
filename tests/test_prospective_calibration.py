@@ -85,10 +85,11 @@ def test_end_to_end_settle_calibrate_bind_and_bound_predictions(tmp_path, clock)
     freeze_current_validation_plans(path, source_commit="b" * 40)
     clock[0] = now
     spec = pc.draft_bound_plan(path, "NBA", "SPREAD", validation_start=(clock[0] + timedelta(days=1)).isoformat(),
-                               validation_days=35, holdout_days=35)
+                               rate=7)  # sized by game count (D14)
     assert spec["version"] == 2 and spec["model_id"] == candidate["model_id"]
     assert spec["calibration_id"] == calibration["calibration_id"]
     assert spec["minimum_independent_sample"] == 200  # v1 thresholds are kept
+    assert (pc._time(spec["validation_end"]) - pc._time(spec["validation_start"])).days == pc.window_days(200, 7)
     pe.freeze_validation_plan(path, spec)
     assert pc.bound_plan(path, "NBA", "SPREAD")["validation_plan_id"] == spec["validation_plan_id"]
 
@@ -131,3 +132,16 @@ def test_nhl_is_not_settled_until_its_shootout_rule_is_confirmed(tmp_path, clock
     path = tmp_path / "SYNTHETIC-evidence.sqlite3"
     assert pc.settle_scope(path, "NHL", "PUCK_LINE")["errors"] == ["SCORE_SETTLEMENT_NOT_ENABLED"]
     assert pc.run_cycle(path, "NHL")["skipped"] == "SCORE_SETTLEMENT_NOT_ENABLED"
+
+
+def test_windows_are_sized_by_game_count():
+    assert pc.window_days(200, 30) == 11          # NCAAB-like slate: 200 / (30 * 0.8) * 1.25
+    assert pc.window_days(200, 7) == 45           # NBA-like slate
+    assert pc.window_days(200, 400) == 7          # never shorter than a week
+    with pytest.raises(ValueError, match='cannot be sized'):
+        pc.window_days(200, 0)
+    from app_core.research_api_budget import ALL_CERTIFIED_CLOSE_LIMITS, Budget
+    assert ALL_CERTIFIED_CLOSE_LIMITS['NCAAB'] == {'daily': 400, 'rolling_31_days': 4500}
+    budget = Budget({}, lambda: None, clock=lambda: _at(0))
+    budget.reserve_certified_close('NCAAB', 400)
+    assert budget.usage('NCAAB', budget.close_ledger)['daily'] == 400

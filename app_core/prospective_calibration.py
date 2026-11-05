@@ -304,8 +304,29 @@ def predict_bound(path, sport, market, *, now=None):
     return dict(result, validation_plan_id=plan["validation_plan_id"])
 
 
-def draft_bound_plan(path, sport, market, *, validation_start, validation_days, holdout_days,
-                     model_id=None, calibration_id=None):
+def games_per_day(path, sport, market, *, now, lookback_days=14):
+    """Observed rate of started events with a verified reference quote over the lookback."""
+    from datetime import timedelta
+    events, quotes, _ = research._read_scope(path, sport, market)
+    start = now - timedelta(days=lookback_days)
+    counted = [event_id for event_id in research._reference_quotes(events, quotes, now)
+               if start <= _time(events[event_id]["scheduled_start"]) < now]
+    return len(counted) / lookback_days
+
+
+def window_days(target, rate, *, coverage=0.8, margin=1.25, minimum=7):
+    """Days for ``target`` independent settled games at ``rate`` per day (owner decision D14).
+
+    ``coverage`` discounts games that miss a prediction, quote or certified close, and
+    ``margin`` covers slow days. The result is fixed in the plan when it is frozen.
+    """
+    if rate <= 0:
+        raise ValueError("no observed games: the window cannot be sized by game count yet")
+    return max(minimum, math.ceil(target / (rate * coverage) * margin))
+
+
+def draft_bound_plan(path, sport, market, *, validation_start, validation_days=None, holdout_days=None,
+                     model_id=None, calibration_id=None, rate=None):
     """A proposed plan version binding the candidate model and its calibration. Nothing is frozen.
 
     Thresholds, sample minimums and policies are the frozen v1 template's
@@ -334,6 +355,12 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days, 
         calibration_id = max(found, key=lambda r: r["available_at"])["calibration_id"]
     calibration = evidence.load_record(path, "prospective_calibration", calibration_id)
     start = _time(validation_start)
+    target = _template(sport, market)["minimum_independent_sample"]
+    if validation_days is None or holdout_days is None:
+        observed = rate if rate is not None else games_per_day(path, sport, market, now=start)
+        sized = window_days(target, observed)
+        validation_days = sized if validation_days is None else validation_days
+        holdout_days = sized if holdout_days is None else holdout_days
     if start < _time(calibration["available_at"]):
         raise ValueError("validation must start after the calibration is available")
     validation_end = start + timedelta(days=validation_days)

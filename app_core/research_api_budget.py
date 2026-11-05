@@ -10,10 +10,15 @@ NEW_SPORT_KEYS = {"basketball_nba": "NBA", "basketball_ncaab": "NCAAB",
                   "icehockey_nhl": "NHL"}
 NEW_SPORT_CREDIT_LIMITS = {"daily": 40, "rolling_31_days": 1000}
 NEW_SPORT_CALL_LIMITS = {"daily": 45, "rolling_31_days": 1200}
-# Certified closes (Odds API historical snapshots, ~10 credits per market) have their own
-# allowance, so they never crowd out capture. Owner decision D13 (2026-11-05): NBA spread
-# only, about 80 credits/day; the plan quota is 20,000 credits/month.
-CERTIFIED_CLOSE_LIMITS = {"NBA": {"daily": 100, "rolling_31_days": 2500}}
+# Certified closes (Odds API historical snapshots, ~10 credits per game per market) have
+# their own allowance, so they never crowd out capture. The plan quota is 20,000
+# credits/month. Owner decisions, 2026-11-05:
+#   D13 - NBA spread only, about 80 credits/day.
+#   D14 - NCAAB spread prioritized. About 400 closed games (200 validation + 200
+#         holdout) is roughly 4,000 credits in total, so the rolling cap bounds it.
+CERTIFIED_CLOSE_LIMITS = {"NBA": {"daily": 100, "rolling_31_days": 2500}}  # D13
+NCAAB_CERTIFIED_CLOSE_LIMITS = {"NCAAB": {"daily": 400, "rolling_31_days": 4500}}  # D14
+ALL_CERTIFIED_CLOSE_LIMITS = {**CERTIFIED_CLOSE_LIMITS, **NCAAB_CERTIFIED_CLOSE_LIMITS}
 
 
 class BudgetLimit(ValueError):
@@ -85,7 +90,7 @@ class Budget:
         ``already_spent=True`` records credits the provider has already charged (a cost
         above the reservation): it is always recorded, never refused.
         """
-        limits = CERTIFIED_CLOSE_LIMITS.get(sport)
+        limits = ALL_CERTIFIED_CLOSE_LIMITS.get(sport)
         if limits is None and not already_spent:
             self.blocked.append(f"{sport}:certified_close:not_budgeted")
             raise BudgetLimit(f"api_budget:{sport}:certified_close:not_budgeted")
@@ -189,8 +194,8 @@ class Budget:
                                 "calls":self.usage(s,self.call_ledger)}
                             for s in ("NFL","NCAAF",*sorted(NEW_SPORT_KEYS.values()))},
                 "new_sport_credit_limits":NEW_SPORT_CREDIT_LIMITS,
-                "certified_close_limits":CERTIFIED_CLOSE_LIMITS,
-                "certified_close_usage":{s:self.usage(s,self.close_ledger) for s in CERTIFIED_CLOSE_LIMITS},
+                "certified_close_limits":ALL_CERTIFIED_CLOSE_LIMITS,
+                "certified_close_usage":{s:self.usage(s,self.close_ledger) for s in ALL_CERTIFIED_CLOSE_LIMITS},
                 "new_sport_call_limits":NEW_SPORT_CALL_LIMITS,
                 "paused":sorted(set(self.blocked)),
                 "cost_review_required":bool(self.state.get("api_budget_cost_mismatch")),

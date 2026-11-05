@@ -16,7 +16,7 @@ selection.
 default is the spread-side market only (``PARLAYPICKER_CERTIFIED_CLOSE_MARKETS``;
 ``SPREAD,TOTAL`` widens it), so about 10 credits per game. Every request is reserved
 first against its own allowance (``Budget.reserve_certified_close``;
-``CERTIFIED_CLOSE_LIMITS``: NBA, 100 credits/day and 2,500 per 31 days, owner
+``ALL_CERTIFIED_CLOSE_LIMITS``: NBA 100/day and 2,500 per 31 days (D13), NCAAB 400/day and 4,500 (D14); owner
 decision D13), so it never crowds out capture. A response whose ``x-requests-last``
 exceeds the reservation is charged in full and stops the batch. Nothing runs
 unless ``PARLAYPICKER_CERTIFIED_CLOSE_SPORTS`` names the sports. The default is none.
