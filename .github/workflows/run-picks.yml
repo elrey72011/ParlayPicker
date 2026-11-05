@@ -1,0 +1,44 @@
+name: Run picks (research-grade)
+# Runs the app's game-pick pipeline headlessly (core.streamlit_pipeline.run_analysis_pipeline)
+# and keeps the board as an artifact and in the run summary. It spends Odds API credits like a
+# Refresh in the app. It writes nothing to Drive or the evidence store and places no wagers.
+# No market is qualified yet, so every pick is NO_BET with zero stake under the plans.
+on:
+  workflow_dispatch:
+    inputs:
+      sports:
+        description: "Comma-separated sports"
+        required: false
+        default: "NBA,NCAAB,NHL,NFL,NCAAF"
+permissions:
+  contents: read
+concurrency:
+  group: run-picks
+  cancel-in-progress: false
+jobs:
+  picks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run the pick pipeline
+        env:
+          SPORTS: ${{ inputs.sports }}
+          OUT: ${{ runner.temp }}/picks
+        run: python -u scripts/run_picks.py --output-dir "$OUT" --sports "$SPORTS"
+      - name: Keep the board
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: picks
+          path: ${{ runner.temp }}/picks/
+          if-no-files-found: warn
