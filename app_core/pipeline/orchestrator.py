@@ -28,7 +28,6 @@ from app_core.pipeline.adapter import AdapterError, adapter_for, instant
 from app_core.pipeline.operations import COMPLETED, EXPIRED, FAILED, CANCELLED, OperationError, Operations
 from app_core.pipeline.store import Store, StoreError
 from app_core.pipeline import nfl as _nfl  # noqa: F401  registers the NFL adapter
-from app_core.pipeline import nba as _nba  # noqa: F401  registers NBA only when a trained artifact exists
 
 MAX_QUOTE_AGE = timedelta(minutes=30)
 HISTORY_ATTEMPTS_PER_DAY = 3
@@ -58,13 +57,22 @@ def _code(exc):
     return first if isinstance(first, str) and first.isupper() and ' ' not in first else type(exc).__name__
 
 
-def run_batch(requests, *, ops: Operations, history_for, as_of_utc: str, max_quote_age=MAX_QUOTE_AGE):
-    """Run every request; return one result row per request, in order."""
+def run_batch(requests, *, ops: Operations, history_for, as_of_utc: str, max_quote_age=MAX_QUOTE_AGE, adapters=None):
+    """Run every request; return one result row per request, in order.
+
+    ``adapters`` ({sport: adapter}) limits the run to those sports; by default the
+    global registry is used.
+    """
     now = instant(as_of_utc)
     results = []
     for request in requests:
         try:
-            adapter = adapter_for(request.sport)
+            if adapters is None:
+                adapter = adapter_for(request.sport)
+            elif request.sport in adapters:
+                adapter = adapters[request.sport]
+            else:
+                raise AdapterError('ADAPTER_SPORT_NOT_SUPPORTED')
             kickoff = instant(request.event.get('kickoff_utc'), 'EVENT_KICKOFF_INVALID')
             if now >= kickoff:
                 results.append(_result(request, 'UNAVAILABLE', 'GAME_STARTED'))
@@ -170,14 +178,17 @@ def store_from_settings(setting=os.environ.get):
     return Store.sqlite(Path(path), key.encode(), owner=owner), None
 
 
-def requests_from_analysis(analysis_df):
-    """NFL spread/total rows from ordinary Refresh, as pipeline requests."""
+def requests_from_analysis(analysis_df, sports=('NFL',)):
+    """Spread/total rows for ``sports`` from ordinary Refresh, as pipeline requests."""
     from core.nfl_teams import nfl_stats_identity
+    from app_core.pipeline.nba_history import team as nba_team
+    identity = {'NFL': nfl_stats_identity, 'NBA': nba_team}
     requests = []
     if analysis_df is None or getattr(analysis_df, 'empty', True):
         return requests
     for row in analysis_df.to_dict('records'):
-        if str(row.get('league', row.get('League', ''))).upper() != 'NFL':
+        sport = str(row.get('league', row.get('League', ''))).upper()
+        if sport not in sports:
             continue
         market_type = str(row.get('market_type', '')).lower()
         if market_type not in {'spread_home', 'spread_away', 'total_over', 'total_under'}:
@@ -190,11 +201,11 @@ def requests_from_analysis(analysis_df):
         if line is not None and not math.isfinite(line):
             line = None
         event = dict(event_id=str(row.get('provider_event_id') or row.get('matchup_id') or ''),
-                     home=nfl_stats_identity(row.get('home_team', '')) or str(row.get('home_team', '')),
-                     away=nfl_stats_identity(row.get('away_team', '')) or str(row.get('away_team', '')),
+                     home=identity[sport](row.get('home_team', '')) or str(row.get('home_team', '')),
+                     away=identity[sport](row.get('away_team', '')) or str(row.get('away_team', '')),
                      kickoff_utc=_utc_text(row.get('game_start_utc') or row.get('commence_time')))
         observed = row.get('odds_recorded_at') or row.get('quote_time') or None
-        requests.append(Request('NFL', event, market_type, line, _utc_text(observed) if observed else None,
+        requests.append(Request(sport, event, market_type, line, _utc_text(observed) if observed else None,
                                 extra=dict(odds_american=row.get('odds_american'))))
     return requests
 
@@ -209,11 +220,21 @@ def _utc_text(value):
         return ''
 
 
-def shadow(analysis_df, *, setting=os.environ.get, clock=None, fetch=fetch_nflverse_schedule):
+def nba_enabled(setting=os.environ.get):
+    """NBA research model in the shadow: PARLAYPICKER_PIPELINE_NBA=true and the artifact exists."""
+    from app_core.pipeline.nba import ARTIFACT
+    return str(setting('PARLAYPICKER_PIPELINE_NBA', 'false')).strip().lower() == 'true' and ARTIFACT.is_file()
+
+
+def shadow(analysis_df, *, setting=os.environ.get, clock=None, fetch=fetch_nflverse_schedule, fetch_nba_day=None):
     """Shadow results for ordinary Refresh, or ([], reason) when not run."""
     if not enabled(setting):
         return [], 'PIPELINE_V2_DISABLED'
-    requests = requests_from_analysis(analysis_df)
+    from app_core.pipeline import nba as nba_adapter, nfl as nfl_adapter
+    adapters = {'NFL': nfl_adapter.ADAPTER}
+    if nba_enabled(setting):
+        adapters['NBA'] = nba_adapter.ADAPTER
+    requests = requests_from_analysis(analysis_df, sports=tuple(adapters))
     if not requests:
         return [], 'NO_NFL_SPREAD_OR_TOTAL_ROWS'
     store, reason = store_from_settings(setting)
@@ -222,8 +243,18 @@ def shadow(analysis_df, *, setting=os.environ.get, clock=None, fetch=fetch_nflve
     clock = clock or (lambda: datetime.now(timezone.utc))
     ops = Operations(store, clock=clock)
     as_of = clock().isoformat()
-    try:
-        games = nfl_history(ops, as_of, fetch=fetch)
-    except (AdapterError, OperationError, StoreError) as exc:
-        return [_result(r, 'UNAVAILABLE', _code(exc)) for r in requests], 'NFL_HISTORY_UNAVAILABLE'
-    return run_batch(requests, ops=ops, history_for=lambda sport, request: games, as_of_utc=as_of), None
+    histories, failures = {}, {}
+    for sport in sorted({r.sport for r in requests}):
+        try:
+            if sport == 'NFL':
+                histories[sport] = nfl_history(ops, as_of, fetch=fetch)
+            else:
+                from app_core.pipeline import nba_history
+                histories[sport] = nba_history.history(ops, as_of, **({'fetch': fetch_nba_day} if fetch_nba_day else {}))
+        except (AdapterError, OperationError, StoreError) as exc:
+            failures[sport] = _code(exc)
+    runnable = [r for r in requests if r.sport in histories]
+    done = iter(run_batch(runnable, ops=ops, history_for=lambda sport, request: histories[sport],
+                          as_of_utc=as_of, adapters=adapters))
+    rows = [next(done) if r.sport in histories else _result(r, 'UNAVAILABLE', failures[r.sport]) for r in requests]
+    return rows, '; '.join(f'{sport}_HISTORY_UNAVAILABLE' for sport in sorted(failures)) or None

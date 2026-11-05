@@ -37,4 +37,7 @@ Owner decision D9 approved one bounded download of NBA game history, with no Odd
 
 ## Artifact
 
-The fitted artifact was written to a scratch location for review. **It is not committed.** Committing `models/nba-score-ridge-v1.json` would make NBA a supported sport in the shared pipeline, which is an owner decision. Recommended next steps are in the roadmap.
+- **Committed as research-only** at owner direction: `models/nba-score-ridge-v1.json`, with `status: RESEARCH_ONLY`.
+- **Not a supported sport.** The adapter is not registered globally, so ordinary pipeline runs stay NFL-only.
+- **Shadow only.** With `PARLAYPICKER_PIPELINE_V2=true` and `PARLAYPICKER_PIPELINE_NBA=true`, ordinary Refresh also forecasts NBA spreads and totals in the shadow. These forecasts are recorded for measurement. They never change analysis, selection, stakes or publication.
+- **History.** The shipped baseline is `data/nba/espn-games.csv`: 2,558 franchise games through 2026-11-04. Each later completed day is one claimed ESPN request, stored once and reused after restarts. A gap of more than 30 days is refused; refresh the baseline instead.

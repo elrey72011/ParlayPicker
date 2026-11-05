@@ -49,58 +49,10 @@ def games_from_game_finder(rows):
     return sorted(games, key=lambda g: (g['game_date'], g['home']))
 
 
-# The 30 NBA franchises as ESPN names them. Anything else (All-Star teams such as
-# "Team Shaq" or "World", exhibition opponents) is excluded, never trained on.
-NBA_FRANCHISES = frozenset({
-    'Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hornets', 'Chicago Bulls', 'Cleveland Cavaliers',
-    'Dallas Mavericks', 'Denver Nuggets', 'Detroit Pistons', 'Golden State Warriors', 'Houston Rockets',
-    'Indiana Pacers', 'LA Clippers', 'Los Angeles Lakers', 'Memphis Grizzlies', 'Miami Heat', 'Milwaukee Bucks',
-    'Minnesota Timberwolves', 'New Orleans Pelicans', 'New York Knicks', 'Oklahoma City Thunder', 'Orlando Magic',
-    'Philadelphia 76ers', 'Phoenix Suns', 'Portland Trail Blazers', 'Sacramento Kings', 'San Antonio Spurs',
-    'Toronto Raptors', 'Utah Jazz', 'Washington Wizards'})
-
-
-def franchise_games(games):
-    """Only games between two NBA franchises, with exact duplicates removed."""
-    seen, out = set(), []
-    for game in games:
-        key = (game['game_date'], game['home'], game['away'])
-        if game['home'] in NBA_FRANCHISES and game['away'] in NBA_FRANCHISES and key not in seen:
-            seen.add(key)
-            out.append(game)
-    return out
-
-
-ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard'
-# Regular-season date windows (inclusive); the current season ends at the as-of date.
+from app_core.pipeline.nba_history import (ESPN_SCOREBOARD, NBA_FRANCHISES, franchise_games,  # noqa: E402,F401
+                                           games_from_espn)
 SEASON_WINDOWS = {'2024-25': ('2024-10-22', '2025-04-13'), '2025-26': ('2025-10-21', '2026-04-12'),
                   '2026-27': ('2026-10-20', '2027-04-11')}
-
-
-def games_from_espn(payload, day=None):
-    """Completed, non-neutral regular-season games from one ESPN scoreboard payload.
-
-    ``day`` is the requested scoreboard date (US local). It is the game date, because
-    ESPN's own ``date`` field is UTC and would move evening games to the next day.
-    """
-    games = []
-    for event in payload.get('events', []):
-        if (event.get('season') or {}).get('type') != 2:
-            continue  # regular season only
-        competition = (event.get('competitions') or [{}])[0]
-        if competition.get('neutralSite') or not competition.get('status', {}).get('type', {}).get('completed'):
-            continue
-        sides = {c.get('homeAway'): c for c in competition.get('competitors', [])}
-        if set(sides) != {'home', 'away'}:
-            continue
-        try:
-            hs, as_ = int(sides['home']['score']), int(sides['away']['score'])
-        except (KeyError, TypeError, ValueError):
-            continue
-        games.append(dict(game_date=day or str(event['date'])[:10], home=sides['home']['team']['displayName'],
-                          away=sides['away']['team']['displayName'], home_score=hs, away_score=as_,
-                          espn_event_id=str(event.get('id'))))
-    return games
 
 
 def fetch_espn(seasons, *, through=None, pause=0.25):

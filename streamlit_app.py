@@ -1021,7 +1021,7 @@ def _app_setting(name, default=''):
 
 def _render_pipeline_v2(frame, note):
     """Shadow results of the shared pipeline. Display only; never selects or stakes."""
-    with st.expander("Shared pipeline (shadow, NFL)", expanded=False):
+    with st.expander("Shared pipeline (shadow: NFL, plus NBA research when PARLAYPICKER_PIPELINE_NBA=true)", expanded=False):
         st.caption("Comparison only. These probabilities do not change picks, stakes or publication.")
         if frame is None or getattr(frame, "empty", True):
             st.info(f"No shadow results: {note or 'NOT_RUN'}")

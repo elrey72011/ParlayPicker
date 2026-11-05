@@ -94,6 +94,7 @@ class Model:
     holdout: dict
     version: str = MODEL_VERSION
     limitations: tuple = LIMITATIONS
+    status: str = 'RESEARCH_ONLY'   # never a wager signal on its own; markets qualify only under D1
 
     def save(self, path=ARTIFACT):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -210,6 +211,6 @@ class NBAAdapter(SportAdapter):
                         features.sha256, projection=round(mean, 3), push_probability=round(probs['push'], 6))
 
 
+# Not registered globally: the shadow orchestrator adds NBA explicitly when
+# PARLAYPICKER_PIPELINE_NBA=true and the research artifact exists.
 ADAPTER = NBAAdapter()
-if ARTIFACT.is_file():  # NBA is a supported sport only once a trained, reviewed artifact exists
-    register(ADAPTER)

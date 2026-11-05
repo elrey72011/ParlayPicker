@@ -299,7 +299,7 @@ AUTHENTICALLY ACCEPTED. Deployment and model quality are tracked separately.
 | M2.2 | Authentic NFL acceptance (2 games) | M2.1, D5 | BLOCKED (D5) | 1–2 d |
 | P2.1–P2.4 | NFL fitted model + promotion gate | E1.3 | NOT STARTED | 10–15 d |
 | M3 | NCAAF adapter | M1.3, D6 | NOT STARTED | 6–10 d |
-| M4.1 | NBA adapter + score model (`app_core/pipeline/nba.py`, `scripts/train_nba_model.py`) | M1.3, D2 | IN PROGRESS: the adapter, ridge fit with a time-ordered holdout, push-aware probabilities and the training script are implemented on synthetic data. NBA counts as supported only once a trained artifact is committed. Training data needs D9 | 8–12 d |
+| M4.1 | NBA adapter + score model (`app_core/pipeline/nba.py`, `nba_history.py`, `scripts/train_nba_model.py`) | M1.3, D2, D9 | IMPLEMENTED (research-only): trained on 2,525 ESPN games (holdout margin RMSE 15.55 vs 17.56 naive; no market comparison yet). The artifact `models/nba-score-ridge-v1.json` is committed as `RESEARCH_ONLY`. NBA runs in the shadow only with `PARLAYPICKER_PIPELINE_NBA=true`; it is never registered as a supported sport, and only D1 qualification can make an NBA market a pick | 8–12 d |
 | M4.2 | NHL adapter + model | M1.3, D2 | NOT STARTED | 7–13 d |
 | M5 | NCAAB, WNBA, MLB | M1.3, D3 | NOT STARTED | 15–25 d |
 | P3 | Moneyline per league | league qualified, D3 | NOT STARTED | 2–4 d each |
