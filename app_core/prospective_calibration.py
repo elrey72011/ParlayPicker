@@ -30,6 +30,7 @@ needs validation, review and the owner's activation.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 
@@ -376,6 +377,79 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
         holdout_start=validation_end.isoformat(), holdout_end=holdout_end.isoformat())
     spec["model_scope"] = dict(spec["model_scope"], initial_binding="BOUND_EXACT_MODEL_AND_CALIBRATION")
     return spec
+
+
+def plan_hash(spec):
+    """SHA-256 of the drafted plan's exact contents: the owner's review token (D11)."""
+    return hashlib.sha256(json.dumps(spec, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+def freeze_inputs(spec):
+    """The explicit inputs that reproduce ``spec`` with no dependence on observed rates."""
+    return {"sport": spec["sport"], "market": spec["market_family"], "model_id": spec["model_id"],
+            "calibration_id": spec["calibration_id"], "validation_start": spec["validation_start"],
+            "validation_days": (_time(spec["validation_end"]) - _time(spec["validation_start"])).days,
+            "holdout_days": (_time(spec["holdout_end"]) - _time(spec["holdout_start"])).days}
+
+
+def freeze_reviewed_plan(path, *, expected_hash, now=None, **inputs):
+    """Freeze a reviewed draft. The plan is redrafted from ``freeze_inputs`` and must hash to ``expected_hash``.
+
+    Refuses when the hash differs (the evidence or code changed since the review) or
+    when validation would already have started, so no prediction made before the
+    freeze can fall inside the bound window.
+    """
+    now = now or datetime.now(timezone.utc)
+    sport, market = inputs.pop("sport"), inputs.pop("market")
+    spec = draft_bound_plan(path, sport, market, **inputs)
+    actual = plan_hash(spec)
+    if actual != expected_hash:
+        raise ValueError(f"PLAN_HASH_MISMATCH: reviewed {expected_hash[:12]}, redrafted {actual[:12]}")
+    if _time(spec["validation_start"]) <= now:
+        raise ValueError("VALIDATION_ALREADY_STARTED: draft again with a future validation start")
+    evidence.freeze_validation_plan(path, spec)
+    return {"validation_plan_id": spec["validation_plan_id"], "plan_hash": actual, "version": spec["version"]}
+
+
+def binding_status(path, sport, market, *, now=None):
+    """Where one research market stands on the C2 chain, and its next blocker. Read-only."""
+    now = now or datetime.now(timezone.utc)
+    status = {"sport": sport, "market_family": market, "settlement_enabled": sport in evidence.SCORE_SETTLEMENT_SPORTS}
+    models = evidence.read_records(path, "prospective_model", sport=sport, market_family=market)
+    status["models"] = len(models)
+    status["most_training_events"] = max((m["independent_event_count"] for m in models), default=0)
+    candidate = candidate_model(path, sport, market)
+    status["candidate_model_id"] = candidate["model_id"] if candidate else None
+    decided, calibration = 0, None
+    if candidate is not None:
+        results = _market_result(path, sport, market)
+        fit_start = _time(candidate["available_at"])
+        decided = sum(1 for event_id, row in _earliest_predictions(path, sport, market, candidate["model_id"], None).items()
+                      if _time(row["prediction_timestamp"]) >= fit_start and
+                      (results.get((event_id, row["selection"])) or {}).get("outcome") in ("WIN", "LOSS"))
+        found = [row for row in evidence.read_records(path, "prospective_calibration", sport=sport,
+                                                       market_family=market) if row["model_id"] == candidate["model_id"]]
+        calibration = max(found, key=lambda r: r["available_at"]) if found else None
+    status["candidate_decided"] = decided
+    status["calibration_id"] = calibration["calibration_id"] if calibration else None
+    rate = games_per_day(path, sport, market, now=now) if models or candidate else 0.0
+    status["games_per_day_14d"] = round(rate, 2)
+    status["proposed_window_days"] = window_days(200, rate) if rate > 0 else None
+    bound = bound_plan(path, sport, market)
+    status["bound_plan_id"] = bound["validation_plan_id"] if bound else None
+    if not status["settlement_enabled"]:
+        status["next_blocker"] = "SCORE_SETTLEMENT_NOT_ENABLED"
+    elif bound:
+        status["next_blocker"] = "VALIDATION_IN_PROGRESS"
+    elif candidate is None:
+        status["next_blocker"] = f"CANDIDATE_NEEDS_{CANDIDATE_MIN_TRAINING_EVENTS}_TRAINING_EVENTS"
+    elif calibration is None:
+        status["next_blocker"] = f"CALIBRATION_NEEDS_{MIN_CALIBRATION_DECIDED}_DECIDED"
+    elif rate <= 0:
+        status["next_blocker"] = "NO_RECENT_GAMES_TO_SIZE_WINDOW"
+    else:
+        status["next_blocker"] = "READY_FOR_OWNER_REVIEW"
+    return status
 
 
 def run_cycle(path, sport, *, now=None):

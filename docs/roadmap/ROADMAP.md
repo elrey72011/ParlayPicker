@@ -176,7 +176,7 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | NBA-B | NBA ESPN offline benchmark | D9 | IMPLEMENTED (local); feeds C5 |
 | C0 | Market readiness from Drive evidence | — | **DONE 2026-11-05** (`docs/evaluation/market-readiness-2026-11-05.md`). No market is in validation. **Next: C2 for NCAAF** |
 | C1 | Certified closes into the prospective store | C0 | NOT STARTED |
-| C2 | Bind models to new plan versions | C0, D11, D12 | NEXT: run Football Stage 2 after #2460 merges, then draft the NCAAF/NFL v3 plan proposal (D12) |
+| C2 | Bind models to new plan versions | C0, D11, D12 | IN PROGRESS. Research sports (NBA, NCAAB): settlement, pinned candidate, calibration and bound predictions are built (`app_core/prospective_calibration.py`). Review-and-freeze path: the **Bound plan** workflow (`scripts/bound_plan.py`) drafts read-only with a plan hash; `freeze` needs that reviewed hash and a future validation start. The readiness report shows each research market's next blocker. Football waits for a second season (D12) |
 | C3 | Frozen-plan progress view; rework the scoreboard | C0 | NOT STARTED |
 | C4 | Validation, review and activation | C1, C2 | NOT STARTED (owner steps) |
 | C5 | Model improvements with fresh holdouts | C2 | NOT STARTED |
