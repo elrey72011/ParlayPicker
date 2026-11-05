@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
 
 from app_core import prospective_evidence as evidence
 from app_core import prospective_research_models as research
@@ -92,15 +93,31 @@ def _market_result(path, sport, market):
     return results
 
 
-def settle_scope(path, sport, market):
-    """Settle each event's earliest predicted quote once a verified final score exists."""
+NHL_SETTLEMENT_ENV = "PARLAYPICKER_NHL_SETTLEMENT"
+
+
+def settlement_enabled(sport, setting=os.environ.get):
+    """NBA/NCAAB always; NHL only with ``PARLAYPICKER_NHL_SETTLEMENT=official_check`` (D17)."""
+    if sport in evidence.SCORE_SETTLEMENT_SPORTS:
+        return True
+    return (sport in evidence.OFFICIAL_CHECK_SETTLEMENT_SPORTS and
+            str(setting(NHL_SETTLEMENT_ENV, "") or "").strip().lower() == "official_check")
+
+
+def settle_scope(path, sport, market, *, request_get=None, setting=os.environ.get):
+    """Settle each event's earliest predicted quote once a verified final score exists.
+
+    NHL games also need the NHL's own official final, fetched once per call from the
+    free public score feed, and settle only when it equals the provider's final.
+    """
     report = {"settled": 0, "already_settled": 0, "awaiting_score": 0, "errors": []}
-    if sport not in evidence.SCORE_SETTLEMENT_SPORTS:
+    if not settlement_enabled(sport, setting):
         report["errors"].append("SCORE_SETTLEMENT_NOT_ENABLED")
         return report
-    _, _, scores = research._read_scope(path, sport, market)
+    events, _, scores = research._read_scope(path, sport, market)
     latest = _latest_scores(scores)
     settled = _market_result(path, sport, market)
+    pending = []
     for event_id, prediction in sorted(_earliest_predictions(path, sport, market).items()):
         if (event_id, prediction["selection"]) in settled:
             report["already_settled"] += 1
@@ -109,8 +126,30 @@ def settle_scope(path, sport, market):
         if score is None:
             report["awaiting_score"] += 1
             continue
+        pending.append((event_id, prediction, score))
+    official_games = None
+    if pending and sport in evidence.OFFICIAL_CHECK_SETTLEMENT_SPORTS:
+        from app_core import nhl_official_scores as official
+        if request_get is None:
+            import requests
+            request_get = requests.get
+        report["awaiting_official"] = 0
         try:
-            evidence.insert_score_settlement(path, score_result_id=score["result_id"], quote_id=prediction["quote_id"])
+            official_games = official.fetch(official.game_dates(events[e] for e, _, _ in pending), request_get)
+        except Exception as exc:  # the official feed is unavailable: settle nothing, retry next cycle
+            report["errors"].append(f"OFFICIAL_SCORES_UNAVAILABLE:{type(exc).__name__}")
+            return report
+    for event_id, prediction, score in pending:
+        check = None
+        if official_games is not None:
+            from app_core import nhl_official_scores as official
+            check = official.match(events[event_id], official_games)
+            if check is None:
+                report["awaiting_official"] += 1
+                continue
+        try:
+            evidence.insert_score_settlement(path, score_result_id=score["result_id"],
+                                             quote_id=prediction["quote_id"], official=check)
             report["settled"] += 1
         except (ValueError, evidence.EvidenceConflict) as exc:
             report["errors"].append(f"{event_id}:{str(exc)[:80]}")
@@ -414,7 +453,7 @@ def freeze_reviewed_plan(path, *, expected_hash, now=None, **inputs):
 def binding_status(path, sport, market, *, now=None):
     """Where one research market stands on the C2 chain, and its next blocker. Read-only."""
     now = now or datetime.now(timezone.utc)
-    status = {"sport": sport, "market_family": market, "settlement_enabled": sport in evidence.SCORE_SETTLEMENT_SPORTS}
+    status = {"sport": sport, "market_family": market, "settlement_enabled": settlement_enabled(sport)}
     models = evidence.read_records(path, "prospective_model", sport=sport, market_family=market)
     status["models"] = len(models)
     status["most_training_events"] = max((m["independent_event_count"] for m in models), default=0)
@@ -456,7 +495,7 @@ def run_cycle(path, sport, *, now=None):
     """Post-research-cycle hook: settle, calibrate the latest model, and predict for bound plans."""
     now = now or datetime.now(timezone.utc)
     report = {"sport": sport, "markets": {}}
-    if sport not in evidence.SCORE_SETTLEMENT_SPORTS:
+    if not settlement_enabled(sport):
         report["skipped"] = "SCORE_SETTLEMENT_NOT_ENABLED"
         return report
     for market in research.SCOPES[sport]:

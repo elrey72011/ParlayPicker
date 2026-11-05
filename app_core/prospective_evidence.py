@@ -1044,6 +1044,10 @@ SCORE_SETTLEMENT_SOURCE = "SCORE_SETTLEMENT_V1"
 # NHL is excluded until the puck-line treatment of shootouts in provider final scores
 # is confirmed; NBA and NCAAB final scores include overtime, as spreads and totals do.
 SCORE_SETTLEMENT_SPORTS = frozenset({"NBA", "NCAAB"})
+# NHL settles only per game, when the provider's final equals the NHL's own official
+# final (including overtime and the shootout goal); see app_core/nhl_official_scores.py
+# (roadmap D17). The caller supplies that official score as ``official``.
+OFFICIAL_CHECK_SETTLEMENT_SPORTS = frozenset({"NHL"})
 
 
 def score_settlement_outcome(sport: str, market_family: str, selection: str, home_team: str,
@@ -1068,7 +1072,8 @@ def score_settlement_outcome(sport: str, market_family: str, selection: str, hom
     return "WIN" if difference > 0 else "LOSS"
 
 
-def insert_score_settlement(path: str | Path | None, *, score_result_id: str, quote_id: str) -> str:
+def insert_score_settlement(path: str | Path | None, *, score_result_id: str, quote_id: str,
+                            official: Mapping | None = None) -> str:
     """Settle one exact quote (market, selection, line) from a replay-verified final score.
 
     The research sports store final scores without a market outcome. Plan evaluation
@@ -1084,7 +1089,7 @@ def insert_score_settlement(path: str | Path | None, *, score_result_id: str, qu
             raise ValueError("unknown score result or quote")
         event = _event(db, score["event_id"])
     sport = event["sport"]
-    if sport not in SCORE_SETTLEMENT_SPORTS:
+    if sport not in SCORE_SETTLEMENT_SPORTS and sport not in OFFICIAL_CHECK_SETTLEMENT_SPORTS:
         raise ValueError("score settlement is not enabled for this sport")
     if not verify_provider_score(event, score):
         raise ValueError("score settlement requires a replay-verified provider final score")
@@ -1099,6 +1104,13 @@ def insert_score_settlement(path: str | Path | None, *, score_result_id: str, qu
             "selection": quote["selection"], "line": quote["line"], "home_team": event["home_team"],
             "away_team": event["away_team"], "home_score": score["home_score"],
             "away_score": score["away_score"], "outcome": outcome}
+    if sport in OFFICIAL_CHECK_SETTLEMENT_SPORTS:
+        if not isinstance(official, Mapping):
+            raise ValueError("this sport settles only with the league's official final score")
+        if (official.get("home_score"), official.get("away_score")) != (score["home_score"], score["away_score"]):
+            raise ValueError("provider final score disagrees with the official final score")
+        rule["official_check"] = {key: official.get(key) for key in (
+            "game_id", "source_hash", "last_period_type", "home_score", "away_score")}
     with closing(_reader(path)) as db:
         latest = db.execute("""SELECT result_id,grading_version,available_at FROM prospective_result
             WHERE event_id=? AND market_family=? AND selection=?

@@ -86,6 +86,8 @@ jobs:
           PARLAYPICKER_CERTIFIED_CLOSE_MARKETS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_MARKETS }}
           # D16: hours ahead to capture NBA/NCAAB/NHL prices (default 2, range 2-24).
           PARLAYPICKER_RESEARCH_CAPTURE_HOURS: ${{ vars.PARLAYPICKER_RESEARCH_CAPTURE_HOURS }}
+          # D17: NHL settles only per game against the NHL official final ("official_check").
+          PARLAYPICKER_NHL_SETTLEMENT: ${{ vars.PARLAYPICKER_NHL_SETTLEMENT }}
         run: python -u scripts/run_research_scheduler.py
       - name: Save the verified Drive object cache
         if: ${{ always() && steps.window.outputs.active == 'true' }}
