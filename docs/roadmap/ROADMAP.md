@@ -149,6 +149,7 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | D9 | NBA ESPN download | **Owner-approved 2026-11-05; done.** The result is an offline benchmark |
 | D10 | Retire or keep the shadow shared pipeline (#2456) | Open. Recommendation: keep it off and frozen; retire it once C3 lands |
 | D11 | Who reviews plan bindings and deployment reviews | Open |
+| D12 | Which plan family an NCAAF/NFL model targets: v1 rules (200 events), v2 (9,451 decided events per market, unreachable in one season), or a new v3 | **Owner-chosen 2026-11-05: C, design a v3.** First, run Football Stage 2 (owner-approved, after #2460 merges). Then draft a v3 proposal whose minimum sample is derived from Stage 2's measured variance, push rate and dependence. The proposal is reviewed before anything is frozen |
 
 ## 5. Guardrails (unchanged)
 
@@ -173,7 +174,7 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | NBA-B | NBA ESPN offline benchmark | D9 | IMPLEMENTED (local); feeds C5 |
 | C0 | Market readiness from Drive evidence | — | **DONE 2026-11-05** (`docs/evaluation/market-readiness-2026-11-05.md`). No market is in validation. **Next: C2 for NCAAF** |
 | C1 | Certified closes into the prospective store | C0 | NOT STARTED |
-| C2 | Bind models to new plan versions | C0, D11 | NOT STARTED |
+| C2 | Bind models to new plan versions | C0, D11, D12 | NEXT: run Football Stage 2 after #2460 merges, then draft the NCAAF/NFL v3 plan proposal (D12) |
 | C3 | Frozen-plan progress view; rework the scoreboard | C0 | NOT STARTED |
 | C4 | Validation, review and activation | C1, C2 | NOT STARTED (owner steps) |
 | C5 | Model improvements with fresh holdouts | C2 | NOT STARTED |
