@@ -97,7 +97,8 @@ def test_score_backup_precedes_slow_ranking_rebuild(monkeypatch, tmp_path):
 def test_closing_schedule_is_independent_of_daily_grading():
     from pathlib import Path
 
-    frequent = yaml.safe_load(Path('.github/workflows/research-scheduler.yml').read_text())
+    # Closing capture runs in its own workflow (roadmap E1.4).
+    frequent = yaml.safe_load(Path('.github/workflows/closing-capture.yml').read_text())
     daily = yaml.safe_load(Path('.github/workflows/activation-grading.yml').read_text())
     close_steps = frequent['jobs']['activation-evidence']['steps']
     close = next(step['run'] for step in close_steps if 'scripts/bootstrap_evidence.py' in step.get('run', ''))

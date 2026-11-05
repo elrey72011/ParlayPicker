@@ -208,7 +208,10 @@ def test_activation_workflow_aliases_window_and_independence():
     from pathlib import Path
     import yaml
     workflow = yaml.safe_load(Path('.github/workflows/research-scheduler.yml').read_text())
-    jobs = workflow['jobs']
+    # Closing capture moved to its own workflow with the same schedule (roadmap E1.4).
+    closing = yaml.safe_load(Path('.github/workflows/closing-capture.yml').read_text())
+    assert closing.get('on', closing.get(True))['schedule'] == workflow.get('on', workflow.get(True))['schedule']
+    jobs = {**workflow['jobs'], **closing['jobs']}
     job = jobs['activation-evidence']
     assert 'needs' not in job
     for alias in ('ODDS_API_KEY', 'THE_ODDS_API_KEY'):

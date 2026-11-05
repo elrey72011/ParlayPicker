@@ -257,6 +257,7 @@ be "No Bet; no demonstrated edge".
 | D5 | Budgets for authentic NFL acceptance (M2.2) | ≤ 2 games, as the existing prepared inventory allows |
 | D6 | Hosted NCAAF custody (Neon vs. local-only first release) | Local-only first, labelled clearly |
 | D7 | Switch selector from highest probability to highest EV with No Bet | After 2+ weeks of shadow comparison |
+| D8 | Closing capture every 15 minutes instead of 30. It catches more closes, and costs Odds API credits only when picks are within 30 minutes of kickoff | Yes, once the 30-minute run is confirmed reliable |
 
 ## 7. Guardrails (unchanged from the 2026-11-01 brief)
 
@@ -282,10 +283,10 @@ AUTHENTICALLY ACCEPTED. Deployment and model quality are tracked separately.
 | ID | Task | Depends on | Status | Effort |
 |---|---|---|---|---|
 | M0 | Release repair (#2455) | — | RELEASE-QUALIFIED (merged `db3e22c`) | done |
-| E1.1 | Grade picks since 2026-08-28 | — | NOT STARTED | 1 d |
-| E1.2 | Refresh + holdout-validate calibration | E1.1 | NOT STARTED | 0.5–1 d |
-| E1.3 | Scoreboard (Brier, log loss, CLV, ROI vs. market) in Streamlit | E1.1 | NOT STARTED | 2–3 d |
-| E1.4 | Automatic closing-line capture | — | NOT STARTED | 1–2 d |
+| E1.1 | Grade picks since 2026-08-28 | owner exports | BLOCKED: post-Aug-28 exports/recaps live in Drive, not the repo. Upload them in Results → scoreboard, or hand them over | 1 d |
+| E1.2 | Refresh + holdout-validate calibration | E1.1 | BLOCKED (E1.1) | 0.5–1 d |
+| E1.3 | Scoreboard (Brier, log loss, CLV, ROI vs. market) in Streamlit | — | IMPLEMENTED (`app_core/evaluation/scoreboard.py`, `scripts/scoreboard.py`, Results-tab panel). Baseline: `docs/evaluation/scoreboard-2026-11-05.md`, no demonstrated edge | done |
+| E1.4 | Automatic closing-line capture | — | IMPLEMENTED. Capture moved to its own workflow (`closing-capture.yml`): it was starved by the hour-long research job in a shared queue. CLV report in `app_core/evaluation/clv.py`; 15-minute cadence is D8 | done |
 | P1.1 | Market-anchored probability | E1.3 | NOT STARTED | 1–2 d |
 | P1.2 | EV/No Bet selector in shadow mode | P1.1 | NOT STARTED | 2–3 d |
 | P1.3 | Sharp-price benchmark | D4 | BLOCKED (D4) | 1–2 d |
