@@ -211,3 +211,26 @@ def test_receipt_cache_missing_checksum_reads_every_time_and_rejects_changed_che
     files[0]['sha256Checksum']='0'*64
     with pytest.raises(Exception,match='checksum changed'):
         store.read_cached_objects(Prefix='receipt/',cache_dir=tmp_path)
+
+
+def test_read_objects_uses_the_verified_cache_only_when_the_cache_env_is_set(tmp_path, monkeypatch):
+    import hashlib
+    store = object.__new__(DriveStore)
+    store.created_ids = {}
+    store._session_factory = None
+    raw = b'SYNTHETIC canonical record'
+    files = [{'id': 'one', 'name': 'canonical/key', 'sha256Checksum': hashlib.sha256(raw).hexdigest()}]
+    reads = []
+    store._files = lambda: files
+    store._read_files = lambda items: reads.append(items[0]['id']) or raw
+    monkeypatch.delenv('PARLAYPICKER_DRIVE_CACHE_DIR', raising=False)
+    for _ in range(2):
+        assert store.read_objects(Prefix='canonical/') == [('canonical/key', raw)]
+    assert reads == ['one', 'one']  # unset: every read downloads, as before
+    monkeypatch.setenv('PARLAYPICKER_DRIVE_CACHE_DIR', str(tmp_path))
+    for _ in range(2):
+        assert store.read_objects(Prefix='canonical/') == [('canonical/key', raw)]
+    assert reads == ['one', 'one', 'one']  # set: the second read reuses checksum-matched bytes
+    files[0]['sha256Checksum'] = '0' * 64  # Drive's checksum changed: the cache is not trusted
+    with pytest.raises(Exception, match='checksum changed'):
+        store.read_objects(Prefix='canonical/')

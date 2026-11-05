@@ -6,6 +6,7 @@ from app_core.scoped_reads import singleflight
 from io import BytesIO
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import uuid
@@ -100,6 +101,9 @@ def _authorized_session():
             "Replace the secret with the complete original downloaded JSON in triple single quotes; "
             "do not edit the private-key contents.") from None
     return AuthorizedSession(credentials)
+
+
+DRIVE_CACHE_ENV = "PARLAYPICKER_DRIVE_CACHE_DIR"
 
 
 class DriveStore:
@@ -398,9 +402,17 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         return values
 
     def read_objects(self, *, Prefix):
-        """Compatibility wrapper using a fresh single-phase inventory."""
+        """Compatibility wrapper using a fresh single-phase inventory.
+
+        When ``PARLAYPICKER_DRIVE_CACHE_DIR`` is set (scheduled workflows keep that
+        directory between runs), media is read exactly as ``read_cached_objects``
+        does: cached bytes are reused only when their SHA-256 matches Drive's fresh
+        checksum, and anything else is downloaded. Unset, nothing changes.
+        """
         inventory = self.discover_complete_inventory(namespace=Prefix)
-        return self.read_verified_prefixes(Prefixes=[Prefix], inventory=inventory)[Prefix]
+        cache_dir = os.environ.get(DRIVE_CACHE_ENV, "").strip() or None
+        return self.read_verified_prefixes(Prefixes=[Prefix], inventory=inventory,
+                                           cache_dir=cache_dir)[Prefix]
 
     def read_cached_objects(self, *, Prefix, cache_dir):
         """Fresh complete listing; reuse only bytes matching Drive's SHA-256.
