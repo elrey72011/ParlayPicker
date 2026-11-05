@@ -432,6 +432,15 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
                     health["reconciliation_status"] = (
                         "research_model_cycle_completed" if "model_cycle" in result else "failed")
                 report["sports"][sport]=result
+                # Certified closes (roadmap C1): off unless PARLAYPICKER_CERTIFIED_CLOSE_SPORTS
+                # names this sport. Each historical request is reserved in the same budget first.
+                from app_core import prospective_closes
+                if sport in prospective_closes.enabled_sports():
+                    import requests as _requests
+                    audit_stage(sport, "CERTIFIED_CLOSES")
+                    result["certified_closes"] = prospective_closes.record(
+                        canonical_path, now=utcnow(), key=odds_key, request_get=_requests.get,
+                        budget=budget, sports=(sport,))
                 report["errors"].extend(sport+":"+reason for reason in result["errors"])
                 health["capture"] = result.get("capture_status", "success" if not result["errors"] else "failed")
                 health["grade"] = result.get("grade_status", "success" if not result["errors"] else "failed")

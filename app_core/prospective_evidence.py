@@ -864,6 +864,124 @@ def insert_close(path: str | Path | None, close: Mapping) -> str:
     return _price_record(path, close, closing_price=True)
 
 
+HISTORICAL_CLOSE_SOURCE = "THE_ODDS_API_HISTORICAL"
+
+
+def certified_close_source_id(provider_event_id: str, sportsbook: str, market_key: str,
+                              selection: str, snapshot: datetime | str) -> str:
+    return (f"historical:{provider_event_id}:{sportsbook}:{market_key}:{selection}:"
+            f"{_iso(_time(snapshot, 'snapshot'))}")
+
+
+def verify_provider_close(event: Mapping, close: Mapping) -> bool:
+    """Replay a certified close: the provider's last pregame snapshot, fetched after start.
+
+    This is the dedicated closing-source verifier that ``verify_provider_offer``
+    defers to. A close qualifies only when its retained response is The Odds API's
+    *historical* event-odds snapshot such that:
+
+    - the snapshot ``timestamp`` is before the scheduled start, and the next
+      snapshot (``next_timestamp``) is at or after it, so no later pregame
+      observation exists;
+    - it was retrieved at or after the scheduled start;
+    - its event, teams, start, book, market, selection, line and price match exactly.
+
+    A live near-start quote is never accepted here: until the game starts, a later
+    pregame price can still exist.
+    """
+    try:
+        sport = event["sport"]
+        if (sport not in ODDS_API_SPORT_KEYS or event["provider_namespace"] != "THE_ODDS_API" or
+                close["close_source"] != HISTORICAL_CLOSE_SOURCE or close["event_id"] != event["event_id"] or
+                sport != close["sport"] or not event.get("home_team_id") or not event.get("away_team_id") or
+                event["home_team_id"] == event["away_team_id"]):
+            return False
+        wrapper = _source_json(close["raw_source"])
+        if not isinstance(wrapper, dict) or set(wrapper) != {"retrieved_at", "response"}:
+            return False
+        response = wrapper["response"]
+        start = _time(event["scheduled_start"], "scheduled_start")
+        retrieved = _time(wrapper["retrieved_at"], "retrieved_at")
+        snapshot = _time(response.get("timestamp"), "snapshot.timestamp")
+        following = response.get("next_timestamp")
+        if (not snapshot < start <= retrieved or
+                (following is not None and _time(following, "snapshot.next_timestamp") < start) or
+                _time(close["close_timestamp"], "close_timestamp") != snapshot):
+            return False
+        data = response.get("data")
+        if (not isinstance(data, dict) or data.get("id") != event["provider_event_id"] or
+                data.get("sport_key") != ODDS_API_SPORT_KEYS[sport] or
+                data.get("home_team") != event["home_team"] or data.get("away_team") != event["away_team"] or
+                _time(data.get("commence_time"), "commence_time") != start):
+            return False
+        side = ODDS_API_SIDE_MARKETS[sport]
+        if close["market_family"] not in (side, "TOTAL"):
+            return False
+        market_key = "spreads" if close["market_family"] == side else "totals"
+        books = [b for b in data.get("bookmakers") or [] if isinstance(b, dict) and b.get("key") == close["sportsbook"]]
+        if len(books) != 1 or not isinstance(books[0].get("markets"), list):
+            return False
+        markets = [m for m in books[0]["markets"] if isinstance(m, dict) and m.get("key") == market_key]
+        if len(markets) != 1 or _time(markets[0].get("last_update"), "market.last_update") > snapshot:
+            return False
+        outcomes = markets[0].get("outcomes")
+        if not isinstance(outcomes, list) or len(outcomes) != 2 or any(not isinstance(o, dict) for o in outcomes):
+            return False
+        names = [o.get("name") for o in outcomes]
+        expected = {event["home_team"], event["away_team"]} if market_key == "spreads" else {"Over", "Under"}
+        if len(set(names)) != 2 or set(names) != expected:
+            return False
+        lines = [_number(o.get("point"), "provider.point") for o in outcomes]
+        prices = [o.get("price") for o in outcomes]
+        if any(type(p) is not int or abs(p) < 100 for p in prices):
+            return False
+        if ((market_key == "spreads" and abs(sum(lines)) > 1e-9) or
+                (market_key == "totals" and (lines[0] != lines[1] or lines[0] <= 0))):
+            return False
+        index = names.index(close["selection"]) if close["selection"] in names else None
+        if index is None:
+            return False
+        price = prices[index]
+        decimal = 1 + (price / 100 if price > 0 else 100 / abs(price))
+        if (close["line"] != lines[index] or close["american_odds"] != price or
+                abs(close["decimal_odds"] - decimal) > 1e-6):
+            return False
+        return close["source_id"] == certified_close_source_id(
+            event["provider_event_id"], close["sportsbook"], market_key, close["selection"], snapshot)
+    except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
+        return False
+
+
+def insert_certified_close(path: str | Path | None, close: Mapping) -> str:
+    """Store a certified close (``verify_provider_close``) with ``close_verified=1``.
+
+    Unlike a live observation, a historical snapshot is replayable after the fact,
+    so the 15-minute freshness rule for live prices does not apply. Instead the
+    snapshot must precede the start, and the retrieval must follow it.
+    """
+    row = _map(close)
+    sport, market = _scope(row.get("sport"), row.get("market_family"))
+    if row.get("close_verified") is not True or row.get("close_source") != HISTORICAL_CLOSE_SOURCE:
+        raise ValueError("certified close must be a verified historical provider snapshot")
+    stamp = _time(row.get("close_timestamp"), "close_timestamp")
+    line, american, decimal, sportsbook = _odds(row, verified=True)
+    raw, source_hash, source_id = _source_fields(row)
+    with closing(connect(path)) as db, db:
+        event = _event(db, row.get("event_id"))
+        wrapper = _source_json(raw) or {}
+        retrieved = _time(wrapper.get("retrieved_at"), "retrieved_at")
+        if sport != event["sport"] or not stamp < _time(event["scheduled_start"], "scheduled_start") <= retrieved <= _clock():
+            raise ValueError("certified close event scope or chronology mismatch")
+        values = {"close_id": _text(row.get("close_id"), "close_id"), "event_id": event["event_id"],
+                  "sport": sport, "market_family": market, "selection": _text(row.get("selection"), "selection"),
+                  "line": line, "american_odds": american, "decimal_odds": decimal, "sportsbook": sportsbook,
+                  "close_timestamp": _iso(stamp), "close_source": HISTORICAL_CLOSE_SOURCE, "close_verified": 1,
+                  "source_id": source_id, "source_hash": source_hash}
+        if not verify_provider_close(event, dict(values, raw_source=raw)):
+            raise ValueError("certified close is not replayable from the provider's last pregame snapshot")
+        return _insert(db, "prospective_close", "close_id", values, _snapshot(values), raw_source=raw)
+
+
 def insert_result(path: str | Path | None, result: Mapping) -> str:
     data = _map(result)
     sport, market = _scope(data.get("sport"), data.get("market_family"))
