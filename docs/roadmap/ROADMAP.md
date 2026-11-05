@@ -176,11 +176,11 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 |---|---|---|---|
 | M0 | CI repair and protected-change guard (#2455) | — | MERGED |
 | M1 | Shared pipeline, shadow only (#2456) | — | MERGED; frozen (D10) |
-| E1 | Legacy scoreboard and closing-capture workflow (#2457) | — | OPEN PR; scoreboard to be reworked under C3 |
+| E1 | Legacy scoreboard and closing-capture workflow (#2457) | — | MERGED; scoreboard to be reworked under C3 |
 | P1 | EV shadow selector on the authority chain | — | IMPLEMENTED (local); off by default |
 | NBA-B | NBA ESPN offline benchmark | D9 | IMPLEMENTED (local); feeds C5 |
 | C0 | Market readiness from Drive evidence | — | **DONE 2026-11-05** (`docs/evaluation/market-readiness-2026-11-05.md`). No market is in validation. **Next: C2 for NCAAF** |
-| C1 | Certified closes into the prospective store | C0 | NOT STARTED |
+| C1 | Certified closes into the prospective store | C0 | **DONE** (#2461). NBA and NCAAB spread allowances (D13, D14). Turn on with `PARLAYPICKER_CERTIFIED_CLOSE_SPORTS` |
 | C2 | Bind models to new plan versions | C0, D11, D12 | IN PROGRESS. Research sports (NBA, NCAAB): settlement, pinned candidate, calibration and bound predictions are built (`app_core/prospective_calibration.py`). Review-and-freeze path: the **Bound plan** workflow (`scripts/bound_plan.py`) drafts read-only with a plan hash; `freeze` needs that reviewed hash and a future validation start. The readiness report shows each research market's next blocker. Football waits for a second season (D12) |
 | C3 | Frozen-plan progress view; rework the scoreboard | C0 | NOT STARTED |
 | C4 | Validation, review and activation | C1, C2 | NOT STARTED (owner steps) |
