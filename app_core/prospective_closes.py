@@ -33,7 +33,10 @@ from app_core import prospective_evidence as evidence
 
 HISTORICAL_EVENT_ODDS = "https://api.the-odds-api.com/v4/historical/sports/{sport_key}/events/{event_id}/odds"
 CREDITS_PER_MARKET_PER_10_BOOKS = 10
-LOOKBACK = timedelta(hours=6)  # started events older than this are left for a manual backfill
+# Started events older than this are left for a manual backfill. Research runs start
+# only a few times a day, so the window spans a full day (D16); the snapshot before
+# the start can be fetched at any time after it, at the same cost.
+LOOKBACK = timedelta(hours=24)
 
 
 def enabled_sports(setting=os.environ.get):

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import math
+import os
 import time
 
 import requests
@@ -24,6 +25,21 @@ SPORT_KEYS = {"NBA": "basketball_nba", "NCAAB": "basketball_ncaab", "NHL": "iceh
 SIDE_MARKETS = {"NBA": "SPREAD", "NCAAB": "SPREAD", "NHL": "PUCK_LINE"}
 BASE = "https://api.the-odds-api.com/v4/sports/"
 PROTOCOL = "odds-sport-research-v1"
+# How far ahead pregame prices are captured (roadmap D16). The default keeps the
+# original 2-hour window. Runs start only a few times a day, so a 2-hour window
+# misses most of an evening slate; the frozen plans require only strictly pregame
+# prices. Allowed range 2-24 hours.
+CAPTURE_HOURS_ENV = "PARLAYPICKER_RESEARCH_CAPTURE_HOURS"
+CAPTURE_BATCH = 24       # events per odds request (one request costs markets x regions)
+MAX_CAPTURE_BATCHES = 3  # per run: a full NCAAB evening slate in one run
+
+
+def capture_hours(setting=os.environ.get):
+    try:
+        hours = float(setting(CAPTURE_HOURS_ENV, "") or 2)
+    except ValueError:
+        hours = 2.0
+    return min(24.0, max(2.0, hours))
 
 
 def utcnow():
@@ -228,11 +244,12 @@ class OddsResearchAdapter:
         upcoming = self.upcoming_events(odds_key, request_get) if upcoming is None else upcoming
         now = utcnow()
         due = {gid: event for gid, event in upcoming.items() if gid not in existing and
-               now < timestamp(event["commence_time"]) <= now + timedelta(hours=2)}
+               now < timestamp(event["commence_time"]) <= now + timedelta(hours=capture_hours())}
+        limit = CAPTURE_BATCH * MAX_CAPTURE_BATCHES
         result = {"discovered": len(upcoming), "due": len(due), "captured": 0,
                   "captured_quote_rows": 0, "identity_blocked": 0,
-                  "price_unavailable_events": 0, "deferred_due_events": max(0, len(due) - 24),
-                  "excluded_markets": {}}
+                  "price_unavailable_events": 0, "deferred_due_events": max(0, len(due) - limit),
+                  "capture_window_hours": capture_hours(), "excluded_markets": {}}
         if not due:
             return result
         participant_response = fetch(self.sport, "participants", odds_key, request_get)
@@ -242,12 +259,14 @@ class OddsResearchAdapter:
         if not isinstance(attempts, dict):
             raise ValueError("invalid_capture_attempt_state")
         allowed = sorted(due, key=lambda gid: (attempts.get(gid, ""),
-                                                due[gid]["commence_time"], gid))[:24]
+                                                due[gid]["commence_time"], gid))[:limit]
         for gid in allowed:
             attempts[gid] = utcnow().isoformat()
-        payload = fetch(self.sport, "odds", odds_key, request_get,
-                        params={"regions": "us", "markets": "spreads,totals", "oddsFormat": "american",
-                                "eventIds": ",".join(allowed)})
+        payload = []
+        for offset in range(0, len(allowed), CAPTURE_BATCH):
+            payload.extend(fetch(self.sport, "odds", odds_key, request_get,
+                                 params={"regions": "us", "markets": "spreads,totals", "oddsFormat": "american",
+                                         "eventIds": ",".join(allowed[offset:offset + CAPTURE_BATCH])}))
         accepted, rejected = [], Counter()
         seen = set()
         for row in payload:
