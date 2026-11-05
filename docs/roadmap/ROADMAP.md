@@ -258,7 +258,7 @@ be "No Bet; no demonstrated edge".
 | D6 | Hosted NCAAF custody (Neon vs. local-only first release) | Local-only first, labelled clearly |
 | D7 | Switch selector from highest probability to highest EV with No Bet | After 2+ weeks of shadow comparison |
 | D8 | Closing capture every 15 minutes instead of 30. It catches more closes, and costs Odds API credits only when picks are within 30 minutes of kickoff | Yes, once the 30-minute run is confirmed reliable |
-| D9 | Download NBA game history (2024-25 and 2025-26 regular seasons, plus the current season to date) via the free public `nba_api` endpoint, to train the NBA model. No Odds API credits | Yes: one bounded download, then review the holdout report before committing the artifact |
+| D9 | Download NBA game history (2024-25 and 2025-26 regular seasons, plus the current season to date) via the free public `nba_api` endpoint, to train the NBA model. No Odds API credits | **Owner-approved 2026-11-05.** One bounded download; review the holdout report before committing the artifact |
 
 ## 7. Guardrails (unchanged from the 2026-11-01 brief)
 

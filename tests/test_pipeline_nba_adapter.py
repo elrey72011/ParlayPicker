@@ -103,11 +103,37 @@ def test_training_script_pairs_game_finder_rows_and_fits_from_csv(tmp_path):
     assert cli.games_from_game_finder(rows) == [dict(game_date='2026-11-01', home='Boston Celtics',
                                                      away='New York Knicks', home_score=110, away_score=104)]
     import csv as _csv
+    names = dict(zip(TEAMS, sorted(cli.NBA_FRANCHISES)))  # the training filter keeps NBA franchises only
+    franchise_history = [dict(g, home=names[g['home']], away=names[g['away']]) for g in HISTORY]
     path = tmp_path / 'games.csv'
     with path.open('w', newline='') as fh:
         writer = _csv.DictWriter(fh, fieldnames=['game_date', 'home', 'away', 'home_score', 'away_score'])
         writer.writeheader()
-        writer.writerows(HISTORY)
+        writer.writerows(franchise_history)
     out = tmp_path / 'model.json'
     assert cli.main(['--csv', str(path), '--output', str(out)]) == 0
     assert Model.load(out).train_games >= 200
+
+
+def test_espn_parser_keeps_completed_non_neutral_regular_season_games_on_the_us_date():
+    from scripts.train_nba_model import games_from_espn
+
+    def event(eid, season_type=2, neutral=False, completed=True, home=110, away=101):
+        return dict(id=eid, date='2026-11-06T00:30Z', season=dict(type=season_type), competitions=[dict(
+            neutralSite=neutral, status=dict(type=dict(completed=completed)), competitors=[
+                dict(homeAway='home', score=str(home), team=dict(displayName='SYNTHETIC Home')),
+                dict(homeAway='away', score=str(away), team=dict(displayName='SYNTHETIC Away'))])])
+    payload = dict(events=[event('1'), event('2', season_type=3), event('3', neutral=True),
+                           event('4', completed=False), event('5', home='x')])
+    assert games_from_espn(payload, '2026-11-05') == [dict(game_date='2026-11-05', home='SYNTHETIC Home',
+                                                           away='SYNTHETIC Away', home_score=110, away_score=101,
+                                                           espn_event_id='1')]
+
+
+def test_all_star_and_duplicate_games_are_excluded_from_training():
+    from scripts.train_nba_model import franchise_games
+    games = [dict(game_date='2026-02-15', home='Team Stripes', away='Team Stars', home_score=42, away_score=40),
+             dict(game_date='2026-02-20', home='Boston Celtics', away='Miami Heat', home_score=110, away_score=100),
+             dict(game_date='2026-02-20', home='Boston Celtics', away='Miami Heat', home_score=110, away_score=100),
+             dict(game_date='2026-02-21', home='LA Clippers', away='World', home_score=90, away_score=80)]
+    assert franchise_games(games) == [games[1]]
