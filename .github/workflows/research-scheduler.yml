@@ -40,7 +40,11 @@ jobs:
     if: vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.football_v3_audit != true && inputs.sports != 'FOOTBALL_STAGE1'
     needs: configuration-preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # G7: every evidence record is its own Drive object, uploaded at about 2.4/s, so a
+    # large slate (e.g. ~150 NCAAB games, ~5,500 records) needs ~40 minutes of upload
+    # alone. A run killed mid-upload loses its unsaved records. Public repository:
+    # standard runner minutes are free; the concurrency group prevents overlap.
+    timeout-minutes: 150
     env:
       PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
       PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}

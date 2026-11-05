@@ -54,3 +54,16 @@ def test_totals_share_one_key_and_a_different_line_is_not_comparable():
     rows = screen.screen([EVENT], quotes, closes, [])
     assert {r["selection"] for r in rows} == {"Over", "Under"}
     assert all("price_clv" not in r for r in rows)   # close moved to another line
+
+
+def test_all_bucket_grades_every_best_price_even_without_a_flag():
+    quotes = []
+    for book in ("a", "b", "c"):
+        quotes += [_quote("e1", book, "Home", -3.5, -110), _quote("e1", book, "Away", 3.5, -110)]
+    closes = [{"event_id": "e1", "market_family": "SPREAD", "selection": "Home", "sportsbook": "c",
+               "line": -3.5, "decimal_odds": _decimal(-120), "close_verified": True}]
+    # Equal prices: the tie-break takes the last book by name ("c").
+    summary = screen.summarize(screen.screen([EVENT], quotes, closes, []))
+    assert summary["0.00"]["picks"] == 0                 # -110 at a fair 50% is negative EV
+    assert summary["all"]["picks"] == 2 and summary["all"]["mean_ev"] < 0
+    assert summary["all"]["with_comparable_close"] == 1 and summary["all"]["beat_close_share"] == 1.0

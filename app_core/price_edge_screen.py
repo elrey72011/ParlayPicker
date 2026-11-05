@@ -83,14 +83,19 @@ def screen(events, quotes, closes, scores, *, min_books=3):
 
 
 def summarize(candidates, thresholds=THRESHOLDS):
+    """By EV threshold, plus ``all``: the best price on every candidate, as a baseline.
+
+    Beating a no-vig consensus needs a price at or above fair odds (+100 at 50%), which
+    is rare, so ``all`` shows whether the best available price beats the close anyway.
+    """
     out = {}
-    for threshold in thresholds:
-        picks = [c for c in candidates if c["ev"] >= threshold]
+    for threshold in (None,) + tuple(thresholds):
+        picks = [c for c in candidates if threshold is None or c["ev"] >= threshold]
         clv = [c["price_clv"] for c in picks if "price_clv" in c]
         settled = [c for c in picks if c.get("outcome") in ("WIN", "LOSS", "PUSH")]
         units = sum(c["decimal_odds"] - 1 if c["outcome"] == "WIN" else (-1 if c["outcome"] == "LOSS" else 0)
                     for c in settled)
-        out[f"{threshold:.2f}"] = {
+        out["all" if threshold is None else f"{threshold:.2f}"] = {
             "picks": len(picks),
             "mean_ev": sum(c["ev"] for c in picks) / len(picks) if picks else None,
             "with_comparable_close": len(clv),
