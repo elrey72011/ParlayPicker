@@ -68,3 +68,9 @@ def test_table_counts_split_rows_by_sport_without_writing(tmp_path):
     before = path.read_bytes()
     assert mr.table_counts(path) == {'prospective_event': {'NBA': 2, 'NHL': 1}, 'prospective_validation_plan': 1}
     assert path.read_bytes() == before and mr.table_counts(tmp_path / 'absent.sqlite3') == {}
+
+
+def test_plan_evaluations_report_errors_instead_of_guessing(tmp_path):
+    assert mr.plan_evaluations(tmp_path / 'absent.sqlite3') == []
+    assert mr._scalars({'n': 3, 'rows': [1, 2], 'status': 'X'}) == {'n': 3, 'status': 'X'}
+    assert mr._scalars(['MISSING_MODEL', 'NO_CLOSES']) == ['MISSING_MODEL', 'NO_CLOSES'] and mr._scalars([{}]) == 1
