@@ -52,10 +52,10 @@ is the correct state until a market passes its plan.
 
 | Gap | What the code shows | Effect |
 |---|---|---|
-| **G1. No certified-close producer** | Nothing outside `prospective_evidence.py` calls `insert_close`. Closing capture writes `closing_observations` in the separate prediction-evidence store (`app_core/activation_closing.py`) | Every plan needs ≥ 80% certified closes, so no market can pass |
-| **G2. Plans are unbound** | Version-1 plans are `UNBOUND_REQUIRES_NEW_VERSION_BEFORE_VALIDATION`. Research models are trained, but nothing freezes a plan version that binds a model and calibration. Football v2 plans exist (`football_validation_v2.py`); their binding still needs to be checked | No market can enter validation |
+| **G1. No certified-close producer** (**confirmed 2026-11-05**) | Nothing outside `prospective_evidence.py` calls `insert_close`; `prospective_close` holds 0 rows for every sport. Closing capture writes `closing_observations` in the separate prediction-evidence store (`app_core/activation_closing.py`) | Every plan needs ≥ 80% certified closes, so no market can pass |
+| **G2. Plans are unbound** (**confirmed 2026-11-05, including football v2**) | All 16 frozen plans (12 v1 and 4 football v2) have no model or calibration, and `prospective_prediction` holds 0 rows. Football has the training data (NCAAF 10,184 rows, NFL 3,331), but no model is registered | No market can enter validation |
 | **G3. No deployment-review caller** | `record_deployment_review` has no caller. It is meant to be an independent review step | Expected; it becomes relevant once G1 and G2 are fixed |
-| **G4. Readiness has not been read this session** | The canonical evidence lives in Drive, which this session could not reach | Each market's real next blocker is unknown |
+| **G4. Readiness** (**read 2026-11-05**) | See `docs/evaluation/market-readiness-2026-11-05.md`. All canonical evidence is football; NBA, NCAAB and NHL have nothing canonical; MLB has reconciled facts only | Priority: C2 for NCAAF first, then C1 |
 
 ### Built this session, and how it fits
 
@@ -149,6 +149,7 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | D9 | NBA ESPN download | **Owner-approved 2026-11-05; done.** The result is an offline benchmark |
 | D10 | Retire or keep the shadow shared pipeline (#2456) | Open. Recommendation: keep it off and frozen; retire it once C3 lands |
 | D11 | Who reviews plan bindings and deployment reviews | Open |
+| D12 | Which plan family an NCAAF/NFL model targets: v1 rules (200 events), v2 (9,451 decided events per market, unreachable in one season), or a new v3 | **Owner-chosen 2026-11-05: C, design a v3.** First, run Football Stage 2 (owner-approved, after #2460 merges). Then draft a v3 proposal whose minimum sample is derived from Stage 2's measured variance, push rate and dependence. The proposal is reviewed before anything is frozen |
 
 ## 5. Guardrails (unchanged)
 
@@ -171,9 +172,9 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | E1 | Legacy scoreboard and closing-capture workflow (#2457) | — | OPEN PR; scoreboard to be reworked under C3 |
 | P1 | EV shadow selector on the authority chain | — | IMPLEMENTED (local); off by default |
 | NBA-B | NBA ESPN offline benchmark | D9 | IMPLEMENTED (local); feeds C5 |
-| C0 | Market readiness from Drive evidence | — | IMPLEMENTED (read-only workflow); **run it next** |
+| C0 | Market readiness from Drive evidence | — | **DONE 2026-11-05** (`docs/evaluation/market-readiness-2026-11-05.md`). No market is in validation. **Next: C2 for NCAAF** |
 | C1 | Certified closes into the prospective store | C0 | NOT STARTED |
-| C2 | Bind models to new plan versions | C0, D11 | NOT STARTED |
+| C2 | Bind models to new plan versions | C0, D11, D12 | NEXT: run Football Stage 2 after #2460 merges, then draft the NCAAF/NFL v3 plan proposal (D12) |
 | C3 | Frozen-plan progress view; rework the scoreboard | C0 | NOT STARTED |
 | C4 | Validation, review and activation | C1, C2 | NOT STARTED (owner steps) |
 | C5 | Model improvements with fresh holdouts | C2 | NOT STARTED |

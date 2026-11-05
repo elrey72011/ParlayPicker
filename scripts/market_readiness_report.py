@@ -106,13 +106,76 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
     markets = [dict(row, remote_evidence_status='RESTORED_READ_ONLY', remote_evidence_verified=True)
                for row in readiness['markets']]
     return dict(remote=dict(status='RESTORED_READ_ONLY', writes_refused=guarded.writes_refused, counts=counts),
-                markets=markets, sources=readiness['sources'])
+                markets=markets, sources=readiness['sources'],
+                tables=table_counts(root / 'prospective-evidence.sqlite3'),
+                plans=plan_evaluations(root / 'prospective-evidence.sqlite3'))
+
+
+def _scalars(value):
+    """The scalar fields of a nested report section (counts, metrics, statuses)."""
+    plain = (str, int, float, bool, type(None))
+    if isinstance(value, (list, tuple)):
+        return [v for v in value if isinstance(v, plain)] if all(isinstance(v, plain) for v in value) else len(value)
+    if not isinstance(value, dict):
+        return value if isinstance(value, plain) else type(value).__name__
+    return {k: v for k, v in value.items() if isinstance(v, plain)}
+
+
+def plan_evaluations(path):
+    """Each frozen validation plan's own evaluation, read-only (prospective_evidence.evaluate_validation_plan)."""
+    from app_core import prospective_evidence as evidence
+    if not Path(path).is_file():
+        return []
+    out = []
+    for plan in evidence.read_records(path, 'prospective_validation_plan'):
+        row = dict(validation_plan_id=plan['validation_plan_id'], sport=plan['sport'],
+                   market_family=plan['market_family'], version=plan.get('version'),
+                   model_id=plan.get('model_id'), calibration_id=plan.get('calibration_id'))
+        try:
+            result = evidence.evaluate_validation_plan(path, plan['validation_plan_id'])
+            row.update({k: _scalars(v) for k, v in result.items()
+                        if k not in row and k not in ('plan_artifact_hash',)})
+        except Exception as exc:  # report, never guess
+            row['evaluation_error'] = f'{type(exc).__name__}: {exc}'[:300]
+        out.append(row)
+    return out
+
+
+def table_counts(path):
+    """Row counts per canonical table, split by sport where the table has one (read-only)."""
+    import sqlite3
+    if not Path(path).is_file():
+        return {}
+    out = {}
+    with sqlite3.connect(f'file:{path}?mode=ro', uri=True) as db:
+        names = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+        for name in names:
+            columns = {r[1] for r in db.execute(f'PRAGMA table_info("{name}")')}
+            if 'sport' in columns:
+                out[name] = {str(sport): n for sport, n in db.execute(
+                    f'SELECT sport, COUNT(*) FROM "{name}" GROUP BY sport ORDER BY sport')}
+            else:
+                out[name] = db.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
+    return out
 
 
 def markdown(result):
     lines = ['| ' + ' | '.join(COLUMNS) + ' |', '|' + '---|' * len(COLUMNS)]
     for row in result['markets']:
         lines.append('| ' + ' | '.join('' if row.get(c) is None else str(row.get(c)) for c in COLUMNS) + ' |')
+    tables = result.get('tables') or {}
+    if tables:
+        lines += ['', '| canonical table | rows |', '|---|---|']
+        for name, count in tables.items():
+            shown = ', '.join(f'{k}: {v}' for k, v in count.items()) if isinstance(count, dict) else str(count)
+            lines.append(f'| {name} | {shown or 0} |')
+    plans = result.get('plans') or []
+    if plans:
+        lines += ['', '| validation plan | version | model | status | blockers |', '|---|---|---|---|---|']
+        for plan in plans:
+            blockers = plan.get('blockers') or plan.get('reasons') or plan.get('evaluation_error') or ''
+            lines.append(f"| {plan['validation_plan_id']} | {plan.get('version')} | {plan.get('model_id') or ''} | "
+                         f"{plan.get('status', '')} | {blockers} |")
     return '\n'.join(lines) + '\n'
 
 
