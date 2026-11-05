@@ -1040,6 +1040,95 @@ def insert_result(path: str | Path | None, result: Mapping) -> str:
                        _snapshot(values), raw_source=raw)
 
 
+SCORE_SETTLEMENT_SOURCE = "SCORE_SETTLEMENT_V1"
+# NHL is excluded until the puck-line treatment of shootouts in provider final scores
+# is confirmed; NBA and NCAAB final scores include overtime, as spreads and totals do.
+SCORE_SETTLEMENT_SPORTS = frozenset({"NBA", "NCAAB"})
+# NHL settles only per game, when the provider's final equals the NHL's own official
+# final (including overtime and the shootout goal); see app_core/nhl_official_scores.py
+# (roadmap D17). The caller supplies that official score as ``official``.
+OFFICIAL_CHECK_SETTLEMENT_SPORTS = frozenset({"NHL"})
+
+
+def score_settlement_outcome(sport: str, market_family: str, selection: str, home_team: str,
+                             away_team: str, home_score: int, away_score: int, line: float) -> str:
+    """WIN, LOSS or PUSH for one exact selection and line from an authentic final score."""
+    if market_family == "TOTAL":
+        if selection not in ("Over", "Under"):
+            raise ValueError("total selection must be Over or Under")
+        difference = home_score + away_score - line
+        difference = difference if selection == "Over" else -difference
+    elif market_family == ODDS_API_SIDE_MARKETS[sport]:
+        if selection == home_team:
+            difference = home_score - away_score + line
+        elif selection == away_team:
+            difference = away_score - home_score + line
+        else:
+            raise ValueError("spread selection must name a team")
+    else:
+        raise ValueError("unsupported settlement market")
+    if abs(difference) < 1e-9:
+        return "PUSH"
+    return "WIN" if difference > 0 else "LOSS"
+
+
+def insert_score_settlement(path: str | Path | None, *, score_result_id: str, quote_id: str,
+                            official: Mapping | None = None) -> str:
+    """Settle one exact quote (market, selection, line) from a replay-verified final score.
+
+    The research sports store final scores without a market outcome. Plan evaluation
+    needs a WIN/LOSS/PUSH result per market and selection. This derives it from the
+    two replay-verified records only: the provider score (``verify_provider_score``)
+    and the verified quote's exact line. The recomputation is stored in the raw
+    source, so it can be checked again.
+    """
+    with closing(_reader(path)) as db:
+        score = _stored(db, "prospective_result", "result_id", _text(score_result_id, "score_result_id"))
+        quote = _stored(db, "prospective_quote", "quote_id", _text(quote_id, "quote_id"))
+        if score is None or quote is None:
+            raise ValueError("unknown score result or quote")
+        event = _event(db, score["event_id"])
+    sport = event["sport"]
+    if sport not in SCORE_SETTLEMENT_SPORTS and sport not in OFFICIAL_CHECK_SETTLEMENT_SPORTS:
+        raise ValueError("score settlement is not enabled for this sport")
+    if not verify_provider_score(event, score):
+        raise ValueError("score settlement requires a replay-verified provider final score")
+    if (quote["event_id"] != event["event_id"] or not quote["quote_verified"] or quote["line"] is None or
+            quote["market_family"] not in (ODDS_API_SIDE_MARKETS[sport], "TOTAL")):
+        raise ValueError("score settlement requires a verified exact-line quote for the same event")
+    outcome = score_settlement_outcome(sport, quote["market_family"], quote["selection"], event["home_team"],
+                                       event["away_team"], score["home_score"], score["away_score"], quote["line"])
+    rule = {"rule": SCORE_SETTLEMENT_SOURCE, "score_result_id": score["result_id"],
+            "score_source_hash": score["source_hash"], "quote_id": quote["quote_id"],
+            "quote_source_hash": quote["source_hash"], "market_family": quote["market_family"],
+            "selection": quote["selection"], "line": quote["line"], "home_team": event["home_team"],
+            "away_team": event["away_team"], "home_score": score["home_score"],
+            "away_score": score["away_score"], "outcome": outcome}
+    if sport in OFFICIAL_CHECK_SETTLEMENT_SPORTS:
+        if not isinstance(official, Mapping):
+            raise ValueError("this sport settles only with the league's official final score")
+        if (official.get("home_score"), official.get("away_score")) != (score["home_score"], score["away_score"]):
+            raise ValueError("provider final score disagrees with the official final score")
+        rule["official_check"] = {key: official.get(key) for key in (
+            "game_id", "source_hash", "last_period_type", "home_score", "away_score")}
+    with closing(_reader(path)) as db:
+        latest = db.execute("""SELECT result_id,grading_version,available_at FROM prospective_result
+            WHERE event_id=? AND market_family=? AND selection=?
+            ORDER BY grading_version DESC,result_id DESC LIMIT 1""",
+            (event["event_id"], quote["market_family"], quote["selection"])).fetchone()
+    result_id = "score-settlement:" + _sha(_json(rule))[:32]
+    if latest is not None and latest["result_id"] == result_id:
+        return result_id
+    return insert_result(path, {
+        "result_id": result_id, "event_id": event["event_id"], "sport": sport,
+        "market_family": quote["market_family"], "selection": quote["selection"],
+        "result_source": SCORE_SETTLEMENT_SOURCE, "result_source_id": score["result_id"],
+        "observed_at": score["observed_at"], "available_at": score["available_at"],
+        "home_score": score["home_score"], "away_score": score["away_score"], "outcome": outcome,
+        "grading_version": latest["grading_version"] + 1 if latest else 1,
+        "revises_result_id": latest["result_id"] if latest else None, "raw_source": rule})
+
+
 def verify_provider_score(event: Mapping, result: Mapping) -> bool:
     """Replay an exact Odds API final score without asserting market settlement."""
     try:

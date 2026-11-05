@@ -108,7 +108,24 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
     return dict(remote=dict(status='RESTORED_READ_ONLY', writes_refused=guarded.writes_refused, counts=counts),
                 markets=markets, sources=readiness['sources'],
                 tables=table_counts(root / 'prospective-evidence.sqlite3'),
-                plans=plan_evaluations(root / 'prospective-evidence.sqlite3'))
+                plans=plan_evaluations(root / 'prospective-evidence.sqlite3'),
+                research_bindings=research_bindings(root / 'prospective-evidence.sqlite3'))
+
+
+def research_bindings(path, now=None):
+    """Each research market's place on the C2 chain (prospective_calibration.binding_status), read-only."""
+    from app_core import prospective_calibration as calibration
+    from app_core.prospective_research_models import SCOPES
+    if not Path(path).is_file():
+        return []
+    out = []
+    for sport, markets in SCOPES.items():
+        for market in markets:
+            try:
+                out.append(calibration.binding_status(path, sport, market, now=now))
+            except Exception as exc:  # report, never guess
+                out.append(dict(sport=sport, market_family=market, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
 
 
 def _scalars(value):
@@ -176,6 +193,16 @@ def markdown(result):
             blockers = plan.get('blockers') or plan.get('reasons') or plan.get('evaluation_error') or ''
             lines.append(f"| {plan['validation_plan_id']} | {plan.get('version')} | {plan.get('model_id') or ''} | "
                          f"{plan.get('status', '')} | {blockers} |")
+    bindings = result.get('research_bindings') or []
+    if bindings:
+        lines += ['', '| research market | training events | candidate decided | calibration | games/day | '
+                  'window days | bound plan | next blocker |', '|---|---|---|---|---|---|---|---|']
+        for row in bindings:
+            lines.append(f"| {row['sport']} {row['market_family']} | {row.get('most_training_events', '')} | "
+                         f"{row.get('candidate_decided', '')} | {row.get('calibration_id') or ''} | "
+                         f"{row.get('games_per_day_14d', '')} | {row.get('proposed_window_days') or ''} | "
+                         f"{row.get('bound_plan_id') or ''} | "
+                         f"{row.get('next_blocker') or row.get('evaluation_error', '')} |")
     return '\n'.join(lines) + '\n'
 
 

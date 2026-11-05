@@ -77,10 +77,17 @@ jobs:
           PARLAYPICKER_EVIDENCE_DIR: ${{ runner.temp }}/research-evidence
           RESEARCH_AUDIT_PATH: ${{ runner.temp }}/research-cycle-audit.json
           PARLAYPICKER_DRIVE_CACHE_DIR: ${{ runner.temp }}/drive-cache
+          # Reuse one complete Drive listing for evidence restores for up to 15 minutes
+          # (evidence_drive.DRIVE_INVENTORY_REUSE_ENV); lock reads always list fresh.
+          PARLAYPICKER_DRIVE_INVENTORY_REUSE_SECONDS: "900"
           # Certified closes (roadmap C1, owner decision D13): off unless the repository
           # variable names sports. Option B: NBA, spread market only.
           PARLAYPICKER_CERTIFIED_CLOSE_SPORTS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_SPORTS }}
           PARLAYPICKER_CERTIFIED_CLOSE_MARKETS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_MARKETS }}
+          # D16: hours ahead to capture NBA/NCAAB/NHL prices (default 2, range 2-24).
+          PARLAYPICKER_RESEARCH_CAPTURE_HOURS: ${{ vars.PARLAYPICKER_RESEARCH_CAPTURE_HOURS }}
+          # D17: NHL settles only per game against the NHL official final ("official_check").
+          PARLAYPICKER_NHL_SETTLEMENT: ${{ vars.PARLAYPICKER_NHL_SETTLEMENT }}
         run: python -u scripts/run_research_scheduler.py
       - name: Save the verified Drive object cache
         if: ${{ always() && steps.window.outputs.active == 'true' }}

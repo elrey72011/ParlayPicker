@@ -413,6 +413,16 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
                     from app_core.prospective_research_models import run_sport_model_cycle
                     def model_after_capture():
                         model_report = run_sport_model_cycle(path, canonical_path, sport)
+                        # Roadmap C2: settle, calibrate the pinned candidate, and predict for
+                        # bound plans. Evidence only: it never freezes a plan and makes no
+                        # provider calls. PARLAYPICKER_RESEARCH_CALIBRATION=false turns it off.
+                        if os.getenv("PARLAYPICKER_RESEARCH_CALIBRATION", "true").strip().lower() != "false":
+                            from app_core import prospective_calibration
+                            try:
+                                model_report["calibration_cycle"] = prospective_calibration.run_cycle(
+                                    canonical_path, sport, now=utcnow())
+                            except Exception as exc:  # never break capture
+                                model_report["calibration_cycle"] = {"error": type(exc).__name__}
                         report["canonical_backup"] = sync_canonical(
                             canonical_path, client, folder, canonical_session)
                         return model_report

@@ -184,3 +184,8 @@ def test_a_provider_overcharge_is_recorded_and_stops_the_batch(store, clock):
                        sports=('NBA',))
     assert report['stored'] == 1 and report['credits'] == 30 and report['stopped'] == 'COST_MISMATCH'
     assert budget.usage('NBA', budget.close_ledger)['daily'] == 30
+
+
+def test_a_game_started_most_of_a_day_ago_is_still_due(tmp_path, monkeypatch):
+    # D16: runs start only a few times a day, so the close lookback spans a full day.
+    assert pc.LOOKBACK == timedelta(hours=24)
