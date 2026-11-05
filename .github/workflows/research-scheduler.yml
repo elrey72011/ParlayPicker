@@ -77,6 +77,10 @@ jobs:
           PARLAYPICKER_EVIDENCE_DIR: ${{ runner.temp }}/research-evidence
           RESEARCH_AUDIT_PATH: ${{ runner.temp }}/research-cycle-audit.json
           PARLAYPICKER_DRIVE_CACHE_DIR: ${{ runner.temp }}/drive-cache
+          # Certified closes (roadmap C1, owner decision D13): off unless the repository
+          # variable names sports. Option B: NBA, spread market only.
+          PARLAYPICKER_CERTIFIED_CLOSE_SPORTS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_SPORTS }}
+          PARLAYPICKER_CERTIFIED_CLOSE_MARKETS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_MARKETS }}
         run: python -u scripts/run_research_scheduler.py
       - name: Save the verified Drive object cache
         if: ${{ always() && steps.window.outputs.active == 'true' }}

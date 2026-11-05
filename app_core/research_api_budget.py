@@ -10,6 +10,10 @@ NEW_SPORT_KEYS = {"basketball_nba": "NBA", "basketball_ncaab": "NCAAB",
                   "icehockey_nhl": "NHL"}
 NEW_SPORT_CREDIT_LIMITS = {"daily": 40, "rolling_31_days": 1000}
 NEW_SPORT_CALL_LIMITS = {"daily": 45, "rolling_31_days": 1200}
+# Certified closes (Odds API historical snapshots, ~10 credits per market) have their own
+# allowance, so they never crowd out capture. Owner decision D13 (2026-11-05): NBA spread
+# only, about 80 credits/day; the plan quota is 20,000 credits/month.
+CERTIFIED_CLOSE_LIMITS = {"NBA": {"daily": 100, "rolling_31_days": 2500}}
 
 
 class BudgetLimit(ValueError):
@@ -29,6 +33,9 @@ class Budget:
         self.sport_ledger=state.setdefault("api_budget_by_sport_v1",{})
         self.call_ledger=state.setdefault("api_calls_by_sport_v1",{})
         if not isinstance(self.sport_ledger,dict) or not isinstance(self.call_ledger,dict):
+            raise ValueError("invalid_api_budget_state")
+        self.close_ledger=state.setdefault("api_budget_certified_close_v1",{})
+        if not isinstance(self.close_ledger,dict):
             raise ValueError("invalid_api_budget_state")
 
     def usage(self, provider, ledger=None):
@@ -68,6 +75,31 @@ class Budget:
             for ledger, count in ((self.sport_ledger, units), (self.call_ledger, 1)):
                 sport_days = ledger.setdefault(sport, {})
                 sport_days[today] = sport_days.get(today, 0) + count
+        # Persist/read-back before network: crashes and timeouts cannot refund requests.
+        self.persist()
+        return today
+
+    def reserve_certified_close(self, sport, units, *, already_spent=False):
+        """Reserve Odds API credits for one certified-close request against its own allowance.
+
+        ``already_spent=True`` records credits the provider has already charged (a cost
+        above the reservation): it is always recorded, never refused.
+        """
+        limits = CERTIFIED_CLOSE_LIMITS.get(sport)
+        if limits is None and not already_spent:
+            self.blocked.append(f"{sport}:certified_close:not_budgeted")
+            raise BudgetLimit(f"api_budget:{sport}:certified_close:not_budgeted")
+        if isinstance(units, bool) or not isinstance(units, int) or units < 0:
+            raise ValueError("invalid_certified_close_units")
+        usage = self.usage(sport, self.close_ledger)
+        for window, limit in ({} if already_spent else limits).items():
+            if usage[window] + units > limit:
+                code = f"{sport}:certified_close:{window}"
+                self.blocked.append(code)
+                raise BudgetLimit("api_budget:" + code)
+        today = self.clock().astimezone(timezone.utc).date().isoformat()
+        days = self.close_ledger.setdefault(sport, {})
+        days[today] = days.get(today, 0) + units
         # Persist/read-back before network: crashes and timeouts cannot refund requests.
         self.persist()
         return today
@@ -157,6 +189,8 @@ class Budget:
                                 "calls":self.usage(s,self.call_ledger)}
                             for s in ("NFL","NCAAF",*sorted(NEW_SPORT_KEYS.values()))},
                 "new_sport_credit_limits":NEW_SPORT_CREDIT_LIMITS,
+                "certified_close_limits":CERTIFIED_CLOSE_LIMITS,
+                "certified_close_usage":{s:self.usage(s,self.close_ledger) for s in CERTIFIED_CLOSE_LIMITS},
                 "new_sport_call_limits":NEW_SPORT_CALL_LIMITS,
                 "paused":sorted(set(self.blocked)),
                 "cost_review_required":bool(self.state.get("api_budget_cost_mismatch")),
