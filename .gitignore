@@ -84,3 +84,6 @@ data/prediction_evidence/
 /.codex-export-audit/
 /test-results/
 /data/parlay_log/
+
+# Shared pipeline local store (roadmap M1.4); holds signed private records
+data/pipeline/
