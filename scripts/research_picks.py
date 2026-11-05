@@ -21,8 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app_core import research_picks as rp  # noqa: E402
 from app_core.prospective_research_models import SCOPES  # noqa: E402
 
-NOTICE = ("Research picks from the in-season score models: best expected value at the best available "
-          "price. No market has qualified, so every pick is NO_BET with zero stake.")
+NOTICE = ("Research picks from two in-season models: the stored score model, and a line-anchored model "
+          "that predicts the result against the line. Best expected value at the best available price. "
+          "No market has qualified, so every pick is NO_BET with zero stake.")
 
 
 def build(path, now=None):
@@ -30,10 +31,11 @@ def build(path, now=None):
     boards, records = [], {}
     for sport in rp.SPORTS:
         for market in SCOPES[sport]:
-            boards.append(rp.board(path, sport, market, now=now))
-            graded = rp.replay(path, sport, market, now=now)
-            records[f"{sport} {market}"] = dict(rp.record(graded), positive_ev=rp.record(
-                [g for g in graded if g["ev"] > 0]))
+            for method in ("score", "anchored"):
+                boards.append(rp.board(path, sport, market, now=now, method=method))
+                graded = rp.replay(path, sport, market, now=now, method=method)
+                records[f"{sport} {market} ({method})"] = dict(rp.record(graded), positive_ev=rp.record(
+                    [g for g in graded if g["ev"] > 0]))
     return {"schema": "research-picks-v1", "as_of": now.isoformat(), "boards": boards, "records": records,
             "wager_authority": False}
 
@@ -43,7 +45,7 @@ def markdown(result):
         return "" if v is None else f"{v:.1%}"
     lines = ["## Research picks", "", NOTICE, ""]
     for b in result["boards"]:
-        head = f"### {b['sport']} {b['market_family']}"
+        head = f"### {b['sport']} {b['market_family']} ({b.get('method', 'score')} model)"
         if b["blocker"]:
             lines += [head, f"- {b['blocker']}", ""]
             continue

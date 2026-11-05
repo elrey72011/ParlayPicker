@@ -55,10 +55,9 @@ def _offers(event, quotes, market, cutoff):
     return out
 
 
-def _pick(event, market, offers, fit, features):
-    """Best-EV (line, side) at the best available price, or None."""
+def _pick(event, market, offers, mean, sd):
+    """Best-EV (line, side) at the best available price for a score distribution N(mean, sd), or None."""
     first, second = _sides(event, market)
-    mean = research._expected(fit, features)
     best = None
     for line, books in offers.items():
         fair = [no_vig_prob(p[first]["american_odds"], p[second]["american_odds"])
@@ -71,7 +70,7 @@ def _pick(event, market, offers, fit, features):
                 continue
             quote = max(prices, key=lambda q: (q["decimal_odds"], q["sportsbook"]))
             try:
-                prob = research.score_probabilities(mean, fit["residual_sd"], market, line,
+                prob = research.score_probabilities(mean, sd, market, line,
                                                     selection="canonical" if side == first else "opposite")
             except ValueError:  # quarter lines need a split-stake rule
                 continue
@@ -89,6 +88,40 @@ def _pick(event, market, offers, fit, features):
     return best
 
 
+ANCHOR_MIN_GAMES = 60
+ANCHOR_RIDGE = 10.0
+
+
+def anchored_fit(events, quotes, scores, market, as_of, *, min_games=None):
+    """Line-anchored ridge on this season's games finished by ``as_of``.
+
+    Target: the home cover margin (margin + home line) or the total's error (points -
+    line), with the line as an extra input. None until ``min_games`` games exist.
+    """
+    min_games = ANCHOR_MIN_GAMES if min_games is None else min_games
+    rows = []
+    for example in research._examples(events, quotes, scores, market, as_of):
+        line = float(example["line"])
+        target = example["target"] + line if market != "TOTAL" else example["target"] - line
+        rows.append({"features": list(example["features"]) + [line], "target": target})
+    if len(rows) < min_games:
+        return None
+    fit = research._fit(rows, ANCHOR_RIDGE)
+    fit["training_games"] = len(rows)
+    return fit
+
+
+def anchored_mean(fit, features, line, market):
+    """Expected margin (spread) or total implied by the anchored prediction at ``line``."""
+    predicted = research._expected(fit, list(features) + [float(line)])
+    return predicted - float(line) if market != "TOTAL" else predicted + float(line)
+
+
+def _reference_line(events, quotes, event_id, when):
+    quote = research._reference_quotes(events, quotes, when).get(event_id)
+    return None if quote is None else quote["line"]
+
+
 def _model(path, sport, market, when):
     try:
         model, artifact = research._latest_model(path, sport, market, when)
@@ -97,17 +130,34 @@ def _model(path, sport, market, when):
     return model, artifact, None if model else "NO_MODEL_YET"
 
 
-def board(path, sport, market, *, now=None):
-    """Picks for upcoming games: one per game, the best-EV side and line at the best price."""
+def _mean(fit, features, method, market, events, quotes, event_id, when):
+    if method != "anchored":
+        return research._expected(fit, features)
+    line = _reference_line(events, quotes, event_id, when)
+    return None if line is None else anchored_mean(fit, features, line, market)
+
+
+def board(path, sport, market, *, now=None, method="score"):
+    """Picks for upcoming games: one per game, the best-EV side and line at the best price.
+
+    ``method``: "score" uses the stored research score model; "anchored" fits the
+    line-anchored model on this season's games finished by ``now``.
+    """
     now = now or datetime.now(timezone.utc)
-    model, artifact, blocker = _model(path, sport, market, now)
-    report = {"sport": sport, "market_family": market, "model_id": model and model["model_id"],
-              "training_games": model and model["independent_event_count"], "blocker": blocker,
-              "picks": [], "skipped": {}}
-    if model is None:
-        return report
-    fit = artifact["model"]
     events, quotes, scores = research._read_scope(path, sport, market)
+    if method == "anchored":
+        fit = anchored_fit(events, quotes, scores, market, now)
+        report = {"sport": sport, "market_family": market, "method": method, "model_id": None,
+                  "training_games": fit and fit["training_games"],
+                  "blocker": None if fit else f"ANCHORED_NEEDS_{ANCHOR_MIN_GAMES}_GAMES", "picks": [], "skipped": {}}
+    else:
+        model, artifact, blocker = _model(path, sport, market, now)
+        fit = artifact and artifact["model"]
+        report = {"sport": sport, "market_family": market, "method": method, "model_id": model and model["model_id"],
+                  "training_games": model and model["independent_event_count"], "blocker": blocker,
+                  "picks": [], "skipped": {}}
+    if fit is None:
+        return report
     for event in sorted(events.values(), key=lambda e: (e["scheduled_start"], e["event_id"])):
         if _time(event["scheduled_start"]) <= now:
             continue
@@ -118,15 +168,17 @@ def board(path, sport, market, *, now=None):
         if built is None:
             report["skipped"]["insufficient_team_history"] = report["skipped"].get("insufficient_team_history", 0) + 1
             continue
-        pick = _pick(event, market, offers, fit, built[0])
+        mean = _mean(fit, built[0], method, market, events, quotes, event["event_id"], now)
+        pick = None if mean is None else _pick(event, market, offers, mean, fit["residual_sd"])
         if pick:
-            report["picks"].append(dict(pick, sport=sport, market_family=market, home_team=event["home_team"],
+            report["picks"].append(dict(pick, sport=sport, market_family=market, method=method,
+                                        home_team=event["home_team"],
                                         away_team=event["away_team"], scheduled_start=event["scheduled_start"]))
     report["picks"].sort(key=lambda p: -p["ev"])
     return report
 
 
-def replay(path, sport, market, *, now=None, min_ev=0.0):
+def replay(path, sport, market, *, now=None, min_ev=0.0, method="score"):
     """Grade the board rule on finished games, as of each game's first captured price."""
     now = now or datetime.now(timezone.utc)
     if sport not in evidence.SCORE_SETTLEMENT_SPORTS:
@@ -147,13 +199,20 @@ def replay(path, sport, market, *, now=None, min_ev=0.0):
         if not stamps or start > now:
             continue
         as_of = min(stamps)
-        model, artifact, _ = _model(path, sport, market, as_of)
-        if model is None:
+        if method == "anchored":
+            fit = anchored_fit(events, quotes, scores, market, as_of)
+        else:
+            model, artifact, _ = _model(path, sport, market, as_of)
+            fit = artifact and artifact["model"]
+        if fit is None:
             continue
         built = research._features(event, as_of, events, scores, market)
         if built is None:
             continue
-        pick = _pick(event, market, _offers(event, quotes, market, as_of), artifact["model"], built[0])
+        mean = _mean(fit, built[0], method, market, events, quotes, event_id, as_of)
+        if mean is None:
+            continue
+        pick = _pick(event, market, _offers(event, quotes, market, as_of), mean, fit["residual_sd"])
         if pick is None or pick["ev"] < min_ev:
             continue
         pick["outcome"] = evidence.score_settlement_outcome(

@@ -44,8 +44,7 @@ def test_pick_takes_the_best_ev_side_at_the_best_price():
     offers = {}
     for quote in (q("a", "H", -3.5, -110), q("a", "A", 3.5, -110), q("b", "H", -3.5, -105), q("b", "A", 3.5, -115)):
         offers.setdefault(rp._home_line(event, quote), {}).setdefault(quote["sportsbook"], {})[quote["selection"]] = quote
-    fit = {"coefficients": [10.0], "means": [], "scales": [], "residual_sd": 10.0}   # home by 10
-    pick = rp._pick(event, "SPREAD", offers, fit, [1.0])
+    pick = rp._pick(event, "SPREAD", offers, 10.0, 10.0)   # home by 10, sd 10
     assert pick["selection"] == "H" and pick["sportsbook"] == "b" and pick["american_odds"] == -105
     assert pick["ev"] > 0 and pick["consensus_probability"] is None   # fewer than 3 books
 
@@ -67,3 +66,20 @@ def test_script_markdown_shows_board_blockers_and_record():
     text = script.markdown(result)
     assert "| A @ H | H | -3.5 | -105 | book | 56.0% | +9.0% | 51.0% |" in text
     assert "NO_MODEL_YET" in text and "| NCAAB SPREAD | 0 | 0-0-0 |" in text and "NO_BET" in text
+
+
+def test_anchored_model_trains_on_finished_games_and_replays(tmp_path, clock, monkeypatch):
+    path = tmp_path / "SYNTHETIC-evidence.sqlite3"
+    for index in range(70):
+        _event(path, clock, "NBA", index)
+    events, quotes, scores = models._read_scope(path, "NBA", "SPREAD")
+    assert rp.anchored_fit(events, quotes, scores, "SPREAD", _at(5)) is None          # too few games yet
+    fit = rp.anchored_fit(events, quotes, scores, "SPREAD", _at(80), min_games=40)
+    assert fit and fit["training_games"] >= 40 and len(fit["means"]) == 8             # 7 features + line
+    # The anchored mean is a margin: predicted cover minus the home line.
+    features = [1.0, 0, 0, 0, 0, 0, 0]
+    assert abs(rp.anchored_mean(fit, features, -3.5, "SPREAD") - (models._expected(fit, features + [-3.5]) + 3.5)) < 1e-9
+    monkeypatch.setattr(rp, "ANCHOR_MIN_GAMES", 40)
+    graded = rp.replay(path, "NBA", "SPREAD", now=_at(80), method="anchored")
+    assert graded and all(g["outcome"] in ("WIN", "LOSS", "PUSH") for g in graded)
+    assert rp.board(path, "NBA", "SPREAD", now=_at(0), method="anchored")["blocker"] == "ANCHORED_NEEDS_40_GAMES"

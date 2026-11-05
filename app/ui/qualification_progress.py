@@ -82,7 +82,7 @@ def _render_research_picks(token):
     picks = [p for board in report.get("boards", []) for p in board.get("picks", [])]
     if picks:
         st.dataframe(pd.DataFrame(picks).reindex(columns=[
-            "sport", "market_family", "scheduled_start", "away_team", "home_team", "selection", "line",
+            "sport", "market_family", "method", "scheduled_start", "away_team", "home_team", "selection", "line",
             "american_odds", "sportsbook", "win_probability", "ev", "consensus_probability"]), hide_index=True)
     blockers = {f"{b['sport']} {b['market_family']}": b["blocker"] for b in report.get("boards", []) if b.get("blocker")}
     if blockers:
