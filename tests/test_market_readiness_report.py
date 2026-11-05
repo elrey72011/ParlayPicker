@@ -17,6 +17,12 @@ class FakeClient:
     def get_object(self, *, Key):
         return dict(Key=Key)
 
+    def read_objects(self, *, Prefix):
+        return [('uncached', Prefix)]
+
+    def read_cached_objects(self, *, Prefix, cache_dir):
+        return [('cached', Prefix, cache_dir)]
+
 
 def test_every_write_is_refused_including_through_parallel_workers():
     client = FakeClient()
@@ -30,7 +36,7 @@ def test_every_write_is_refused_including_through_parallel_workers():
 
 
 def test_report_covers_all_twelve_markets_from_the_restored_copy(tmp_path, monkeypatch):
-    monkeypatch.setattr(mr, 'restore', lambda root, client, folder: dict(canonical='SYNTHETIC'))
+    monkeypatch.setattr(mr, 'restore', lambda root, client, folder, with_sources=False: dict(canonical='SYNTHETIC'))
     result = mr.report(tmp_path / 'restore', client=FakeClient(), folder='SYNTHETIC-folder')
     assert len(result['markets']) == 12 and result['remote']['writes_refused'] == 0
     assert {r['remote_evidence_status'] for r in result['markets']} == {'RESTORED_READ_ONLY'}
@@ -43,3 +49,9 @@ def test_a_non_empty_restore_directory_is_refused(tmp_path):
     (tmp_path / 'leftover.sqlite3').write_bytes(b'')
     with pytest.raises(SystemExit, match='must start empty'):
         mr.report(tmp_path, client=FakeClient(), folder='SYNTHETIC-folder')
+
+
+def test_reads_use_the_checksum_verified_cache_only_when_a_cache_dir_is_given(tmp_path):
+    assert mr.ReadOnlyDrive(FakeClient()).read_objects(Prefix='SYNTHETIC/') == [('uncached', 'SYNTHETIC/')]
+    cached = mr.ReadOnlyDrive(FakeClient(), tmp_path).read_objects(Prefix='SYNTHETIC/')
+    assert cached == [('cached', 'SYNTHETIC/', tmp_path)]
