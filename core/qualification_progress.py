@@ -83,7 +83,7 @@ REPORT_FILE = "market-readiness.json"
 API = "https://api.github.com/repos/{repo}/actions/artifacts"
 
 
-def latest_report(repo, token, get, *, max_bytes=20_000_000):
+def latest_report(repo, token, get, *, max_bytes=20_000_000, artifact=ARTIFACT_NAME, filename=REPORT_FILE):
     """(report, created_at) from the newest unexpired market-readiness artifact (read-only).
 
     ``token`` needs only Actions read access. ``get`` is ``requests.get``-like.
@@ -92,19 +92,19 @@ def latest_report(repo, token, get, *, max_bytes=20_000_000):
     import json as _json
     import zipfile
     headers = {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"}
-    listing = get(API.format(repo=repo), params={"name": ARTIFACT_NAME, "per_page": 20},
+    listing = get(API.format(repo=repo), params={"name": artifact, "per_page": 20},
                   headers=headers, timeout=20)
     listing.raise_for_status()
     artifacts = [a for a in listing.json().get("artifacts") or [] if not a.get("expired")]
     if not artifacts:
-        raise ValueError("no market-readiness report has been published yet")
+        raise ValueError(f"no {artifact} report has been published yet")
     newest = max(artifacts, key=lambda a: a.get("created_at") or "")
     if (newest.get("size_in_bytes") or 0) > max_bytes:
         raise ValueError("market-readiness artifact is unexpectedly large")
     archive = get(newest["archive_download_url"], headers=headers, timeout=60)
     archive.raise_for_status()
     with zipfile.ZipFile(io.BytesIO(archive.content)) as bundle:
-        name = next((n for n in bundle.namelist() if n.rsplit("/", 1)[-1] == REPORT_FILE), None)
+        name = next((n for n in bundle.namelist() if n.rsplit("/", 1)[-1] == filename), None)
         if name is None:
-            raise ValueError("the artifact has no market-readiness.json")
+            raise ValueError(f"the artifact has no {filename}")
         return _json.loads(bundle.read(name).decode("utf-8")), newest.get("created_at")

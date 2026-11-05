@@ -47,6 +47,7 @@ def render_qualification_progress():
             except (ValueError, UnicodeDecodeError, AttributeError, TypeError):
                 st.session_state.pop("qualification_progress", None)
                 st.error("That file is not a market-readiness report.")
+        _render_research_picks(token)
         progress = st.session_state.get("qualification_progress")
         if progress is None:
             return
@@ -58,3 +59,35 @@ def render_qualification_progress():
         st.caption("Gates: 120 training games for the pinned model, 40 settled calibration predictions, "
                    "then 200 settled games in the frozen validation window. Price screen: picks at 2%+ EV "
                    "and the share that beat the certified close.")
+
+
+def _render_research_picks(token):
+    """Latest research picks board (NBA, NCAAB, NHL) from the 'Research picks' workflow."""
+    if not token:
+        return
+    if st.button("Load latest research picks", key="research_picks_latest"):
+        try:
+            import requests
+            report, created = latest_report(REPO, token, requests.get, artifact="research-picks",
+                                            filename="research-picks.json")
+            st.session_state["research_picks"] = (report, created)
+        except Exception as exc:
+            st.error(f"The research picks could not be loaded ({type(exc).__name__}).")
+    loaded = st.session_state.get("research_picks")
+    if not loaded:
+        return
+    report, created = loaded
+    st.caption(f"Research picks ({created}). Best expected value at the best available price from the "
+               "in-season score models. Research only: every pick is NO_BET with zero stake.")
+    picks = [p for board in report.get("boards", []) for p in board.get("picks", [])]
+    if picks:
+        st.dataframe(pd.DataFrame(picks).reindex(columns=[
+            "sport", "market_family", "scheduled_start", "away_team", "home_team", "selection", "line",
+            "american_odds", "sportsbook", "win_probability", "ev", "consensus_probability"]), hide_index=True)
+    blockers = {f"{b['sport']} {b['market_family']}": b["blocker"] for b in report.get("boards", []) if b.get("blocker")}
+    if blockers:
+        st.caption("Not ready: " + "; ".join(f"{k}: {v}" for k, v in blockers.items()))
+    records = report.get("records") or {}
+    if records:
+        st.dataframe(pd.DataFrame([dict(market=k, **{x: v for x, v in r.items() if x != "positive_ev"})
+                                   for k, r in records.items()]), hide_index=True)
