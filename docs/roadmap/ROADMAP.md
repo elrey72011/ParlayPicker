@@ -77,12 +77,16 @@ is the correct state until a market passes its plan.
 
 ## 3. Milestones, in order
 
-### C0: Read where every market stands (first; needs Drive; ~0.5 day)
+### C0: Read where every market stands (first; ~0.5 day)
 
-- **What:** restore the canonical prospective evidence from Drive and run `prospective_evidence.all_market_readiness()`.
-- **Output:** a table of the 12 markets with events, verified entry prices, verified closes, model, plan and next blocker. Commit it as `docs/evaluation/market-readiness-<date>.md`.
-- **Needs** a session with Drive access (see `docs/roadmap/HANDOFF-2026-11-05.md`).
+- **How to run it:** Actions → **Market readiness (read-only)** → **Run workflow** (`.github/workflows/market-readiness.yml`, `scripts/market_readiness_report.py`).
+  - It restores the Drive evidence into an empty runner directory.
+  - It reports `all_market_readiness()` for the 12 markets: events, verified entry prices, verified closes, model, plan, deployment state and next blocker.
+  - Output: the run summary, plus the `market-readiness` artifact (JSON and Markdown).
+- **Read-only:** the Drive client refuses every upload, and there are no Odds API or CFBD calls. It uses the research scheduler's Drive secrets.
+- **Commit the result** as `docs/evaluation/market-readiness-<date>.md`.
 - **Effect:** confirms or corrects G1, G2 and G4, and sets the real priority among C1–C4.
+- **Also check: research runs are timing out.** The last two scheduled research runs (2026-11-04 21:15 and 2026-11-05 01:46 UTC) were cancelled at the job's 60-minute limit. Cut-short cycles slow every market's evidence.
 
 ### C1: Certified closes into the prospective store (fixes G1; ~3–5 days)
 
@@ -167,7 +171,7 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | E1 | Legacy scoreboard and closing-capture workflow (#2457) | — | OPEN PR; scoreboard to be reworked under C3 |
 | P1 | EV shadow selector on the authority chain | — | IMPLEMENTED (local); off by default |
 | NBA-B | NBA ESPN offline benchmark | D9 | IMPLEMENTED (local); feeds C5 |
-| C0 | Market readiness from Drive evidence | Drive session | NOT STARTED. **Next task** |
+| C0 | Market readiness from Drive evidence | — | IMPLEMENTED (read-only workflow); **run it next** |
 | C1 | Certified closes into the prospective store | C0 | NOT STARTED |
 | C2 | Bind models to new plan versions | C0, D11 | NOT STARTED |
 | C3 | Frozen-plan progress view; rework the scoreboard | C0 | NOT STARTED |
