@@ -2,6 +2,7 @@
 
 Usage:
     python scripts/scoreboard.py [DIR] [--min-n 150] [--json OUT.json] [--markdown OUT.md]
+                                 [--evidence-db data/prediction_evidence/evidence.sqlite3]
 
 DIR defaults to data/backtest_exports. Read-only: no stored pick is modified,
 and no network is used.
@@ -27,11 +28,18 @@ def main(argv=None):
     parser.add_argument('--min-n', type=int, default=150)
     parser.add_argument('--json', type=Path)
     parser.add_argument('--markdown', type=Path)
+    parser.add_argument('--evidence-db', type=Path,
+                        help='prediction-evidence SQLite (read-only) with closing observations, for CLV')
     args = parser.parse_args(argv)
     with contextlib.redirect_stdout(io.StringIO()):  # the loader prints a progress line
         rows = scoreboard.load(args.directory)
     board = scoreboard.scoreboard(rows)
     text = scoreboard.markdown(board, minimum=args.min_n)
+    if args.evidence_db:
+        from app_core.evaluation import clv
+        clv_report = clv.report(clv.read_observations(args.evidence_db))
+        board['clv'] = clv_report
+        text += '\n' + clv.markdown(clv_report)
     if args.json:
         args.json.write_text(json.dumps(board, indent=2) + '\n', encoding='utf-8')
     if args.markdown:

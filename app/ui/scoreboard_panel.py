@@ -39,6 +39,15 @@ def _board(uploads: tuple[tuple[str, bytes], ...], baseline: str):
     return scoreboard.scoreboard(rows)
 
 
+@st.cache_data(show_spinner=False)
+def _clv(raw: bytes):
+    from app_core.evaluation import clv
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / 'evidence.sqlite3'
+        path.write_bytes(raw)  # a private copy; the uploaded file is never modified
+        return clv.report(clv.read_observations(path))
+
+
 def _table(groups, minimum):
     records = []
     for name, m in groups.items():
@@ -60,6 +69,8 @@ def render_scoreboard(*, baseline: Path = BASELINE, minimum: int = 150):
                    f'{minimum} graded picks. A coin flip has log loss 0.693. CLV needs closing prices (not yet captured).')
         files = st.file_uploader('Add graded exports (Drive downloads)', type=['csv', 'xlsx', 'txt'],
                                  accept_multiple_files=True, key='scoreboard_uploads')
+        evidence = st.file_uploader('Evidence database for closing-line value (evidence.sqlite3)',
+                                    type=['sqlite3', 'sqlite', 'db'], key='scoreboard_evidence')
         # Lazy: parsing every export takes seconds, so nothing runs until requested.
         if st.button('Compute scoreboard', key='scoreboard_compute'):
             st.session_state['scoreboard_requested'] = True
@@ -85,3 +96,11 @@ def render_scoreboard(*, baseline: Path = BASELINE, minimum: int = 150):
         st.dataframe(_table(board['by_month'], minimum), hide_index=True, use_container_width=True)
         st.markdown('**Calibration (overall)**')
         st.dataframe(pd.DataFrame(overall.get('calibration', [])), hide_index=True, use_container_width=True)
+        st.markdown('**Closing-line value**')
+        if evidence is None:
+            st.caption('Upload the evidence database to see whether picks beat the closing line.')
+            return
+        report = _clv(evidence.getvalue())
+        rows = [dict(Group=name, **{k: (str(v) if isinstance(v, tuple) else v) for k, v in m.items()})
+                for name, m in [('All', report['overall']), *report['by_league_market'].items()]]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)

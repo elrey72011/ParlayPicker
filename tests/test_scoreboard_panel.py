@@ -33,3 +33,11 @@ def test_empty_folder_reports_no_graded_picks(tmp_path):
     app.run(timeout=60)
     app.button(key='scoreboard_compute').click().run(timeout=60)
     assert not app.exception and any('No graded picks' in i.value for i in app.info)
+
+
+def test_closing_line_value_needs_an_uploaded_evidence_database(tmp_path):
+    app = _script(tmp_path, ROOT / 'data' / 'backtest_exports')
+    app.run(timeout=60)
+    app.button(key='scoreboard_compute').click().run(timeout=120)
+    assert not app.exception
+    assert any('Upload the evidence database' in c.value for c in app.caption)
