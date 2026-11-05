@@ -2068,6 +2068,8 @@ def main() -> None:
         # We still want to call render_results_dashboard to show the file uploader
         # even if perf_df is None
         render_results_dashboard(perf_df)
+        from app.ui.scoreboard_panel import render_scoreboard
+        render_scoreboard()
 
     with tab6:
         with st.expander("Last player-prop stage timings", expanded=False):

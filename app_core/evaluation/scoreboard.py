@@ -109,10 +109,15 @@ def wilson(wins, n, z=1.96):
     return ((centre - spread) / (1 + z * z / n), (centre + spread) / (1 + z * z / n))
 
 
-def _bootstrap(values, statistic, rng):
+def _bootstrap_mean(values, rng):
+    """95% percentile interval of the mean of ``values``."""
     n = len(values)
-    draws = sorted(statistic([values[rng.randrange(n)] for _ in range(n)]) for _ in range(BOOTSTRAP))
+    draws = sorted(sum(rng.choices(values, k=n)) / n for _ in range(BOOTSTRAP))
     return (draws[int(0.025 * BOOTSTRAP)], draws[int(0.975 * BOOTSTRAP) - 1])
+
+
+def _row_log_loss(p, y):
+    return -(y * math.log(max(p, EPS)) + (1 - y) * math.log(max(1 - p, EPS)))
 
 
 def _round(value, digits=4):
@@ -140,19 +145,15 @@ def metrics(rows):
         mp = [r.market_probability for r in paired]
         my = [r.outcome for r in paired]
         out.update(market_brier=_round(brier(mp, my)), market_log_loss=_round(log_loss(mp, my)))
-        pairs = [(r.probability, r.market_probability, r.outcome) for r in paired]
-
-        def skill(sample):
-            return (log_loss([m for _, m, _ in sample], [y for *_, y in sample])
-                    - log_loss([p for p, _, _ in sample], [y for *_, y in sample]))
-        out['skill_vs_market'] = _round(skill(pairs))
-        out['skill_vs_market_ci'] = tuple(_round(v) for v in _bootstrap(pairs, skill, rng))
+        # Log loss is a mean, so the skill difference is the mean of per-row differences.
+        gains = [_row_log_loss(r.market_probability, r.outcome) - _row_log_loss(r.probability, r.outcome) for r in paired]
+        out['skill_vs_market'] = _round(sum(gains) / len(gains))
+        out['skill_vs_market_ci'] = tuple(_round(v) for v in _bootstrap_mean(gains, rng))
     priced = [r.units for r in rows if r.units is not None]
     out['priced'] = len(priced)
     if priced:
-        mean = lambda sample: sum(sample) / len(sample)  # noqa: E731
-        out['roi_per_unit'] = _round(mean(priced))
-        out['roi_ci'] = tuple(_round(v) for v in _bootstrap(priced, mean, rng))
+        out['roi_per_unit'] = _round(sum(priced) / len(priced))
+        out['roi_ci'] = tuple(_round(v) for v in _bootstrap_mean(priced, rng))
     bins = []
     for lo, hi in zip(BINS, BINS[1:]):
         members = [r for r in scored if lo <= r.probability < hi]
