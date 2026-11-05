@@ -45,6 +45,7 @@ jobs:
           tests/paid_launch/case_subscriber_completion.py::test_results_are_complete_and_scoped_to_entitled_product
           tests/paid_launch/case_subscriber_completion.py::test_cancellation_remains_available_when_sales_are_disabled
           tests/paid_launch/case_nfl_workflow_store.py
+          tests/paid_launch/case_pipeline_store.py
           --junitxml=subscriber-completion-tests.xml
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
