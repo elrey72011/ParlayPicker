@@ -222,14 +222,15 @@ def markdown(result):
                          f"{row.get('next_blocker') or row.get('evaluation_error', '')} |")
     edges = result.get('price_edge') or []
     if edges:
-        lines += ['', '| price screen (EV >= 2%) | candidates | picks | mean EV | closes | mean CLV | beat close | settled | ROI |',
+        lines += ['', '| price screen (best price, all candidates) | candidates | EV >= 2% picks | mean EV | closes | mean CLV | beat close | settled | ROI |',
                   '|---|---|---|---|---|---|---|---|---|']
         def pct(v):
             return '' if v is None else f'{v:+.1%}'
         for row in edges:
-            t = (row.get('by_threshold') or {}).get('0.02') or {}
+            t = (row.get('by_threshold') or {}).get('all') or {}
+            flagged = ((row.get('by_threshold') or {}).get('0.02') or {}).get('picks', '')
             lines.append(f"| {row['sport']} {row['market_family']} | {row.get('candidates', row.get('evaluation_error', ''))} | "
-                         f"{t.get('picks', '')} | {pct(t.get('mean_ev'))} | {t.get('with_comparable_close', '')} | "
+                         f"{flagged} | {pct(t.get('mean_ev'))} | {t.get('with_comparable_close', '')} | "
                          f"{pct(t.get('mean_price_clv'))} | {pct(t.get('beat_close_share'))} | {t.get('settled', '')} | "
                          f"{pct(t.get('roi_per_pick'))} |")
     return '\n'.join(lines) + '\n'
