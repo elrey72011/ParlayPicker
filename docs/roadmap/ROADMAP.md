@@ -258,6 +258,7 @@ be "No Bet; no demonstrated edge".
 | D6 | Hosted NCAAF custody (Neon vs. local-only first release) | Local-only first, labelled clearly |
 | D7 | Switch selector from highest probability to highest EV with No Bet | After 2+ weeks of shadow comparison |
 | D8 | Closing capture every 15 minutes instead of 30. It catches more closes, and costs Odds API credits only when picks are within 30 minutes of kickoff | Yes, once the 30-minute run is confirmed reliable |
+| D9 | Download NBA game history (2024-25 and 2025-26 regular seasons, plus the current season to date) via the free public `nba_api` endpoint, to train the NBA model. No Odds API credits | Yes: one bounded download, then review the holdout report before committing the artifact |
 
 ## 7. Guardrails (unchanged from the 2026-11-01 brief)
 
@@ -298,7 +299,8 @@ AUTHENTICALLY ACCEPTED. Deployment and model quality are tracked separately.
 | M2.2 | Authentic NFL acceptance (2 games) | M2.1, D5 | BLOCKED (D5) | 1–2 d |
 | P2.1–P2.4 | NFL fitted model + promotion gate | E1.3 | NOT STARTED | 10–15 d |
 | M3 | NCAAF adapter | M1.3, D6 | NOT STARTED | 6–10 d |
-| M4.1 / M4.2 | NBA / NHL adapters + models | M1.3, D2 | NOT STARTED | 15–25 d |
+| M4.1 | NBA adapter + score model (`app_core/pipeline/nba.py`, `scripts/train_nba_model.py`) | M1.3, D2 | IN PROGRESS: the adapter, ridge fit with a time-ordered holdout, push-aware probabilities and the training script are implemented on synthetic data. NBA counts as supported only once a trained artifact is committed. Training data needs D9 | 8–12 d |
+| M4.2 | NHL adapter + model | M1.3, D2 | NOT STARTED | 7–13 d |
 | M5 | NCAAB, WNBA, MLB | M1.3, D3 | NOT STARTED | 15–25 d |
 | P3 | Moneyline per league | league qualified, D3 | NOT STARTED | 2–4 d each |
 

@@ -28,6 +28,7 @@ from app_core.pipeline.adapter import AdapterError, adapter_for, instant
 from app_core.pipeline.operations import COMPLETED, EXPIRED, FAILED, CANCELLED, OperationError, Operations
 from app_core.pipeline.store import Store, StoreError
 from app_core.pipeline import nfl as _nfl  # noqa: F401  registers the NFL adapter
+from app_core.pipeline import nba as _nba  # noqa: F401  registers NBA only when a trained artifact exists
 
 MAX_QUOTE_AGE = timedelta(minutes=30)
 HISTORY_ATTEMPTS_PER_DAY = 3
