@@ -1008,6 +1008,29 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
     diagnostics["kelly_zero_reason_counts"] = out.loc[pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0).le(0), "kelly_zero_reason"].value_counts().to_dict()
     return out
 
+def _app_setting(name, default=''):
+    """Environment first, then Streamlit secrets."""
+    value = os.environ.get(name)
+    if value is not None:
+        return value
+    try:
+        return st.secrets.get(name, default)
+    except Exception:
+        return default
+
+
+def _render_pipeline_v2(frame, note):
+    """Shadow results of the shared pipeline. Display only; never selects or stakes."""
+    with st.expander("Shared pipeline (shadow, NFL)", expanded=False):
+        st.caption("Comparison only. These probabilities do not change picks, stakes or publication.")
+        if frame is None or getattr(frame, "empty", True):
+            st.info(f"No shadow results: {note or 'NOT_RUN'}")
+            return
+        columns = [c for c in ("home", "away", "market_type", "line", "status", "reason", "probability",
+                               "quote_age_seconds", "state") if c in frame.columns]
+        st.dataframe(frame[columns], hide_index=True, use_container_width=True)
+
+
 def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[str]]:
     """Run game analysis without collecting or reviewing player props. Returns (state_updates, warnings, errors).
     Contains NO st.* calls.
@@ -1075,6 +1098,7 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         "gemini_df": pd.DataFrame(),
         "simulation_results": {},
         "best_picks_df": pd.DataFrame(),
+        "pipeline_v2_df": pd.DataFrame(),
         "diagnostics": diagnostics,
         "pipeline_status": "idle",
         "pipeline_running": False,
@@ -1827,8 +1851,20 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         except ValueError as exc:
             diagnostics['slate_coverage_error'] = str(exc)
             deferred_errors.append('Slate coverage reconciliation failed: ' + str(exc))
+    pipeline_v2_rows, pipeline_v2_note = [], 'PIPELINE_V2_DISABLED'
+    if controls.get("pipeline_v2"):
+        # Comparison only: never changes analysis, selection, stakes or publication.
+        try:
+            from app_core.pipeline.orchestrator import shadow as pipeline_v2_shadow
+            pipeline_v2_rows, pipeline_v2_note = pipeline_v2_shadow(
+                analysis_df, setting=controls.get("pipeline_v2_setting") or os.environ.get)
+        except Exception as exc:  # the shadow must never break Refresh
+            pipeline_v2_note = 'PIPELINE_V2_ERROR:' + type(exc).__name__
+            deferred_warnings.append(f"Shared pipeline shadow did not run ({type(exc).__name__}). Picks are unaffected.")
+    diagnostics["pipeline_v2_note"] = pipeline_v2_note
     timer.finish()
     state_updates = {
+        "pipeline_v2_df": pd.DataFrame(pipeline_v2_rows),
         "pipeline_status": "using stored results",
         "pipeline_running": False,
         "games_analyzed_at": pd.Timestamp.now(tz="UTC").isoformat(),
@@ -1899,6 +1935,10 @@ def main() -> None:
     controls["ncaaf_research_packets"] = list(st.session_state.get("ncaaf_research_packets", ()))
     controls["ncaaf_private_research"] = bool(st.session_state.get("ncaaf_private_research", False))
     controls["nfl_private_packets"] = list(st.session_state.get("nfl_private_packets", ()))
+    # Shared pipeline (roadmap M1.4): shadow-only and off unless PARLAYPICKER_PIPELINE_V2=true.
+    from app_core.pipeline.orchestrator import enabled as pipeline_v2_enabled
+    controls["pipeline_v2_setting"] = _app_setting
+    controls["pipeline_v2"] = pipeline_v2_enabled(_app_setting)
 
     run_counter = int(controls.get("run_analysis_counter", 0))
     should_run = _should_run_pipeline(st.session_state, run_counter, controls)
@@ -1982,6 +2022,8 @@ def main() -> None:
         return
     if not st.session_state["analysis_df"].empty:
         st.caption(f"Pipeline status: {pipeline_status}")
+    if controls.get("pipeline_v2"):
+        _render_pipeline_v2(st.session_state.get("pipeline_v2_df"), diagnostics.get("pipeline_v2_note"))
 
 
 
