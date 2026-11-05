@@ -665,7 +665,14 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
 
         # Re-derive market_probability if needed for edge
         implied_prob = odds_american.apply(american_to_prob)
-        opposing_implied = odds_american.apply(get_opposing_odds_from_exchange).apply(american_to_prob)
+        # Prefer the real paired opposite quote (as run_analysis_pipeline does); the
+        # synthetic 20-cent price is only a fallback. Mixing the two made the edge
+        # column the gap between two de-vigs of the same price, not information.
+        synthetic_implied = pd.to_numeric(
+            odds_american.apply(get_opposing_odds_from_exchange).apply(american_to_prob), errors="coerce")
+        paired_implied = pd.to_numeric(
+            _safe_numeric_series(out, "opposing_odds_american").apply(american_to_prob), errors="coerce")
+        opposing_implied = paired_implied.where(paired_implied.gt(0), synthetic_implied)
         market_prob = implied_prob / (implied_prob + opposing_implied)
         out["market_probability"] = market_prob
     else:
