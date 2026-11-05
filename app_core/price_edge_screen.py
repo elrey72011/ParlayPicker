@@ -1,0 +1,116 @@
+"""Cross-book price screen: do the best available prices beat the market, and the close? (roadmap C5)
+
+The research score models do not beat the line (``docs/evaluation/ncaaf-line-backtest-
+2026-11-05.md``). The approach with the strongest record is price shopping: estimate the
+fair probability **from the market itself**, then take only prices that beat it. This
+screen measures that on captured evidence, without any model:
+
+1. **Consensus.** For each event, market and line (spread lines in home perspective),
+   every sportsbook with both sides posted is de-vigged (``core.clv.no_vig_prob``). The
+   fair probability is the median across books; at least ``min_books`` are required.
+2. **Flag.** For each side, the best price across books; EV = fair × decimal − 1.
+   Flagged at EV ≥ threshold.
+3. **Grade.** Against that book's certified close for the same selection and line (price
+   CLV = entry decimal / close decimal − 1, positive means it beat the close), and against
+   the final score (``prospective_evidence.score_settlement_outcome``).
+
+Research only. Pushes on whole-number lines are ignored in EV, which overstates EV
+slightly on those lines. Beating the close is the leading indicator. ROI needs hundreds
+of settled picks before it means anything.
+"""
+from __future__ import annotations
+
+from statistics import median
+
+from core.clv import no_vig_prob
+from app_core import prospective_evidence as evidence
+
+THRESHOLDS = (0.0, 0.02, 0.04)
+
+
+def _key(event, quote):
+    """(event, market, home-perspective line) so both sides of one line share a key."""
+    line = quote["line"]
+    if quote["market_family"] != "TOTAL" and quote["selection"] != event["home_team"]:
+        line = -line
+    return quote["event_id"], quote["market_family"], round(float(line), 2)
+
+
+def _sides(event, market):
+    return (event["home_team"], event["away_team"]) if market != "TOTAL" else ("Over", "Under")
+
+
+def screen(events, quotes, closes, scores, *, min_books=3):
+    """Flagged candidates (one per event, market, line and side) with their grades."""
+    events = {e["event_id"]: e for e in events}
+    books = {}
+    for quote in quotes:
+        event = events.get(quote["event_id"])
+        if event is None or not quote.get("quote_verified") or quote.get("line") is None:
+            continue
+        books.setdefault(_key(event, quote), {}).setdefault(quote["sportsbook"], {})[quote["selection"]] = quote
+    close_by = {(c["event_id"], c["market_family"], c["selection"], c["sportsbook"]): c
+                for c in closes if c.get("close_verified")}
+    score_by = {s["event_id"]: s for s in scores}
+    candidates = []
+    for (event_id, market, line), by_book in sorted(books.items()):
+        event = events[event_id]
+        first, second = _sides(event, market)
+        fair = [no_vig_prob(pair[first]["american_odds"], pair[second]["american_odds"])
+                for pair in by_book.values() if first in pair and second in pair]
+        fair = [p for p in fair if p is not None]
+        if len(fair) < min_books:
+            continue
+        consensus = {first: median(fair)}
+        consensus[second] = 1 - consensus[first]
+        for side in (first, second):
+            offers = [pair[side] for pair in by_book.values() if side in pair]
+            best = max(offers, key=lambda q: (q["decimal_odds"], q["sportsbook"]))
+            row = {"event_id": event_id, "sport": event["sport"], "market_family": market, "selection": side,
+                   "line": best["line"], "sportsbook": best["sportsbook"], "decimal_odds": best["decimal_odds"],
+                   "fair_probability": consensus[side], "books": len(fair),
+                   "ev": consensus[side] * best["decimal_odds"] - 1}
+            close = close_by.get((event_id, market, side, best["sportsbook"]))
+            if close is not None and close["line"] == best["line"]:
+                row["price_clv"] = best["decimal_odds"] / close["decimal_odds"] - 1
+            score = score_by.get(event_id)
+            if score is not None:
+                row["outcome"] = evidence.score_settlement_outcome(
+                    event["sport"], market, side, event["home_team"], event["away_team"],
+                    score["home_score"], score["away_score"], best["line"])
+            candidates.append(row)
+    return candidates
+
+
+def summarize(candidates, thresholds=THRESHOLDS):
+    out = {}
+    for threshold in thresholds:
+        picks = [c for c in candidates if c["ev"] >= threshold]
+        clv = [c["price_clv"] for c in picks if "price_clv" in c]
+        settled = [c for c in picks if c.get("outcome") in ("WIN", "LOSS", "PUSH")]
+        units = sum(c["decimal_odds"] - 1 if c["outcome"] == "WIN" else (-1 if c["outcome"] == "LOSS" else 0)
+                    for c in settled)
+        out[f"{threshold:.2f}"] = {
+            "picks": len(picks),
+            "mean_ev": sum(c["ev"] for c in picks) / len(picks) if picks else None,
+            "with_comparable_close": len(clv),
+            "mean_price_clv": sum(clv) / len(clv) if clv else None,
+            "beat_close_share": sum(1 for v in clv if v > 0) / len(clv) if clv else None,
+            "settled": len(settled),
+            "wins": sum(1 for c in settled if c["outcome"] == "WIN"),
+            "roi_per_pick": units / len(settled) if settled else None}
+    return out
+
+
+def from_store(path, sport, market, *, min_books=3):
+    """Read one sport and market from the canonical store and summarize it."""
+    events = evidence.read_records(path, "prospective_event", sport=sport)
+    quotes = evidence.read_records(path, "prospective_quote", sport=sport, market_family=market)
+    closes = evidence.read_records(path, "prospective_close", sport=sport, market_family=market)
+    by_id = {e["event_id"]: e for e in events}
+    scores = [r for r in evidence.read_records(path, "prospective_result", sport=sport)
+              if r["market_family"] is None and r["home_score"] is not None and r["away_score"] is not None
+              and r["event_id"] in by_id and evidence.verify_provider_score(by_id[r["event_id"]], r)]
+    candidates = screen(events, quotes, closes, scores, min_books=min_books)
+    return {"sport": sport, "market_family": market, "candidates": len(candidates),
+            "by_threshold": summarize(candidates)}

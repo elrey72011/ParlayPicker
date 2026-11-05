@@ -118,6 +118,8 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
                 st.download_button("Download research source inventory",
                                    json.dumps(source_rows, indent=2, allow_nan=False),
                                    file_name="sport-market-source-inventory.json", mime="application/json")
+        from app.ui.qualification_progress import render_qualification_progress
+        render_qualification_progress()
         if st.button("Prepare research performance report", key="research_performance_prepare"):
             try:
                 from core.research_performance import rebuild

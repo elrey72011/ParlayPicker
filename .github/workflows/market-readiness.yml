@@ -5,6 +5,9 @@ name: Market readiness (read-only)
 # The canonical store is ~80k small Drive objects; a checksum-verified object cache is
 # kept between runs (actions/cache), so only the first run downloads everything.
 on:
+  # Daily read-only report for the app's Qualification progress panel (roadmap C3).
+  schedule:
+    - cron: '17 11 * * *'
   workflow_dispatch:
     inputs:
       with_sources:

@@ -109,7 +109,24 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 markets=markets, sources=readiness['sources'],
                 tables=table_counts(root / 'prospective-evidence.sqlite3'),
                 plans=plan_evaluations(root / 'prospective-evidence.sqlite3'),
-                research_bindings=research_bindings(root / 'prospective-evidence.sqlite3'))
+                research_bindings=research_bindings(root / 'prospective-evidence.sqlite3'),
+                price_edge=price_edge(root / 'prospective-evidence.sqlite3'))
+
+
+def price_edge(path):
+    """Cross-book price screen per research market (app_core.price_edge_screen), read-only."""
+    from app_core import price_edge_screen
+    from app_core.prospective_research_models import SCOPES
+    if not Path(path).is_file():
+        return []
+    out = []
+    for sport, markets in SCOPES.items():
+        for market in markets:
+            try:
+                out.append(price_edge_screen.from_store(path, sport, market))
+            except Exception as exc:  # report, never guess
+                out.append(dict(sport=sport, market_family=market, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
 
 
 def research_bindings(path, now=None):
@@ -203,6 +220,18 @@ def markdown(result):
                          f"{row.get('games_per_day_14d', '')} | {row.get('proposed_window_days') or ''} | "
                          f"{row.get('bound_plan_id') or ''} | "
                          f"{row.get('next_blocker') or row.get('evaluation_error', '')} |")
+    edges = result.get('price_edge') or []
+    if edges:
+        lines += ['', '| price screen (EV >= 2%) | candidates | picks | mean EV | closes | mean CLV | beat close | settled | ROI |',
+                  '|---|---|---|---|---|---|---|---|---|']
+        def pct(v):
+            return '' if v is None else f'{v:+.1%}'
+        for row in edges:
+            t = (row.get('by_threshold') or {}).get('0.02') or {}
+            lines.append(f"| {row['sport']} {row['market_family']} | {row.get('candidates', row.get('evaluation_error', ''))} | "
+                         f"{t.get('picks', '')} | {pct(t.get('mean_ev'))} | {t.get('with_comparable_close', '')} | "
+                         f"{pct(t.get('mean_price_clv'))} | {pct(t.get('beat_close_share'))} | {t.get('settled', '')} | "
+                         f"{pct(t.get('roi_per_pick'))} |")
     return '\n'.join(lines) + '\n'
 
 
