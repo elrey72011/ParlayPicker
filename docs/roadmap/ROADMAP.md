@@ -250,8 +250,8 @@ be "No Bet; no demonstrated edge".
 
 | ID | Decision | Recommendation |
 |---|---|---|
-| D1 | Qualification thresholds (CLV, log loss vs. market, minimum sample) | The §1 targets |
-| D2 | Start NBA/NHL in parallel with NFL, given the NFL season length | Yes: start M4.1 after M1.3 |
+| D1 | Qualification thresholds (CLV, log loss vs. market, minimum sample) | **Owner-approved 2026-11-05: the §1 targets.** ≥ 150 graded picks, skill vs. market CI above 0, ≥ 150 closes with mean line CLV CI above 0. Encoded in `app_core/selection/qualification.py` |
+| D2 | Start NBA/NHL in parallel with NFL, given the NFL season length | **Owner-approved 2026-11-05: yes.** M4.1 (NBA) started after M1.3 |
 | D3 | Moneyline in scope; add WNBA to the policy | Moneyline yes, after spread/total; WNBA next season |
 | D4 | Sharp-price and injury sources: rights, cost and quota | Use existing Odds API/Novig first; no new paid plan without review |
 | D5 | Budgets for authentic NFL acceptance (M2.2) | ≤ 2 games, as the existing prepared inventory allows |

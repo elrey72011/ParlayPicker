@@ -42,3 +42,17 @@ def test_enabled_with_a_store_records_signed_decisions(tmp_path):
     assert nfl[0]['payload']['decided_at'] == NOW.isoformat() and nfl[0]['payload']['agrees_with_current'] is True
     mlb = store.list('MLB', 'ev-shadow-decision')[0]['payload']
     assert mlb['reason'] == 'NO_USABLE_CANDIDATE:MARKET_PRICE_UNPAIRED' and mlb['current_market_type'] is None
+
+
+def test_qualified_markets_follow_owner_decision_d1(tmp_path):
+    qualified, note = shadow.qualified_markets(evidence_db=tmp_path / 'missing.sqlite3')
+    assert qualified == frozenset() and note is None  # baseline has no edge and no closes
+    broken = tmp_path / 'not-a-database.sqlite3'
+    broken.write_bytes(b'not sqlite')
+    assert shadow.qualified_markets(evidence_db=broken) == (frozenset(), 'QUALIFICATION_UNAVAILABLE:DatabaseError')
+
+
+def test_run_reports_the_qualified_markets_it_used():
+    on = {'PARLAYPICKER_EV_SHADOW': 'true'}
+    _, summary, _ = shadow.run(FRAME, CURRENT, setting=lambda k, d='': on.get(k, d), qualified=frozenset({('NFL', 'SPREAD')}))
+    assert summary['qualified_markets'] == ['NFL SPREAD'] and summary['bet'] == 1
