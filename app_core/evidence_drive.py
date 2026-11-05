@@ -104,6 +104,15 @@ def _authorized_session():
 
 
 DRIVE_CACHE_ENV = "PARLAYPICKER_DRIVE_CACHE_DIR"
+# Opt-in, evidence-restore paths only (``read_objects`` / ``read_cached_objects``):
+# reuse this process's last complete folder listing for up to N seconds. Every
+# listing covers the whole folder, so a scheduler run otherwise repeats the same
+# ~85k-item listing (~2 min each) for every sport. Evidence objects are create-only
+# and never deleted, so a reused listing can only miss another writer's newest
+# objects until the next listing; this process's own uploads are merged from
+# ``created_ids``. Lock and public-history reads call ``discover_complete_inventory``
+# directly and always list fresh.
+DRIVE_INVENTORY_REUSE_ENV = "PARLAYPICKER_DRIVE_INVENTORY_REUSE_SECONDS"
 
 
 class DriveStore:
@@ -306,6 +315,11 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         download media. Duplicate names retain fail-closed byte comparison.
         """
         prefixes = tuple(dict.fromkeys(Prefixes))
+        if cache_dir is not None and os.environ.get(DRIVE_CACHE_ENV, "").strip():
+            # Callers' own caches live beside their temporary databases; when the
+            # workflow keeps a cache between runs, use that one. Bytes are still
+            # reused only when they match Drive's fresh checksum.
+            cache_dir = os.environ[DRIVE_CACHE_ENV].strip()
         ids = ids or operation_ids(action_id=getattr(inventory, "operation_id", None))
         inventory = inventory or self.discover_complete_inventory(ids=ids, namespace=opaque_hash(*sorted(prefixes)))
         grouped_by_prefix = self._inventory_groups(inventory, prefixes)
@@ -409,7 +423,7 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         does: cached bytes are reused only when their SHA-256 matches Drive's fresh
         checksum, and anything else is downloaded. Unset, nothing changes.
         """
-        inventory = self.discover_complete_inventory(namespace=Prefix)
+        inventory = self._evidence_inventory(Prefix)
         cache_dir = os.environ.get(DRIVE_CACHE_ENV, "").strip() or None
         return self.read_verified_prefixes(Prefixes=[Prefix], inventory=inventory,
                                            cache_dir=cache_dir)[Prefix]
@@ -420,9 +434,27 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         Missing checksums always force media reads. Every duplicate is checked;
         cached bytes alone never establish remote presence or durability.
         """
-        inventory = self.discover_complete_inventory(namespace=Prefix)
+        inventory = self._evidence_inventory(Prefix)
         return self.read_verified_prefixes(Prefixes=[Prefix], inventory=inventory,
                                            cache_dir=cache_dir)[Prefix]
+
+    def _evidence_inventory(self, namespace):
+        """A complete listing for an evidence restore, reused within the opt-in window."""
+        try:
+            window = float(os.environ.get(DRIVE_INVENTORY_REUSE_ENV, "") or 0)
+        except ValueError:
+            window = 0
+        if window <= 0:
+            return self.discover_complete_inventory(namespace=namespace)
+        scope = self.storage_scope_hash()
+        held = getattr(self, "_evidence_listing", None)
+        now = time.monotonic()
+        if held is None or held[1].scope_hash != scope or now - held[0] > window:
+            held = (now, self.discover_complete_inventory(namespace=namespace))
+            self._evidence_listing = held
+        base = held[1]
+        return DriveInventory(base.scope_hash, base.operation_id, namespace, base.files,
+                              base.listing_pages, base.metadata_items_seen, base.complete)
 
     def put_object(self, *, Key, Body, IfNoneMatch, **kwargs):
         if IfNoneMatch != "*":

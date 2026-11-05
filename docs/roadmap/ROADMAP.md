@@ -57,6 +57,7 @@ is the correct state until a market passes its plan.
 | **G3. No deployment-review caller** | `record_deployment_review` has no caller. It is meant to be an independent review step | Expected; it becomes relevant once G1 and G2 are fixed |
 | **G4. Readiness** (**read 2026-11-05**) | See `docs/evaluation/market-readiness-2026-11-05.md`. All canonical evidence is football; NBA, NCAAB and NHL have nothing canonical; MLB has reconciled facts only | Priority: C2 for NCAAF first, then C1 |
 | **G5. Research sports never captured** (**found 2026-11-05**) | The NBA, NCAAB and NHL Drive stores hold 0 records: the repository variable `RESEARCH_SPORTS` is `MLB,NCAAF,NFL` | Owner: set `RESEARCH_SPORTS=NFL,NCAAF,NBA,NCAAB,MLB,NHL` |
+| **G6. Scheduler runs time out** (**found 2026-11-05**) | Most active research runs end "cancelled" at the job limit, so capture rarely completes. A run spends about 27 of 48 minutes on 12 identical full-folder Drive listings (about 2 min each), and MLB receipts re-download about 800 MB each run because their cache lives in the temporary evidence folder | Opt-in listing reuse for evidence restores (15 min; lock reads stay fresh), and callers' caches moved to the kept workflow cache |
 
 ### Built this session, and how it fits
 
