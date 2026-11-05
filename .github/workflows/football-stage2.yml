@@ -23,13 +23,27 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+      - name: Restore the verified Drive object cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-football-stage2-${{ github.run_id }}
+          restore-keys: drive-cache-
       - name: Refresh and read-back Stage 1 evidence
+        env:
+          PARLAYPICKER_DRIVE_CACHE_DIR: ${{ runner.temp }}/drive-cache
         id: stage1
         continue-on-error: true
         run: >-
           python -u scripts/run_football_stage1.py
           --database "${{ runner.temp }}/football-stage2/evidence.sqlite3"
           --output-dir "${{ runner.temp }}/football-stage2/stage1"
+      - name: Save the verified Drive object cache
+        if: ${{ always() }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-football-stage2-${{ github.run_id }}
       - name: Audit and gate four exact football model scopes
         run: >-
           python -u scripts/run_football_stage2.py
