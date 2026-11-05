@@ -70,6 +70,11 @@ def historical_view(root, consumer, destination):
     root, consumer, destination = Path(root).resolve(), Path(consumer).resolve(), Path(destination)
     with predecessor_imports(destination):
         binding = current.authenticate(root)
+        physical_binding = binding
+        account = binding.get('nfl_account_reset_successor', {})
+        if account:
+            from scripts.nfl_account_reset_scope import parent_binding as account_parent
+            binding = json.loads(account_parent(binding))
         metadata = binding['qualification_release_repair']['build_preflight']['receipt_successor']['first_driver_successor']['capacity_context_successor']
         require(consumer == root / CONSUMER)
         sources = metadata['historical_parent_sources']
@@ -83,6 +88,9 @@ def historical_view(root, consumer, destination):
             elif path in sources: raw = record_bytes(sources[path])
             else:
                 raw = current.physical(root / path)
+                if path in account.get('historical_sources', {}):
+                    require(sha(raw) == physical_binding['components'][path])
+                    raw = record_bytes(account['historical_sources'][path])
                 successor = metadata.get('tls_trust_successor', {})
                 clock = successor.get('clock_fixture_successor', {})
                 saved = clock.get('ncaaf_saved_refresh_successor', {})
@@ -100,6 +108,11 @@ def historical_view(root, consumer, destination):
                     require(sha(raw) == clock.get('prior_component_sha256', {}).get(path, binding['components'][path]))
                     raw = record_bytes(successor['historical_sources'][path])
                 if path in current.NORMALIZED:
+                    if account:
+                        # The outer binding restores its exact parent source as
+                        # well as its metadata; keep the original compiler entry.
+                        from scripts.nfl_account_reset_scope import reader_entry_parent
+                        raw = reader_entry_parent(path, raw)
                     if path == 'scripts/ncaaf_filtered_history_scope.py' and startup:
                         # The older reader is independently pinned. Remove only
                         # this successor's exact, authenticated parent adapter.
@@ -129,5 +142,76 @@ def historical_profile_generation(request):
     root = Path(__file__).resolve().parents[1]
     destination = request.getfixturevalue('tmp_path') / 'SYNTHETIC-authenticated-95d227-profile'
     with historical_view(root, request.module.__file__, destination) as values, pytest.MonkeyPatch.context() as patch:
+        for name, value in values.items(): patch.setattr(request.module, name, value)
+        yield
+
+
+CONTEXT_CONSUMER = 'tests/test_nfl_capacity_context_profile.py'
+CONTEXT_RECORD = 'docs/paid-launch/nfl-capacity-context-generation-v10.json'
+CONTEXT_BINDING = 'ac2abfe85d86f20c9cbbb10be72fdba9a4a61c6c54ab588e4a12bed45fb0167b'
+CONTEXT_APPEND = b'\n\nfrom tests.nfl_profile_generation_inputs import historical_context_profile_generation\n'
+
+
+@contextmanager
+def context_view(root, consumer, destination):
+    """Exact 9,238-generation source, never a projection of current costs."""
+    from scripts import ncaaf_filtered_history_scope as current
+    root, consumer, destination = Path(root).resolve(), Path(consumer).resolve(), Path(destination)
+    with predecessor_imports(destination):
+        binding = current.authenticate(root)
+        raw = current.physical(root / CONTEXT_RECORD)
+        require(sha(raw) == binding['components'][CONTEXT_RECORD])
+        record = json.loads(raw)
+        require(record['version'] == 'authenticated-f33-capacity-context-v10'
+                and record['commit'] == 'f33fe07a2870efa606e314eb1441eb0405ce3735'
+                and consumer == root / CONTEXT_CONSUMER)
+        before = record_bytes(record['consumer'])
+        require(current.physical(consumer) == before + CONTEXT_APPEND)
+        prior_raw = record_bytes(record['binding'])
+        require(sha(prior_raw) == CONTEXT_BINDING)
+        prior = json.loads(prior_raw)
+        require(set(record['sources']) == set(prior['components']) | set(record['fixture_context_blobs'])
+                | {CONTEXT_CONSUMER, 'scripts/run_ci_tests.py'})
+        # All current inputs are read and checked anew, including inputs whose
+        # old bytes are restored. No approval outcome or mutable view is cached.
+        for path, declaration in record['sources'].items():
+            raw = current.physical(root / path)
+            require(sha(current.normalized(path, raw)) == declaration['physical_sha256'])
+            if 'before' in declaration:
+                raw = record_bytes(declaration['before'])
+            elif path in current.NORMALIZED:
+                raw = raw.replace(current._BINDING_SHA256.encode(), CONTEXT_BINDING.encode())
+            checked = raw.replace(CONTEXT_BINDING.encode(), b'0' * 64) if path in current.NORMALIZED else raw
+            require(sha(checked) == declaration['reconstructed_sha256'])
+            if path in prior['components']:
+                require(sha(checked) == prior['components'][path])
+            if path in record['fixture_context_blobs']:
+                require(hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
+                        == record['fixture_context_blobs'][path])
+            if path == CONTEXT_CONSUMER: require(raw == before)
+            target = destination / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        target = destination / current.BINDING
+        target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(prior_raw)
+        history = load_module(destination / 'scripts/ncaaf_filtered_history_scope.py', 'exact_context_history')
+        history.authenticate(destination)
+        inputs = load_module(destination / 'tests/nfl_profile_generation_inputs.py', 'exact_context_inputs')
+        runner = load_module(destination / 'scripts/run_ci_tests.py', 'exact_context_runner')
+        yield dict(ROOT=destination, history=history, inputs=inputs, runner=runner)
+
+
+@pytest.fixture(autouse=True)
+def historical_context_profile_generation(request):
+    from scripts import ncaaf_filtered_history_scope as current
+    import scripts
+    import sys
+    root = Path(__file__).resolve().parents[1]
+    destination = request.getfixturevalue('tmp_path') / 'SYNTHETIC-authenticated-f33-context'
+    with context_view(root, request.module.__file__, destination) as values, pytest.MonkeyPatch.context() as patch:
+        # The predecessor's own nested view imports its original reader by name.
+        # These aliases are owned and restored, even if setup or the body fails.
+        patch.setitem(sys.modules, 'scripts.ncaaf_filtered_history_scope', values['history'])
+        patch.setattr(scripts, 'ncaaf_filtered_history_scope', values['history'])
         for name, value in values.items(): patch.setattr(request.module, name, value)
         yield

@@ -1,0 +1,199 @@
+{
+  "actual_ci_reserves": "UNKNOWN",
+  "application_cases": 429,
+  "at": "2026-11-02T17:29:00.947793+00:00",
+  "before_edit_decision_sha256": "b94a18b7c0f353cf85eae5d40c914ac4388c478688896ce8e328c7c50f381d71",
+  "binding_sha256": "5f1d64778ba98d8ea03517f444f644d1d53de070935879950f2d0d6b640b0bdf",
+  "capacity": {
+    "actual_ci_reserves": "UNKNOWN",
+    "actual_requirement": 120,
+    "full_pool_replay_sha256": "921c8d2123caac5e97f39255fda12d68a24173b6e0d51910cfc4c4535bf892f1",
+    "minimum_projected_reserve": 246.5513659845351,
+    "minimum_stress_reserve": 210.44147366522648,
+    "model_only": true,
+    "planning_gate": 180,
+    "report_sha256": "ca44d5a0af55c0fbc2090434bccf677b2d811411620eea669838112100d3b26b"
+  },
+  "ci_authority": false,
+  "collection_sha256": "4004dbb6fd493d819e43cf5bc6aa4261f86b61fa759749eb372b6c16d48e205f",
+  "contexts": [
+    {
+      "cases": 11,
+      "head": "237c7b7595a430690b47b5b95eba38bb7cadc68c",
+      "implementation_commit": "16a4f10a90947dace348cffcb929f9b57c387b95",
+      "implementation_tree": "59d902a0d1e07b8fa759d6526d72f8713e73bf78",
+      "junit_sha256": "1570619d59670c8a11272a06be6296457c5a7aebf42ddc87b9ce4d3927449891",
+      "label": "candidate-v2-generation11",
+      "progress_sha256": "28af36e760201c7a886a030235d46fedd35b71bc6b731e4d529f2ac47ef5cea6",
+      "report_sha256": "91cd6cb71e45b21d3d791eff75c4f562bcfd4ebbda037274afe49ef396b58677",
+      "tested_tree": "265e651b0b2a814a92d5cb8a51f45595efe9d339",
+      "wall_seconds": 19.2194954000297
+    },
+    {
+      "cases": 61,
+      "head": "237c7b7595a430690b47b5b95eba38bb7cadc68c",
+      "implementation_commit": "16a4f10a90947dace348cffcb929f9b57c387b95",
+      "implementation_tree": "59d902a0d1e07b8fa759d6526d72f8713e73bf78",
+      "junit_sha256": "117e6f58a72ab218f0e1b88dc560b2495d84e560533439552cf7c2b36f0bb211",
+      "label": "candidate-v2-security",
+      "progress_sha256": "257b36e1f3a6f4d719abde23cd5aa64d14c572b5cb79c39d5ea9ba848691dfaf",
+      "report_sha256": "c920c6a94dfa2267ffba944a8090931a5d52a1c2d7011c5a7262219dde5623da",
+      "tested_tree": "265e651b0b2a814a92d5cb8a51f45595efe9d339",
+      "wall_seconds": 30.397340399969835
+    },
+    {
+      "cases": 53,
+      "head": "237c7b7595a430690b47b5b95eba38bb7cadc68c",
+      "implementation_commit": "16a4f10a90947dace348cffcb929f9b57c387b95",
+      "implementation_tree": "59d902a0d1e07b8fa759d6526d72f8713e73bf78",
+      "junit_sha256": "ade9c7c4d86cc7ba5092ee35055041be23f9367cec30411189221b35903105be",
+      "label": "candidate-v2-workflow",
+      "progress_sha256": "8803254882332807ce41d281589c2f8f30da38f4c48962875468893b4fdc2509",
+      "report_sha256": "37cdb7bfb73505187f1971655d82c44215024e8df2c2c0f910e3753904121cbe",
+      "tested_tree": "265e651b0b2a814a92d5cb8a51f45595efe9d339",
+      "wall_seconds": 237.1351923000184
+    },
+    {
+      "cases": 15,
+      "head": "237c7b7595a430690b47b5b95eba38bb7cadc68c",
+      "implementation_commit": "16a4f10a90947dace348cffcb929f9b57c387b95",
+      "implementation_tree": "59d902a0d1e07b8fa759d6526d72f8713e73bf78",
+      "junit_sha256": "97edfc3995eef04e8c97b7bcf8d6ede83598927c7e16786399b410d390321525",
+      "label": "candidate-v2-reader",
+      "progress_sha256": "0a0c9dc56b9f048d3ea04dbaa895475d069dff7f1bbbde9eec29abb75645d6fb",
+      "report_sha256": "da49b39a4441e14aed44588188d15110f8adf27f7b4485d4bc55c3354c5f3159",
+      "tested_tree": "265e651b0b2a814a92d5cb8a51f45595efe9d339",
+      "wall_seconds": 23.371444799995515
+    },
+    {
+      "cases": 182,
+      "head": "237c7b7595a430690b47b5b95eba38bb7cadc68c",
+      "implementation_commit": "16a4f10a90947dace348cffcb929f9b57c387b95",
+      "implementation_tree": "59d902a0d1e07b8fa759d6526d72f8713e73bf78",
+      "junit_sha256": "84a8afe6aaaa983ecc60dc99d8f4a40a2489e97799670712d244947cb046b2b5",
+      "label": "candidate-v2-comparison182",
+      "progress_sha256": "5512547086ae1bf3a4def63dd01c45306606e8a51f1bc711a860cc4666cc2145",
+      "report_sha256": "afea22bde70642332861ceb08dcf4e1b07058e861ee54039dd03179cc9387a6e",
+      "tested_tree": "265e651b0b2a814a92d5cb8a51f45595efe9d339",
+      "wall_seconds": 599.191897200013
+    },
+    {
+      "cases": 110,
+      "head": "237c7b7595a430690b47b5b95eba38bb7cadc68c",
+      "implementation_commit": "16a4f10a90947dace348cffcb929f9b57c387b95",
+      "implementation_tree": "59d902a0d1e07b8fa759d6526d72f8713e73bf78",
+      "junit_sha256": "51d60730d3b4aabeb9ccd90744d79480a080c1aefa171a3f71423611d55103c4",
+      "label": "candidate-v2-slate",
+      "progress_sha256": "fc52046323452c03a91db42f336993b689b78b89363c214473cb75757c57d7e3",
+      "report_sha256": "a5e52fee0b701f0a2ef0832af909708755659eb6c880489ef960376978f4079b",
+      "tested_tree": "265e651b0b2a814a92d5cb8a51f45595efe9d339",
+      "wall_seconds": 1752.7798153000185
+    }
+  ],
+  "contract_attribution_sha256": "7aaed1272abded17d622cf6fb81b53a5f3b02a436d28a0cbf0117f2ecc75a1d2",
+  "distinct_release_cases": 432,
+  "failed_cycle_inventory": {
+    "archives": 22,
+    "failed": 2,
+    "grant": "CONSUMED",
+    "identities": 9403,
+    "manifests": 15,
+    "passed": 9391,
+    "setup_errors": 8,
+    "skipped": 2
+  },
+  "fixture_append_only_consumer": "tests/test_nfl_capacity_context_profile.py",
+  "full_pool_replay": {
+    "all_old_samples_preserved": true,
+    "final_conservative_union": [
+      210.44147366522648,
+      380.9951500000002,
+      359.89207960046906,
+      326.5230519301069,
+      297.4422837556123,
+      247.33295000000044,
+      218.7922499999995,
+      385.07075000000077,
+      360.0083569052672,
+      258.22400236007707,
+      347.5551177648126,
+      420.9599500000004,
+      397.8571122999272,
+      403.67556319014557,
+      363.3665483799946
+    ],
+    "increment_assessment_retained": true,
+    "minimum_stress": 210.44147366522648,
+    "new_per_shard_minima": [
+      232.59841598453568,
+      380.9951500000002,
+      364.4776999999999,
+      328.5436500000005,
+      338.64869999999974,
+      282.6552000000006,
+      229.01574999999957,
+      416.8544499999998,
+      363.4034255593142,
+      258.22400236007707,
+      369.409375310197,
+      420.9599500000004,
+      416.250492669853,
+      406.2899527204513,
+      408.17655000000013
+    ],
+    "nonlimiting_shards_lowered": [
+      2,
+      10,
+      12
+    ],
+    "old_per_shard_replay_matches": true,
+    "old_pool_digest_matches": true,
+    "seeds": [
+      2454,
+      2455
+    ],
+    "trials_per_seed": 5000
+  },
+  "historical_crash_cause": "UNKNOWN",
+  "historical_skips": {
+    "count": 2,
+    "kind": "inherited empty-parameter NOTSET; no assertions executed",
+    "new_actual_outcomes": "UNKNOWN"
+  },
+  "implementation_commit": "16a4f10a90947dace348cffcb929f9b57c387b95",
+  "implementation_tree": "59d902a0d1e07b8fa759d6526d72f8713e73bf78",
+  "inventory": {
+    "additions": 0,
+    "assignment_sha256": "59f968743e59ba1c0bcbc2292cd38bab6d7799aff0edcc9aab6c53ca6cf908f0",
+    "identities": 9403,
+    "whole_file_order_preserved": true
+  },
+  "maximum_ci_cycles": 0,
+  "operational_authority": false,
+  "original_assertions_unchanged": true,
+  "paid_scope_cases": 3,
+  "pipeline_gap_inventory": "OUTSTANDING",
+  "protocols": [
+    {
+      "cases": 14,
+      "label": "candidate-v2-protocol",
+      "program_sha256": "8e77a45a0f70ba5aab7a36c39bf256fbb08b18b1a0914efcab3dedba54d0cf0d",
+      "report_sha256": "d7fff0df062b1962fe12ea160357ec97dfc014531d814f46cc9d7fe0daae14cf",
+      "wall_seconds": 62.1217209000024
+    },
+    {
+      "cases": 31,
+      "label": "candidate-v2-release-protocol",
+      "program_sha256": "0cef53742a2b377017cdf75d78954dc96c471e5912c339c7a31a815f0424c18e",
+      "report_sha256": "df6df19f107c02b44dde8c6582fe180a861c08b864fda6ffbfa9120c07dc0875",
+      "wall_seconds": 278.3566989999963
+    }
+  ],
+  "publication_authority": false,
+  "published_failed_parent": "5b9d4827fd2965996eca26533b8d568ae046888e",
+  "published_failed_tree": "e2f7e76a64237055b4e9d3b85b1f922f6283fdb5",
+  "source_tree_reuse": "Implementation16a4f10 and binding5f1d647 unchanged from complete432-case contexts and45protocol cases; c5cc664 final11/61/14/8 read-back passed. This successor changes ONLY the new v2 validation/policy to bind the full-pool replay; fresh standalone,metadata attacks and native collection required.",
+  "standalone_commands_sha256": "7b4fee74e29d68d0617ecbd10005b21f7095080f416260dbd0dde0b0134ebf2d",
+  "status": "LOCAL_GENERATION_CONTRACT_QUALIFIED_FORECAST_GATE_PASS_ACTUAL_CI_UNKNOWN",
+  "version": 2
+}

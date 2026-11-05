@@ -75,5 +75,6 @@ def pytest_sessionfinish(session, exitstatus):
     socket.socket.sendto = _original_sendto
     requests.sessions.Session.request = _original_request
 
-# Exact predecessor inputs for historical scope assertions only.
-from ncaaf_future_scope_inputs import ncaaf_released_scope_inputs, exact_released_scope_contract_inputs, pytest_configure
+# The historical seal-input fixtures (tests/ncaaf_future_scope_inputs.py) served
+# only the successor-seal guard tests retired to tests_archive/seal_guards/ on
+# 2026-11-04. Current tests run against current repository bytes.

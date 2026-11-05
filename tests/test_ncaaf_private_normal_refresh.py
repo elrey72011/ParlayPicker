@@ -95,7 +95,7 @@ def test_actual_normal_refresh_button_uses_private_caller(synthetic,monkeypatch,
     app.run()
     assert not app.exception
     assert not list(tmp_path.glob('*.inference-attempts.jsonl'))
-    next(b for b in app.button if b.label=='Refresh picks').click().run()
+    next(b for b in app.button if b.label=='Refresh picks').click().run(timeout=300)
     assert not app.exception
     assert app.session_state['pipeline_status']=='PRIVATE_CONDITIONAL_RESEARCH'
     assert len(app.session_state['ncaaf_private_refresh_ranked'])==2

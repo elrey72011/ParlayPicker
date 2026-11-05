@@ -1,8 +1,9 @@
 """Guided owner workflow using the released NFL inputs, transports and caller."""
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone
 import hmac
+import re
 
 from app_core import nfl_workflow_inputs as inputs, nfl_workflow_acquisition as acquisition
 from app_core import nfl_scenario_research as scenario, nfl_scoring_profile as profile
@@ -10,6 +11,40 @@ from app_core.nfl_workflow_store import Store, require, WorkflowError, digest, u
 
 MAX_GAMES = 4
 _ISSUER = object()
+
+
+def account_reset_evidence(*, reset_at=None, reset_observation=None):
+    """Keep a reported reset separate from a conservative admission bound.
+
+    UNKNOWN timezone covers the deliberately broad UTC-offset envelope
+    [-24h, +24h]. Its bound is NOT an observed reset timestamp. A date alone
+    never establishes a time of day, even when its timezone is known to be UTC.
+    """
+    require((reset_at is not None) != (reset_observation is not None),
+            'NFL_WORKFLOW_ACCOUNT_RESET_INVALID')
+    if reset_observation is None:
+        # Keep the released exact-time authority and its original string intact.
+        inputs.instant(reset_at)
+        return dict(reset_at=reset_at), reset_at
+    r = reset_observation
+    require(type(r) is dict and set(r) == {'precision', 'date', 'timezone'}
+            and r['precision'] == 'date' and isinstance(r['timezone'], str) and r['timezone'] in {'UNKNOWN', 'UTC'}
+            and isinstance(r['date'], str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', r['date']),
+            'NFL_WORKFLOW_ACCOUNT_RESET_INVALID')
+    try:
+        day = date.fromisoformat(r['date'])
+        bound = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
+        if r['timezone'] == 'UNKNOWN':
+            bound -= timedelta(hours=24)
+    except (ValueError, OverflowError):
+        raise WorkflowError('NFL_WORKFLOW_ACCOUNT_RESET_INVALID') from None
+    value = dict(reset_observation=dict(r), reset_time='UNKNOWN',
+                 reset_not_before=bound.isoformat(),
+                 reset_bound_basis=('date_start_minus_24h_unknown_timezone_v1'
+                                    if r['timezone'] == 'UNKNOWN' else 'utc_date_start_v1'))
+    if r['timezone'] == 'UNKNOWN':
+        value['supported_utc_offset_hours'] = [-24, 24]
+    return value, value['reset_not_before']
 
 
 @dataclass(frozen=True)
@@ -116,17 +151,18 @@ class Workflow:
             prepared.append(dict(operation=operation,prepared=facts))
         return prepared
 
-    def capture_quotes(self,operation_ids,*,remaining_credits,reset_at,private_use,no_overage):
+    def capture_quotes(self,operation_ids,*,remaining_credits,reset_at=None,private_use,no_overage,reset_observation=None):
         require(self.allow_acquisition,'NFL_WORKFLOW_ACQUISITION_NOT_ENABLED')
         require(isinstance(operation_ids,list) and 1<=len(operation_ids)<=MAX_GAMES and len(set(operation_ids))==len(operation_ids),'NFL_WORKFLOW_GAME_SELECTION_REQUIRED')
         require(type(remaining_credits) is int and remaining_credits>=len(operation_ids) and private_use is True and no_overage is True,'NFL_WORKFLOW_ACCOUNT_REVIEW_REQUIRED')
+        reset_evidence, reset_bound = account_reset_evidence(reset_at=reset_at, reset_observation=reset_observation)
         operations=[self.store.get(key,kind='operation') for key in operation_ids]
         require(len({op['payload']['events'][0]['canonical_event_id'] for op in operations})==len(operations),'NFL_WORKFLOW_DUPLICATE_EVENT')
         at=self.clock();batch_scope=digest(operation_ids)
         for op in operations:
             require(op['payload']['kind']=='market','NFL_WORKFLOW_OPERATION_UNSUPPORTED')
             acquisition.check_scope(op,at)
-            require(inputs.instant(reset_at)>inputs.instant(op['payload']['window']['not_after']),'NFL_WORKFLOW_ACCOUNT_EXPIRED')
+            require(inputs.instant(reset_bound)>inputs.instant(op['payload']['window']['not_after']),'NFL_WORKFLOW_ACCOUNT_EXPIRED')
             require(not self.store.spent('operation:'+op['id']),'PRIVATE_OPERATION_ALREADY_SPENT_NO_RETRY')
         ready=[]
         for op in operations:
@@ -139,7 +175,7 @@ class Workflow:
         for op,facts in ready:
             authority=dict(reviewed_at=at,reviewer='Robert Velarde',scope_sha256=digest(op['payload']),
                 batch_scope_sha256=batch_scope,batch_maximum_credits=len(operations),remaining_included_credit_floor=remaining_credits,
-                reset_at=reset_at,private_use=True,no_paid_overage=True,maximum_http_requests=1,
+                **reset_evidence,private_use=True,no_paid_overage=True,maximum_http_requests=1,
                 maximum_odds_credits=1,maximum_extra_spending=0)
             result=acquisition.capture_market(self.store,op,authority,facts,credential=self.credential,
                 transport=self.market_transport,wall=self.clock)

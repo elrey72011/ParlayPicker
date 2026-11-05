@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "predecessor_head": "a5430e5a93cece580d6645720b41f6a0d922d74a",
+  "predecessor_tree": "7c5afb019fd81eacdff0794728ede6118a00cc49",
+  "profile_sha256": "5513e877c0e467bf8217dce1b041453e942d4610af1c5734e72519cb197ea347",
+  "assignment_sha256": "59f968743e59ba1c0bcbc2292cd38bab6d7799aff0edcc9aab6c53ca6cf908f0",
+  "projected_reserves": [
+    398.2682665564871,
+    398.28080000000045,
+    398.2728000000011,
+    398.2733500000004,
+    398.27160000000003,
+    398.27275000000054,
+    398.26815000000033,
+    398.2807999999991,
+    398.2705788128692,
+    398.27274999999963,
+    398.26899181490126,
+    398.27120000000195,
+    398.2692972302407,
+    398.2685956555233,
+    398.2687499999993
+  ],
+  "stress_reserves": [
+    343.16704999999956,
+    394.2442999999994,
+    373.01070000000027,
+    333.4219500000004,
+    310.90265,
+    247.33295000000044,
+    236.01694999999927,
+    385.07075000000077,
+    360.0083569052672,
+    274.28665,
+    347.5551177648126,
+    461.1375000000003,
+    428.6878972302402,
+    404.52409126486054,
+    384.7326500000004
+  ],
+  "planning_gate_seconds": 180,
+  "required_actual_reserve_seconds": 120,
+  "actual_ci_reserves": "UNKNOWN",
+  "qualification_scope": "Completed predecessor local15 assignment/synthetic reconciliation and measured-profile replay; not successor source integration or hosted capacity.",
+  "retained_evidence": {
+    "FINAL-EVIDENCE-MANIFEST-v2.json": "ace1fb02cbcf5420026a10a32c133044aec5037f67f054f90a00e86e590d96a9",
+    "LOCAL-FIFTEEN-CONTRACT-RESULT.json": "b072aa0aee28d13750d3b301693b3f5ed8e6629a2ae2a41553817cfed9322a48",
+    "LOCAL-QUALIFICATION-OWNER-RESULT-v2.json": "24a65f9ad56218a8955570a389d1c6b0bae6e7cc8e5d7c45602e5d5856933371"
+  },
+  "synthetic_outcomes": {
+    "passed": 28,
+    "skipped": 2,
+    "acceptance_implication": "Harness execution/reconciliation only; synthetic skips are not inherited release skips or proof of skipped functionality. All9403 release outcomes remain unmeasured on15-wayCI."
+  },
+  "source_timing_provenance": "Profile retains measured Windows transfer estimates and all previous variability samples; no profiled-cost subtraction or new saving claim.",
+  "retained_raw_windows_profile_sha256": "1ebf59b3cc1e9ac9992ab308227ff732961bb33107507dfcf01953095f5d5248",
+  "profile_byte_transition": "CRLF final newline normalized toLF for repository; parsed JSON,timing rows,classification and values exactly unchanged.",
+  "live_workflow": ".github/workflows/ci-fifteen.yml",
+  "retained_thirteen_workflow": ".github/workflows/ci.yml",
+  "hosted_precondition": "Owner must explicitly authorize and verify disabling oldci.yml before the ONE PR push; no workflow state is changed by local preparation.",
+  "rejected_same_path_integration": {
+    "head": "8ced09cd02b3fa1abfd3b04829ecf4f75c9c0557",
+    "outcomes": "167PASS/15FAIL; no correctness or timing credit.",
+    "reason": "Native historical contract explicitly authenticates physical13 workflow bytes; leave that source and its assertions unchanged."
+  }
+}

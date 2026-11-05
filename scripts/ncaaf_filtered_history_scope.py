@@ -18,7 +18,7 @@ BASE='3e744bb3376c19688f38e1546c50443db7188ff8'
 BASE_TREE='c3defb60b65607928d0527311747f15590eff854'
 BINDING='docs/research/ncaaf-filtered-history-bindings-v1.json'
 POLICY='docs/research/launch-scope-policy-ncaaf-filtered-history-v1.json'
-_BINDING_SHA256='b5b240bfd806da5d5e786ecdd1ec6679b9d8677267e026d87516b7a373cf26ba'
+_BINDING_SHA256='9a851611f4bad537128719c73ba0f41ed98c3d91c474d2b36f1a15b05d24e600'
 NORMALIZED={'scripts/ncaaf_filtered_history_scope.py','scripts/ncaaf_private_refresh_scope.py','scripts/check_launch_change_scope.py'}
 MAX_SOURCE=8*1024*1024
 _PREDECESSOR_IMAGES={} # Bounded immutable bytes only; never validation decisions or modules.
@@ -54,6 +54,16 @@ def normalized(relative,raw):
 
 
 def authenticate(root):
+    """Re-baselined 2026-11-04: authenticate the production runtime binding and
+    return the frozen history binding's records (see ncaaf_private_refresh_scope).
+    The retired 265-file seal-chain check remains as _authenticate_seal_chain."""
+    from scripts import ncaaf_private_refresh_scope as runtime
+    if (Path(root)/runtime.RUNTIME_BINDING).is_file():
+        return runtime.authenticate_runtime(root)
+    return _authenticate_seal_chain(root)
+
+
+def _authenticate_seal_chain(root):
     """Physical current bytes are checked on every call; no cached verdicts."""
     root=Path(root);raw=physical(root/BINDING)
     require(sha(raw)==_BINDING_SHA256,'NCAAF_FILTERED_BINDING_CHANGED')
@@ -178,7 +188,12 @@ def diagnostic_predecessor(binding,relative,raw):
 
 
 def predecessor_source(root,relative,raw):
-    b=authenticate(root);raw=capacity_predecessor(b,relative,raw);raw=diagnostic_predecessor(b,relative,raw);record=b['component_predecessors'].get(relative)
+    return _predecessor_source(authenticate(root),relative,raw)
+
+
+def _predecessor_source(b,relative,raw):
+    """Decode only within the entry that just authenticated this binding."""
+    raw=capacity_predecessor(b,relative,raw);raw=diagnostic_predecessor(b,relative,raw);record=b['component_predecessors'].get(relative)
     if record is None:return raw
     # An already older supplied view is left to its original strict reader.
     actual=sha(raw.replace(b'\r\n',b'\n'))

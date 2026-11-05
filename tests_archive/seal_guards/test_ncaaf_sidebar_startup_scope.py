@@ -54,3 +54,5 @@ def test_physical_source_or_binding_tampering_rejects(tmp_path,path):
     assert boundary.authenticate(tmp_path)==b
     p=tmp_path/path;p.write_bytes(p.read_bytes()+b'\nSYNTHETIC_UNAUTHORIZED_EDIT\n')
     with pytest.raises(ValueError):boundary.authenticate(tmp_path)
+
+from native_lpt_profile_inputs import retained_native_lpt_profile_generation

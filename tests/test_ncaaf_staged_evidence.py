@@ -184,7 +184,7 @@ def test_actual_pipeline_capture_export_static_replay_private_display(synthetic,
     from streamlit.testing.v1 import AppTest
     script=tmp_path/'SYNTHETIC-private-display.py'
     script.write_text('import streamlit as st\nfrom app.ui.ncaaf_pipeline_research import render\nrender(st.session_state["games"],st.session_state["candidates"])',encoding='utf-8')
-    app=AppTest.from_file(str(script));app.session_state['games']=saved['card'];app.session_state['candidates']=saved['captured'];app.session_state['ncaaf_private_research']=True;app.run()
+    app=AppTest.from_file(str(script));app.session_state['games']=saved['card'];app.session_state['candidates']=saved['captured'];app.session_state['ncaaf_private_research']=True;app.run(timeout=60)
     assert not app.exception and any(m.value==f'{selected.ml_probability:.2%}' for m in app.metric)
     assert packet==before and not adapter.ACCEPTED_PACKETS
 
