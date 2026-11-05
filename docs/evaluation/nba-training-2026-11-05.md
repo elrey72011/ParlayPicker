@@ -1,12 +1,14 @@
-# NBA score model: first training run (2026-11-05)
+# NBA ESPN benchmark: first training run (2026-11-05)
 
 Owner decision D9 approved one bounded download of NBA game history, with no Odds API credits.
+
+> **Status after the repository audit (2026-11-05): offline benchmark only.** The NBA model in the validated chain already exists: `app_core/prospective_research_models.py` (`pregame-score-ridge-normal-v1`). The research scheduler retrains it after each NBA capture, from Odds API events and final scores bound to captured quotes. This ESPN model uses the same features and ridge method on a longer history. Its games have no quote lineage, so the evidence store cannot accept it as a model. It is kept only to test whether more history helps.
 
 ## Data
 
 - **Source.** ESPN's public NBA scoreboard, one request per day, the same feed `app_core/espn_results.py` uses. The free `nba_api` endpoint (`stats.nba.com`) does not answer from the cloud container: it returned an empty reply after 31 s.
 - **Window.** 2024-25 and 2025-26 regular seasons, plus 2026-27 through 2026-11-04. That came to 2,565 completed, non-neutral regular-season games.
-- **Excluded: 7 games.** These were All-Star games ("Team Shaq", "World", …) that ESPN labels as regular season, including 1 duplicate. Training now keeps only games between the 30 NBA franchises (`scripts/train_nba_model.py`, `NBA_FRANCHISES`). The excluded games never had enough team history to become training examples, so the fit was unchanged.
+- **Excluded: 7 games.** These were All-Star games ("Team Shaq", "World", …) that ESPN labels as regular season, including 1 duplicate. Training now keeps only games between the 30 NBA franchises (`NBA_FRANCHISES`). The excluded games never had enough team history to become training examples, so the fit was unchanged.
 - **Checks.**
   - 30 franchises.
   - 1,228 / 1,229 / 108 games per season.
@@ -15,7 +17,7 @@ Owner decision D9 approved one bounded download of NBA game history, with no Odd
 
 ## Model and honest holdout
 
-- **Model.** `nba-score-ridge-v1` (`app_core/pipeline/nba.py`): ridge regressions for margin and total. Features are each team's last 2–8 games within 240 days.
+- **Model.** `nba-espn-benchmark-v1` (`app_core/nba_espn_benchmark.py`; first run named `nba-score-ridge-v1`): ridge regressions for margin and total. Features are each team's last 2–8 games within 240 days.
 - **Split.** Time-ordered: trained on 2,020 games through 2026-02-20, then scored on the 505 later games. Ridge strength was chosen inside the training window.
 
 | Holdout, 505 later games | Model RMSE | Always predict the training average | Gain |
@@ -33,11 +35,11 @@ Owner decision D9 approved one bounded download of NBA game history, with no Odd
   - No injury or lineup inputs (`NO_AUTHENTIC_INJURY_LINEUP_FEATURE`).
   - Early-season form reaches back into the previous season.
   - No pace, travel or back-to-back features beyond rest days.
-- **Measurement path.** Under owner decision D1, a market qualifies only on prospective evidence: model log loss and CLV against real lines on upcoming games. Under the P1 anchor, a weak model can move the market probability by at most ±5 points, and nothing becomes a bet unless the market qualifies.
+- **Measurement path.** NBA markets qualify only through the existing chain: the frozen NBA SPREAD and TOTAL validation plans (≥ 200 independent events, Brier ≤ 0.24, log loss ≤ 0.68, calibration error ≤ 0.08, ≥ 80% certified closes, paper ROI ≥ 0), then a deployment review, then owner activation.
 
 ## Artifact
 
-- **Committed as research-only** at owner direction: `models/nba-score-ridge-v1.json`, with `status: RESEARCH_ONLY`.
-- **Not a supported sport.** The adapter is not registered globally, so ordinary pipeline runs stay NFL-only.
-- **Shadow only.** With `PARLAYPICKER_PIPELINE_V2=true` and `PARLAYPICKER_PIPELINE_NBA=true`, ordinary Refresh also forecasts NBA spreads and totals in the shadow. These forecasts are recorded for measurement. They never change analysis, selection, stakes or publication.
-- **History.** The shipped baseline is `data/nba/espn-games.csv`: 2,558 franchise games through 2026-11-04. Each later completed day is one claimed ESPN request, stored once and reused after restarts. A gap of more than 30 days is refused; refresh the baseline instead.
+- **Not committed.** It briefly was, as research-only. It was withdrawn after the audit because nothing in the validated chain can read it.
+- **Not wired in.** A shadow-pipeline hookup (`PARLAYPICKER_PIPELINE_NBA`) was withdrawn for the same reason, before it was ever pushed.
+- **Reproduce with** `python scripts/train_nba_model.py --espn --seasons 2024-25 2025-26 2026-27 --through 2026-11-04`. That makes about 560 free ESPN requests.
+- **Next useful step.** Compare this holdout with the research model's own chronological diagnostics for the same games. Only a clear gain would justify proposing a longer history window, as a new frozen plan version, to the research model.

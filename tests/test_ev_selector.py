@@ -83,3 +83,10 @@ def test_empty_or_keyless_input_returns_no_decisions():
     assert ev.select(pd.DataFrame()).empty
     assert ev.select(pd.DataFrame([{'league': 'NFL'}])).empty
     assert ev.summary(pd.DataFrame())['games'] == 0
+
+
+def test_families_and_market_scope_follow_core_market_policy():
+    run_line = ev.select(pd.DataFrame([row(league='MLB', line=-1.5, model=0.75)]), qualified={('MLB', 'RUN_LINE')})
+    assert run_line.iloc[0]['family'] == 'RUN_LINE' and run_line.iloc[0]['decision'] == 'BET'
+    moneyline = ev.select(pd.DataFrame([row(market='h2h_home', model=0.75)]), qualified={('NFL', 'SPREAD')})
+    assert moneyline.iloc[0]['reason'] == 'NOT_A_PRODUCTION_MARKET'  # moneylines are context only

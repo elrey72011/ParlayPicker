@@ -1021,7 +1021,7 @@ def _app_setting(name, default=''):
 
 def _render_pipeline_v2(frame, note):
     """Shadow results of the shared pipeline. Display only; never selects or stakes."""
-    with st.expander("Shared pipeline (shadow: NFL, plus NBA research when PARLAYPICKER_PIPELINE_NBA=true)", expanded=False):
+    with st.expander("Shared pipeline (shadow, NFL)", expanded=False):
         st.caption("Comparison only. These probabilities do not change picks, stakes or publication.")
         if frame is None or getattr(frame, "empty", True):
             st.info(f"No shadow results: {note or 'NOT_RUN'}")
@@ -1035,8 +1035,9 @@ def _render_ev_shadow(frame, summary, note):
     """Shadow EV/No Bet decisions. Display only; never selects or stakes."""
     with st.expander("EV selector (shadow)", expanded=False):
         st.caption("Comparison only. One decision per game: BET only when the market-anchored edge clears the "
-                   "threshold in a qualified league and market; otherwise NO BET with the reason. Nothing is "
-                   "qualified until the owner sets thresholds (roadmap D1). Picks are unaffected.")
+                   "threshold in a qualified sport and market; otherwise NO BET with the reason. A market "
+                   "qualifies only after its frozen validation plan passes and a deployment review records it. "
+                   "Picks are unaffected.")
         if frame is None or getattr(frame, "empty", True):
             st.info(f"No shadow decisions: {note or 'NOT_RUN'}")
             return
@@ -1048,6 +1049,11 @@ def _render_ev_shadow(frame, summary, note):
                                "market_probability", "anchored_probability", "edge", "ev", "current_market_type",
                                "agrees_with_current") if c in frame.columns]
         st.dataframe(frame[columns], hide_index=True, use_container_width=True)
+        blockers = summary.get("next_blockers") or {}
+        if blockers:
+            st.caption("Why each market is not qualified (prospective evidence store, next blocker):")
+            st.dataframe(pd.DataFrame(sorted(blockers.items()), columns=["Market", "Next blocker"]),
+                         hide_index=True, use_container_width=True)
 
 
 def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[str]]:

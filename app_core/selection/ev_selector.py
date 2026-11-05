@@ -14,10 +14,15 @@ For each game it returns exactly one decision, BET or NO_BET, always with a reas
 3. **Edge and EV.** Edge is anchored minus market; EV is anchored × decimal − 1
    at the offered price.
 4. **Decision.** Take the highest-EV usable candidate per game. Bet only if its
-   edge ≥ ``min_edge``, its EV > ``min_ev``, *and* its league × market is in
-   ``qualified``. ``qualified`` is empty until the owner sets thresholds (D1) and
-   a market passes them. Until then every game is NO_BET with the reason it
-   would or would not otherwise qualify.
+   edge ≥ ``min_edge``, its EV > ``min_ev``, *and* its sport × market family is in
+   ``qualified``. ``qualified`` comes from the existing authority chain
+   (``app_core.selection.qualification``): a market qualifies only after its frozen
+   validation plan passes and a deployment review records it. Until then every
+   game is NO_BET with the reason it would or would not otherwise qualify.
+
+Families are the validation families of ``core.market_policy`` (MLB ``RUN_LINE``,
+NHL ``PUCK_LINE``). De-vig uses ``core.clv`` and EV uses ``core.price_value``, so
+the shadow and the live wager contract do the same arithmetic.
 
 This module is pure: it reads a candidate table and returns a decision table. It
 does not change picks, stakes or publication.
@@ -28,6 +33,11 @@ from dataclasses import dataclass, asdict
 import math
 
 import pandas as pd
+
+from core.clv import american_to_implied, no_vig_prob
+from core.market_policy import sport_market_family
+from core.price_value import price_value
+from core.wager_decisions import decimal_price
 
 VERSION = 'ev-selector-v1'
 
@@ -41,27 +51,15 @@ class Policy:
     version: str = VERSION
 
 
-FAMILY = {'spread_home': 'SPREAD', 'spread_away': 'SPREAD', 'total_over': 'TOTAL', 'total_under': 'TOTAL',
-          'h2h_home': 'MONEYLINE', 'h2h_away': 'MONEYLINE', 'moneyline_home': 'MONEYLINE', 'moneyline_away': 'MONEYLINE'}
-
-
 def american_to_decimal(odds):
-    try:
-        o = float(odds)
-    except (TypeError, ValueError):
-        return None
-    if isinstance(odds, bool) or not math.isfinite(o) or abs(o) < 100:
-        return None
-    return 1 + o / 100 if o > 0 else 1 + 100 / -o
+    return None if isinstance(odds, bool) else decimal_price(odds)
 
 
 def fair_probability(odds, opposing):
     """Two-way multiplicative de-vig for the selected side, or None without both prices."""
-    d, q = american_to_decimal(odds), american_to_decimal(opposing)
-    if d is None or q is None:
-        return None
-    p, r = 1 / d, 1 / q
-    return p / (p + r)
+    if american_to_implied(odds) is None or american_to_implied(opposing) is None:
+        return None  # core.clv would fall back to the vig-inclusive price; the selector never does
+    return no_vig_prob(odds, opposing)
 
 
 def _logit(p):
@@ -95,9 +93,10 @@ def evaluate(row, policy: Policy):
     model = _number(row.get('ml_probability'))
     model = model if model is not None and 0 < model < 1 else None
     anchored = anchored_probability(market, model, policy)
+    value = price_value(anchored, 0.0, decimal)  # half-point lines only reach here with a zero push
     return dict(usable=True, reason='', decimal_odds=decimal, market_probability=market,
                 model_probability=model, anchored_probability=anchored, edge=anchored - market,
-                ev=anchored * decimal - 1, has_model=model is not None)
+                ev=value['expected_value'], has_model=model is not None)
 
 
 def select(candidates: pd.DataFrame, *, qualified=frozenset(), policy: Policy = Policy(), current=None):
@@ -127,9 +126,11 @@ def select(candidates: pd.DataFrame, *, qualified=frozenset(), policy: Policy = 
             continue
         row, best = max(usable, key=lambda item: item[1]['ev'])
         market_type = str(row.get('market_type', '')).lower()
-        family = FAMILY.get(market_type, 'UNKNOWN')
+        family = sport_market_family(base['league'], market_type) or 'NOT_A_PRODUCTION_MARKET'
         line = row.get('total_line') if family == 'TOTAL' else row.get('spread_line')
-        if not best['has_model']:
+        if family == 'NOT_A_PRODUCTION_MARKET':
+            reason = 'NOT_A_PRODUCTION_MARKET'  # moneylines are context only (core.market_policy)
+        elif not best['has_model']:
             reason = 'NO_INDEPENDENT_MODEL'
         elif best['edge'] < policy.min_edge:
             reason = 'EDGE_BELOW_THRESHOLD'

@@ -1,11 +1,10 @@
-"""SYNTHETIC NBA adapter and model fitting (roadmap M4.1). No network, no real games."""
+"""SYNTHETIC offline NBA ESPN benchmark (owner decision D9). No network, no real games."""
 from datetime import date, timedelta
 import random
 
 import pytest
 
-from app_core.pipeline.adapter import AdapterError
-from app_core.pipeline.nba import NBAAdapter, Model, fit
+from app_core.nba_espn_benchmark import Model, examples, fit
 
 TEAMS = [f'SYNTHETIC-T{i}' for i in range(10)]
 STRENGTH = {team: (i - 4.5) * 1.6 for i, team in enumerate(TEAMS)}
@@ -29,8 +28,6 @@ def season(days=130, seed=7):
 
 
 HISTORY = season()
-EVENT = dict(event_id='SYNTHETIC-NBA-1', home=TEAMS[9], away=TEAMS[0], kickoff_utc='2027-03-01T00:30:00+00:00')
-AS_OF = '2027-02-28T18:00:00+00:00'
 
 
 @pytest.fixture(scope='module')
@@ -43,54 +40,13 @@ def test_fit_uses_an_honest_time_ordered_holdout_and_beats_the_naive_baseline(mo
     later = [g['game_date'] for g in HISTORY if g['game_date'] > model.trained_through]
     assert later and min(later) > model.trained_through
     assert model.holdout['margin']['rmse'] < model.holdout['margin']['baseline_rmse']
-    assert model.limitations == ('NO_AUTHENTIC_INJURY_LINEUP_FEATURE',)
+    assert model.limitations == ('NO_AUTHENTIC_INJURY_LINEUP_FEATURE', 'NO_QUOTE_LINEAGE')
+    assert model.status == 'OFFLINE_BENCHMARK'
 
 
 def test_too_little_history_refuses_to_fit():
-    with pytest.raises(AdapterError, match='NBA_TOO_FEW_TRAINING_GAMES'):
+    with pytest.raises(ValueError, match='NBA_TOO_FEW_TRAINING_GAMES'):
         fit(HISTORY[:150])
-
-
-def test_features_use_only_earlier_games_and_reject_neutral_sites():
-    nba = NBAAdapter(model=None)
-    cutoff = [g for g in HISTORY if g['game_date'] < '2027-02-28']
-    on_the_day = cutoff + [dict(game_date='2027-02-28', home=EVENT['home'], away=EVENT['away'], home_score=200, away_score=0)]
-    assert nba.features(EVENT, on_the_day, as_of_utc=AS_OF).values == nba.features(EVENT, cutoff, as_of_utc=AS_OF).values
-    with pytest.raises(AdapterError, match='NBA_NEUTRAL_SITE_UNSUPPORTED'):
-        nba.features(dict(EVENT, neutral_site=True), HISTORY, as_of_utc=AS_OF)
-    with pytest.raises(AdapterError, match='NBA_INSUFFICIENT_TEAM_HISTORY'):
-        nba.features(dict(EVENT, away='SYNTHETIC-NEW'), HISTORY, as_of_utc=AS_OF)
-
-
-def test_without_a_trained_model_no_probability_is_invented(tmp_path):
-    nba = NBAAdapter(model=None, artifact=tmp_path / 'absent.json')
-    forecast = nba.forecast(nba.features(EVENT, HISTORY, as_of_utc=AS_OF), 'spread_home', -4.5)
-    assert (forecast.status, forecast.reason, forecast.probability) == ('UNAVAILABLE', 'NBA_MODEL_NOT_TRAINED', None)
-
-
-def test_sides_are_complementary_and_integer_lines_report_pushes(model):
-    nba = NBAAdapter(model=model)
-    features = nba.features(EVENT, HISTORY, as_of_utc=AS_OF)
-    home, away = nba.forecast(features, 'spread_home', -4.5), nba.forecast(features, 'spread_away', 4.5)
-    assert home.status == away.status == 'AVAILABLE' and home.push_probability == 0
-    assert home.probability + away.probability == pytest.approx(1.0)
-    over, under = nba.forecast(features, 'total_over', 224.5), nba.forecast(features, 'total_under', 224.5)
-    assert over.probability + under.probability == pytest.approx(1.0)
-    whole_home, whole_away = nba.forecast(features, 'spread_home', -4.0), nba.forecast(features, 'spread_away', 4.0)
-    assert whole_home.push_probability > 0 and whole_home.push_probability == whole_away.push_probability
-    assert whole_home.probability + whole_away.probability == pytest.approx(1.0)  # conditional on no push
-    assert home.projection > 0  # the stronger home team is projected to win
-    assert nba.forecast(features, 'moneyline_home', None).reason == 'NBA_MONEYLINE_NOT_QUALIFIED'
-    assert nba.forecast(features, 'spread_home', -4.25).reason == 'NBA_LINE_INCREMENT_UNSUPPORTED'
-
-
-def test_model_artifact_round_trips(model, tmp_path):
-    path = tmp_path / 'nba.json'
-    model.save(path)
-    loaded = Model.load(path)
-    assert loaded == model
-    nba = NBAAdapter(artifact=path)
-    assert nba.forecast(nba.features(EVENT, HISTORY, as_of_utc=AS_OF), 'total_over', 224.5).status == 'AVAILABLE'
 
 
 def test_training_script_pairs_game_finder_rows_and_fits_from_csv(tmp_path):
@@ -137,3 +93,13 @@ def test_all_star_and_duplicate_games_are_excluded_from_training():
              dict(game_date='2026-02-20', home='Boston Celtics', away='Miami Heat', home_score=110, away_score=100),
              dict(game_date='2026-02-21', home='LA Clippers', away='World', home_score=90, away_score=80)]
     assert franchise_games(games) == [games[1]]
+
+
+def test_features_use_only_earlier_games_and_the_artifact_round_trips(model, tmp_path):
+    later = [dict(game_date='2027-03-05', home=TEAMS[0], away=TEAMS[1], home_score=200, away_score=0)]
+    before = {r[0]: r[1:3] for r in examples(HISTORY)}
+    after = {r[0]: r[1:3] for r in examples(HISTORY + later) if r[0] in before}
+    assert after == before  # a later blowout never changes an earlier game's features
+    path = tmp_path / 'benchmark.json'
+    model.save(path)
+    assert Model.load(path) == model

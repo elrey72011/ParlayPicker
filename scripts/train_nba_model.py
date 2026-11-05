@@ -1,16 +1,17 @@
-"""Fit the NBA score model and save its artifact (roadmap M4.1).
+"""Fit the offline NBA ESPN benchmark and print its holdout report (owner decision D9).
 
 Usage:
-    python scripts/train_nba_model.py --seasons 2024-25 2025-26 2026-27 [--espn] [--through YYYY-MM-DD]
-                                      [--csv games.csv] [--save-games games.csv] [--output models/nba-score-ridge-v1.json]
+    python scripts/train_nba_model.py --seasons 2024-25 2025-26 2026-27 --espn [--through YYYY-MM-DD]
+                                      [--save-games games.csv] [--csv games.csv] [--output benchmark.json]
 
-Data comes from the free public NBA stats endpoint via ``nba_api`` (the source
-ordinary Refresh already uses), or from a CSV with columns game_date, home, away,
-home_score, away_score. No Odds API credits are used. Running it downloads
-training data, which needs the owner's approval (see roadmap decisions).
+Data comes from ESPN's free public scoreboard (one request per day; ``--espn``),
+from ``nba_api`` (stats.nba.com, which does not answer from the cloud
+container), or from a CSV with columns game_date, home, away, home_score,
+away_score. No Odds API credits are used. Downloading needs the owner's approval.
 
-The script prints the time-ordered holdout report. It writes the artifact only
-with --output; committing that artifact is what makes NBA a supported sport.
+This is a benchmark only (``app_core.nba_espn_benchmark``). The NBA model in the
+validated chain is ``app_core.prospective_research_models``; nothing written
+here is read by Refresh, the pipeline or the wager contract.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app_core.pipeline.nba import fit  # noqa: E402
+from app_core.nba_espn_benchmark import fit  # noqa: E402
 
 
 def games_from_game_finder(rows):
@@ -49,8 +50,8 @@ def games_from_game_finder(rows):
     return sorted(games, key=lambda g: (g['game_date'], g['home']))
 
 
-from app_core.pipeline.nba_history import (ESPN_SCOREBOARD, NBA_FRANCHISES, franchise_games,  # noqa: E402,F401
-                                           games_from_espn)
+from app_core.nba_espn_benchmark import (ESPN_SCOREBOARD, NBA_FRANCHISES, franchise_games,  # noqa: E402,F401
+                                         games_from_espn)
 SEASON_WINDOWS = {'2024-25': ('2024-10-22', '2025-04-13'), '2025-26': ('2025-10-21', '2026-04-12'),
                   '2026-27': ('2026-10-20', '2027-04-11')}
 

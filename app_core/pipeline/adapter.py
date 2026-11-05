@@ -91,7 +91,6 @@ class Forecast:
     semantics: str
     features_sha256: str
     projection: float | None = None
-    push_probability: float | None = None   # integer lines; ``probability`` is then P(win | no push)
 
     def record(self):
         return asdict(self)
