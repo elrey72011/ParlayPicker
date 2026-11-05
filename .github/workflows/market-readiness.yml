@@ -37,7 +37,9 @@ jobs:
         with:
           path: ${{ runner.temp }}/drive-cache
           key: drive-cache-readiness-${{ github.run_id }}
-          restore-keys: drive-cache-
+          restore-keys: |
+            drive-cache-
+            market-readiness-drive-cache-
       - name: Restore read-only and report readiness
         run: >-
           python -u scripts/market_readiness_report.py

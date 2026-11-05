@@ -55,3 +55,16 @@ def test_reads_use_the_checksum_verified_cache_only_when_a_cache_dir_is_given(tm
     assert mr.ReadOnlyDrive(FakeClient()).read_objects(Prefix='SYNTHETIC/') == [('uncached', 'SYNTHETIC/')]
     cached = mr.ReadOnlyDrive(FakeClient(), tmp_path).read_objects(Prefix='SYNTHETIC/')
     assert cached == [('cached', 'SYNTHETIC/', tmp_path)]
+
+
+def test_table_counts_split_rows_by_sport_without_writing(tmp_path):
+    import sqlite3
+    path = tmp_path / 'SYNTHETIC-canonical.sqlite3'
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE prospective_event (event_id TEXT, sport TEXT)')
+        db.executemany('INSERT INTO prospective_event VALUES (?, ?)', [('a', 'NBA'), ('b', 'NBA'), ('c', 'NHL')])
+        db.execute('CREATE TABLE prospective_validation_plan (id TEXT)')
+        db.execute("INSERT INTO prospective_validation_plan VALUES ('p')")
+    before = path.read_bytes()
+    assert mr.table_counts(path) == {'prospective_event': {'NBA': 2, 'NHL': 1}, 'prospective_validation_plan': 1}
+    assert path.read_bytes() == before and mr.table_counts(tmp_path / 'absent.sqlite3') == {}

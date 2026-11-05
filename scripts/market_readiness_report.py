@@ -106,13 +106,38 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
     markets = [dict(row, remote_evidence_status='RESTORED_READ_ONLY', remote_evidence_verified=True)
                for row in readiness['markets']]
     return dict(remote=dict(status='RESTORED_READ_ONLY', writes_refused=guarded.writes_refused, counts=counts),
-                markets=markets, sources=readiness['sources'])
+                markets=markets, sources=readiness['sources'],
+                tables=table_counts(root / 'prospective-evidence.sqlite3'))
+
+
+def table_counts(path):
+    """Row counts per canonical table, split by sport where the table has one (read-only)."""
+    import sqlite3
+    if not Path(path).is_file():
+        return {}
+    out = {}
+    with sqlite3.connect(f'file:{path}?mode=ro', uri=True) as db:
+        names = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+        for name in names:
+            columns = {r[1] for r in db.execute(f'PRAGMA table_info("{name}")')}
+            if 'sport' in columns:
+                out[name] = {str(sport): n for sport, n in db.execute(
+                    f'SELECT sport, COUNT(*) FROM "{name}" GROUP BY sport ORDER BY sport')}
+            else:
+                out[name] = db.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
+    return out
 
 
 def markdown(result):
     lines = ['| ' + ' | '.join(COLUMNS) + ' |', '|' + '---|' * len(COLUMNS)]
     for row in result['markets']:
         lines.append('| ' + ' | '.join('' if row.get(c) is None else str(row.get(c)) for c in COLUMNS) + ' |')
+    tables = result.get('tables') or {}
+    if tables:
+        lines += ['', '| canonical table | rows |', '|---|---|']
+        for name, count in tables.items():
+            shown = ', '.join(f'{k}: {v}' for k, v in count.items()) if isinstance(count, dict) else str(count)
+            lines.append(f'| {name} | {shown or 0} |')
     return '\n'.join(lines) + '\n'
 
 
