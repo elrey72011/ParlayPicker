@@ -292,7 +292,7 @@ AUTHENTICALLY ACCEPTED. Deployment and model quality are tracked separately.
 | M1.1 | Sport-neutral signed store (`app_core/pipeline/store.py`) | — | IMPLEMENTED (SQLite + real-Postgres tests) | done |
 | M1.2 | Operation state machine (`app_core/pipeline/operations.py`) | M1.1 | IMPLEMENTED (lifecycle, claims, expiry, crash, batch tests) | done |
 | M1.3 | SportAdapter + NFL adapter (`app_core/pipeline/adapter.py`, `nfl.py`) | M1.2 | IMPLEMENTED (feature parity with `fetch_nfl_stats`). Physical merge of the 8 legacy packet modules is deferred: old packets keep their unchanged reader, and new sources use the adapter | done |
-| M1.4 | Ordinary Refresh calls the orchestrator | M1.3 | NOT STARTED | 1–2 d |
+| M1.4 | Ordinary Refresh calls the orchestrator (`app_core/pipeline/orchestrator.py`) | M1.3 | IMPLEMENTED in shadow mode behind `PARLAYPICKER_PIPELINE_V2` (off). Switching selection to it is P1.2/D7 | done |
 | M2.1 | NFL end-to-end in Refresh | M1.4, E1 | NOT STARTED | 3–5 d |
 | M2.2 | Authentic NFL acceptance (2 games) | M2.1, D5 | BLOCKED (D5) | 1–2 d |
 | P2.1–P2.4 | NFL fitted model + promotion gate | E1.3 | NOT STARTED | 10–15 d |
