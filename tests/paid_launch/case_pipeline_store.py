@@ -87,3 +87,24 @@ def test_pipeline_postgres_missing_protection_and_production_tls_reject(pipeline
         admin.execute('DROP TRIGGER records_immutable ON pipeline_private.records')
     with pytest.raises(StoreError, match='PROTECTION_MISSING'):
         store.verify()
+
+
+def test_pipeline_postgres_operation_runs_once_under_concurrent_clicks(pipeline_pg):
+    from datetime import datetime, timedelta, timezone
+    from app_core.pipeline.operations import COMPLETED, Operations
+    store, factory, _ = pipeline_pg
+    calls = []
+    op = Operations(store).create('NFL', 'acquisition', {'event': 'SYNTHETIC-NFL-1'},
+                                  not_after=(datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+                                  review_required=False)
+
+    def click(_):
+        try:
+            Operations(Store(factory, KEY, owner=OWNER)).run('NFL', op['id'], lambda o: calls.append(1) or {'ok': True})
+            return True
+        except StoreError:
+            return False
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        assert sum(pool.map(click, range(12))) == 1
+    assert len(calls) == 1
+    assert Operations(Store(factory, KEY, owner=OWNER)).status('NFL', op['id'])['state'] == COMPLETED

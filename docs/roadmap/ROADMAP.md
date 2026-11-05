@@ -289,8 +289,8 @@ AUTHENTICALLY ACCEPTED. Deployment and model quality are tracked separately.
 | P1.1 | Market-anchored probability | E1.3 | NOT STARTED | 1–2 d |
 | P1.2 | EV/No Bet selector in shadow mode | P1.1 | NOT STARTED | 2–3 d |
 | P1.3 | Sharp-price benchmark | D4 | BLOCKED (D4) | 1–2 d |
-| M1.1 | Sport-neutral signed store | — | NOT STARTED | 2–3 d |
-| M1.2 | Operation state machine | M1.1 | NOT STARTED | 2–3 d |
+| M1.1 | Sport-neutral signed store (`app_core/pipeline/store.py`) | — | IMPLEMENTED (SQLite + real-Postgres tests) | done |
+| M1.2 | Operation state machine (`app_core/pipeline/operations.py`) | M1.1 | IMPLEMENTED (lifecycle, claims, expiry, crash, batch tests) | done |
 | M1.3 | SportAdapter + NFL adapter; packet consolidation | M1.2 | NOT STARTED | 3–4 d |
 | M1.4 | Ordinary Refresh calls the orchestrator | M1.3 | NOT STARTED | 1–2 d |
 | M2.1 | NFL end-to-end in Refresh | M1.4, E1 | NOT STARTED | 3–5 d |
