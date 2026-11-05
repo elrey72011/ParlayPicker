@@ -1,0 +1,46 @@
+name: Closing-line capture (slate loop)
+# G8: a close is saved only within 30 minutes of kickoff, but GitHub starts scheduled runs
+# hours apart, so the 30-minute "Closing-line capture" workflow never landed in that window
+# and no close was ever recorded. This restores the evidence store once and checks every
+# 5 minutes through the slate (scripts/closing_capture_loop.py). Odds are fetched only
+# when a saved pick is inside its closing window. Public repository: runner minutes are free.
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "How long to keep capturing (max 340)"
+        required: false
+        default: "340"
+  schedule:
+    - cron: '17 22 * * *'      # 5:17 PM EST / 6:17 PM EDT, through the evening slate
+    - cron: '17 16 * * 0,6'    # weekends 11:17 AM EST, early football
+permissions:
+  contents: read
+concurrency:
+  group: closing-line-capture
+  cancel-in-progress: false
+jobs:
+  slate-closes:
+    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
+      PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      THE_ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Capture closes through the slate
+        env:
+          MINUTES: ${{ inputs.minutes || '340' }}
+        run: python -u scripts/closing_capture_loop.py --minutes "$MINUTES" --interval 5
+      - name: Report evidence health
+        if: ${{ !cancelled() }}
+        run: python -u scripts/prediction_evidence.py status --database data/prediction_evidence/evidence.sqlite3

@@ -7,6 +7,12 @@ from core.exposure_ledger import digest
 
 
 def build(rows, now=None):
+    accepted, rejected = accepted_rows(rows, now)
+    return _summarize(accepted, rejected)
+
+
+def accepted_rows(rows, now=None):
+    """(accepted, rejected counts): the verified pregame saved best picks with a settled outcome."""
     clock = now or datetime.now(timezone.utc)
     rejected, groups = Counter(), defaultdict(list)
     for row in rows:
@@ -55,6 +61,10 @@ def build(rows, now=None):
             rejected['missing_original_consensus'] += 1
             continue
         accepted.append(row)
+    return accepted, rejected
+
+
+def _summarize(accepted, rejected):
     from core.empirical_tiers import bucket_key
     from zoneinfo import ZoneInfo
     buckets = defaultdict(list)
@@ -76,11 +86,16 @@ def build(rows, now=None):
 
 
 def rebuild(database):
+    return build(saved_rows(database))
+
+
+def saved_rows(database):
+    """Every saved candidate row with its capture time, from the verified evidence store."""
     from app_core.prediction_evidence import materialize, connect
     from app_core.candidate_evidence_schema import evidence_value
     frame, _ = materialize(database)  # verifies immutable snapshot and score payload hashes
     if frame.empty:
-        return build([])
+        return []
     with closing(connect(database)) as db:
         captured = dict(db.execute('SELECT snapshot_id, generated_at FROM snapshots'))
     rows = []
@@ -88,4 +103,4 @@ def rebuild(database):
         row = evidence_value(source)
         row['capture_recorded_at'] = captured.get(row.get('snapshot_id'))
         rows.append(row)
-    return build(rows)
+    return rows

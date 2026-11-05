@@ -10,6 +10,22 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def _eastern():
+    """America/New_York that yields a real UTC offset for every date.
+
+    ``dateutil.tz.gettz`` can return a zone whose ``utcoffset`` is None for current
+    dates when the system zoneinfo files use the compact ("slim") format, as on recent
+    GitHub Ubuntu runners. Every game then failed ET conversion and was dropped from
+    the slate. The standard library's ``zoneinfo`` reads that format; dateutil remains
+    the fallback where zoneinfo is unavailable.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo("America/New_York")
+    except Exception:
+        return gettz("America/New_York")
+
+
 def iso8601_to_est(iso_string: str):
     """Converts ISO 8601 string to Eastern Time aware datetime via explicit UTC normalization."""
     dt_object_utc = parser.parse(str(iso_string))
@@ -17,8 +33,7 @@ def iso8601_to_est(iso_string: str):
         dt_object_utc = dt_object_utc.replace(tzinfo=pytz.UTC)
     else:
         dt_object_utc = dt_object_utc.astimezone(pytz.UTC)
-    eastern_tz = gettz("America/New_York")
-    return dt_object_utc.astimezone(eastern_tz)
+    return dt_object_utc.astimezone(_eastern())
 
 class OddsAPIAuthError(requests.exceptions.HTTPError):
     """Exception raised for authentication errors with The Odds API (e.g., 401, 403 or missing key)."""
