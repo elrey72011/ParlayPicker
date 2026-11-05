@@ -84,6 +84,9 @@ def _number(value):
 
 def evaluate(row, policy: Policy):
     """Market, anchored probability, edge and EV for one candidate, or a reason it is unusable."""
+    league = str(row.get('league', row.get('League', ''))).upper()
+    if sport_market_family(league, row.get('market_type')) is None:
+        return dict(usable=False, reason='NOT_A_PRODUCTION_MARKET')  # moneylines are context only
     decimal = american_to_decimal(row.get('odds_american'))
     if decimal is None:
         return dict(usable=False, reason='PRICE_MISSING')
@@ -126,11 +129,9 @@ def select(candidates: pd.DataFrame, *, qualified=frozenset(), policy: Policy = 
             continue
         row, best = max(usable, key=lambda item: item[1]['ev'])
         market_type = str(row.get('market_type', '')).lower()
-        family = sport_market_family(base['league'], market_type) or 'NOT_A_PRODUCTION_MARKET'
+        family = sport_market_family(base['league'], market_type)
         line = row.get('total_line') if family == 'TOTAL' else row.get('spread_line')
-        if family == 'NOT_A_PRODUCTION_MARKET':
-            reason = 'NOT_A_PRODUCTION_MARKET'  # moneylines are context only (core.market_policy)
-        elif not best['has_model']:
+        if not best['has_model']:
             reason = 'NO_INDEPENDENT_MODEL'
         elif best['edge'] < policy.min_edge:
             reason = 'EDGE_BELOW_THRESHOLD'

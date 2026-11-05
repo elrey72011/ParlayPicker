@@ -89,4 +89,11 @@ def test_families_and_market_scope_follow_core_market_policy():
     run_line = ev.select(pd.DataFrame([row(league='MLB', line=-1.5, model=0.75)]), qualified={('MLB', 'RUN_LINE')})
     assert run_line.iloc[0]['family'] == 'RUN_LINE' and run_line.iloc[0]['decision'] == 'BET'
     moneyline = ev.select(pd.DataFrame([row(market='h2h_home', model=0.75)]), qualified={('NFL', 'SPREAD')})
-    assert moneyline.iloc[0]['reason'] == 'NOT_A_PRODUCTION_MARKET'  # moneylines are context only
+    assert moneyline.iloc[0]['reason'] == 'NO_USABLE_CANDIDATE:NOT_A_PRODUCTION_MARKET'  # context only
+
+
+def test_a_higher_ev_moneyline_never_hides_a_qualified_spread():
+    game = pd.DataFrame([row(market='h2h_home', odds=150, opposing=-180, model=0.9),
+                         row(market='spread_home', model=0.75)])
+    d = ev.select(game, qualified={('NFL', 'SPREAD')}).iloc[0]
+    assert (d['decision'], d['market_type'], d['usable_candidates']) == ('BET', 'spread_home', 1)
