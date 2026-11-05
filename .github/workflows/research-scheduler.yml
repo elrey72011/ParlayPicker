@@ -61,12 +61,29 @@ jobs:
       - name: Install runtime dependencies
         if: steps.window.outputs.active == 'true'
         run: python -m pip install -r requirements.txt
+      # Every evidence record is its own Drive object (~80k). Keep a checksum-verified
+      # copy between runs so each cycle downloads only new or changed objects
+      # (app_core/evidence_drive.py, PARLAYPICKER_DRIVE_CACHE_DIR).
+      - name: Restore the verified Drive object cache
+        if: steps.window.outputs.active == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-research-${{ github.run_id }}
+          restore-keys: drive-cache-
       - name: Restore, capture, grade and verify backup
         if: steps.window.outputs.active == 'true'
         env:
           PARLAYPICKER_EVIDENCE_DIR: ${{ runner.temp }}/research-evidence
           RESEARCH_AUDIT_PATH: ${{ runner.temp }}/research-cycle-audit.json
+          PARLAYPICKER_DRIVE_CACHE_DIR: ${{ runner.temp }}/drive-cache
         run: python -u scripts/run_research_scheduler.py
+      - name: Save the verified Drive object cache
+        if: ${{ always() && steps.window.outputs.active == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-research-${{ github.run_id }}
       - name: Retain sanitized cycle audit
         if: ${{ always() && steps.window.outputs.active == 'true' }}
         uses: actions/upload-artifact@v4
