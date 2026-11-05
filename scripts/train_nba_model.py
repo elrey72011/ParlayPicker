@@ -1,0 +1,125 @@
+"""Fit the offline NBA ESPN benchmark and print its holdout report (owner decision D9).
+
+Usage:
+    python scripts/train_nba_model.py --seasons 2024-25 2025-26 2026-27 --espn [--through YYYY-MM-DD]
+                                      [--save-games games.csv] [--csv games.csv] [--output benchmark.json]
+
+Data comes from ESPN's free public scoreboard (one request per day; ``--espn``),
+from ``nba_api`` (stats.nba.com, which does not answer from the cloud
+container), or from a CSV with columns game_date, home, away, home_score,
+away_score. No Odds API credits are used. Downloading needs the owner's approval.
+
+This is a benchmark only (``app_core.nba_espn_benchmark``). The NBA model in the
+validated chain is ``app_core.prospective_research_models``; nothing written
+here is read by Refresh, the pipeline or the wager contract.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from app_core.nba_espn_benchmark import fit  # noqa: E402
+
+
+def games_from_game_finder(rows):
+    """Completed games from LeagueGameFinder team rows (two per game), keyed by full team name."""
+    by_game = {}
+    for row in rows:
+        by_game.setdefault(str(row['GAME_ID']), []).append(row)
+    games = []
+    for pair in by_game.values():
+        if len(pair) != 2:
+            continue
+        home = [r for r in pair if ' vs. ' in str(r['MATCHUP'])]
+        away = [r for r in pair if ' @ ' in str(r['MATCHUP'])]
+        if len(home) != 1 or len(away) != 1:
+            continue  # neutral or malformed rows are left out, not guessed
+        h, a = home[0], away[0]
+        try:
+            hs, as_ = int(h['PTS']), int(a['PTS'])
+        except (TypeError, ValueError):
+            continue
+        games.append(dict(game_date=str(h['GAME_DATE'])[:10], home=str(h['TEAM_NAME']), away=str(a['TEAM_NAME']),
+                          home_score=hs, away_score=as_))
+    return sorted(games, key=lambda g: (g['game_date'], g['home']))
+
+
+from app_core.nba_espn_benchmark import (ESPN_SCOREBOARD, NBA_FRANCHISES, franchise_games,  # noqa: E402,F401
+                                         games_from_espn)
+SEASON_WINDOWS = {'2024-25': ('2024-10-22', '2025-04-13'), '2025-26': ('2025-10-21', '2026-04-12'),
+                  '2026-27': ('2026-10-20', '2027-04-11')}
+
+
+def fetch_espn(seasons, *, through=None, pause=0.25):
+    """One ESPN request per calendar day in each season window (free, public; no Odds API credits)."""
+    from datetime import date, timedelta
+    import time
+    import requests
+    through = date.fromisoformat(through) if through else date.today() - timedelta(days=1)
+    games, seen = [], set()
+    for season in seasons:
+        start, end = (date.fromisoformat(d) for d in SEASON_WINDOWS[season])
+        day = start
+        while day <= min(end, through):
+            response = requests.get(ESPN_SCOREBOARD, params={'dates': day.strftime('%Y%m%d')}, timeout=20)
+            response.raise_for_status()
+            for game in games_from_espn(response.json(), day.isoformat()):
+                if game['espn_event_id'] not in seen:
+                    seen.add(game['espn_event_id'])
+                    games.append(game)
+            day += timedelta(days=1)
+            time.sleep(pause)
+    return sorted(games, key=lambda g: (g['game_date'], g['home']))
+
+
+def fetch(seasons):
+    from nba_api.stats.endpoints import leaguegamefinder
+    rows = []
+    for season in seasons:
+        frame = leaguegamefinder.LeagueGameFinder(season_nullable=season, league_id_nullable='00',
+                                                  season_type_nullable='Regular Season').get_data_frames()[0]
+        rows.extend(frame.to_dict('records'))
+    return games_from_game_finder(rows)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument('--seasons', nargs='*', default=[])
+    parser.add_argument('--csv', type=Path)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--espn', action='store_true', help='use the ESPN public scoreboard instead of nba_api')
+    parser.add_argument('--through', help='last date to include (default: yesterday)')
+    parser.add_argument('--save-games', type=Path, help='also write the downloaded games to this CSV')
+    args = parser.parse_args(argv)
+    if args.csv:
+        with args.csv.open(newline='') as fh:
+            games = [dict(r, home_score=int(r['home_score']), away_score=int(r['away_score'])) for r in csv.DictReader(fh)]
+    elif args.seasons:
+        games = fetch_espn(args.seasons, through=args.through) if args.espn else fetch(args.seasons)
+        if args.save_games:
+            with args.save_games.open('w', newline='') as fh:
+                writer = csv.DictWriter(fh, fieldnames=['game_date', 'home', 'away', 'home_score', 'away_score'],
+                                        extrasaction='ignore')
+                writer.writeheader()
+                writer.writerows(games)
+    else:
+        parser.error('give --seasons or --csv')
+    downloaded = len(games)
+    games = franchise_games(games)
+    model = fit(games)
+    print(json.dumps(dict(games=len(games), excluded_non_franchise_or_duplicate=downloaded - len(games), train_games=model.train_games, holdout_games=model.holdout_games,
+                          trained_through=model.trained_through, holdout=model.holdout), indent=2))
+    if args.output:
+        model.save(args.output)
+        print(f'Wrote {args.output}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
