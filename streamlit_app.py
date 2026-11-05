@@ -1031,6 +1031,25 @@ def _render_pipeline_v2(frame, note):
         st.dataframe(frame[columns], hide_index=True, use_container_width=True)
 
 
+def _render_ev_shadow(frame, summary, note):
+    """Shadow EV/No Bet decisions. Display only; never selects or stakes."""
+    with st.expander("EV selector (shadow)", expanded=False):
+        st.caption("Comparison only. One decision per game: BET only when the market-anchored edge clears the "
+                   "threshold in a qualified league and market; otherwise NO BET with the reason. Nothing is "
+                   "qualified until the owner sets thresholds (roadmap D1). Picks are unaffected.")
+        if frame is None or getattr(frame, "empty", True):
+            st.info(f"No shadow decisions: {note or 'NOT_RUN'}")
+            return
+        summary = summary or {}
+        st.markdown(f"**{summary.get('bet', 0)} BET / {summary.get('games', 0)} games** · agrees with the current "
+                    f"pick on {summary.get('agrees_with_current', 0)} of {summary.get('compared_with_current', 0)} "
+                    f"compared · recorded: {summary.get('recorded', 0)}" + (f" · note: {note}" if note else ""))
+        columns = [c for c in ("home_team", "away_team", "decision", "reason", "market_type", "line", "odds_american",
+                               "market_probability", "anchored_probability", "edge", "ev", "current_market_type",
+                               "agrees_with_current") if c in frame.columns]
+        st.dataframe(frame[columns], hide_index=True, use_container_width=True)
+
+
 def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[str]]:
     """Run game analysis without collecting or reviewing player props. Returns (state_updates, warnings, errors).
     Contains NO st.* calls.
@@ -1099,6 +1118,7 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         "simulation_results": {},
         "best_picks_df": pd.DataFrame(),
         "pipeline_v2_df": pd.DataFrame(),
+        "ev_shadow_df": pd.DataFrame(),
         "diagnostics": diagnostics,
         "pipeline_status": "idle",
         "pipeline_running": False,
@@ -1862,9 +1882,20 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
             pipeline_v2_note = 'PIPELINE_V2_ERROR:' + type(exc).__name__
             deferred_warnings.append(f"Shared pipeline shadow did not run ({type(exc).__name__}). Picks are unaffected.")
     diagnostics["pipeline_v2_note"] = pipeline_v2_note
+    ev_shadow_df, ev_shadow_note = None, 'EV_SHADOW_DISABLED'
+    try:
+        # Roadmap P1.2: market-anchored EV/No Bet selector in shadow; never changes picks.
+        from app_core.selection.shadow import run as ev_shadow_run
+        ev_shadow_df, diagnostics["ev_shadow_summary"], ev_shadow_note = ev_shadow_run(
+            analysis_df, best_picks_df, setting=controls.get("pipeline_v2_setting") or os.environ.get)
+    except Exception as exc:  # the shadow must never break Refresh
+        ev_shadow_note = 'EV_SHADOW_ERROR:' + type(exc).__name__
+        deferred_warnings.append(f"EV selector shadow did not run ({type(exc).__name__}). Picks are unaffected.")
+    diagnostics["ev_shadow_note"] = ev_shadow_note
     timer.finish()
     state_updates = {
         "pipeline_v2_df": pd.DataFrame(pipeline_v2_rows),
+        "ev_shadow_df": ev_shadow_df if ev_shadow_df is not None else pd.DataFrame(),
         "pipeline_status": "using stored results",
         "pipeline_running": False,
         "games_analyzed_at": pd.Timestamp.now(tz="UTC").isoformat(),
@@ -1939,6 +1970,8 @@ def main() -> None:
     from app_core.pipeline.orchestrator import enabled as pipeline_v2_enabled
     controls["pipeline_v2_setting"] = _app_setting
     controls["pipeline_v2"] = pipeline_v2_enabled(_app_setting)
+    from app_core.selection.shadow import enabled as ev_shadow_enabled
+    controls["ev_shadow"] = ev_shadow_enabled(_app_setting)
 
     run_counter = int(controls.get("run_analysis_counter", 0))
     should_run = _should_run_pipeline(st.session_state, run_counter, controls)
@@ -2024,6 +2057,9 @@ def main() -> None:
         st.caption(f"Pipeline status: {pipeline_status}")
     if controls.get("pipeline_v2"):
         _render_pipeline_v2(st.session_state.get("pipeline_v2_df"), diagnostics.get("pipeline_v2_note"))
+    if controls.get("ev_shadow"):
+        _render_ev_shadow(st.session_state.get("ev_shadow_df"), diagnostics.get("ev_shadow_summary"),
+                          diagnostics.get("ev_shadow_note"))
 
 
 

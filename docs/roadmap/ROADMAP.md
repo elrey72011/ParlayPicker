@@ -287,8 +287,8 @@ AUTHENTICALLY ACCEPTED. Deployment and model quality are tracked separately.
 | E1.2 | Refresh + holdout-validate calibration | E1.1 | BLOCKED (E1.1) | 0.5–1 d |
 | E1.3 | Scoreboard (Brier, log loss, CLV, ROI vs. market) in Streamlit | — | IMPLEMENTED (`app_core/evaluation/scoreboard.py`, `scripts/scoreboard.py`, Results-tab panel). Baseline: `docs/evaluation/scoreboard-2026-11-05.md`, no demonstrated edge | done |
 | E1.4 | Automatic closing-line capture | — | IMPLEMENTED. Capture moved to its own workflow (`closing-capture.yml`): it was starved by the hour-long research job in a shared queue. CLV report in `app_core/evaluation/clv.py`; 15-minute cadence is D8 | done |
-| P1.1 | Market-anchored probability | E1.3 | NOT STARTED | 1–2 d |
-| P1.2 | EV/No Bet selector in shadow mode | P1.1 | NOT STARTED | 2–3 d |
+| P1.1 | Market-anchored probability | E1.3 | IMPLEMENTED (`app_core/selection/ev_selector.py`): two-way de-vig; the independent model nudges the market by at most ±5 points (weight 0.25 in log-odds) | done |
+| P1.2 | EV/No Bet selector in shadow mode | P1.1 | IMPLEMENTED (shadow behind `PARLAYPICKER_EV_SHADOW`, off; decisions recorded to the pipeline store when configured). Grading shadow vs. current picks is next | done |
 | P1.3 | Sharp-price benchmark | D4 | BLOCKED (D4) | 1–2 d |
 | M1.1 | Sport-neutral signed store (`app_core/pipeline/store.py`) | — | IMPLEMENTED (SQLite + real-Postgres tests) | done |
 | M1.2 | Operation state machine (`app_core/pipeline/operations.py`) | M1.1 | IMPLEMENTED (lifecycle, claims, expiry, crash, batch tests) | done |
