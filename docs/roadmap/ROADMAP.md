@@ -150,6 +150,7 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | D10 | Retire or keep the shadow shared pipeline (#2456) | Open. Recommendation: keep it off and frozen; retire it once C3 lands |
 | D11 | Who reviews plan bindings and deployment reviews | Open |
 | D12 | Which plan family an NCAAF/NFL model targets: v1 rules (200 events), v2 (9,451 decided events per market, unreachable in one season), or a new v3 | **Owner-chosen 2026-11-05: C, design a v3.** First, run Football Stage 2 (owner-approved, after #2460 merges). Then draft a v3 proposal whose minimum sample is derived from Stage 2's measured variance, push rate and dependence. The proposal is reviewed before anything is frozen |
+| D13 | Odds API credits for certified closes (plan quota 20,000/month; CFBD/CBBD 30,000/month) | **Owner-chosen 2026-11-05: option B, NBA spread only.** A separate allowance of 100 credits/day and 2,500 per 31 days (`CERTIFIED_CLOSE_LIMITS`), about 80 credits/day used. Enabled when the repository variable `PARLAYPICKER_CERTIFIED_CLOSE_SPORTS=NBA` is set. The capture allowance (7,500 per 31 days) is unchanged |
 
 ## 5. Guardrails (unchanged)
 

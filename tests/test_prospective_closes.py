@@ -119,8 +119,8 @@ def test_disabled_by_default_and_budget_limits_stop_before_any_request(store, cl
     from app_core.research_api_budget import BudgetLimit
 
     class Exhausted:
-        def reserve(self, provider, units, sport=None):
-            raise BudgetLimit('api_budget:ODDS:daily')
+        def reserve_certified_close(self, sport, units, already_spent=False):
+            raise BudgetLimit('api_budget:NBA:certified_close:daily')
     capped = pc.record(store, now=now, key='SYNTHETIC-KEY', request_get=provider, budget=Exhausted(), sports=('NBA',))
     assert provider.calls == [] and capped['stored'] == 0 and 'BudgetLimit' in capped['errors'][0]
     assert pc.enabled_sports(lambda k, d='': 'nba, nhl, XFL') == ('NBA', 'NHL')
@@ -137,3 +137,50 @@ def test_a_certified_close_is_comparable_for_plan_evaluation(store, clock):
         db.row_factory = sqlite3.Row
         found = pe._comparable_close(db, quote, now)
     assert found is not None and found['close_verified'] == 1  # same event, book, selection and line
+
+
+
+def test_spread_only_by_default_and_totals_only_when_asked(store, clock):
+    pe.insert_quote(store, dict(quote_id="SYNTHETIC-Q2", event_id="SYNTHETIC-E1", sport="NBA", market_family="TOTAL",
+        selection="Over", line=221.5, american_odds=-110, decimal_odds=1.909090909, sportsbook="TestBook",
+        quote_timestamp=at(0), quote_source="THE_ODDS_API", quote_verified=False,
+        source_id=f"SYNTHETIC-E1:TestBook:totals:Over:{at(0)}", raw_source={"synthetic": True}))
+    assert pc.enabled_families('NBA', lambda k, d='': d) == {'SPREAD'}
+    assert pc.enabled_families('NBA', lambda k, d='': 'spread,total') == {'SPREAD', 'TOTAL'}
+    assert pc.enabled_families('MLB', lambda k, d='': 'SPREAD') == {'RUN_LINE'}
+    now = BASE + timedelta(hours=1, minutes=5)
+    [(_, quotes)] = pc.due(store, now, sports=('NBA',), setting=lambda k, d='': d)
+    assert {q['market_family'] for q in quotes} == {'SPREAD'}
+
+
+def test_certified_close_allowance_is_separate_and_capped():
+    from app_core.research_api_budget import Budget, BudgetLimit, CERTIFIED_CLOSE_LIMITS
+    assert CERTIFIED_CLOSE_LIMITS == {'NBA': {'daily': 100, 'rolling_31_days': 2500}}
+    saves = []
+    budget = Budget({}, lambda: saves.append(1), clock=lambda: BASE)
+    for _ in range(10):
+        budget.reserve_certified_close('NBA', 10)
+    with pytest.raises(BudgetLimit, match='NBA:certified_close:daily'):
+        budget.reserve_certified_close('NBA', 10)
+    with pytest.raises(BudgetLimit, match='NHL:certified_close:not_budgeted'):
+        budget.reserve_certified_close('NHL', 10)
+    budget.reserve_certified_close('NBA', 5, already_spent=True)  # an overcharge is always recorded
+    assert budget.usage('NBA', budget.close_ledger)['daily'] == 105 and len(saves) == 11
+    assert budget.usage('ODDS') == {'daily': 0, 'rolling_31_days': 0}  # capture allowance untouched
+
+
+def test_a_provider_overcharge_is_recorded_and_stops_the_batch(store, clock):
+    from app_core.research_api_budget import Budget
+    clock(1, 5)
+    now = BASE + timedelta(hours=1, minutes=5)
+
+    class Overcharging(Provider):
+        def __call__(self, url, params=None, timeout=None):
+            response = super().__call__(url, params, timeout)
+            response.headers = {'x-requests-last': '30'}
+            return response
+    budget = Budget({}, lambda: None, clock=lambda: now)
+    report = pc.record(store, now=now, key='SYNTHETIC-KEY', request_get=Overcharging(snapshot()), budget=budget,
+                       sports=('NBA',))
+    assert report['stored'] == 1 and report['credits'] == 30 and report['stopped'] == 'COST_MISMATCH'
+    assert budget.usage('NBA', budget.close_ledger)['daily'] == 30
