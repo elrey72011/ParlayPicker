@@ -185,6 +185,6 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | C2 | Bind models to new plan versions | C0, D11, D12 | IN PROGRESS. Research sports (NBA, NCAAB): settlement, pinned candidate, calibration and bound predictions are built (`app_core/prospective_calibration.py`). Review-and-freeze path: the **Bound plan** workflow (`scripts/bound_plan.py`) drafts read-only with a plan hash; `freeze` needs that reviewed hash and a future validation start. The readiness report shows each research market's next blocker. Football waits for a second season (D12) |
 | C3 | Frozen-plan progress view; rework the scoreboard | C0 | NOT STARTED |
 | C4 | Validation, review and activation | C1, C2 | NOT STARTED (owner steps) |
-| C5 | Model improvements with fresh holdouts | C2 | NOT STARTED |
+| C5 | Model improvements with fresh holdouts | C2 | IN PROGRESS. The NCAAF score model shows no edge over archived lines (D18). The first C5 piece is a **cross-book price screen** (`app_core/price_edge_screen.py`, shown in the readiness report). It de-vigs every book, takes the median as fair, flags the best price with EV at or above a threshold, and grades each flag against its certified close (CLV) and the final score. It uses no model. It shows whether price shopping beats the close before any selector is bound to a plan |
 | C6 | Selector switch | C4, D7 | NOT STARTED |
 | E1.1/E1.2 | Grade legacy picks since 2026-08-28; refit legacy calibration | Drive | BLOCKED (Drive). Lower priority than C0 |
