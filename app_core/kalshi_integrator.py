@@ -1281,6 +1281,44 @@ def kalshi_title_references_matchup(norm_title: str, norm_home: str, norm_away: 
     return False
 
 
+# Approximate standard deviation of the final margin and of the game total per league,
+# used only to move a nearest-line Kalshi proxy to the pick's line. Rough, published-
+# scale values; the shift is small for small offsets, and the decay still applies after.
+PROXY_MARGIN_SD = {"NBA": 12.0, "WNBA": 11.0, "NCAAB": 11.0, "NCAAF": 15.5, "NFL": 13.5,
+                   "NHL": 2.3, "MLB": 4.3}
+PROXY_TOTAL_SD = {"NBA": 18.0, "WNBA": 15.0, "NCAAB": 16.0, "NCAAF": 16.5, "NFL": 13.5,
+                  "NHL": 2.3, "MLB": 4.4}
+
+
+def shift_proxy_probability(prob, league, line_gap, *, is_total, is_under=False, pick_is_favorite=False):
+    """Move an oriented pick probability from the Kalshi contract's line to the pick's line.
+
+    ``prob`` is P(pick wins) at the contract line k; ``line_gap`` = pick line - k (both as
+    absolute lines). A normal approximation of the margin/total is shifted by
+    ``line_gap / sd``: a higher total line lowers P(over) and raises P(under); a longer
+    favourite line lowers P(cover) and a longer underdog line raises it. Returns None
+    when the input is not a usable probability.
+    """
+    try:
+        p = float(prob)
+        gap = float(line_gap)
+    except (TypeError, ValueError):
+        return None
+    if not (0.0 < p < 1.0) or not math.isfinite(gap):
+        return None
+    if gap == 0.0:
+        return p
+    from statistics import NormalDist
+    sd = (PROXY_TOTAL_SD if is_total else PROXY_MARGIN_SD).get(str(league).upper(), 12.0)
+    if is_total:
+        harder = gap > 0 if not is_under else gap < 0
+    else:
+        harder = gap > 0 if pick_is_favorite else gap < 0
+    step = abs(gap) / sd
+    z = NormalDist().inv_cdf(min(max(p, 1e-6), 1 - 1e-6))
+    return float(NormalDist().cdf(z - step if harder else z + step))
+
+
 def orient_spread_kalshi_prob(raw_prob, subject_is_home, pick_is_home, pick_line):
     """P(pick covers) from a run-line contract "S wins by over L" (raw_prob = P(S by >L)).
 
@@ -1342,6 +1380,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         "kalshi_event_ticker",
         "kalshi_market_ticker",
         "kalshi_line_diff",
+        "kalshi_line_offset",
         "kalshi_series_ticker",
         "kalshi_series_fetch_error",
         "kalshi_best_event_score",
@@ -1675,6 +1714,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         match_status = "matched"
                         match_reason = "nearest_line_proxy"
                         out.at[idx, "kalshi_line_diff"] = delta
+                        out.at[idx, "kalshi_line_offset"] = float(nearest[0]) - target_line_abs
                 else:
                     best_market = None
                     match_status = "miss"
@@ -1869,6 +1909,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             match_status = "matched"
                             match_reason = "nearest_line_proxy"
                             out.at[idx, "kalshi_line_diff"] = delta
+                            out.at[idx, "kalshi_line_offset"] = float(nearest[0]) - target_line_abs
                     else:
                         best_market = None
                         match_status = "miss"
@@ -2029,6 +2070,20 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 # so the away/under side is genuinely 1 - the over/home probability.
                 is_away_or_under = any(x in market_type_str for x in ["away", "under"])
                 final_pick_prob = 1.0 - float(final_prob) if is_away_or_under else float(final_prob)
+
+            # PROXY LINE SHIFT: a nearest-line proxy prices a different line than the
+            # pick. Move it to the pick's line before the decay below, so a -9.5 pick
+            # priced from a "wins by over 7" contract is not credited with P(cover -7).
+            offset = _safe_float(out.at[idx, "kalshi_line_offset"]) if "kalshi_line_offset" in out.columns else 0.0
+            if offset and not pd.isna(offset):
+                signed_pick_line = None if is_totals_query else _signed_spread_line(row)
+                shifted = shift_proxy_probability(
+                    final_pick_prob, league, -offset, is_total=bool(is_totals_query),
+                    is_under="under" in market_type_str or "Under " in best_pick,
+                    pick_is_favorite=(signed_pick_line is not None and signed_pick_line < 0),
+                )
+                if shifted is not None:
+                    final_pick_prob = shifted
 
             # PROXY DECAY (New Logic)
             delta = _safe_float(out.at[idx, "kalshi_line_diff"])
