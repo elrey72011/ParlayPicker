@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '47 22 * * *'      # 5:47 PM EST, before the evening slate
+    - cron: '17 0 * * *'       # backup start: GitHub often skips scheduled runs (2026-11-06)
     - cron: '47 15 * * 0,6'    # weekends 10:47 AM EST
 permissions:
   contents: read
