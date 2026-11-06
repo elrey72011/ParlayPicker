@@ -17,6 +17,7 @@ from pathlib import Path
 import subprocess
 
 from app_core import prospective_evidence as evidence
+from app_core.research_api_budget import REFERENCE_BOOKS
 from app_core.odds_market_store import for_sport
 from app_core.odds_research_adapter import (PROTOCOL, digest as native_digest,
                                              identity, participant_ids)
@@ -95,6 +96,8 @@ def _reference_quotes(events, quotes, cutoff):
         event = events.get(quote["event_id"])
         if event is None or quote["quote_verified"] != 1 or quote["line"] is None:
             continue
+        if quote["sportsbook"] in REFERENCE_BOOKS:
+            continue  # D4: Pinnacle is a fair-price reference, never the plan's entry price
         canonical_selection = event["home_team"] if quote["market_family"] != "TOTAL" else "Over"
         if quote["selection"] != canonical_selection or _time(quote["quote_timestamp"]) > cutoff:
             continue

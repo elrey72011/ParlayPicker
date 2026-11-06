@@ -18,7 +18,7 @@ import requests
 from app_core.ncaaf_history import timestamp
 from app_core.odds_market_store import for_sport
 from app_core.quote_freshness import QUOTE_MAX_AGE_SECONDS
-from app_core.research_api_budget import BudgetLimit
+from app_core.research_api_budget import BudgetLimit, PINNACLE_BOOKMAKERS, pinnacle_sports
 
 
 SPORT_KEYS = {"NBA": "basketball_nba", "NCAAB": "basketball_ncaab", "NHL": "icehockey_nhl"}
@@ -263,10 +263,25 @@ class OddsResearchAdapter:
         for gid in allowed:
             attempts[gid] = utcnow().isoformat()
         payload = []
+        pinnacle = self.sport in pinnacle_sports()
+        result["pinnacle"] = "on" if pinnacle else "off"
         for offset in range(0, len(allowed), CAPTURE_BATCH):
-            payload.extend(fetch(self.sport, "odds", odds_key, request_get,
-                                 params={"regions": "us", "markets": "spreads,totals", "oddsFormat": "american",
-                                         "eventIds": ",".join(allowed[offset:offset + CAPTURE_BATCH])}))
+            ids = ",".join(allowed[offset:offset + CAPTURE_BATCH])
+            params = {"regions": "us", "markets": "spreads,totals", "oddsFormat": "american", "eventIds": ids}
+            if pinnacle:
+                # D4: the same US books plus Pinnacle in one response, so every quote
+                # still replays against the raw capture.
+                try:
+                    payload.extend(fetch(self.sport, "odds", odds_key, request_get,
+                                         params={"bookmakers": PINNACLE_BOOKMAKERS, "markets": "spreads,totals",
+                                                 "oddsFormat": "american", "eventIds": ids}))
+                    continue
+                except BudgetLimit as exc:
+                    if "PINNACLE" not in str(exc):
+                        raise
+                    pinnacle = False
+                    result["pinnacle"] = "allowance_spent"
+            payload.extend(fetch(self.sport, "odds", odds_key, request_get, params=params))
         accepted, rejected = [], Counter()
         seen = set()
         for row in payload:

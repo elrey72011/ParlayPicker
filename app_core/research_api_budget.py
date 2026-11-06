@@ -19,6 +19,29 @@ NEW_SPORT_CALL_LIMITS = {"daily": 45, "rolling_31_days": 1200}
 CERTIFIED_CLOSE_LIMITS = {"NBA": {"daily": 100, "rolling_31_days": 2500}}  # D13
 NCAAB_CERTIFIED_CLOSE_LIMITS = {"NCAAB": {"daily": 400, "rolling_31_days": 4500}}  # D14
 ALL_CERTIFIED_CLOSE_LIMITS = {**CERTIFIED_CLOSE_LIMITS, **NCAAB_CERTIFIED_CLOSE_LIMITS}
+# D4 option A (owner-chosen 2026-11-06): Pinnacle as the fair-price reference for NBA and
+# NCAAB spreads. The capture request names the US-region books plus Pinnacle instead of
+# ``regions=us``, so one raw response holds every book and each quote still replays
+# against it. 11 US books + Pinnacle = 12 bookmakers = 2 region equivalents, so a
+# request costs 4 credits instead of 2; the extra 2 are charged to their own allowance.
+PINNACLE_ENV = "PARLAYPICKER_PINNACLE_SPORTS"
+PINNACLE_SPORTS = ("NBA", "NCAAB")
+US_BOOKMAKERS = ("betonlineag", "betmgm", "betrivers", "betus", "bovada", "williamhill_us", "draftkings",
+                 "fanatics", "fanduel", "lowvig", "mybookieag")
+PINNACLE_BOOKMAKERS = ",".join(US_BOOKMAKERS + ("pinnacle",))
+PINNACLE_EXTRA_UNITS = 2
+PINNACLE_LIMITS = {"daily": 60, "rolling_31_days": 1500}
+# Reference-only books: captured for the fair price, never an entry price, a plan's
+# reference quote, a research pick or a certified-close request (Pinnacle is not
+# bettable for US users, and naming it would double certified-close credits).
+REFERENCE_BOOKS = frozenset({"pinnacle"})
+
+
+def pinnacle_sports(setting=None):
+    """Sports with Pinnacle enabled (``PARLAYPICKER_PINNACLE_SPORTS``, e.g. "NBA,NCAAB"); off by default."""
+    import os
+    raw = (setting or os.environ.get)(PINNACLE_ENV, "") or ""
+    return {s.strip().upper() for s in raw.split(",") if s.strip().upper() in PINNACLE_SPORTS}
 
 
 class BudgetLimit(ValueError):
@@ -41,6 +64,9 @@ class Budget:
             raise ValueError("invalid_api_budget_state")
         self.close_ledger=state.setdefault("api_budget_certified_close_v1",{})
         if not isinstance(self.close_ledger,dict):
+            raise ValueError("invalid_api_budget_state")
+        self.pinnacle_ledger=state.setdefault("api_budget_pinnacle_v1",{})
+        if not isinstance(self.pinnacle_ledger,dict):
             raise ValueError("invalid_api_budget_state")
 
     def usage(self, provider, ledger=None):
@@ -84,6 +110,25 @@ class Budget:
         self.persist()
         return today
 
+    def reserve_pinnacle(self, units):
+        """Charge the extra Pinnacle credits to their own allowance and to the plan-wide ODDS total."""
+        usage = self.usage("PINNACLE", self.pinnacle_ledger)
+        overall = self.usage("ODDS")
+        for window, limit in PINNACLE_LIMITS.items():
+            if usage[window] + units > limit:
+                code = f"PINNACLE:{window}"
+                self.blocked.append(code)
+                raise BudgetLimit("api_budget:" + code)
+        for window, limit in self.limits["ODDS"].items():
+            if overall[window] + units > limit:
+                code = f"ODDS:{window}"
+                self.blocked.append(code)
+                raise BudgetLimit("api_budget:" + code)
+        today = self.clock().astimezone(timezone.utc).date().isoformat()
+        for ledger, key in ((self.pinnacle_ledger, "PINNACLE"), (self.ledger, "ODDS")):
+            days = ledger.setdefault(key, {})
+            days[today] = days.get(today, 0) + units
+
     def reserve_certified_close(self, sport, units, *, already_spent=False):
         """Reserve Odds API credits for one certified-close request against its own allowance.
 
@@ -118,6 +163,7 @@ class Budget:
         if parsed.scheme!="https" or parsed.query:
             raise ValueError("unbudgeted_provider_request")
         sport = None
+        extra = 0
         if parsed.netloc=="api.collegefootballdata.com" and parsed.path in ("/games","/games/teams"):
             provider,units,sport="CFBD",1,"NCAAF"
         elif parsed.netloc=="api.the-odds-api.com" and parsed.path in ("/v4/sports/americanfootball_ncaaf/odds", "/v4/sports/americanfootball_nfl/odds"):
@@ -149,6 +195,13 @@ class Budget:
                 if set(params) - {"apiKey"}:
                     raise ValueError("unbudgeted_odds_parameters")
                 provider, units = "ODDS", 1
+            elif endpoint == "odds" and "bookmakers" in params:
+                if (params.get("bookmakers") != PINNACLE_BOOKMAKERS or sport not in PINNACLE_SPORTS or
+                        "regions" in params or params.get("markets") != "spreads,totals" or
+                        params.get("oddsFormat") != "american" or
+                        set(params) - {"apiKey", "dateFormat", "bookmakers", "markets", "oddsFormat", "eventIds"}):
+                    raise ValueError("unbudgeted_odds_markets")
+                provider, units, extra = "ODDS", 2, PINNACLE_EXTRA_UNITS
             elif endpoint == "odds":
                 if (params.get("regions") != "us" or params.get("markets") != "spreads,totals" or
                         params.get("oddsFormat") != "american" or
@@ -169,13 +222,24 @@ class Budget:
             raise ValueError("unbudgeted_provider_request")
         if self.state.get("api_budget_cost_mismatch"):
             raise BudgetLimit("api_budget:provider_cost_review_required")
+        if extra:
+            # Refuse before any reservation, so a spent Pinnacle allowance costs nothing.
+            usage = self.usage("PINNACLE", self.pinnacle_ledger)
+            if any(usage[w] + extra > limit for w, limit in PINNACLE_LIMITS.items()):
+                code = "PINNACLE:" + next(w for w, limit in PINNACLE_LIMITS.items() if usage[w] + extra > limit)
+                self.blocked.append(code)
+                raise BudgetLimit("api_budget:" + code)
         reserved_day=self.reserve(provider,units,sport)
+        if extra:
+            self.reserve_pinnacle(extra)
+            self.persist()
         response=self.get(url,**kwargs)
         if provider=="ODDS":
             raw=getattr(response,"headers",{}).get("x-requests-last")
             if raw is not None:
                 try:actual=int(raw)
                 except (ValueError,TypeError):actual=-1
+                units += extra
                 if actual<0 or actual>units:
                     self.state["api_budget_cost_mismatch"]=True
                     if actual>units:
@@ -197,6 +261,8 @@ class Budget:
                 "certified_close_limits":ALL_CERTIFIED_CLOSE_LIMITS,
                 "certified_close_usage":{s:self.usage(s,self.close_ledger) for s in ALL_CERTIFIED_CLOSE_LIMITS},
                 "new_sport_call_limits":NEW_SPORT_CALL_LIMITS,
+                "pinnacle_limits":PINNACLE_LIMITS,
+                "pinnacle_usage":self.usage("PINNACLE",self.pinnacle_ledger),
                 "paused":sorted(set(self.blocked)),
                 "cost_review_required":bool(self.state.get("api_budget_cost_mismatch")),
                 "scope":"Scheduler only, starting when installed; prior and manual usage are not counted."}
