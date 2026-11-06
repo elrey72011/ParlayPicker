@@ -37,15 +37,20 @@ def run(database, minutes, interval, *, capture=None, restore=None, backup=None,
     totals = {"cycles": 0, "verified": 0, "unavailable": 0, "backups": 0, "errors": 0}
     while True:
         totals["cycles"] += 1
+        unmatched = {}
         try:
-            result = capture(database)
+            try:
+                result = capture(database, unmatched=unmatched)
+            except TypeError:  # a capture without the diagnostic parameter
+                result = capture(database)
         except Exception as exc:  # one failed cycle must not end the slate
             totals["errors"] += 1
             result = {"verified": 0, "error": type(exc).__name__}
         totals["verified"] += result.get("verified", 0)
         totals["unavailable"] += result.get("unavailable", 0)
         print(json.dumps({"cycle": totals["cycles"], **{k: v for k, v in result.items() if k != "reasons"},
-                          "reasons": result.get("reasons")}), flush=True)
+                          "reasons": result.get("reasons"),
+                          **({"unmatched_detail": unmatched} if unmatched else {})}), flush=True)
         if result.get("verified"):
             backup(database)
             totals["backups"] += 1
