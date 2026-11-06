@@ -41,6 +41,10 @@ def _sides(event, market):
     return (event["home_team"], event["away_team"]) if market != "TOTAL" else ("Over", "Under")
 
 
+def _order(quote):
+    return str(quote.get("quote_timestamp") or ""), str(quote.get("quote_id") or "")
+
+
 def screen(events, quotes, closes, scores, *, min_books=3):
     """Flagged candidates (one per event, market, line and side) with their grades."""
     events = {e["event_id"]: e for e in events}
@@ -49,7 +53,10 @@ def screen(events, quotes, closes, scores, *, min_books=3):
         event = events.get(quote["event_id"])
         if event is None or not quote.get("quote_verified") or quote.get("line") is None:
             continue
-        books.setdefault(_key(event, quote), {}).setdefault(quote["sportsbook"], {})[quote["selection"]] = quote
+        sides = books.setdefault(_key(event, quote), {}).setdefault(quote["sportsbook"], {})
+        held = sides.get(quote["selection"])
+        if held is None or _order(quote) < _order(held):
+            sides[quote["selection"]] = quote  # each book's first quote at this line (later ones are C6 decision quotes)
     close_by = {(c["event_id"], c["market_family"], c["selection"], c["sportsbook"]): c
                 for c in closes if c.get("close_verified")}
     score_by = {s["event_id"]: s for s in scores}
