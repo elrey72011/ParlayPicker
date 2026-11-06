@@ -56,3 +56,17 @@ def test_pinnacle_is_scored_on_the_picks_that_have_it():
 def test_blend_study_fits_kalshi_and_pinnacle_together():
     from core.blend_weights import INPUTS, CURRENT
     assert INPUTS["pinnacle"] == "pinnacle_fair_probability" and "pinnacle" in CURRENT
+
+
+def test_board_market_shadow_falls_back_to_game_market_and_pick():
+    """Overall board rows come from the final export, which has no candidate_id (2026-11-06)."""
+    from app.ui.daily_dashboard import market_shadow
+    result = pd.DataFrame({"candidate_id": ["", ""], "matchup_id": ["g1", "g2"], "market_type": ["spread_home", "total_over"],
+                           "pick": ["Home -3.5", "Over 140.5"], "odds": [-110, 100]})
+    candidates = pd.DataFrame({"candidate_id": ["a", "b", "c"], "matchup_id": ["g1", "g2", "g2"],
+                               "market_type": ["spread_home", "total_over", "total_over"],
+                               "best_pick": ["Home -3.5", "Over 140.5", "Over 140.5"],
+                               "market_probability": [0.52, 0.5, 0.49]})
+    probs, ev = market_shadow(result, candidates)
+    assert probs.tolist()[0] == 0.52 and abs(ev[0] - (0.52 * (1 + 100 / 110) - 1)) < 1e-9
+    assert pd.isna(probs[1])                 # two candidates share the key: ambiguous, left empty
