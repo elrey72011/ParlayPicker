@@ -1,0 +1,80 @@
+name: Deployment review (audit, then record)
+# Roadmap D11 option B (owner-chosen 2026-11-06). `audit` restores the canonical evidence
+# read-only and publishes an independent audit of a validated plan (chronology, reference
+# books, duplicates, concentration, holdout drift, closing-line value) with its hash.
+# Nothing changes. `record` is the owner's step after reading the audit: it recomputes the
+# audit, continues only if the hash matches and nothing FAILs, then writes the validation
+# artifact and the deployment review bound to that audit hash, with Drive read-back.
+# A review grants no stake; funding still needs the owner's market activation.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "audit (read-only) or record (after review)"
+        required: true
+        default: audit
+        type: choice
+        options: [audit, record]
+      plan:
+        description: "Validation plan ID"
+        required: true
+      audit_hash:
+        description: "record only: the audit hash from the reviewed audit"
+        required: false
+        default: ""
+      reviewer:
+        description: "record only: your reviewer name"
+        required: false
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: research-capture-and-grading
+  cancel-in-progress: false
+jobs:
+  deployment-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
+      PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Restore the verified Drive object cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-deployment-review-${{ github.run_id }}
+          restore-keys: drive-cache-
+      - name: Audit or record
+        env:
+          ACTION: ${{ inputs.action }}
+          PLAN: ${{ inputs.plan }}
+          AUDIT_HASH: ${{ inputs.audit_hash }}
+          REVIEWER: ${{ inputs.reviewer }}
+          OUT: ${{ runner.temp }}/deployment-review
+        run: |
+          set -euo pipefail
+          args=("$ACTION" --directory "$OUT/evidence" --output "$OUT/report/deployment-review.json"
+                --cache-dir "$RUNNER_TEMP/drive-cache" --plan "$PLAN")
+          if [ "$ACTION" = record ]; then args+=(--audit-hash "$AUDIT_HASH" --reviewer "$REVIEWER"); fi
+          python -u scripts/deployment_review.py "${args[@]}"
+      - name: Save the verified Drive object cache
+        if: ${{ always() }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-deployment-review-${{ github.run_id }}
+      - name: Keep the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-review-${{ inputs.action }}
+          path: ${{ runner.temp }}/deployment-review/report/
+          if-no-files-found: warn
