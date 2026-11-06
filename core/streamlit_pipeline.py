@@ -10835,6 +10835,14 @@ def run_analysis_pipeline(
     finish_ncaaf_evidence(analysis_df)
     from app_core.nhl_puck_line_evidence import finish as finish_nhl_evidence
     finish_nhl_evidence(analysis_df)
+    # Roadmap C6: a qualified market's own bound predictions replace the app's rows for that
+    # market before eligibility, Gemini review and the wager contract. Off by default
+    # (PARLAYPICKER_QUALIFIED_BRIDGE); a failure leaves every row exactly as it was.
+    try:
+        from app_core.qualified_bridge import inject as inject_qualified
+        analysis_df, best_picks_df, diagnostics["qualified_bridge"] = inject_qualified(analysis_df, best_picks_df)
+    except Exception as exc:  # never break Refresh
+        diagnostics["qualified_bridge"] = {"status": "ERROR", "error": type(exc).__name__}
     return (analysis_df, best_picks_df, diagnostics)
 
 

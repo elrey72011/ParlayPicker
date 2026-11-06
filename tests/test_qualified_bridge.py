@@ -68,3 +68,35 @@ def test_only_qualified_upcoming_markets_and_never_pinnacle(tmp_path, clock):  #
     _trained_market(path2, clock)
     _upcoming(path2, clock, book="pinnacle")
     assert qb.rows(path2, {("NBA", "SPREAD")}, now=now) == []                     # reference book
+
+
+def test_inject_is_off_by_default_and_replaces_only_qualified_market_rows():
+    import pandas as pd
+    analysis = pd.DataFrame([{"league": "NCAAB", "market_type": "spread_home", "best_pick": "app pick"},
+                             {"league": "NCAAB", "market_type": "total_over", "best_pick": "app total"},
+                             {"league": "NBA", "market_type": "spread_home", "best_pick": "nba pick"}])
+    best = analysis.copy()
+    off = qb.inject(analysis, best, setting=lambda *_: "")
+    assert off[2] == {"status": "OFF"} and off[0] is analysis
+    bridged = [{"league": "NCAAB", "market_type": "spread_away", "best_pick": "Away +3.5",
+                "candidate_source": "qualified_bridge"}]
+    seen = {}
+
+    def make_rows(path, qualified, now=None, policy_versions=None):
+        seen.update(path=path, qualified=qualified, versions=policy_versions)
+        return bridged
+    config = {"prospective_evidence_path": "evidence.sqlite3",
+              "market_activations": {"NCAAB:SPREAD": {"policy": {"version": "ncaab-policy-v1"}}}}
+    a, b, diag = qb.inject(analysis, best, setting=lambda *_: "true", configuration=config,
+                           assess=lambda path: {("NCAAB", "SPREAD")}, make_rows=make_rows)
+    assert diag == {"status": "INJECTED", "qualified_markets": ["NCAAB SPREAD"], "rows": 1}
+    assert seen["path"] == "evidence.sqlite3" and seen["versions"] == {"NCAAB:SPREAD": "ncaab-policy-v1"}
+    for frame in (a, b):
+        assert sorted(frame["best_pick"]) == ["Away +3.5", "app total", "nba pick"]   # only NCAAB spread replaced
+
+
+def test_inject_with_nothing_qualified_changes_nothing():
+    import pandas as pd
+    best = pd.DataFrame([{"league": "NCAAB", "market_type": "spread_home", "best_pick": "app pick"}])
+    a, b, diag = qb.inject(best, best, setting=lambda *_: "true", configuration={}, assess=lambda path: set())
+    assert diag == {"status": "NO_QUALIFIED_MARKET"} and b is best

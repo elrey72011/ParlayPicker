@@ -93,3 +93,54 @@ def rows(path, qualified, *, now=None, policy_versions=None):
         for p, quote, event in latest.values():
             out.append(row(p, quote, event, policy_versions.get(f"{sport}:{family}")))
     return sorted(out, key=lambda r: (r["start"], r["sport"], r["game_id"]))
+
+
+BRIDGE_ENV = "PARLAYPICKER_QUALIFIED_BRIDGE"
+FAMILY_OF = {"spread_home": "SPREAD", "spread_away": "SPREAD", "total_over": "TOTAL", "total_under": "TOTAL"}
+
+
+def enabled(setting=None):
+    import os
+    return str((setting or os.environ.get)(BRIDGE_ENV, "") or "").strip().lower() == "true"
+
+
+def _family(sport, market_type):
+    from core.market_policy import sport_market_family
+    return sport_market_family(sport, market_type)
+
+
+def inject(analysis_df, best_picks_df, *, now=None, setting=None, configuration=None, assess=None, make_rows=None):
+    """Replace each qualified market's app rows with its bridge rows, before eligibility and Gemini.
+
+    Off unless ``PARLAYPICKER_QUALIFIED_BRIDGE=true``. Returns (analysis_df, best_picks_df, diagnostic).
+    Unqualified markets and every other row are untouched.
+    """
+    import pandas as pd
+    if not enabled(setting):
+        return analysis_df, best_picks_df, {"status": "OFF"}
+    now = now or datetime.now(timezone.utc)
+    if configuration is None:
+        from core.live_wager_contract import load_configuration
+        _, configuration, _ = load_configuration(now)
+    path = (configuration or {}).get("prospective_evidence_path")
+    if assess is None:
+        from app_core.selection import qualification
+        qualified = qualification.qualified_set(qualification.assess(path))
+    else:
+        qualified = frozenset(assess(path))
+    if not qualified:
+        return analysis_df, best_picks_df, {"status": "NO_QUALIFIED_MARKET"}
+    versions = {key: ((record or {}).get("policy") or {}).get("version")
+                for key, record in ((configuration or {}).get("market_activations") or {}).items()}
+    bridged = (make_rows or rows)(path, qualified, now=now, policy_versions=versions)
+
+    def replace(frame):
+        frame = frame if frame is not None else pd.DataFrame()
+        if not frame.empty and {"league", "market_type"} <= set(frame.columns):
+            keep = [(str(lg).upper(), _family(str(lg).upper(), mt)) not in qualified
+                    for lg, mt in zip(frame["league"], frame["market_type"])]
+            frame = frame.loc[keep]
+        return pd.concat([frame, pd.DataFrame(bridged)], ignore_index=True) if bridged else frame.reset_index(drop=True)
+
+    return replace(analysis_df), replace(best_picks_df), {
+        "status": "INJECTED", "qualified_markets": sorted(" ".join(m) for m in qualified), "rows": len(bridged)}
