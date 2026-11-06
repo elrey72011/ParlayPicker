@@ -41,6 +41,9 @@ jobs:
       PARLAYPICKER_RESEARCH_CAPTURE_HOURS: ${{ vars.PARLAYPICKER_RESEARCH_CAPTURE_HOURS }}
       PARLAYPICKER_PINNACLE_SPORTS: ${{ vars.PARLAYPICKER_PINNACLE_SPORTS }}
       PARLAYPICKER_NHL_SETTLEMENT: ${{ vars.PARLAYPICKER_NHL_SETTLEMENT }}
+      # Fewer, fuller provider requests so 30-minute cycles stay inside the per-sport
+      # daily credit caps (app_core/odds_research_adapter.py, BATCHING_ENV).
+      PARLAYPICKER_RESEARCH_BATCHING: "true"
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
