@@ -201,9 +201,68 @@ def _refresh(target, stamp, started, clock, client, folder, sync):
         return {"status": "REFRESH_FAILED", "error": type(exc).__name__}
 
 
-def refresh_if_enabled(setting=None, **kwargs):
-    """``refresh_store`` when the bridge is on (``PARLAYPICKER_QUALIFIED_BRIDGE=true``), else OFF."""
-    return refresh_store(setting=setting, **kwargs) if enabled(setting) else {"status": "OFF"}
+def active_markets(directory=None):
+    """Owner market activations on disk (``sport:family``), read the same way as the live
+    wager contract (``core.live_wager_contract.load_configuration``). Empty when none."""
+    import json
+    import os
+    from pathlib import Path
+    from core.market_policy import SPORT_MARKET_FAMILIES
+    directory = Path(directory or os.environ.get("PARLAYPICKER_MARKET_ACTIVATIONS_DIR", "data/policies/active_markets"))
+    found = []
+    for sport, families in SPORT_MARKET_FAMILIES.items():
+        for family in families:
+            try:
+                record = json.loads((directory / f"{sport}-{family}.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(record, dict) and record.get("sport") == sport and record.get("market_family") == family:
+                found.append(f"{sport}:{family}")
+    return found
+
+
+_BACKGROUND = {"thread": None, "last": None}
+
+
+def refresh_if_enabled(setting=None, *, activations=None, background=True, **kwargs):
+    """Refresh the canonical store for the bridge without ever holding up Refresh.
+
+    * Bridge off (``PARLAYPICKER_QUALIFIED_BRIDGE`` not ``true``): ``OFF``, no remote read.
+    * No owner market activation: ``NO_ACTIVE_MARKET``. Nothing can be bridged, so the
+      store is not read at all. (On a fresh app container a full read downloads every
+      evidence object and took longer than the whole Refresh, 2026-11-06.)
+    * Otherwise ``refresh_store`` runs in a background thread, at most one per process
+      (the file lock and the 10-minute throttle still apply across processes). Refresh
+      continues at once with the store already on disk; the next Refresh sees the update.
+      The diagnostic carries the previous background result under ``last``.
+    """
+    if not enabled(setting):
+        return {"status": "OFF"}
+    markets = active_markets() if activations is None else list(activations)
+    if not markets:
+        return {"status": "NO_ACTIVE_MARKET"}
+    if not background:
+        return refresh_store(setting=setting, **kwargs)
+    import threading
+    with _BACKGROUND_LOCK:
+        thread = _BACKGROUND["thread"]
+        if thread is not None and thread.is_alive():
+            return {"status": "IN_PROGRESS_BACKGROUND", "last": _BACKGROUND["last"]}
+
+        def run():
+            _BACKGROUND["last"] = refresh_store(setting=setting, **kwargs)  # never raises
+        thread = threading.Thread(target=run, name="qualified-bridge-refresh", daemon=True)
+        _BACKGROUND["thread"] = thread
+        thread.start()
+    return {"status": "STARTED_IN_BACKGROUND", "markets": markets, "last": _BACKGROUND["last"]}
+
+
+def _make_lock():
+    import threading
+    return threading.Lock()
+
+
+_BACKGROUND_LOCK = _make_lock()
 
 
 def inject(analysis_df, best_picks_df, *, now=None, setting=None, configuration=None, assess=None, make_rows=None):

@@ -167,3 +167,35 @@ def test_refresh_without_drive_credentials_reports_it(tmp_path, monkeypatch):
     monkeypatch.setattr("app_core.evidence_remote.settings", lambda: ("folder", None))
     out = qb.refresh_store(tmp_path / "p.sqlite3", setting=lambda *_: "")
     assert out == {"status": "MISSING_CREDENTIALS"}
+
+
+def test_refresh_skips_without_an_owner_activation(tmp_path, monkeypatch):
+    monkeypatch.setenv("PARLAYPICKER_MARKET_ACTIVATIONS_DIR", str(tmp_path / "none"))
+    assert qb.active_markets() == []
+    assert qb.refresh_if_enabled(setting=lambda *_: "true") == {"status": "NO_ACTIVE_MARKET"}
+    (tmp_path / "act").mkdir()
+    (tmp_path / "act" / "NCAAB-SPREAD.json").write_text('{"sport": "NCAAB", "market_family": "SPREAD"}')
+    (tmp_path / "act" / "NBA-TOTAL.json").write_text('{"sport": "NFL", "market_family": "TOTAL"}')  # mismatched
+    assert qb.active_markets(tmp_path / "act") == ["NCAAB:SPREAD"]
+
+
+def test_refresh_runs_in_background_and_never_blocks(tmp_path):
+    import threading
+    path = tmp_path / "prospective-evidence.sqlite3"
+    release, entered = threading.Event(), threading.Event()
+
+    def slow_sync(*_):
+        entered.set()
+        release.wait(5)
+        return {"restored": 1}
+
+    kwargs = dict(path=path, activations=["NCAAB:SPREAD"], client=_Remote(), folder="f", sync=slow_sync)
+    first = qb.refresh_if_enabled(setting=lambda *_: "true", **kwargs)
+    assert first["status"] == "STARTED_IN_BACKGROUND" and first["markets"] == ["NCAAB:SPREAD"]
+    assert entered.wait(5)
+    assert qb.refresh_if_enabled(setting=lambda *_: "true", **kwargs)["status"] == "IN_PROGRESS_BACKGROUND"
+    release.set()
+    qb._BACKGROUND["thread"].join(5)
+    assert qb._BACKGROUND["last"]["status"] == "REFRESHED"
+    direct = qb.refresh_if_enabled(setting=lambda *_: "true", background=False, **kwargs)
+    assert direct["status"] == "RECENT"                      # throttle still applies
