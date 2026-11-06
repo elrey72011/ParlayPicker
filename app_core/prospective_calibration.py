@@ -546,6 +546,8 @@ def pinnacle_cycle(path, sport, market, *, now):
         return {"status": "OFF"}
     try:
         model = pinnacle_model.register(path, sport, market, now=now, commit=research.source_commit())
-        return dict(pinnacle_model.fit_calibration(path, sport, market, model, now=now), model_id=model["model_id"])
+        settled = pinnacle_model.settle_reference_games(path, sport, market, now=now)
+        return dict(pinnacle_model.fit_calibration(path, sport, market, model, now=now), model_id=model["model_id"],
+                    settlement=settled)
     except Exception as exc:  # never break the research cycle
         return {"status": "ERROR", "error": type(exc).__name__}

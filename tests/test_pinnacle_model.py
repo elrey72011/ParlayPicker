@@ -174,3 +174,46 @@ def test_preview_without_a_model_and_the_report_section(tmp_path, clock):
     assert empty["model_id"] is None and empty["calibration"] is None and empty["coverage"] is None
     text = research_picks.markdown({"boards": [], "records": {}, "pinnacle_model": [empty]})
     assert "Pinnacle model: readiness and replay" in text and "| NCAAB SPREAD | not registered |" in text
+
+
+def test_pairs_only_within_the_same_capture_response():
+    """A later capture's US price never pairs with an earlier capture's Pinnacle price."""
+    event = {"event_id": "e", "home_team": "H", "away_team": "A", "observed_at": "2030-01-01T10:00:00+00:00"}
+    later = "2030-01-01T10:15:00+00:00"
+
+    def q(book, selection, line, price, received=None, stamp="2030-01-01T09:58:00+00:00"):
+        raw = ({"event_response": {}, "market": {}, "response_received_at": received} if received
+               else {"key": "spreads"})
+        return {"event_id": "e", "sportsbook": book, "market_family": "SPREAD", "selection": selection, "line": line,
+                "decimal_odds": _decimal(price), "quote_verified": 1, "quote_timestamp": stamp, "raw_source": raw}
+    first_pin = [q("pinnacle", "H", -2.5, PIN_HOME), q("pinnacle", "A", 2.5, PIN_AWAY)]
+    us_later = q("book", "H", -2.5, -110, received=later, stamp="2030-01-01T10:12:00+00:00")
+    end = datetime(2031, 1, 1, tzinfo=timezone.utc)
+    assert pm.fair(event, us_later, first_pin + [us_later], now=end) is None        # different captures
+    later_pin = [q("pinnacle", "H", -2.5, -140, received=later, stamp="2030-01-01T10:11:00+00:00"),
+                 q("pinnacle", "A", 2.5, 120, received=later, stamp="2030-01-01T10:11:00+00:00")]
+    home, away = 1 / _decimal(-140), 1 / _decimal(120)
+    assert pm.fair(event, us_later, first_pin + later_pin + [us_later], now=end) == pytest.approx(home / (home + away))
+    first_us = q("book", "H", -2.5, -110)
+    assert pm.fair(event, first_us, first_pin + later_pin, now=end) == pytest.approx(
+        (1 / _decimal(PIN_HOME)) / (1 / _decimal(PIN_HOME) + 1 / _decimal(PIN_AWAY)))
+
+
+def test_early_season_no_research_model_the_pinnacle_cycle_settles_and_calibrates(tmp_path, clock, monkeypatch):
+    """Season start: the research cycle has no model and settles nothing; the Pinnacle cycle still can."""
+    monkeypatch.setenv("PARLAYPICKER_PINNACLE_SPORTS", "NBA")
+    path = tmp_path / "SYNTHETIC.sqlite3"
+    clock[0] = _at(0)
+    _pin_event(path, clock, 0)                              # a stored game, so the store exists
+    clock[0] = _at(0, 6)
+    first = pc.pinnacle_cycle(path, "NBA", "SPREAD", now=clock[0])
+    assert first["status"] == "INSUFFICIENT_EVIDENCE"         # game 0 finished before registration
+    for index in range(1, 46):
+        _pin_event(path, clock, index)
+    clock[0] = _at(47)
+    out = pc.pinnacle_cycle(path, "NBA", "SPREAD", now=clock[0])
+    assert out["settlement"]["settled"] == 45 and out["status"] == "FITTED" and out["decided"] == 45
+    assert not pe.read_records(path, "prospective_model", sport="NBA", market_family="SPREAD")[0][
+        "independent_event_count"]                            # only the Pinnacle model exists
+    again = pm.settle_reference_games(path, "NBA", "SPREAD", now=clock[0])
+    assert again["settled"] == 0 and again["already_settled"] == 46
