@@ -83,7 +83,7 @@ def loop(minutes, interval, *, out_dir, cycle=None, waiting=owner_run_waiting, c
         next_start = max(clock(), started + interval * 60)
         if next_start + MIN_CYCLE_MINUTES * 60 > deadline:
             break
-        sleep(next_start - clock())
+        sleep(max(0.0, next_start - clock()))  # the clock moves on; never a negative sleep
     return totals
 
 

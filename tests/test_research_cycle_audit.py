@@ -113,3 +113,22 @@ def test_canonical_failure_audit_identifies_stage_without_exception_text():
     assert audit["canonical_failure"] == {"stage": "CANONICAL_RESTORE",
                                           "code": "DRIVE_STATUS_429"}
     assert audit["canonical_repair_sports"] == ["MLB"]
+
+
+def test_audit_reports_research_and_pinnacle_settlement_counts():
+    report = {"requested_sports": ["NCAAB"], "requested_slate_success": False,
+              "health": {"NCAAB": {"restore": "success"}},
+              "sports": {"NCAAB": {"model_cycle": {"predictions": 0, "blockers": [], "calibration_cycle": {
+                  "sport": "NCAAB", "markets": {"SPREAD": {
+                      "settlement": {"settled": 0, "awaiting_score": 3, "note": "https://private.example/x"},
+                      "pinnacle_model": {"status": "INSUFFICIENT_EVIDENCE", "decided": 0, "required": 40,
+                                         "model_id": "pinnacle-xyz",
+                                         "settlement": {"settled": 2, "no_pinnacle_at_line": 9,
+                                                        "awaiting_score": 4, "errors": 0}}}}}}}}}
+    audit = sanitize_cycle(report)
+    spread = audit["sports"]["NCAAB"]["calibration_cycle"]["SPREAD"]
+    assert spread["settlement"] == {"settled": 0, "awaiting_score": 3}
+    assert spread["pinnacle_model"] == {"status": "INSUFFICIENT_EVIDENCE", "decided": 0, "required": 40,
+                                        "settlement": {"settled": 2, "no_pinnacle_at_line": 9,
+                                                       "awaiting_score": 4, "errors": 0}}
+    assert "private.example" not in json.dumps(audit)

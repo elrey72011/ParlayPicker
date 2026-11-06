@@ -157,9 +157,36 @@ def sanitize_cycle(report):
                     if type(model.get(key)) is int and model[key] >= 0}
                 row["model_blockers"] = [_code(code) for code in model.get("blockers", [])
                                           if isinstance(code, str)]
+                calibration = model.get("calibration_cycle")
+                if isinstance(calibration, dict) and isinstance(calibration.get("markets"), dict):
+                    row["calibration_cycle"] = _calibration_summary(calibration["markets"])
         budget = health.get("api_budget")
         if isinstance(budget, dict):
             row["api_budget"] = {key: _code(budget[key]) for key in ("provider", "status")
                                  if isinstance(budget.get(key), str)}
         result["sports"][_code(sport)] = row
     return result
+
+
+def _counts(value):
+    return ({key: value[key] for key in value if isinstance(key, str) and type(value[key]) is int and value[key] >= 0}
+            if isinstance(value, dict) else {})
+
+
+def _calibration_summary(markets):
+    """Per market: research settlement counts and the Pinnacle model's status, decided games and
+    self-settlement counts (settled / already_settled / no_pinnacle_at_line / awaiting_score / errors).
+    Counts and codes only."""
+    out = {}
+    for market, entry in markets.items():
+        if not isinstance(market, str) or not isinstance(entry, dict):
+            continue
+        summary = {"settlement": _counts(entry.get("settlement"))}
+        pinnacle = entry.get("pinnacle_model")
+        if isinstance(pinnacle, dict):
+            summary["pinnacle_model"] = dict(
+                {key: _code(pinnacle[key]) for key in ("status", "error") if isinstance(pinnacle.get(key), str)},
+                **{key: pinnacle[key] for key in ("decided", "required") if type(pinnacle.get(key)) is int},
+                settlement=_counts(pinnacle.get("settlement")))
+        out[_code(market)] = summary
+    return out

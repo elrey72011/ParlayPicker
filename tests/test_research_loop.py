@@ -91,3 +91,20 @@ def test_cycle_runs_the_unchanged_scheduler_with_its_own_audit_path(tmp_path):
     code, audit = rl.run_cycle(3, out_dir=tmp_path, run=run)
     assert code == 0 and audit == {"execution_state": "COMPLETE"}
     assert calls[0][0].endswith("run_research_scheduler.py") and calls[0][1].endswith("research-cycle-audit-03.json")
+
+
+def test_a_clock_that_moves_between_reads_never_sleeps_negative(tmp_path):
+    """2026-11-06: a 58-minute cycle ended the loop with 'sleep length must be non-negative'."""
+    class Moving(Clock):
+        def __call__(self):
+            self.now += 0.001                 # real time passes between every read
+            return self.now
+    clock, slept = Moving(), []
+
+    def sleep(seconds):
+        assert seconds >= 0
+        slept.append(seconds)
+        clock.sleep(seconds)
+    totals = rl.loop(180, 30, out_dir=tmp_path, cycle=_cycle(clock, [(0, "COMPLETE")], minutes=58),
+                     waiting=lambda: False, clock=clock, sleep=sleep)
+    assert totals["cycles"] == 3 and totals["failed"] == 0 and slept and min(slept) == 0.0
