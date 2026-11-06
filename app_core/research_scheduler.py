@@ -263,6 +263,10 @@ def run_ncaaf(path, state, cfbd_key, odds_key, backup, request_get=None):
     return counts
 
 
+BACKLOG_ONLY = "DUE_SCORE_BATCH_LIMIT"
+GRADE_FAILURES = frozenset({"SCORE_SOURCE_IDENTITY_OR_TIMING_REJECTED", "SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW"})
+
+
 def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callback=None):
     sports = parse_sports(sports)
     root.mkdir(parents=True,exist_ok=True)
@@ -516,12 +520,23 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
             audit_callback(report)
     report["finished_at"]=utcnow().isoformat()
     report["api_budget"]=budget.report()
+    def grade_ok(s):
+        # A score backlog alone (more finished games than one run grades; the next run
+        # continues) is not a failure. Rejected scores or games past the provider's score
+        # window still are. The health entry keeps "partial" and the blocker stays listed.
+        if report["health"][s]["grade"] == "success":
+            return True
+        blockers = set(report["sports"].get(s, {}).get("blockers") or [])
+        return (report["health"][s]["grade"] == "partial" and BACKLOG_ONLY in blockers
+                and not blockers & GRADE_FAILURES)
+    report["grade_backlog_only"] = sorted(
+        s for s in sports if s in report["health"] and report["health"][s]["grade"] != "success" and grade_ok(s))
     report["requested_slate_success"] = not report["errors"] and all(
         report["health"][s]["restore"] == "success" and
         report["health"][s]["backup"] == "success" and
         report["health"][s].get("canonical_backup") != "failed" and
         report["health"][s]["capture"] == "success" and
-        report["health"][s]["grade"] == "success" and
+        grade_ok(s) and
         report["health"][s]["close_capture"] in ("success", "legacy_specialized") and
         report["sports"].get(s,{}).get("budget_paused") is not True for s in sports)
     report["execution_state"] = "COMPLETE" if report["requested_slate_success"] else "FAILED"
