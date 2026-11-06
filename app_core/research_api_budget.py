@@ -25,7 +25,7 @@ ALL_CERTIFIED_CLOSE_LIMITS = {**CERTIFIED_CLOSE_LIMITS, **NCAAB_CERTIFIED_CLOSE_
 # against it. 11 US books + Pinnacle = 12 bookmakers = 2 region equivalents, so a
 # request costs 4 credits instead of 2; the extra 2 are charged to their own allowance.
 PINNACLE_ENV = "PARLAYPICKER_PINNACLE_SPORTS"
-PINNACLE_SPORTS = ("NBA", "NCAAB")
+PINNACLE_SPORTS = ("NBA", "NCAAB", "NCAAF")  # NCAAF added 2026-11-06 (owner option B)
 US_BOOKMAKERS = ("betonlineag", "betmgm", "betrivers", "betus", "bovada", "williamhill_us", "draftkings",
                  "fanatics", "fanduel", "lowvig", "mybookieag")
 PINNACLE_BOOKMAKERS = ",".join(US_BOOKMAKERS + ("pinnacle",))
@@ -167,10 +167,17 @@ class Budget:
         if parsed.netloc=="api.collegefootballdata.com" and parsed.path in ("/games","/games/teams"):
             provider,units,sport="CFBD",1,"NCAAF"
         elif parsed.netloc=="api.the-odds-api.com" and parsed.path in ("/v4/sports/americanfootball_ncaaf/odds", "/v4/sports/americanfootball_nfl/odds"):
-            if params.get("regions")!="us" or params.get("markets")!="h2h,spreads,totals" or params.get("bookmakers"):
-                raise ValueError("unbudgeted_odds_markets")
-            provider,units="ODDS",3
             sport = "NCAAF" if "americanfootball_ncaaf" in parsed.path else "NFL"
+            if params.get("bookmakers") is not None:
+                # D4 for NCAAF: the 11 US books plus Pinnacle (2 region equivalents x 3 markets).
+                if (sport != "NCAAF" or params.get("bookmakers") != PINNACLE_BOOKMAKERS or "regions" in params
+                        or params.get("markets") != "h2h,spreads,totals"):
+                    raise ValueError("unbudgeted_odds_markets")
+                provider, units, extra = "ODDS", 3, 3
+            else:
+                if params.get("regions")!="us" or params.get("markets")!="h2h,spreads,totals":
+                    raise ValueError("unbudgeted_odds_markets")
+                provider,units="ODDS",3
         elif parsed.netloc=="api.the-odds-api.com" and parsed.path=="/v4/sports/americanfootball_nfl/events":
             if set(params)-{"apiKey", "dateFormat"}:
                 raise ValueError("unbudgeted_nfl_parameters")
