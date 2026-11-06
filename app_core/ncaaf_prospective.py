@@ -161,7 +161,10 @@ def quote_candidates(event, model, feature, captured):
     result = []
     margin = float(centers(model["margin"], [feature], "margin")[0])
     total = float(centers(model["total"], [feature], "total")[0])
+    from app_core.research_api_budget import REFERENCE_BOOKS
     for q in quotes:
+        if str(q.get("book", "")).lower() in REFERENCE_BOOKS:
+            continue  # D4: Pinnacle is a fair-price reference, never the recorded pick price
         t = timestamp(q.get("recorded_at"))
         price, line, kind = q.get("price"), q.get("point"), q["market_type"]
         if not t or not 0 <= (captured-t).total_seconds() <= 900:
@@ -191,6 +194,25 @@ def quote_candidates(event, model, feature, captured):
     return sorted(result, key=lambda q: (-q["ev"], digest(q)))
 
 
+def _fetch_odds(odds_key, get):
+    """NCAAF odds; with Pinnacle switched on (D4), the US books plus Pinnacle in one response.
+
+    Pinnacle is a fair-price reference only: ``quote_candidates`` never selects it. When
+    its credit allowance is spent the capture falls back to ``regions=us``.
+    """
+    from app_core.research_api_budget import BudgetLimit, PINNACLE_BOOKMAKERS, pinnacle_sports
+    url = "https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/odds"
+    if "NCAAF" in pinnacle_sports():
+        try:
+            return fetch(url, odds_key, {"bookmakers": PINNACLE_BOOKMAKERS, "markets": "h2h,spreads,totals",
+                                         "oddsFormat": "american"}, cfbd=False, get=get)
+        except BudgetLimit as exc:
+            if "PINNACLE" not in str(exc):
+                raise
+    return fetch(url, odds_key, {"regions": "us", "markets": "h2h,spreads,totals", "oddsFormat": "american"},
+                 cfbd=False, get=get)
+
+
 def capture(state, model_record, odds_key, *, get=None, path=None):
     if digest(model_record["data"]["artifact"]) != model_record["data"]["artifact_hash"]:
         raise ValueError("Frozen model integrity failure")
@@ -203,8 +225,7 @@ def capture(state, model_record, odds_key, *, get=None, path=None):
         raise ValueError("Model freeze time is invalid")
     if any(not timestamp(b["retrieved_at"]) or not 0 <= (before-timestamp(b["retrieved_at"])).total_seconds() <= 86400 for b in state["batches"]):
         raise ValueError("Refresh current-season inputs; maximum age is 24 hours")
-    events = fetch("https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf/odds", odds_key,
-                   {"regions": "us", "markets": "h2h,spreads,totals", "oddsFormat": "american"}, cfbd=False, get=get)
+    events = _fetch_odds(odds_key, get)
     captured = utcnow()
     saved, skipped = [], []
     games = state["batches"][0]["records"]

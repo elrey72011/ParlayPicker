@@ -24,7 +24,9 @@ from core.clv import no_vig_prob
 from app_core import prospective_evidence as evidence
 from app_core import prospective_research_models as research
 from app_core import research_picks as rp
-from app_core.research_api_budget import PINNACLE_SPORTS, REFERENCE_BOOKS
+from app_core.research_api_budget import REFERENCE_BOOKS
+
+PINNACLE_SPORTS = ("NBA", "NCAAB")  # canonical research scope; NCAAF Pinnacle quotes feed its own capture
 
 MIN_EV = 0.02
 METHOD = "pinnacle_value"

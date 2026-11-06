@@ -15,7 +15,10 @@ from app_core import ncaaf_research as research, ncaaf_identity as identity
 from app_core.ncaaf_history import timestamp
 
 VERSION = "ncaaf-recovered-model-compatibility-v1"
-BINDING_PATH = Path(__file__).resolve().parents[1] / "docs/paid-launch/ncaaf-compatibility-binding-v1.json"
+# v2 (owner-chosen D4 option B, 2026-11-06) supersedes v1 only to accept the reviewed
+# ncaaf_prospective.py that adds the Pinnacle reference capture, and this file's own new
+# bytes. Every model, artifact, lineage and alias field is copied from v1 unchanged.
+BINDING_PATH = Path(__file__).resolve().parents[1] / "docs/paid-launch/ncaaf-compatibility-binding-v2.json"
 MAX_RECORD_BYTES = 64 * 1024
 CAPABILITIES = {"spread": "selected_side_full_game_half_point_cover",
                 "total": "full_game_half_point_over_under"}

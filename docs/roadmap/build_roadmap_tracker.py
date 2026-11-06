@@ -85,7 +85,7 @@ DECISIONS = [
     ("D8", "Closing capture every 15 instead of 30 minutes", "Open", ""),
     ("D9", "NBA ESPN download", "Decided", "Offline benchmark; done"),
     ("D10", "Retire or keep the shadow shared pipeline", "Open", "Recommend: keep off; retire after C3"),
-    ("D11", "Who reviews plan bindings and deployment reviews", "Open", "Needed before the first freeze"),
+    ("D11", "Who reviews plan bindings and deployment reviews", "Decided", "Option B: owner plus automated audit (Deployment review workflow)"),
     ("D12", "Football plan family", "Decided", "Option C: design v3 (two seasons needed)"),
     ("D13", "Odds API credits for certified closes", "Decided", "Option B: NBA spread, 100/day, 2,500 per 31 days"),
     ("D14", "Plan windows and first market", "Decided", "Windows sized by game count; NCAAB spread first"),
