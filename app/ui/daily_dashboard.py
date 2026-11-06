@@ -37,6 +37,31 @@ def wager_rejection_summary(board):
     return pd.DataFrame(reasons).groupby(['League', 'Reason'], sort=False).size().reset_index(name='Games')
 
 
+def market_shadow(result, candidates):
+    """(market no-vig probability, market EV) per board row from its saved candidate, or None.
+
+    The board row carries ``candidate_id``; the candidate carries ``fair_market_probability``
+    (else ``market_probability``), both for the picked side. EV uses the row's American odds.
+    """
+    if candidates is None or getattr(candidates, "empty", True) or "candidate_id" not in result:
+        return None
+    if "candidate_id" not in candidates:
+        return None
+    fair = None
+    for column in ("fair_market_probability", "market_probability"):
+        if column in candidates:
+            values = pd.to_numeric(candidates[column], errors="coerce")
+            fair = values if fair is None else fair.fillna(values)
+    if fair is None:
+        return None
+    lookup = dict(zip(candidates["candidate_id"].astype(str), fair))
+    probs = result["candidate_id"].astype(str).map(lookup)
+    probs = probs.where((probs > 0) & (probs < 1))
+    odds = pd.to_numeric(result.get("odds"), errors="coerce")
+    decimal = odds.map(lambda o: (1 + o / 100 if o > 0 else 1 + 100 / abs(o)) if pd.notna(o) and abs(o) >= 100 else float("nan"))
+    return probs, probs * decimal - 1
+
+
 def _render_game_board(board, candidates, family):
     from app_core.per_game_boards import per_game_board
     from app_core.coverage_presentation import CoverageBindingConflict
@@ -57,12 +82,18 @@ def _render_game_board(board, candidates, family):
         return
     display = result.rename(columns={"league":"Sport", "matchup":"Game", "start":"Start", "pick":"Best pick", "selection_label":"Selection", "status":"Wager status", "approval_reason":"Wager explanation", "odds":"Odds", "win_probability":"Win estimate", "edge":"Edge", "ev":"EV estimate", "selection_score":"Selection score", "probability_basis":"Win estimate source"})
     columns = ["Game", "Best pick", "Odds", "Win estimate", "EV estimate", "Wager status"]
+    market = market_shadow(result, candidates)
+    if market is not None:
+        # Shadow only (owner request 2026-11-06): the market's no-vig price next to the
+        # app's estimate. It changes no pick, stake or approval.
+        display["Market estimate"], display["Market EV"] = market
+        columns[4:4] = ["Market estimate", "Market EV"]
     if 'coverage_decision_state' in result:
         display['Coverage decision'] = result['coverage_decision_state']
         display['Coverage explanation'] = result['coverage_explanation']
         columns += ['Coverage decision', 'Coverage explanation']
     display = display[columns].copy()
-    for column in ("Win estimate", "EV estimate"):
+    for column in [c for c in ("Win estimate", "EV estimate", "Market estimate", "Market EV") if c in display]:
         display[column] = display[column].map(lambda v: f"{v:.1%}" if pd.notna(v) else "Unavailable")
     st.dataframe(display, hide_index=True, width="stretch", height=min(760, 38 * (len(display) + 1)), column_config={"Selection score": st.column_config.NumberColumn(format="%.3f"), "Odds": st.column_config.NumberColumn(format="%+.0f")})
     with st.expander("Selection details and wager explanations", expanded=False):

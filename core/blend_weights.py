@@ -20,7 +20,9 @@ missing input contributes 0. This study:
 Only inputs saved with each pick can be fitted: Kalshi, the ML model and, from picks
 saved on or after 2026-11-06, TheOver (``theover_probability``, pick side; a percentage is
 read as a fraction, and TheOver's exactly-0.5 "no prediction" value counts as missing, as
-in the app's blend). Sentiment is not saved, so it is not fitted.
+in the app's blend). Pinnacle's no-vig price at the pick's line (``pinnacle_fair_probability``,
+saved from 2026-11-06) is fitted the same way, so one fit gives the Kalshi and Pinnacle weights
+together, each relative to the book's own no-vig price. Sentiment is not saved, so it is not fitted.
 Descriptive only; it changes no weight.
 """
 from __future__ import annotations
@@ -29,9 +31,11 @@ import math
 
 import numpy as np
 
-INPUTS = {"kalshi": "kalshi_probability", "ml": "ml_probability", "theover": "theover_probability"}
+INPUTS = {"kalshi": "kalshi_probability", "ml": "ml_probability", "theover": "theover_probability",
+          "pinnacle": "pinnacle_fair_probability"}
 CURRENT = {"kalshi": "0.40 when Kalshi >= 0.55, else 0", "ml": "0.15 (tier 1) / 0.35 (tier 2)",
-           "theover": "0.20 standard (NBA totals 0.30, NHL 0.09)"}
+           "theover": "0.20 standard (NBA totals 0.30, NHL 0.09)",
+           "pinnacle": "0 (reference only; not in the blend)"}
 L2 = 1.0
 TRAIN_SHARE = 0.7
 BOOTSTRAP = 200
