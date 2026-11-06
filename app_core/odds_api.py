@@ -42,7 +42,7 @@ class OddsAPIAuthError(requests.exceptions.HTTPError):
 class TheOddsAPIClient:
     BASE_URL = "https://api.the-odds-api.com/v4"
 
-    def __init__(self, api_key: str, regions="us2,eu", markets="h2h,spreads,totals", bookmakers="novig,draftkings,fanduel,betmgm", oddsFormat="american"):
+    def __init__(self, api_key: str, regions="us2,eu", markets="h2h,spreads,totals", bookmakers="novig,draftkings,fanduel,betmgm,pinnacle", oddsFormat="american"):
         if not api_key:
             raise ValueError("TheOddsAPI API key is required")
 

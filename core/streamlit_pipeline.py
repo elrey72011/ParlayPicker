@@ -7696,10 +7696,14 @@ def _fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None
                     # novig_us. Normalize all NoVig variants to the canonical
                     # export prefix so downstream consensus code does not lose them.
                     book_key = 'novig' if raw_book_key == 'novig' or raw_book_key.startswith('novig_') else raw_book_key
-                    if book_key not in ['novig', 'fanduel', 'draftkings', 'betmgm']:
+                    # Pinnacle is a fair-price reference only (D4): its columns are never in the
+                    # bettable book lists below, so it can never become a pick price.
+                    if book_key not in ['novig', 'fanduel', 'draftkings', 'betmgm', 'pinnacle']:
                         continue
 
                     for market in book.get('markets', []):
+                        if book_key == 'pinnacle' and market.get('key') in ('spreads', 'totals'):
+                            row[f"pinnacle_{market['key']}_updated"] = market.get('last_update')
                         if market.get('key') == 'spreads':
                             for o in market.get('outcomes', []):
                                 if _sanitize(o.get('name')) == _sanitize(game.get('home_team')):
@@ -8685,6 +8689,16 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             market_dict["opposing_odds_source"] = (
                 "novig" if pd.notna(opposing_price_val) else "missing"
             )
+
+            # Pinnacle reference (D4): price, opposite price, line and update time for this side.
+            # Reference-only fields; the anchor is computed after the blend (core.pinnacle_anchor).
+            if point_suffix:
+                market_dict["pinnacle_odds_american"] = pd.to_numeric(row.get(f"pinnacle_{price_suffix}"), errors="coerce")
+                market_dict["pinnacle_opposing_odds_american"] = pd.to_numeric(
+                    row.get(f"pinnacle_{opposing_price_suffixes[market_type]}"), errors="coerce")
+                market_dict["pinnacle_point"] = pd.to_numeric(row.get(f"pinnacle_{point_suffix}"), errors="coerce")
+                market_dict["pinnacle_updated_at"] = row.get(
+                    "pinnacle_totals_updated" if market_type.startswith("total") else "pinnacle_spreads_updated")
 
             # Map pricing for other bookmakers
             for book_key in ["fanduel", "draftkings", "betmgm"]:
@@ -10426,6 +10440,13 @@ def run_analysis_pipeline(
     merged["model_probability"] = model_probability
     merged["display_probability"] = model_probability.round(3)
     merged["calibrated_probability"] = calibrated_probability
+    # D4 shadow anchor: Pinnacle's no-vig probability at the pick's exact line (or empty).
+    # Saved with each pick for the blend-weight study; it changes no probability or pick.
+    try:
+        from core.pinnacle_anchor import fair_series as _pinnacle_fair
+        merged["pinnacle_fair_probability"] = _pinnacle_fair(merged)
+    except Exception:  # a reference must never break Refresh
+        merged["pinnacle_fair_probability"] = float("nan")
 
     # Persist the EXACT signal inputs the blend consumed (already oriented to the
     # pick side). These are the values weight-fitting must train on; reconstructing

@@ -90,12 +90,30 @@ def _scores(p, y):
             "brier": float(np.mean((p - y) ** 2))}
 
 
+def anchor_comparison(accepted):
+    """Book price vs Pinnacle as the anchor, on settled picks that recorded both."""
+    pairs = []
+    for row in accepted:
+        m = _prob(row.get("fair_market_probability")) or _prob(row.get("market_probability"))
+        pin = _prob(row.get("pinnacle_fair_probability"))
+        if m is not None and pin is not None and row.get("candidate_outcome") in ("WIN", "LOSS"):
+            pairs.append((m, pin, 1 if row["candidate_outcome"] == "WIN" else 0))
+    out = {"rows": len(pairs)}
+    if len(pairs) >= MIN_ROWS:
+        y = np.array([p[2] for p in pairs], dtype=float)
+        out.update(book=_scores(np.array([p[0] for p in pairs]), y), pinnacle=_scores(np.array([p[1] for p in pairs]), y))
+    else:
+        out["status"] = f"TOO_FEW_PICKS_WITH_PINNACLE (need {MIN_ROWS})"
+    return out
+
+
 def study(accepted, *, seed=7):
     rows = rows_from(accepted)
     report = {"schema": "blend-weights-v1", "rows": len(rows), "inputs": list(INPUTS),
               "current_weights": CURRENT, "weight_authority": False,
               "not_fitted": ["theover", "sentiment"],
-              "present": {n: sum(1 for r in rows if r[2][n] is not None) for n in INPUTS}}
+              "present": {n: sum(1 for r in rows if r[2][n] is not None) for n in INPUTS},
+              "anchor_comparison": anchor_comparison(accepted)}
     if len(rows) < MIN_ROWS:
         report["status"] = f"TOO_FEW_SETTLED_PICKS (need {MIN_ROWS})"
         return report
@@ -136,8 +154,16 @@ def markdown(report):
              "logit(p) = logit(market) + sum of w x (logit(input) - logit(market)). A weight near 0 means "
              "\"trust the market\". Descriptive only; it changes no weight. TheOver and sentiment are not saved "
              "with picks, so they are not fitted.", ""]
+    anchor = report.get("anchor_comparison") or {}
+    if "pinnacle" in anchor:
+        anchor_line = (f"- Anchor test on {anchor['rows']} picks with a Pinnacle price: log loss book "
+                       f"{anchor['book']['log_loss']:.4f} vs Pinnacle {anchor['pinnacle']['log_loss']:.4f} (lower is better).")
+    else:
+        anchor_line = f"- Anchor test (book vs Pinnacle): {anchor.get('status', 'no data')} ({anchor.get('rows', 0)} picks)."
     if report.get("status") != "FITTED":
-        return "\n".join(lines + [f"- {report['rows']} settled picks: {report['status']}.", ""]) + "\n"
+        return "\n".join(lines + [f"- {report['rows']} settled picks: {report['status']}.", anchor_line, ""]) + "\n"
+    lines.append(anchor_line)
+    lines.append("")
     lines += [f"Fitted on the earliest {report['train_rows']} picks, scored once on the next {report['test_rows']}.", "",
               "| input | picks with it | fitted weight (90% interval) | current hand-set weight |", "|---|---|---|---|"]
     for name, w in report["weights"].items():
