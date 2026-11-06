@@ -1,0 +1,13 @@
+name: Activation grading (backup start)
+# GitHub often skips scheduled starts (2026-11-06: the 9 AM ET activation grading run never
+# started). This reuses activation-grading.yml unchanged at 11:37 AM EST. Grading skips games
+# already graded, so a second run in a day is harmless; both share one concurrency group.
+on:
+  schedule:
+    - cron: '37 16 * * *'
+permissions:
+  contents: read
+jobs:
+  grade-and-validate:
+    uses: ./.github/workflows/activation-grading.yml
+    secrets: inherit

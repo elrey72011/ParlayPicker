@@ -1,6 +1,8 @@
 name: Activation grading and validation
 on:
   workflow_dispatch:
+  # Reused by activation-grading-backup.yml (a second daily start; GitHub often skips this one).
+  workflow_call:
   schedule:
     - cron: '0 14 * * *'
 permissions:

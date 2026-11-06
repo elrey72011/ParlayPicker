@@ -8,6 +8,7 @@ on:
   # Daily read-only report for the app's Qualification progress panel (roadmap C3).
   schedule:
     - cron: '17 11 * * *'
+    - cron: '47 13 * * *'      # backup start: GitHub often skips scheduled runs (2026-11-06)
   workflow_dispatch:
     inputs:
       with_sources:

@@ -13,6 +13,7 @@ on:
         default: "340"
   schedule:
     - cron: '17 22 * * *'      # 5:17 PM EST / 6:17 PM EDT, through the evening slate
+    - cron: '47 23 * * *'      # backup start: GitHub often skips scheduled runs (2026-11-06)
     - cron: '17 16 * * 0,6'    # weekends 11:17 AM EST, early football
 permissions:
   contents: read
@@ -40,7 +41,15 @@ jobs:
       - name: Capture closes through the slate
         env:
           MINUTES: ${{ inputs.minutes || '340' }}
-        run: python -u scripts/closing_capture_loop.py --minutes "$MINUTES" --interval 5
+          EVENT: ${{ github.event_name }}
+        # A scheduled run stops at 04:30 UTC (11:30 PM EST), so a backup start that queues
+        # behind the first run only covers what is left of the slate.
+        run: |
+          if [ "$EVENT" = schedule ]; then
+            MINUTES=$(python -c "import datetime as d; n=d.datetime.now(d.timezone.utc); e=n.replace(hour=4,minute=30,second=0,microsecond=0); e=e+d.timedelta(days=1) if e<=n else e; print(max(0,min(340,int((e-n).total_seconds()//60))))")
+          fi
+          echo "capturing for $MINUTES minutes"
+          python -u scripts/closing_capture_loop.py --minutes "$MINUTES" --interval 5
       - name: Report evidence health
         if: ${{ !cancelled() }}
         run: python -u scripts/prediction_evidence.py status --database data/prediction_evidence/evidence.sqlite3
