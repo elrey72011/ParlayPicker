@@ -62,6 +62,76 @@ def market_shadow(result, candidates):
     return probs, probs * decimal - 1
 
 
+PINNACLE_MIN_EV = 0.02
+
+
+def _decimal(odds):
+    try:
+        odds = float(odds)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(odds) or abs(odds) < 100:
+        return None
+    return 1 + odds / 100 if odds > 0 else 1 + 100 / abs(odds)
+
+
+def pinnacle_value_board(candidates, min_ev=PINNACLE_MIN_EV):
+    """Candidates whose price beats Pinnacle's no-vig probability at the same line (research only).
+
+    Uses each candidate's saved ``pinnacle_fair_probability`` (``core.pinnacle_anchor``:
+    Pinnacle posted both sides at exactly that line, fresh at refresh) and its own
+    American odds: EV = fair x decimal - 1. Keeps EV >= ``min_ev``, pregame candidates
+    only, never a Pinnacle price as the entry, and the best EV per game and market.
+    """
+    columns = ["Sport", "Game", "Pick", "Odds", "Book", "Pinnacle fair", "EV vs Pinnacle"]
+    if candidates is None or getattr(candidates, "empty", True) or "pinnacle_fair_probability" not in candidates:
+        return pd.DataFrame(columns=columns)
+    rows = []
+    for row in candidates.to_dict("records"):
+        if str(row.get("candidate_context") or "").upper() == "POST_START_DIAGNOSTIC":
+            continue
+        try:
+            fair = float(row.get("pinnacle_fair_probability"))
+        except (TypeError, ValueError):
+            continue
+        decimal = _decimal(row.get("odds_american"))
+        if decimal is None or pd.isna(fair) or not 0 < fair < 1:
+            continue
+        book = _text(row, "quote_bookmaker", "odds_feed_source", "odds_source", default="")
+        if "pinnacle" in book.lower():
+            continue
+        ev = fair * decimal - 1
+        if ev < min_ev:
+            continue
+        family = "Totals" if str(row.get("market_type") or "").lower().startswith("total") else "Sides"
+        game = f"{_text(row, 'away_team', default='?')} at {_text(row, 'home_team', default='?')}"
+        rows.append({"key": (_text(row, "matchup_id", default=game), family), "Sport": _text(row, "league", default=""),
+                     "Game": game, "Pick": _text(row, "best_pick", default=""), "Odds": float(row["odds_american"]),
+                     "Book": book, "Pinnacle fair": fair, "EV vs Pinnacle": ev})
+    if not rows:
+        return pd.DataFrame(columns=columns)
+    frame = pd.DataFrame(rows).sort_values("EV vs Pinnacle", ascending=False)
+    return frame.drop_duplicates("key")[columns].reset_index(drop=True)
+
+
+def _render_pinnacle_value(candidates):
+    board = pinnacle_value_board(candidates)
+    with st.expander(f"Pinnacle value (research) · {len(board)} price(s) beat Pinnacle", expanded=False):
+        if board.empty:
+            st.info("No current price beats Pinnacle's no-vig line by 2% or more. Pinnacle must post both "
+                    "sides at the same line, updated within 20 minutes of Refresh.")
+        else:
+            shown = board.copy()
+            for column in ("Pinnacle fair", "EV vs Pinnacle"):
+                shown[column] = shown[column].map(lambda v: f"{v:.1%}")
+            st.dataframe(shown, hide_index=True, width="stretch",
+                         column_config={"Odds": st.column_config.NumberColumn(format="%+.0f")})
+        st.caption("Research only: no stake, approval or change to Best picks. Each row is the best price per game and "
+                   "market whose expected value against Pinnacle's no-vig probability at the same line is at least 2%. "
+                   "Pinnacle is the sharp reference, never the entry price. Its edge is being measured in the "
+                   "forward shadow before it can move any pick.")
+
+
 def _render_game_board(board, candidates, family):
     from app_core.per_game_boards import per_game_board
     from app_core.coverage_presentation import CoverageBindingConflict
@@ -129,6 +199,7 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.D
             with totals:
                 st.caption("Best over or under for each game, selected from the full ranked candidate audit.")
                 _render_game_board(board, candidates, "totals")
+            _render_pinnacle_value(candidates)
             if not approved.empty:
                 st.download_button("Download approved game wagers", approved.to_csv(index=False),
                                    "approved-game-wagers.csv", "text/csv", key="daily_approved_export")
