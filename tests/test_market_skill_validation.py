@@ -64,18 +64,38 @@ def test_market_skill_plan_passes_when_the_model_beats_the_no_vig_price(tmp_path
     skill = report["market_skill"]["holdout"]
     assert skill["with_market_reference"] == 1 and skill["market_brier"] == pytest.approx(0.25)
     assert skill["model_brier"] == pytest.approx(0.1225)
-    # The model beats the market on both cohorts; only certified closes (none here) are missing.
-    assert report["blockers"] == ["VALIDATION_MEAN_CLV_BELOW_MINIMUM", "HOLDOUT_MEAN_CLV_BELOW_MINIMUM"]
+    assert skill["bets"] == 1 and skill["bet_roi"] == pytest.approx(0.909090909)   # home at -110, won
+    # The model beats the market on both cohorts; what is left is sample size and certified closes.
+    assert not any("WORSE_THAN_MARKET" in b or "REFERENCE" in b or "BET_ROI" in b for b in report["blockers"])
+    for label in ("VALIDATION", "HOLDOUT"):
+        assert {f"{label}_NEED_49_MORE_BETS", f"{label}_BET_CLOSE_COVERAGE_TOO_LOW",
+                f"{label}_BET_MEAN_CLV_BELOW_MINIMUM"} <= set(report["blockers"])
 
 
 def test_gate_passes_with_skill_reference_coverage_and_non_negative_clv():
     method = {ms.KEY: ms.methodology()}
     good = {"market_reference_coverage": 0.95, "model_brier": 0.247, "market_brier": 0.249,
-            "model_log_loss": 0.687, "market_log_loss": 0.691}
-    assert ms.blockers("HOLDOUT", {"average_valid_clv": 0.004}, good, method) == []
-    assert ms.blockers("HOLDOUT", {"average_valid_clv": -0.01}, good, method) == ["HOLDOUT_MEAN_CLV_BELOW_MINIMUM"]
+            "model_log_loss": 0.687, "market_log_loss": 0.691, "bets": 80, "bet_roi": 0.03,
+            "bet_close_coverage": 0.9, "bet_mean_clv": 0.004}
+    assert ms.blockers("HOLDOUT", {}, good, method) == []
+    assert ms.blockers("HOLDOUT", {}, dict(good, bet_mean_clv=-0.01), method) == ["HOLDOUT_BET_MEAN_CLV_BELOW_MINIMUM"]
+    assert ms.blockers("HOLDOUT", {}, dict(good, bet_roi=-0.01), method) == ["HOLDOUT_BET_ROI_BELOW_MINIMUM"]
+    assert ms.blockers("HOLDOUT", {}, dict(good, bets=30), method) == ["HOLDOUT_NEED_20_MORE_BETS"]
     tied = dict(good, model_brier=0.249)                                 # equal to the market still passes
-    assert ms.blockers("HOLDOUT", {"average_valid_clv": 0.0}, tied, method) == []
+    assert ms.blockers("HOLDOUT", {}, tied, method) == []
+
+
+def test_bets_take_the_side_with_the_edge_and_skip_thin_edges(monkeypatch):
+    home = {"quote_id": "h", "selection": "Home", "decimal_odds": 1.909090909}
+    away = {"quote_id": "a", "selection": "Away", "decimal_odds": 1.909090909}
+    monkeypatch.setattr(ms, "opposite", lambda db, quote: away)
+    monkeypatch.setattr("app_core.prospective_evidence._comparable_close",
+                        lambda db, quote, as_of: {"decimal_odds": 1.8} if quote is away else None)
+    # Model says home 40%: the away side has EV 0.6 x 1.909 - 1 = +14.5%; away won (home lost).
+    out = ms.skill(None, [(0.40, 0, home), (0.52, 1, home)], as_of="now")
+    assert out["bets"] == 1 and out["bet_roi"] == pytest.approx(0.909090909)   # 52% home: EV -0.7%, no bet
+    assert out["bet_mean_clv"] == pytest.approx(1.909090909 / 1.8 - 1) and out["bet_close_coverage"] == 1.0
+    assert out["with_market_reference"] == 2 and out["market_brier"] == pytest.approx(0.25)
 
 
 def test_worse_than_market_missing_reference_and_v1_plans_unchanged(tmp_path, clock):  # noqa: F811
@@ -90,6 +110,9 @@ def test_worse_than_market_missing_reference_and_v1_plans_unchanged(tmp_path, cl
     assert "VALIDATION_BRIER_WORSE_THAN_MARKET" in report["blockers"]
     assert "VALIDATION_LOG_LOSS_WORSE_THAN_MARKET" in report["blockers"]
     assert "HOLDOUT_MARKET_REFERENCE_COVERAGE_TOO_LOW" in report["blockers"]
+    # Every-game paper ROI (home side, lost) is not a gate for market-skill plans; the bets are.
+    assert report["validation"]["paper_roi"] < 0 and "VALIDATION_PAPER_ROI_POLICY_NOT_MET" not in report["blockers"]
+    assert "VALIDATION_BET_ROI_BELOW_MINIMUM" in report["blockers"]
 
     v1 = tmp_path / "v1.sqlite3"
     clock(hours=0)

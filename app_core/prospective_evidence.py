@@ -1783,7 +1783,8 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
         if details:
             # D19 option B: the probability gate is skill against the de-vigged entry price.
             from app_core import market_skill_validation as market_skill
-            skill = {name: market_skill.skill(db, pairs) for name, pairs in details.items()}
+            skill = {name: market_skill.skill(db, pairs, as_of=cutoff, rules=method[market_skill.KEY])
+                     for name, pairs in details.items()}
     if "football_v2_methodology" in method:
         from app_core.football_validation_v2 import evaluate as evaluate_football_v2
         decision = evaluate_football_v2(plan, method, validation, holdout, cutoff)
@@ -1827,8 +1828,9 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
         if (method["clv_policy"]["required"] and cohort["comparable_close_coverage"] <
                 method["clv_policy"]["min_comparable_close_coverage"]):
             blockers.append(f"{label}_NO_VALID_CLOSE_QUOTES")
-        if (cohort["paper_roi"] is None or cohort["paper_roi"] <
-                method["value_roi_policy"]["min_paper_roi"]):
+        if (not details and (cohort["paper_roi"] is None or cohort["paper_roi"] <
+                             method["value_roi_policy"]["min_paper_roi"])):
+            # Market-skill plans score ROI on the model's bets instead (market_skill_validation).
             blockers.append(f"{label}_PAPER_ROI_POLICY_NOT_MET")
     extra = {}
     if details:

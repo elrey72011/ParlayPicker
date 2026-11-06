@@ -61,7 +61,13 @@ owner freezes it with the Bound plan workflow as before.
   * model Brier and log loss no worse than the de-vigged entry price on the same games
     (the same book's other side at the same line and timestamp);
   * at least 90% of scored games with that two-sided reference;
-  * mean CLV against certified closes of at least 0.
+  * the model's **bets** (either side, when its EV at the entry price is at least 2%): at
+    least 50 of them, paper ROI >= 0, a certified close for at least 80% of them, and
+    mean CLV >= 0.
+* Why bets: the v1 paper-ROI rule scores every game's first prediction, which the research
+  cycle always makes on the home side or the Over. Betting one side of every game at -110
+  loses the vig whatever the model knows, so for these plans that rule is replaced by the
+  bet-based one (found and fixed 2026-11-06, before any market-skill plan was frozen).
 * `prospective_evidence.evaluate_validation_plan` applies those gates only to plans frozen
   with the key and reports them under `market_skill`; v1 and v2 plans are evaluated and
   reported exactly as before. `freeze_validation_plan` stores the key in the plan artifact.
