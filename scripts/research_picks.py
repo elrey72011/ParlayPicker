@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app_core import research_picks as rp  # noqa: E402
 from app_core import selector_shadow_compare as shadow  # noqa: E402
+from app_core import pinnacle_value as pv  # noqa: E402
 from app_core.prospective_research_models import SCOPES  # noqa: E402
 
 NOTICE = ("Research picks from two in-season models: the stored score model, and a line-anchored model "
@@ -40,6 +41,10 @@ def build(path, now=None):
                 if sport != "NHL":
                     comparison[f"{sport} {market} ({method})"] = shadow.summarize(
                         shadow.compare(path, sport, market, now=now, method=method))
+    for sport in pv.PINNACLE_SPORTS:
+        boards.append(pv.board(path, sport, "SPREAD", now=now))
+        records[f"{sport} SPREAD ({pv.METHOD})"] = dict(pv.record(pv.replay(path, sport, "SPREAD", now=now)),
+                                                       positive_ev=rp.record([]))
     return {"schema": "research-picks-v1", "as_of": now.isoformat(), "boards": boards, "records": records,
             "selector_comparison": comparison, "wager_authority": False}
 
@@ -49,11 +54,14 @@ def markdown(result):
         return "" if v is None else f"{v:.1%}"
     lines = ["## Research picks", "", NOTICE, ""]
     for b in result["boards"]:
-        head = f"### {b['sport']} {b['market_family']} ({b.get('method', 'score')} model)"
+        method = b.get("method", "score")
+        head = f"### {b['sport']} {b['market_family']} ({'Pinnacle value' if method == pv.METHOD else method + ' model'})"
         if b["blocker"]:
             lines += [head, f"- {b['blocker']}", ""]
             continue
-        lines += [head + f" (model trained on {b['training_games']} games)", "",
+        trained = (" (prices that beat Pinnacle's no-vig line by 2%+)" if b.get("method") == pv.METHOD
+                   else f" (model trained on {b['training_games']} games)")
+        lines += [head + trained, "",
                   "| start (UTC) | game | pick | line | price | book | P(win) | EV | consensus |",
                   "|---|---|---|---|---|---|---|---|---|"]
         for p in b["picks"]:
@@ -72,6 +80,14 @@ def markdown(result):
         lines.append(f"| {key} | {r['picks']} | {r['wins']}-{r['losses']}-{r['pushes']} | {interval} | "
                      f"{pct(r['roi_per_pick'])} | {e['picks']} | {e['wins']}-{e['losses']}-{e['pushes']} | "
                      f"{pct(e['roi_per_pick'])} |")
+    value = {k: r for k, r in result["records"].items() if pv.METHOD in k}
+    if value:
+        lines += ["", "### Pinnacle value: closing-line value against Pinnacle's last pregame no-vig line", "",
+                  "| market | picks | W-L-P | ROI/pick | CLV measured | mean CLV | beat close |", "|---|---|---|---|---|---|---|"]
+        for key, r in value.items():
+            clv = "" if r.get("mean_clv") is None else f"{r['mean_clv']:+.1%}"
+            lines.append(f"| {key} | {r['picks']} | {r['wins']}-{r['losses']}-{r['pushes']} | {pct(r['roi_per_pick'])} | "
+                         f"{r.get('clv_measured', 0)} | {clv} | {pct(r.get('beat_close_share'))} |")
     comparison = result.get("selector_comparison") or {}
     if comparison:
         lines += ["", "### Selector shadow test (D7): current rule vs EV selector on the same games", "",
