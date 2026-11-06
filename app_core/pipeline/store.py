@@ -24,6 +24,7 @@ from hashlib import sha256
 import hmac
 import json
 from pathlib import Path
+import os
 import sqlite3
 
 VERSION = 'pipeline-store-v1'
@@ -266,3 +267,16 @@ class Store:
         if row is not None:
             self._authenticate(row, sport, identity, 'claim')
         return row is not None
+
+
+def store_from_settings(setting=os.environ.get):
+    """Configured store, or (None, reason). Never creates a production schema."""
+    key = setting('PARLAYPICKER_PIPELINE_STORE_KEY', '') or ''
+    if len(key.encode()) < 32:
+        return None, 'PIPELINE_STORE_NOT_CONFIGURED'
+    owner = setting('PARLAYPICKER_PIPELINE_OWNER', '') or 'owner'
+    dsn = setting('PARLAYPICKER_PIPELINE_DATABASE_URL', '') or ''
+    if dsn:
+        return Store.postgres(dsn, key.encode(), owner=owner), None
+    path = setting('PARLAYPICKER_PIPELINE_SQLITE_PATH', '') or 'data/pipeline/pipeline-store.sqlite'
+    return Store.sqlite(Path(path), key.encode(), owner=owner), None
