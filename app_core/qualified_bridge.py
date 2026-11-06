@@ -122,6 +122,90 @@ def _family(sport, market_type):
     return sport_market_family(sport, market_type)
 
 
+REFRESH_ENV = "PARLAYPICKER_QUALIFIED_BRIDGE_REFRESH"
+REFRESH_EVERY = 600  # seconds; a full read of the evidence remote takes minutes
+STAMP = ".qualified-bridge-refreshed"
+
+
+def refresh_store(path=None, *, setting=None, clock=None, client=None, folder=None, sync=None):
+    """Bring the app's canonical store up to date from the evidence remote, read-only.
+
+    The decision-capture job (``app_core.decision_capture``) writes fresh quotes and
+    predictions to the remote every 15 minutes during a slate; the app's market gate
+    and this bridge read the local store (``prospective_evidence._path``). This restores
+    every remote row the local store lacks. The client refuses every write
+    (``ReadOnlyDrive``), cached object bytes are reused only when they match Drive's
+    checksum, and it runs at most once per ``REFRESH_EVERY`` seconds. Off with
+    ``PARLAYPICKER_QUALIFIED_BRIDGE_REFRESH=false``. Returns a diagnostic; never raises.
+    """
+    import os
+    import time
+    from pathlib import Path
+    clock = clock or time.time
+    if str((setting or os.environ.get)(REFRESH_ENV, "true") or "true").strip().lower() == "false":
+        return {"status": "OFF"}
+    target = Path(evidence._path(path))
+    stamp = target.with_name(STAMP)
+    try:
+        last = float(stamp.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        last = None
+    started = clock()
+    if last is not None and 0 <= started - last < REFRESH_EVERY:
+        return {"status": "RECENT", "seconds_since_refresh": round(started - last)}
+    lock = target.with_name(STAMP + ".lock")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        lock_fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        try:
+            held = started - lock.stat().st_mtime
+        except OSError:
+            held = 0
+        if held < 2 * REFRESH_EVERY:
+            return {"status": "IN_PROGRESS"}  # another session is refreshing
+        lock.unlink(missing_ok=True)          # a crashed refresh left it behind
+        return {"status": "STALE_LOCK_CLEARED"}
+    os.close(lock_fd)
+    try:
+        return _refresh(target, stamp, started, clock, client, folder, sync)
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def _refresh(target, stamp, started, clock, client, folder, sync):
+    import os
+    try:
+        if client is None:
+            from app_core.evidence_drive import DriveStore
+            from app_core.evidence_remote import settings
+            folder = folder or settings()[0]
+            if not folder or not os.getenv("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", "").strip():
+                return {"status": "MISSING_CREDENTIALS"}
+            client = DriveStore(folder)
+        if sync is None:
+            from app_core.prospective_remote import sync
+        from app_core.read_only_drive import ReadOnlyDrive, ReadOnlyViolation
+        cache = target.parent / "drive-cache"
+        cache.mkdir(exist_ok=True)
+        guarded = ReadOnlyDrive(client, cache)
+        try:
+            counts = sync(target, guarded, folder, {})
+            status = "REFRESHED"
+        except ReadOnlyViolation:
+            # The restore finished; the local store also holds rows the remote lacks.
+            counts, status = None, "REFRESHED_LOCAL_ROWS_NOT_UPLOADED"
+        stamp.write_text(str(started), encoding="utf-8")
+        return {"status": status, "seconds": round(clock() - started, 1), "counts": counts}
+    except Exception as exc:  # never break Refresh; the gate then reads what is local
+        return {"status": "REFRESH_FAILED", "error": type(exc).__name__}
+
+
+def refresh_if_enabled(setting=None, **kwargs):
+    """``refresh_store`` when the bridge is on (``PARLAYPICKER_QUALIFIED_BRIDGE=true``), else OFF."""
+    return refresh_store(setting=setting, **kwargs) if enabled(setting) else {"status": "OFF"}
+
+
 def inject(analysis_df, best_picks_df, *, now=None, setting=None, configuration=None, assess=None, make_rows=None):
     """Replace each qualified market's app rows with its bridge rows, before eligibility and Gemini.
 

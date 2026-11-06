@@ -41,7 +41,7 @@ STAGES = [
      "NCAAF backtest: no edge (D18); price screen (#2463); research picks (#2466); board Kalshi/de-vig fixes (G9); NCAAB line screen", None),
     ("C6", "Selector switch (app shows qualified picks)", "C4, D7", "Claude", "In progress",
      "Bridge + pipeline hookup (#2472); decision capture: fresh quotes and both-side predictions (step 1). "
-     "Left: app reads the refreshed store; owner activation after C4", None),
+     "App store refresh (read-only, every 10 min). Left: owner activation after C4", None),
 ]
 
 # sport, market, priority, games/day estimate, target sample, window days estimate, status, notes

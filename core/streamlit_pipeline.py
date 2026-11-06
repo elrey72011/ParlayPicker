@@ -10860,6 +10860,13 @@ def run_analysis_pipeline(
     # market before eligibility, Gemini review and the wager contract. Off by default
     # (PARLAYPICKER_QUALIFIED_BRIDGE); a failure leaves every row exactly as it was.
     try:
+        # Read-only and at most every 10 minutes: pick up the decision-capture job's fresh
+        # quotes and predictions from the evidence remote before the bridge reads them.
+        from app_core.qualified_bridge import refresh_if_enabled
+        diagnostics["qualified_bridge_store"] = refresh_if_enabled()
+    except Exception as exc:  # never break Refresh
+        diagnostics["qualified_bridge_store"] = {"status": "ERROR", "error": type(exc).__name__}
+    try:
         from app_core.qualified_bridge import inject as inject_qualified
         analysis_df, best_picks_df, diagnostics["qualified_bridge"] = inject_qualified(analysis_df, best_picks_df)
     except Exception as exc:  # never break Refresh
