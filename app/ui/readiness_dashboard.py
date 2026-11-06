@@ -118,6 +118,39 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
                 st.download_button("Download research source inventory",
                                    json.dumps(source_rows, indent=2, allow_nan=False),
                                    file_name="sport-market-source-inventory.json", mime="application/json")
+        with st.expander("Go-live checklist (one market)", expanded=False):
+            st.caption("Each requirement for a qualified market to reach a staked pick, in order, with the next step. "
+                       "Read-only: it changes nothing and grants no stake.")
+            from core.market_policy import SPORT_MARKET_FAMILIES
+            choices = [f"{s} {f}" for s, families in SPORT_MARKET_FAMILIES.items() for f in families]
+            chosen = st.selectbox("Market", choices,
+                                  index=choices.index("NCAAB SPREAD") if "NCAAB SPREAD" in choices else 0,
+                                  key="go_live_market")
+            if st.button("Check go-live requirements", key="go_live_check"):
+                try:
+                    import os
+                    from app_core.go_live import checklist, summary
+
+                    def secret(name, default=None):
+                        try:
+                            if name in st.secrets:
+                                return st.secrets[name]
+                        except Exception:
+                            pass
+                        return os.environ.get(name, default)
+                    sport, family = chosen.split(" ", 1)
+                    items = checklist(sport, family, setting=secret, secret=secret)
+                    st.session_state["go_live_items"] = (chosen, items, summary(items))
+                except Exception as exc:
+                    st.session_state.pop("go_live_items", None)
+                    st.error("Go-live checklist could not be read: " + type(exc).__name__)
+            result = st.session_state.get("go_live_items")
+            if result:
+                market, items, head = result
+                st.dataframe(pd.DataFrame(items).reindex(columns=("title", "status", "detail", "next_step")),
+                             hide_index=True)
+                st.caption(f"{market}: ready to stake." if head["ready"] else
+                           f"{market}: next is \"{head['next']['title']}\" ({head['next']['status']}).")
         from app.ui.qualification_progress import render_qualification_progress
         render_qualification_progress()
         if st.button("Prepare research performance report", key="research_performance_prepare"):

@@ -50,8 +50,11 @@ def build(path, now=None, ncaaf_records=None):
         boards.append(npv.board(ncaaf_records, now=now))
         records[f"NCAAF SPREAD+TOTAL ({pv.METHOD})"] = dict(pv.record(npv.replay(ncaaf_records, now=now)),
                                                            positive_ev=rp.record([]))
+    from app_core import pinnacle_model
+    readiness = [pinnacle_model.preview(path, sport, family, now=now)
+                 for sport, families in pinnacle_model.FAMILIES.items() for family in families]
     return {"schema": "research-picks-v1", "as_of": now.isoformat(), "boards": boards, "records": records,
-            "selector_comparison": comparison, "wager_authority": False}
+            "selector_comparison": comparison, "pinnacle_model": readiness, "wager_authority": False}
 
 
 def markdown(result):
@@ -108,6 +111,28 @@ def markdown(result):
                 clv = "" if r["mean_clv"] is None else f"{r['mean_clv']:+.1%}"
                 lines.append(f"| {key} | {c['games']} | {rule} | {r['picks']} | {r['wins']}-{r['losses']}-{r['pushes']} | "
                              f"{pct(r['roi_per_pick'])} | {clv} | {pct(r['beat_close_share'])} | {same} |")
+    readiness = result.get("pinnacle_model") or []
+    if readiness:
+        def num(v, f="{:.4f}"):
+            return "" if v is None else f.format(v)
+        lines += ["", "### Pinnacle model: readiness and replay (for the plan freeze decision)", "",
+                  "Calibration needs 40 decided games settled after the model was registered. Coverage is the share "
+                  "of settled games where Pinnacle priced the settled quote's exact line (others get no prediction). "
+                  "The replay compares Pinnacle's no-vig price with the US book's own no-vig price on the same games "
+                  "(lower is better) and bets either side at 2%+ EV against Pinnacle. Not the plan's verdict: no "
+                  "certified closes or windows.", "",
+                  "| market | calibration | settled games | Pinnacle at line | coverage | Brier Pinnacle / US | "
+                  "log loss Pinnacle / US | bets | W-L | ROI/bet |",
+                  "|---|---|---|---|---|---|---|---|---|---|"]
+        for r in readiness:
+            cal = r["calibration"]
+            status = ("not registered" if cal is None else "fitted" if cal["status"] == "FITTED"
+                      else f"{cal['decided']}/{cal['required']} games")
+            lines.append(f"| {r['sport']} {r['market_family']} | {status} | {r['settled_games']} | "
+                         f"{r['with_pinnacle_at_line']} | {pct(r['coverage'])} | "
+                         f"{num(r.get('pinnacle_brier'))} / {num(r.get('us_brier'))} | "
+                         f"{num(r.get('pinnacle_log_loss'))} / {num(r.get('us_log_loss'))} | {r['bets']} | "
+                         f"{r['bet_wins']}-{r['bets'] - r['bet_wins']} | {pct(r['bet_roi'])} |")
     lines += ["", "NHL is not graded here: its settlement needs the per-game official-score check."]
     return "\n".join(lines) + "\n"
 

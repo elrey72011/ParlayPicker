@@ -36,12 +36,12 @@ STAGES = [
      "Waiting on data", "#2462 merged; fills in as games are recorded", None),
     ("C3", "Plan-progress view; rework the scoreboard", "C0", "Claude", "Done",
      "#2463 progress panel; #2465 paper track record; #2466 research picks", None),
-    ("C4", "Validation, review and activation", "C1, C2", "Owner", "Waiting on data", "First market: NCAAB spread", "2026-12-15"),
+    ("C4", "Validation, review and activation", "C1, C2", "Owner", "Waiting on data", "First market: NCAAB spread. Go-live checklist in the app's readiness report", "2026-12-15"),
     ("C5", "Model improvements with fresh holdouts", "C2", "Claude", "In progress",
      "NCAAF backtest: no edge (D18); price screen (#2463); research picks (#2466); board Kalshi/de-vig fixes (G9); NCAAB line screen", None),
     ("C6", "Selector switch (app shows qualified picks)", "C4, D7", "Claude", "In progress",
      "Bridge + pipeline hookup (#2472); decision capture: fresh quotes and both-side predictions (step 1). "
-     "Left: app reads the refreshed store; owner activation after C4", None),
+     "App store refresh (read-only, every 10 min). Left: owner activation after C4", None),
 ]
 
 # sport, market, priority, games/day estimate, target sample, window days estimate, status, notes

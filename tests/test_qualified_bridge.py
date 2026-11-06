@@ -100,3 +100,70 @@ def test_inject_with_nothing_qualified_changes_nothing():
     best = pd.DataFrame([{"league": "NCAAB", "market_type": "spread_home", "best_pick": "app pick"}])
     a, b, diag = qb.inject(best, best, setting=lambda *_: "true", configuration={}, assess=lambda path: set())
     assert diag == {"status": "NO_QUALIFIED_MARKET"} and b is best
+
+
+# --- Refresh of the app's canonical store (C6: the app reads the decision job's rows) ---
+
+class _Remote:
+    """Fake evidence remote: reads succeed, writes are recorded."""
+
+    def __init__(self):
+        self.writes = []
+
+    def read_objects(self, *, Prefix):
+        return []
+
+    def put_object(self, **kwargs):
+        self.writes.append(kwargs.get("Key"))
+
+
+def test_refresh_is_read_only_throttled_and_never_raises(tmp_path):
+    from app_core.read_only_drive import ReadOnlyViolation
+    path = tmp_path / "prospective-evidence.sqlite3"
+    remote, calls, now = _Remote(), [], [1_000.0]
+
+    def sync(target, client, folder, session):
+        calls.append(target)
+        client.put_object(Key="local-only-row")      # the wrapper refuses it before it reaches the remote
+        return {"restored": 3}
+
+    first = qb.refresh_store(path, setting=lambda *_: "", clock=lambda: now[0], client=remote, folder="f", sync=sync)
+    assert first["status"] == "REFRESHED_LOCAL_ROWS_NOT_UPLOADED" and remote.writes == []
+    assert calls == [path]
+    now[0] += 60                                       # within 10 minutes: no second remote read
+    assert qb.refresh_store(path, setting=lambda *_: "", clock=lambda: now[0], client=remote, folder="f",
+                            sync=sync)["status"] == "RECENT" and len(calls) == 1
+    now[0] += qb.REFRESH_EVERY
+    ok = qb.refresh_store(path, setting=lambda *_: "", clock=lambda: now[0], client=remote, folder="f",
+                          sync=lambda *a: {"restored": 0})
+    assert ok["status"] == "REFRESHED" and ok["counts"] == {"restored": 0}
+    now[0] += qb.REFRESH_EVERY
+
+    def broken(*_):
+        raise ValueError("canonical_remote_identity_conflict")
+    assert qb.refresh_store(path, setting=lambda *_: "", clock=lambda: now[0], client=remote, folder="f",
+                            sync=broken) == {"status": "REFRESH_FAILED", "error": "ValueError"}
+    assert ReadOnlyViolation  # imported from app code, not from scripts/
+    assert not (tmp_path / (qb.STAMP + ".lock")).exists()
+
+
+def test_refresh_off_switches_and_concurrent_sessions(tmp_path):
+    import os
+    path = tmp_path / "prospective-evidence.sqlite3"
+    assert qb.refresh_store(path, setting=lambda *_: "false") == {"status": "OFF"}
+    assert qb.refresh_if_enabled(setting=lambda *_: "") == {"status": "OFF"}       # bridge off: no remote read
+    lock = tmp_path / (qb.STAMP + ".lock")
+    lock.write_text("")
+    now = os.path.getmtime(lock)
+    assert qb.refresh_store(path, setting=lambda *_: "", clock=lambda: now + 5, client=_Remote(), folder="f",
+                            sync=lambda *a: {})["status"] == "IN_PROGRESS"
+    assert qb.refresh_store(path, setting=lambda *_: "", clock=lambda: now + 3 * qb.REFRESH_EVERY,
+                            client=_Remote(), folder="f", sync=lambda *a: {})["status"] == "STALE_LOCK_CLEARED"
+    assert not lock.exists()
+
+
+def test_refresh_without_drive_credentials_reports_it(tmp_path, monkeypatch):
+    monkeypatch.delenv("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", raising=False)
+    monkeypatch.setattr("app_core.evidence_remote.settings", lambda: ("folder", None))
+    out = qb.refresh_store(tmp_path / "p.sqlite3", setting=lambda *_: "")
+    assert out == {"status": "MISSING_CREDENTIALS"}
