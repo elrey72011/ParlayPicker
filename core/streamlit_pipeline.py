@@ -4845,6 +4845,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "independent_model_available", "probability_authority",
         "production_model_eligible", "model_scope_status", "model_validation_status",
         "market_validation_status",
+        # D4 research reference: Pinnacle's no-vig price at this candidate's exact line
+        # (shown on the Pinnacle value board; changes no pick).
+        "pinnacle_fair_probability",
     ]
     candidate_audit_columns.extend(_NFL_CONTEXT_COLUMNS)
     candidate_audit_columns.extend(c for c in EXPORT_PROVENANCE_COLUMNS if c not in candidate_audit_columns)
