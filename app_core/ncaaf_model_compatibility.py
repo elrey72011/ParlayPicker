@@ -18,7 +18,9 @@ VERSION = "ncaaf-recovered-model-compatibility-v1"
 # v2 (owner-chosen D4 option B, 2026-11-06) supersedes v1 only to accept the reviewed
 # ncaaf_prospective.py that adds the Pinnacle reference capture, and this file's own new
 # bytes. Every model, artifact, lineage and alias field is copied from v1 unchanged.
-BINDING_PATH = Path(__file__).resolve().parents[1] / "docs/paid-launch/ncaaf-compatibility-binding-v2.json"
+# v3 (2026-11-06) supersedes v2 only to accept ncaaf_prospective.py saving Pinnacle
+# reference quotes per capture event, and this file's own new bytes.
+BINDING_PATH = Path(__file__).resolve().parents[1] / "docs/paid-launch/ncaaf-compatibility-binding-v3.json"
 MAX_RECORD_BYTES = 64 * 1024
 CAPABILITIES = {"spread": "selected_side_full_game_half_point_cover",
                 "total": "full_game_half_point_over_under"}
