@@ -1532,7 +1532,8 @@ def freeze_validation_plan(path: str | Path | None, plan: Mapping) -> str:
     if "source_commit" in data:
         policy_metadata["source_commit"] = _text(data["source_commit"], "source_commit")
     for name in ("model_scope", "training_cutoff_policy", "independence_policy",
-                 "push_void_policy", "promotion_criteria", "football_v2_methodology"):
+                 "push_void_policy", "promotion_criteria", "football_v2_methodology",
+                 "market_skill_methodology"):
         if name in data:
             policy_metadata[name] = _policy(data, name)
     if "model_scope" in policy_metadata:
@@ -1617,7 +1618,8 @@ def _comparable_close(db: sqlite3.Connection, quote: dict, as_of: datetime) -> d
     return _stored(db, "prospective_close", "close_id", rows[0]["close_id"]) if rows else None
 
 
-def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> dict:
+def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime,
+            detail: list | None = None) -> dict:
     is_v2 = "football_v2_methodology" in json.loads(plan["payload"])
     start = _time(plan[f"{name}_start"], f"{name}_start")
     end = _time(plan[f"{name}_end"], f"{name}_end")
@@ -1717,6 +1719,8 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime) -> d
                 prediction["mean_probability"] + prediction["loss_probability"])
             scored.append((conditional, int(outcome == "WIN")))
             unconditional_probabilities.append(prediction["mean_probability"])
+            if detail is not None and valid_quote:
+                detail.append((conditional, int(outcome == "WIN"), quote))
         if valid_quote and outcome in {"WIN", "LOSS", "PUSH", "VOID"}:
             returns.append(quote["decimal_odds"] - 1 if outcome == "WIN" else
                            -1.0 if outcome == "LOSS" else 0.0)
@@ -1773,8 +1777,13 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
         if plan is None:
             raise ValueError("unknown validation plan")
         method = json.loads(plan["payload"])
-        validation = _cohort(db, plan, "validation", cutoff)
-        holdout = _cohort(db, plan, "holdout", cutoff)
+        details = {"validation": [], "holdout": []} if "market_skill_methodology" in method else {}
+        validation = _cohort(db, plan, "validation", cutoff, details.get("validation"))
+        holdout = _cohort(db, plan, "holdout", cutoff, details.get("holdout"))
+        if details:
+            # D19 option B: the probability gate is skill against the de-vigged entry price.
+            from app_core import market_skill_validation as market_skill
+            skill = {name: market_skill.skill(db, pairs) for name, pairs in details.items()}
     if "football_v2_methodology" in method:
         from app_core.football_validation_v2 import evaluate as evaluate_football_v2
         decision = evaluate_football_v2(plan, method, validation, holdout, cutoff)
@@ -1821,11 +1830,16 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
         if (cohort["paper_roi"] is None or cohort["paper_roi"] <
                 method["value_roi_policy"]["min_paper_roi"]):
             blockers.append(f"{label}_PAPER_ROI_POLICY_NOT_MET")
+    extra = {}
+    if details:
+        for cohort in (validation, holdout):
+            blockers.extend(market_skill.blockers(cohort["name"].upper(), cohort, skill[cohort["name"]], method))
+        extra["market_skill"] = skill
     return dict(validation_plan_id=plan["validation_plan_id"], sport=plan["sport"],
                 market_family=plan["market_family"], model_id=plan["model_id"],
                 calibration_id=plan["calibration_id"], plan_artifact_hash=plan["artifact_hash"],
                 validation=validation, holdout=holdout, blockers=blockers,
-                status="UNVALIDATED" if blockers else "VALIDATION_PASSED")
+                status="UNVALIDATED" if blockers else "VALIDATION_PASSED", **extra)
 
 
 def create_validation_artifact(path: str | Path | None, validation_plan_id: str,

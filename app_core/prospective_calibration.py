@@ -376,12 +376,14 @@ def window_days(target, rate, *, coverage=0.8, margin=1.25, minimum=7):
 
 
 def draft_bound_plan(path, sport, market, *, validation_start, validation_days=None, holdout_days=None,
-                     model_id=None, calibration_id=None, rate=None):
+                     model_id=None, calibration_id=None, rate=None, methodology="v1"):
     """A proposed plan version binding the candidate model and its calibration. Nothing is frozen.
 
     Thresholds, sample minimums and policies are the frozen v1 template's
     (``prospective_validation_plans._template``). Only the version chain, the binding
-    and the window dates change. The windows are the owner's decision: v1 validates
+    and the window dates change. ``methodology="market_skill"`` (D19 option B) scores the
+    probability gate against the de-vigged entry price instead of absolute Brier and log
+    loss (``app_core.market_skill_validation``). The windows are the owner's decision: v1 validates
     for a year and holds out for another year. Freezing is a separate, explicit call
     to ``prospective_evidence.freeze_validation_plan`` after review.
     """
@@ -417,6 +419,11 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
     holdout_end = validation_end + timedelta(days=holdout_days)
     version = previous["version"] + 1
     spec = _template(sport, market)
+    if methodology == "market_skill":
+        from app_core.market_skill_validation import template as market_skill_template
+        spec = market_skill_template(spec)
+    elif methodology != "v1":
+        raise ValueError("unknown plan methodology")
     spec.update(
         validation_plan_id=f"prospective-{sport.lower()}-{market.lower()}-bound-v{version}",
         version=version, supersedes_plan_id=previous["validation_plan_id"],
@@ -438,7 +445,8 @@ def freeze_inputs(spec):
     return {"sport": spec["sport"], "market": spec["market_family"], "model_id": spec["model_id"],
             "calibration_id": spec["calibration_id"], "validation_start": spec["validation_start"],
             "validation_days": (_time(spec["validation_end"]) - _time(spec["validation_start"])).days,
-            "holdout_days": (_time(spec["holdout_end"]) - _time(spec["holdout_start"])).days}
+            "holdout_days": (_time(spec["holdout_end"]) - _time(spec["holdout_start"])).days,
+            **({"methodology": "market_skill"} if "market_skill_methodology" in spec else {})}
 
 
 def freeze_reviewed_plan(path, *, expected_hash, now=None, **inputs):

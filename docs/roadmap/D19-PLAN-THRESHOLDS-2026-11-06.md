@@ -1,6 +1,6 @@
 # D19: the frozen probability thresholds cannot be met by a spread or total market
 
-Found 2026-11-06 while preparing go-live (C4). Owner decision needed.
+Found 2026-11-06 while preparing go-live (C4). **Owner chose option B on 2026-11-06.**
 
 ## The problem
 
@@ -52,3 +52,23 @@ model with no skill; it leaves ROI as the only real test. Not recommended.
 `evaluate_validation_plan` gains a v3 branch (v1/v2 evaluation unchanged), the plan
 drafter (`prospective_calibration.draft_bound_plan`) can draft v3 for review, and the
 owner freezes it with the Bound plan workflow as before.
+
+## Built (2026-11-06)
+
+* `app_core/market_skill_validation.py`: the `market_skill_methodology` (version `market-skill-v1`).
+  A plan frozen with it keeps every v1 rule, sets the absolute bounds to a coin flip
+  (Brier 0.25, log loss ln 2), and adds, per validation and holdout cohort:
+  * model Brier and log loss no worse than the de-vigged entry price on the same games
+    (the same book's other side at the same line and timestamp);
+  * at least 90% of scored games with that two-sided reference;
+  * mean CLV against certified closes of at least 0.
+* `prospective_evidence.evaluate_validation_plan` applies those gates only to plans frozen
+  with the key and reports them under `market_skill`; v1 and v2 plans are evaluated and
+  reported exactly as before. `freeze_validation_plan` stores the key in the plan artifact.
+* `prospective_calibration.draft_bound_plan(..., methodology="market_skill")`; the freeze
+  inputs carry the methodology, so the reviewed hash reproduces. The Bound plan workflow
+  has a `methodology` input, defaulting to `market_skill`.
+
+**Owner step:** draft a market-skill plan for NCAAB spread with the Bound plan workflow
+(action `draft`), review it, then freeze it with the printed inputs and hash. The current
+v2 plan and its records stay frozen; the new version's windows start at its validation start.

@@ -56,14 +56,15 @@ def statuses(path, now):
             for sport, markets in research.SCOPES.items() for market in markets]
 
 
-def draft(path, *, sport=None, market=None, validation_start=None, now=None):
+def draft(path, *, sport=None, market=None, validation_start=None, now=None, methodology='market_skill'):
     now = now or datetime.now(timezone.utc)
     result = {'mode': 'DRAFT_READ_ONLY', 'as_of': now.isoformat(), 'markets': statuses(path, now)}
     if sport and market:
         start = validation_start or (now + timedelta(days=1)).replace(hour=0, minute=0, second=0,
                                                                      microsecond=0).isoformat()
         try:
-            spec = calibration.draft_bound_plan(path, sport, market, validation_start=start)
+            spec = calibration.draft_bound_plan(path, sport, market, validation_start=start,
+                                                methodology=methodology)
         except ValueError as exc:
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'NOT_DRAFTABLE', 'reason': str(exc)}
         else:
@@ -110,6 +111,8 @@ def main(argv=None):
     parser.add_argument('--sport')
     parser.add_argument('--market')
     parser.add_argument('--validation-start', help='ISO timestamp; default is the next UTC midnight')
+    parser.add_argument('--methodology', choices=('market_skill', 'v1'), default='market_skill',
+                        help='market_skill: scored against the de-vigged entry price (D19 option B); v1: absolute thresholds')
     parser.add_argument('--inputs', help='freeze inputs JSON printed by the reviewed draft')
     parser.add_argument('--expected-hash', help='plan hash printed by the reviewed draft')
     args = parser.parse_args(argv)
@@ -121,7 +124,8 @@ def main(argv=None):
         from market_readiness_report import ReadOnlyDrive
         guarded = ReadOnlyDrive(client, args.cache_dir)
         restore = sync(path, guarded, folder, {})
-        result = draft(path, sport=args.sport, market=args.market, validation_start=args.validation_start)
+        result = draft(path, sport=args.sport, market=args.market, validation_start=args.validation_start,
+                       methodology=args.methodology)
         result['restore'] = dict(restore, writes_refused=guarded.writes_refused)
     else:
         if not (args.sport and args.market and args.inputs and args.expected_hash):
