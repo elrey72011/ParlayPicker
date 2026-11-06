@@ -2745,6 +2745,9 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     display_prob = ml.where(ml.notna(), theover)
     out["display_probability"] = display_prob.round(3)
     kalshi_prob = _numeric_series(out, "kalshi_probability") if "kalshi_probability" in out.columns else pd.Series([pd.NA]*len(out), index=out.index)
+    # Kalshi only at the book's exact line and the pick's own team (owner 2026-11-06).
+    from app_core.kalshi_exact import gate as _kalshi_exact
+    kalshi_prob, out["kalshi_blend_gate"] = _kalshi_exact(out, kalshi_prob)
 
     calibrated = compute_blended_probability(
         p_market=out["market_probability"],
@@ -4848,6 +4851,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # D4 research reference: Pinnacle's no-vig price at this candidate's exact line
         # (shown on the Pinnacle value board; changes no pick).
         "pinnacle_fair_probability",
+        # Why Kalshi was left out of this candidate's blend (app_core.kalshi_exact); '' = used.
+        "kalshi_blend_gate",
     ]
     candidate_audit_columns.extend(_NFL_CONTEXT_COLUMNS)
     candidate_audit_columns.extend(c for c in EXPORT_PROVENANCE_COLUMNS if c not in candidate_audit_columns)
@@ -10413,6 +10418,10 @@ def run_analysis_pipeline(
     # --- End Metadata Framework ---
 
     kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
+    # Kalshi only at the book's exact line and the pick's own team (owner 2026-11-06):
+    # a near-line or other-team contract is dropped before the blend (app_core.kalshi_exact).
+    from app_core.kalshi_exact import gate as _kalshi_exact
+    kalshi_probability, merged["kalshi_blend_gate"] = _kalshi_exact(merged, kalshi_probability)
     _raw_sentiment = _numeric_series(merged, "sentiment_diff", 0.0) if "sentiment_diff" in merged.columns else pd.Series([0.0]*len(merged), index=merged.index)
     sentiment_prob = (0.5 + _raw_sentiment * 0.5).clip(0.0, 1.0)
     from app_core.nfl_inference_evidence import blend_inputs as retain_nfl_blend_inputs
