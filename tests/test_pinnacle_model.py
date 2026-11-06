@@ -197,3 +197,23 @@ def test_pairs_only_within_the_same_capture_response():
     first_us = q("book", "H", -2.5, -110)
     assert pm.fair(event, first_us, first_pin + later_pin, now=end) == pytest.approx(
         (1 / _decimal(PIN_HOME)) / (1 / _decimal(PIN_HOME) + 1 / _decimal(PIN_AWAY)))
+
+
+def test_early_season_no_research_model_the_pinnacle_cycle_settles_and_calibrates(tmp_path, clock, monkeypatch):
+    """Season start: the research cycle has no model and settles nothing; the Pinnacle cycle still can."""
+    monkeypatch.setenv("PARLAYPICKER_PINNACLE_SPORTS", "NBA")
+    path = tmp_path / "SYNTHETIC.sqlite3"
+    clock[0] = _at(0)
+    _pin_event(path, clock, 0)                              # a stored game, so the store exists
+    clock[0] = _at(0, 6)
+    first = pc.pinnacle_cycle(path, "NBA", "SPREAD", now=clock[0])
+    assert first["status"] == "INSUFFICIENT_EVIDENCE"         # game 0 finished before registration
+    for index in range(1, 46):
+        _pin_event(path, clock, index)
+    clock[0] = _at(47)
+    out = pc.pinnacle_cycle(path, "NBA", "SPREAD", now=clock[0])
+    assert out["settlement"]["settled"] == 45 and out["status"] == "FITTED" and out["decided"] == 45
+    assert not pe.read_records(path, "prospective_model", sport="NBA", market_family="SPREAD")[0][
+        "independent_event_count"]                            # only the Pinnacle model exists
+    again = pm.settle_reference_games(path, "NBA", "SPREAD", now=clock[0])
+    assert again["settled"] == 0 and again["already_settled"] == 46

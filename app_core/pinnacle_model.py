@@ -17,8 +17,9 @@ the bets), then the gate, the owner's activation and Gemini.
   capture runs every 15 minutes) while the price moved between them. No line translation:
   a game without Pinnacle at that line gets no prediction.
 * **Calibration** (``fit_calibration``): Platt, fitted from games settled after the model
-  was registered, at the quote each game was settled on (the research cycle's first
-  quote), using stored quotes only. It records **no predictions**, so it never enters,
+  was registered, at the research cycle's reference quote (each game's first canonical US
+  quote; ``settle_reference_games`` settles them, since early in a season the research
+  cycle has no model and settles nothing), using stored quotes only. It records **no predictions**, so it never enters,
   or blocks, a plan bound to another model.
 * **Predictions** (``predict``): only through ``prospective_calibration._predict`` when a
   bound plan names this model (``predict_bound``, decision capture), so a market holds
@@ -144,23 +145,63 @@ def _other_side(quote, quotes):
     return found[0] if len(found) == 1 else None
 
 
+def _settled_at(result, quote):
+    """True when ``result`` was settled at exactly ``quote`` (its stored settlement rule names it)."""
+    rule = evidence._source_json(result.get("raw_source"))
+    return isinstance(rule, dict) and rule.get("quote_id") == quote["quote_id"]
+
+
+def settle_reference_games(path, sport, family, *, now=None):
+    """Settle each finished game at the research cycle's reference quote, where Pinnacle priced that line.
+
+    The research cycle settles only games it predicted, and early in a season it has no
+    model yet. Settlement needs only a replay-verified final score and the verified quote
+    (``prospective_evidence.insert_score_settlement``), so this settles the same quote the
+    research cycle would (``_reference_quotes``: each game's first canonical US quote).
+    When the research cycle later settles that quote, it gets this same result row.
+    """
+    from app_core import prospective_calibration as calibration
+    from app_core import prospective_research_models as research
+    now = now or datetime.now(timezone.utc)
+    events, quotes, scores = research._read_scope(path, sport, family)
+    latest = calibration._latest_scores(scores)
+    settled = calibration._market_result(path, sport, family)
+    report = {"settled": 0, "already_settled": 0, "no_pinnacle_at_line": 0, "awaiting_score": 0, "errors": 0}
+    for event_id, quote in sorted(research._reference_quotes(events, quotes, now).items()):
+        event = events[event_id]
+        if (event_id, quote["selection"]) in settled:
+            report["already_settled"] += 1
+            continue
+        if fair(event, quote, quotes, now=_t(event["scheduled_start"])) is None:
+            report["no_pinnacle_at_line"] += 1
+            continue
+        score = latest.get(event_id)
+        if score is None:
+            report["awaiting_score"] += 1
+            continue
+        try:
+            evidence.insert_score_settlement(path, score_result_id=score["result_id"], quote_id=quote["quote_id"])
+            report["settled"] += 1
+        except (ValueError, evidence.EvidenceConflict):
+            report["errors"] += 1
+    return report
+
+
 def settled_games(path, sport, family, *, since=None, now=None):
-    """Decided games at the quote each was settled on (the research cycle's first quote), where
-    Pinnacle had a price at that line: [{event_id, result_id, y, pinnacle, quote, other}].
+    """Decided games settled at the research cycle's reference quote, where Pinnacle priced
+    that line: [{event_id, result_id, y, pinnacle, quote, other}].
 
     ``other`` is the same US book's opposite side at that time (None when not stored).
     """
     from app_core import prospective_calibration as calibration
+    from app_core import prospective_research_models as research
     now = now or datetime.now(timezone.utc)
-    events = {e["event_id"]: e for e in evidence.read_records(path, "prospective_event", sport=sport)}
-    quotes = evidence.read_records(path, "prospective_quote", sport=sport, market_family=family)
-    by_id = {q["quote_id"]: q for q in quotes}
+    events, quotes, _ = research._read_scope(path, sport, family)
     results = calibration._market_result(path, sport, family)
     out = []
-    for event_id, prediction in sorted(calibration._earliest_predictions(path, sport, family).items()):
-        result = results.get((event_id, prediction["selection"]))
-        quote, event = by_id.get(prediction["quote_id"]), events.get(event_id)
-        if (result is None or quote is None or event is None or result["outcome"] not in ("WIN", "LOSS")
+    for event_id, quote in sorted(research._reference_quotes(events, quotes, now).items()):
+        result, event = results.get((event_id, quote["selection"])), events[event_id]
+        if (result is None or result["outcome"] not in ("WIN", "LOSS") or not _settled_at(result, quote)
                 or _t(result["available_at"]) > now or (since is not None and _t(result["available_at"]) < since)):
             continue
         p = fair(event, quote, quotes, now=_t(event["scheduled_start"]))
@@ -193,9 +234,12 @@ def preview(path, sport, family, *, now=None, min_edge=0.02):
         out["calibration"] = ({"status": "FITTED", "calibration_id": max(cals, key=lambda c: c["available_at"])["calibration_id"]}
                               if cals else {"status": "WAITING", "decided": len(since),
                                             "required": calibration.MIN_CALIBRATION_DECIDED})
+    from app_core import prospective_research_models as research
+    events, quotes, _ = research._read_scope(path, sport, family)
     results = calibration._market_result(path, sport, family)
-    decided = [e for e, p in calibration._earliest_predictions(path, sport, family).items()
-               if (e, p["selection"]) in results and results[(e, p["selection"])]["outcome"] in ("WIN", "LOSS")]
+    decided = [e for e, q in research._reference_quotes(events, quotes, now).items()
+               if (e, q["selection"]) in results and results[(e, q["selection"])]["outcome"] in ("WIN", "LOSS")
+               and _settled_at(results[(e, q["selection"])], q)]
     games = settled_games(path, sport, family, now=now)
     out.update(settled_games=len(decided), with_pinnacle_at_line=len(games),
                coverage=len(games) / len(decided) if decided else None)
