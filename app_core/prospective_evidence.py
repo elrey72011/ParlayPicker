@@ -731,11 +731,23 @@ def _source_json(raw: object) -> dict | None:
     return value if isinstance(value, dict) else None
 
 
+QUOTE_SOURCE_KEYS = frozenset({"event_response", "market", "response_received_at"})
+
+
+def quote_source(event_response: Mapping, market: Mapping, response_received_at: str) -> dict:
+    """A quote's own replayable source, for a capture after the event's first one."""
+    return {"event_response": event_response, "market": market, "response_received_at": response_received_at}
+
+
 def verify_provider_offer(event: Mapping, offer: Mapping) -> bool:
     """Replay a verified The Odds API offer against its retained raw response.
 
     Pregame quotes use the capture event response plus the exact market fragment
-    for all six sports. A verified MLB Odds API offer does not establish the
+    for all six sports. A quote observed in a later capture of an already-stored
+    event (roadmap C6: fresh decision-time quotes) instead carries its own response as
+    ``{"event_response", "market", "response_received_at"}`` (``QUOTE_SOURCE_KEYS``);
+    that response must still match the stored event's provider id, sport, teams and
+    start exactly, and the same freshness and fragment rules apply against it. A verified MLB Odds API offer does not establish the
     cross-provider mapping to an MLB Stats API model/game; that requires separate
     identity evidence before prediction or wager eligibility.
     A live near-start odds response is only a close *candidate*: The Odds API
@@ -764,9 +776,14 @@ def verify_provider_offer(event: Mapping, offer: Mapping) -> bool:
         raw_offer = _source_json(offer["raw_source"])
         if raw_offer is None:
             return False
-        full_event = _source_json(event["raw_source"])
-        market = raw_offer
-        received = _time(event["observed_at"], "observed_at")
+        if set(raw_offer) == QUOTE_SOURCE_KEYS:
+            full_event = raw_offer["event_response"]
+            market = raw_offer["market"]
+            received = _time(raw_offer["response_received_at"], "response_received_at")
+        else:
+            full_event = _source_json(event["raw_source"])
+            market = raw_offer
+            received = _time(event["observed_at"], "observed_at")
         if not isinstance(full_event, dict) or not isinstance(market, dict):
             return False
         if (full_event.get("id") != event["provider_event_id"] or
@@ -853,6 +870,10 @@ def _price_record(path: str | Path | None, data: Mapping, *, closing_price: bool
                   verified_column: int(verified), "source_id": source_id, "source_hash": source_hash}
         if verified and not verify_provider_offer(event, dict(values, raw_source=raw)):
             raise ValueError("verified price is not replayable from exact provider source")
+        own = _source_json(raw) or {}
+        if (verified and set(own) == QUOTE_SOURCE_KEYS and
+                _time(own["response_received_at"], "response_received_at") > _clock()):
+            raise ValueError("quote response cannot be received in the future")
         return _insert(db, table, key_column, values, _snapshot(values), raw_source=raw)
 
 

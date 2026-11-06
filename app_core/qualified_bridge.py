@@ -70,8 +70,22 @@ def row(prediction, quote, event, policy_version=None):
     }
 
 
+def expected_value(prediction, quote):
+    """Per-unit EV at the quoted price: win x (decimal - 1) - loss; a push returns the stake."""
+    return prediction["mean_probability"] * (quote["decimal_odds"] - 1) - prediction["loss_probability"]
+
+
+def _rank(prediction, quote):
+    """Newest prediction first; at the same time (both sides of a C6 decision capture), the better EV."""
+    return (prediction["prediction_timestamp"], expected_value(prediction, quote), prediction["observation_id"])
+
+
 def rows(path, qualified, *, now=None, policy_versions=None):
-    """Best-pick rows for upcoming games in the ``qualified`` {(sport, family)} markets."""
+    """Best-pick rows for upcoming games in the ``qualified`` {(sport, family)} markets.
+
+    One row per game: its newest bound prediction, and when that time has both sides
+    (``app_core.decision_capture``), the side with the better expected value.
+    """
     now = now or datetime.now(timezone.utc)
     policy_versions = policy_versions or {}
     t = evidence._time
@@ -87,8 +101,7 @@ def rows(path, qualified, *, now=None, policy_versions=None):
                     or not t(p["prediction_timestamp"], "prediction") <= now < t(event["scheduled_start"], "start")):
                 continue
             best = latest.get(p["event_id"])
-            if best is None or (p["prediction_timestamp"], p["observation_id"]) > (best[0]["prediction_timestamp"],
-                                                                                  best[0]["observation_id"]):
+            if best is None or _rank(p, quote) > _rank(*best[:2]):
                 latest[p["event_id"]] = (p, quote, event)
         for p, quote, event in latest.values():
             out.append(row(p, quote, event, policy_versions.get(f"{sport}:{family}")))

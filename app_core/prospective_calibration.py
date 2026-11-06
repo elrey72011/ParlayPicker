@@ -258,7 +258,7 @@ def candidate_model(path, sport, market, *, min_events=None):
     return min(models, key=lambda r: (r["available_at"], r["model_id"])) if models else None
 
 
-def _predict(path, sport, market, model, calibration, *, now, policy_version, tag):
+def _predict(path, sport, market, model, calibration, *, now, policy_version, tag, select=None):
     artifact = json.loads(model["payload"]).get("model_artifact")
     if not isinstance(artifact, dict) or research._digest(artifact) != model["artifact_hash"]:
         return {"predictions": 0, "blocker": f"{tag}_MODEL_ARTIFACT_INTEGRITY"}
@@ -277,7 +277,9 @@ def _predict(path, sport, market, model, calibration, *, now, policy_version, ta
         if row["model_id"] == model["model_id"] and row["calibration_id"] == calibration_id}
     created, no_history = 0, 0
     commit = research.source_commit()
-    for event_id, quote in sorted(research._reference_quotes(events, quotes, now).items()):
+    chosen = (select or research._reference_quotes)(events, quotes, now)
+    for _, quote in sorted(chosen.items()):
+        event_id = quote["event_id"]
         event = events[event_id]
         if now >= _time(event["scheduled_start"]) or (event_id, quote["quote_id"]) in done:
             continue
@@ -287,8 +289,14 @@ def _predict(path, sport, market, model, calibration, *, now, policy_version, ta
             continue
         features, lineage = feature_result
         fit = artifact["model"]
-        raw = research.score_probabilities(research._expected(fit, features), fit["residual_sd"], market, quote["line"])
+        # The model and calibration are for the home side (spread) or Over (total). The other
+        # side (C6 decision quotes) is the same distribution at the home-perspective line, swapped.
+        opposite = quote["selection"] != (event["home_team"] if market != "TOTAL" else "Over")
+        line = -quote["line"] if opposite and market != "TOTAL" else quote["line"]
+        raw = research.score_probabilities(research._expected(fit, features), fit["residual_sd"], market, line)
         probabilities = calibrated(raw, cal_artifact) if cal_artifact else raw
+        if opposite:
+            raw, probabilities = (dict(p, win=p["loss"], loss=p["win"]) for p in (raw, probabilities))
         n = max(1, cal_artifact["decided"] if cal_artifact else artifact["training_independent_events"])
         conservative = max(0.0, probabilities["win"] - 1.645 * math.sqrt(
             probabilities["win"] * (1 - probabilities["win"]) / n))
@@ -299,6 +307,8 @@ def _predict(path, sport, market, model, calibration, *, now, policy_version, ta
                     "sportsbook": quote["sportsbook"], "provider_event_hash": event["source_hash"],
                     "provider_quote_hash": quote["source_hash"], "raw_probabilities": raw,
                     "calibration_id": calibration_id, "policy_version": policy_version}
+        if opposite:
+            snapshot["orientation"] = "opposite"
         snapshot_id = evidence._sha(evidence._json(snapshot))
         observation_id = f"{tag.lower()}-prediction:" + research._digest([model["model_id"], calibration_id, snapshot_id])[:32]
         record = {
