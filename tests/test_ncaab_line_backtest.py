@@ -82,3 +82,27 @@ def test_script_runs_end_to_end_with_a_fake_client(tmp_path):
     assert result["test_lined"] > 0 and set(result["report"]) == {"SPREAD", "TOTAL"}
     text = bt.markdown(result)
     assert "NCAAB market-anchored model" in text and "| SPREAD |" in text
+
+
+def test_fetch_splits_capped_windows_and_returns_every_game(monkeypatch):
+    monkeypatch.setattr(bt, "ROW_CAP", 10)
+    games = [{"id": i, "startDate": f"2024-{11 + (i % 2)}-{1 + i % 28:02d}T20:00:00Z"} for i in range(60)]
+
+    class Response:
+        def __init__(self, value):
+            self.status_code, self._value = 200, value
+
+        def json(self):
+            return self._value
+
+    calls = []
+
+    def get(url, params, **kwargs):
+        calls.append(params)
+        lo, hi = params["startDateRange"], params["endDateRange"]
+        inside = [g for g in games if lo <= g["startDate"][:10] <= hi]
+        return Response(inside[:bt.ROW_CAP])          # the API truncates silently at the cap
+
+    rows = bt.fetch("games", 2025, "token", get)
+    assert sorted(r["id"] for r in rows) == list(range(60))
+    assert all(p["season"] == 2025 for p in calls) and len(calls) > 7   # monthly windows plus splits
