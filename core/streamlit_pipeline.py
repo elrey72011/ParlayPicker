@@ -2550,7 +2550,12 @@ def get_opposing_odds_from_exchange(odds):
         # as a favorite and manufacturing a vig-skewed market_probability.
         return 0.0
     if odds_val < 0:
-        return abs(odds_val) - 20.0
+        # 20-cent line: a -150 favourite faces +130. Near even money the other side
+        # is also negative (-108 faces -112); abs - 20 there gave +88, which is not an
+        # American price and made the pick's no-vig probability too low.
+        if abs(odds_val) - 20.0 >= 100.0:
+            return abs(odds_val) - 20.0
+        return -(220.0 - abs(odds_val))
     else:
         return -(odds_val + 20.0)
 

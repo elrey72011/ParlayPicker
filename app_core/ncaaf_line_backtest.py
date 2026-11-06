@@ -125,5 +125,18 @@ def markdown(result):
                 roi = "" if row["roi_per_pick"] is None else f"{row['roi_per_pick']:+.3f}"
                 brier = "" if entry.get("brier_side_a") is None else f"{entry['brier_side_a']:.3f}"
                 lines.append(f"| {kind} | {market} | {threshold} | {row['picks']} | {hit} | {roi} | {brier} |")
+    aware = result.get("line_aware") or {}
+    if aware:
+        lines += ["", "### Market-anchored model (line as input; fit 2023, calibrated 2024, scored 2025)", "",
+                  "| market | games | mean |predicted edge| (pts) | min P(cover) | picks | hit rate | ROI/pick | Brier |",
+                  "|---|---|---|---|---|---|---|---|"]
+        for market, entry in aware.items():
+            for threshold, row in (entry.get("by_threshold") or {}).items():
+                hit = "" if row["hit_rate"] is None else f"{row['hit_rate']:.1%}"
+                roi = "" if row["roi_per_pick"] is None else f"{row['roi_per_pick']:+.3f}"
+                lines.append(f"| {market} | {entry['games']} | {entry['mean_abs_centre']:.2f} | {threshold} | "
+                             f"{row['picks']} | {hit} | {roi} | {entry['brier']:.3f} |")
+            if entry.get("blocker"):
+                lines.append(f"| {market} | 0 | | | | | | {entry['blocker']} |")
     lines += ["", "Archived lines have no quote timestamp; this screens the model and is not validation evidence."]
     return "\n".join(lines) + "\n"

@@ -19,6 +19,7 @@ import requests  # noqa: E402
 
 from app_core import ncaaf_history as history  # noqa: E402
 from app_core import ncaaf_line_backtest as bt  # noqa: E402
+from app_core import ncaaf_line_model as lm  # noqa: E402
 from app_core import ncaaf_research as research  # noqa: E402
 from app_core.research_model_recovery import ARTIFACT as FROZEN_ARTIFACT  # noqa: E402
 
@@ -43,7 +44,17 @@ def run(token, get=requests.get):
     splits, _ = research.prepare(features, targets)
     holdout = splits[2025]
     lines = bt.select_lines(bt.fetch_lines(2025, token, get))
-    return {"artifact_hash": result["report"]["artifact_hash"],
+    # Market-anchored model (C5): fit on 2023, centre/scale on 2024, score 2025 once.
+    all_lines = {**bt.select_lines(bt.fetch_lines(2023, token, get)),
+                 **bt.select_lines(bt.fetch_lines(2024, token, get)), **lines}
+    line_aware = {}
+    for market in ("SPREAD", "TOTAL"):
+        model = lm.fit(splits[2023], splits[2024], all_lines, market)
+        line_aware[market] = lm.evaluate(model, holdout, all_lines) if model else {"games": 0, "blocker": "TOO_FEW_LINED_GAMES"}
+        if model:
+            line_aware[market].update(train_games=model["train_games"], calibration_games=model["calibration_games"],
+                                      sigma=model["sigma"])
+    return {"line_aware": line_aware,"artifact_hash": result["report"]["artifact_hash"],
             "artifact_matches_frozen": result["report"]["artifact_hash"] == FROZEN_ARTIFACT,
             "frozen_artifact_hash": FROZEN_ARTIFACT,
             "holdout_games": len(holdout),

@@ -33,10 +33,12 @@ STAGES = [
     ("C0", "Market readiness from Drive evidence", "—", "Claude", "Done", "#2460; market-readiness-2026-11-05.md", None),
     ("C1", "Certified closing prices into the prospective store", "C0", "Claude", "Done", "#2461; on via PARLAYPICKER_CERTIFIED_CLOSE_SPORTS", None),
     ("C2", "Bind models to new plan versions (settle, calibrate, bind, freeze)", "C0, D11, D12", "Claude",
-     "In progress", "#2462 open; fills in as games are recorded", None),
-    ("C3", "Plan-progress view; rework the scoreboard", "C0", "Claude", "Not started", "Next build", None),
+     "Waiting on data", "#2462 merged; fills in as games are recorded", None),
+    ("C3", "Plan-progress view; rework the scoreboard", "C0", "Claude", "Done",
+     "#2463 progress panel; #2465 paper track record; #2466 research picks", None),
     ("C4", "Validation, review and activation", "C1, C2", "Owner", "Waiting on data", "First market: NCAAB spread", "2026-12-15"),
-    ("C5", "Model improvements with fresh holdouts", "C2", "Claude", "Not started", "Only if validation fails or after first result", None),
+    ("C5", "Model improvements with fresh holdouts", "C2", "Claude", "In progress",
+     "NCAAF backtest: no edge (D18); price screen (#2463); research picks (#2466); board Kalshi/de-vig fixes (G9)", None),
     ("C6", "Selector switch (app shows qualified picks)", "C4, D7", "Owner", "Not started", "After C4", None),
 ]
 
@@ -46,9 +48,9 @@ MARKETS = [
     ("NCAAB", "TOTAL", 2, 30, 200, 11, "Waiting on data", "Runs in parallel with spread"),
     ("NBA", "SPREAD", 3, 7, 200, 45, "Waiting on data", "Certified closes allowed (D13)"),
     ("NBA", "TOTAL", 4, 7, 200, 45, "Waiting on data", ""),
-    ("NHL", "PUCK_LINE", 5, 8, 200, 40, "Owner action", "Needs PARLAYPICKER_NHL_SETTLEMENT=official_check (D17)"),
-    ("NHL", "TOTAL", 6, 8, 200, 40, "Owner action", "Needs D17 setting"),
-    ("NCAAF", "SPREAD", 7, None, 200, None, "Blocked", "Needs two seasons (D12, v3); D15 fix restores capture"),
+    ("NHL", "PUCK_LINE", 5, 8, 200, 40, "Waiting on data", "Settlement on (D17); checked per game vs NHL official"),
+    ("NHL", "TOTAL", 6, 8, 200, 40, "Waiting on data", "Settlement on (D17)"),
+    ("NCAAF", "SPREAD", 7, None, 200, None, "Blocked", "Historical model shows no edge (D18); needs a better model (C5)"),
     ("NCAAF", "TOTAL", 8, None, 200, None, "Blocked", "Needs two seasons"),
     ("NFL", "SPREAD", 9, None, 200, None, "Blocked", "Needs two seasons"),
     ("NFL", "TOTAL", 10, None, 200, None, "Blocked", "Needs two seasons"),
@@ -58,12 +60,15 @@ MARKETS = [
 
 ACTIONS = [
     ("Set RESEARCH_SPORTS=NFL,NCAAF,NBA,NCAAB,MLB,NHL", "Now", "Done", "2026-11-05"),
-    ("Review D15 (NCAAF runtime recovery) in PR #2462", "Before merge", "Open", None),
-    ("Review G6 (Drive listing reuse) in PR #2462", "Before merge", "Open", None),
-    ("Merge PR #2462", "After review", "Open", None),
-    ("Set PARLAYPICKER_CERTIFIED_CLOSE_SPORTS=NBA,NCAAB", "After merge", "Open", None),
-    ("Set PARLAYPICKER_RESEARCH_CAPTURE_HOURS=18 (D16)", "After merge", "Open", None),
-    ("Set PARLAYPICKER_NHL_SETTLEMENT=official_check (D17, optional)", "After merge", "Open", None),
+    ("Review D15 (NCAAF runtime recovery) and merge PR #2462", "Before merge", "Done", "2026-11-05"),
+    ("Set PARLAYPICKER_CERTIFIED_CLOSE_SPORTS=NBA,NCAAB", "After merge", "Done", "2026-11-05"),
+    ("Set PARLAYPICKER_RESEARCH_CAPTURE_HOURS=18 (D16)", "After merge", "Done", "2026-11-05"),
+    ("Set PARLAYPICKER_NHL_SETTLEMENT=official_check (D17)", "After merge", "Done", "2026-11-05"),
+    ("Add Streamlit secret PARLAYPICKER_GITHUB_READ_TOKEN", "For the progress panel", "Done", "2026-11-05"),
+    ("Merge PRs #2463, #2464, #2465", "After CI", "Done", "2026-11-05"),
+    ("Merge PR #2466 (research picks)", "After CI", "Open", None),
+    ("Keep pressing Refresh daily (feeds the paper track record)", "Daily", "Open", None),
+    ("Check the paper track record (Activation grading run summary)", "Weekly", "Open", None),
     ("Run Bound plan → draft for NCAAB SPREAD, review, then freeze with the hash", "When readiness shows READY_FOR_OWNER_REVIEW", "Open", None),
     ("Decide D11: who reviews plan bindings and deployment reviews", "Before first freeze", "Open", None),
     ("Validation review and market activation (C4)", "After validation and holdout", "Open", None),
@@ -84,9 +89,10 @@ DECISIONS = [
     ("D12", "Football plan family", "Decided", "Option C: design v3 (two seasons needed)"),
     ("D13", "Odds API credits for certified closes", "Decided", "Option B: NBA spread, 100/day, 2,500 per 31 days"),
     ("D14", "Plan windows and first market", "Decided", "Windows sized by game count; NCAAB spread first"),
-    ("D15", "NCAAF runtime after alias-only edits", "Proposed", "Owner review in PR #2462"),
-    ("D16", "Research capture window", "Proposed", "Owner sets PARLAYPICKER_RESEARCH_CAPTURE_HOURS (recommend 18)"),
-    ("D17", "NHL settlement against the official final", "Proposed", "Owner sets PARLAYPICKER_NHL_SETTLEMENT=official_check"),
+    ("D15", "NCAAF runtime after alias-only edits", "Decided", "Merged #2462; NCAAF capture works again"),
+    ("D16", "Research capture window", "Decided", "PARLAYPICKER_RESEARCH_CAPTURE_HOURS=18"),
+    ("D17", "NHL settlement against the official final", "Decided", "PARLAYPICKER_NHL_SETTLEMENT=official_check"),
+    ("D18", "NCAAF model trained on history", "Decided", "Backtest: no edge over 2025 lines; not bound to a plan"),
 ]
 
 
@@ -128,7 +134,7 @@ def build():
     sm.title = "Summary"
     sm["A1"] = "ParlayPicker roadmap tracker"
     sm["A1"].font = Font(name=FONT, size=14, bold=True)
-    sm["A2"] = "Snapshot of docs/roadmap/ROADMAP.md on 2026-11-05. Edit the yellow cells (blue text) on each tab; totals update automatically."
+    sm["A2"] = "Snapshot of docs/roadmap/ROADMAP.md, updated 2026-11-05 evening. Edit the yellow cells (blue text) on each tab; totals update automatically."
     sm["A2"].font = BLACK
     rows = [
         ("Roadmap stages", "=COUNTA(Stages!A2:A100)"),
