@@ -249,3 +249,23 @@ def test_loop_restores_first_and_backs_up_only_after_changes(tmp_path):
     assert totals["cycles"] == 2 and totals["stored_quotes"] == 2 and totals["backups"] == 1
     assert run(30, 15, root=tmp_path, client=None, folder="f", key="k", request_get=None,
                setting=lambda *_: "")["status"] == "OFF"
+
+
+def test_pinnacle_plan_capture_requests_pinnacle_and_keeps_it_reference_only(tmp_path, clock):
+    from app_core.research_api_budget import PINNACLE_BOOKMAKERS
+    path, _, start = _store(tmp_path, clock)
+    later = start - timedelta(minutes=40)
+    clock[0] = later + timedelta(minutes=1)
+    ledger, calls = _Ledger(clock), []
+
+    def get(url, **kwargs):
+        calls.append(kwargs["params"])
+        return _Reply([_response(start, later, home_price=-105, away_price=-115, books=("book", "pinnacle"))], spent="2")
+
+    out = dc.capture(path, "NBA", "SPREAD", key="k", request_get=get, budget=ledger.budget,
+                     clock=lambda: clock[0], pinnacle=True)
+    assert calls[0]["bookmakers"] == PINNACLE_BOOKMAKERS and "regions" not in calls[0]
+    assert out["stored_quotes"] == 4 and out["blocker"] is None           # 2 credits is the expected cost
+    assert ledger.budget.usage("ODDS")["daily"] == 2
+    events, quotes, _ = models._read_scope(path, "NBA", "SPREAD")
+    assert {q["sportsbook"] for q in dc.decision_quotes(events, quotes, clock[0]).values()} == {"book"}

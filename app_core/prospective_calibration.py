@@ -262,6 +262,11 @@ def _predict(path, sport, market, model, calibration, *, now, policy_version, ta
     artifact = json.loads(model["payload"]).get("model_artifact")
     if not isinstance(artifact, dict) or research._digest(artifact) != model["artifact_hash"]:
         return {"predictions": 0, "blocker": f"{tag}_MODEL_ARTIFACT_INTEGRITY"}
+    if artifact.get("kind") == "pinnacle_no_vig_v1":
+        # A price, not a fitted score model: the research runtime does not apply (app_core.pinnacle_model).
+        from app_core import pinnacle_model
+        return pinnacle_model.predict(path, sport, market, model, calibration, now=now,
+                                      policy_version=policy_version, tag=tag, select=select)
     if artifact.get("runtime_hash") != research.runtime_hash():
         # Visible, never silent: the research module changed after this model was trained.
         return {"predictions": 0, "blocker": f"{tag}_MODEL_RUNTIME_CHANGED"}
@@ -524,5 +529,23 @@ def run_cycle(path, sport, *, now=None):
             if entry["calibration"]["status"] != "PRESENT":
                 entry["candidate_predictions"] = predict_candidate(path, sport, market, now=now)
         entry["bound_predictions"] = predict_bound(path, sport, market, now=now)
+        entry["pinnacle_model"] = pinnacle_cycle(path, sport, market, now=now)
         report["markets"][market] = entry
     return report
+
+
+def pinnacle_cycle(path, sport, market, *, now):
+    """Register and calibrate the Pinnacle model (``app_core.pinnacle_model``) where Pinnacle is captured.
+
+    Only for sports in ``PARLAYPICKER_PINNACLE_SPORTS``. It records no predictions: those
+    come only from a plan that binds it (``predict_bound``).
+    """
+    from app_core import pinnacle_model
+    from app_core.research_api_budget import pinnacle_sports
+    if sport not in pinnacle_sports() or market not in pinnacle_model.FAMILIES.get(sport, ()):
+        return {"status": "OFF"}
+    try:
+        model = pinnacle_model.register(path, sport, market, now=now, commit=research.source_commit())
+        return dict(pinnacle_model.fit_calibration(path, sport, market, model, now=now), model_id=model["model_id"])
+    except Exception as exc:  # never break the research cycle
+        return {"status": "ERROR", "error": type(exc).__name__}

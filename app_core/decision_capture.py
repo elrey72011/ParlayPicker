@@ -71,7 +71,7 @@ def _utcnow():
 COST_FLAG = "decision_cost_review_required"
 
 
-def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow):
+def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow, pinnacle=False):
     """Store fresh verified quotes for the games due in one market. Returns counts."""
     from app_core import odds_research_adapter as adapter
     result = {"due_events": 0, "requested": False, "stored_quotes": 0, "replay_blocked": 0, "blocker": None}
@@ -82,8 +82,11 @@ def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow):
     if budget.state.get(COST_FLAG):
         result["blocker"] = COST_FLAG  # sticky until the owner reviews the provider's charge
         return result
+    # A Pinnacle-model plan needs Pinnacle's price in the same response: the 11 US books plus
+    # Pinnacle are 12 bookmakers, 2 region equivalents, so 2 credits for one market.
+    cost = 2 if pinnacle else 1
     try:
-        budget.reserve("ODDS", 1)
+        budget.reserve("ODDS", cost)
     except BudgetLimit as exc:
         result["blocker"] = str(exc)
         return result
@@ -92,14 +95,16 @@ def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow):
     def charged_get(url, **kwargs):
         response = request_get(url, **kwargs)
         spent = getattr(response, "headers", {}).get("x-requests-last")
-        if spent is not None and str(spent).strip() not in ("0", "1"):
+        if spent is not None and str(spent).strip() not in {str(n) for n in range(cost + 1)}:
             budget.state[COST_FLAG] = str(spent)
             budget.persist()
             result["blocker"] = COST_FLAG
         return response
 
+    from app_core.research_api_budget import PINNACLE_BOOKMAKERS
+    books = {"bookmakers": PINNACLE_BOOKMAKERS} if pinnacle else {"regions": "us"}
     payload = adapter.fetch(sport, "odds", key, charged_get, params={
-        "regions": "us", "markets": _market_key(sport, family), "oddsFormat": "american",
+        **books, "markets": _market_key(sport, family), "oddsFormat": "american",
         "eventIds": ",".join(sorted(events))})
     have = {q["quote_id"] for q in evidence.read_records(path, "prospective_quote", sport=sport, market_family=family)}
     for row in payload:
@@ -109,7 +114,9 @@ def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow):
         observed = clock()
         valid, _ = adapter.quotes(sport, row, observed)
         for quote in valid:
-            if quote["market_family"] != family or quote["sportsbook"] in REFERENCE_BOOKS:
+            # Pinnacle is stored only as the Pinnacle model's reference; it is never an entry price
+            # (decision_quotes skips it).
+            if quote["market_family"] != family or (quote["sportsbook"] in REFERENCE_BOOKS and not pinnacle):
                 continue
             quote_id = f"odds-quote:{sport}:{research._digest([event['provider_event_id'], quote['source_id']])[:24]}"
             if quote_id in have:
@@ -181,6 +188,14 @@ def predict(path, sport, family, *, now):
     return dict(result, validation_plan_id=plan["validation_plan_id"])
 
 
+def _plan_uses_pinnacle(path, sport, family):
+    from app_core import pinnacle_model
+    from app_core import prospective_calibration as calibration
+    plan = calibration.bound_plan(path, sport, family)
+    model = plan and evidence.load_record(path, "prospective_model", plan["model_id"])
+    return bool(model) and pinnacle_model.is_pinnacle(model)
+
+
 def run_once(path, *, key, request_get, budget, setting=None, assess=None, clock=_utcnow):
     """One cycle over every owner-switched market that is also qualified."""
     switched = markets(setting)
@@ -199,7 +214,8 @@ def run_once(path, *, key, request_get, budget, setting=None, assess=None, clock
             report["markets"][name] = {"blocker": "NOT_QUALIFIED"}
             continue
         entry = report["markets"][name] = {"capture": capture(path, sport, family, key=key, request_get=request_get,
-                                                              budget=budget, clock=clock)}
+                                                              budget=budget, clock=clock,
+                                                              pinnacle=_plan_uses_pinnacle(path, sport, family))}
         entry["predictions"] = predict(path, sport, family, now=clock())  # after the quotes it uses
     report["status"] = "RAN"
     return report

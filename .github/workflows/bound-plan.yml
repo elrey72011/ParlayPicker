@@ -25,6 +25,12 @@ on:
         default: SPREAD
         type: choice
         options: [SPREAD, TOTAL]
+      model:
+        description: "draft only: research (the pinned score model) or pinnacle (Pinnacle's no-vig price)"
+        required: false
+        default: research
+        type: choice
+        options: [research, pinnacle]
       methodology:
         description: "draft only: market_skill (scored against the market's no-vig price, D19 B) or v1"
         required: false
@@ -77,6 +83,7 @@ jobs:
           MARKET: ${{ inputs.market }}
           VALIDATION_START: ${{ inputs.validation_start }}
           METHODOLOGY: ${{ inputs.methodology }}
+          MODEL: ${{ inputs.model }}
           FREEZE_INPUTS: ${{ inputs.freeze_inputs }}
           EXPECTED_HASH: ${{ inputs.expected_hash }}
           OUT: ${{ runner.temp }}/bound-plan
@@ -85,7 +92,7 @@ jobs:
           args=("$ACTION" --directory "$OUT/evidence" --output "$OUT/report/bound-plan.json"
                 --cache-dir "$RUNNER_TEMP/drive-cache" --sport "$SPORT" --market "$MARKET")
           if [ "$ACTION" = draft ] && [ -n "$VALIDATION_START" ]; then args+=(--validation-start "$VALIDATION_START"); fi
-          if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}"); fi
+          if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}" --model "${MODEL:-research}"); fi
           if [ "$ACTION" = freeze ]; then args+=(--inputs "$FREEZE_INPUTS" --expected-hash "$EXPECTED_HASH"); fi
           python -u scripts/bound_plan.py "${args[@]}"
       - name: Save the verified Drive object cache
