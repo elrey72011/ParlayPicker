@@ -38,8 +38,12 @@ def observations(database):
     return out
 
 
-def capture_live(database, *, fetch=None, now=None):
-    """Explicit job; never called by rendering. Missing provider identity blocks."""
+def capture_live(database, *, fetch=None, now=None, unmatched=None):
+    """Explicit job; never called by rendering. Missing provider identity blocks.
+
+    ``unmatched``: an optional dict filled with why each unmatched pick found no single
+    live quote (``_why_unmatched``); diagnostic only, the result is unchanged.
+    """
     from datetime import datetime, timezone
     from app_core.prediction_evidence import load_snapshots
     current = now or datetime.now(timezone.utc)
@@ -55,10 +59,11 @@ def capture_live(database, *, fetch=None, now=None):
         from core.streamlit_pipeline import fetch_live_odds_dataframe
         fetch = fetch_live_odds_dataframe
     live = fetch(sorted({r.get('sport',r.get('league')) for r in candidates}))
-    saved = 0; blocked = {}
+    saved = 0; blocked = {}; detail = {} if unmatched is None else unmatched
+    rows = live.to_dict('records')
     for r in candidates:
         matching = []
-        for row in live.to_dict('records'):
+        for row in rows:
             if row.get('matchup_id') != r.get('matchup_id'): continue
             for q in json.loads(row.get('provider_quotes') or '[]'):
                 if (q.get('provider_namespace') and q.get('provider_namespace') == r.get('provider_namespace')
@@ -67,6 +72,8 @@ def capture_live(database, *, fetch=None, now=None):
                     matching.append(q)
         if len(matching) != 1:
             blocked['missing_or_ambiguous_exact_quote'] = blocked.get('missing_or_ambiguous_exact_quote',0)+1
+            why = _why_unmatched(r, rows, len(matching))
+            detail[why] = detail.get(why, 0) + 1
             continue
         q = matching[0]
         quote = dict(game_id=r['game_id'], sport=r['sport'], market_type=r['market_type'],
@@ -78,3 +85,27 @@ def capture_live(database, *, fetch=None, now=None):
         except ValueError:
             blocked['invalid_or_stale_close'] = blocked.get('invalid_or_stale_close',0)+1
     return {'verified':saved, 'unavailable':sum(blocked.values()), 'reasons':blocked}
+
+
+def _why_unmatched(pick, rows, matches):
+    """The first check a saved pick fails against the live odds (diagnostic only)."""
+    if matches > 1:
+        return 'several_quotes_same_book_and_market'
+    if not pick.get('provider_namespace') or not pick.get('provider_event_id'):
+        return 'saved_pick_has_no_provider_identity'
+    same_game = [row for row in rows if row.get('matchup_id') == pick.get('matchup_id')]
+    if not same_game:
+        return 'game_not_in_live_odds'
+    quotes = [q for row in same_game for q in json.loads(row.get('provider_quotes') or '[]')]
+    if not quotes:
+        return 'live_game_has_no_provider_quotes'
+    same_event = [q for q in quotes if q.get('provider_namespace') == pick.get('provider_namespace')
+                  and q.get('provider_event_id') == pick.get('provider_event_id')]
+    if not same_event:
+        return 'live_quotes_have_another_provider_event'
+    book = canonical_book_label(pick.get('quote_bookmaker'))
+    same_book = [q for q in same_event if canonical_book_label(q.get('book')) == book]
+    if not same_book:
+        return 'book_not_quoting_this_game'
+    return 'book_not_quoting_this_market'
+

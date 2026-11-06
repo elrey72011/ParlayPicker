@@ -32,6 +32,22 @@ PROTOCOL = "odds-sport-research-v1"
 CAPTURE_HOURS_ENV = "PARLAYPICKER_RESEARCH_CAPTURE_HOURS"
 CAPTURE_BATCH = 24       # events per odds request (one request costs markets x regions)
 MAX_CAPTURE_BATCHES = 3  # per run: a full NCAAB evening slate in one run
+# Credit batching for the research loop (owner 2026-11-06), on only with
+# PARLAYPICKER_RESEARCH_BATCHING=true. Every request costs the same however few games it
+# covers, so a 30-minute loop would pay for many small requests and reach the per-sport
+# daily cap early. With batching on: capture when a due game starts within
+# BATCH_CAPTURE_LEAD, a full batch is due, or BATCH_CAPTURE_EVERY has passed; grade new
+# finals at most every BATCH_GRADE_EVERY (or at once for a full batch); check only for
+# score corrections at most every BATCH_CORRECTION_EVERY.
+BATCHING_ENV = "PARLAYPICKER_RESEARCH_BATCHING"
+BATCH_CAPTURE_LEAD = timedelta(hours=3)
+BATCH_CAPTURE_EVERY = timedelta(hours=3)
+BATCH_GRADE_EVERY = timedelta(minutes=60)
+BATCH_CORRECTION_EVERY = timedelta(hours=6)
+
+
+def batching(setting=os.environ.get):
+    return str(setting(BATCHING_ENV, "") or "").strip().lower() == "true"
 
 
 def capture_hours(setting=os.environ.get):
@@ -252,6 +268,14 @@ class OddsResearchAdapter:
                   "capture_window_hours": capture_hours(), "excluded_markets": {}}
         if not due:
             return result
+        if batching():
+            last_key = self.sport.lower() + "_last_capture"
+            last = timestamp(state.get(last_key))
+            soon = any(timestamp(event["commence_time"]) <= now + BATCH_CAPTURE_LEAD for event in due.values())
+            if not (soon or len(due) >= CAPTURE_BATCH or last is None or now - last >= BATCH_CAPTURE_EVERY):
+                result["batched_wait"] = len(due)
+                return result
+            state[last_key] = now.isoformat()
         participant_response = fetch(self.sport, "participants", odds_key, request_get)
         participant_observed = utcnow().isoformat()
         participants = participant_ids(participant_response)
@@ -397,6 +421,15 @@ class OddsResearchAdapter:
                   "score_rejections": {}}
         if not pending:
             return result
+        if batching():
+            last_key = self.sport.lower() + "_last_score_fetch"
+            last = timestamp(state.get(last_key))
+            new_finals = sum(gid not in completed for gid in pending)
+            every = BATCH_GRADE_EVERY if new_finals else BATCH_CORRECTION_EVERY
+            if last is not None and now - last < every and len(pending) < 24:
+                result["batched_wait"] = len(pending)
+                return result
+            state[last_key] = now.isoformat()
         selected = sorted(pending, key=lambda gid: (attempts.get(gid, ""), gid))[:24]
         for gid in selected:
             attempts[gid] = now.isoformat()
