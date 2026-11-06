@@ -78,7 +78,7 @@ DECISIONS = [
     ("D1", "Qualification thresholds", "Superseded", "Qualification follows the frozen validation plans"),
     ("D2", "NBA/NHL in parallel with NFL", "Moot", "Scheduler already covers six sports"),
     ("D3", "Moneyline in scope; WNBA in the policy", "Open", "Moneyline stays context-only"),
-    ("D4", "Sharp-price and injury sources", "Open", "No new paid plan without review"),
+    ("D4", "Sharp-price and injury sources", "Decided", "Option A: Pinnacle fair-price reference for NBA/NCAAB spreads; 1,500 credits per 31 days; set PARLAYPICKER_PINNACLE_SPORTS"),
     ("D5", "Budgets for authentic NFL acceptance", "Open", ""),
     ("D6", "Hosted NCAAF custody", "Open", ""),
     ("D7", "Switch the selector to EV with No Bet", "Open", "Only after C4; shadow comparison built (Research picks report)"),

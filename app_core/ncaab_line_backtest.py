@@ -4,7 +4,8 @@ NCAAB spread is the first research market (D14), but its in-season models wait f
 captured games. This asks the question early, on history: given the closing-era
 archived line, can simple team form predict what the line misses?
 
-* Data: CollegeBasketballData ``/games`` and ``/lines`` for two seasons (4 calls).
+* Data: CollegeBasketballData ``/games`` and ``/lines`` for two seasons, in date windows
+  (about 30 calls) so the 3,000-row cap per request never truncates a season.
 * Features, strictly as of each game: each team's average margin, points for and
   points against over its earlier games that season (shrunk toward 0 with 5 pseudo
   games), the home-minus-away differences, a neutral-site flag, and the line itself.
@@ -33,8 +34,12 @@ WIN = 100 / 110
 FEATURES = ("margin_diff", "points_for_sum", "points_against_sum", "home_margin", "away_margin", "neutral")
 
 
-def fetch(endpoint, season, token, get):
-    response = get(f"{BASE_URL}/{endpoint}", params={"season": season},
+ROW_CAP = 3000          # CBBD returns at most this many rows per request
+MAX_CALLS = 80
+
+
+def _request(endpoint, params, token, get):
+    response = get(f"{BASE_URL}/{endpoint}", params=params,
                    headers={"Authorization": "Bearer " + token}, timeout=60, allow_redirects=False)
     if response.status_code != 200:
         raise ValueError(f"CBBD {endpoint} HTTP {int(response.status_code)}")
@@ -42,6 +47,41 @@ def fetch(endpoint, season, token, get):
     if not isinstance(value, list):
         raise ValueError(f"CBBD {endpoint} response is not a list")
     return value
+
+
+def fetch(endpoint, season, token, get):
+    """Every row of a season, requested in date windows so the per-request row cap never truncates it.
+
+    Windows start monthly (October to April); a window that returns ``ROW_CAP`` rows
+    is split in half and fetched again. Rows are de-duplicated by game id.
+    """
+    from datetime import date, timedelta
+    pending = [(date(season - 1, 10, 1), date(season - 1, 11, 1))]
+    first = date(season - 1, 11, 1)
+    while first < date(season, 5, 1):
+        nxt = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
+        pending.append((first, nxt))
+        first = nxt
+    rows, seen, calls = [], set(), 0
+    while pending:
+        start, end = pending.pop(0)
+        calls += 1
+        if calls > MAX_CALLS:
+            raise ValueError(f"CBBD {endpoint}: more than {MAX_CALLS} requests for season {season}")
+        chunk = _request(endpoint, {"season": season, "startDateRange": start.isoformat(),
+                                    "endDateRange": (end - timedelta(days=1)).isoformat()}, token, get)
+        if len(chunk) >= ROW_CAP:
+            if (end - start).days <= 1:
+                raise ValueError(f"CBBD {endpoint}: a single day returned {len(chunk)} rows")
+            middle = start + (end - start) // 2
+            pending[:0] = [(start, middle), (middle, end)]
+            continue
+        for row in chunk:
+            key = _first(row, "id", "gameId")
+            if key is None or key not in seen:
+                seen.add(key)
+                rows.append(row)
+    return rows
 
 
 def _first(row, *keys):

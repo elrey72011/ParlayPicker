@@ -26,6 +26,7 @@ from core.clv import no_vig_prob
 from app_core import prospective_evidence as evidence
 
 THRESHOLDS = (0.0, 0.02, 0.04)
+REFERENCE_BOOK = "pinnacle"  # D4: sharp reference, never a bettable price or a consensus member
 
 
 def _key(event, quote):
@@ -56,6 +57,7 @@ def screen(events, quotes, closes, scores, *, min_books=3):
     for (event_id, market, line), by_book in sorted(books.items()):
         event = events[event_id]
         first, second = _sides(event, market)
+        reference = by_book.pop(REFERENCE_BOOK, None)
         fair = [no_vig_prob(pair[first]["american_odds"], pair[second]["american_odds"])
                 for pair in by_book.values() if first in pair and second in pair]
         fair = [p for p in fair if p is not None]
@@ -63,13 +65,21 @@ def screen(events, quotes, closes, scores, *, min_books=3):
             continue
         consensus = {first: median(fair)}
         consensus[second] = 1 - consensus[first]
+        sharp = None
+        if reference and first in reference and second in reference:
+            sharp = no_vig_prob(reference[first]["american_odds"], reference[second]["american_odds"])
         for side in (first, second):
             offers = [pair[side] for pair in by_book.values() if side in pair]
+            if not offers:
+                continue
             best = max(offers, key=lambda q: (q["decimal_odds"], q["sportsbook"]))
             row = {"event_id": event_id, "sport": event["sport"], "market_family": market, "selection": side,
                    "line": best["line"], "sportsbook": best["sportsbook"], "decimal_odds": best["decimal_odds"],
                    "fair_probability": consensus[side], "books": len(fair),
                    "ev": consensus[side] * best["decimal_odds"] - 1}
+            if sharp is not None:
+                row["pinnacle_fair"] = sharp if side == first else 1 - sharp
+                row["ev_vs_pinnacle"] = row["pinnacle_fair"] * best["decimal_odds"] - 1
             close = close_by.get((event_id, market, side, best["sportsbook"]))
             if close is not None and close["line"] == best["line"]:
                 row["price_clv"] = best["decimal_odds"] / close["decimal_odds"] - 1
@@ -82,7 +92,7 @@ def screen(events, quotes, closes, scores, *, min_books=3):
     return candidates
 
 
-def summarize(candidates, thresholds=THRESHOLDS):
+def summarize(candidates, thresholds=THRESHOLDS, ev_key="ev"):
     """By EV threshold, plus ``all``: the best price on every candidate, as a baseline.
 
     Beating a no-vig consensus needs a price at or above fair odds (+100 at 50%), which
@@ -90,14 +100,14 @@ def summarize(candidates, thresholds=THRESHOLDS):
     """
     out = {}
     for threshold in (None,) + tuple(thresholds):
-        picks = [c for c in candidates if threshold is None or c["ev"] >= threshold]
+        picks = [c for c in candidates if ev_key in c and (threshold is None or c[ev_key] >= threshold)]
         clv = [c["price_clv"] for c in picks if "price_clv" in c]
         settled = [c for c in picks if c.get("outcome") in ("WIN", "LOSS", "PUSH")]
         units = sum(c["decimal_odds"] - 1 if c["outcome"] == "WIN" else (-1 if c["outcome"] == "LOSS" else 0)
                     for c in settled)
         out["all" if threshold is None else f"{threshold:.2f}"] = {
             "picks": len(picks),
-            "mean_ev": sum(c["ev"] for c in picks) / len(picks) if picks else None,
+            "mean_ev": sum(c[ev_key] for c in picks) / len(picks) if picks else None,
             "with_comparable_close": len(clv),
             "mean_price_clv": sum(clv) / len(clv) if clv else None,
             "beat_close_share": sum(1 for v in clv if v > 0) / len(clv) if clv else None,
@@ -118,4 +128,6 @@ def from_store(path, sport, market, *, min_books=3):
               and r["event_id"] in by_id and evidence.verify_provider_score(by_id[r["event_id"]], r)]
     candidates = screen(events, quotes, closes, scores, min_books=min_books)
     return {"sport": sport, "market_family": market, "candidates": len(candidates),
-            "by_threshold": summarize(candidates)}
+            "by_threshold": summarize(candidates),
+            "with_pinnacle": sum(1 for c in candidates if "ev_vs_pinnacle" in c),
+            "by_threshold_vs_pinnacle": summarize(candidates, ev_key="ev_vs_pinnacle")}

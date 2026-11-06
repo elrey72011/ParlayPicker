@@ -90,6 +90,8 @@ jobs:
           PARLAYPICKER_CERTIFIED_CLOSE_MARKETS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_MARKETS }}
           # D16: hours ahead to capture NBA/NCAAB/NHL prices (default 2, range 2-24).
           PARLAYPICKER_RESEARCH_CAPTURE_HOURS: ${{ vars.PARLAYPICKER_RESEARCH_CAPTURE_HOURS }}
+          # D4 option A: Pinnacle as the fair-price reference ("NBA,NCAAB"); unset = off.
+          PARLAYPICKER_PINNACLE_SPORTS: ${{ vars.PARLAYPICKER_PINNACLE_SPORTS }}
           # D17: NHL settles only per game against the NHL official final ("official_check").
           PARLAYPICKER_NHL_SETTLEMENT: ${{ vars.PARLAYPICKER_NHL_SETTLEMENT }}
         run: python -u scripts/run_research_scheduler.py

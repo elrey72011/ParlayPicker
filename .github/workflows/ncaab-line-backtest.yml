@@ -1,6 +1,6 @@
 name: NCAAB line backtest (research only)
 # Roadmap C5: screen a market-anchored NCAAB model on archived CollegeBasketballData
-# lines. Four CBBD calls; no Odds API calls; writes nothing to Drive or the evidence store.
+# lines. About 30 CBBD calls (date windows); no Odds API calls; writes nothing to Drive or the evidence store.
 on:
   workflow_dispatch:
     inputs:

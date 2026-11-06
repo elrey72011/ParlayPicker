@@ -30,6 +30,7 @@ import math
 import os
 
 from app_core import prospective_evidence as evidence
+from app_core.research_api_budget import REFERENCE_BOOKS
 
 HISTORICAL_EVENT_ODDS = "https://api.the-odds-api.com/v4/historical/sports/{sport_key}/events/{event_id}/odds"
 CREDITS_PER_MARKET_PER_10_BOOKS = 10
@@ -76,7 +77,7 @@ def due(path, now, *, sports, lookback=LOOKBACK, setting=os.environ.get):
         for quote in evidence.read_records(path, "prospective_quote", sport=sport):
             event = events.get(quote["event_id"])
             if (not quote["quote_verified"] or event is None or event["provider_namespace"] != "THE_ODDS_API" or
-                    quote["market_family"] not in families):
+                    quote["market_family"] not in families or quote["sportsbook"] in REFERENCE_BOOKS):
                 continue
             start = _time(event["scheduled_start"])
             if not now - lookback <= start <= now:

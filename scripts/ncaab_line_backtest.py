@@ -3,7 +3,7 @@
     python scripts/ncaab_line_backtest.py --output OUT.json [--train-season 2024 --test-season 2025]
 
 Needs CBBD_API_KEY (falls back to CFBD_API_KEY: the same account serves both APIs).
-Four CBBD calls (games and lines for two seasons). No Odds API calls; writes nothing to
+About 30 CBBD calls (games and lines for two seasons, in date windows). No Odds API calls; writes nothing to
 Drive or the evidence store.
 """
 from __future__ import annotations

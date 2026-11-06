@@ -24,6 +24,7 @@ from core.clv import no_vig_prob
 from app_core import prospective_research_models as research
 from app_core import research_picks as rp
 from app_core.selection import ev_selector
+from app_core.research_api_budget import REFERENCE_BOOKS
 
 RULES = ("current", "ev_selector")
 
@@ -31,7 +32,7 @@ RULES = ("current", "ev_selector")
 def _latest_quotes(event, quotes, market, cutoff):
     """{home_line: {book: {selection: quote}}} keeping each book's newest quote before ``cutoff``."""
     ordered = sorted((q for q in quotes if q["quote_verified"] and q["line"] is not None
-                      and rp._time(q["quote_timestamp"]) < cutoff),
+                      and q["sportsbook"] not in REFERENCE_BOOKS and rp._time(q["quote_timestamp"]) < cutoff),
                      key=lambda q: (rp._time(q["quote_timestamp"]), q["quote_id"]))
     out = {}
     for quote in ordered:

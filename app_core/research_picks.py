@@ -25,6 +25,7 @@ from statistics import median
 from core.clv import no_vig_prob
 from app_core import prospective_evidence as evidence
 from app_core import prospective_research_models as research
+from app_core.research_api_budget import REFERENCE_BOOKS
 
 SPORTS = ("NBA", "NCAAB", "NHL")
 
@@ -49,7 +50,7 @@ def _offers(event, quotes, market, cutoff):
     out = {}
     for quote in quotes:
         if (quote["event_id"] != event["event_id"] or not quote["quote_verified"] or quote["line"] is None
-                or _time(quote["quote_timestamp"]) > cutoff):
+                or _time(quote["quote_timestamp"]) > cutoff or quote["sportsbook"] in REFERENCE_BOOKS):
             continue
         out.setdefault(_home_line(event, quote), {}).setdefault(quote["sportsbook"], {})[quote["selection"]] = quote
     return out
