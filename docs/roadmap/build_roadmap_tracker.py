@@ -81,7 +81,7 @@ DECISIONS = [
     ("D4", "Sharp-price and injury sources", "Open", "No new paid plan without review"),
     ("D5", "Budgets for authentic NFL acceptance", "Open", ""),
     ("D6", "Hosted NCAAF custody", "Open", ""),
-    ("D7", "Switch the selector to EV with No Bet", "Open", "Only after C4 and a shadow comparison"),
+    ("D7", "Switch the selector to EV with No Bet", "Open", "Only after C4; shadow comparison built (Research picks report)"),
     ("D8", "Closing capture every 15 instead of 30 minutes", "Open", ""),
     ("D9", "NBA ESPN download", "Decided", "Offline benchmark; done"),
     ("D10", "Retire or keep the shadow shared pipeline", "Open", "Recommend: keep off; retire after C3"),

@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app_core import research_picks as rp  # noqa: E402
+from app_core import selector_shadow_compare as shadow  # noqa: E402
 from app_core.prospective_research_models import SCOPES  # noqa: E402
 
 NOTICE = ("Research picks from two in-season models: the stored score model, and a line-anchored model "
@@ -28,7 +29,7 @@ NOTICE = ("Research picks from two in-season models: the stored score model, and
 
 def build(path, now=None):
     now = now or datetime.now(timezone.utc)
-    boards, records = [], {}
+    boards, records, comparison = [], {}, {}
     for sport in rp.SPORTS:
         for market in SCOPES[sport]:
             for method in ("score", "anchored"):
@@ -36,8 +37,11 @@ def build(path, now=None):
                 graded = rp.replay(path, sport, market, now=now, method=method)
                 records[f"{sport} {market} ({method})"] = dict(rp.record(graded), positive_ev=rp.record(
                     [g for g in graded if g["ev"] > 0]))
+                if sport != "NHL":
+                    comparison[f"{sport} {market} ({method})"] = shadow.summarize(
+                        shadow.compare(path, sport, market, now=now, method=method))
     return {"schema": "research-picks-v1", "as_of": now.isoformat(), "boards": boards, "records": records,
-            "wager_authority": False}
+            "selector_comparison": comparison, "wager_authority": False}
 
 
 def markdown(result):
@@ -68,6 +72,21 @@ def markdown(result):
         lines.append(f"| {key} | {r['picks']} | {r['wins']}-{r['losses']}-{r['pushes']} | {interval} | "
                      f"{pct(r['roi_per_pick'])} | {e['picks']} | {e['wins']}-{e['losses']}-{e['pushes']} | "
                      f"{pct(e['roi_per_pick'])} |")
+    comparison = result.get("selector_comparison") or {}
+    if comparison:
+        lines += ["", "### Selector shadow test (D7): current rule vs EV selector on the same games", "",
+                  "Current: bet the best-EV side when EV >= 0. EV selector: market nudged toward the model "
+                  "(at most 5 points), bet only with an edge of 2+ points. CLV is against the last captured "
+                  "pregame consensus, not a certified close.", "",
+                  "| market | games | rule | bets | W-L-P | ROI/pick | mean CLV | beat close | same side |",
+                  "|---|---|---|---|---|---|---|---|---|"]
+        for key, c in comparison.items():
+            for rule in shadow.RULES:
+                r = c[rule]
+                same = f"{c['same_side']}/{c['both_bet']}" if rule == "ev_selector" else ""
+                clv = "" if r["mean_clv"] is None else f"{r['mean_clv']:+.1%}"
+                lines.append(f"| {key} | {c['games']} | {rule} | {r['picks']} | {r['wins']}-{r['losses']}-{r['pushes']} | "
+                             f"{pct(r['roi_per_pick'])} | {clv} | {pct(r['beat_close_share'])} | {same} |")
     lines += ["", "NHL is not graded here: its settlement needs the per-game official-score check."]
     return "\n".join(lines) + "\n"
 

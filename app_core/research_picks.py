@@ -178,11 +178,15 @@ def board(path, sport, market, *, now=None, method="score"):
     return report
 
 
-def replay(path, sport, market, *, now=None, min_ev=0.0, method="score"):
-    """Grade the board rule on finished games, as of each game's first captured price."""
+def replay_games(path, sport, market, *, now=None, method="score"):
+    """Finished games as of each one's first captured price: (event, score, as_of, mean, sd, quotes).
+
+    Only the model available at ``as_of`` is used. Shared by ``replay`` and the selector
+    shadow comparison so both grade exactly the same games.
+    """
     now = now or datetime.now(timezone.utc)
     if sport not in evidence.SCORE_SETTLEMENT_SPORTS:
-        return []  # NHL grades need the per-game official-score check (D17), not done offline
+        return  # NHL grades need the per-game official-score check (D17), not done offline
     events, quotes, scores = research._read_scope(path, sport, market)
     latest = {}
     for score in scores:
@@ -190,7 +194,6 @@ def replay(path, sport, market, *, now=None, min_ev=0.0, method="score"):
             previous = latest.get(score["event_id"])
             if previous is None or score["grading_version"] > previous["grading_version"]:
                 latest[score["event_id"]] = score
-    graded = []
     for event_id, score in latest.items():
         event = events[event_id]
         start = _time(event["scheduled_start"])
@@ -212,12 +215,22 @@ def replay(path, sport, market, *, now=None, min_ev=0.0, method="score"):
         mean = _mean(fit, built[0], method, market, events, quotes, event_id, as_of)
         if mean is None:
             continue
-        pick = _pick(event, market, _offers(event, quotes, market, as_of), mean, fit["residual_sd"])
+        yield event, score, as_of, mean, fit["residual_sd"], [q for q in quotes if q["event_id"] == event_id]
+
+
+def settle(sport, market, event, score, selection, line):
+    return evidence.score_settlement_outcome(sport, market, selection, event["home_team"], event["away_team"],
+                                             score["home_score"], score["away_score"], line)
+
+
+def replay(path, sport, market, *, now=None, min_ev=0.0, method="score"):
+    """Grade the board rule on finished games, as of each game's first captured price."""
+    graded = []
+    for event, score, as_of, mean, sd, quotes in replay_games(path, sport, market, now=now, method=method):
+        pick = _pick(event, market, _offers(event, quotes, market, as_of), mean, sd)
         if pick is None or pick["ev"] < min_ev:
             continue
-        pick["outcome"] = evidence.score_settlement_outcome(
-            sport, market, pick["selection"], event["home_team"], event["away_team"],
-            score["home_score"], score["away_score"], pick["line"])
+        pick["outcome"] = settle(sport, market, event, score, pick["selection"], pick["line"])
         graded.append(pick)
     return graded
 
