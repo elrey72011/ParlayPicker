@@ -128,6 +128,91 @@ def fair(event, quote, quotes, *, now):
     return p if quote["selection"] == _canonical(event, quote["market_family"]) else 1 - p
 
 
+def _other_side(quote, quotes):
+    line = quote["line"] if quote["market_family"] == "TOTAL" else -quote["line"]
+    found = [q for q in quotes if q["event_id"] == quote["event_id"] and q["sportsbook"] == quote["sportsbook"]
+             and q["quote_timestamp"] == quote["quote_timestamp"] and q["selection"] != quote["selection"]
+             and q["line"] == line and q["quote_verified"]]
+    return found[0] if len(found) == 1 else None
+
+
+def settled_games(path, sport, family, *, since=None, now=None):
+    """Decided games at the quote each was settled on (the research cycle's first quote), where
+    Pinnacle had a price at that line: [{event_id, result_id, y, pinnacle, quote, other}].
+
+    ``other`` is the same US book's opposite side at that time (None when not stored).
+    """
+    from app_core import prospective_calibration as calibration
+    now = now or datetime.now(timezone.utc)
+    events = {e["event_id"]: e for e in evidence.read_records(path, "prospective_event", sport=sport)}
+    quotes = evidence.read_records(path, "prospective_quote", sport=sport, market_family=family)
+    by_id = {q["quote_id"]: q for q in quotes}
+    results = calibration._market_result(path, sport, family)
+    out = []
+    for event_id, prediction in sorted(calibration._earliest_predictions(path, sport, family).items()):
+        result = results.get((event_id, prediction["selection"]))
+        quote, event = by_id.get(prediction["quote_id"]), events.get(event_id)
+        if (result is None or quote is None or event is None or result["outcome"] not in ("WIN", "LOSS")
+                or _t(result["available_at"]) > now or (since is not None and _t(result["available_at"]) < since)):
+            continue
+        p = fair(event, quote, quotes, now=_t(event["scheduled_start"]))
+        if p is None:
+            continue
+        out.append({"event_id": event_id, "result_id": result["result_id"], "y": int(result["outcome"] == "WIN"),
+                    "pinnacle": p, "quote": quote, "other": _other_side(quote, quotes)})
+    return out
+
+
+def preview(path, sport, family, *, now=None, min_edge=0.02):
+    """What a market-skill plan bound to the Pinnacle model would see so far (research only).
+
+    * readiness: model registered, calibration fitted or games still needed;
+    * coverage: of the games the research cycle settled, the share where Pinnacle had a price
+      at the settled quote's exact line (a game without one gets no Pinnacle prediction);
+    * replay on all settled games with a Pinnacle price (uncalibrated): Pinnacle's Brier and log loss
+      vs the US book's own no-vig price, and the bets (either side, EV >= ``min_edge`` against
+      Pinnacle) with their record and ROI. Not the plan's verdict: no certified closes or windows.
+    """
+    from app_core import prospective_calibration as calibration
+    now = now or datetime.now(timezone.utc)
+    model = registered(path, sport, family)
+    out = {"sport": sport, "market_family": family, "model_id": model["model_id"] if model else None,
+           "calibration": None, "settled_games": 0, "with_pinnacle_at_line": 0, "coverage": None}
+    if model is not None:
+        cals = [c for c in evidence.read_records(path, "prospective_calibration", sport=sport, market_family=family)
+                if c["model_id"] == model["model_id"]]
+        since = settled_games(path, sport, family, since=_t(model["available_at"]), now=now)
+        out["calibration"] = ({"status": "FITTED", "calibration_id": max(cals, key=lambda c: c["available_at"])["calibration_id"]}
+                              if cals else {"status": "WAITING", "decided": len(since),
+                                            "required": calibration.MIN_CALIBRATION_DECIDED})
+    results = calibration._market_result(path, sport, family)
+    decided = [e for e, p in calibration._earliest_predictions(path, sport, family).items()
+               if (e, p["selection"]) in results and results[(e, p["selection"])]["outcome"] in ("WIN", "LOSS")]
+    games = settled_games(path, sport, family, now=now)
+    out.update(settled_games=len(decided), with_pinnacle_at_line=len(games),
+               coverage=len(games) / len(decided) if decided else None)
+    paired = [g for g in games if g["other"] is not None]
+    if paired:
+        def scores(rows):
+            brier = sum((p - y) ** 2 for p, y in rows) / len(rows)
+            loss = -sum(y * math.log(max(p, 1e-15)) + (1 - y) * math.log(max(1 - p, 1e-15)) for p, y in rows) / len(rows)
+            return brier, loss
+        us = [((1 / g["quote"]["decimal_odds"]) / (1 / g["quote"]["decimal_odds"] + 1 / g["other"]["decimal_odds"]), g["y"])
+              for g in paired]
+        out["pinnacle_brier"], out["pinnacle_log_loss"] = scores([(g["pinnacle"], g["y"]) for g in paired])
+        out["us_brier"], out["us_log_loss"] = scores(us)
+    bets = []
+    for g in paired:
+        sides = [(g["pinnacle"] * g["quote"]["decimal_odds"] - 1, g["quote"]["decimal_odds"], g["y"]),
+                 ((1 - g["pinnacle"]) * g["other"]["decimal_odds"] - 1, g["other"]["decimal_odds"], 1 - g["y"])]
+        ev, decimal, won = max(sides)
+        if ev >= min_edge:
+            bets.append(decimal - 1 if won else -1.0)
+    out.update(compared=len(paired), bets=len(bets), bet_wins=sum(1 for r in bets if r > 0),
+               bet_roi=sum(bets) / len(bets) if bets else None)
+    return out
+
+
 def fit_calibration(path, sport, family, model, *, now=None, min_decided=None):
     """A Platt calibration for the Pinnacle model from settled games, recording no predictions."""
     from app_core import prospective_calibration as calibration
@@ -139,21 +224,9 @@ def fit_calibration(path, sport, family, model, *, now=None, min_decided=None):
     if existing:
         return {"status": "PRESENT", "calibration_id": max(existing, key=lambda c: c["available_at"])["calibration_id"]}
     fit_start = _t(model["available_at"])
-    events = {e["event_id"]: e for e in evidence.read_records(path, "prospective_event", sport=sport)}
-    quotes = evidence.read_records(path, "prospective_quote", sport=sport, market_family=family)
-    by_id = {q["quote_id"]: q for q in quotes}
-    results = calibration._market_result(path, sport, family)
-    pairs_, result_ids = [], []
-    for event_id, prediction in sorted(calibration._earliest_predictions(path, sport, family).items()):
-        result = results.get((event_id, prediction["selection"]))
-        quote, event = by_id.get(prediction["quote_id"]), events.get(event_id)
-        if result is None or quote is None or event is None or not fit_start <= _t(result["available_at"]) <= now:
-            continue
-        p = fair(event, quote, quotes, now=_t(event["scheduled_start"]))
-        if p is None or result["outcome"] not in ("WIN", "LOSS"):
-            continue
-        result_ids.append(result["result_id"])
-        pairs_.append((p, int(result["outcome"] == "WIN")))
+    settled = settled_games(path, sport, family, since=fit_start, now=now)
+    pairs_ = [(g["pinnacle"], g["y"]) for g in settled]
+    result_ids = [g["result_id"] for g in settled]
     if len(pairs_) < min_decided:
         return {"status": "INSUFFICIENT_EVIDENCE", "calibration_id": None, "decided": len(pairs_),
                 "required_decided": min_decided}

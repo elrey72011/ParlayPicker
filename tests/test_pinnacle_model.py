@@ -36,7 +36,8 @@ def _pin_event(path, clock, index, *, pin_line=-2.5):
                            "home_team": home[0], "away_team": away[0], "home_team_id": home[1],
                            "away_team_id": away[1], "scheduled_start": start.isoformat(),
                            "observed_at": observed.isoformat(), "source_id": f"capture-{provider_id}", "raw_source": raw})
-    quotes = [("book", home[0], -2.5, -110, us), ("pinnacle", home[0], pin_line, PIN_HOME, pin),
+    quotes = [("book", home[0], -2.5, -110, us), ("book", away[0], 2.5, -110, us),
+              ("pinnacle", home[0], pin_line, PIN_HOME, pin),
               ("pinnacle", away[0], -pin_line, PIN_AWAY, pin)]
     for book, selection, line, price, market in quotes:
         pe.insert_quote(path, {"quote_id": f"q-{event_id}-{book}-{selection}", "event_id": event_id, "sport": "NBA",
@@ -84,7 +85,8 @@ def test_fair_price_needs_the_same_line_the_window_and_no_look_ahead(tmp_path, c
     other = _pin_event(path, clock, 2, pin_line=-3.0)
     events = {e["event_id"]: e for e in pe.read_records(path, "prospective_event", sport="NBA")}
     quotes = pe.read_records(path, "prospective_quote", sport="NBA", market_family="SPREAD")
-    us = {q["event_id"]: q for q in quotes if q["sportsbook"] == "book"}
+    us = {q["event_id"]: q for q in quotes
+          if q["sportsbook"] == "book" and q["selection"] == events[q["event_id"]]["home_team"]}
     home, away = 1 / _decimal(PIN_HOME), 1 / _decimal(PIN_AWAY)
     expected = home / (home + away)
     late = datetime(2031, 1, 1, tzinfo=timezone.utc)
@@ -117,12 +119,18 @@ def test_calibrate_from_settled_games_then_predict_only_through_a_bound_plan(tmp
         pc.predict_candidate(path, "NBA", "SPREAD", now=clock[0])    # the research cycle's own predictions
     clock[0] = _at(121)
     pc.settle_scope(path, "NBA", "SPREAD")
+    before = pm.preview(path, "NBA", "SPREAD", now=clock[0])
+    assert before["calibration"] == {"status": "WAITING", "decided": 48, "required": 40}
+    assert before["settled_games"] == 48 and before["coverage"] == 1.0 and before["compared"] == 48
+    assert before["us_brier"] is not None and before["pinnacle_brier"] is not None
+    assert before["bets"] == 0          # Pinnacle 52.7% for home at -110: +0.6% EV, under the 2% edge
     assert pm.fit_calibration(path, "NBA", "SPREAD", model, now=clock[0], min_decided=10_000)["status"] == \
         "INSUFFICIENT_EVIDENCE"
     fitted = pm.fit_calibration(path, "NBA", "SPREAD", model, now=clock[0])
     assert fitted["status"] == "FITTED" and fitted["decided"] == 48
     assert not [p for p in pe.read_records(path, "prospective_prediction", sport="NBA", market_family="SPREAD")
                 if p["model_id"] == model["model_id"]]                     # calibration recorded no predictions
+    assert pm.preview(path, "NBA", "SPREAD", now=clock[0])["calibration"]["status"] == "FITTED"
     # Bind it with a market-skill plan (the owner's reviewed freeze), then the cycle predicts with it.
     now = clock[0]
     clock[0] = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -153,3 +161,16 @@ def test_cycle_registers_and_calibrates_only_where_pinnacle_is_captured(tmp_path
     out = pc.pinnacle_cycle(path, "NBA", "SPREAD", now=_at(1))
     assert out["status"] == "INSUFFICIENT_EVIDENCE" and out["model_id"].startswith("pinnacle-model:NBA:SPREAD")
     assert pc.pinnacle_cycle(path, "NHL", "PUCK_LINE", now=_at(1)) == {"status": "OFF"}
+
+
+def test_preview_without_a_model_and_the_report_section(tmp_path, clock):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import research_picks
+    path = tmp_path / "SYNTHETIC.sqlite3"
+    _pin_event(path, clock, 1, pin_line=-3.0)
+    empty = pm.preview(path, "NCAAB", "SPREAD", now=_at(5))
+    assert empty["model_id"] is None and empty["calibration"] is None and empty["coverage"] is None
+    text = research_picks.markdown({"boards": [], "records": {}, "pinnacle_model": [empty]})
+    assert "Pinnacle model: readiness and replay" in text and "| NCAAB SPREAD | not registered |" in text
