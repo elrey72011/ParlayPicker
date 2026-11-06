@@ -24,14 +24,26 @@ ALIAS_RUNTIME = "8283b60a3e1e3310719526ef60320a45560de4b0a04c1faedeca3218102936c
 # Pinnacle allowance is spent), and quote_candidates never selects Pinnacle. The model,
 # features, history and identity code are byte-identical; so is the artifact. With the
 # switch off the request and every selected quote are unchanged.
-PINNACLE_RUNTIME = "4cf3b333932e733be316a2d42e5bfcc41f039ab53309a799aa8a7128bf304246"
+FIRST_PINNACLE_RUNTIME = "4cf3b333932e733be316a2d42e5bfcc41f039ab53309a799aa8a7128bf304246"
+# Fourth reviewed transition (2026-11-06, completing D4 option B+). ncaaf_prospective.py
+# only: each saved capture event also keeps its fresh Pinnacle quotes as
+# ``reference_quotes`` (never a candidate or pick). Model, features, history, identity
+# and artifact are byte-identical; candidates and selections are unchanged.
+REFERENCE_RUNTIME = "27c79227900e32017eb7fbe7b704d6a9df1999139c5e9df5227a2eac25fadcf6"
+# PINNACLE_RUNTIME names the current reviewed Pinnacle-era runtime (the code on disk);
+# FIRST_PINNACLE_RUNTIME keeps the first one so cohorts recovered to it still carry over.
+PINNACLE_RUNTIME = REFERENCE_RUNTIME
 REVIEWED_TRANSITIONS = {
     (SOURCE_RUNTIME, TARGET_RUNTIME): "reviewed_NFL_alias_only_change_0d36bd74",
     (TARGET_RUNTIME, ALIAS_RUNTIME): "reviewed_NCAAF_identity_alias_and_NHL_mapper_only_93a7f236_1ccf0a28",
     (SOURCE_RUNTIME, ALIAS_RUNTIME): "reviewed_NFL_alias_0d36bd74_then_NCAAF_identity_alias_and_NHL_mapper_93a7f236_1ccf0a28",
-    (ALIAS_RUNTIME, PINNACLE_RUNTIME): "reviewed_NCAAF_pinnacle_reference_capture_only_D4",
-    (TARGET_RUNTIME, PINNACLE_RUNTIME): "reviewed_NCAAF_alias_93a7f236_1ccf0a28_then_pinnacle_reference_capture_D4",
-    (SOURCE_RUNTIME, PINNACLE_RUNTIME): "reviewed_NFL_alias_0d36bd74_NCAAF_alias_93a7f236_1ccf0a28_then_pinnacle_reference_capture_D4",
+    (ALIAS_RUNTIME, FIRST_PINNACLE_RUNTIME): "reviewed_NCAAF_pinnacle_reference_capture_only_D4",
+    (TARGET_RUNTIME, FIRST_PINNACLE_RUNTIME): "reviewed_NCAAF_alias_93a7f236_1ccf0a28_then_pinnacle_reference_capture_D4",
+    (SOURCE_RUNTIME, FIRST_PINNACLE_RUNTIME): "reviewed_NFL_alias_0d36bd74_NCAAF_alias_93a7f236_1ccf0a28_then_pinnacle_reference_capture_D4",
+    (FIRST_PINNACLE_RUNTIME, REFERENCE_RUNTIME): "reviewed_NCAAF_pinnacle_reference_quotes_saved_D4",
+    (ALIAS_RUNTIME, REFERENCE_RUNTIME): "reviewed_NCAAF_pinnacle_reference_capture_and_saved_quotes_D4",
+    (TARGET_RUNTIME, REFERENCE_RUNTIME): "reviewed_NCAAF_alias_93a7f236_1ccf0a28_then_pinnacle_reference_capture_and_saved_quotes_D4",
+    (SOURCE_RUNTIME, REFERENCE_RUNTIME): "reviewed_NFL_alias_0d36bd74_NCAAF_alias_93a7f236_1ccf0a28_then_pinnacle_reference_capture_and_saved_quotes_D4",
 }
 
 

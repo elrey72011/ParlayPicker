@@ -1026,18 +1026,6 @@ def _app_setting(name, default=''):
         return default
 
 
-def _render_pipeline_v2(frame, note):
-    """Shadow results of the shared pipeline. Display only; never selects or stakes."""
-    with st.expander("Shared pipeline (shadow, NFL)", expanded=False):
-        st.caption("Comparison only. These probabilities do not change picks, stakes or publication.")
-        if frame is None or getattr(frame, "empty", True):
-            st.info(f"No shadow results: {note or 'NOT_RUN'}")
-            return
-        columns = [c for c in ("home", "away", "market_type", "line", "status", "reason", "probability",
-                               "quote_age_seconds", "state") if c in frame.columns]
-        st.dataframe(frame[columns], hide_index=True, use_container_width=True)
-
-
 def _render_ev_shadow(frame, summary, note):
     """Shadow EV/No Bet decisions. Display only; never selects or stakes."""
     with st.expander("EV selector (shadow)", expanded=False):
@@ -1130,7 +1118,6 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         "gemini_df": pd.DataFrame(),
         "simulation_results": {},
         "best_picks_df": pd.DataFrame(),
-        "pipeline_v2_df": pd.DataFrame(),
         "ev_shadow_df": pd.DataFrame(),
         "diagnostics": diagnostics,
         "pipeline_status": "idle",
@@ -1884,30 +1871,18 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         except ValueError as exc:
             diagnostics['slate_coverage_error'] = str(exc)
             deferred_errors.append('Slate coverage reconciliation failed: ' + str(exc))
-    pipeline_v2_rows, pipeline_v2_note = [], 'PIPELINE_V2_DISABLED'
-    if controls.get("pipeline_v2"):
-        # Comparison only: never changes analysis, selection, stakes or publication.
-        try:
-            from app_core.pipeline.orchestrator import shadow as pipeline_v2_shadow
-            pipeline_v2_rows, pipeline_v2_note = pipeline_v2_shadow(
-                analysis_df, setting=controls.get("pipeline_v2_setting") or os.environ.get)
-        except Exception as exc:  # the shadow must never break Refresh
-            pipeline_v2_note = 'PIPELINE_V2_ERROR:' + type(exc).__name__
-            deferred_warnings.append(f"Shared pipeline shadow did not run ({type(exc).__name__}). Picks are unaffected.")
-    diagnostics["pipeline_v2_note"] = pipeline_v2_note
     ev_shadow_df, ev_shadow_note = None, 'EV_SHADOW_DISABLED'
     try:
         # Roadmap P1.2: market-anchored EV/No Bet selector in shadow; never changes picks.
         from app_core.selection.shadow import run as ev_shadow_run
         ev_shadow_df, diagnostics["ev_shadow_summary"], ev_shadow_note = ev_shadow_run(
-            analysis_df, best_picks_df, setting=controls.get("pipeline_v2_setting") or os.environ.get)
+            analysis_df, best_picks_df, setting=controls.get("shadow_setting") or os.environ.get)
     except Exception as exc:  # the shadow must never break Refresh
         ev_shadow_note = 'EV_SHADOW_ERROR:' + type(exc).__name__
         deferred_warnings.append(f"EV selector shadow did not run ({type(exc).__name__}). Picks are unaffected.")
     diagnostics["ev_shadow_note"] = ev_shadow_note
     timer.finish()
     state_updates = {
-        "pipeline_v2_df": pd.DataFrame(pipeline_v2_rows),
         "ev_shadow_df": ev_shadow_df if ev_shadow_df is not None else pd.DataFrame(),
         "pipeline_status": "using stored results",
         "pipeline_running": False,
@@ -1979,10 +1954,9 @@ def main() -> None:
     controls["ncaaf_research_packets"] = list(st.session_state.get("ncaaf_research_packets", ()))
     controls["ncaaf_private_research"] = bool(st.session_state.get("ncaaf_private_research", False))
     controls["nfl_private_packets"] = list(st.session_state.get("nfl_private_packets", ()))
-    # Shared pipeline (roadmap M1.4): shadow-only and off unless PARLAYPICKER_PIPELINE_V2=true.
-    from app_core.pipeline.orchestrator import enabled as pipeline_v2_enabled
-    controls["pipeline_v2_setting"] = _app_setting
-    controls["pipeline_v2"] = pipeline_v2_enabled(_app_setting)
+    # The shared-pipeline shadow (roadmap M1.4) was retired 2026-11-06 (D10); the EV selector
+    # shadow below keeps its own setting.
+    controls["shadow_setting"] = _app_setting
     from app_core.selection.shadow import enabled as ev_shadow_enabled
     controls["ev_shadow"] = ev_shadow_enabled(_app_setting)
 
@@ -2068,8 +2042,6 @@ def main() -> None:
         return
     if not st.session_state["analysis_df"].empty:
         st.caption(f"Pipeline status: {pipeline_status}")
-    if controls.get("pipeline_v2"):
-        _render_pipeline_v2(st.session_state.get("pipeline_v2_df"), diagnostics.get("pipeline_v2_note"))
     if controls.get("ev_shadow"):
         _render_ev_shadow(st.session_state.get("ev_shadow_df"), diagnostics.get("ev_shadow_summary"),
                           diagnostics.get("ev_shadow_note"))

@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app_core import research_picks as rp  # noqa: E402
 from app_core import selector_shadow_compare as shadow  # noqa: E402
 from app_core import pinnacle_value as pv  # noqa: E402
+from app_core import ncaaf_pinnacle_value as npv  # noqa: E402
 from app_core.prospective_research_models import SCOPES  # noqa: E402
 
 NOTICE = ("Research picks from two in-season models: the stored score model, and a line-anchored model "
@@ -28,7 +29,7 @@ NOTICE = ("Research picks from two in-season models: the stored score model, and
           "No market has qualified, so every pick is NO_BET with zero stake.")
 
 
-def build(path, now=None):
+def build(path, now=None, ncaaf_records=None):
     now = now or datetime.now(timezone.utc)
     boards, records, comparison = [], {}, {}
     for sport in rp.SPORTS:
@@ -45,6 +46,10 @@ def build(path, now=None):
         boards.append(pv.board(path, sport, "SPREAD", now=now))
         records[f"{sport} SPREAD ({pv.METHOD})"] = dict(pv.record(pv.replay(path, sport, "SPREAD", now=now)),
                                                        positive_ev=rp.record([]))
+    if ncaaf_records is not None:
+        boards.append(npv.board(ncaaf_records, now=now))
+        records[f"NCAAF SPREAD+TOTAL ({pv.METHOD})"] = dict(pv.record(npv.replay(ncaaf_records, now=now)),
+                                                           positive_ev=rp.record([]))
     return {"schema": "research-picks-v1", "as_of": now.isoformat(), "boards": boards, "records": records,
             "selector_comparison": comparison, "wager_authority": False}
 
@@ -127,7 +132,11 @@ def main(argv=None):
         os.environ[DRIVE_CACHE_ENV] = str(args.cache_dir)
     path = args.directory / "prospective-evidence.sqlite3"
     sync(path, ReadOnlyDrive(DriveStore(folder), args.cache_dir), folder, {})
-    result = build(path)
+    # NCAAF captures live in their own store (ncaaf_prospective_store); restore it read-only too.
+    from app_core import ncaaf_prospective_store as ns
+    ncaaf_path = args.directory / "ncaaf-prospective.sqlite3"
+    ns.sync(ncaaf_path, client=ReadOnlyDrive(DriveStore(folder), args.cache_dir), folder=folder, session={})
+    result = build(path, ncaaf_records=ns.records(ncaaf_path))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
     text = markdown(result)

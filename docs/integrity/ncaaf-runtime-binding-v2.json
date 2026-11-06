@@ -24,7 +24,7 @@
     "app_core/ncaaf_history.py": "ed328551bb8e961d432a5c371732dc860fcf3c23f69dbb4a77d922f48ea30411",
     "app_core/ncaaf_history_continuation.py": "72f5770a23d8b1cff9cb18fe84670fbc733ba75d5b79ef12d7ecbcffbfc33012",
     "app_core/ncaaf_identity.py": "cd83e7b0915d9c98b6b7c3abbf4f1d28f0157c185d0bcd1c05d9ad9d4918f438",
-    "app_core/ncaaf_model_compatibility.py": "fd1b2724bbe142d5cb8c1c638f3cfed90dfc8803a136e3be7a92f8edc73ec48f",
+    "app_core/ncaaf_model_compatibility.py": "f010111353c2af5238cbc7ec80ff7eafc0b61f66a4e26509b998553c935e967f",
     "app_core/ncaaf_owner_event_crosswalk.py": "694ff6e253fc84f4f7eeddc1d45cc992d84e50d69a75204e24d8cd5a85091b2a",
     "app_core/ncaaf_owner_mapping.py": "fd5fa49a5c92a9c1cc2745a2210c48c1ba143d69c0eb573409814072b01df8c3",
     "app_core/ncaaf_owner_research.py": "e45acba0879437f34b676944bb3a05226ecf4348af81882fdb3ca4c270b22ecb",
@@ -37,7 +37,7 @@
     "app_core/ncaaf_pilot_setup.py": "d7dd10687ef72aefe23a973c7c7c7515b14db1f753f54ff295299577451fec29",
     "app_core/ncaaf_pipeline_evidence.py": "24feb58730709a3cc207aab33038f42aa52a58abf590fe79bfbade9108e66709",
     "app_core/ncaaf_private_refresh.py": "abf89dba2d1e2ebe3cb0a087b6cfaa79f9954b4941ea29dba242771b7d4fe0f0",
-    "app_core/ncaaf_prospective.py": "762f3eed584271e1ea146ef9c9d2ea35067eb3b2f363e7bc0ab2c9462df1a56f",
+    "app_core/ncaaf_prospective.py": "f5163586233e6b0d552bd9f8ec487accdb31f8ea461916f71488c7684c05633e",
     "app_core/ncaaf_prospective_chronology.py": "4decd9d0e9258dca894fa576593972753bb230f9bfc030abd3a45ddbb39d5c02",
     "app_core/ncaaf_prospective_store.py": "dd4be76230accc6730b70e3200be57ec1663e4108d99794e7060966d3ae12e43",
     "app_core/ncaaf_research.py": "e85a82eb585967c0f9fda8d483aecb8155d982a471b20a4359eda340046d579b",
@@ -166,7 +166,7 @@
     "scripts/ncaaf_staged_acquisition.py": "5361d463f7aa53b92302b9a3e7cdd21ba4bea2f27022955e40569c35128358af",
     "services/subscriber/auth.py": "71956dd74b70232eafb713de639c1ca51d631091900d6ded2a1f347d2991e97a",
     "services/subscriber/requirements.txt": "7b9f0adb9988ec21928d4c15758e992e3cef7ac78fa88daa80f7ca1e21a6222a",
-    "streamlit_app.py": "1331080867c805f59e9542d4d02dfc8c61ade532f57dea49e9b056af7413f126"
+    "streamlit_app.py": "c5bc300bb9bbaa6a4ab497aeba7f59ae199cc706a8d1d05f8ac7f4cbb58f0b65"
   },
   "excluded": "tests/, .github/, CI timing profiles and retired seal guards are not runtime inputs",
   "frozen_history_binding": {

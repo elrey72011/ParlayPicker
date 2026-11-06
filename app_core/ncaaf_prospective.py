@@ -213,6 +213,26 @@ def _fetch_odds(odds_key, get):
                  cfbd=False, get=get)
 
 
+def reference_quotes(event, captured):
+    """Fresh reference-book (Pinnacle) quotes for one event, kept apart from the pick candidates."""
+    from app_core.prediction_evidence import provider_quotes
+    from app_core.research_api_budget import REFERENCE_BOOKS
+    try:
+        quotes = json.loads(provider_quotes(event))
+    except (TypeError, KeyError, AttributeError, ValueError):
+        return []
+    out = []
+    for q in quotes:
+        t = timestamp(q.get("recorded_at"))
+        price = q.get("price")
+        if (str(q.get("book", "")).lower() not in REFERENCE_BOOKS or not t or not 0 <= (captured - t).total_seconds() <= 900
+                or not isinstance(price, (int, float)) or isinstance(price, bool) or not math.isfinite(price)
+                or abs(price) < 100):
+            continue
+        out.append({k: q.get(k) for k in ("book", "market_type", "point", "price", "recorded_at")})
+    return sorted(out, key=lambda q: (q["market_type"], str(q["point"]), q["recorded_at"]))
+
+
 def capture(state, model_record, odds_key, *, get=None, path=None):
     if digest(model_record["data"]["artifact"]) != model_record["data"]["artifact_hash"]:
         raise ValueError("Frozen model integrity failure")
@@ -248,9 +268,13 @@ def capture(state, model_record, odds_key, *, get=None, path=None):
         if not models:
             skipped.append({"event_id": event.get("id"), "reason": "no_fresh_exact_quotes"})
             continue
-        saved.append({"event_id": event["id"], "cfbd_id": g["id"], "season": g["season"],
-                      "home_id": g["homeId"], "away_id": g["awayId"], "home": g["homeTeam"], "away": g["awayTeam"],
-                      "start": start.isoformat(), "features": feature, "models": models})
+        entry = {"event_id": event["id"], "cfbd_id": g["id"], "season": g["season"],
+                 "home_id": g["homeId"], "away_id": g["awayId"], "home": g["homeTeam"], "away": g["awayTeam"],
+                 "start": start.isoformat(), "features": feature, "models": models}
+        reference = reference_quotes(event, captured)
+        if reference:
+            entry["reference_quotes"] = reference  # D4: fair-price reference only, never a pick
+        saved.append(entry)
     # Final pregame check after computation; no in-play rows can enter the ledger.
     finished = utcnow()
     saved = [e for e in saved if timestamp(e["start"]) > finished and all(

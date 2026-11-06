@@ -57,7 +57,7 @@ def run(analysis_df, current_picks, *, setting=os.environ.get, clock=None, quali
     decisions = ev_selector.select(analysis_df, qualified=qualified, current=current_picks)
     summary = dict(ev_selector.summary(decisions), qualified_markets=sorted(' '.join(m) for m in qualified),
                    qualification_note=qualification_note, next_blockers=blockers)
-    from app_core.pipeline.orchestrator import store_from_settings
+    from app_core.pipeline.store import store_from_settings
     store, reason = store_from_settings(setting)
     if store is None or decisions.empty:
         return decisions, summary, reason or 'NO_GAMES'
