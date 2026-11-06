@@ -52,3 +52,19 @@ def test_small_samples_and_markdown():
     assert small["status"].startswith("TOO_FEW") and "TOO_FEW" in bw.markdown(small)
     text = bw.markdown(bw.study(_rows(600, kalshi_signal=1.0)))
     assert "| kalshi |" in text and "market only" in text and "TheOver and sentiment" in text
+
+
+def test_theover_is_read_as_a_pick_side_fraction_and_its_no_prediction_value_is_missing():
+    from core.blend_weights import _theover, rows_from, INPUTS
+    assert INPUTS["theover"] == "theover_probability"
+    assert _theover(0.61) == 0.61 and _theover(61) == 0.61       # percentage read as a fraction
+    assert _theover(0.5) is None and _theover(50) is None         # TheOver's "no prediction" value
+    assert _theover(None) is None and _theover("x") is None and _theover(0) is None
+    rows = rows_from([{"fair_market_probability": 0.5, "theover_probability": 58, "candidate_outcome": "WIN",
+                       "game_start_utc": "2026-11-07T00:00:00Z"}])
+    assert rows[0][2]["theover"] == 0.58
+
+
+def test_theover_is_saved_with_each_pick():
+    from app_core.candidate_evidence_schema import FIELDS
+    assert "theover_probability" in FIELDS

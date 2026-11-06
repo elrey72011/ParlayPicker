@@ -17,8 +17,12 @@ missing input contributes 0. This study:
 * scores log loss and Brier on the later picks for: the market alone, the current blend
   (``calibrated_probability``), and the fitted blend.
 
-Only inputs saved with each pick can be fitted: Kalshi and the ML model. TheOver and
-sentiment are not saved in the candidate evidence, so they are not fitted here.
+Only inputs saved with each pick can be fitted: Kalshi, the ML model and, from picks
+saved on or after 2026-11-06, TheOver (``theover_probability``, pick side; a percentage is
+read as a fraction, and TheOver's exactly-0.5 "no prediction" value counts as missing, as
+in the app's blend). Pinnacle's no-vig price at the pick's line (``pinnacle_fair_probability``,
+saved from 2026-11-06) is fitted the same way, so one fit gives the Kalshi and Pinnacle weights
+together, each relative to the book's own no-vig price. Sentiment is not saved, so it is not fitted.
 Descriptive only; it changes no weight.
 """
 from __future__ import annotations
@@ -27,8 +31,11 @@ import math
 
 import numpy as np
 
-INPUTS = {"kalshi": "kalshi_probability", "ml": "ml_probability"}
-CURRENT = {"kalshi": "0.40 when Kalshi >= 0.55, else 0", "ml": "0.15 (tier 1) / 0.35 (tier 2)"}
+INPUTS = {"kalshi": "kalshi_probability", "ml": "ml_probability", "theover": "theover_probability",
+          "pinnacle": "pinnacle_fair_probability"}
+CURRENT = {"kalshi": "0.40 when Kalshi >= 0.55, else 0", "ml": "0.15 (tier 1) / 0.35 (tier 2)",
+           "theover": "0.20 standard (NBA totals 0.30, NHL 0.09)",
+           "pinnacle": "0 (reference only; not in the blend)"}
 L2 = 1.0
 TRAIN_SHARE = 0.7
 BOOTSTRAP = 200
@@ -44,6 +51,16 @@ def _prob(value):
     return p if 0.0 < p < 1.0 else None
 
 
+def _theover(value):
+    """TheOver as a fraction (it can arrive as a percentage); exactly 0.5 means no prediction."""
+    try:
+        p = float(value)
+    except (TypeError, ValueError):
+        return None
+    p = p / 100.0 if 1.0 < p <= 100.0 else p
+    return None if abs(p - 0.5) < 1e-9 else _prob(p)
+
+
 def _logit(p):
     p = min(max(p, CLIP), 1 - CLIP)
     return math.log(p / (1 - p))
@@ -56,7 +73,7 @@ def rows_from(accepted):
         m = _prob(row.get("fair_market_probability")) or _prob(row.get("market_probability"))
         if m is None or row.get("candidate_outcome") not in ("WIN", "LOSS"):
             continue
-        inputs = {name: _prob(row.get(field)) for name, field in INPUTS.items()}
+        inputs = {name: (_theover if name == "theover" else _prob)(row.get(field)) for name, field in INPUTS.items()}
         out.append((str(row.get("game_start_utc") or ""), m, inputs, _prob(row.get("calibrated_probability")),
                     1 if row["candidate_outcome"] == "WIN" else 0))
     return sorted(out, key=lambda r: r[0])
@@ -111,7 +128,7 @@ def study(accepted, *, seed=7):
     rows = rows_from(accepted)
     report = {"schema": "blend-weights-v1", "rows": len(rows), "inputs": list(INPUTS),
               "current_weights": CURRENT, "weight_authority": False,
-              "not_fitted": ["theover", "sentiment"],
+              "not_fitted": ["sentiment"],
               "present": {n: sum(1 for r in rows if r[2][n] is not None) for n in INPUTS},
               "anchor_comparison": anchor_comparison(accepted)}
     if len(rows) < MIN_ROWS:
@@ -152,8 +169,8 @@ def build(database):
 def markdown(report):
     lines = ["## Blend weights fitted from settled picks (market-anchored)", "",
              "logit(p) = logit(market) + sum of w x (logit(input) - logit(market)). A weight near 0 means "
-             "\"trust the market\". Descriptive only; it changes no weight. TheOver and sentiment are not saved "
-             "with picks, so they are not fitted.", ""]
+             "\"trust the market\". Descriptive only; it changes no weight. TheOver and sentiment: TheOver is "
+             "saved with picks from 2026-11-06 and fitted once enough settle; sentiment is not saved.", ""]
     anchor = report.get("anchor_comparison") or {}
     if "pinnacle" in anchor:
         anchor_line = (f"- Anchor test on {anchor['rows']} picks with a Pinnacle price: log loss book "
