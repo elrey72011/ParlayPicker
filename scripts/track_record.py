@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core import track_record  # noqa: E402
+from core import kalshi_report, track_record  # noqa: E402
 
 
 def main(argv=None):
@@ -21,9 +21,10 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     report = track_record.build(args.database)
+    report["kalshi"] = kalshi_report.build(args.database)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
-    text = track_record.markdown(report)
+    text = track_record.markdown(report) + "\n" + kalshi_report.markdown(report["kalshi"])
     args.output.with_suffix(".md").write_text(text, encoding="utf-8")
     if os.getenv("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
