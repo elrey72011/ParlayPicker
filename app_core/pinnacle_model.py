@@ -11,9 +11,11 @@ the bets), then the gate, the owner's activation and Gemini.
   research cycle's pinned candidate (``prospective_calibration.candidate_model`` needs
   120 training games).
 * **Probability** (``fair``): for a US-book quote, Pinnacle's no-vig probability for the
-  same side at the **same home-perspective line**, from Pinnacle's two sides in one
-  capture within ``PAIR_WINDOW`` of the US quote and no later than the prediction time.
-  No line translation: a game without Pinnacle at that line gets no prediction.
+  same side at the **same home-perspective line**, from Pinnacle's two sides in the **same
+  capture response** as the US quote (``capture_time``), received no later than the
+  prediction time. Pairing by timestamp could mix two captures a few minutes apart (decision
+  capture runs every 15 minutes) while the price moved between them. No line translation:
+  a game without Pinnacle at that line gets no prediction.
 * **Calibration** (``fit_calibration``): Platt, fitted from games settled after the model
   was registered, at the quote each game was settled on (the research cycle's first
   quote), using stored quotes only. It records **no predictions**, so it never enters,
@@ -34,7 +36,6 @@ from app_core import prospective_evidence as evidence
 KIND = "pinnacle_no_vig_v1"
 FEATURE_VERSION = "pinnacle-no-vig-v1"
 REFERENCE_BOOK = "pinnacle"
-PAIR_WINDOW = timedelta(minutes=30)
 FAMILIES = {"NBA": ("SPREAD", "TOTAL"), "NCAAB": ("SPREAD", "TOTAL")}
 
 
@@ -44,7 +45,7 @@ def _t(value):
 
 def artifact(sport, family):
     return {"kind": KIND, "sport": sport, "market_family": family, "reference_book": REFERENCE_BOOK,
-            "line_rule": "SAME_HOME_PERSPECTIVE_LINE", "pair_window_minutes": int(PAIR_WINDOW.total_seconds() // 60),
+            "line_rule": "SAME_HOME_PERSPECTIVE_LINE", "pairing": "SAME_CAPTURE_RESPONSE",
             "probability": "NO_VIG_TWO_SIDED", "training": "NONE_PRICE_NOT_FIT"}
 
 
@@ -57,9 +58,10 @@ def is_pinnacle(model):
 
 
 def registered(path, sport, family):
-    """The registered Pinnacle model for this market, or None."""
+    """The registered Pinnacle model with this code's exact definition (``artifact``), or None."""
+    digest = evidence._sha(evidence._json(artifact(sport, family)))
     found = [m for m in evidence.read_records(path, "prospective_model", sport=sport, market_family=family)
-             if is_pinnacle(m)]
+             if is_pinnacle(m) and m["artifact_hash"] == digest]
     return min(found, key=lambda m: (m["available_at"], m["model_id"])) if found else None
 
 
@@ -93,39 +95,45 @@ def _canonical(event, family):
     return event["home_team"] if family != "TOTAL" else "Over"
 
 
+def capture_time(event, quote):
+    """When the response holding ``quote`` was received: its own stored response
+    (``prospective_evidence.quote_source``, later captures) or the event's first capture."""
+    raw = evidence._source_json(quote.get("raw_source"))
+    if isinstance(raw, dict) and set(raw) == evidence.QUOTE_SOURCE_KEYS:
+        return _t(raw["response_received_at"])
+    return _t(event["observed_at"])
+
+
 def pairs(event, quotes, family):
-    """[(quote_timestamp, home_line, p_canonical)] for Pinnacle's two-sided quotes on this event."""
-    by_time = {}
+    """[(capture_time, home_line, p_canonical)] for Pinnacle's two-sided quotes on this event."""
+    grouped = {}
     for q in quotes:
         if (q["event_id"] != event["event_id"] or q["sportsbook"] != REFERENCE_BOOK or q["market_family"] != family
                 or not q["quote_verified"] or q["line"] is None):
             continue
-        by_time.setdefault((q["quote_timestamp"], _home_line(event, q)), {})[q["selection"]] = q
+        key = (capture_time(event, q), q["quote_timestamp"], _home_line(event, q))
+        grouped.setdefault(key, {})[q["selection"]] = q
     out = []
     canonical = _canonical(event, family)
-    for (stamp, line), sides in by_time.items():
+    for (captured, _, line), sides in grouped.items():
         if len(sides) != 2 or canonical not in sides:
             continue
         mine = 1 / sides[canonical]["decimal_odds"]
         other = 1 / next(q for s, q in sides.items() if s != canonical)["decimal_odds"]
-        out.append((stamp, line, mine / (mine + other)))
+        out.append((captured, line, mine / (mine + other)))
     return out
 
 
 def fair(event, quote, quotes, *, now):
-    """Pinnacle's no-vig probability for ``quote``'s side at its exact line, or None."""
-    line, at = _home_line(event, quote), _t(quote["quote_timestamp"])
-    best = None
-    for stamp, home_line, p in pairs(event, quotes, quote["market_family"]):
-        when = _t(stamp)
-        if home_line != line or when > now or abs(when - at) > PAIR_WINDOW:
-            continue
-        if best is None or abs(when - at) < abs(_t(best[0]) - at):
-            best = (stamp, p)
-    if best is None:
+    """Pinnacle's no-vig probability for ``quote``'s side at its exact line, same capture, or None."""
+    line, captured = _home_line(event, quote), capture_time(event, quote)
+    if captured > now:
         return None
-    p = best[1]
-    return p if quote["selection"] == _canonical(event, quote["market_family"]) else 1 - p
+    found = [p for when, home_line, p in pairs(event, quotes, quote["market_family"])
+             if when == captured and home_line == line]
+    if len(found) != 1:
+        return None
+    return found[0] if quote["selection"] == _canonical(event, quote["market_family"]) else 1 - found[0]
 
 
 def _other_side(quote, quotes):

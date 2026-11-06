@@ -174,3 +174,26 @@ def test_preview_without_a_model_and_the_report_section(tmp_path, clock):
     assert empty["model_id"] is None and empty["calibration"] is None and empty["coverage"] is None
     text = research_picks.markdown({"boards": [], "records": {}, "pinnacle_model": [empty]})
     assert "Pinnacle model: readiness and replay" in text and "| NCAAB SPREAD | not registered |" in text
+
+
+def test_pairs_only_within_the_same_capture_response():
+    """A later capture's US price never pairs with an earlier capture's Pinnacle price."""
+    event = {"event_id": "e", "home_team": "H", "away_team": "A", "observed_at": "2030-01-01T10:00:00+00:00"}
+    later = "2030-01-01T10:15:00+00:00"
+
+    def q(book, selection, line, price, received=None, stamp="2030-01-01T09:58:00+00:00"):
+        raw = ({"event_response": {}, "market": {}, "response_received_at": received} if received
+               else {"key": "spreads"})
+        return {"event_id": "e", "sportsbook": book, "market_family": "SPREAD", "selection": selection, "line": line,
+                "decimal_odds": _decimal(price), "quote_verified": 1, "quote_timestamp": stamp, "raw_source": raw}
+    first_pin = [q("pinnacle", "H", -2.5, PIN_HOME), q("pinnacle", "A", 2.5, PIN_AWAY)]
+    us_later = q("book", "H", -2.5, -110, received=later, stamp="2030-01-01T10:12:00+00:00")
+    end = datetime(2031, 1, 1, tzinfo=timezone.utc)
+    assert pm.fair(event, us_later, first_pin + [us_later], now=end) is None        # different captures
+    later_pin = [q("pinnacle", "H", -2.5, -140, received=later, stamp="2030-01-01T10:11:00+00:00"),
+                 q("pinnacle", "A", 2.5, 120, received=later, stamp="2030-01-01T10:11:00+00:00")]
+    home, away = 1 / _decimal(-140), 1 / _decimal(120)
+    assert pm.fair(event, us_later, first_pin + later_pin + [us_later], now=end) == pytest.approx(home / (home + away))
+    first_us = q("book", "H", -2.5, -110)
+    assert pm.fair(event, first_us, first_pin + later_pin, now=end) == pytest.approx(
+        (1 / _decimal(PIN_HOME)) / (1 / _decimal(PIN_HOME) + 1 / _decimal(PIN_AWAY)))

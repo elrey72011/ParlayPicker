@@ -10,8 +10,8 @@ from app_core.prospective_evidence import all_market_readiness, read_records
 from app_core.prospective_source_view import all_source_readiness, SOURCE_FILENAMES
 
 
-def _latest(path, table, sport, market, time_field):
-    rows = read_records(path, table, sport=sport, market_family=market)
+def _latest(path, table, sport, market, time_field, keep=None):
+    rows = [row for row in read_records(path, table, sport=sport, market_family=market) if keep is None or keep(row)]
     return max(rows, key=lambda row: (row[time_field], row[next(iter(row))])) if rows else None
 
 
@@ -76,8 +76,12 @@ def load_readiness(directory=None, *, authenticate=False, client=None, folder=No
     for row in canonical_rows:
         sport, market = row["sport"], row["market_family"]
         source = sources[(sport, market)]
-        model = _latest(canonical, "prospective_model", sport, market, "available_at")
-        calibration = _latest(canonical, "prospective_calibration", sport, market, "available_at")
+        # The trained model, as market_readiness counts it: a reference-price model (Pinnacle,
+        # no training games) is not shown as the market's latest model, nor its calibration.
+        model = _latest(canonical, "prospective_model", sport, market, "available_at",
+                        keep=lambda row: row["training_observation_count"] > 0)
+        calibration = _latest(canonical, "prospective_calibration", sport, market, "available_at",
+                              keep=lambda row: model is not None and row["model_id"] == model["model_id"])
         plan = _latest(canonical, "prospective_validation_plan", sport, market, "version")
         merged = {**row,
                   "source_observations": source["research_quote_rows"],
