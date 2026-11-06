@@ -78,3 +78,17 @@ owner freezes it with the Bound plan workflow as before.
 **Owner step:** draft a market-skill plan for NCAAB spread with the Bound plan workflow
 (action `draft`), review it, then freeze it with the printed inputs and hash. The current
 v2 plan and its records stay frozen; the new version's windows start at its validation start.
+
+## Also found (2026-11-06): research-cycle predictions block every v1/v2 bound plan
+
+The research cycle (`prospective_research_models.predict_scope`) writes an uncalibrated
+prediction for every upcoming game. Inside a bound plan's windows those count as "another
+model or calibration", and v1 evaluation then blocks with `*_MODEL_CALIBRATION_SCOPE_MISMATCH`.
+Reproduced on the synthetic end-to-end chain. So, as frozen, **no v1/v2 bound plan can pass
+while the research cycle runs**, including the current NCAAB v2 plan.
+
+Those predictions do not affect the scores: each game is scored from its first prediction by
+the plan's exact model and calibration. Market-skill plans therefore **report** them
+(`wrong_model_or_calibration_count`) but are not blocked by them
+(`other_model_predictions: REPORTED_NOT_BLOCKING`). v1/v2 evaluation is unchanged. This is one
+more reason to freeze the next NCAAB plan with the market-skill methodology.

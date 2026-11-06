@@ -172,3 +172,52 @@ def test_draft_freeze_and_evaluate_a_market_skill_bound_plan(tmp_path, monkeypat
     frozen = pc.freeze_reviewed_plan(path, expected_hash=pc.plan_hash(spec), now=now, **inputs)
     report = pe.evaluate_validation_plan(path, frozen["validation_plan_id"], as_of=now)
     assert "market_skill" in report and report["status"] == "UNVALIDATED"
+
+
+def test_research_cycle_predictions_do_not_block_a_market_skill_plan(tmp_path, monkeypatch):
+    """The research cycle writes an uncalibrated prediction for every game; v1 plans block on it."""
+    from datetime import datetime, timedelta, timezone
+    from app_core import prospective_calibration as pc
+    from app_core import prospective_research_models as models
+    from app_core.prospective_validation_plans import freeze_current_validation_plans
+    from tests.test_prospective_research_models import _at, _event
+    state = [_at(0)]
+    monkeypatch.setattr(pe, "_clock", lambda: state[0])
+    monkeypatch.setattr(models, "_utcnow", lambda: state[0])
+    monkeypatch.setattr(models, "source_commit", lambda: "a" * 40)
+    monkeypatch.setattr(pc, "CANDIDATE_MIN_TRAINING_EVENTS", 60)
+
+    def plan_with(methodology, path):
+        for index in range(70):
+            _event(path, state, "NBA", index)
+        state[0] = _at(71)
+        model_id = models.train_scope(path, "NBA", "SPREAD")["model_id"]
+        for index in range(72, 120):
+            _event(path, state, "NBA", index)
+            state[0] = _at(index, 1)
+            pc.predict_candidate(path, "NBA", "SPREAD", now=state[0])
+        state[0] = _at(121)
+        pc.settle_scope(path, "NBA", "SPREAD")
+        pc.fit_calibration(path, "NBA", "SPREAD", model_id, now=state[0])
+        now = state[0]
+        state[0] = datetime(2026, 10, 1, tzinfo=timezone.utc)
+        freeze_current_validation_plans(path, source_commit="b" * 40)
+        state[0] = now
+        spec = pc.draft_bound_plan(path, "NBA", "SPREAD", validation_start=(now + timedelta(days=1)).isoformat(),
+                                   rate=7, methodology=methodology)
+        pe.freeze_validation_plan(path, spec)
+        _event(path, state, "NBA", 123)
+        state[0] = _at(123, 1)
+        assert models.predict_scope(path, "NBA", "SPREAD", as_of=state[0])["predictions"] == 1   # research cycle
+        assert pc.predict_bound(path, "NBA", "SPREAD", now=state[0])["predictions"] == 1
+        state[0] = _at(124)
+        pc.settle_scope(path, "NBA", "SPREAD")
+        return pe.evaluate_validation_plan(path, spec["validation_plan_id"], as_of=state[0])
+
+    v1 = plan_with("v1", tmp_path / "v1.sqlite3")
+    assert "VALIDATION_MODEL_CALIBRATION_SCOPE_MISMATCH" in v1["blockers"]           # unchanged for v1
+    state[0] = _at(0)
+    skill = plan_with("market_skill", tmp_path / "skill.sqlite3")
+    assert skill["validation"]["wrong_model_or_calibration_count"] == 1                 # still reported
+    assert skill["validation"]["unique_events"] == 1
+    assert not any("SCOPE_MISMATCH" in b for b in skill["blockers"])

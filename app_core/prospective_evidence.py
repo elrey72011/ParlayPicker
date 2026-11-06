@@ -1808,7 +1808,10 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
             blockers.append(f"NEED_{plan['minimum_independent_sample'] - cohort['unique_events']}_MORE_SETTLED_{label}_EVENTS")
         if cohort["outcomes"]["PENDING"] or cohort["outcomes"]["NEEDS_REVIEW"]:
             blockers.append(f"{label}_OUTCOMES_UNRESOLVED")
-        if cohort["wrong_model_or_calibration_count"]:
+        if cohort["wrong_model_or_calibration_count"] and not details:
+            # Market-skill plans report these but are not blocked: the research cycle writes an
+            # uncalibrated prediction for every game, and each game is scored from its first
+            # prediction by the plan's exact model and calibration (market_skill_validation).
             blockers.append(f"{label}_MODEL_CALIBRATION_SCOPE_MISMATCH")
         if cohort["missing_provenance_count"]:
             blockers.append(f"{label}_PROVENANCE_INCOMPLETE")

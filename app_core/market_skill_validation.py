@@ -18,6 +18,11 @@ The v1 paper-ROI rule scores every game's first prediction, which for the resear
 is always the home side or the Over: betting one side of every game at -110 loses the vig
 whatever the model knows. So for these plans ROI and CLV are scored on the bets instead.
 
+Predictions by other models or calibrations in the windows (the research cycle writes an
+uncalibrated one for every game) are reported, not blocking: each game is scored from its
+first prediction by the plan's exact model and calibration. Under v1 they block, so no v1/v2
+bound plan can pass while the research cycle runs.
+
 Everything else in the v1 template still applies unchanged (calibration error, coverage,
 sample sizes, verified entry prices, certified-close coverage). The
 absolute bounds are set to a coin flip (0.25, ln 2) as a sanity floor. Plans frozen
@@ -38,7 +43,8 @@ def methodology():
             "min_market_reference_coverage": 0.9, "min_mean_clv": 0.0,
             "bet_rule": "EITHER_SIDE_EV_AT_ENTRY_PRICE_AT_LEAST_MIN_EDGE", "min_edge": 0.02,
             "min_bets": 50, "min_bet_close_coverage": 0.8, "paper_roi_scope": "BETS", "min_bet_roi": 0.0,
-            "absolute_bounds": "COIN_FLIP_SANITY_FLOOR", "decision_record": "D19 option B (owner 2026-11-06)"}
+            "absolute_bounds": "COIN_FLIP_SANITY_FLOOR",
+            "other_model_predictions": "REPORTED_NOT_BLOCKING", "decision_record": "D19 option B (owner 2026-11-06)"}
 
 
 def template(base):
