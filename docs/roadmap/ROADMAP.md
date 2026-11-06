@@ -149,7 +149,7 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | D4 | Sharp-price and injury sources: rights, cost and quota | Open. Use existing Odds API/Novig first; no new paid plan without review |
 | D5 | Budgets for authentic NFL acceptance | Open |
 | D6 | Hosted NCAAF custody | Open |
-| D7 | Switch the selector to EV with No Bet | Open. Only after C4 and a shadow comparison |
+| D7 | Switch the selector to EV with No Bet | Open. Only after C4 and a shadow comparison. **Shadow comparison built 2026-11-06** (`app_core/selector_shadow_compare.py`, in the Research picks report): on the same replayed NBA/NCAAB games and model, today's rule (bet the best-EV side when EV >= 0) vs the EV selector (market nudged toward the model by at most 5 points, bet only with a 2-point edge), each graded on results and CLV against the last captured pregame consensus |
 | D8 | Closing capture every 15 minutes instead of 30 | Open. Decide together with C1 |
 | D9 | NBA ESPN download | **Owner-approved 2026-11-05; done.** The result is an offline benchmark |
 | D10 | Retire or keep the shadow shared pipeline (#2456) | Open. Recommendation: keep it off and frozen; retire it once C3 lands |
