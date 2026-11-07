@@ -39,3 +39,23 @@ def test_errors_still_fail_a_backlog_run(monkeypatch, tmp_path):
     result = _run(monkeypatch, tmp_path, {"errors": ["capture_failed"], "grade_status": "partial",
                                           "blockers": ["DUE_SCORE_BATCH_LIMIT"]})
     assert result["requested_slate_success"] is False
+
+
+@pytest.mark.parametrize("cycle,success", [
+    # 2026-11-07 NCAAB: daily credit cap reached for capture, closes and grading.
+    ({"errors": [], "budget_paused": True, "capture_status": "budget_paused",
+      "close_capture_status": "budget_paused", "grade_status": "budget_paused"}, True),
+    ({"errors": [], "budget_paused": True, "capture_status": "success",
+      "close_capture_status": "budget_paused"}, True),
+    # A pause never hides a real failure.
+    ({"errors": ["capture_failed"], "budget_paused": True,
+      "capture_status": "failed", "close_capture_status": "budget_paused"}, False),
+    ({"errors": [], "budget_paused": True, "capture_status": "failed"}, False),
+    ({"errors": [], "budget_paused": True, "capture_status": "budget_paused",
+      "close_capture_status": "failed"}, False),
+])
+def test_budget_pause_is_not_a_failure(monkeypatch, tmp_path, cycle, success):
+    result = _run(monkeypatch, tmp_path, cycle)
+    assert result["requested_slate_success"] is success
+    assert result["execution_state"] == ("COMPLETE" if success else "FAILED")
+    assert result["budget_paused_sports"] == ["NFL"]                  # still visible
