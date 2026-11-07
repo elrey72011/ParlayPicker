@@ -151,4 +151,12 @@ def review_candidates(
             targets["controlled_trial_review_status"].dropna().value_counts().items()
         }
     pool_reviews = targets.drop(columns=["_review_target_key"], errors="ignore")
+    # Gemini role #1 (owner 2026-11-07): research review of the top board picks, separate
+    # from the wager gate above. Own columns only; never a stake, approval or pick change.
+    try:
+        from app_core.gemini_research_review import review as research_review
+        best, diagnostics["gemini_research_review"] = research_review(
+            best, session_state=session_state, analysis=analysis, enabled=enabled)
+    except Exception as exc:  # research only: never break Refresh
+        diagnostics["gemini_research_review"] = {"status": "ERROR", "error": type(exc).__name__}
     return best, trials, pool_reviews, error
