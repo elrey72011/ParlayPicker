@@ -657,7 +657,7 @@ _REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi
                              "gemini_research_reviewed_at", "gemini_research_model",
                              # Research models' view of the pick (app_core.research_model_column)
                              "research_model_probability", "research_model_push_probability", "research_model_ev",
-                             "research_model_predicted_at"]
+                             "research_model_predicted_at", "research_model_status"]
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 
@@ -4999,7 +4999,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "kalshi_blend_gate",
         # Research models' view of this candidate (app_core.research_model_column).
         "research_model_probability", "research_model_push_probability", "research_model_ev",
-        "research_model_predicted_at",
+        "research_model_predicted_at", "research_model_status",
     ]
     candidate_audit_columns.extend(_NFL_CONTEXT_COLUMNS)
     candidate_audit_columns.extend(c for c in EXPORT_PROVENANCE_COLUMNS if c not in candidate_audit_columns)

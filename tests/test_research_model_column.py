@@ -108,3 +108,41 @@ def test_game_board_shows_model_probability_and_ev_with_push():
 def test_best_pick_export_carries_research_model_columns():
     from core.streamlit_pipeline import BEST_PICK_COLUMNS, REQUIRED_BEST_PICK_EXPORT_COLUMNS
     assert set(column.COLUMNS) <= set(BEST_PICK_COLUMNS) & set(REQUIRED_BEST_PICK_EXPORT_COLUMNS)
+
+
+def test_status_says_why_each_row_has_no_probability(tmp_path, clock):  # noqa: F811
+    path, event, _ = _store_with_prediction(tmp_path, clock)
+    home, away, start = event["home_team"], event["away_team"], event["scheduled_start"]
+    board = pd.DataFrame([
+        {"league": "NBA", "home_team": home, "away_team": away, "market_type": "spread_home",
+         "best_pick": f"{home} -2.5", "odds_american": -110, "game_start_utc": start},
+        {"league": "NCAAF", "home_team": home, "away_team": away, "market_type": "spread_home",
+         "best_pick": f"{home} -2.5", "odds_american": -110, "game_start_utc": start},
+        {"league": "NBA", "home_team": home, "away_team": away, "market_type": "moneyline_home",
+         "best_pick": home, "odds_american": -110, "game_start_utc": start},
+        {"league": "NBA", "home_team": "Elsewhere", "away_team": away, "market_type": "spread_home",
+         "best_pick": "Elsewhere -2.5", "odds_american": -110, "game_start_utc": start},
+    ])
+    predictions = column.load(path, now=_at(73, 1))
+    status = column.attach(board, predictions)["research_model_status"].tolist()
+    assert status == ["ATTACHED", "NO_RESEARCH_MODEL_FOR_SPORT", "UNSUPPORTED_MARKET", "NO_PREDICTION_FOR_GAME"]
+    assert column.attach(board, predictions + predictions)["research_model_status"][0] == "AMBIGUOUS_GAME_MATCH"
+
+
+def test_store_wide_status_on_every_row():
+    board = pd.DataFrame([{"league": "NBA", "market_type": "spread_home", "best_pick": "A -2.5"}] * 2)
+    on = lambda k, d=None: d  # noqa: E731
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("store")
+    out, _ = column.apply(board, setting=on, refresh=lambda s: {"status": "MISSING_CREDENTIALS"}, read=missing)
+    assert set(out["research_model_status"]) == {"STORE_MISSING_CREDENTIALS"}
+    out, _ = column.apply(board, setting=on, read=missing,
+                          refresh=lambda s: {"status": "IN_PROGRESS_BACKGROUND", "last": None})
+    assert set(out["research_model_status"]) == {"STORE_NOT_DOWNLOADED_YET (IN_PROGRESS_BACKGROUND)"}
+    failed = {"status": "STARTED_IN_BACKGROUND", "last": {"status": "REFRESH_FAILED", "error": "HttpError"}}
+    out, _ = column.apply(board, setting=on, refresh=lambda s: failed, read=lambda *a, **k: [])
+    assert set(out["research_model_status"]) == {
+        "NO_CURRENT_PREDICTIONS_IN_STORE (STARTED_IN_BACKGROUND; last restore REFRESH_FAILED HttpError)"}
+    out, _ = column.apply(board, setting=lambda k, d=None: "false")
+    assert set(out["research_model_status"]) == {"OFF"}
