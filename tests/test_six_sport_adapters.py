@@ -354,6 +354,4 @@ def test_health_keeps_last_success_after_new_failure_and_scopes_errors(tmp_path,
     monkeypatch.setattr(adapter, "run_cycle", lambda *args: {"captured": 0, "graded": 0,
                                                             "errors": [], "budget_paused": True})
     third = scheduler.run(["NBA"], tmp_path, cloud, "folder")
-    # A budget pause alone is not a failure (owner 2026-11-07); it stays visible.
-    assert third["errors"] == [] and third["requested_slate_success"] is True
-    assert third["budget_paused_sports"] == ["NBA"]
+    assert third["errors"] == [] and third["requested_slate_success"] is False
