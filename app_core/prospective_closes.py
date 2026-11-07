@@ -67,9 +67,15 @@ def _market_key(sport, family):
 
 def _bet_scopes(path, sport):
     """{(event_id, market_family, sportsbook)} for recorded predictions' quotes: the books a plan bets at."""
+    try:
+        predictions = evidence.read_records(path, "prospective_prediction", sport=sport)
+    except (KeyError, ValueError, LookupError, OSError):
+        return set()  # no readable predictions: plain order, never a failed close run
+    if not predictions:
+        return set()
     quotes = {q["quote_id"]: q for q in evidence.read_records(path, "prospective_quote", sport=sport)}
     scopes = set()
-    for prediction in evidence.read_records(path, "prospective_prediction", sport=sport):
+    for prediction in predictions:
         quote = quotes.get(prediction.get("quote_id"))
         if quote is not None:
             scopes.add((quote["event_id"], quote["market_family"], quote["sportsbook"]))
