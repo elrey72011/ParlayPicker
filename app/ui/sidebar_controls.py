@@ -169,8 +169,9 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
 
     advanced.subheader("Data Uploads")
 
-    theover_spreads = advanced.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
-    theover_totals = advanced.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
+    # The workbook (.xlsx) also carries the raw page's sharp-money and public-split signals.
+    theover_spreads = advanced.file_uploader("Upload TheOver Spreads (CSV or workbook)", type=["csv", "xlsx"], key="theover_spreads")
+    theover_totals = advanced.file_uploader("Upload TheOver Totals (CSV or workbook)", type=["csv", "xlsx"], key="theover_totals")
     prop_results_log = advanced.file_uploader(
         "Upload Latest Downloaded Graded Prop Ledger(s)",
         type=["csv"],

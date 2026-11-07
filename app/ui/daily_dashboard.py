@@ -37,24 +37,24 @@ def wager_rejection_summary(board):
     return pd.DataFrame(reasons).groupby(['League', 'Reason'], sort=False).size().reset_index(name='Games')
 
 
-def market_shadow(result, candidates):
-    """(market no-vig probability, market EV) per board row from its saved candidate, or None.
+def _candidate_values(result, candidates, columns):
+    """Per board row, the first of ``columns`` (in order) from its saved candidate, or None.
 
-    The board row carries ``candidate_id``; the candidate carries ``fair_market_probability``
-    (else ``market_probability``), both for the picked side. EV uses the row's American odds.
+    Matched by ``candidate_id``; board rows built from the final export carry none, so it
+    falls back to game + market + pick label when that names exactly one candidate.
     """
     if candidates is None or getattr(candidates, "empty", True):
         return None
-    fair = None
-    for column in ("fair_market_probability", "market_probability"):
+    values = None
+    for column in columns:
         if column in candidates:
-            values = pd.to_numeric(candidates[column], errors="coerce")
-            fair = values if fair is None else fair.fillna(values)
-    if fair is None:
+            numbers = pd.to_numeric(candidates[column], errors="coerce")
+            values = numbers if values is None else values.fillna(numbers)
+    if values is None:
         return None
     probs = pd.Series(float("nan"), index=result.index)
     if "candidate_id" in result and "candidate_id" in candidates:
-        lookup = dict(zip(candidates["candidate_id"].astype(str), fair))
+        lookup = dict(zip(candidates["candidate_id"].astype(str), values))
         probs = result["candidate_id"].astype(str).map(lookup).astype("float64")
     # Board rows built from the final export carry no candidate_id (2026-11-06: every
     # Overall row read "Unavailable"), so fall back to the game, market and pick label,
@@ -66,12 +66,33 @@ def market_shadow(result, candidates):
                     + frame[pick].astype(str))
         candidate_keys = key(candidates, "best_pick")
         unique = ~candidate_keys.duplicated(keep=False)
-        by_key = dict(zip(candidate_keys[unique], fair[unique]))
+        by_key = dict(zip(candidate_keys[unique], values[unique]))
         probs = probs.fillna(key(result, "pick").map(by_key).astype("float64"))
-    probs = probs.where((probs > 0) & (probs < 1))
+    return probs.where((probs > 0) & (probs < 1))
+
+
+def _ev(result, probs):
     odds = pd.to_numeric(result.get("odds"), errors="coerce")
     decimal = odds.map(lambda o: (1 + o / 100 if o > 0 else 1 + 100 / abs(o)) if pd.notna(o) and abs(o) >= 100 else float("nan"))
-    return probs, probs * decimal - 1
+    return probs * decimal - 1
+
+
+def market_shadow(result, candidates):
+    """(market no-vig probability, market EV) per board row from its saved candidate, or None.
+
+    The candidate carries ``fair_market_probability`` (else ``market_probability``) for the
+    picked side. EV uses the row's American odds.
+    """
+    probs = _candidate_values(result, candidates, ("fair_market_probability", "market_probability"))
+    return None if probs is None else (probs, _ev(result, probs))
+
+
+def pinnacle_shadow(result, candidates):
+    """(Pinnacle no-vig probability at the pick's line, EV against it) per board row, or None."""
+    probs = _candidate_values(result, candidates, ("pinnacle_fair_probability",))
+    if probs is None or not probs.notna().any():
+        return None
+    return probs, _ev(result, probs)
 
 
 PINNACLE_MIN_EV = 0.02
@@ -170,12 +191,20 @@ def _render_game_board(board, candidates, family):
         # app's estimate. It changes no pick, stake or approval.
         display["Market estimate"], display["Market EV"] = market
         columns[4:4] = ["Market estimate", "Market EV"]
+    pinnacle = pinnacle_shadow(result, candidates)
+    if pinnacle is not None:
+        # Research reference (owner 2026-11-07): Pinnacle's no-vig price at the pick's exact
+        # line, where Pinnacle posted it; changes no pick, stake or approval.
+        display["Pinnacle fair"], display["EV vs Pinnacle"] = pinnacle
+        at = columns.index("Wager status")
+        columns[at:at] = ["Pinnacle fair", "EV vs Pinnacle"]
     if 'coverage_decision_state' in result:
         display['Coverage decision'] = result['coverage_decision_state']
         display['Coverage explanation'] = result['coverage_explanation']
         columns += ['Coverage decision', 'Coverage explanation']
     display = display[columns].copy()
-    for column in [c for c in ("Win estimate", "EV estimate", "Market estimate", "Market EV") if c in display]:
+    for column in [c for c in ("Win estimate", "EV estimate", "Market estimate", "Market EV", "Pinnacle fair",
+                               "EV vs Pinnacle") if c in display]:
         display[column] = display[column].map(lambda v: f"{v:.1%}" if pd.notna(v) else "Unavailable")
     st.dataframe(display, hide_index=True, width="stretch", height=min(760, 38 * (len(display) + 1)), column_config={"Selection score": st.column_config.NumberColumn(format="%.3f"), "Odds": st.column_config.NumberColumn(format="%+.0f")})
     with st.expander("Selection details and wager explanations", expanded=False):

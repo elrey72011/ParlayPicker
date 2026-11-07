@@ -645,6 +645,14 @@ _NFL_CONTEXT_COLUMNS = [
 ]
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _NFL_CONTEXT_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _NFL_CONTEXT_COLUMNS))
+# Research references next to each pick (owner 2026-11-07): Pinnacle's no-vig probability at
+# the pick's exact line, the pick's EV against it, and why Kalshi was left out of the blend.
+_REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi_blend_gate",
+                             "theover_pick_agrees", "theover_pick_line", "theover_public_pct", "theover_model_hit_rate",
+                             "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star", "theover_fade_public",
+                             "theover_money_pct"]
+REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
+BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 
 
 CANONICAL_BET_COLUMNS = [
@@ -665,6 +673,17 @@ _CANONICAL_RESEARCH_COLUMNS = ["quote_id", "prospective_quote_id", "market_perio
     "candidate_id", "export_run_id", "research_source_semantics", "provider_namespace", "provider_event_id",
     "probability_semantics", "push_probability", "model_status", "ml_inference_status", "ml_estimate_metadata"]
 CANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + _CANONICAL_RESEARCH_COLUMNS))
+
+# TheOver research signals (owner 2026-11-07). TheOver uploads carry no win probability
+# (WinProbability blank, WinProbSource not_provided), only its AI pick, the public betting
+# split and the backing model's recent record. Kept per row, oriented to the row's side,
+# for the track record to test; never blended and never turned into a probability.
+THEOVER_RESEARCH_COLUMNS = ["theover_pick_agrees", "theover_pick_line", "theover_public_pct",
+                            "theover_model_hit_rate",
+                            # From the raw page in the owner's workbook (app_core.theover_signals):
+                            "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star",
+                            "theover_fade_public", "theover_money_pct"]
+CANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + THEOVER_RESEARCH_COLUMNS))
 
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
@@ -2882,7 +2901,82 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     spread_away["theover_probability"] = (1 - home_prob).where(home_prob.notna(), pd.NA)
     spread_away["odds_american"] = odds
 
+    hit_rate = _theover_fraction(_first_existing_numeric(normalized, ["modelhitrate", "model_hit_rate"], default=pd.NA))
+    # Research only: TheOver's short pick codes ("MICH", "FAU", "SIU") rarely equal the
+    # full team columns, so also accept a code that is the start of exactly one team's
+    # name or its initials. Used for the research columns only; the rows' own spread
+    # lines above keep the strict resolution.
+    code_home = pick_has_value & pd.Series([_pick_code_names(p, h, k) for p, h, k in
+                                            zip(pick_token, home_name_token, home_code_token)], index=normalized.index)
+    code_away = pick_has_value & pd.Series([_pick_code_names(p, a, k) for p, a, k in
+                                            zip(pick_token, away_name_token, away_code_token)], index=normalized.index)
+    research_home = resolved_home | (~resolved_away & code_home & ~code_away)
+    research_away = resolved_away | (~resolved_home & code_away & ~code_home)
+    resolved = research_home | research_away
+    research_home_line = line.where(research_home, (-line).where(research_away, pd.NA))
+    spread_home["theover_pick_agrees"] = research_home.astype("float64").where(resolved)
+    spread_away["theover_pick_agrees"] = research_away.astype("float64").where(resolved)
+    spread_home["theover_pick_line"] = research_home_line
+    spread_away["theover_pick_line"] = -research_home_line
+    for frame in (spread_home, spread_away):
+        frame["theover_public_pct"] = pd.NA
+        frame["theover_money_pct"] = pd.NA
+        frame["theover_model_hit_rate"] = hit_rate.where(resolved)
+    _theover_page_flags(normalized, (spread_home, spread_away))
+
     return [spread_home, spread_away]
+
+
+def _pick_code_names(code: str, name_token: str, kalshi_token: str) -> bool:
+    """True when TheOver's pick code plausibly names this team: the code (or the code
+    without a "U" for University at either end) is a prefix of the team name, or its
+    letters appear in order in the name starting at the name's first letter
+    ("OKST" = OKLAHOMASTATE, "CBU" = CALIFORNIABAPTIST, "MICH" = MICHIGAN)."""
+    code = str(code or "")
+    if len(code) < 2:
+        return False
+    variants = {code}
+    if len(code) > 2 and code.endswith("U"):
+        variants.add(code[:-1])
+    if len(code) > 2 and code.startswith("U"):
+        variants.add(code[1:])
+
+    def in_order(short, name):
+        if not short or not name or short[0] != name[0]:
+            return False
+        rest = iter(name)
+        return all(letter in rest for letter in short)
+    for token in {str(name_token or ""), str(kalshi_token or "")}:
+        for short in variants:
+            if token and (token.startswith(short) or in_order(short, token)):
+                return True
+    return False
+
+
+def _theover_page_flags(normalized: pd.DataFrame, frames) -> None:
+    """Game-level page signals (same on both rows): sharp money, its play count, PURPLE STAR,
+    fade the public. Missing when the upload had no raw page."""
+    def flag(column):
+        if column not in normalized.columns:
+            return pd.Series(np.nan, index=normalized.index, dtype="float64")
+        text = normalized[column].astype("string").str.strip().str.lower()
+        return pd.Series(np.where(text.isin(["true", "1", "1.0", "yes"]), 1.0,
+                                  np.where(text.isin(["false", "0", "0.0", "no"]), 0.0, np.nan)),
+                         index=normalized.index, dtype="float64")
+    plays = (pd.to_numeric(normalized["sharpplays"], errors="coerce").astype("float64")
+             if "sharpplays" in normalized.columns else pd.Series(np.nan, index=normalized.index, dtype="float64"))
+    for frame in frames:
+        frame["theover_sharp_agrees"] = flag("sharpmoneyagrees")
+        frame["theover_sharp_plays"] = plays
+        frame["theover_purple_star"] = flag("purplestar")
+        frame["theover_fade_public"] = flag("fadepublic")
+
+
+def _theover_fraction(values: pd.Series) -> pd.Series:
+    """A percentage or fraction as a fraction in (0, 1); anything else missing."""
+    values = pd.to_numeric(values, errors="coerce").astype("float64")
+    values = values.where(~((values > 1) & (values <= 100)), values / 100.0)
+    return values.where((values > 0) & (values < 1))
 
 def _build_moneyline_orientation_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     """Preserve favorite orientation from a sides-upload moneyline row.
@@ -3017,6 +3111,29 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     total_under["theover_probability"] = under_prob
     total_under["win_prob_source"] = win_prob_source
     total_under["odds_american"] = total_odds
+
+    pick = _first_nonempty_text(normalized, ["pickcode", "pick_code", "pick"]).fillna("").astype(str).str.upper()
+    pick_over = pick.str.contains("OVER", regex=False)
+    pick_under = pick.str.contains("UNDER", regex=False) & ~pick_over
+    resolved = pick_over | pick_under
+    total_over["theover_pick_agrees"] = pick_over.astype("float64").where(resolved)
+    total_under["theover_pick_agrees"] = pick_under.astype("float64").where(resolved)
+    total_over["theover_pick_line"] = total_line.where(resolved)
+    total_under["theover_pick_line"] = total_line.where(resolved)
+    public = _theover_fraction(_first_existing_numeric(normalized, ["publicbettingpct", "public_betting_pct"], default=pd.NA))
+    direction = _first_nonempty_text(normalized, ["bettingdirection", "betting_direction"]).fillna("").astype(str).str.upper()
+    public_over = public.where(direction.eq("OVER"), (1 - public).where(direction.eq("UNDER")))
+    page_bets = _theover_fraction(_first_existing_numeric(normalized, ["betspctover"], default=pd.NA))
+    public_over = public_over.fillna(page_bets)
+    total_over["theover_public_pct"] = public_over
+    total_under["theover_public_pct"] = 1 - public_over
+    money_over = _theover_fraction(_first_existing_numeric(normalized, ["moneypctover"], default=pd.NA))
+    total_over["theover_money_pct"] = money_over
+    total_under["theover_money_pct"] = 1 - money_over
+    _theover_page_flags(normalized, (total_over, total_under))
+    hit_rate = _theover_fraction(_first_existing_numeric(normalized, ["modelhitrate", "model_hit_rate"], default=pd.NA))
+    total_over["theover_model_hit_rate"] = hit_rate.where(resolved)
+    total_under["theover_model_hit_rate"] = hit_rate.where(resolved)
 
     return [total_over, total_under]
 
@@ -4803,6 +4920,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool.loc[pool["candidate_context"].eq("POST_START_DIAGNOSTIC"),
              "best_available_rejection_reason"] = "post_start_quote"
 
+    # EV of each candidate's own price against Pinnacle's no-vig probability (research only).
+    _pin = (pd.to_numeric(pool["pinnacle_fair_probability"], errors="coerce").astype("float64")
+            if "pinnacle_fair_probability" in pool.columns else pd.Series(np.nan, index=pool.index, dtype="float64"))
+    # Strict: only a real American price (|odds| >= 100); no -110 default for a missing one.
+    _odds = (pd.to_numeric(pool["odds_american"], errors="coerce").astype("float64")
+             if "odds_american" in pool.columns else pd.Series(np.nan, index=pool.index, dtype="float64"))
+    _dec = np.where(_odds >= 100, 1 + _odds / 100.0, np.where(_odds <= -100, 1 + 100.0 / _odds.abs(), np.nan))
+    _dec = pd.Series(_dec, index=pool.index, dtype="float64")
+    pool["pinnacle_ev"] = (_pin.where((_pin > 0) & (_pin < 1)) * pd.to_numeric(_dec, errors="coerce") - 1).where(lambda v: v > -1)
     candidate_audit_columns = [
         "pipeline_build", "league", "home_team", "away_team", "game_date", "game_time_est",
         "matchup_id", "market_type", "candidate_source", "best_pick",
@@ -4850,7 +4976,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "market_validation_status",
         # D4 research reference: Pinnacle's no-vig price at this candidate's exact line
         # (shown on the Pinnacle value board; changes no pick).
-        "pinnacle_fair_probability",
+        "pinnacle_fair_probability", "pinnacle_ev",
+        "theover_pick_agrees", "theover_pick_line", "theover_public_pct", "theover_model_hit_rate",
+        "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star", "theover_fade_public", "theover_money_pct",
         # Why Kalshi was left out of this candidate's blend (app_core.kalshi_exact); '' = used.
         "kalshi_blend_gate",
     ]
@@ -9598,7 +9726,8 @@ def run_analysis_pipeline(
         # Merge theover enrichment columns. win_prob_source rides along with
         # theover_probability so the selection stage can discount untrusted TheOver
         # sources (e.g. model_hit_rate_flipped) for the MLB total direction decision.
-        theover_cols_to_merge = ["matchup_id", "market_type", "theover_probability", "ml_probability", "win_prob_source"]
+        theover_cols_to_merge = ["matchup_id", "market_type", "theover_probability", "ml_probability", "win_prob_source",
+                                 *THEOVER_RESEARCH_COLUMNS]
         # Only merge columns that exist
         theover_cols_to_merge = [c for c in theover_cols_to_merge if c in theover_rows.columns]
 
@@ -9654,6 +9783,10 @@ def run_analysis_pipeline(
 
                     if "win_prob_source" in merged.columns and pd.isna(merged.at[idx, "win_prob_source"]) and pd.notna(match.get("win_prob_source")):
                         merged.at[idx, "win_prob_source"] = match.get("win_prob_source")
+
+                    for _col in THEOVER_RESEARCH_COLUMNS:
+                        if _col in merged.columns and pd.isna(merged.at[idx, _col]) and pd.notna(match.get(_col)):
+                            merged.at[idx, _col] = match.get(_col)
 
         # Propagate any slate-level TheOver-feed degradation warning from the uploaded
         # rows onto the master slate. The column-scoped merge above intentionally carries
