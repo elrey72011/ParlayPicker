@@ -100,6 +100,13 @@ def sanitize_cycle(report):
                                     if sport in {"NFL", "NCAAF", "MLB"}],
         "sports": {},
     }
+    board = report.get("research_model_board")
+    if isinstance(board, dict):
+        # The app's research model column board (app_core.research_model_column.publish).
+        result["research_model_board"] = {"status": _code(board.get("status")),
+                                          "predictions": board.get("predictions") if isinstance(
+                                              board.get("predictions"), int) else None,
+                                          "error": _code(board.get("error")) if board.get("error") else None}
     failure = report.get("failure_stages", {}).get("canonical")
     if isinstance(failure, dict):
         result["canonical_failure"] = {"stage": _code(failure.get("stage")),

@@ -1,6 +1,8 @@
 """Research model probability column (app_core.research_model_column), on synthetic research models."""
 import math
 
+import pytest
+
 import pandas as pd
 
 from app_core import prospective_evidence as pe
@@ -146,3 +148,69 @@ def test_store_wide_status_on_every_row():
         "NO_CURRENT_PREDICTIONS_IN_STORE (STARTED_IN_BACKGROUND; last restore REFRESH_FAILED HttpError)"}
     out, _ = column.apply(board, setting=lambda k, d=None: "false")
     assert set(out["research_model_status"]) == {"OFF"}
+
+
+class _FakeDrive:
+    """Write-once object store shaped like evidence_drive.DriveStore."""
+    def __init__(self):
+        self.objects = {}
+
+    def put_object(self, *, Key, Body, IfNoneMatch):
+        assert IfNoneMatch == "*"
+        if Key in self.objects:
+            raise _AlreadyExists()
+        self.objects[Key] = Body
+
+    def get_object(self, *, Key):
+        import io
+        if Key not in self.objects:
+            raise RuntimeError("Remote evidence object is missing")
+        return {"Body": io.BytesIO(self.objects[Key])}
+
+
+class _AlreadyExists(Exception):
+    pass
+
+
+_AlreadyExists.__name__ = "AlreadyExists"
+
+
+def test_published_board_round_trips_to_the_same_probabilities(tmp_path, clock):  # noqa: F811
+    path, event, stored = _store_with_prediction(tmp_path, clock)
+    drive = _FakeDrive()
+    now = _at(73, 1)
+    assert column.publish(path, drive, now=now) == {"status": "PUBLISHED", "predictions": 2}
+    assert column.publish(path, drive, now=now)["status"] == "ALREADY_PUBLISHED"  # write-once, once per hour
+    assert list(drive.objects) == [column.board_key(now)]
+    # The app finds the newest board within the last hours, by name.
+    fetched, key = column.fetch_board(drive, now=now + pd.Timedelta(hours=2).to_pytimedelta())
+    assert key == column.board_key(now) and len(fetched) == 2
+    assert column.fetch_board(drive, now=now + pd.Timedelta(hours=7).to_pytimedelta()) == ([], None)
+    home, away = event["home_team"], event["away_team"]
+    board = pd.DataFrame([{"league": "NBA", "home_team": home, "away_team": away, "market_type": "spread_home",
+                           "best_pick": f"{home} -2.5", "odds_american": -110,
+                           "game_start_utc": event["scheduled_start"]}])
+    out = column.attach(board, fetched)
+    assert math.isclose(out["research_model_probability"][0], stored["SPREAD"]["mean_probability"], abs_tol=1e-9)
+    assert column.publish(tmp_path / "missing.sqlite3", drive, now=now)["status"] == "NO_PREDICTIONS"
+
+
+def test_background_fetch_records_result_or_failure(monkeypatch):
+    import time
+    monkeypatch.setattr(column, "_BOARD", {"thread": None, "last": None, "predictions": None, "fetched_at": None})
+    on = lambda k, d=None: "credentials" if k == "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT" else d  # noqa: E731
+    assert column.start_board_fetch(lambda k, d=None: d)["status"] == "MISSING_CREDENTIALS"
+    with pytest.raises(FileNotFoundError):
+        column.board_predictions()
+
+    class Broken:
+        def get_object(self, *, Key):
+            raise ConnectionError("down")
+    assert column.start_board_fetch(on, client_factory=Broken)["status"] == "STARTED_IN_BACKGROUND"
+    column._BOARD["thread"].join(5)
+    assert column._BOARD["last"] == {"status": "FETCH_FAILED", "error": "ConnectionError"}
+    assert column.start_board_fetch(on, client_factory=Broken)["status"] == "RECENT"  # at most every 10 minutes
+    column._BOARD["fetched_at"] = time.time() - 601
+    assert column.start_board_fetch(on, client_factory=_FakeDrive)["status"] == "STARTED_IN_BACKGROUND"
+    column._BOARD["thread"].join(5)
+    assert column._BOARD["last"] == {"status": "NO_BOARD_PUBLISHED"} and column.board_predictions() == []

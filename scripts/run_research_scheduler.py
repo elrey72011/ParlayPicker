@@ -70,6 +70,12 @@ def main():
                    os.getenv("CFBD_API_KEY"),os.getenv("ODDS_API_KEY"),
                    lambda checkpoint: write_audit(audit_path, checkpoint))
         result.setdefault("requested_sports", sports)
+        # The app's research model column reads this small hourly board (never raises).
+        from app_core.research_model_column import publish as publish_research_board
+        result["research_model_board"] = publish_research_board(
+            Path(os.getenv("PARLAYPICKER_EVIDENCE_DIR","output/scheduled-research")) / "prospective-evidence.sqlite3",
+            DriveStore(folder))
+        print("Research model board: " + json.dumps(result["research_model_board"]), flush=True)
     except Exception as exc:
         result={"requested_sports":result.get("requested_sports",[]),"health":{},
                 "errors":["scheduler:"+type(exc).__name__],"requested_slate_success":False,
