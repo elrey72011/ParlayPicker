@@ -43,9 +43,7 @@ def market_shadow(result, candidates):
     The board row carries ``candidate_id``; the candidate carries ``fair_market_probability``
     (else ``market_probability``), both for the picked side. EV uses the row's American odds.
     """
-    if candidates is None or getattr(candidates, "empty", True) or "candidate_id" not in result:
-        return None
-    if "candidate_id" not in candidates:
+    if candidates is None or getattr(candidates, "empty", True):
         return None
     fair = None
     for column in ("fair_market_probability", "market_probability"):
@@ -54,8 +52,22 @@ def market_shadow(result, candidates):
             fair = values if fair is None else fair.fillna(values)
     if fair is None:
         return None
-    lookup = dict(zip(candidates["candidate_id"].astype(str), fair))
-    probs = result["candidate_id"].astype(str).map(lookup)
+    probs = pd.Series(float("nan"), index=result.index)
+    if "candidate_id" in result and "candidate_id" in candidates:
+        lookup = dict(zip(candidates["candidate_id"].astype(str), fair))
+        probs = result["candidate_id"].astype(str).map(lookup).astype("float64")
+    # Board rows built from the final export carry no candidate_id (2026-11-06: every
+    # Overall row read "Unavailable"), so fall back to the game, market and pick label,
+    # used only when it names exactly one candidate.
+    keys = ("matchup_id", "market_type")
+    if all(k in result for k in keys + ("pick",)) and all(k in candidates for k in keys + ("best_pick",)):
+        def key(frame, pick):
+            return (frame["matchup_id"].astype(str) + "|" + frame["market_type"].astype(str) + "|"
+                    + frame[pick].astype(str))
+        candidate_keys = key(candidates, "best_pick")
+        unique = ~candidate_keys.duplicated(keep=False)
+        by_key = dict(zip(candidate_keys[unique], fair[unique]))
+        probs = probs.fillna(key(result, "pick").map(by_key).astype("float64"))
     probs = probs.where((probs > 0) & (probs < 1))
     odds = pd.to_numeric(result.get("odds"), errors="coerce")
     decimal = odds.map(lambda o: (1 + o / 100 if o > 0 else 1 + 100 / abs(o)) if pd.notna(o) and abs(o) >= 100 else float("nan"))
