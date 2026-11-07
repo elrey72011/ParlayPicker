@@ -639,3 +639,41 @@ def test_classification_nullable_boolean_flags_without_downcasting_warnings():
     assert result.wager_approved.tolist()==[True,False,True,False]
     assert result.sellable_as_premium.tolist()==[True,False,False,False]
     assert result.sellable_as_value_card.tolist()==[False,False,True,False]
+
+
+def test_second_best_pick_is_the_other_market_family_and_never_moneyline(monkeypatch):
+    # Owner 2026-11-07: Best Pick plus a 2nd Best Pick column; a different bet, no ML.
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+    moneyline = _candidate("total_over", probability=0.90, ev=0.30)
+    moneyline["market_type"] = "moneyline_home"
+    analysis = pd.DataFrame([
+        _candidate("total_over", probability=0.64, ev=0.10),
+        _candidate("total_under", probability=0.36, ev=-0.10),
+        _candidate("spread_home", probability=0.58, ev=0.05),
+        _candidate("spread_away", probability=0.42, ev=-0.05),
+        moneyline,
+    ])
+    best = build_best_picks_df(analysis)
+
+    assert len(best) == 1
+    winner = best.iloc[0]
+    assert winner["market_type"] == "total_over"
+    assert winner["second_best_pick"] == _second_label(analysis, "spread_home")
+    assert float(winner["second_best_probability"]) == pytest.approx(0.58)
+
+
+def test_second_best_pick_is_blank_without_another_market_family(monkeypatch):
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+    best = build_best_picks_df(pd.DataFrame([
+        _candidate("total_over", probability=0.64, ev=0.10),
+        _candidate("total_under", probability=0.36, ev=-0.10),
+    ]))
+    assert best.iloc[0]["second_best_pick"] == ""
+    assert pd.isna(best.iloc[0]["second_best_probability"])
+
+
+def _second_label(analysis, market_type):
+    from core.streamlit_pipeline import _format_best_pick
+    return _format_best_pick(analysis[analysis["market_type"].eq(market_type)].iloc[0])

@@ -2920,6 +2920,8 @@ def main() -> None:
                 "game_date": "Game Date",
                 "game_time_est": "Game Time (ET)",
                 "best_pick": "Best Pick",
+                "second_best_pick": "2nd Best Pick",
+                "second_best_probability": "2nd Best Prob",
                 "gemini_pick": "Gemini Pick",
                 "gemini_confidence": "Gemini Confidence",
                 "gemini_review_status": "Gemini Verdict",
@@ -2939,7 +2941,7 @@ def main() -> None:
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Gemini Confidence", "Gemini Verdict", "Gemini Stake Multiplier", "Gemini Gate Reason", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
+            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "2nd Best Pick", "2nd Best Prob", "Gemini Pick", "Gemini Confidence", "Gemini Verdict", "Gemini Stake Multiplier", "Gemini Gate Reason", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
 
