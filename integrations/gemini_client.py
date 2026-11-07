@@ -233,6 +233,7 @@ def run_gemini_analysis(
     analysis_df: pd.DataFrame | None = None,
     *,
     eligible_only: bool = False,
+    extra_columns: tuple = (),
 ) -> pd.DataFrame:
     """Best-effort Gemini annotation that preserves UI behavior when Gemini is unavailable.
 
@@ -255,6 +256,7 @@ def run_gemini_analysis(
             session_state,
             analysis_df,
             eligible_only=False,
+            extra_columns=extra_columns,
         )
         return _merge_reviewed_positions(skipped, reviewed, mask)
 
@@ -274,7 +276,10 @@ def run_gemini_analysis(
         # Restrict the LLM payload to analytic inputs (see LLM_PAYLOAD_COLUMNS) so
         # Gemini reasons from the same raw signals a human would, not our own
         # Pick_Status/Status_Reason verdict on those signals.
-        available_cols = [c for c in LLM_PAYLOAD_COLUMNS if c in result.columns]
+        # extra_columns: research references (app_core.gemini_research_review); the wager
+        # gate passes none, so its payload and cache keys are unchanged.
+        available_cols = [c for c in list(dict.fromkeys(list(LLM_PAYLOAD_COLUMNS) + list(extra_columns)))
+                          if c in result.columns]
         llm_payload = result[available_cols].copy()
 
         # Inject a fallback game_id if one doesn't exist

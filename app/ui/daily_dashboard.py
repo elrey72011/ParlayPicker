@@ -77,6 +77,28 @@ def _ev(result, probs):
     return probs * decimal - 1
 
 
+def gemini_research_labels(result, board):
+    """'Agrees · HIGH' / 'Disagrees (Under 152.5) · LOW' per board row from the Gemini research
+    review saved on the final picks (``app_core.gemini_research_review``), else None."""
+    if board is None or getattr(board, "empty", True) or "gemini_research_agrees" not in board:
+        return None
+    keys = ("matchup_id", "market_type")
+    if not all(k in result for k in keys + ("pick",)) or not all(k in board for k in keys + ("best_pick",)):
+        return None
+
+    def label(row):
+        agrees = pd.to_numeric(row.get("gemini_research_agrees"), errors="coerce")
+        if pd.isna(agrees):
+            return None
+        confidence = str(row.get("gemini_research_confidence") or "").strip()
+        text = "Agrees" if agrees == 1 else f"Disagrees ({row.get('gemini_research_pick')})"
+        return text + (f" · {confidence}" if confidence else "")
+    lookup = {f"{r['matchup_id']}|{r['market_type']}|{r['best_pick']}": label(r) for _, r in board.iterrows()}
+    labels = (result["matchup_id"].astype(str) + "|" + result["market_type"].astype(str) + "|"
+              + result["pick"].astype(str)).map(lookup)
+    return labels if labels.notna().any() else None
+
+
 def market_shadow(result, candidates):
     """(market no-vig probability, market EV) per board row from its saved candidate, or None.
 
@@ -198,6 +220,12 @@ def _render_game_board(board, candidates, family):
         display["Pinnacle fair"], display["EV vs Pinnacle"] = pinnacle
         at = columns.index("Wager status")
         columns[at:at] = ["Pinnacle fair", "EV vs Pinnacle"]
+    gemini = gemini_research_labels(result, board)
+    if gemini is not None:
+        # Research only (owner 2026-11-07): Gemini's review of the top picks; never a stake.
+        display["Gemini (research)"] = gemini.fillna("Not reviewed")
+        at = columns.index("Wager status")
+        columns[at:at] = ["Gemini (research)"]
     if 'coverage_decision_state' in result:
         display['Coverage decision'] = result['coverage_decision_state']
         display['Coverage explanation'] = result['coverage_explanation']

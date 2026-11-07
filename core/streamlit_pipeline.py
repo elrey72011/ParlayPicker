@@ -650,7 +650,11 @@ BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _NFL_CONTEXT_COLUMNS)
 _REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi_blend_gate",
                              "theover_pick_agrees", "theover_pick_line", "theover_public_pct", "theover_model_hit_rate",
                              "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star", "theover_fade_public",
-                             "theover_money_pct"]
+                             "theover_money_pct",
+                             # Gemini research review of the top picks (app_core.gemini_research_review)
+                             "gemini_research_pick", "gemini_research_agrees", "gemini_research_confidence",
+                             "gemini_research_flags", "gemini_research_explanation", "gemini_research_risk_notes",
+                             "gemini_research_reviewed_at", "gemini_research_model"]
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 

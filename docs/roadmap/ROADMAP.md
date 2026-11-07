@@ -165,6 +165,33 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | D17 | NHL settlement | **Owner-set 2026-11-05: `PARLAYPICKER_NHL_SETTLEMENT=official_check` (#2462).** The Odds API does not document how it reports shootout games. US books settle NHL puck lines and totals on the official final, including overtime and the shootout goal, which is the existing `nhl_puck_line_evidence` target. The NHL's free official feed (api-web.nhle.com) reports exactly that (e.g. EDM 3 @ NJD 4, `lastPeriodType: SO`, 2026-11-03). An NHL game settles only when the provider final **equals** the official final, and the official game ID, period type and hash are recorded in the settlement. A mismatch is never settled. Enable with `PARLAYPICKER_NHL_SETTLEMENT=official_check` |
 | D18 | NCAAF model trained on history | **Owner-approved 2026-11-05. Step 1 done: no edge.** The canonical store accepts only games discovered before kickoff, so history is not loaded into it. The historically trained model (`ncaaf_research`, artifact 9334f2a4…, confirmed by rebuild) was backtested on 614 2025 games against archived lines. No variant beats the 52.4% break-even beyond noise, and every Brier score is worse than a coin flip (`docs/evaluation/ncaaf-line-backtest-2026-11-05.md`). Step 2 (registration and a v3 plan) is not recommended. Next: C5, a market-anchored NCAAF model screened by the same backtest |
 
+## 4a. Gemini roles (owner request 2026-11-07)
+
+Gemini is good at reading, matching and explaining; it is not a source of calibrated
+probabilities (a model's "70% confident" is not a 70% win rate). Every role below gives
+Gemini facts to find, mistakes to catch or explanations to write, saves its output before
+the game with a timestamp, and lets the track record measure whether it helps. Gemini
+never sets a probability and never approves a stake on its own; the existing pre-stake
+review stays one check among several. Each role runs under a daily request budget the
+owner approves (`PARLAYPICKER_GEMINI_DAILY_REQUESTS`, default 20, shared).
+
+| # | Role | What it does | Status |
+|---|---|---|---|
+| 1 | **Research reviewer** | Each Refresh, the top 12 board picks (Pinnacle value first, then EV) get the same structured review as the pre-stake gate, with the Kalshi value the blend used and the Pinnacle and TheOver signals. Agree/disagree, confidence, flags and reasons are saved with each pick (`gemini_research_*`) and shown on the board as "Gemini (research)". One request per Refresh; `PARLAYPICKER_GEMINI_RESEARCH_PICKS` (0 turns it off). | **Built 2026-11-07** (`app_core/gemini_research_review.py`) |
+| 2 | **Matching checker** | For Kalshi contracts and team names the code cannot resolve, asks whether a contract is this game, team and line (2026-11-06: "Oklahoma" matched to Oklahoma St; both South Carolina teams given one name; UMKC vs Kansas City). Code still decides. | Next |
+| 3 | **Pre-game news and injury context** | Grounded search for sourced, timestamped facts per game: injuries and lineups, rest, travel, coaching changes. Saved as research inputs (the `verified_context` channel already exists). Must exclude anything published after the quote. | Planned; grounded requests cost more |
+| 4 | **Sanity check per Refresh** | Reads the board and flags implausible picks (an estimate far from the market, no line) with a reason. | Planned |
+| 5 | **Score and settlement checks** | When a score is rejected for identity or timing, or two sources disagree, checks the final score against a second source. Owner confirms any change. | Planned |
+| 6 | **Post-game review** | Explains each graded loss (injury, blowout, garbage time, line move, bad data) into a running log. | Planned |
+| 7 | **TheOver page backup reader** | Extracts the same signals if TheOver changes its page layout and the parser breaks. | Planned |
+| 8 | **Plain-English daily report** | Writes the morning and evening reports from the cycle audits. | Planned |
+| 9 | **Props context** | Minutes, role and usage news for the player-props pipeline. | Planned |
+| 10 | **Research assistant (offline)** | Critiques backtests and suggests features; the owner decides. | Ongoing |
+
+Measuring role 1: once enough reviewed picks settle (a few hundred), compare picks Gemini
+agreed with against those it disagreed with, by hit rate, ROI and closing-line value. Only
+a measured difference can give Gemini any weight in the blend or the selection.
+
 ## 5. Guardrails (unchanged)
 
 - **What gets saved:**
