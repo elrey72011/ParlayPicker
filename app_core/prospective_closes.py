@@ -65,28 +65,57 @@ def _market_key(sport, family):
     return "spreads" if family == evidence.ODDS_API_SIDE_MARKETS[sport] else "totals"
 
 
+def _bet_scopes(path, sport):
+    """{(event_id, market_family, sportsbook)} for recorded predictions' quotes: the books a plan bets at."""
+    quotes = {q["quote_id"]: q for q in evidence.read_records(path, "prospective_quote", sport=sport)}
+    scopes = set()
+    for prediction in evidence.read_records(path, "prospective_prediction", sport=sport):
+        quote = quotes.get(prediction.get("quote_id"))
+        if quote is not None:
+            scopes.add((quote["event_id"], quote["market_family"], quote["sportsbook"]))
+    return scopes
+
+
 def due(path, now, *, sports, lookback=LOOKBACK, setting=os.environ.get):
-    """[(event, [verified quotes])] for started events still missing a certified close per quote scope."""
-    out = []
+    """[(event, [verified quotes])] for started events still missing a certified close per quote scope.
+
+    Plan bets first (owner request 2026-11-07): a plan needs a comparable close for its own
+    bets, and each request is charged per 10 bookmakers. So for every game with a recorded
+    prediction, the books of the predicted quotes (both sides, that market) come first as
+    their own entries, at 10 credits per market; every other due game and book follows in
+    the usual order, while the daily allowance lasts. Without predictions nothing changes.
+    """
+    priority, rest = [], []
     for sport in sports:
-        families = enabled_families(sport, setting)
-        events = {e["event_id"]: e for e in evidence.read_records(path, "prospective_event", sport=sport)}
-        closes = {(c["event_id"], c["market_family"], c["selection"], c["sportsbook"])
-                  for c in evidence.read_records(path, "prospective_close", sport=sport) if c["close_verified"]}
-        by_event = {}
-        for quote in evidence.read_records(path, "prospective_quote", sport=sport):
-            event = events.get(quote["event_id"])
-            if (not quote["quote_verified"] or event is None or event["provider_namespace"] != "THE_ODDS_API" or
-                    quote["market_family"] not in families or quote["sportsbook"] in REFERENCE_BOOKS):
-                continue
-            start = _time(event["scheduled_start"])
-            if not now - lookback <= start <= now:
-                continue
-            if (quote["event_id"], quote["market_family"], quote["selection"], quote["sportsbook"]) in closes:
-                continue
-            by_event.setdefault(quote["event_id"], []).append(quote)
-        out.extend((events[event_id], quotes) for event_id, quotes in sorted(by_event.items()))
-    return out
+        bets = _bet_scopes(path, sport)
+        for event, quotes in _due_sport(path, now, sport, lookback, setting):
+            first = [q for q in quotes if (q["event_id"], q["market_family"], q["sportsbook"]) in bets]
+            later = [q for q in quotes if (q["event_id"], q["market_family"], q["sportsbook"]) not in bets]
+            if first:
+                priority.append((event, first))
+            if later:
+                rest.append((event, later))
+    return priority + rest
+
+
+def _due_sport(path, now, sport, lookback, setting):
+    families = enabled_families(sport, setting)
+    events = {e["event_id"]: e for e in evidence.read_records(path, "prospective_event", sport=sport)}
+    closes = {(c["event_id"], c["market_family"], c["selection"], c["sportsbook"])
+              for c in evidence.read_records(path, "prospective_close", sport=sport) if c["close_verified"]}
+    by_event = {}
+    for quote in evidence.read_records(path, "prospective_quote", sport=sport):
+        event = events.get(quote["event_id"])
+        if (not quote["quote_verified"] or event is None or event["provider_namespace"] != "THE_ODDS_API" or
+                quote["market_family"] not in families or quote["sportsbook"] in REFERENCE_BOOKS):
+            continue
+        start = _time(event["scheduled_start"])
+        if not now - lookback <= start <= now:
+            continue
+        if (quote["event_id"], quote["market_family"], quote["selection"], quote["sportsbook"]) in closes:
+            continue
+        by_event.setdefault(quote["event_id"], []).append(quote)
+    return [(events[event_id], quotes) for event_id, quotes in sorted(by_event.items())]
 
 
 def request_plan(event, quotes):
