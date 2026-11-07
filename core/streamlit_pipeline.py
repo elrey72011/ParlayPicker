@@ -4809,9 +4809,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
              "best_available_rejection_reason"] = "post_start_quote"
 
     # EV of each candidate's own price against Pinnacle's no-vig probability (research only).
-    _pin = _numeric_series(pool, "pinnacle_fair_probability") if "pinnacle_fair_probability" in pool.columns else pd.Series(np.nan, index=pool.index)
+    _pin = (pd.to_numeric(pool["pinnacle_fair_probability"], errors="coerce").astype("float64")
+            if "pinnacle_fair_probability" in pool.columns else pd.Series(np.nan, index=pool.index, dtype="float64"))
     # Strict: only a real American price (|odds| >= 100); no -110 default for a missing one.
-    _odds = pd.to_numeric(pool["odds_american"], errors="coerce") if "odds_american" in pool.columns else pd.Series(np.nan, index=pool.index)
+    _odds = (pd.to_numeric(pool["odds_american"], errors="coerce").astype("float64")
+             if "odds_american" in pool.columns else pd.Series(np.nan, index=pool.index, dtype="float64"))
     _dec = np.where(_odds >= 100, 1 + _odds / 100.0, np.where(_odds <= -100, 1 + 100.0 / _odds.abs(), np.nan))
     _dec = pd.Series(_dec, index=pool.index, dtype="float64")
     pool["pinnacle_ev"] = (_pin.where((_pin > 0) & (_pin < 1)) * pd.to_numeric(_dec, errors="coerce") - 1).where(lambda v: v > -1)
