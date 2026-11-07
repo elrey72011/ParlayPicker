@@ -10,6 +10,21 @@ NEW_SPORT_KEYS = {"basketball_nba": "NBA", "basketball_ncaab": "NCAAB",
                   "icehockey_nhl": "NHL"}
 NEW_SPORT_CREDIT_LIMITS = {"daily": 40, "rolling_31_days": 1000}
 NEW_SPORT_CALL_LIMITS = {"daily": 45, "rolling_31_days": 1200}
+# Per-sport overrides of the two limits above. Owner 2026-11-07: NCAAB (55-65 games a
+# day) spent its 40 credits by mid-afternoon, pausing closes all day and capture from
+# about 4 PM ET. NCAAB gets 120 credits / 135 requests a day; NBA and NHL keep the
+# defaults. Every credit still counts against the plan-wide ODDS cap above (200/day),
+# so total spend is unchanged; NCAAB can use more of it.
+SPORT_CREDIT_LIMITS = {"NCAAB": {"daily": 120, "rolling_31_days": 3700}}
+SPORT_CALL_LIMITS = {"NCAAB": {"daily": 135, "rolling_31_days": 4200}}
+
+
+def sport_credit_limits(sport):
+    return SPORT_CREDIT_LIMITS.get(sport, NEW_SPORT_CREDIT_LIMITS)
+
+
+def sport_call_limits(sport):
+    return SPORT_CALL_LIMITS.get(sport, NEW_SPORT_CALL_LIMITS)
 # Certified closes (Odds API historical snapshots, ~10 credits per game per market) have
 # their own allowance, so they never crowd out capture. The plan quota is 20,000
 # credits/month. Owner decisions, 2026-11-05:
@@ -91,8 +106,8 @@ class Budget:
                 raise BudgetLimit("api_budget:"+code)
         if sport in NEW_SPORT_KEYS.values():
             for ledger, limits, unit_count, prefix in (
-                    (self.sport_ledger, NEW_SPORT_CREDIT_LIMITS, units, "credits"),
-                    (self.call_ledger, NEW_SPORT_CALL_LIMITS, 1, "calls")):
+                    (self.sport_ledger, sport_credit_limits(sport), units, "credits"),
+                    (self.call_ledger, sport_call_limits(sport), 1, "calls")):
                 sport_usage = self.usage(sport, ledger)
                 for window, limit in limits.items():
                     if sport_usage[window] + unit_count > limit:
@@ -268,6 +283,8 @@ class Budget:
                 "certified_close_limits":ALL_CERTIFIED_CLOSE_LIMITS,
                 "certified_close_usage":{s:self.usage(s,self.close_ledger) for s in ALL_CERTIFIED_CLOSE_LIMITS},
                 "new_sport_call_limits":NEW_SPORT_CALL_LIMITS,
+                "sport_credit_limits":{s:sport_credit_limits(s) for s in sorted(NEW_SPORT_KEYS.values())},
+                "sport_call_limits":{s:sport_call_limits(s) for s in sorted(NEW_SPORT_KEYS.values())},
                 "pinnacle_limits":PINNACLE_LIMITS,
                 "pinnacle_usage":self.usage("PINNACLE",self.pinnacle_ledger),
                 "paused":sorted(set(self.blocked)),
