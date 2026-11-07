@@ -19,11 +19,18 @@ This shows that model's view next to the market, for comparison only:
 It changes no probability, pick, EV, gate or stake. The models are unvalidated: their
 graded record is what the research loop and the Pinnacle calibration measure.
 
-The app reads the canonical store the qualified bridge already restores read-only from the
-evidence remote (``app_core.qualified_bridge.refresh_store``: throttled, background, never
-writes). That restore otherwise runs only when a market is activated; this column starts it
-in the background too. The first Refresh after an app restart may show the column empty
-until the restore finishes. ``PARLAYPICKER_RESEARCH_MODEL_COLUMN=false`` turns it all off.
+How the app gets the predictions (2026-11-07). The research cycle publishes a small board to
+the evidence Drive folder after each run (``publish``, from ``scripts/run_research_scheduler.py``):
+one write-once JSON object per UTC hour, ``parlaypicker/research-model-board-v1/<hour>.json``,
+holding the latest prediction's mean score and SD per upcoming game. The app fetches the newest
+one by name (``fetch_board``, at most the last 6 hours, in a background thread, at most every
+10 minutes) and computes each candidate's own side and line from it.
+
+(The first version restored the whole canonical store into the app. A full restore reads every
+remote object into memory, about 89,000, which the app never finished: on 2026-11-07 every
+Refresh found the restore restarted and nothing recorded.)
+
+``PARLAYPICKER_RESEARCH_MODEL_COLUMN=false`` turns it all off.
 """
 from __future__ import annotations
 
@@ -43,7 +50,6 @@ FAMILIES = {"NBA": {"spread": "SPREAD", "total": "TOTAL"}, "NCAAB": {"spread": "
             "NHL": {"spread": "PUCK_LINE", "total": "TOTAL"}}
 START_TOLERANCE = timedelta(hours=3)
 LOOKBACK = timedelta(hours=12)
-_CACHE: dict = {}
 
 
 def enabled(setting=os.environ.get) -> bool:
@@ -69,23 +75,114 @@ def _same_team(board, stored) -> bool:
                                        or (len(stored) >= 4 and board.startswith(stored)))
 
 
-def start_store_refresh(setting=os.environ.get):
-    """Start the bridge's read-only store restore in the background (one per process)."""
-    import threading
-    from app_core import qualified_bridge as bridge
-    if not str(setting("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", "") or "").strip():
-        return {"status": "MISSING_CREDENTIALS"}  # no remote to read; no thread
-    with bridge._BACKGROUND_LOCK:
-        thread = bridge._BACKGROUND["thread"]
-        if thread is not None and thread.is_alive():
-            return {"status": "IN_PROGRESS_BACKGROUND", "last": bridge._BACKGROUND["last"]}
+BOARD_PREFIX = "parlaypicker/research-model-board-v1/"
+BOARD_LOOKBACK_HOURS = 6
+BOARD_REFETCH_SECONDS = 600
+_BOARD = {"thread": None, "last": None, "predictions": None, "fetched_at": None}
 
-        def run():
-            bridge._BACKGROUND["last"] = bridge.refresh_store(setting=setting)  # never raises
-        thread = threading.Thread(target=run, name="research-model-store-refresh", daemon=True)
-        bridge._BACKGROUND["thread"] = thread
-        thread.start()
-    return {"status": "STARTED_IN_BACKGROUND", "last": bridge._BACKGROUND["last"]}
+
+def board_key(when: datetime) -> str:
+    return BOARD_PREFIX + when.astimezone(timezone.utc).strftime("%Y-%m-%dT%HZ") + ".json"
+
+
+def _encode_board(predictions, now) -> bytes:
+    rows = [dict(p, start=p["start"].isoformat()) for p in predictions]
+    return json.dumps({"schema": "research-model-board-v1", "published_at": now.isoformat(),
+                       "research_only": True, "predictions": rows},
+                      sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def _decode_board(raw) -> list[dict]:
+    data = json.loads(raw)
+    if not isinstance(data, dict) or data.get("schema") != "research-model-board-v1":
+        raise ValueError("not a research model board")
+    out = []
+    for p in data.get("predictions") or []:
+        start = _time(p.get("start"))
+        if start is None:
+            continue
+        out.append(dict(p, start=start, mean=float(p["mean"]), sd=float(p["sd"])))
+    return out
+
+
+def publish(path, client, *, now=None) -> dict:
+    """Write this hour's board from the canonical store, once. Never raises."""
+    now = now or datetime.now(timezone.utc)
+    try:
+        predictions = load(path, now=now)
+        if not predictions:
+            return {"status": "NO_PREDICTIONS"}
+        key = board_key(now)
+        try:
+            client.put_object(Key=key, Body=_encode_board(predictions, now), IfNoneMatch="*")
+        except Exception as exc:
+            if type(exc).__name__ == "AlreadyExists":
+                return {"status": "ALREADY_PUBLISHED", "predictions": len(predictions)}
+            raise
+        return {"status": "PUBLISHED", "predictions": len(predictions)}
+    except Exception as exc:  # research only: never break the research cycle
+        return {"status": "ERROR", "error": type(exc).__name__}
+
+
+def fetch_board(client, *, now=None):
+    """(predictions, key) from the newest board in the last ``BOARD_LOOKBACK_HOURS`` hours, or ([], None)."""
+    now = now or datetime.now(timezone.utc)
+    for hours in range(BOARD_LOOKBACK_HOURS):
+        key = board_key(now - timedelta(hours=hours))
+        try:
+            response = client.get_object(Key=key)
+        except Exception as exc:
+            if "missing" in str(exc).lower() or type(exc).__name__ in ("NoSuchKey", "KeyError", "FileNotFoundError"):
+                continue
+            raise
+        with response["Body"] as body:
+            return _decode_board(body.read()), key
+    return [], None
+
+
+def start_board_fetch(setting=os.environ.get, *, client_factory=None, clock=None):
+    """Fetch the newest board in a background thread (one per process, at most every 10 minutes)."""
+    import threading
+    import time
+    clock = clock or time.time
+    if not str(setting("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", "") or "").strip():
+        return {"status": "MISSING_CREDENTIALS"}
+    thread = _BOARD["thread"]
+    if thread is not None and thread.is_alive():
+        return {"status": "IN_PROGRESS_BACKGROUND", "last": _BOARD["last"]}
+    fetched = _BOARD["fetched_at"]
+    if fetched is not None and 0 <= clock() - fetched < BOARD_REFETCH_SECONDS:
+        return {"status": "RECENT", "last": _BOARD["last"]}
+
+    def run():
+        try:
+            if client_factory is None:
+                from app_core.evidence_drive import DriveStore
+                from app_core.evidence_remote import settings
+                from app_core.read_only_drive import ReadOnlyDrive
+                client = ReadOnlyDrive(DriveStore(settings()[0]))
+            else:
+                client = client_factory()
+            predictions, key = fetch_board(client)
+            _BOARD["predictions"] = predictions
+            _BOARD["last"] = ({"status": "FETCHED", "board": key.rsplit("/", 1)[-1], "predictions": len(predictions)}
+                              if key else {"status": "NO_BOARD_PUBLISHED"})
+        except BaseException as exc:  # recorded, so the next Refresh can say why
+            _BOARD["last"] = {"status": "FETCH_FAILED", "error": type(exc).__name__}
+        finally:
+            _BOARD["fetched_at"] = clock()
+    thread = threading.Thread(target=run, name="research-model-board-fetch", daemon=True)
+    _BOARD["thread"] = thread
+    thread.start()
+    return {"status": "STARTED_IN_BACKGROUND", "last": _BOARD["last"]}
+
+
+def board_predictions(path=None, *, now=None) -> list[dict]:
+    """The fetched board's predictions for games after now - 12h; FileNotFoundError until a fetch finishes."""
+    if _BOARD["predictions"] is None:
+        raise FileNotFoundError("research model board not fetched yet")
+    now = now or datetime.now(timezone.utc)
+    return [p for p in _BOARD["predictions"] if p["start"] >= now - LOOKBACK]
 
 
 def load(path=None, *, now=None) -> list[dict]:
@@ -234,6 +331,8 @@ def _store_note(store: dict) -> str:
     note = status
     if last.get("status"):
         note += f"; last restore {last['status']}" + (f" {last['error']}" if last.get("error") else "")
+        if last.get("board"):
+            note += f" {last['board']}"
     return note
 
 
@@ -248,12 +347,12 @@ def apply(frame: pd.DataFrame, *, setting=os.environ.get, path=None, now=None, r
         return _empty(frame, "OFF"), {"status": "OFF"}
     diagnostic = {}
     try:
-        diagnostic["store"] = (refresh or start_store_refresh)(setting)
+        diagnostic["store"] = (refresh or start_board_fetch)(setting)
     except Exception as exc:  # never break Refresh
         diagnostic["store"] = {"status": "ERROR", "error": type(exc).__name__}
     note = _store_note(diagnostic["store"])
     try:
-        predictions = (read or _cached_load)(path, now=now)
+        predictions = (read or board_predictions)(path, now=now)
     except FileNotFoundError:
         status = ("STORE_MISSING_CREDENTIALS" if diagnostic["store"].get("status") == "MISSING_CREDENTIALS"
                   else f"STORE_NOT_DOWNLOADED_YET ({note})")
@@ -272,17 +371,3 @@ def apply(frame: pd.DataFrame, *, setting=os.environ.get, path=None, now=None, r
     diagnostic.update(status="ATTACHED" if filled else "NO_MATCHING_PREDICTION", predictions=len(predictions),
                       candidates_with_probability=filled, row_status=counts)
     return out, diagnostic
-
-
-def _cached_load(path=None, *, now=None):
-    """``load`` once per store version (file size and mtime) and hour."""
-    from pathlib import Path
-    from app_core import prospective_evidence as evidence
-    target = Path(evidence._path(path))
-    stat = target.stat()
-    hour = (now or datetime.now(timezone.utc)).strftime("%Y%m%d%H")
-    key = (str(target), stat.st_size, stat.st_mtime_ns, hour)
-    if key not in _CACHE:
-        _CACHE.clear()
-        _CACHE[key] = load(path, now=now)
-    return _CACHE[key]
