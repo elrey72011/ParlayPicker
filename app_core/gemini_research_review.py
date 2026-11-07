@@ -98,7 +98,8 @@ def review(best: pd.DataFrame, *, session_state=None, analysis: pd.DataFrame | N
         out.at[label, "gemini_research_flags"] = row.get("gemini_flags")
         out.at[label, "gemini_research_explanation"] = row.get("gemini_explanation")
         out.at[label, "gemini_research_risk_notes"] = row.get("gemini_risk_notes")
-        out.at[label, "gemini_research_reviewed_at"] = row.get("gemini_reviewed_at") or now
+        stamp = row.get("gemini_reviewed_at")
+        out.at[label, "gemini_research_reviewed_at"] = stamp if isinstance(stamp, str) and stamp.strip() else now
         out.at[label, "gemini_research_model"] = row.get("gemini_review_model")
     done = int(out.loc[chosen, "gemini_research_pick"].notna().sum())
     return out, {"status": "REVIEWED" if done else "NO_REVIEW_RETURNED", "selected": len(chosen), "reviewed": done}
