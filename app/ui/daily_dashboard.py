@@ -117,6 +117,22 @@ def pinnacle_shadow(result, candidates):
     return probs, _ev(result, probs)
 
 
+def research_model_shadow(result, candidates):
+    """(research model win probability, its EV) per board row from the saved candidate, or None.
+
+    ``app_core.research_model_column``: the research loop's score model (NBA, NCAAB, NHL), at
+    the pick's own side and line; EV counts a push as stake returned.
+    """
+    probs = _candidate_values(result, candidates, ("research_model_probability",))
+    if probs is None or not probs.notna().any():
+        return None
+    # The lookup keeps values in (0, 1), so a zero push reads as missing: 0.
+    push = _candidate_values(result, candidates, ("research_model_push_probability",))
+    push = push.fillna(0.0) if push is not None else pd.Series(0.0, index=probs.index)
+    decimal = pd.to_numeric(result.get("odds"), errors="coerce").map(_decimal).astype("float64")
+    return probs, probs * (decimal - 1) - (1 - probs - push)
+
+
 PINNACLE_MIN_EV = 0.02
 
 
@@ -220,6 +236,13 @@ def _render_game_board(board, candidates, family):
         display["Pinnacle fair"], display["EV vs Pinnacle"] = pinnacle
         at = columns.index("Wager status")
         columns[at:at] = ["Pinnacle fair", "EV vs Pinnacle"]
+    model = research_model_shadow(result, candidates)
+    if model is not None:
+        # Research only (owner 2026-11-07): the unvalidated research model's view of the pick;
+        # changes no pick, stake or approval.
+        display["Research model"], display["Research model EV"] = model
+        at = columns.index("Wager status")
+        columns[at:at] = ["Research model", "Research model EV"]
     gemini = gemini_research_labels(result, board)
     if gemini is not None:
         # Research only (owner 2026-11-07): Gemini's review of the top picks; never a stake.
@@ -232,7 +255,7 @@ def _render_game_board(board, candidates, family):
         columns += ['Coverage decision', 'Coverage explanation']
     display = display[columns].copy()
     for column in [c for c in ("Win estimate", "EV estimate", "Market estimate", "Market EV", "Pinnacle fair",
-                               "EV vs Pinnacle") if c in display]:
+                               "EV vs Pinnacle", "Research model", "Research model EV") if c in display]:
         display[column] = display[column].map(lambda v: f"{v:.1%}" if pd.notna(v) else "Unavailable")
     st.dataframe(display, hide_index=True, width="stretch", height=min(760, 38 * (len(display) + 1)), column_config={"Selection score": st.column_config.NumberColumn(format="%.3f"), "Odds": st.column_config.NumberColumn(format="%+.0f")})
     with st.expander("Selection details and wager explanations", expanded=False):
