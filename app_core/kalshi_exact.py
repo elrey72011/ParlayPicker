@@ -18,7 +18,10 @@ unchanged and only decides what the **blend** receives:
   (``kalshi_line_diff`` == 0, else ``kalshi_matched_line`` == |line|);
 * spreads: and, when the contract title names a team ("X wins by over L"), only when X is
   the home or away team (school names compared with "St."/"St" read as "State");
-* other markets (moneylines) unchanged.
+* other markets (moneylines) unchanged;
+* a frame with no Kalshi match diagnostics at all (``kalshi_line_diff`` / ``kalshi_matched_line``
+  absent: not integrator output) passes unchanged. Within integrator output, a spread or total
+  with no recorded contract line is dropped.
 
 A dropped Kalshi value is NaN: the blend falls to its tier without Kalshi, exactly as when
 Kalshi has no market. ``kalshi_probability`` itself is kept for research reports;
@@ -50,6 +53,11 @@ def gate(frame: pd.DataFrame, kalshi: pd.Series) -> tuple[pd.Series, pd.Series]:
     kalshi = pd.to_numeric(kalshi, errors="coerce").astype("float64")
     reasons = pd.Series("", index=frame.index, dtype="object")
     if frame.empty:
+        return kalshi, reasons
+    if "kalshi_line_diff" not in frame.columns and "kalshi_matched_line" not in frame.columns:
+        # No Kalshi match diagnostics at all: these values did not come from the integrator
+        # (tests, legacy inputs), so there is nothing to judge and they pass unchanged.
+        # The integrator always writes these columns.
         return kalshi, reasons
     market = _column(frame, "market_type").astype(str).str.lower()
     is_spread = market.str.startswith("spread")
