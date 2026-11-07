@@ -189,3 +189,37 @@ def test_a_provider_overcharge_is_recorded_and_stops_the_batch(store, clock):
 def test_a_game_started_most_of_a_day_ago_is_still_due(tmp_path, monkeypatch):
     # D16: runs start only a few times a day, so the close lookback spans a full day.
     assert pc.LOOKBACK == timedelta(hours=24)
+
+
+def test_plan_bets_come_first_at_their_own_book(monkeypatch):
+    """Owner 2026-11-07: closes for the plan's bets first, at the bet's book only (10 credits, not 20)."""
+    events = {e: {"event_id": e, "sport": "NBA", "provider_event_id": e, "scheduled_start": at(1)} for e in ("A", "B")}
+    books = ["book%02d" % i for i in range(11)]
+
+    def quotes(event):
+        return [dict(quote_id=f"{event}-{b}-{s}", event_id=event, market_family="SPREAD", selection=s, sportsbook=b)
+                for b in books for s in ("Home", "Away")]
+    monkeypatch.setattr(pc, "_due_sport", lambda path, now, sport, lookback, setting:
+                        [(events["A"], quotes("A")), (events["B"], quotes("B"))])
+    monkeypatch.setattr(pc, "_bet_scopes", lambda path, sport: {("B", "SPREAD", "book03")})
+    due = pc.due("unused", BASE, sports=("NBA",))
+    assert [(e["event_id"], len(q)) for e, q in due] == [("B", 2), ("A", 22), ("B", 20)]
+    assert {q["selection"] for q in due[0][1]} == {"Home", "Away"}            # both sides of the bet's market
+    assert pc.request_plan(due[0][0], due[0][1])[2] == 10 and pc.request_plan(due[1][0], due[1][1])[2] == 20
+
+
+def test_without_predictions_the_order_is_unchanged(monkeypatch):
+    event = {"event_id": "A", "sport": "NBA", "provider_event_id": "A", "scheduled_start": at(1)}
+    rows = [dict(quote_id="q", event_id="A", market_family="SPREAD", selection="Home", sportsbook="b")]
+    monkeypatch.setattr(pc, "_due_sport", lambda *a: [(event, rows)])
+    monkeypatch.setattr(pc, "_bet_scopes", lambda path, sport: set())
+    assert pc.due("unused", BASE, sports=("NBA",)) == [(event, rows)]
+
+
+def test_bet_scopes_read_predicted_quotes(monkeypatch):
+    def read(path, table, **kw):
+        if table == "prospective_quote":
+            return [dict(quote_id="q1", event_id="A", market_family="TOTAL", sportsbook="dk")]
+        return [dict(quote_id="q1"), dict(quote_id="missing")]
+    monkeypatch.setattr(pc.evidence, "read_records", read)
+    assert pc._bet_scopes("unused", "NBA") == {("A", "TOTAL", "dk")}
