@@ -38,7 +38,7 @@ import pandas as pd
 
 ENV = "PARLAYPICKER_RESEARCH_MODEL_COLUMN"
 COLUMNS = ("research_model_probability", "research_model_push_probability", "research_model_ev",
-           "research_model_predicted_at")
+           "research_model_predicted_at", "research_model_status")
 FAMILIES = {"NBA": {"spread": "SPREAD", "total": "TOTAL"}, "NCAAB": {"spread": "SPREAD", "total": "TOTAL"},
             "NHL": {"spread": "PUCK_LINE", "total": "TOTAL"}}
 START_TOLERANCE = timedelta(hours=3)
@@ -172,18 +172,32 @@ def _decimal(odds):
     return None
 
 
-def attach(frame: pd.DataFrame, predictions: list[dict]) -> pd.DataFrame:
-    """``frame`` with the research columns; rows without a unique matching prediction stay empty."""
-    from app_core.prospective_research_models import score_probabilities
+def _empty(frame: pd.DataFrame, status: str) -> pd.DataFrame:
     out = frame.copy()
     for column in COLUMNS:
-        out[column] = np.nan if column != "research_model_predicted_at" else None
-    if out.empty or not predictions:
+        out[column] = np.nan if column not in ("research_model_predicted_at", "research_model_status") else None
+    out["research_model_status"] = status
+    return out
+
+
+def attach(frame: pd.DataFrame, predictions: list[dict]) -> pd.DataFrame:
+    """``frame`` with the research columns; ``research_model_status`` says why a row is empty.
+
+    Per row: ATTACHED, NO_RESEARCH_MODEL_FOR_SPORT (only NBA, NCAAB and NHL have one),
+    UNSUPPORTED_MARKET, NO_PREDICTION_FOR_GAME, AMBIGUOUS_GAME_MATCH, UNSUPPORTED_LINE.
+    """
+    from app_core.prospective_research_models import score_probabilities
+    out = _empty(frame, "NO_PREDICTION_FOR_GAME")
+    if out.empty:
         return out
     for index, row in out.iterrows():
         sport = str(row.get("league") or row.get("sport") or "").upper()
+        if sport not in FAMILIES:
+            out.at[index, "research_model_status"] = "NO_RESEARCH_MODEL_FOR_SPORT"
+            continue
         side = _side(row)
-        if sport not in FAMILIES or side is None:
+        if side is None:
+            out.at[index, "research_model_status"] = "UNSUPPORTED_MARKET"
             continue
         kind, line, selection = side
         family = FAMILIES[sport][kind]
@@ -194,11 +208,13 @@ def attach(frame: pd.DataFrame, predictions: list[dict]) -> pd.DataFrame:
                  and _same_team(row.get("away_team"), p["away_team"])
                  and (start is None or abs(p["start"] - start) <= START_TOLERANCE)]
         if len(found) != 1:
+            out.at[index, "research_model_status"] = "AMBIGUOUS_GAME_MATCH" if found else "NO_PREDICTION_FOR_GAME"
             continue
         p = found[0]
         try:
             split = score_probabilities(p["mean"], p["sd"], family, line, selection=selection)
         except ValueError:
+            out.at[index, "research_model_status"] = "UNSUPPORTED_LINE"
             continue
         out.at[index, "research_model_probability"] = split["win"]
         out.at[index, "research_model_push_probability"] = split["push"]
@@ -206,29 +222,55 @@ def attach(frame: pd.DataFrame, predictions: list[dict]) -> pd.DataFrame:
         if price is not None:
             out.at[index, "research_model_ev"] = split["win"] * (price - 1) - split["loss"]
         out.at[index, "research_model_predicted_at"] = p["predicted_at"]
+        out.at[index, "research_model_status"] = "ATTACHED"
     return out
 
 
+def _store_note(store: dict) -> str:
+    """The background restore's state, in a few words, for a status cell."""
+    store = store if isinstance(store, dict) else {}
+    status = str(store.get("status") or "UNKNOWN")
+    last = store.get("last") if isinstance(store.get("last"), dict) else {}
+    note = status
+    if last.get("status"):
+        note += f"; last restore {last['status']}" + (f" {last['error']}" if last.get("error") else "")
+    return note
+
+
 def apply(frame: pd.DataFrame, *, setting=os.environ.get, path=None, now=None, refresh=None, read=None):
-    """(frame with the research columns, diagnostic). Never raises; changes no other column."""
+    """(frame with the research columns, diagnostic). Never raises; changes no other column.
+
+    ``research_model_status`` on every row says why a row has no probability; a store-wide
+    reason (no credentials, restore still running or failed, store unreadable, store holds
+    no current predictions) is written on every row with the restore's state.
+    """
     if not enabled(setting):
-        out = frame.copy()
-        for column in COLUMNS:
-            out[column] = np.nan if column != "research_model_predicted_at" else None
-        return out, {"status": "OFF"}
+        return _empty(frame, "OFF"), {"status": "OFF"}
     diagnostic = {}
     try:
         diagnostic["store"] = (refresh or start_store_refresh)(setting)
     except Exception as exc:  # never break Refresh
         diagnostic["store"] = {"status": "ERROR", "error": type(exc).__name__}
+    note = _store_note(diagnostic["store"])
     try:
         predictions = (read or _cached_load)(path, now=now)
-    except Exception as exc:  # an absent or unreadable store leaves the column empty
-        predictions, diagnostic["error"] = [], type(exc).__name__
+    except FileNotFoundError:
+        status = ("STORE_MISSING_CREDENTIALS" if diagnostic["store"].get("status") == "MISSING_CREDENTIALS"
+                  else f"STORE_NOT_DOWNLOADED_YET ({note})")
+        return _empty(frame, status), dict(diagnostic, status="NO_MATCHING_PREDICTION", error="FileNotFoundError",
+                                           reason=status, predictions=0)
+    except Exception as exc:  # an unreadable store leaves the column empty
+        status = f"STORE_READ_ERROR {type(exc).__name__} ({note})"
+        return _empty(frame, status), dict(diagnostic, status="NO_MATCHING_PREDICTION", error=type(exc).__name__,
+                                           reason=status, predictions=0)
+    if not predictions:
+        status = f"NO_CURRENT_PREDICTIONS_IN_STORE ({note})"
+        return _empty(frame, status), dict(diagnostic, status="NO_MATCHING_PREDICTION", reason=status, predictions=0)
     out = attach(frame, predictions)
-    filled = int(pd.to_numeric(out["research_model_probability"], errors="coerce").notna().sum())
-    diagnostic.update(status="ATTACHED" if filled else "NO_MATCHING_PREDICTION",
-                      predictions=len(predictions), candidates_with_probability=filled)
+    counts = out["research_model_status"].value_counts().to_dict()
+    filled = int(counts.get("ATTACHED", 0))
+    diagnostic.update(status="ATTACHED" if filled else "NO_MATCHING_PREDICTION", predictions=len(predictions),
+                      candidates_with_probability=filled, row_status=counts)
     return out, diagnostic
 
 
