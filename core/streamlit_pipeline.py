@@ -645,6 +645,11 @@ _NFL_CONTEXT_COLUMNS = [
 ]
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _NFL_CONTEXT_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _NFL_CONTEXT_COLUMNS))
+# Research references next to each pick (owner 2026-11-07): Pinnacle's no-vig probability at
+# the pick's exact line, the pick's EV against it, and why Kalshi was left out of the blend.
+_REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi_blend_gate"]
+REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
+BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 
 
 CANONICAL_BET_COLUMNS = [
@@ -4803,6 +4808,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool.loc[pool["candidate_context"].eq("POST_START_DIAGNOSTIC"),
              "best_available_rejection_reason"] = "post_start_quote"
 
+    # EV of each candidate's own price against Pinnacle's no-vig probability (research only).
+    _pin = _numeric_series(pool, "pinnacle_fair_probability") if "pinnacle_fair_probability" in pool.columns else pd.Series(np.nan, index=pool.index)
+    # Strict: only a real American price (|odds| >= 100); no -110 default for a missing one.
+    _odds = pd.to_numeric(pool["odds_american"], errors="coerce") if "odds_american" in pool.columns else pd.Series(np.nan, index=pool.index)
+    _dec = np.where(_odds >= 100, 1 + _odds / 100.0, np.where(_odds <= -100, 1 + 100.0 / _odds.abs(), np.nan))
+    _dec = pd.Series(_dec, index=pool.index, dtype="float64")
+    pool["pinnacle_ev"] = (_pin.where((_pin > 0) & (_pin < 1)) * pd.to_numeric(_dec, errors="coerce") - 1).where(lambda v: v > -1)
     candidate_audit_columns = [
         "pipeline_build", "league", "home_team", "away_team", "game_date", "game_time_est",
         "matchup_id", "market_type", "candidate_source", "best_pick",
@@ -4850,7 +4862,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "market_validation_status",
         # D4 research reference: Pinnacle's no-vig price at this candidate's exact line
         # (shown on the Pinnacle value board; changes no pick).
-        "pinnacle_fair_probability",
+        "pinnacle_fair_probability", "pinnacle_ev",
         # Why Kalshi was left out of this candidate's blend (app_core.kalshi_exact); '' = used.
         "kalshi_blend_gate",
     ]
