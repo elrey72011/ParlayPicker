@@ -584,6 +584,10 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     from core.streamlit_pipeline import compute_blended_probability, _scoped_theover_blend_fade
 
     kalshi_prob = _safe_numeric_series(out, "kalshi_probability")
+    # Kalshi only at the book's exact line and the pick's own team (owner 2026-11-06/07):
+    # this post-Kalshi re-blend sets the final probability, so the gate must run here.
+    from app_core.kalshi_exact import gate as _kalshi_exact
+    kalshi_prob, out["kalshi_blend_gate"] = _kalshi_exact(out, kalshi_prob)
     market_prob = _safe_numeric_series(out, "market_probability")
 
     ml = _safe_numeric_series(out, "ml_probability")
