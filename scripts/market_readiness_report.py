@@ -79,7 +79,8 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 tables=table_counts(root / 'prospective-evidence.sqlite3'),
                 plans=plan_evaluations(root / 'prospective-evidence.sqlite3'),
                 research_bindings=research_bindings(root / 'prospective-evidence.sqlite3'),
-                price_edge=price_edge(root / 'prospective-evidence.sqlite3'))
+                price_edge=price_edge(root / 'prospective-evidence.sqlite3'),
+                close_coverage=close_coverage(root / 'prospective-evidence.sqlite3'))
 
 
 def price_edge(path):
@@ -93,6 +94,22 @@ def price_edge(path):
         for market in markets:
             try:
                 out.append(price_edge_screen.from_store(path, sport, market))
+            except Exception as exc:  # report, never guess
+                out.append(dict(sport=sport, market_family=market, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
+
+
+def close_coverage(path):
+    """Comparable certified-close coverage by entry timing (app_core.close_coverage), read-only."""
+    from app_core import close_coverage as coverage
+    from app_core.prospective_research_models import SCOPES
+    if not Path(path).is_file():
+        return []
+    out = []
+    for sport, markets in SCOPES.items():
+        for market in markets:
+            try:
+                out.append(coverage.from_store(path, sport, market))
             except Exception as exc:  # report, never guess
                 out.append(dict(sport=sport, market_family=market, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
     return out
@@ -202,6 +219,19 @@ def markdown(result):
                          f"{flagged} | {pct(t.get('mean_ev'))} | {t.get('with_comparable_close', '')} | "
                          f"{pct(t.get('mean_price_clv'))} | {pct(t.get('beat_close_share'))} | {t.get('settled', '')} | "
                          f"{pct(t.get('roi_per_pick'))} |")
+    covered = [row for row in result.get('close_coverage') or [] if row.get('by_minutes_before_start')]
+    if covered:
+        from app_core.close_coverage import BUCKETS
+        labels = [label for _, _, label in BUCKETS]
+        lines += ['', 'Comparable certified close (same book, selection and line) for entry quotes on started games, '
+                  'by how long before the start the quote was taken. A plan needs 80% for its bets.', '',
+                  '| market | ' + ' | '.join(labels) + ' |', '|---|' + '---|' * len(labels)]
+        for row in covered:
+            cells = []
+            for label in labels:
+                b = row['by_minutes_before_start'][label]
+                cells.append('' if b['share'] is None else f"{b['share']:.0%} ({b['comparable']}/{b['with_close_fetched']})")
+            lines.append(f"| {row['sport']} {row['market_family']} | " + ' | '.join(cells) + ' |')
     return '\n'.join(lines) + '\n'
 
 
