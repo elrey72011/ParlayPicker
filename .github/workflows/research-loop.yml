@@ -16,6 +16,10 @@ on:
   schedule:
     - cron: '37 16 * * *'     # 11:37 AM EST / 12:37 PM EDT, the afternoon window
     - cron: '7 22 * * *'      # 5:07 PM EST / 6:07 PM EDT, through the evening slate
+    # 11:13 PM EST / 12:13 AM EDT: grades the late games. A final is graded only 3 hours
+    # after tip-off, so the evening run (ends ~10:50 PM) graded no NBA game on 2026-11-06.
+    # Cycles after the 2:30 AM ET operating window close are skipped.
+    - cron: '13 4 * * *'
 permissions:
   contents: read
   actions: read
