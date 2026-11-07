@@ -214,3 +214,39 @@ def test_background_fetch_records_result_or_failure(monkeypatch):
     assert column.start_board_fetch(on, client_factory=_FakeDrive)["status"] == "STARTED_IN_BACKGROUND"
     column._BOARD["thread"].join(5)
     assert column._BOARD["last"] == {"status": "NO_BOARD_PUBLISHED"} and column.board_predictions() == []
+
+
+def test_board_says_which_models_are_not_trained_yet(tmp_path, clock):  # noqa: F811
+    path = tmp_path / "evidence.sqlite3"
+    for index in range(30):  # too few games to train (60 needed)
+        _event(path, clock, "NBA", index)
+    now = _at(31)
+    clock[0] = now
+    status = column.model_status(path, now=now)
+    events, quotes, scores = models._read_scope(path, "NBA", "SPREAD")
+    usable = len(models._examples(events, quotes, scores, "SPREAD", now))
+    assert status["NBA:SPREAD"] == {"status": "NOT_TRAINED", "needed": 60, "training_games": usable}
+    assert 0 < usable < 60 and status["NHL:PUCK_LINE"]["training_games"] == 0
+    drive = _FakeDrive()
+    # Published with no predictions, so the app can say why the column is empty.
+    assert column.publish(path, drive, now=now)["status"] == "PUBLISHED"
+    predictions, board_models, key = column.fetch_board_full(drive, now=now)
+    assert predictions == [] and board_models == status and key == column.board_key(now)
+    board = pd.DataFrame([
+        {"league": "NBA", "home_team": "A", "away_team": "B", "market_type": "spread_home", "best_pick": "A -2.5"},
+        {"league": "NBA", "home_team": "A", "away_team": "B", "market_type": "total_over", "best_pick": "Over 202.5"},
+        {"league": "NCAAF", "home_team": "A", "away_team": "B", "market_type": "spread_home", "best_pick": "A -2.5"},
+    ])
+    out, _ = column.apply(board, setting=lambda k, d=None: d, refresh=lambda s: {"status": "RECENT"},
+                          read=lambda *a, **k: predictions, models=board_models)
+    total = status["NBA:TOTAL"]["training_games"]
+    assert out["research_model_status"].tolist() == [
+        f"RESEARCH_MODEL_NOT_TRAINED (NBA SPREAD: {usable} of 60 training games)",
+        f"RESEARCH_MODEL_NOT_TRAINED (NBA TOTAL: {total} of 60 training games)",
+        "NO_RESEARCH_MODEL_FOR_SPORT"]
+
+
+def test_trained_scope_reads_trained(tmp_path, clock):  # noqa: F811
+    path, _, _ = _store_with_prediction(tmp_path, clock)
+    status = column.model_status(path, now=_at(73, 1))
+    assert status["NBA:SPREAD"] == {"status": "TRAINED"} and status["NBA:TOTAL"] == {"status": "TRAINED"}

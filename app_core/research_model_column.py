@@ -78,18 +78,47 @@ def _same_team(board, stored) -> bool:
 BOARD_PREFIX = "parlaypicker/research-model-board-v1/"
 BOARD_LOOKBACK_HOURS = 6
 BOARD_REFETCH_SECONDS = 600
-_BOARD = {"thread": None, "last": None, "predictions": None, "fetched_at": None}
+_BOARD = {"thread": None, "last": None, "predictions": None, "fetched_at": None, "models": None}
 
 
 def board_key(when: datetime) -> str:
     return BOARD_PREFIX + when.astimezone(timezone.utc).strftime("%Y-%m-%dT%HZ") + ".json"
 
 
-def _encode_board(predictions, now) -> bytes:
+def _encode_board(predictions, now, models=None) -> bytes:
     rows = [dict(p, start=p["start"].isoformat()) for p in predictions]
     return json.dumps({"schema": "research-model-board-v1", "published_at": now.isoformat(),
-                       "research_only": True, "predictions": rows},
+                       "research_only": True, "predictions": rows, "models": models or {}},
                       sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def _decode_models(raw) -> dict:
+    """{"NBA:SPREAD": {"status": "TRAINED" | "NOT_TRAINED", "training_games", "needed"}} (older boards: {})."""
+    models = json.loads(raw).get("models")
+    return models if isinstance(models, dict) else {}
+
+
+def model_status(path, *, now=None) -> dict:
+    """Per research scope: is a model trained, and if not, how many usable training games exist.
+
+    Read-only: counts the examples ``train_scope`` would fit on (``_examples``), never fits.
+    """
+    from app_core import prospective_research_models as models
+    now = now or datetime.now(timezone.utc)
+    out = {}
+    for sport, families in FAMILIES.items():
+        for family in sorted(set(families.values())):
+            try:
+                model, _ = models._latest_model(path, sport, family, now)
+            except ValueError:
+                model = None  # a stale model cannot predict either
+            if model is not None:
+                out[f"{sport}:{family}"] = {"status": "TRAINED"}
+                continue
+            events, quotes, scores = models._read_scope(path, sport, family)
+            out[f"{sport}:{family}"] = {"status": "NOT_TRAINED", "needed": models.MIN_TRAIN_EVENTS,
+                                        "training_games": len(models._examples(events, quotes, scores, family, now))}
+    return out
 
 
 def _decode_board(raw) -> list[dict]:
@@ -107,14 +136,22 @@ def _decode_board(raw) -> list[dict]:
 
 def publish(path, client, *, now=None) -> dict:
     """Write this hour's board from the canonical store, once. Never raises."""
+    from pathlib import Path
     now = now or datetime.now(timezone.utc)
     try:
-        predictions = load(path, now=now)
-        if not predictions:
+        if not Path(path).is_file():
             return {"status": "NO_PREDICTIONS"}
         key = board_key(now)
         try:
-            client.put_object(Key=key, Body=_encode_board(predictions, now), IfNoneMatch="*")
+            client.get_object(Key=key)
+            return {"status": "ALREADY_PUBLISHED"}  # write-once: skip the work this hour
+        except Exception:
+            pass
+        predictions = load(path, now=now)
+        # Published even without predictions: the app then says which models are not trained yet.
+        models = model_status(path, now=now)
+        try:
+            client.put_object(Key=key, Body=_encode_board(predictions, now, models), IfNoneMatch="*")
         except Exception as exc:
             if type(exc).__name__ == "AlreadyExists":
                 return {"status": "ALREADY_PUBLISHED", "predictions": len(predictions)}
@@ -126,6 +163,12 @@ def publish(path, client, *, now=None) -> dict:
 
 def fetch_board(client, *, now=None):
     """(predictions, key) from the newest board in the last ``BOARD_LOOKBACK_HOURS`` hours, or ([], None)."""
+    predictions, _, key = fetch_board_full(client, now=now)
+    return predictions, key
+
+
+def fetch_board_full(client, *, now=None):
+    """(predictions, models, key) from the newest board, or ([], {}, None)."""
     now = now or datetime.now(timezone.utc)
     for hours in range(BOARD_LOOKBACK_HOURS):
         key = board_key(now - timedelta(hours=hours))
@@ -136,8 +179,9 @@ def fetch_board(client, *, now=None):
                 continue
             raise
         with response["Body"] as body:
-            return _decode_board(body.read()), key
-    return [], None
+            raw = body.read()
+        return _decode_board(raw), _decode_models(raw), key
+    return [], {}, None
 
 
 def start_board_fetch(setting=os.environ.get, *, client_factory=None, clock=None):
@@ -163,8 +207,9 @@ def start_board_fetch(setting=os.environ.get, *, client_factory=None, clock=None
                 client = ReadOnlyDrive(DriveStore(settings()[0]))
             else:
                 client = client_factory()
-            predictions, key = fetch_board(client)
+            predictions, models, key = fetch_board_full(client)
             _BOARD["predictions"] = predictions
+            _BOARD["models"] = models
             _BOARD["last"] = ({"status": "FETCHED", "board": key.rsplit("/", 1)[-1], "predictions": len(predictions)}
                               if key else {"status": "NO_BOARD_PUBLISHED"})
         except BaseException as exc:  # recorded, so the next Refresh can say why
@@ -277,11 +322,22 @@ def _empty(frame: pd.DataFrame, status: str) -> pd.DataFrame:
     return out
 
 
-def attach(frame: pd.DataFrame, predictions: list[dict]) -> pd.DataFrame:
+def _not_trained(models, sport, family):
+    """'RESEARCH_MODEL_NOT_TRAINED (NBA SPREAD: 23 of 60 training games)' when the board says so, else None."""
+    entry = (models or {}).get(f"{sport}:{family}")
+    if not isinstance(entry, dict) or entry.get("status") != "NOT_TRAINED":
+        return None
+    return (f"RESEARCH_MODEL_NOT_TRAINED ({sport} {family}: {entry.get('training_games', '?')} of "
+            f"{entry.get('needed', '?')} training games)")
+
+
+def attach(frame: pd.DataFrame, predictions: list[dict], models: dict | None = None) -> pd.DataFrame:
     """``frame`` with the research columns; ``research_model_status`` says why a row is empty.
 
     Per row: ATTACHED, NO_RESEARCH_MODEL_FOR_SPORT (only NBA, NCAAB and NHL have one),
-    UNSUPPORTED_MARKET, NO_PREDICTION_FOR_GAME, AMBIGUOUS_GAME_MATCH, UNSUPPORTED_LINE.
+    UNSUPPORTED_MARKET, NO_PREDICTION_FOR_GAME, AMBIGUOUS_GAME_MATCH, UNSUPPORTED_LINE, and
+    RESEARCH_MODEL_NOT_TRAINED (with the training games so far) when the board's ``models``
+    says the sport and market has no model yet.
     """
     from app_core.prospective_research_models import score_probabilities
     out = _empty(frame, "NO_PREDICTION_FOR_GAME")
@@ -305,7 +361,8 @@ def attach(frame: pd.DataFrame, predictions: list[dict]) -> pd.DataFrame:
                  and _same_team(row.get("away_team"), p["away_team"])
                  and (start is None or abs(p["start"] - start) <= START_TOLERANCE)]
         if len(found) != 1:
-            out.at[index, "research_model_status"] = "AMBIGUOUS_GAME_MATCH" if found else "NO_PREDICTION_FOR_GAME"
+            out.at[index, "research_model_status"] = ("AMBIGUOUS_GAME_MATCH" if found else
+                                                      _not_trained(models, sport, family) or "NO_PREDICTION_FOR_GAME")
             continue
         p = found[0]
         try:
@@ -336,7 +393,8 @@ def _store_note(store: dict) -> str:
     return note
 
 
-def apply(frame: pd.DataFrame, *, setting=os.environ.get, path=None, now=None, refresh=None, read=None):
+def apply(frame: pd.DataFrame, *, setting=os.environ.get, path=None, now=None, refresh=None, read=None,
+          models=None):
     """(frame with the research columns, diagnostic). Never raises; changes no other column.
 
     ``research_model_status`` on every row says why a row has no probability; a store-wide
@@ -362,10 +420,12 @@ def apply(frame: pd.DataFrame, *, setting=os.environ.get, path=None, now=None, r
         status = f"STORE_READ_ERROR {type(exc).__name__} ({note})"
         return _empty(frame, status), dict(diagnostic, status="NO_MATCHING_PREDICTION", error=type(exc).__name__,
                                            reason=status, predictions=0)
-    if not predictions:
+    if models is None and read is None:
+        models = _BOARD["models"]
+    if not predictions and not models:
         status = f"NO_CURRENT_PREDICTIONS_IN_STORE ({note})"
         return _empty(frame, status), dict(diagnostic, status="NO_MATCHING_PREDICTION", reason=status, predictions=0)
-    out = attach(frame, predictions)
+    out = attach(frame, predictions, models)
     counts = out["research_model_status"].value_counts().to_dict()
     filled = int(counts.get("ATTACHED", 0))
     diagnostic.update(status="ATTACHED" if filled else "NO_MATCHING_PREDICTION", predictions=len(predictions),
