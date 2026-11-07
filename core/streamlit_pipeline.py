@@ -654,7 +654,10 @@ _REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi
                              # Gemini research review of the top picks (app_core.gemini_research_review)
                              "gemini_research_pick", "gemini_research_agrees", "gemini_research_confidence",
                              "gemini_research_flags", "gemini_research_explanation", "gemini_research_risk_notes",
-                             "gemini_research_reviewed_at", "gemini_research_model"]
+                             "gemini_research_reviewed_at", "gemini_research_model",
+                             # Research models' view of the pick (app_core.research_model_column)
+                             "research_model_probability", "research_model_push_probability", "research_model_ev",
+                             "research_model_predicted_at"]
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 
@@ -4933,6 +4936,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     _dec = np.where(_odds >= 100, 1 + _odds / 100.0, np.where(_odds <= -100, 1 + 100.0 / _odds.abs(), np.nan))
     _dec = pd.Series(_dec, index=pool.index, dtype="float64")
     pool["pinnacle_ev"] = (_pin.where((_pin > 0) & (_pin < 1)) * pd.to_numeric(_dec, errors="coerce") - 1).where(lambda v: v > -1)
+    # Research models' probability for each candidate (app_core.research_model_column): a
+    # comparison column only; it changes no probability, pick, EV, gate or stake.
+    try:
+        from app_core.research_model_column import apply as _research_model_column
+        pool, _research_model_diagnostic = _research_model_column(pool)
+    except Exception as exc:  # a research column must never break Refresh
+        _research_model_diagnostic = {"status": "ERROR", "error": type(exc).__name__}
+    if diagnostics_out is not None:
+        diagnostics_out["research_model_column"] = _research_model_diagnostic
     candidate_audit_columns = [
         "pipeline_build", "league", "home_team", "away_team", "game_date", "game_time_est",
         "matchup_id", "market_type", "candidate_source", "best_pick",
@@ -4985,6 +4997,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star", "theover_fade_public", "theover_money_pct",
         # Why Kalshi was left out of this candidate's blend (app_core.kalshi_exact); '' = used.
         "kalshi_blend_gate",
+        # Research models' view of this candidate (app_core.research_model_column).
+        "research_model_probability", "research_model_push_probability", "research_model_ev",
+        "research_model_predicted_at",
     ]
     candidate_audit_columns.extend(_NFL_CONTEXT_COLUMNS)
     candidate_audit_columns.extend(c for c in EXPORT_PROVENANCE_COLUMNS if c not in candidate_audit_columns)

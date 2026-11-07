@@ -70,3 +70,13 @@ def test_gate_payload_unchanged_without_extra_columns():
     import inspect
     from integrations.gemini_client import run_gemini_analysis
     assert inspect.signature(run_gemini_analysis).parameters["extra_columns"].default == ()
+
+
+def test_research_review_survives_wager_finalization():
+    """2026-11-07 export: finalization copies evidence fields from the candidate pool over each
+    pick, so research columns listed there came out blank. They must stay off that schema."""
+    from app_core.candidate_evidence_schema import FIELDS, PRIVATE_AUTHORITY_FIELDS
+    from app_core.gemini_research_review import COLUMNS
+
+    assert not set(COLUMNS) & set(FIELDS)
+    assert not set(COLUMNS) & set(PRIVATE_AUTHORITY_FIELDS)
