@@ -201,6 +201,8 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "best_available_runner_up_pick",
     "best_available_runner_up_market_type",
     "best_available_runner_up_score",
+    "second_best_pick",
+    "second_best_probability",
     "best_available_score_gap",
     "best_available_candidate_count",
     "best_available_selection_verified",
@@ -369,6 +371,8 @@ def ensure_best_pick_export_columns(
         "best_available_family_rank": pd.NA,
         "best_available_score": pd.NA,
         "best_available_runner_up_pick": "",
+        "second_best_pick": "",
+        "second_best_probability": pd.NA,
         "best_available_runner_up_market_type": "",
         "best_available_runner_up_score": pd.NA,
         "best_available_score_gap": pd.NA,
@@ -431,7 +435,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"odds_feed_source", "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_reason", "recent_regime_bucket", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
+        if col in {"odds_feed_source", "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_reason", "recent_regime_bucket", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "second_best_pick", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     # The public card always answers which candidate ranked first for the game.
@@ -556,6 +560,7 @@ BEST_PICK_COLUMNS = [
     "best_available_value_override_ev_gain",
     "best_available_runner_up_pick", "best_available_runner_up_market_type",
     "best_available_runner_up_score", "best_available_score_gap",
+    "second_best_pick", "second_best_probability",
     "best_available_candidate_count", "best_available_selection_verified",
     "best_available_ranking_verified", "final_pick_valid", "final_pick_valid_reason",
     "quote_chronology_status", "selected_quote_recorded_at",
@@ -4788,6 +4793,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     runner_up_market_by_matchup: dict[object, str] = {}
     runner_up_score_by_matchup: dict[object, float] = {}
     score_gap_by_matchup: dict[object, float] = {}
+    second_best_pick_by_matchup: dict[object, str] = {}
+    second_best_probability_by_matchup: dict[object, float] = {}
     candidate_count_by_matchup: dict[object, int] = {}
     verified_by_matchup: dict[object, bool] = {}
 
@@ -4856,6 +4863,24 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             runner_up_score_by_matchup[matchup] = float("nan")
             score_gap_by_matchup[matchup] = float("nan")
 
+        # 2nd Best Pick (owner 2026-11-07): the top-ranked candidate of the other
+        # market family (the total when the pick is a side, and the reverse), so it
+        # is always a different bet, never an alternate line of the pick. Moneyline
+        # never reaches this pool (allowed_markets above). Display only.
+        other_family = matchup_candidates[
+            matchup_candidates["_market_family"].ne(winner_row["_market_family"])
+        ]
+        if other_family.empty:
+            second_best_pick_by_matchup[matchup] = ""
+            second_best_probability_by_matchup[matchup] = float("nan")
+        else:
+            second = other_family.iloc[0]
+            second_score = pd.to_numeric(second.get("best_available_probability"), errors="coerce")
+            second_best_pick_by_matchup[matchup] = str(second.get("best_pick", ""))
+            second_best_probability_by_matchup[matchup] = (
+                float(second_score) if pd.notna(second_score) else float("nan")
+            )
+
         winner_family = winner_row["_market_family"]
         winner_pick = winner_row["best_pick"]
         winner_reason = winner_row.get("Status_Reason", "N/A (determined later)")
@@ -4899,6 +4924,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     )
     pool["best_available_score_gap"] = pd.to_numeric(
         pool["matchup_id"].map(score_gap_by_matchup), errors="coerce"
+    )
+    pool["second_best_pick"] = pool["matchup_id"].map(second_best_pick_by_matchup).fillna("")
+    pool["second_best_probability"] = pd.to_numeric(
+        pool["matchup_id"].map(second_best_probability_by_matchup), errors="coerce"
     )
     pool["best_available_candidate_count"] = (
         pd.to_numeric(pool["matchup_id"].map(candidate_count_by_matchup), errors="coerce")
@@ -4983,6 +5012,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_selected", "best_available_score",
         "best_available_runner_up_pick", "best_available_runner_up_market_type",
         "best_available_runner_up_score", "best_available_score_gap",
+        "second_best_pick", "second_best_probability",
         "best_available_candidate_count", "best_available_selection_verified",
         "best_available_ranking_verified", "best_available_rejection_reason",
         "quote_chronology_status", "selected_quote_recorded_at",
