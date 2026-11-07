@@ -648,7 +648,9 @@ BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _NFL_CONTEXT_COLUMNS)
 # Research references next to each pick (owner 2026-11-07): Pinnacle's no-vig probability at
 # the pick's exact line, the pick's EV against it, and why Kalshi was left out of the blend.
 _REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi_blend_gate",
-                             "theover_pick_agrees", "theover_pick_line", "theover_public_pct", "theover_model_hit_rate"]
+                             "theover_pick_agrees", "theover_pick_line", "theover_public_pct", "theover_model_hit_rate",
+                             "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star", "theover_fade_public",
+                             "theover_money_pct"]
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 
@@ -677,7 +679,10 @@ CANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + _CANONICAL_RE
 # split and the backing model's recent record. Kept per row, oriented to the row's side,
 # for the track record to test; never blended and never turned into a probability.
 THEOVER_RESEARCH_COLUMNS = ["theover_pick_agrees", "theover_pick_line", "theover_public_pct",
-                            "theover_model_hit_rate"]
+                            "theover_model_hit_rate",
+                            # From the raw page in the owner's workbook (app_core.theover_signals):
+                            "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star",
+                            "theover_fade_public", "theover_money_pct"]
 CANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + THEOVER_RESEARCH_COLUMNS))
 
 
@@ -2915,7 +2920,9 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     spread_away["theover_pick_line"] = -research_home_line
     for frame in (spread_home, spread_away):
         frame["theover_public_pct"] = pd.NA
+        frame["theover_money_pct"] = pd.NA
         frame["theover_model_hit_rate"] = hit_rate.where(resolved)
+    _theover_page_flags(normalized, (spread_home, spread_away))
 
     return [spread_home, spread_away]
 
@@ -2944,6 +2951,25 @@ def _pick_code_names(code: str, name_token: str, kalshi_token: str) -> bool:
             if token and (token.startswith(short) or in_order(short, token)):
                 return True
     return False
+
+
+def _theover_page_flags(normalized: pd.DataFrame, frames) -> None:
+    """Game-level page signals (same on both rows): sharp money, its play count, PURPLE STAR,
+    fade the public. Missing when the upload had no raw page."""
+    def flag(column):
+        if column not in normalized.columns:
+            return pd.Series(np.nan, index=normalized.index, dtype="float64")
+        text = normalized[column].astype("string").str.strip().str.lower()
+        return pd.Series(np.where(text.isin(["true", "1", "1.0", "yes"]), 1.0,
+                                  np.where(text.isin(["false", "0", "0.0", "no"]), 0.0, np.nan)),
+                         index=normalized.index, dtype="float64")
+    plays = (pd.to_numeric(normalized["sharpplays"], errors="coerce").astype("float64")
+             if "sharpplays" in normalized.columns else pd.Series(np.nan, index=normalized.index, dtype="float64"))
+    for frame in frames:
+        frame["theover_sharp_agrees"] = flag("sharpmoneyagrees")
+        frame["theover_sharp_plays"] = plays
+        frame["theover_purple_star"] = flag("purplestar")
+        frame["theover_fade_public"] = flag("fadepublic")
 
 
 def _theover_fraction(values: pd.Series) -> pd.Series:
@@ -3097,8 +3123,14 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     public = _theover_fraction(_first_existing_numeric(normalized, ["publicbettingpct", "public_betting_pct"], default=pd.NA))
     direction = _first_nonempty_text(normalized, ["bettingdirection", "betting_direction"]).fillna("").astype(str).str.upper()
     public_over = public.where(direction.eq("OVER"), (1 - public).where(direction.eq("UNDER")))
+    page_bets = _theover_fraction(_first_existing_numeric(normalized, ["betspctover"], default=pd.NA))
+    public_over = public_over.fillna(page_bets)
     total_over["theover_public_pct"] = public_over
     total_under["theover_public_pct"] = 1 - public_over
+    money_over = _theover_fraction(_first_existing_numeric(normalized, ["moneypctover"], default=pd.NA))
+    total_over["theover_money_pct"] = money_over
+    total_under["theover_money_pct"] = 1 - money_over
+    _theover_page_flags(normalized, (total_over, total_under))
     hit_rate = _theover_fraction(_first_existing_numeric(normalized, ["modelhitrate", "model_hit_rate"], default=pd.NA))
     total_over["theover_model_hit_rate"] = hit_rate.where(resolved)
     total_under["theover_model_hit_rate"] = hit_rate.where(resolved)
@@ -4946,6 +4978,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # (shown on the Pinnacle value board; changes no pick).
         "pinnacle_fair_probability", "pinnacle_ev",
         "theover_pick_agrees", "theover_pick_line", "theover_public_pct", "theover_model_hit_rate",
+        "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star", "theover_fade_public", "theover_money_pct",
         # Why Kalshi was left out of this candidate's blend (app_core.kalshi_exact); '' = used.
         "kalshi_blend_gate",
     ]

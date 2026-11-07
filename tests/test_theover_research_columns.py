@@ -61,3 +61,52 @@ def test_pick_code_matching_and_ambiguity():
 def test_columns_reach_the_canonical_rows_and_the_export():
     for column in THEOVER_RESEARCH_COLUMNS:
         assert column in CANONICAL_BET_COLUMNS and column in BEST_PICK_COLUMNS
+
+
+def _workbook(tmp_path):
+    table = TOTALS.copy()
+    page = pd.DataFrame({0: [
+        "Picks", "NBA", "19:00:00", "PURPLE STAR", "Washington Wizards", "Washington", "Wizards", "0",
+        "Atlanta Hawks", "Atlanta", "Hawks", "0", "Backed by Pulsar, which hit 71.4% of the last 14 NBA games.",
+        "Fade the public", "Sharp money agrees · 3 plays", "UNDER", "228.5", "PENDING", "NBA", "19:00:00",
+        "Boston Celtics", "Boston", "Celtics", "0", "Charlotte Hornets", "Charlotte", "Hornets", "0",
+        "87% betting over", "o207.5", "Best line", "u208.5", "87% Over", "% of bets", "Under 13%", "79% Over",
+        "% of money", "Under 21%", "OVER", "207.5", "PENDING", "NCAAB", "19:00:00", "Austin Peay Governors",
+        "Austin Peay", "Austin Peay", "0", "Kennesaw State Owls", "Kennesaw State", "Kennesaw St", "0",
+        "66% betting under", "OVER", "157.5", "PENDING"]})
+    path = tmp_path / "Theover_Totals.xlsx"
+    with pd.ExcelWriter(path) as writer:
+        table.to_excel(writer, sheet_name="TotalsRaw", index=False)
+        page.to_excel(writer, sheet_name="Sheet1", index=False, header=False)
+    return path
+
+
+def test_workbook_page_signals_parse_and_attach(tmp_path):
+    from app_core.theover_signals import read_workbook
+    table, matched = read_workbook(_workbook(tmp_path))
+    assert matched == 3
+    atl = table[table.HomeTeam == "Atlanta"].iloc[0]
+    assert atl.SharpMoneyAgrees is True and atl.SharpPlays == 3 and atl.PurpleStar and atl.FadePublic
+    cha = table[table.HomeTeam == "Charlotte"].iloc[0]
+    assert cha.SharpMoneyAgrees is False and cha.BetsPctOver == 0.87 and cha.MoneyPctOver == 0.79
+    ken = table[table.HomeTeam == "Kennesaw State"].iloc[0]
+    assert abs(ken.BetsPctOver - 0.34) < 1e-9 and pd.isna(ken.MoneyPctOver)   # "66% betting under"
+
+
+def test_workbook_upload_reaches_rows_oriented_to_each_side(tmp_path):
+    import io
+    from core.theover_loader import load_theover_csv
+    upload = io.BytesIO(_workbook(tmp_path).read_bytes())
+    upload.name = "Theover_Totals.xlsx"
+    totals, warning = load_theover_csv(upload)
+    rows = build_theover_bet_rows(None, totals, None)
+    under = _row(rows, "Atlanta", "total_under")
+    assert (under.theover_sharp_agrees, under.theover_sharp_plays, under.theover_purple_star, under.theover_fade_public) == (1.0, 3.0, 1.0, 1.0)
+    over, cha_under = _row(rows, "Charlotte", "total_over"), _row(rows, "Charlotte", "total_under")
+    assert abs(over.theover_money_pct - 0.79) < 1e-9 and abs(cha_under.theover_money_pct - 0.21) < 1e-9
+    assert rows["theover_probability"].isna().all()
+
+
+def test_csv_upload_has_no_page_signals():
+    rows = build_theover_bet_rows(None, TOTALS, None)
+    assert rows["theover_sharp_agrees"].isna().all() and rows["theover_money_pct"].isna().all()

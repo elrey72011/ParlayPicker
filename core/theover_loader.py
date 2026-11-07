@@ -98,7 +98,15 @@ def load_theover_csv(uploaded_file) -> tuple[pd.DataFrame, str | None]:
 
     try:
         uploaded_file.seek(0)
-        df = pd.read_csv(uploaded_file)
+        name = str(getattr(uploaded_file, "name", "") or "").lower()
+        if name.endswith((".xlsx", ".xlsm")):
+            # The owner's workbook (2026-11-07): the summary table plus the raw TheOver
+            # page, whose sharp-money, PURPLE STAR, fade-the-public and bets/money signals
+            # are attached as extra columns (app_core.theover_signals). Research only.
+            from app_core.theover_signals import read_workbook
+            df, _matched = read_workbook(uploaded_file)
+        else:
+            df = pd.read_csv(uploaded_file)
         if df.empty:
             return pd.DataFrame(), "Uploaded TheOver CSV is empty."
         # Content validation on the RAW upload (before normalize coerces the
