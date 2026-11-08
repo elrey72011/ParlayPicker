@@ -42,13 +42,25 @@ DEFAULT_MIN_EDGE = 0.02
 # bound plan draft's replay estimate shows the bet rate at each). It locks at the freeze.
 ALLOWED_MIN_EDGES = (0.01, 0.02)
 
+# Where a Pinnacle plan enters each game (``pinnacle_model.plan_quotes``). Plans frozen without
+# ``entry_rule`` use the earliest capture where a US book posts Pinnacle's line, and bet on that
+# prediction. ``FIRST_EDGE_CAPTURE`` (owner 2026-11-08) also predicts at the first later capture
+# whose best side clears ``min_edge``, and bets on the game's first prediction that clears it;
+# the probability gate still scores each game's first prediction.
+EARLIEST_SHARED_LINE = "EARLIEST_SHARED_LINE"
+FIRST_EDGE_CAPTURE = "FIRST_EDGE_CAPTURE"
+ENTRY_RULES = (EARLIEST_SHARED_LINE, FIRST_EDGE_CAPTURE)
 
-def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None):
+
+def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None):
     """The market-skill rules. ``entry_books`` (canonical book labels), when given, is the set of
     books the plan may enter at, frozen with the plan (a Pinnacle plan: the books a pick can be
-    staked at, ``pinnacle_model.PLAN_BOOKS``)."""
+    staked at, ``pinnacle_model.PLAN_BOOKS``). ``entry_rule`` is recorded only when it is not the
+    default, so earlier plans keep their exact rules and hash."""
     if min_edge not in ALLOWED_MIN_EDGES:
         raise ValueError(f"min_edge must be one of {ALLOWED_MIN_EDGES}")
+    if entry_rule is not None and entry_rule not in ENTRY_RULES:
+        raise ValueError(f"entry_rule must be one of {ENTRY_RULES}")
     rules = {"version": VERSION, "probability_gate": "NO_WORSE_THAN_DEVIGGED_ENTRY_PRICE",
             "market_reference": "SAME_BOOK_OPPOSITE_SIDE_SAME_LINE_SAME_TIMESTAMP",
             "min_market_reference_coverage": 0.9, "min_mean_clv": 0.0,
@@ -58,14 +70,16 @@ def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None):
             "other_model_predictions": "REPORTED_NOT_BLOCKING", "decision_record": "D19 option B (owner 2026-11-06)"}
     if entry_books:
         rules["entry_books"] = sorted(entry_books)
+    if entry_rule == FIRST_EDGE_CAPTURE:
+        rules["entry_rule"] = FIRST_EDGE_CAPTURE
     return rules
 
 
-def template(base, min_edge=DEFAULT_MIN_EDGE, entry_books=None):
+def template(base, min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None):
     """The v1 template with the market-skill gates: coin-flip absolute bounds plus ``KEY``."""
     spec = dict(base)
     spec["probability_thresholds"] = dict(base["probability_thresholds"], **COIN_FLIP)
-    spec[KEY] = methodology(min_edge, entry_books)
+    spec[KEY] = methodology(min_edge, entry_books, entry_rule)
     return spec
 
 
@@ -98,13 +112,64 @@ def _scores(pairs):
     return brier, log_loss
 
 
-def skill(db, scored, *, as_of=None, rules=None):
+def _best_side(p, y, quote, other):
+    sides = [(p * quote["decimal_odds"] - 1, quote, y), ((1 - p) * other["decimal_odds"] - 1, other, 1 - y)]
+    return max(sides, key=lambda side: side[0])
+
+
+def first_edge_bet(db, plan, quote, rules, as_of):
+    """``FIRST_EDGE_CAPTURE``: the game's first prediction by the plan's exact model and calibration
+    whose better side clears ``min_edge``, as (ev, side quote, won), or None.
+
+    Only pregame predictions at verified quotes captured before the prediction count, and only
+    when the prediction's own line is decided (scored from the stored final score at that line).
+    """
+    from app_core import prospective_evidence as pe
+    event = pe._event(db, quote["event_id"])
+    start = pe._time(event["scheduled_start"], "scheduled_start")
+    rows = db.execute("""SELECT observation_id FROM prospective_prediction WHERE event_id=? AND market_family=?
+        AND model_id=? AND calibration_id=? ORDER BY prediction_timestamp, observation_id""",
+                      (quote["event_id"], quote["market_family"], plan["model_id"], plan["calibration_id"])).fetchall()
+    for row in rows:
+        prediction = pe._stored(db, "prospective_prediction", "observation_id", row[0])
+        made = pe._time(prediction["prediction_timestamp"], "prediction_timestamp")
+        if made >= start or (as_of is not None and made > as_of) or not prediction["quote_id"]:
+            continue
+        entry = pe._stored(db, "prospective_quote", "quote_id", prediction["quote_id"])
+        mean, loss = prediction["mean_probability"], prediction["loss_probability"]
+        if (entry is None or not entry["quote_verified"] or entry["line"] is None or entry["decimal_odds"] is None
+                or mean is None or loss is None or mean + loss <= 0
+                or pe._time(entry["quote_timestamp"], "quote_timestamp") > made):
+            continue
+        other = opposite(db, entry)
+        if other is None:
+            continue
+        p = mean / (mean + loss)
+        ev, side, _ = _best_side(p, 1, entry, other)
+        if ev < rules["min_edge"]:
+            continue
+        result = pe._latest_result(db, entry["event_id"], entry["market_family"], prediction["selection"],
+                                   as_of if as_of is not None else pe._clock())
+        if result is None:
+            return None
+        outcome = pe._outcome_at_quote_line(db, result, entry, result["outcome"])
+        if outcome not in ("WIN", "LOSS"):
+            return None
+        won = int(outcome == "WIN")
+        return ev, side, won if side is entry else 1 - won
+    return None
+
+
+def skill(db, scored, *, as_of=None, rules=None, plan=None):
     """Model vs market, and the model's bets, on the scored games. ``scored``: [(p, y, quote)].
 
     ``p`` is the decided probability for ``quote``'s side and ``y`` its WIN (1) / LOSS (0).
+    Under ``FIRST_EDGE_CAPTURE`` the bets come from ``first_edge_bet`` (``plan`` names the model
+    and calibration); the probability gate still uses each game's first prediction.
     """
     from app_core.prospective_evidence import _comparable_close
     rules = rules or methodology()
+    first_edge = rules.get("entry_rule") == FIRST_EDGE_CAPTURE and plan is not None
     paired, returns, clvs = [], [], []
     for p, y, quote in scored:
         other = opposite(db, quote)
@@ -112,8 +177,13 @@ def skill(db, scored, *, as_of=None, rules=None):
             continue
         mine, theirs = 1 / quote["decimal_odds"], 1 / other["decimal_odds"]
         paired.append((p, mine / (mine + theirs), y))
-        sides = [(p * quote["decimal_odds"] - 1, quote, y), ((1 - p) * other["decimal_odds"] - 1, other, 1 - y)]
-        ev, chosen, won = max(sides, key=lambda side: side[0])
+        if first_edge:
+            bet = first_edge_bet(db, plan, quote, rules, as_of)
+            if bet is None:
+                continue
+            ev, chosen, won = bet
+        else:
+            ev, chosen, won = _best_side(p, y, quote, other)
         if ev < rules["min_edge"]:
             continue
         returns.append(chosen["decimal_odds"] - 1 if won else -1.0)

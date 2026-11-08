@@ -43,6 +43,12 @@ on:
         default: "0.02"
         type: choice
         options: ["0.02", "0.01"]
+      entry_rule:
+        description: "draft only, market_skill: earliest (first shared-line capture) or first_edge (first capture that clears the bet threshold)"
+        required: false
+        default: earliest
+        type: choice
+        options: [earliest, first_edge]
       validation_start:
         description: "draft only: ISO validation start (blank = next UTC midnight)"
         required: false
@@ -91,6 +97,7 @@ jobs:
           METHODOLOGY: ${{ inputs.methodology }}
           MODEL: ${{ inputs.model }}
           MIN_EDGE: ${{ inputs.min_edge }}
+          ENTRY_RULE: ${{ inputs.entry_rule }}
           FREEZE_INPUTS: ${{ inputs.freeze_inputs }}
           EXPECTED_HASH: ${{ inputs.expected_hash }}
           OUT: ${{ runner.temp }}/bound-plan
@@ -99,7 +106,7 @@ jobs:
           args=("$ACTION" --directory "$OUT/evidence" --output "$OUT/report/bound-plan.json"
                 --cache-dir "$RUNNER_TEMP/drive-cache" --sport "$SPORT" --market "$MARKET")
           if [ "$ACTION" = draft ] && [ -n "$VALIDATION_START" ]; then args+=(--validation-start "$VALIDATION_START"); fi
-          if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}" --model "${MODEL:-research}" --min-edge "${MIN_EDGE:-0.02}"); fi
+          if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}" --model "${MODEL:-research}" --min-edge "${MIN_EDGE:-0.02}" --entry-rule "${ENTRY_RULE:-earliest}"); fi
           if [ "$ACTION" = freeze ]; then args+=(--inputs "$FREEZE_INPUTS" --expected-hash "$EXPECTED_HASH"); fi
           python -u scripts/bound_plan.py "${args[@]}"
       - name: Save the verified Drive object cache

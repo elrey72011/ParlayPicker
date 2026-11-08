@@ -1806,7 +1806,7 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
         if details:
             # D19 option B: the probability gate is skill against the de-vigged entry price.
             from app_core import market_skill_validation as market_skill
-            skill = {name: market_skill.skill(db, pairs, as_of=cutoff, rules=method[market_skill.KEY])
+            skill = {name: market_skill.skill(db, pairs, as_of=cutoff, rules=method[market_skill.KEY], plan=plan)
                      for name, pairs in details.items()}
     if "football_v2_methodology" in method:
         from app_core.football_validation_v2 import evaluate as evaluate_football_v2

@@ -57,7 +57,7 @@ def statuses(path, now):
 
 
 def draft(path, *, sport=None, market=None, validation_start=None, now=None, methodology='market_skill',
-          model='research', min_edge=None):
+          model='research', min_edge=None, entry_rule=None):
     now = now or datetime.now(timezone.utc)
     result = {'mode': 'DRAFT_READ_ONLY', 'as_of': now.isoformat(), 'markets': statuses(path, now)}
     if sport and market:
@@ -79,7 +79,8 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                                                              and methodology == 'market_skill' else None),
                                                 # The staking terms a Pinnacle plan needs to ever stake.
                                                 staking_terms=('pinnacle-provisional-v1' if model == 'pinnacle'
-                                                               and methodology == 'market_skill' else None))
+                                                               and methodology == 'market_skill' else None),
+                                                entry_rule=entry_rule if methodology == 'market_skill' else None)
         except ValueError as exc:
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'NOT_DRAFTABLE', 'reason': str(exc)}
         else:
@@ -90,11 +91,26 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
             # Read-only: how fast this plan would fill, before the bet threshold is frozen.
             from app_core import pinnacle_model
             try:
+                artifact = None
+                drafted = result['draft'].get('plan')
+                if drafted:
+                    # The plan bets with its calibrated probability: replay that too.
+                    from app_core import prospective_evidence as evidence
+                    found = evidence.load_record(path, 'prospective_calibration', drafted['calibration_id'])
+                    artifact = json.loads(found['payload']).get('calibration_artifact') if found else None
                 result['replay_estimate'] = pinnacle_model.replay_estimate(path, sport, market, now=now,
-                                                                           books=pinnacle_model.PLAN_BOOKS)
+                                                                           books=pinnacle_model.PLAN_BOOKS,
+                                                                           calibration=artifact)
             except Exception as exc:  # an estimate must never block the draft
                 result['replay_estimate'] = {'status': 'ERROR', 'error': type(exc).__name__}
     return result
+
+
+ENTRY_RULE_TEXT = {
+    'EARLIEST_SHARED_LINE': 'the earliest capture where one of its books posts Pinnacle\'s line',
+    'FIRST_EDGE_CAPTURE': 'the first capture where one of its books posts Pinnacle\'s line and clears the bet '
+                          'threshold (else the earliest such capture); bets on the first prediction that clears it',
+}
 
 
 def markdown(result):
@@ -120,6 +136,8 @@ def markdown(result):
                          f"{plan['deployment_criteria']['validated_policy']['provisional_stake_cap']:.1%} of bankroll per pick, "
                          f"{plan['deployment_criteria']['validated_policy']['sport_exposure_cap']:.0%} open at once)"]
                         if 'staking_terms' in plan.get('deployment_criteria', {}) else []),
+                      *([f"- entry rule: {ENTRY_RULE_TEXT[plan['market_skill_methodology'].get('entry_rule', 'EARLIEST_SHARED_LINE')]}"]
+                        if 'entry_books' in plan.get('market_skill_methodology', {}) else []),
                       *([f"- entry books: {', '.join(plan['market_skill_methodology']['entry_books'])} "
                          "(the books its picks can be staked at)"]
                         if 'entry_books' in plan.get('market_skill_methodology', {}) else []),
@@ -142,6 +160,19 @@ def markdown(result):
             for edge, row in replay['by_edge'].items():
                 lines.append(f"| {edge} | {row['bets']} | {row['bets_per_day']} | {row['days_for_min_bets']} | "
                              f"{row['days_per_window']} |")
+            if replay.get('variants'):
+                cal = replay.get('calibration')
+                lines += ['', '#### By entry rule and probability', '',
+                          *([f"Calibration (Platt on {cal.get('decided')} games): a = {cal.get('a')}, "
+                             f"b = {cal.get('b')}.", ''] if cal else []),
+                          '| entry rule | probability | edge | bets | bets/day | days for '
+                          f"{replay['min_bets']} bets | days per window |", '|---|---|---|---|---|---|---|']
+                for variant in replay['variants']:
+                    for edge, row in variant['by_edge'].items():
+                        lines.append(f"| {variant['entry_rule']} | {variant['probability']} | {edge} | {row['bets']} | "
+                                     f"{row['bets_per_day']} | {row['days_for_min_bets']} | {row['days_per_window']} |")
+                lines += ['', 'CALIBRATED is the probability the plan bets with. FIRST_EDGE_CAPTURE enters at the '
+                              'first capture that clears the edge (a draft with entry rule first_edge).']
             lines += ['', 'A plan has a validation and a holdout window. The frozen threshold is the template\'s '
                           '2% unless the plan is changed before freezing.']
     frozen = result.get('frozen')
@@ -166,6 +197,9 @@ def main(argv=None):
                         help="research: the pinned research score model; pinnacle: Pinnacle's no-vig price")
     parser.add_argument('--min-edge', type=float, choices=(0.01, 0.02), default=0.02,
                         help='market_skill only: the minimum EV for a bet (locks when the plan is frozen)')
+    parser.add_argument('--entry-rule', choices=('earliest', 'first_edge'), default='earliest',
+                        help='draft, market_skill: enter at the earliest shared-line capture, or at the first '
+                             'capture that clears the bet threshold (FIRST_EDGE_CAPTURE)')
     parser.add_argument('--inputs', help='freeze inputs JSON printed by the reviewed draft')
     parser.add_argument('--expected-hash', help='plan hash printed by the reviewed draft')
     args = parser.parse_args(argv)
@@ -178,7 +212,8 @@ def main(argv=None):
         guarded = ReadOnlyDrive(client, args.cache_dir)
         restore = sync(path, guarded, folder, {})
         result = draft(path, sport=args.sport, market=args.market, validation_start=args.validation_start,
-                       methodology=args.methodology, model=args.model, min_edge=args.min_edge)
+                       methodology=args.methodology, model=args.model, min_edge=args.min_edge,
+                       entry_rule=('FIRST_EDGE_CAPTURE' if args.entry_rule == 'first_edge' else None))
         result['restore'] = dict(restore, writes_refused=guarded.writes_refused)
     else:
         if not (args.sport and args.market and args.inputs and args.expected_hash):
