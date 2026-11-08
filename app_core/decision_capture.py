@@ -139,18 +139,22 @@ def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow, pin
     return result
 
 
-def decision_quotes(events, quotes, now, *, predicted=None, horizon=HORIZON, max_age=MAX_QUOTE_AGE):
+def decision_quotes(events, quotes, now, *, predicted=None, horizon=HORIZON, max_age=MAX_QUOTE_AGE, books=None):
     """{(event_id, selection): newest fresh verified quote} for games starting within ``horizon``.
 
     Both sides of each game, any bettable book, quote at most ``max_age`` old and not after
     ``now``; half-point or whole lines only (the research settlement contract). With
-    ``predicted``, only games in it: games that already have their research prediction.
+    ``predicted``, only games in it: games that already have their research prediction. With
+    ``books`` (canonical labels: the plan's frozen ``entry_books``, go-live 2026-11-08), only
+    quotes at those books, the books a pick can be staked at.
     """
+    from app_core.public_quote_policy import canonical_book_label
     chosen = {}
     for quote in quotes:
         event = events.get(quote["event_id"])
         if (event is None or (predicted is not None and quote["event_id"] not in predicted) or quote["quote_verified"] != 1 or quote["line"] is None
-                or quote["sportsbook"] in REFERENCE_BOOKS):
+                or quote["sportsbook"] in REFERENCE_BOOKS
+                or (books is not None and canonical_book_label(quote["sportsbook"]) not in books)):
             continue
         start, stamp = _time(event["scheduled_start"]), _time(quote["quote_timestamp"])
         if not (now < start <= now + horizon and now - max_age <= stamp <= now):
@@ -181,10 +185,13 @@ def predict(path, sport, family, *, now):
                                                                market_family=family)
                  if p["model_id"] == plan["model_id"] and p["calibration_id"] == plan["calibration_id"]
                  and _time(p["prediction_timestamp"]) <= now}
+    # Only the books the plan froze as its entry books (the books a pick can be staked at).
+    books = frozenset(calibration._plan_rules(plan).get("entry_books") or ()) or None
     result = calibration._predict(path, sport, family, model, cal, now=now,
                                   policy_version=calibration.POLICY_VERSION, tag="DECISION",
                                   select=lambda events, quotes, at: decision_quotes(events, quotes, at,
-                                                                                    predicted=predicted))
+                                                                                    predicted=predicted,
+                                                                                    books=books))
     return dict(result, validation_plan_id=plan["validation_plan_id"])
 
 

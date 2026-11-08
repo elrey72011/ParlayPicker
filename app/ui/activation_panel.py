@@ -4,7 +4,15 @@ from pathlib import Path
 from datetime import datetime,timezone
 import streamlit as st
 from core.sport_policy import SPORTS
-from core.exposure_ledger import append,snapshot,digest
+from core.exposure_ledger import append as _ledger_append,snapshot,digest
+
+
+def append(path,event,**kwargs):
+    """Append to the exposure ledger, then mirror it to Drive (app_core.exposure_ledger_remote; off unless enabled)."""
+    key=_ledger_append(path,event,**kwargs)
+    from app_core.exposure_ledger_remote import after_append
+    after_append(path)
+    return key
 
 def render(games):
     if not st.checkbox('Show wager readiness and exposure',key='activation_tools_visible'):return
@@ -25,6 +33,8 @@ def render(games):
     st.json(evidence_health())
     policy_path=Path(os.environ.get('PARLAYPICKER_WAGER_POLICY_PATH','data/policies/active_wager_policy.json'))
     ledger=os.environ.get('PARLAYPICKER_EXPOSURE_LEDGER','data/exposure/exposure.sqlite3')
+    from app_core.exposure_ledger_remote import before_read
+    before_read(ledger)  # restore the ledger from Drive after a reboot (off unless enabled)
     with st.expander('Review and activate validated policy'):
         uploaded=st.file_uploader('Candidate policy JSON',type=['json'],key='activation_candidate')
         if uploaded:

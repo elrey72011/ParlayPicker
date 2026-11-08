@@ -5,7 +5,9 @@ outside the app pipeline, and the app's ML model is blocked for spreads and tota
 qualified market would otherwise have no rows for the wager contract or Gemini. This turns
 the latest bound prediction per upcoming game, for **qualified markets only**, into a row
 carrying every field ``core.sport_market_gate.market_gate`` checks, copied from the stored
-prediction, quote, event, model and calibration records (never recomputed or guessed).
+prediction, quote, event, model and calibration records (never recomputed or guessed). The
+stake fields (``app_core.bridge_stake_fields``) are derived from the market's validated
+deployment and the stored evidence; they are fail-closed while the market is not validated.
 
 The rows then go through the existing chain unchanged: live wager contract, market gate
 (deployment, owner activation, exposure), maturity, Gemini secondary review, stake. This
@@ -103,8 +105,12 @@ def rows(path, qualified, *, now=None, policy_versions=None):
             best = latest.get(p["event_id"])
             if best is None or _rank(p, quote) > _rank(*best[:2]):
                 latest[p["event_id"]] = (p, quote, event)
+        from app_core import bridge_stake_fields
+        # The stake fields (go-live Part 2), from the market's deployment and stored evidence.
+        context = bridge_stake_fields.market_context(path, sport, family, now=now) if latest else {}
         for p, quote, event in latest.values():
-            out.append(row(p, quote, event, policy_versions.get(f"{sport}:{family}")))
+            out.append(dict(row(p, quote, event, policy_versions.get(f"{sport}:{family}")),
+                            **bridge_stake_fields.fields(context, p, quote, event)))
     return sorted(out, key=lambda r: (r["start"], r["sport"], r["game_id"]))
 
 

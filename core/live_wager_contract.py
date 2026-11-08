@@ -64,7 +64,10 @@ def load_configuration(now):
     config['market_activations']=activations
     try:
         from core.exposure_ledger import snapshot as ledger_snapshot
-        config['exposure']=ledger_snapshot(os.environ.get('PARLAYPICKER_EXPOSURE_LEDGER','data/exposure/exposure.sqlite3'),now=now)
+        ledger_path=os.environ.get('PARLAYPICKER_EXPOSURE_LEDGER','data/exposure/exposure.sqlite3')
+        from app_core.exposure_ledger_remote import before_read
+        before_read(ledger_path)  # restore from Drive after a reboot (off unless enabled; never raises)
+        config['exposure']=ledger_snapshot(ledger_path,now=now)
         config['unit_value']=config['exposure']['unit_value']
     except ValueError:
         config['exposure']={}
