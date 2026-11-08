@@ -76,7 +76,10 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                                                 min_edge=min_edge if methodology == 'market_skill' else None,
                                                 # A Pinnacle plan enters only where its picks can be staked.
                                                 entry_books=(pinnacle_model.PLAN_BOOKS if model == 'pinnacle'
-                                                             and methodology == 'market_skill' else None))
+                                                             and methodology == 'market_skill' else None),
+                                                # The staking terms a Pinnacle plan needs to ever stake.
+                                                staking_terms=('pinnacle-provisional-v1' if model == 'pinnacle'
+                                                               and methodology == 'market_skill' else None))
         except ValueError as exc:
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'NOT_DRAFTABLE', 'reason': str(exc)}
         else:
@@ -113,6 +116,10 @@ def markdown(result):
                       *([f"- bet rule: EV at least {plan['market_skill_methodology']['min_edge']:.0%} at the entry "
                          f"price, at least {plan['market_skill_methodology']['min_bets']} bets per window"]
                         if 'market_skill_methodology' in plan else []),
+                      *([f"- staking terms: {plan['deployment_criteria']['staking_terms']} (tenth Kelly, "
+                         f"{plan['deployment_criteria']['validated_policy']['provisional_stake_cap']:.1%} of bankroll per pick, "
+                         f"{plan['deployment_criteria']['validated_policy']['sport_exposure_cap']:.0%} open at once)"]
+                        if 'staking_terms' in plan.get('deployment_criteria', {}) else []),
                       *([f"- entry books: {', '.join(plan['market_skill_methodology']['entry_books'])} "
                          "(the books its picks can be staked at)"]
                         if 'entry_books' in plan.get('market_skill_methodology', {}) else []),

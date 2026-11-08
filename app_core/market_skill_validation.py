@@ -125,11 +125,21 @@ def skill(db, scored, *, as_of=None, rules=None):
            "model_brier": None, "market_brier": None, "model_log_loss": None, "market_log_loss": None,
            "bets": len(returns), "bet_roi": sum(returns) / len(returns) if returns else None,
            "bets_with_close": len(clvs), "bet_close_coverage": len(clvs) / len(returns) if returns else 0.0,
-           "bet_mean_clv": sum(clvs) / len(clvs) if clvs else None}
+           "bet_mean_clv": sum(clvs) / len(clvs) if clvs else None,
+           # Mean CLV minus 1.96 standard errors: the staking terms' prior-CLV bound (app_core.staking_terms).
+           "bet_clv_lower_95": _lower_95(clvs)}
     if paired:
         out["model_brier"], out["model_log_loss"] = _scores([(p, y) for p, _, y in paired])
         out["market_brier"], out["market_log_loss"] = _scores([(m, y) for _, m, y in paired])
     return out
+
+
+def _lower_95(values):
+    if len(values) < 2:
+        return None
+    mean = sum(values) / len(values)
+    sd = math.sqrt(sum((v - mean) ** 2 for v in values) / (len(values) - 1))
+    return mean - 1.96 * sd / math.sqrt(len(values))
 
 
 def blockers(label, cohort, result, method):
