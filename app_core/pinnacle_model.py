@@ -213,6 +213,56 @@ def plan_games_per_day(path, sport, family, *, now, lookback_days=14):
     return len(covered) / days
 
 
+REPLAY_EDGES = (0.01, 0.02)
+
+
+def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_EDGES,
+                    min_sample=200, min_bets=50):
+    """How fast a Pinnacle plan would fill, replayed over games already captured (read-only).
+
+    For games started in the last ``lookback_days`` (counted over the days actually
+    observed), applies the plan's entry rule (``plan_quotes``) and counts, per day:
+    games the plan could predict, and games whose better side's EV against Pinnacle's
+    no-vig price clears each ``edge`` (the market-skill bet rule). Then the days each
+    window would need for ``min_sample`` games and ``min_bets`` bets.
+
+    It never reads results or scores, so the bet threshold is chosen before seeing which
+    bets won. Pinnacle's raw no-vig price is used (the plan applies its calibration).
+    """
+    from app_core import prospective_research_models as research
+    events, quotes, _ = research._read_scope(path, sport, family)
+    start = now - timedelta(days=lookback_days)
+    started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
+    if not started:
+        return {"sport": sport, "market_family": family, "games_started": 0, "status": "NO_GAMES"}
+    chosen = plan_quotes(started, quotes, now)
+    first = min(_t(e["scheduled_start"]) for e in started.values())
+    days = max(1.0, (now - first).total_seconds() / 86400)
+    best_evs = []
+    for event_id, quote in chosen.items():
+        event = started[event_id]
+        p = fair(event, quote, quotes, now=now)
+        other = _other_side(quote, quotes)
+        if p is None or other is None:
+            continue
+        best_evs.append(max(p * quote["decimal_odds"] - 1, (1 - p) * other["decimal_odds"] - 1))
+    games_per_day = len(chosen) / days
+    out = {"sport": sport, "market_family": family, "status": "ESTIMATED", "days_observed": round(days, 1),
+           "games_started": len(started), "plan_games": len(chosen),
+           "plan_share": round(len(chosen) / len(started), 3), "plan_games_per_day": round(games_per_day, 2),
+           "days_for_min_sample": (round(min_sample / games_per_day, 1) if games_per_day else None),
+           "min_sample": min_sample, "min_bets": min_bets, "by_edge": {}}
+    for edge in edges:
+        bets = sum(ev >= edge for ev in best_evs)
+        per_day = bets / days
+        days_bets = round(min_bets / per_day, 1) if per_day else None
+        window = (max(out["days_for_min_sample"], days_bets)
+                  if out["days_for_min_sample"] is not None and days_bets is not None else None)
+        out["by_edge"][f"{edge:.0%}"] = {"bets": bets, "bets_per_day": round(per_day, 2),
+                                         "days_for_min_bets": days_bets, "days_per_window": window}
+    return out
+
+
 def _settled_at(result, quote):
     """True when ``result`` was settled at exactly ``quote`` (its stored settlement rule names it)."""
     rule = evidence._source_json(result.get("raw_source"))

@@ -79,6 +79,13 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'DRAFTED_NOT_FROZEN',
                                'plan_hash': calibration.plan_hash(spec),
                                'freeze_inputs': calibration.freeze_inputs(spec), 'plan': spec}
+        if model == 'pinnacle':
+            # Read-only: how fast this plan would fill, before the bet threshold is frozen.
+            from app_core import pinnacle_model
+            try:
+                result['replay_estimate'] = pinnacle_model.replay_estimate(path, sport, market, now=now)
+            except Exception as exc:  # an estimate must never block the draft
+                result['replay_estimate'] = {'status': 'ERROR', 'error': type(exc).__name__}
     return result
 
 
@@ -103,6 +110,22 @@ def markdown(result):
                       '', '```json', json.dumps(item['freeze_inputs'], sort_keys=True), '```']
         else:
             lines.append(f"- reason: {item.get('reason')}")
+    replay = result.get('replay_estimate')
+    if replay:
+        lines += ['', f"### Replay estimate {replay.get('sport', '')} {replay.get('market_family', '')}: "
+                      f"{replay.get('status')}"]
+        if replay.get('status') == 'ESTIMATED':
+            lines += ['', f"Over {replay['days_observed']} days of captured games (results not read): "
+                          f"{replay['plan_games']} of {replay['games_started']} games had a US book at Pinnacle's line "
+                          f"({replay['plan_share']:.0%}), {replay['plan_games_per_day']} a day; "
+                          f"{replay['min_sample']} games take about {replay['days_for_min_sample']} days.", '',
+                      '| bet edge vs Pinnacle | bets | bets/day | days for '
+                      f"{replay['min_bets']} bets | days per window |", '|---|---|---|---|---|']
+            for edge, row in replay['by_edge'].items():
+                lines.append(f"| {edge} | {row['bets']} | {row['bets_per_day']} | {row['days_for_min_bets']} | "
+                             f"{row['days_per_window']} |")
+            lines += ['', 'A plan has a validation and a holdout window. The frozen threshold is the template\'s '
+                          '2% unless the plan is changed before freezing.']
     frozen = result.get('frozen')
     if frozen:
         lines += ['', f"### Frozen `{frozen['validation_plan_id']}` (hash `{frozen['plan_hash']}`)",
