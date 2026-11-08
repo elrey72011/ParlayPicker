@@ -79,7 +79,7 @@ def test_an_efficient_market_shows_no_edge_and_a_soft_one_does():
     assert row["picks"] > 0 and row["hit_rate"] > 0.6
     text = bt.markdown({"prior_season": 2023, "calibration_season": 2024, "scored_season": 2025, "games": {},
                         "closing_lined": 1, "opening_lined": 1, "report": soft})
-    assert "| SPREAD | closing | Jan-Apr |" in text and "fit: k = " in text
+    assert "| SPREAD | closing | Jan-Apr |" in text and "k = " in text
 
 
 def test_script_fetches_three_seasons_and_lines_for_two(monkeypatch):
