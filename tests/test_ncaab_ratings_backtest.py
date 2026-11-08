@@ -79,7 +79,7 @@ def test_an_efficient_market_shows_no_edge_and_a_soft_one_does():
     assert row["picks"] > 0 and row["hit_rate"] > 0.6
     text = bt.markdown({"prior_season": 2023, "calibration_season": 2024, "scored_season": 2025, "games": {},
                         "closing_lined": 1, "opening_lined": 1, "report": soft})
-    assert "| SPREAD | closing | Jan-Apr |" in text and "k = " in text
+    assert "| SPREAD | closing | Jan-Apr |" in text and "fit: k = " in text
 
 
 def test_script_fetches_three_seasons_and_lines_for_two(monkeypatch):
@@ -90,3 +90,17 @@ def test_script_fetches_three_seasons_and_lines_for_two(monkeypatch):
     result = script.run("token", 2025, get=object())
     assert sorted(calls) == [("games", 2023), ("games", 2024), ("games", 2025), ("lines", 2024), ("lines", 2025)]
     assert result["prior_season"] == 2023 and result["opening_lined"] == 0
+
+
+def test_opening_lines_get_their_own_fit():
+    prior, calibration, scored = (_season(y, STRENGTHS, seed=y) for y in (2023, 2024, 2025))
+
+    def lines(games):
+        # Closing lines are efficient; opening lines are 4 points off: only the opening fit finds an edge.
+        out = _lines_from_truth(games)
+        for g in games:
+            out[g["id"]]["spread_open"] = out[g["id"]]["spread"] + 4.0
+        return out
+    report = bt.run(prior, calibration, scored, lines(calibration), lines(scored))["SPREAD"]
+    assert report["fits"]["opening"]["k"] > 0.5 > report["fits"]["closing"]["k"]
+    assert report["lines"]["opening"]["Jan-Apr"]["by_threshold"]["0.55"]["hit_rate"] > 0.6
