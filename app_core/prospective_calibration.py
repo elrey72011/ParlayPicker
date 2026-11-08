@@ -414,7 +414,14 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
     start = _time(validation_start)
     target = _template(sport, market)["minimum_independent_sample"]
     if validation_days is None or holdout_days is None:
-        observed = rate if rate is not None else games_per_day(path, sport, market, now=start)
+        if rate is not None:
+            observed = rate
+        else:
+            from app_core import pinnacle_model
+            # A Pinnacle plan predicts only games where a US book posts Pinnacle's line
+            # (pinnacle_model.plan_quotes): size its windows by those, over the observed days.
+            observed = (pinnacle_model.plan_games_per_day(path, sport, market, now=start)
+                        if pinnacle_model.is_pinnacle(model) else games_per_day(path, sport, market, now=start))
         sized = window_days(target, observed)
         validation_days = sized if validation_days is None else validation_days
         holdout_days = sized if holdout_days is None else holdout_days

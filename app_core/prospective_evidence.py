@@ -1585,6 +1585,27 @@ def freeze_validation_plan(path: str | Path | None, plan: Mapping) -> str:
                        dict(methodology, artifact_hash=values["artifact_hash"]))
 
 
+def _outcome_at_quote_line(db: sqlite3.Connection, result: dict, quote: dict, outcome: str) -> str:
+    """The outcome at the prediction's own line when the game was settled at another line.
+
+    ``prospective_result`` keeps one result per game, market and side, settled at the
+    first quote settled (``insert_score_settlement`` stores that quote's line with the
+    score). A prediction at a different line (a Pinnacle plan's best price at Pinnacle's
+    line, ``pinnacle_model.plan_quotes``) is scored from the same verified final score at
+    its own line, never from another line's outcome. Results without a stored score
+    settlement are left as they are.
+    """
+    rule = _source_json(result.get("raw_source"))
+    if (not isinstance(rule, dict) or rule.get("rule") != SCORE_SETTLEMENT_SOURCE or rule.get("line") is None
+            or quote["line"] is None or abs(float(rule["line"]) - float(quote["line"])) < 1e-9
+            or rule.get("selection") != quote["selection"]):
+        return outcome
+    event = _event(db, result["event_id"])
+    return score_settlement_outcome(event["sport"], quote["market_family"], quote["selection"],
+                                    event["home_team"], event["away_team"], int(result["home_score"]),
+                                    int(result["away_score"]), float(quote["line"]))
+
+
 def _latest_result(db: sqlite3.Connection, event_id: str, market: str,
                    selection: str, as_of: datetime) -> dict | None:
     rows = db.execute("""SELECT result_id FROM prospective_result WHERE event_id=?
@@ -1707,6 +1728,8 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime,
         result = _latest_result(db, prediction["event_id"], plan["market_family"],
                                 prediction["selection"], as_of)
         outcome = result["outcome"] if result else "PENDING"
+        if result is not None and quote is not None:
+            outcome = _outcome_at_quote_line(db, result, quote, outcome)
         outcomes[outcome] += 1
         if result is not None:
             source_ids.append(result["result_id"])
