@@ -33,6 +33,7 @@ import math
 from datetime import datetime, timedelta, timezone
 
 from app_core import prospective_evidence as evidence
+from app_core.market_skill_validation import EARLIEST_SHARED_LINE, FIRST_EDGE_CAPTURE
 
 KIND = "pinnacle_no_vig_v1"
 FEATURE_VERSION = "pinnacle-no-vig-v1"
@@ -158,7 +159,7 @@ def _plan_book(quote, books):
     return canonical_book_label(quote["sportsbook"]) in books
 
 
-def plan_quotes(events, quotes, now, *, books=None):
+def plan_quotes(events, quotes, now, *, books=None, entry_rule=None, min_edge=None, adjust=None):
     """The plan's entry quote per game (owner 2026-11-07): the best US price at Pinnacle's line.
 
     A fixed rule, using only prices known before tip-off (never results):
@@ -174,6 +175,13 @@ def plan_quotes(events, quotes, now, *, books=None):
     * at one of ``books`` (canonical labels). A plan drafted by the Bound plan workflow freezes
       ``PLAN_BOOKS`` (the books the stake can use) as its ``entry_books``; its predictions, window
       rate and replay estimate use them. ``None`` means every US book.
+
+    ``entry_rule`` ``FIRST_EDGE_CAPTURE`` (owner 2026-11-08, frozen with a plan) enters instead at
+    the **first capture whose best side clears ``min_edge``**, and at the earliest shared-line
+    capture while none has. US books match Pinnacle's line at the same price when both first
+    post, and lag when Pinnacle moves, so the earliest capture almost never clears a 1-2% edge.
+    Each capture is judged only on prices known at that capture. ``adjust`` maps Pinnacle's
+    no-vig probability to the plan's (its calibration), so the entry and the bet rule agree.
 
     The first canonical US quote (``prospective_research_models._reference_quotes``) has
     Pinnacle at its line only about 22% of the time (NCAAB, 2026-11-07) and is rarely a good
@@ -202,12 +210,18 @@ def plan_quotes(events, quotes, now, *, books=None):
             other = _other_side(q, quotes) if p is not None and captured <= now else None
             if other is None:
                 continue
+            if adjust is not None:
+                p = adjust(p)
             ev = max(p * q["decimal_odds"] - 1, (1 - p) * other["decimal_odds"] - 1)
             key = (ev, q["decimal_odds"], q["sportsbook"])
             if captured not in best or key > best[captured][0]:
                 best[captured] = (key, q)
         if best:
-            chosen[event_id] = best[min(best)][1]
+            when = min(best)
+            if entry_rule == FIRST_EDGE_CAPTURE:
+                clearing = [c for c, (key, _) in best.items() if key[0] >= min_edge]
+                when = min(clearing) if clearing else when
+            chosen[event_id] = best[when][1]
     return chosen
 
 
@@ -234,7 +248,7 @@ REPLAY_EDGES = (0.01, 0.02)
 
 
 def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_EDGES,
-                    min_sample=200, min_bets=50, books=None):
+                    min_sample=200, min_bets=50, books=None, calibration=None):
     """How fast a Pinnacle plan would fill, replayed over games already captured (read-only).
 
     For games started in the last ``lookback_days`` (counted over the days actually
@@ -243,8 +257,14 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     no-vig price clears each ``edge`` (the market-skill bet rule). Then the days each
     window would need for ``min_sample`` games and ``min_bets`` bets.
 
+    ``by_edge`` is the earliest-capture rule on Pinnacle's raw no-vig price. ``variants``
+    adds each entry rule (``EARLIEST_SHARED_LINE``, ``FIRST_EDGE_CAPTURE``) on the raw price
+    and, given the plan's ``calibration`` artifact, on the calibrated probability the plan
+    actually bets with (owner 2026-11-08). Both rules predict every plan game, so the game
+    rate is the same; only the bets differ.
+
     It never reads results or scores, so the bet threshold is chosen before seeing which
-    bets won. Pinnacle's raw no-vig price is used (the plan applies its calibration).
+    bets won.
     """
     from app_core import prospective_research_models as research
     events, quotes, _ = research._read_scope(path, sport, family)
@@ -255,28 +275,49 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     chosen = plan_quotes(started, quotes, now, books=books)
     first = min(_t(e["scheduled_start"]) for e in started.values())
     days = max(1.0, (now - first).total_seconds() / 86400)
-    best_evs = []
-    for event_id, quote in chosen.items():
-        event = started[event_id]
-        p = fair(event, quote, quotes, now=now)
-        other = _other_side(quote, quotes)
-        if p is None or other is None:
-            continue
-        best_evs.append(max(p * quote["decimal_odds"] - 1, (1 - p) * other["decimal_odds"] - 1))
     games_per_day = len(chosen) / days
     out = {"sport": sport, "market_family": family, "status": "ESTIMATED", "days_observed": round(days, 1),
            "games_started": len(started), "plan_games": len(chosen),
            "plan_share": round(len(chosen) / len(started), 3), "plan_games_per_day": round(games_per_day, 2),
            "days_for_min_sample": (round(min_sample / games_per_day, 1) if games_per_day else None),
-           "min_sample": min_sample, "min_bets": min_bets, "by_edge": {}}
-    for edge in edges:
-        bets = sum(ev >= edge for ev in best_evs)
+           "min_sample": min_sample, "min_bets": min_bets}
+
+    def row(bets):
         per_day = bets / days
         days_bets = round(min_bets / per_day, 1) if per_day else None
         window = (max(out["days_for_min_sample"], days_bets)
                   if out["days_for_min_sample"] is not None and days_bets is not None else None)
-        out["by_edge"][f"{edge:.0%}"] = {"bets": bets, "bets_per_day": round(per_day, 2),
-                                         "days_for_min_bets": days_bets, "days_per_window": window}
+        return {"bets": bets, "bets_per_day": round(per_day, 2), "days_for_min_bets": days_bets,
+                "days_per_window": window}
+
+    def bets(picked, edge, adjust):
+        count = 0
+        for event_id, quote in picked.items():
+            p = fair(started[event_id], quote, quotes, now=now)
+            other = _other_side(quote, quotes)
+            if p is None or other is None:
+                continue
+            p = adjust(p) if adjust else p
+            count += max(p * quote["decimal_odds"] - 1, (1 - p) * other["decimal_odds"] - 1) >= edge
+        return count
+
+    out["by_edge"] = {f"{edge:.0%}": row(bets(chosen, edge, None)) for edge in edges}
+    probabilities = [("PINNACLE_NO_VIG", None)]
+    if calibration:
+        from app_core.prospective_calibration import calibrated
+        probabilities.append(("CALIBRATED", lambda p: calibrated({"win": p, "push": 0.0, "loss": 1 - p},
+                                                                 calibration)["win"]))
+        out["calibration"] = {k: calibration.get(k) for k in ("a", "b", "decided")}
+    out["variants"] = []
+    for label, adjust in probabilities:
+        for rule in (EARLIEST_SHARED_LINE, FIRST_EDGE_CAPTURE):
+            by_edge = {}
+            for edge in edges:
+                picked = (chosen if rule == EARLIEST_SHARED_LINE else
+                          plan_quotes(started, quotes, now, books=books, entry_rule=rule, min_edge=edge,
+                                      adjust=adjust))
+                by_edge[f"{edge:.0%}"] = row(bets(picked, edge, adjust))
+            out["variants"].append({"entry_rule": rule, "probability": label, "by_edge": by_edge})
     return out
 
 

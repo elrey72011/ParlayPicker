@@ -110,6 +110,27 @@ forward evidence with at least 80% certified closes, then C4.
 2. Freeze the NCAAB Pinnacle market-skill plan (Bound plan workflow, `model: pinnacle`) once its calibration reaches 40 decided games.
 3. Run C4 (go-live checklist) once the plan has passed its forward evidence.
 
+## 2b. Update 2026-11-08
+
+**NCAAB SPREAD plan frozen** (`prospective-ncaab-spread-bound-v2`, hash `12b209b4…1ada1d`, owner
+delegation): Pinnacle model and its calibration, 2% bet rule, entry books BetMGM, DraftKings,
+FanDuel and Novig, staking terms `pinnacle-provisional-v1`
+(`docs/roadmap/GO-LIVE-STAKING-TERMS-2026-11-08.md`). Validation from 2026-11-09 00:00 UTC
+(Nov 8, 7 PM ET) to Dec 1, holdout to Dec 23. NCAAB TOTAL waits for its calibration (38 of 40).
+
+**Risk: too few bets.** The draft's replay (2.4 days, results not read) found 41 plan games
+(17 a day, enough games) but **no bet** at 1% or 2% (TOTAL: 1 at 1%). At the earliest capture
+where a US book posts Pinnacle's line, the books price like Pinnacle.
+
+**Response (owner 2026-11-08): measure before the window opens, replace v2 if it helps.**
+The draft's replay now also shows (a) the bets on the plan's calibrated probability (what it
+actually bets with) and (b) an optional entry rule, `FIRST_EDGE_CAPTURE`: predict also at the
+first later capture where a plan book clears the bet threshold against Pinnacle's price at that
+same capture, and bet on the game's first prediction that clears it (the probability gate still
+scores each game's first prediction). Drafted with `entry_rule: first_edge`; frozen plans
+without it are unchanged. If the replay shows enough bets, a v3 with the same start is frozen
+before 7 PM ET and supersedes v2.
+
 ## 3. Milestones, in order
 
 ### C0: Read where every market stands (first; ~0.5 day)
