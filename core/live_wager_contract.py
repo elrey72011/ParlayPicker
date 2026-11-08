@@ -62,9 +62,16 @@ def load_configuration(now):
     config.pop('_test_only',None)
     config.pop('_test_only_market_deployments',None)
     config['market_activations']=activations
+    # Go-live A: with the qualified-market file on, the gate and bridge read its small store.
+    from app_core import qualified_market_file
+    if qualified_market_file.enabled() and qualified_market_file.store_path().is_file():
+        config['prospective_evidence_path']=str(qualified_market_file.store_path())
     try:
         from core.exposure_ledger import snapshot as ledger_snapshot
-        config['exposure']=ledger_snapshot(os.environ.get('PARLAYPICKER_EXPOSURE_LEDGER','data/exposure/exposure.sqlite3'),now=now)
+        ledger_path=os.environ.get('PARLAYPICKER_EXPOSURE_LEDGER','data/exposure/exposure.sqlite3')
+        from app_core.exposure_ledger_remote import before_read
+        before_read(ledger_path)  # restore from Drive after a reboot (off unless enabled; never raises)
+        config['exposure']=ledger_snapshot(ledger_path,now=now)
         config['unit_value']=config['exposure']['unit_value']
     except ValueError:
         config['exposure']={}

@@ -20,6 +20,19 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+def publish_slices(path, client, report, *, publish=None):
+    """Publish the slice of every qualified market the cycle ran (``app_core.qualified_market_file``)."""
+    if publish is None:
+        from app_core.qualified_market_file import publish
+    out = {}
+    for name, entry in (report.get("markets") or {}).items():
+        if not isinstance(entry, dict) or entry.get("blocker") or "capture" not in entry:
+            continue
+        sport, _, family = name.partition(" ")
+        out[name] = publish(path, client, sport, family)
+    return out
+
+
 def run(minutes, interval, *, root, client, folder, key, request_get, setting=None, cycle=None, sync=None,
         clock=time.monotonic, sleep=time.sleep):
     from app_core import decision_capture as decision
@@ -54,6 +67,13 @@ def run(minutes, interval, *, root, client, folder, key, request_get, setting=No
         if changed:
             sync(path, client, folder, session)
             totals["backups"] += 1
+        # The app's small qualified-market file (app_core.qualified_market_file): one slice per
+        # qualified market per 15-minute slot, from the store just backed up.
+        published = publish_slices(path, client, report)
+        if published:
+            totals["published"] = totals.get("published", 0) + sum(
+                1 for p in published.values() if p.get("status") == "PUBLISHED")
+            print(json.dumps({"cycle": totals["cycles"], "qualified_market_file": published}, default=str), flush=True)
         if clock() + interval * 60 > deadline:
             return totals
         sleep(interval * 60)

@@ -5,7 +5,9 @@ outside the app pipeline, and the app's ML model is blocked for spreads and tota
 qualified market would otherwise have no rows for the wager contract or Gemini. This turns
 the latest bound prediction per upcoming game, for **qualified markets only**, into a row
 carrying every field ``core.sport_market_gate.market_gate`` checks, copied from the stored
-prediction, quote, event, model and calibration records (never recomputed or guessed).
+prediction, quote, event, model and calibration records (never recomputed or guessed). The
+stake fields (``app_core.bridge_stake_fields``) are derived from the market's validated
+deployment and the stored evidence; they are fail-closed while the market is not validated.
 
 The rows then go through the existing chain unchanged: live wager contract, market gate
 (deployment, owner activation, exposure), maturity, Gemini secondary review, stake. This
@@ -103,8 +105,12 @@ def rows(path, qualified, *, now=None, policy_versions=None):
             best = latest.get(p["event_id"])
             if best is None or _rank(p, quote) > _rank(*best[:2]):
                 latest[p["event_id"]] = (p, quote, event)
+        from app_core import bridge_stake_fields
+        # The stake fields (go-live Part 2), from the market's deployment and stored evidence.
+        context = bridge_stake_fields.market_context(path, sport, family, now=now) if latest else {}
         for p, quote, event in latest.values():
-            out.append(row(p, quote, event, policy_versions.get(f"{sport}:{family}")))
+            out.append(dict(row(p, quote, event, policy_versions.get(f"{sport}:{family}")),
+                            **bridge_stake_fields.fields(context, p, quote, event)))
     return sorted(out, key=lambda r: (r["start"], r["sport"], r["game_id"]))
 
 
@@ -241,8 +247,14 @@ def refresh_if_enabled(setting=None, *, activations=None, background=True, **kwa
     markets = active_markets() if activations is None else list(activations)
     if not markets:
         return {"status": "NO_ACTIVE_MARKET"}
+    from app_core import qualified_market_file
+    if qualified_market_file.enabled():  # its own app setting, read from the environment
+        # Go-live A: the newest small per-market file instead of the full store.
+        work = lambda: refresh_market_files(markets, setting=setting, **kwargs)  # noqa: E731
+    else:
+        work = lambda: refresh_store(setting=setting, **kwargs)  # noqa: E731
     if not background:
-        return refresh_store(setting=setting, **kwargs)
+        return work()
     import threading
     with _BACKGROUND_LOCK:
         thread = _BACKGROUND["thread"]
@@ -250,11 +262,44 @@ def refresh_if_enabled(setting=None, *, activations=None, background=True, **kwa
             return {"status": "IN_PROGRESS_BACKGROUND", "last": _BACKGROUND["last"]}
 
         def run():
-            _BACKGROUND["last"] = refresh_store(setting=setting, **kwargs)  # never raises
+            _BACKGROUND["last"] = work()  # never raises
         thread = threading.Thread(target=run, name="qualified-bridge-refresh", daemon=True)
         _BACKGROUND["thread"] = thread
         thread.start()
     return {"status": "STARTED_IN_BACKGROUND", "markets": markets, "last": _BACKGROUND["last"]}
+
+
+FILE_REFRESH_EVERY = 300  # seconds; decision capture publishes a new slice every 15 minutes
+_FILE_STATE = {"last": None}
+
+
+def refresh_market_files(markets, *, setting=None, client=None, clock=None, **_):
+    """Fetch the newest qualified-market slice of each activated market (``app_core.qualified_market_file``).
+
+    Throttled to once per ``FILE_REFRESH_EVERY`` seconds. Returns a diagnostic; never raises.
+    """
+    import os
+    import time
+    from app_core import qualified_market_file
+    clock = clock or time.time
+    started = clock()
+    if _FILE_STATE["last"] is not None and 0 <= started - _FILE_STATE["last"] < FILE_REFRESH_EVERY:
+        return {"status": "RECENT", "seconds_since_refresh": round(started - _FILE_STATE["last"])}
+    try:
+        if client is None:
+            from app_core.evidence_drive import DriveStore
+            from app_core.evidence_remote import settings
+            folder = settings()[0]
+            if not folder or not os.getenv("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", "").strip():
+                return {"status": "MISSING_CREDENTIALS"}
+            from app_core.read_only_drive import ReadOnlyDrive
+            client = ReadOnlyDrive(DriveStore(folder), None)
+        pairs = {tuple(m.split(":", 1)) for m in markets}
+        result = qualified_market_file.refresh(client, pairs, target=qualified_market_file.store_path())
+        _FILE_STATE["last"] = started
+        return result
+    except Exception as exc:  # never break Refresh; the gate then reads what is local
+        return {"status": "REFRESH_FAILED", "error": type(exc).__name__}
 
 
 def _make_lock():
