@@ -130,7 +130,9 @@ jobs:
   # Preserve the existing required check name; every shard must pass.
   full-suite:
     needs: full-suite-tests
-    if: ${{ always() }}
+    # Not when the run itself was cancelled (a newer push superseded it): that is not a failure.
+    # A failed or skipped shard still fails this check.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
