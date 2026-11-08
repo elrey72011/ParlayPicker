@@ -131,6 +131,19 @@ scores each game's first prediction). Drafted with `entry_rule: first_edge`; fro
 without it are unchanged. If the replay shows enough bets, a v3 with the same start is frozen
 before 7 PM ET and supersedes v2.
 
+**Result (2026-11-08, 11 AM ET): no v3.** On Pinnacle's price, neither rule finds a bet (0 at
+1% and 2%). The calibrated bets (36 of 41) came from a broken calibration: Platt on 40 games
+priced near 50% fitted a slope of -13.2, reversing Pinnacle's probability. v2 stays frozen.
+It cannot stake and will fail on Brier and CLV.
+
+**Owner 2026-11-08: (1) calibration guard, (3) start the news edge.**
+
+1. `guarded_fit`: a fit is kept only with a slope in [0.5, 2.0] and |intercept| <= 0.5, else the
+   identity (recorded in the artifact). Calibration version `platt-logit-v2`, so v1 calibrations
+   are refitted. Frozen plans keep theirs.
+2. The news edge (NBA official injury reports): `docs/roadmap/NEWS-EDGE-PLAN-2026-11-08.md`.
+   Step 1, the report archive, is built. Next comes the lag study, which needs an owner credit decision.
+
 ## 3. Milestones, in order
 
 ### C0: Read where every market stands (first; ~0.5 day)
