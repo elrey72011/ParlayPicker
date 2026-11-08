@@ -57,7 +57,7 @@ def statuses(path, now):
 
 
 def draft(path, *, sport=None, market=None, validation_start=None, now=None, methodology='market_skill',
-          model='research'):
+          model='research', min_edge=None):
     now = now or datetime.now(timezone.utc)
     result = {'mode': 'DRAFT_READ_ONLY', 'as_of': now.isoformat(), 'markets': statuses(path, now)}
     if sport and market:
@@ -72,7 +72,8 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                     raise ValueError('no Pinnacle model registered for this market yet')
                 model_id = found['model_id']
             spec = calibration.draft_bound_plan(path, sport, market, validation_start=start,
-                                                methodology=methodology, model_id=model_id)
+                                                methodology=methodology, model_id=model_id,
+                                                min_edge=min_edge if methodology == 'market_skill' else None)
         except ValueError as exc:
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'NOT_DRAFTABLE', 'reason': str(exc)}
         else:
@@ -105,6 +106,9 @@ def markdown(result):
                       f"- validation: {plan['validation_start']} to {plan['validation_end']}",
                       f"- holdout: {plan['holdout_start']} to {plan['holdout_end']}",
                       f"- minimum independent sample: {plan['minimum_independent_sample']}",
+                      *([f"- bet rule: EV at least {plan['market_skill_methodology']['min_edge']:.0%} at the entry "
+                         f"price, at least {plan['market_skill_methodology']['min_bets']} bets per window"]
+                        if 'market_skill_methodology' in plan else []),
                       f"- **plan hash:** `{item['plan_hash']}`", '',
                       'To freeze after review, run the workflow with action `freeze`, this hash, and these inputs:',
                       '', '```json', json.dumps(item['freeze_inputs'], sort_keys=True), '```']
@@ -146,6 +150,8 @@ def main(argv=None):
                         help='market_skill: scored against the de-vigged entry price (D19 option B); v1: absolute thresholds')
     parser.add_argument('--model', choices=('research', 'pinnacle'), default='research',
                         help="research: the pinned research score model; pinnacle: Pinnacle's no-vig price")
+    parser.add_argument('--min-edge', type=float, choices=(0.01, 0.02), default=0.02,
+                        help='market_skill only: the minimum EV for a bet (locks when the plan is frozen)')
     parser.add_argument('--inputs', help='freeze inputs JSON printed by the reviewed draft')
     parser.add_argument('--expected-hash', help='plan hash printed by the reviewed draft')
     args = parser.parse_args(argv)
@@ -158,7 +164,7 @@ def main(argv=None):
         guarded = ReadOnlyDrive(client, args.cache_dir)
         restore = sync(path, guarded, folder, {})
         result = draft(path, sport=args.sport, market=args.market, validation_start=args.validation_start,
-                       methodology=args.methodology, model=args.model)
+                       methodology=args.methodology, model=args.model, min_edge=args.min_edge)
         result['restore'] = dict(restore, writes_refused=guarded.writes_refused)
     else:
         if not (args.sport and args.market and args.inputs and args.expected_hash):

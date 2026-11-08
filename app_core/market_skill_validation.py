@@ -37,21 +37,29 @@ VERSION = "market-skill-v1"
 COIN_FLIP = {"max_brier": 0.25, "max_log_loss": round(math.log(2), 6)}
 
 
-def methodology():
+DEFAULT_MIN_EDGE = 0.02
+# The bet threshold is chosen when the plan is drafted and frozen (owner 2026-11-07; the
+# bound plan draft's replay estimate shows the bet rate at each). It locks at the freeze.
+ALLOWED_MIN_EDGES = (0.01, 0.02)
+
+
+def methodology(min_edge=DEFAULT_MIN_EDGE):
+    if min_edge not in ALLOWED_MIN_EDGES:
+        raise ValueError(f"min_edge must be one of {ALLOWED_MIN_EDGES}")
     return {"version": VERSION, "probability_gate": "NO_WORSE_THAN_DEVIGGED_ENTRY_PRICE",
             "market_reference": "SAME_BOOK_OPPOSITE_SIDE_SAME_LINE_SAME_TIMESTAMP",
             "min_market_reference_coverage": 0.9, "min_mean_clv": 0.0,
-            "bet_rule": "EITHER_SIDE_EV_AT_ENTRY_PRICE_AT_LEAST_MIN_EDGE", "min_edge": 0.02,
+            "bet_rule": "EITHER_SIDE_EV_AT_ENTRY_PRICE_AT_LEAST_MIN_EDGE", "min_edge": min_edge,
             "min_bets": 50, "min_bet_close_coverage": 0.8, "paper_roi_scope": "BETS", "min_bet_roi": 0.0,
             "absolute_bounds": "COIN_FLIP_SANITY_FLOOR",
             "other_model_predictions": "REPORTED_NOT_BLOCKING", "decision_record": "D19 option B (owner 2026-11-06)"}
 
 
-def template(base):
+def template(base, min_edge=DEFAULT_MIN_EDGE):
     """The v1 template with the market-skill gates: coin-flip absolute bounds plus ``KEY``."""
     spec = dict(base)
     spec["probability_thresholds"] = dict(base["probability_thresholds"], **COIN_FLIP)
-    spec[KEY] = methodology()
+    spec[KEY] = methodology(min_edge)
     return spec
 
 
