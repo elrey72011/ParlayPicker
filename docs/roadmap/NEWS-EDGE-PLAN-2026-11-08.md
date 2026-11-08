@@ -40,7 +40,12 @@ Questionable to Out at 5:30 PM; Thornton, Bruce: Out to Available at 1:45 PM.
      so each row replays from retained bytes.
    - No Odds API credits. Runs daily at 7:17 AM EST; backfill with the `start` input
      (season start 2026-10-21).
-2. **Lag study (next; needs an owner credit decision).** For each material change of a player who
+2. **Lag study (built, `app_core/news_lag_study.py`, workflow "News lag study (one-time research)";
+   owner approved 5,000 credits on 2026-11-08).** It runs once per label (a write-once marker on
+   Drive) and stops at the 5,000 cap or when the account has fewer than 4,000 monthly credits left.
+   Each piece of news costs 41 credits (the events list plus 4 spread snapshots: 30 minutes before,
+   at, 10 and 30 after), so about 120 pieces of news. Flips come first, then first listings within
+   3 hours of tip-off. For each material change of a player who
    matters, compare Pinnacle and the four stake books before and after:
    - Weight changes by minutes played (`nba_api` is installed).
    - Measure how far the spread or total moved, which book moved first, and how long the stake
@@ -59,8 +64,12 @@ Questionable to Out at 5:30 PM; Thornton, Bruce: Out to Available at 1:45 PM.
    players' impact (minutes-weighted rating), scored against Pinnacle's price. This is a new model
    and needs its own frozen plan.
 
-## Decisions needed (owner)
+## Decisions
 
-- **Lag study prices:** a one-time historical-odds budget (recommended: up to about
-  5,000 credits of the 20,000 a month, about 60 changes with 4 snapshots each), or live captures only.
-- Then, depending on the study: news-triggered capture credits (step 3), or the model build (step 4).
+- **Lag study prices: decided 2026-11-08.** A one-time 5,000 credits.
+- **Open:** depending on the study, news-triggered capture credits (step 3) or the model build (step 4).
+
+## Run order
+
+1. Merge, then run **NBA injury reports** with `start` 2026-10-21 (the backfill).
+2. Run **News lag study** with `start` 2026-10-21 and `end` set to the last recorded day.
