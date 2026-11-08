@@ -447,8 +447,8 @@ def fit_calibration(path, sport, family, model, *, now=None, min_decided=None):
     from app_core import prospective_research_models as research
     now = now or datetime.now(timezone.utc)
     min_decided = calibration.MIN_CALIBRATION_DECIDED if min_decided is None else min_decided
-    existing = [c for c in evidence.read_records(path, "prospective_calibration", sport=sport, market_family=family)
-                if c["model_id"] == model["model_id"]]
+    existing = calibration.current_calibrations(evidence.read_records(path, "prospective_calibration", sport=sport,
+                                                                      market_family=family), model["model_id"])
     if existing:
         return {"status": "PRESENT", "calibration_id": max(existing, key=lambda c: c["available_at"])["calibration_id"]}
     fit_start = _t(model["available_at"])
@@ -458,12 +458,13 @@ def fit_calibration(path, sport, family, model, *, now=None, min_decided=None):
     if len(pairs_) < min_decided:
         return {"status": "INSUFFICIENT_EVIDENCE", "calibration_id": None, "decided": len(pairs_),
                 "required_decided": min_decided}
-    a, b = calibration.platt_fit(pairs_)
+    a, b, fallback = calibration.guarded_fit(pairs_)
     fit_end = max(_t(evidence.load_record(path, "prospective_result", rid)["available_at"]) for rid in result_ids)
     body = {"method": calibration.CALIBRATION_VERSION, "a": a, "b": b, "decided": len(pairs_),
             "model_id": model["model_id"], "sport": sport, "market_family": family,
             "fit_start": fit_start.isoformat(), "fit_end": fit_end.isoformat(), "fit_result_ids": result_ids,
-            "applies_to": "decided_win_probability", "source": "STORED_PINNACLE_QUOTES_AT_SETTLED_QUOTE"}
+            "applies_to": "decided_win_probability", "source": "STORED_PINNACLE_QUOTES_AT_SETTLED_QUOTE",
+            **({"fallback": fallback} if fallback else {})}
     digest = research._digest(body)
     calibration_id = f"platt-calibration:{sport}:{family}:{digest[:24]}"
     created = max(now, fit_end).isoformat()
@@ -473,7 +474,8 @@ def fit_calibration(path, sport, family, model, *, now=None, min_decided=None):
         "fit_start": fit_start.isoformat(), "fit_end": fit_end.isoformat(), "method": calibration.CALIBRATION_VERSION,
         "created_at": created, "available_at": created, "artifact_hash": digest,
         "calibration_artifact": body, "fit_result_ids": result_ids})
-    return {"status": "FITTED", "calibration_id": calibration_id, "decided": len(pairs_), "a": a, "b": b}
+    return {"status": "FITTED", "calibration_id": calibration_id, "decided": len(pairs_), "a": a, "b": b,
+            **({"fallback": fallback["reason"]} if fallback else {})}
 
 
 def predict(path, sport, family, model, calibration, *, now, policy_version, tag, select=None):

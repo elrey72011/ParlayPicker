@@ -38,7 +38,13 @@ import os
 from app_core import prospective_evidence as evidence
 from app_core import prospective_research_models as research
 
-CALIBRATION_VERSION = "platt-logit-v1"
+# v2 (owner 2026-11-08): a Platt fit is accepted only when it is plausible (``guarded_fit``). The
+# NCAAB SPREAD Pinnacle calibration (v1, 40 games, all near 50%) fitted a slope of -13.2, which
+# turned a 52% favorite into about 21%. A v1 calibration no longer counts as present, so the next
+# cycle registers a v2 one; plans already frozen keep the calibration they were bound to.
+CALIBRATION_VERSION = "platt-logit-v2"
+PLAUSIBLE_SLOPE = (0.5, 2.0)
+MAX_ABS_INTERCEPT = 0.5
 MIN_CALIBRATION_DECIDED = 40
 CANDIDATE_MIN_TRAINING_EVENTS = 120
 POLICY_VERSION = "plan-bound-research-v1"
@@ -186,6 +192,26 @@ def platt_fit(pairs, *, l2=1e-3, iterations=50):
     return a, b
 
 
+def guarded_fit(pairs):
+    """``(a, b, fallback)``: the Platt fit when plausible, else the identity (a=0, b=1).
+
+    Plausible means a slope in ``PLAUSIBLE_SLOPE`` and an intercept within ``MAX_ABS_INTERCEPT``.
+    With few games whose probabilities sit close together (spreads and totals are priced near
+    50%), the slope is not identified: a negative or extreme fit reverses or exaggerates every
+    probability. The identity leaves the model's own probability unchanged. ``fallback`` records
+    the rejected fit so the decision is visible in the calibration artifact.
+    """
+    a, b = platt_fit(pairs)
+    if PLAUSIBLE_SLOPE[0] <= b <= PLAUSIBLE_SLOPE[1] and abs(a) <= MAX_ABS_INTERCEPT:
+        return a, b, None
+    return 0.0, 1.0, {"reason": "IMPLAUSIBLE_FIT_IDENTITY_USED", "fitted_a": a, "fitted_b": b}
+
+
+def current_calibrations(rows, model_id):
+    """The model's calibrations of the current ``CALIBRATION_VERSION`` (older versions are refitted)."""
+    return [row for row in rows if row["model_id"] == model_id and row.get("calibration_version") == CALIBRATION_VERSION]
+
+
 def calibrated(probabilities, artifact):
     """Apply a Platt artifact to {win, push, loss}; the push probability is unchanged."""
     push = probabilities["push"]
@@ -201,8 +227,8 @@ def fit_calibration(path, sport, market, model_id, *, now=None, min_decided=MIN_
     model = evidence.load_record(path, "prospective_model", model_id)
     if model is None or (model["sport"], model["market_family"]) != (sport, market):
         return {"status": "UNKNOWN_MODEL", "calibration_id": None}
-    existing = [row for row in evidence.read_records(path, "prospective_calibration", sport=sport, market_family=market)
-                if row["model_id"] == model_id]
+    existing = current_calibrations(evidence.read_records(path, "prospective_calibration", sport=sport,
+                                                          market_family=market), model_id)
     if existing:
         return {"status": "PRESENT", "calibration_id": max(existing, key=lambda r: r["available_at"])["calibration_id"]}
     fit_start = _time(model["available_at"])
@@ -222,13 +248,14 @@ def fit_calibration(path, sport, market, model_id, *, now=None, min_decided=MIN_
     if len(pairs) < min_decided:
         return {"status": "INSUFFICIENT_EVIDENCE", "calibration_id": None, "decided": len(pairs),
                 "required_decided": min_decided}
-    a, b = platt_fit(pairs)
+    a, b, fallback = guarded_fit(pairs)
     fit_end = max(_time(results_row["available_at"]) for results_row in
                   (evidence.load_record(path, "prospective_result", rid) for rid in result_ids))
     artifact = {"method": CALIBRATION_VERSION, "a": a, "b": b, "decided": len(pairs),
                 "model_id": model_id, "sport": sport, "market_family": market,
                 "fit_start": fit_start.isoformat(), "fit_end": fit_end.isoformat(),
-                "fit_result_ids": result_ids, "applies_to": "decided_win_probability"}
+                "fit_result_ids": result_ids, "applies_to": "decided_win_probability",
+                **({"fallback": fallback} if fallback else {})}
     artifact_hash = research._digest(artifact)
     calibration_id = f"platt-calibration:{sport}:{market}:{artifact_hash[:24]}"
     created = max(now, fit_end).isoformat()
@@ -238,7 +265,8 @@ def fit_calibration(path, sport, market, model_id, *, now=None, min_decided=MIN_
         "fit_start": fit_start.isoformat(), "fit_end": fit_end.isoformat(), "method": CALIBRATION_VERSION,
         "created_at": created, "available_at": created, "artifact_hash": artifact_hash,
         "calibration_artifact": artifact, "fit_result_ids": result_ids})
-    return {"status": "FITTED", "calibration_id": calibration_id, "decided": len(pairs), "a": a, "b": b}
+    return {"status": "FITTED", "calibration_id": calibration_id, "decided": len(pairs), "a": a, "b": b,
+            **({"fallback": fallback["reason"]} if fallback else {})}
 
 
 def bound_plan(path, sport, market):
