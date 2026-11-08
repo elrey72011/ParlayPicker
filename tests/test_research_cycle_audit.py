@@ -42,6 +42,18 @@ def test_zero_event_slate_audit_keeps_all_sports():
                for row in audit["sports"].values())
 
 
+
+def test_audit_lists_budget_paused_sports_as_codes_only():
+    report = {"requested_sports": SPORTS, "requested_slate_success": True,
+              "budget_paused_sports": ["NCAAB", "https://leak.example", "WNBA"],
+              "health": {sport: {"restore": "success", "capture": "success",
+                                 "grade": "success", "backup": "success",
+                                 "verified_backup": True} for sport in SPORTS}}
+    report["health"]["NCAAB"]["capture"] = "budget_paused"
+    audit = sanitize_cycle(report)
+    assert audit["budget_paused_sports"] == ["NCAAB"]
+    assert audit["sports"]["NCAAB"]["capture"] == "budget_paused"
+
 def test_missing_credentials_fail_explicitly_before_provider_or_remote_calls(tmp_path, monkeypatch):
     from scripts import run_research_scheduler as script
     for name in ("PARLAYPICKER_DRIVE_FOLDER_ID", "PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT",

@@ -98,6 +98,8 @@ def sanitize_cycle(report):
         "canonical_backup": _counts(report.get("canonical_backup")),
         "canonical_repair_sports": [_code(sport) for sport in report.get("canonical_repair_sports", [])
                                     if sport in {"NFL", "NCAAF", "MLB"}],
+        "budget_paused_sports": [_code(sport) for sport in report.get("budget_paused_sports", [])
+                                 if sport in requested],
         "sports": {},
     }
     board = report.get("research_model_board")

@@ -264,6 +264,7 @@ def run_ncaaf(path, state, cfbd_key, odds_key, backup, request_get=None):
 
 
 BACKLOG_ONLY = "DUE_SCORE_BATCH_LIMIT"
+BUDGET_PAUSED = "budget_paused"
 GRADE_FAILURES = frozenset({"SCORE_SOURCE_IDENTITY_OR_TIMING_REJECTED", "SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW"})
 
 
@@ -524,21 +525,26 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
         # A score backlog alone (more finished games than one run grades; the next run
         # continues) is not a failure. Rejected scores or games past the provider's score
         # window still are. The health entry keeps "partial" and the blocker stays listed.
-        if report["health"][s]["grade"] == "success":
+        if report["health"][s]["grade"] in ("success", BUDGET_PAUSED):
             return True
         blockers = set(report["sports"].get(s, {}).get("blockers") or [])
         return (report["health"][s]["grade"] == "partial" and BACKLOG_ONLY in blockers
                 and not blockers & GRADE_FAILURES)
     report["grade_backlog_only"] = sorted(
         s for s in sports if s in report["health"] and report["health"][s]["grade"] != "success" and grade_ok(s))
+    # A provider budget pause is not a failure (owner 2026-11-07): the daily credit cap
+    # was reached on purpose and the next day's cycles continue. The health entry keeps
+    # "budget_paused" and the sport is listed in budget_paused_sports. Errors still fail.
+    report["budget_paused_sports"] = sorted(
+        s for s in sports if report["sports"].get(s, {}).get("budget_paused") is True)
     report["requested_slate_success"] = not report["errors"] and all(
         report["health"][s]["restore"] == "success" and
         report["health"][s]["backup"] == "success" and
         report["health"][s].get("canonical_backup") != "failed" and
-        report["health"][s]["capture"] == "success" and
+        report["health"][s]["capture"] in ("success", BUDGET_PAUSED) and
         grade_ok(s) and
-        report["health"][s]["close_capture"] in ("success", "legacy_specialized") and
-        report["sports"].get(s,{}).get("budget_paused") is not True for s in sports)
+        report["health"][s]["close_capture"] in ("success", "legacy_specialized", BUDGET_PAUSED)
+        for s in sports)
     report["execution_state"] = "COMPLETE" if report["requested_slate_success"] else "FAILED"
     state["last_run"]=report
     audit_stage(None, "CHECKPOINT")
