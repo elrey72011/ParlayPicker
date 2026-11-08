@@ -45,14 +45,7 @@ Questionable to Out at 5:30 PM; Thornton, Bruce: Out to Available at 1:45 PM.
    Drive) and stops at the 5,000 cap or when the account has fewer than 4,000 monthly credits left.
    Each piece of news costs 41 credits (the events list plus 4 spread snapshots: 30 minutes before,
    at, 10 and 30 after), so about 120 pieces of news. Flips come first, then first listings within
-   3 hours of tip-off. For each material change of a player who
-   matters, compare Pinnacle and the four stake books before and after:
-   - Weight changes by minutes played (`nba_api` is installed).
-   - Measure how far the spread or total moved, which book moved first, and how long the stake
-     books lagged.
-   - Prices: the Odds API historical snapshots around each change (5-minute granularity; about
-     10 credits per region per market per snapshot), capped by a one-time budget the owner sets.
-     The alternative is live captures from now on (slower to collect, cheaper).
+   3 hours of tip-off.
    - Output: the share of material changes with a stake book still 1% or more better than
      Pinnacle's new price, and for how many minutes.
 3. **If books lag: news-triggered capture.** When a report shows a material change for a
