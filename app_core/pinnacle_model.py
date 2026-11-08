@@ -145,6 +145,74 @@ def _other_side(quote, quotes):
     return found[0] if len(found) == 1 else None
 
 
+def plan_quotes(events, quotes, now):
+    """The plan's entry quote per game (owner 2026-11-07): the best US price at Pinnacle's line.
+
+    A fixed rule, using only prices known before tip-off (never results):
+
+    * the canonical side (home team, or Over), so each game is settled once per side
+      (``prospective_result`` keeps one result per game, market and side);
+    * the **earliest capture** in which Pinnacle and at least one US book post the same line;
+    * among that capture's US books at that line, the one whose better side has the
+      highest EV against Pinnacle's no-vig price (ties: higher price, then book name).
+      Both of the book's sides must be posted, since the market-skill gate compares the
+      model with that book's own two-sided price;
+    * quoted before the scheduled start, verified, half or whole line, never Pinnacle itself.
+
+    The first canonical US quote (``prospective_research_models._reference_quotes``) has
+    Pinnacle at its line only about 22% of the time (NCAAB, 2026-11-07) and is rarely a good
+    price, which left too few qualifying bets for a plan to pass.
+    """
+    from app_core.research_api_budget import REFERENCE_BOOKS
+    by_event = {}
+    for q in quotes:
+        event = events.get(q["event_id"])
+        if (event is None or q["sportsbook"] in REFERENCE_BOOKS or not q["quote_verified"] or q["line"] is None
+                or q["selection"] != _canonical(event, q["market_family"])
+                or abs(2 * q["line"] - round(2 * q["line"])) > 1e-8
+                or _t(q["quote_timestamp"]) > now or _t(q["quote_timestamp"]) >= _t(event["scheduled_start"])):
+            continue
+        by_event.setdefault(q["event_id"], []).append(q)
+    chosen = {}
+    for event_id, candidates in by_event.items():
+        event = events[event_id]
+        family = candidates[0]["market_family"]
+        priced = {(when, line): p for when, line, p in pairs(event, quotes, family)}
+        best = {}
+        for q in candidates:
+            captured = capture_time(event, q)
+            p = priced.get((captured, _home_line(event, q)))
+            other = _other_side(q, quotes) if p is not None and captured <= now else None
+            if other is None:
+                continue
+            ev = max(p * q["decimal_odds"] - 1, (1 - p) * other["decimal_odds"] - 1)
+            key = (ev, q["decimal_odds"], q["sportsbook"])
+            if captured not in best or key > best[captured][0]:
+                best[captured] = (key, q)
+        if best:
+            chosen[event_id] = best[min(best)][1]
+    return chosen
+
+
+def plan_games_per_day(path, sport, family, *, now, lookback_days=14):
+    """Games per day the plan can predict (``plan_quotes``), over the days actually observed.
+
+    Sizing a plan's windows (``prospective_calibration.window_days``) by every game over a
+    fixed 14 days undercounted a new season (NCAAB capture began about 2026-11-04) and
+    counted games a Pinnacle plan cannot predict.
+    """
+    from app_core import prospective_research_models as research
+    events, quotes, _ = research._read_scope(path, sport, family)
+    start = now - timedelta(days=lookback_days)
+    started = [e for e in events.values() if start <= _t(e["scheduled_start"]) < now]
+    if not started:
+        return 0.0
+    covered = plan_quotes({e["event_id"]: e for e in started}, quotes, now)
+    first = min(_t(e["scheduled_start"]) for e in started)
+    days = max(1.0, (now - first).total_seconds() / 86400)
+    return len(covered) / days
+
+
 def _settled_at(result, quote):
     """True when ``result`` was settled at exactly ``quote`` (its stored settlement rule names it)."""
     rule = evidence._source_json(result.get("raw_source"))
@@ -314,7 +382,7 @@ def predict(path, sport, family, model, calibration, *, now, policy_version, tag
         if r["model_id"] == model["model_id"] and r["calibration_id"] == calibration_id}
     created, no_reference = 0, 0
     commit = research.source_commit()
-    for _, quote in sorted((select or research._reference_quotes)(events, quotes, now).items()):
+    for _, quote in sorted((select or plan_quotes)(events, quotes, now).items()):
         event = events[quote["event_id"]]
         if now >= _t(event["scheduled_start"]) or (event["event_id"], quote["quote_id"]) in done:
             continue
