@@ -80,7 +80,17 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 plans=plan_evaluations(root / 'prospective-evidence.sqlite3'),
                 research_bindings=research_bindings(root / 'prospective-evidence.sqlite3'),
                 price_edge=price_edge(root / 'prospective-evidence.sqlite3'),
-                close_coverage=close_coverage(root / 'prospective-evidence.sqlite3'))
+                close_coverage=close_coverage(root / 'prospective-evidence.sqlite3'),
+                plan_progress=_plan_progress(root / 'prospective-evidence.sqlite3'))
+
+
+def _plan_progress(path):
+    """Frozen bound plans' pace against their windows (app_core.plan_progress); read-only."""
+    from app_core import plan_progress
+    try:
+        return plan_progress.from_store(path)
+    except Exception as exc:  # a progress view must never break the readiness report
+        return [{'plan': 'ALL', 'sport': '', 'market_family': '', 'error': type(exc).__name__}]
 
 
 def price_edge(path):
@@ -232,6 +242,9 @@ def markdown(result):
                 b = row['by_minutes_before_start'][label]
                 cells.append('' if b['share'] is None else f"{b['share']:.0%} ({b['comparable']}/{b['with_close_fetched']})")
             lines.append(f"| {row['sport']} {row['market_family']} | " + ' | '.join(cells) + ' |')
+    if result.get('plan_progress'):  # only once a frozen bound plan has a window running
+        from app_core import plan_progress
+        lines += plan_progress.markdown(result['plan_progress'])
     return '\n'.join(lines) + '\n'
 
 

@@ -347,6 +347,16 @@ def predict_candidate(path, sport, market, *, now=None):
                     tag="CANDIDATE")
 
 
+def _plan_rules(plan):
+    """The frozen plan's market-skill rules ({} when it has none)."""
+    try:
+        payload = json.loads(plan.get("payload") or "{}")
+    except (TypeError, ValueError):
+        return {}
+    rules = payload.get("market_skill_methodology") if isinstance(payload, dict) else None
+    return rules if isinstance(rules, dict) else {}
+
+
 def predict_bound(path, sport, market, *, now=None):
     """Freeze pregame predictions with the bound plan's exact model and calibration."""
     now = now or datetime.now(timezone.utc)
@@ -355,7 +365,15 @@ def predict_bound(path, sport, market, *, now=None):
         return {"predictions": 0, "blocker": "NO_BOUND_PLAN"}
     model = evidence.load_record(path, "prospective_model", plan["model_id"])
     calibration = evidence.load_record(path, "prospective_calibration", plan["calibration_id"])
-    result = _predict(path, sport, market, model, calibration, now=now, policy_version=POLICY_VERSION, tag="BOUND")
+    select = None
+    books = (_plan_rules(plan).get("entry_books") or None)
+    if books:
+        from app_core import pinnacle_model
+        # The plan froze the books it may enter at (the books its picks can be staked at).
+        select = lambda events, quotes, at: pinnacle_model.plan_quotes(events, quotes, at,  # noqa: E731
+                                                                       books=frozenset(books))
+    result = _predict(path, sport, market, model, calibration, now=now, policy_version=POLICY_VERSION, tag="BOUND",
+                      select=select)
     return dict(result, validation_plan_id=plan["validation_plan_id"])
 
 
@@ -381,7 +399,8 @@ def window_days(target, rate, *, coverage=0.8, margin=1.25, minimum=7):
 
 
 def draft_bound_plan(path, sport, market, *, validation_start, validation_days=None, holdout_days=None,
-                     model_id=None, calibration_id=None, rate=None, methodology="v1", min_edge=None):
+                     model_id=None, calibration_id=None, rate=None, methodology="v1", min_edge=None,
+                     entry_books=None):
     """A proposed plan version binding the candidate model and its calibration. Nothing is frozen.
 
     Thresholds, sample minimums and policies are the frozen v1 template's
@@ -420,7 +439,8 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
             from app_core import pinnacle_model
             # A Pinnacle plan predicts only games where a US book posts Pinnacle's line
             # (pinnacle_model.plan_quotes): size its windows by those, over the observed days.
-            observed = (pinnacle_model.plan_games_per_day(path, sport, market, now=start)
+            observed = (pinnacle_model.plan_games_per_day(path, sport, market, now=start,
+                                                          books=frozenset(entry_books) if entry_books else None)
                         if pinnacle_model.is_pinnacle(model) else games_per_day(path, sport, market, now=start))
         sized = window_days(target, observed)
         validation_days = sized if validation_days is None else validation_days
@@ -433,9 +453,9 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
     spec = _template(sport, market)
     if methodology == "market_skill":
         from app_core.market_skill_validation import DEFAULT_MIN_EDGE, template as market_skill_template
-        spec = market_skill_template(spec, DEFAULT_MIN_EDGE if min_edge is None else min_edge)
-    elif min_edge is not None:
-        raise ValueError("min_edge applies only to the market_skill methodology")
+        spec = market_skill_template(spec, DEFAULT_MIN_EDGE if min_edge is None else min_edge, entry_books)
+    elif min_edge is not None or entry_books:
+        raise ValueError("min_edge and entry_books apply only to the market_skill methodology")
     elif methodology != "v1":
         raise ValueError("unknown plan methodology")
     spec.update(
@@ -463,7 +483,9 @@ def freeze_inputs(spec):
             **({"methodology": "market_skill"} if "market_skill_methodology" in spec else {}),
             # Recorded only when it differs from the default, so default plans keep their inputs.
             **({"min_edge": spec["market_skill_methodology"]["min_edge"]}
-               if "market_skill_methodology" in spec and spec["market_skill_methodology"]["min_edge"] != 0.02 else {})}
+               if "market_skill_methodology" in spec and spec["market_skill_methodology"]["min_edge"] != 0.02 else {}),
+            **({"entry_books": spec["market_skill_methodology"]["entry_books"]}
+               if "entry_books" in spec.get("market_skill_methodology", {}) else {})}
 
 
 def freeze_reviewed_plan(path, *, expected_hash, now=None, **inputs):
