@@ -43,23 +43,29 @@ DEFAULT_MIN_EDGE = 0.02
 ALLOWED_MIN_EDGES = (0.01, 0.02)
 
 
-def methodology(min_edge=DEFAULT_MIN_EDGE):
+def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None):
+    """The market-skill rules. ``entry_books`` (canonical book labels), when given, is the set of
+    books the plan may enter at, frozen with the plan (a Pinnacle plan: the books a pick can be
+    staked at, ``pinnacle_model.PLAN_BOOKS``)."""
     if min_edge not in ALLOWED_MIN_EDGES:
         raise ValueError(f"min_edge must be one of {ALLOWED_MIN_EDGES}")
-    return {"version": VERSION, "probability_gate": "NO_WORSE_THAN_DEVIGGED_ENTRY_PRICE",
+    rules = {"version": VERSION, "probability_gate": "NO_WORSE_THAN_DEVIGGED_ENTRY_PRICE",
             "market_reference": "SAME_BOOK_OPPOSITE_SIDE_SAME_LINE_SAME_TIMESTAMP",
             "min_market_reference_coverage": 0.9, "min_mean_clv": 0.0,
             "bet_rule": "EITHER_SIDE_EV_AT_ENTRY_PRICE_AT_LEAST_MIN_EDGE", "min_edge": min_edge,
             "min_bets": 50, "min_bet_close_coverage": 0.8, "paper_roi_scope": "BETS", "min_bet_roi": 0.0,
             "absolute_bounds": "COIN_FLIP_SANITY_FLOOR",
             "other_model_predictions": "REPORTED_NOT_BLOCKING", "decision_record": "D19 option B (owner 2026-11-06)"}
+    if entry_books:
+        rules["entry_books"] = sorted(entry_books)
+    return rules
 
 
-def template(base, min_edge=DEFAULT_MIN_EDGE):
+def template(base, min_edge=DEFAULT_MIN_EDGE, entry_books=None):
     """The v1 template with the market-skill gates: coin-flip absolute bounds plus ``KEY``."""
     spec = dict(base)
     spec["probability_thresholds"] = dict(base["probability_thresholds"], **COIN_FLIP)
-    spec[KEY] = methodology(min_edge)
+    spec[KEY] = methodology(min_edge, entry_books)
     return spec
 
 

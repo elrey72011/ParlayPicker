@@ -131,3 +131,32 @@ def test_bound_plan_draft_shows_the_replay_estimate():
                     "2%": {"bets": 8, "bets_per_day": 2.0, "days_for_min_bets": 25.0, "days_per_window": 25.0}}}})
     assert "### Replay estimate NCAAB SPREAD: ESTIMATED" in text
     assert "| 2% | 8 | 2.0 | 25.0 | 25.0 |" in text and "(50%), 15.0 a day" in text
+
+
+def test_plans_enter_only_at_books_the_stake_can_use():
+    quotes = (both("pinnacle", -3.5, -102, -118, received=LATER) + both("caesars", -3.5, +110, -130, received=LATER)
+              + both("fanduel", -3.5, -105, -105, received=LATER) + both("draftkings", -3.5, -110, -110, received=LATER))
+    # Every US book: Caesars has the best price. The plan's books: FanDuel's -105 away side is the best.
+    assert pm.plan_quotes({"e": EVENT}, quotes, NOW)["e"]["sportsbook"] == "caesars"
+    chosen = pm.plan_quotes({"e": EVENT}, quotes, NOW, books=pm.PLAN_BOOKS)["e"]
+    assert chosen["sportsbook"] == "fanduel"
+    assert pm.PLAN_BOOKS == {"Novig", "DraftKings", "FanDuel", "BetMGM"}
+    only_caesars = both("pinnacle", -3.5, -102, -118) + both("caesars", -3.5, +110, -130)
+    assert pm.plan_quotes({"e": EVENT}, only_caesars, NOW, books=pm.PLAN_BOOKS) == {}
+
+
+def test_bound_plan_freezes_its_entry_books_and_predictions_follow_them():
+    from app_core import market_skill_validation as ms
+    from app_core import prospective_calibration as pc
+    rules = ms.methodology(0.02, pm.PLAN_BOOKS)
+    assert rules["entry_books"] == ["BetMGM", "DraftKings", "FanDuel", "Novig"]
+    assert "entry_books" not in ms.methodology(0.02)                      # older plans: no restriction
+    spec = {"sport": "NCAAB", "market_family": "SPREAD", "model_id": "m", "calibration_id": "c",
+            "validation_start": "2030-01-02T00:00:00+00:00", "validation_end": "2030-01-12T00:00:00+00:00",
+            "holdout_start": "2030-01-12T00:00:00+00:00", "holdout_end": "2030-01-22T00:00:00+00:00",
+            "market_skill_methodology": rules}
+    assert pc.freeze_inputs(spec)["entry_books"] == rules["entry_books"]   # the freeze redrafts the same plan
+    import json
+    assert pc._plan_rules({"payload": json.dumps({"market_skill_methodology": rules})})["entry_books"] == \
+        rules["entry_books"]
+    assert pc._plan_rules({"payload": "{}"}) == {} and pc._plan_rules({}) == {}

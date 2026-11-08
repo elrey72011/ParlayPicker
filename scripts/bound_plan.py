@@ -73,7 +73,10 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                 model_id = found['model_id']
             spec = calibration.draft_bound_plan(path, sport, market, validation_start=start,
                                                 methodology=methodology, model_id=model_id,
-                                                min_edge=min_edge if methodology == 'market_skill' else None)
+                                                min_edge=min_edge if methodology == 'market_skill' else None,
+                                                # A Pinnacle plan enters only where its picks can be staked.
+                                                entry_books=(pinnacle_model.PLAN_BOOKS if model == 'pinnacle'
+                                                             and methodology == 'market_skill' else None))
         except ValueError as exc:
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'NOT_DRAFTABLE', 'reason': str(exc)}
         else:
@@ -84,7 +87,8 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
             # Read-only: how fast this plan would fill, before the bet threshold is frozen.
             from app_core import pinnacle_model
             try:
-                result['replay_estimate'] = pinnacle_model.replay_estimate(path, sport, market, now=now)
+                result['replay_estimate'] = pinnacle_model.replay_estimate(path, sport, market, now=now,
+                                                                           books=pinnacle_model.PLAN_BOOKS)
             except Exception as exc:  # an estimate must never block the draft
                 result['replay_estimate'] = {'status': 'ERROR', 'error': type(exc).__name__}
     return result
@@ -109,6 +113,9 @@ def markdown(result):
                       *([f"- bet rule: EV at least {plan['market_skill_methodology']['min_edge']:.0%} at the entry "
                          f"price, at least {plan['market_skill_methodology']['min_bets']} bets per window"]
                         if 'market_skill_methodology' in plan else []),
+                      *([f"- entry books: {', '.join(plan['market_skill_methodology']['entry_books'])} "
+                         "(the books its picks can be staked at)"]
+                        if 'entry_books' in plan.get('market_skill_methodology', {}) else []),
                       f"- **plan hash:** `{item['plan_hash']}`", '',
                       'To freeze after review, run the workflow with action `freeze`, this hash, and these inputs:',
                       '', '```json', json.dumps(item['freeze_inputs'], sort_keys=True), '```']

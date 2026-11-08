@@ -145,7 +145,20 @@ def _other_side(quote, quotes):
     return found[0] if len(found) == 1 else None
 
 
-def plan_quotes(events, quotes, now):
+# The books a qualified NBA/NCAAB pick can be staked at (core.sport_market_gate: Novig, or DraftKings,
+# FanDuel and BetMGM with their capture replayed). A plan must be measured where it can bet: a
+# price at another book would pass validation and then be blocked at the stake (owner 2026-11-07).
+PLAN_BOOKS = frozenset({"Novig", "DraftKings", "FanDuel", "BetMGM"})
+
+
+def _plan_book(quote, books):
+    if books is None:
+        return True
+    from app_core.public_quote_policy import canonical_book_label
+    return canonical_book_label(quote["sportsbook"]) in books
+
+
+def plan_quotes(events, quotes, now, *, books=None):
     """The plan's entry quote per game (owner 2026-11-07): the best US price at Pinnacle's line.
 
     A fixed rule, using only prices known before tip-off (never results):
@@ -157,7 +170,10 @@ def plan_quotes(events, quotes, now):
       highest EV against Pinnacle's no-vig price (ties: higher price, then book name).
       Both of the book's sides must be posted, since the market-skill gate compares the
       model with that book's own two-sided price;
-    * quoted before the scheduled start, verified, half or whole line, never Pinnacle itself.
+    * quoted before the scheduled start, verified, half or whole line, never Pinnacle itself;
+    * at one of ``books`` (canonical labels). A plan drafted by the Bound plan workflow freezes
+      ``PLAN_BOOKS`` (the books the stake can use) as its ``entry_books``; its predictions, window
+      rate and replay estimate use them. ``None`` means every US book.
 
     The first canonical US quote (``prospective_research_models._reference_quotes``) has
     Pinnacle at its line only about 22% of the time (NCAAB, 2026-11-07) and is rarely a good
@@ -167,7 +183,8 @@ def plan_quotes(events, quotes, now):
     by_event = {}
     for q in quotes:
         event = events.get(q["event_id"])
-        if (event is None or q["sportsbook"] in REFERENCE_BOOKS or not q["quote_verified"] or q["line"] is None
+        if (event is None or q["sportsbook"] in REFERENCE_BOOKS or not _plan_book(q, books)
+                or not q["quote_verified"] or q["line"] is None
                 or q["selection"] != _canonical(event, q["market_family"])
                 or abs(2 * q["line"] - round(2 * q["line"])) > 1e-8
                 or _t(q["quote_timestamp"]) > now or _t(q["quote_timestamp"]) >= _t(event["scheduled_start"])):
@@ -194,7 +211,7 @@ def plan_quotes(events, quotes, now):
     return chosen
 
 
-def plan_games_per_day(path, sport, family, *, now, lookback_days=14):
+def plan_games_per_day(path, sport, family, *, now, lookback_days=14, books=None):
     """Games per day the plan can predict (``plan_quotes``), over the days actually observed.
 
     Sizing a plan's windows (``prospective_calibration.window_days``) by every game over a
@@ -207,7 +224,7 @@ def plan_games_per_day(path, sport, family, *, now, lookback_days=14):
     started = [e for e in events.values() if start <= _t(e["scheduled_start"]) < now]
     if not started:
         return 0.0
-    covered = plan_quotes({e["event_id"]: e for e in started}, quotes, now)
+    covered = plan_quotes({e["event_id"]: e for e in started}, quotes, now, books=books)
     first = min(_t(e["scheduled_start"]) for e in started)
     days = max(1.0, (now - first).total_seconds() / 86400)
     return len(covered) / days
@@ -217,7 +234,7 @@ REPLAY_EDGES = (0.01, 0.02)
 
 
 def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_EDGES,
-                    min_sample=200, min_bets=50):
+                    min_sample=200, min_bets=50, books=None):
     """How fast a Pinnacle plan would fill, replayed over games already captured (read-only).
 
     For games started in the last ``lookback_days`` (counted over the days actually
@@ -235,7 +252,7 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
     if not started:
         return {"sport": sport, "market_family": family, "games_started": 0, "status": "NO_GAMES"}
-    chosen = plan_quotes(started, quotes, now)
+    chosen = plan_quotes(started, quotes, now, books=books)
     first = min(_t(e["scheduled_start"]) for e in started.values())
     days = max(1.0, (now - first).total_seconds() / 86400)
     best_evs = []
