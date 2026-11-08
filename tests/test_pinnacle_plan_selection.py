@@ -95,3 +95,39 @@ def test_prediction_at_another_line_is_scored_from_the_same_final_score(monkeypa
     assert pe._outcome_at_quote_line(None, result, at(-4.0), "WIN") == "PUSH"
     other = dict(result, raw_source={"rule": "MARKET_GRADE", "line": -3.5})
     assert pe._outcome_at_quote_line(None, other, at(-4.5), "WIN") == "WIN"       # no stored score settlement
+
+
+def test_replay_estimate_counts_plan_games_and_bets_by_edge_without_results(monkeypatch):
+    now = datetime(2030, 1, 10, tzinfo=timezone.utc)
+    events, quotes = {}, []
+    for i in range(8):                                     # 8 games over the last 4 days
+        start = now - timedelta(days=4) + timedelta(hours=12 * i)
+        observed = start - timedelta(hours=8)
+        eid = f"g{i}"
+        events[eid] = {"event_id": eid, "home_team": "H", "away_team": "A", "observed_at": observed.isoformat(),
+                       "scheduled_start": start.isoformat()}
+        stamp = (observed - timedelta(minutes=2)).isoformat()
+        quotes += both("pinnacle", -2.5, -110, -110, stamp=stamp, event=eid)     # fair 50/50
+        home_price = {0: +106, 1: +103, 2: -110, 3: -110}.get(i % 4)           # +3%, +1.5%, -4.5%, -4.5% EV
+        quotes += both("bookA", -2.5, home_price, -110, stamp=stamp, event=eid)
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope",
+                        lambda *a: (events, quotes, [["never read"]]))
+    out = pm.replay_estimate("db", "NCAAB", "SPREAD", now=now)
+    assert out["plan_games"] == 8 and out["plan_games_per_day"] == 2.0 and out["days_for_min_sample"] == 100.0
+    assert out["by_edge"]["1%"]["bets"] == 4 and out["by_edge"]["2%"]["bets"] == 2
+    assert out["by_edge"]["2%"]["bets_per_day"] == 0.5 and out["by_edge"]["2%"]["days_for_min_bets"] == 100.0
+    assert out["by_edge"]["1%"]["days_per_window"] == 100.0                # the 200-game minimum binds
+    assert pm.replay_estimate("db", "NCAAB", "SPREAD", now=now - timedelta(days=30))["status"] == "NO_GAMES"
+
+
+def test_bound_plan_draft_shows_the_replay_estimate():
+    import importlib
+    bound_plan = importlib.import_module("scripts.bound_plan")
+    text = bound_plan.markdown({"mode": "DRAFT_READ_ONLY", "markets": [], "replay_estimate": {
+        "sport": "NCAAB", "market_family": "SPREAD", "status": "ESTIMATED", "days_observed": 4.0,
+        "games_started": 120, "plan_games": 60, "plan_share": 0.5, "plan_games_per_day": 15.0,
+        "days_for_min_sample": 13.3, "min_sample": 200, "min_bets": 50,
+        "by_edge": {"1%": {"bets": 20, "bets_per_day": 5.0, "days_for_min_bets": 10.0, "days_per_window": 13.3},
+                    "2%": {"bets": 8, "bets_per_day": 2.0, "days_for_min_bets": 25.0, "days_per_window": 25.0}}}})
+    assert "### Replay estimate NCAAB SPREAD: ESTIMATED" in text
+    assert "| 2% | 8 | 2.0 | 25.0 | 25.0 |" in text and "(50%), 15.0 a day" in text
