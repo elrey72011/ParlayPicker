@@ -44,7 +44,29 @@ PINNACLE_SPORTS = ("NBA", "NCAAB", "NCAAF")  # NCAAF added 2026-11-06 (owner opt
 US_BOOKMAKERS = ("betonlineag", "betmgm", "betrivers", "betus", "bovada", "williamhill_us", "draftkings",
                  "fanatics", "fanduel", "lowvig", "mybookieag")
 PINNACLE_BOOKMAKERS = ",".join(US_BOOKMAKERS + ("pinnacle",))
+# Novig, the exchange a NBA/NCAAB pick can be staked at, is not in the US region list, so the
+# 12-book request above never captured it. The 2026-11-08 news lag study found it is the plan book
+# that lags Pinnacle (15 of 18 price gaps >= 1% after injury news). Owner 2026-11-08: NBA and NCAAB
+# capture also name Novig, switched on by the repository variable ``PARLAYPICKER_NOVIG_SPORTS``
+# (e.g. "NBA,NCAAB"; off by default, like Pinnacle). 13 books are still 2 region equivalents, so a
+# request costs the same. NCAAF keeps the 12-book request (its frozen runtime and binding name it).
+NOVIG_ENV = "PARLAYPICKER_NOVIG_SPORTS"
+NOVIG_BOOKMAKER = "novig"
+NOVIG_SPORTS = ("NBA", "NCAAB")
+PINNACLE_NOVIG_BOOKMAKERS = PINNACLE_BOOKMAKERS + "," + NOVIG_BOOKMAKER
 PINNACLE_EXTRA_UNITS = 2
+
+
+def novig_sports(setting=None):
+    """Sports whose Pinnacle capture also names Novig (``PARLAYPICKER_NOVIG_SPORTS``); off by default."""
+    import os
+    raw = (setting or os.environ.get)(NOVIG_ENV, "") or ""
+    return {s.strip().upper() for s in raw.split(",") if s.strip().upper() in NOVIG_SPORTS}
+
+
+def capture_bookmakers(sport, setting=None):
+    """The bookmakers a Pinnacle capture names for ``sport``: Novig added where switched on."""
+    return PINNACLE_NOVIG_BOOKMAKERS if sport in novig_sports(setting) else PINNACLE_BOOKMAKERS
 PINNACLE_LIMITS = {"daily": 60, "rolling_31_days": 1500}
 # Reference-only books: captured for the fair price, never an entry price, a plan's
 # reference quote, a research pick or a certified-close request (Pinnacle is not
@@ -218,7 +240,8 @@ class Budget:
                     raise ValueError("unbudgeted_odds_parameters")
                 provider, units = "ODDS", 1
             elif endpoint == "odds" and "bookmakers" in params:
-                if (params.get("bookmakers") != PINNACLE_BOOKMAKERS or sport not in PINNACLE_SPORTS or
+                if (params.get("bookmakers") not in {PINNACLE_BOOKMAKERS, capture_bookmakers(sport)} or
+                        sport not in PINNACLE_SPORTS or
                         "regions" in params or params.get("markets") != "spreads,totals" or
                         params.get("oddsFormat") != "american" or
                         set(params) - {"apiKey", "dateFormat", "bookmakers", "markets", "oddsFormat", "eventIds"}):

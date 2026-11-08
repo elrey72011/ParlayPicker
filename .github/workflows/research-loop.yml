@@ -44,6 +44,7 @@ jobs:
       PARLAYPICKER_CERTIFIED_CLOSE_MARKETS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_MARKETS }}
       PARLAYPICKER_RESEARCH_CAPTURE_HOURS: ${{ vars.PARLAYPICKER_RESEARCH_CAPTURE_HOURS }}
       PARLAYPICKER_PINNACLE_SPORTS: ${{ vars.PARLAYPICKER_PINNACLE_SPORTS }}
+      PARLAYPICKER_NOVIG_SPORTS: ${{ vars.PARLAYPICKER_NOVIG_SPORTS }}
       PARLAYPICKER_NHL_SETTLEMENT: ${{ vars.PARLAYPICKER_NHL_SETTLEMENT }}
       # Fewer, fuller provider requests so 30-minute cycles stay inside the per-sport
       # daily credit caps (app_core/odds_research_adapter.py, BATCHING_ENV).

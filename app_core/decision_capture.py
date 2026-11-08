@@ -101,8 +101,8 @@ def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow, pin
             result["blocker"] = COST_FLAG
         return response
 
-    from app_core.research_api_budget import PINNACLE_BOOKMAKERS
-    books = {"bookmakers": PINNACLE_BOOKMAKERS} if pinnacle else {"regions": "us"}
+    from app_core.research_api_budget import capture_bookmakers
+    books = {"bookmakers": capture_bookmakers(sport)} if pinnacle else {"regions": "us"}
     payload = adapter.fetch(sport, "odds", key, charged_get, params={
         **books, "markets": _market_key(sport, family), "oddsFormat": "american",
         "eventIds": ",".join(sorted(events))})
