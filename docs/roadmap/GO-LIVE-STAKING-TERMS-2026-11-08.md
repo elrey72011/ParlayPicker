@@ -1,6 +1,6 @@
 # Go-live staking terms for the NCAAB Pinnacle plan (proposal, 2026-11-08)
 
-Owner decision document. Nothing here is built yet. Part 1 must be decided **before the
+Owner decision document. **Decided 2026-11-08 by owner delegation (see "Decisions" at the end); Part 1 built in `app_core/staking_terms.py`.** Part 1 must be decided **before the
 NCAAB Pinnacle plan is frozen**; parts 2 and 3 can follow while the plan validates.
 
 ## Why this matters now
@@ -87,3 +87,25 @@ Each is **derived from stored evidence, never guessed**:
 
 **Then:** the Bound plan draft adds these terms to the plan, a new draft is reviewed, and you
 freeze it. Expected delay: one to two days, against a guaranteed restart if frozen without them.
+
+## Decisions (2026-11-08, delegated by the owner)
+
+1. **Policy (1a):** as proposed, except `provisional_minimum_evidence` **300** (not 400) and
+   `minimum_evidence` 600: the windows require 200 games each, and pushes and voids are not
+   scored, so 400 scored games could fall just short. `min_conservative_edge` **0.0**: a pick
+   stakes only while its edge stays positive after the uncertainty haircut, with
+   `uncertainty_quantile` 0.25 (the repository's existing convention for cautious probabilities).
+2. **Uncertainty limit (1b):** `max_uncertainty` **0.03**, where a pick's uncertainty is its mean
+   probability minus its cautious probability (the 25% quantile) **measured on the plan's
+   validated games** (about 0.017 at 400 games), not on the 40-game calibration (which would
+   cut about 0.13 off every probability and never stake). The bridge computes it that way (Part 2).
+3. **Prior CLV (1c):** **Option A**, the holdout bets' CLV lower 95% bound
+   (`validation_report.metrics.price_clv_lower_95`), with `min_prior_clv` 0.0.
+4. **Drift brake (Part 2):** **(a)**, no stake while the market's last 50 settled live bets have
+   mean CLV < 0 (`regime_brake`, frozen with the plan).
+
+The bet threshold (1% or 2%, `min_edge`) is set from the replay estimate in the morning drafts.
+
+What this means in practice: the stake rule is stricter than the plan's bet rule. A plan bet
+needs an EV of at least 1–2% against the entry price; a stake also needs the edge to survive
+the haircut, so only the clearer edges get money, at a tenth of Kelly and 0.5% of bankroll at most.

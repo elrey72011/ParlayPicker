@@ -1863,6 +1863,9 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
         for cohort in (validation, holdout):
             blockers.extend(market_skill.blockers(cohort["name"].upper(), cohort, skill[cohort["name"]], method))
         extra["market_skill"] = skill
+        # The provisional stake tier's prior-CLV input (core.live_wager_contract reads
+        # validation_report.metrics.price_clv_lower_95): the holdout bets' CLV lower 95% bound.
+        extra["metrics"] = {"price_clv_lower_95": skill["holdout"].get("bet_clv_lower_95")}
     return dict(validation_plan_id=plan["validation_plan_id"], sport=plan["sport"],
                 market_family=plan["market_family"], model_id=plan["model_id"],
                 calibration_id=plan["calibration_id"], plan_artifact_hash=plan["artifact_hash"],

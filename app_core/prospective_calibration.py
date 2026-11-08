@@ -400,7 +400,7 @@ def window_days(target, rate, *, coverage=0.8, margin=1.25, minimum=7):
 
 def draft_bound_plan(path, sport, market, *, validation_start, validation_days=None, holdout_days=None,
                      model_id=None, calibration_id=None, rate=None, methodology="v1", min_edge=None,
-                     entry_books=None):
+                     entry_books=None, staking_terms=None):
     """A proposed plan version binding the candidate model and its calibration. Nothing is frozen.
 
     Thresholds, sample minimums and policies are the frozen v1 template's
@@ -466,6 +466,12 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
         validation_start=start.isoformat(), validation_end=validation_end.isoformat(),
         holdout_start=validation_end.isoformat(), holdout_end=holdout_end.isoformat())
     spec["model_scope"] = dict(spec["model_scope"], initial_binding="BOUND_EXACT_MODEL_AND_CALIBRATION")
+    if staking_terms:
+        # The policy the owner activates and the stake-tier rules, frozen with the plan (app_core.staking_terms).
+        from app_core.staking_terms import terms
+        extra = terms(staking_terms, sport)
+        rules = dict(spec["deployment_criteria"].get("maturity_rules") or {}, **extra.pop("maturity_rules"))
+        spec["deployment_criteria"] = dict(spec["deployment_criteria"], maturity_rules=rules, **extra)
     return spec
 
 
@@ -485,7 +491,9 @@ def freeze_inputs(spec):
             **({"min_edge": spec["market_skill_methodology"]["min_edge"]}
                if "market_skill_methodology" in spec and spec["market_skill_methodology"]["min_edge"] != 0.02 else {}),
             **({"entry_books": spec["market_skill_methodology"]["entry_books"]}
-               if "entry_books" in spec.get("market_skill_methodology", {}) else {})}
+               if "entry_books" in spec.get("market_skill_methodology", {}) else {}),
+            **({"staking_terms": spec["deployment_criteria"]["staking_terms"]}
+               if "staking_terms" in spec.get("deployment_criteria", {}) else {})}
 
 
 def freeze_reviewed_plan(path, *, expected_hash, now=None, **inputs):
