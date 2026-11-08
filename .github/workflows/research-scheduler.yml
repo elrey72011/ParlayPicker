@@ -92,6 +92,7 @@ jobs:
           PARLAYPICKER_RESEARCH_CAPTURE_HOURS: ${{ vars.PARLAYPICKER_RESEARCH_CAPTURE_HOURS }}
           # D4 option A: Pinnacle as the fair-price reference ("NBA,NCAAB"); unset = off.
           PARLAYPICKER_PINNACLE_SPORTS: ${{ vars.PARLAYPICKER_PINNACLE_SPORTS }}
+          PARLAYPICKER_NOVIG_SPORTS: ${{ vars.PARLAYPICKER_NOVIG_SPORTS }}
           # D17: NHL settles only per game against the NHL official final ("official_check").
           PARLAYPICKER_NHL_SETTLEMENT: ${{ vars.PARLAYPICKER_NHL_SETTLEMENT }}
         run: python -u scripts/run_research_scheduler.py
