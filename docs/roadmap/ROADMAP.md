@@ -1,6 +1,6 @@
 # ParlayPicker roadmap: the best pick for each game
 
-Version 3, 2026-11-05; updated 2026-11-07 (§2a). This supersedes version 2 (same day). Version 2 was written
+Version 3, 2026-11-05; updated 2026-11-07 (§2a) and 2026-11-08 (§2b). This supersedes version 2 (same day). Version 2 was written
 without a full audit of the repository and planned parallel systems for things the
 repository already does. Version 3 is built around the authority chain that already
 exists. Statuses were checked against `main` `cc42eac` plus open PR #2457.
@@ -143,6 +143,31 @@ It cannot stake and will fail on Brier and CLV.
    are refitted. Frozen plans keep theirs.
 2. The news edge (NBA official injury reports): `docs/roadmap/NEWS-EDGE-PLAN-2026-11-08.md`.
    Step 1, the report archive, is built. Next comes the lag study, which needs an owner credit decision.
+
+**Later on 2026-11-08 (all merged).**
+
+| Work | PR | Result |
+|---|---|---|
+| Lag study (owner budget 5,000 credits; 4,625 spent) | #2500 | 114 pieces of pregame NBA injury news, Oct 21 to Nov 7. After news that moved Pinnacle, a stake book was >= 1% better than Pinnacle's new price in 11 of 29 (38%), against 7 of 51 (14%) 30 minutes before. **15 of the 18 gaps were at Novig**; DraftKings, FanDuel and BetMGM almost never lag. About 0.6 a day at >= 1%: too few for a plan on news alone (`NEWS-EDGE-PLAN-2026-11-08.md`) |
+| Novig capture | #2502 | **The research and decision captures never requested Novig** (11 US books + Pinnacle), so every replay at the plan's books saw only DraftKings, FanDuel and BetMGM. NBA and NCAAB Pinnacle captures now also name Novig, at the same cost (13 books are still 2 region equivalents). Owner set `PARLAYPICKER_NOVIG_SPORTS=NBA,NCAAB`; NCAAF unchanged |
+| Go-live plumbing | #2503 | (1) Per-pick stake fields on bridge rows, derived from the validated deployment and stored evidence (`bridge_stake_fields`). (2) Decision capture enters only at the plan's frozen `entry_books`. (3) The exposure ledger mirrored to Drive (write-once, hash-verified, survives reboots; `PARLAYPICKER_EXPOSURE_LEDGER_REMOTE`). (4) A small per-market store published by decision capture every 15 minutes that the app reads instead of the full store (`qualified_market_file`; `PARLAYPICKER_QUALIFIED_MARKET_FILE`). Both switches are app settings, off until a market validates |
+| CI speed-up | #2501 | The offline qualification suite (against a pinned application commit) runs on a PR only when the PR touches it, and always on `main`. PR checks: about 25 minutes, now 13-17 |
+| Drive upload retry | this update | A Drive 429/5xx (or rate-limit 403) on an upload stopped the 11:52 AM ET research loop. Uploads are now retried up to 3 times after a readback check, so a rejected upload that landed anyway is never sent twice; a lost response is still never re-sent |
+
+**Where it stands.** NCAAB SPREAD v2's window opens 2026-11-09 00:00 UTC; it cannot stake and
+is expected to fail (broken calibration). **The deciding check is Wed 2026-11-11 at 11:07 AM ET:**
+the read-only first-edge replays for NCAAB and NBA spreads, now with Novig prices.
+
+- If Novig gives about 2.3 bets a day, the owner reviews and freezes a Novig-entry NCAAB plan
+  with the guarded calibration. NBA follows when its calibration reaches 40 games (9 now).
+- If not, the next edge is an injury-adjusted NBA model (`NEWS-EDGE-PLAN-2026-11-08.md`, step 4).
+
+**Owner actions open.**
+
+1. When a market validates: set `PARLAYPICKER_EXPOSURE_LEDGER_REMOTE=true` and
+   `PARLAYPICKER_QUALIFIED_MARKET_FILE=true` in the app, configure the bankroll and limits
+   (activation panel), activate the market, and set `PARLAYPICKER_DECISION_MARKETS`.
+2. Review and freeze the next NCAAB plan if Wednesday's replay supports it.
 
 ## 3. Milestones, in order
 
