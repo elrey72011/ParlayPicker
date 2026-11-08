@@ -1,0 +1,55 @@
+name: NBA injury reports (research)
+# Option 3 (owner 2026-11-08): archive the NBA's official 15-minute injury reports for completed
+# ET days, write-once to Drive, for the news-lag study (docs/roadmap/NEWS-EDGE-PLAN-2026-11-08.md).
+# No Odds API calls. A skipped run is caught up by the next one (the league keeps this season's
+# reports at fixed URLs).
+on:
+  schedule:
+    - cron: '17 12 * * *'     # 7:17 AM EST / 8:17 AM EDT
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "first ET day to record (YYYY-MM-DD); blank = three days ago"
+        required: false
+        default: ""
+      end:
+        description: "last ET day (blank = yesterday)"
+        required: false
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: nba-injury-reports
+  cancel-in-progress: false
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
+      PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Record completed days
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        run: |
+          set -euo pipefail
+          args=(--output "$RUNNER_TEMP/nba-injury-reports/result.json")
+          if [ -n "${START:-}" ]; then args+=(--start "$START"); fi
+          if [ -n "${END:-}" ]; then args+=(--end "$END"); fi
+          python -u scripts/record_nba_injury_reports.py "${args[@]}"
+      - name: Keep the result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nba-injury-reports
+          path: ${{ runner.temp }}/nba-injury-reports/
+          if-no-files-found: ignore
