@@ -37,6 +37,12 @@ on:
         default: market_skill
         type: choice
         options: [market_skill, v1]
+      min_edge:
+        description: "draft only, market_skill: minimum EV for a bet (locks at the freeze; see the replay estimate)"
+        required: false
+        default: "0.02"
+        type: choice
+        options: ["0.02", "0.01"]
       validation_start:
         description: "draft only: ISO validation start (blank = next UTC midnight)"
         required: false
@@ -84,6 +90,7 @@ jobs:
           VALIDATION_START: ${{ inputs.validation_start }}
           METHODOLOGY: ${{ inputs.methodology }}
           MODEL: ${{ inputs.model }}
+          MIN_EDGE: ${{ inputs.min_edge }}
           FREEZE_INPUTS: ${{ inputs.freeze_inputs }}
           EXPECTED_HASH: ${{ inputs.expected_hash }}
           OUT: ${{ runner.temp }}/bound-plan
@@ -92,7 +99,7 @@ jobs:
           args=("$ACTION" --directory "$OUT/evidence" --output "$OUT/report/bound-plan.json"
                 --cache-dir "$RUNNER_TEMP/drive-cache" --sport "$SPORT" --market "$MARKET")
           if [ "$ACTION" = draft ] && [ -n "$VALIDATION_START" ]; then args+=(--validation-start "$VALIDATION_START"); fi
-          if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}" --model "${MODEL:-research}"); fi
+          if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}" --model "${MODEL:-research}" --min-edge "${MIN_EDGE:-0.02}"); fi
           if [ "$ACTION" = freeze ]; then args+=(--inputs "$FREEZE_INPUTS" --expected-hash "$EXPECTED_HASH"); fi
           python -u scripts/bound_plan.py "${args[@]}"
       - name: Save the verified Drive object cache

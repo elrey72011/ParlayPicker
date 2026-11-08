@@ -381,7 +381,7 @@ def window_days(target, rate, *, coverage=0.8, margin=1.25, minimum=7):
 
 
 def draft_bound_plan(path, sport, market, *, validation_start, validation_days=None, holdout_days=None,
-                     model_id=None, calibration_id=None, rate=None, methodology="v1"):
+                     model_id=None, calibration_id=None, rate=None, methodology="v1", min_edge=None):
     """A proposed plan version binding the candidate model and its calibration. Nothing is frozen.
 
     Thresholds, sample minimums and policies are the frozen v1 template's
@@ -432,8 +432,10 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
     version = previous["version"] + 1
     spec = _template(sport, market)
     if methodology == "market_skill":
-        from app_core.market_skill_validation import template as market_skill_template
-        spec = market_skill_template(spec)
+        from app_core.market_skill_validation import DEFAULT_MIN_EDGE, template as market_skill_template
+        spec = market_skill_template(spec, DEFAULT_MIN_EDGE if min_edge is None else min_edge)
+    elif min_edge is not None:
+        raise ValueError("min_edge applies only to the market_skill methodology")
     elif methodology != "v1":
         raise ValueError("unknown plan methodology")
     spec.update(
@@ -458,7 +460,10 @@ def freeze_inputs(spec):
             "calibration_id": spec["calibration_id"], "validation_start": spec["validation_start"],
             "validation_days": (_time(spec["validation_end"]) - _time(spec["validation_start"])).days,
             "holdout_days": (_time(spec["holdout_end"]) - _time(spec["holdout_start"])).days,
-            **({"methodology": "market_skill"} if "market_skill_methodology" in spec else {})}
+            **({"methodology": "market_skill"} if "market_skill_methodology" in spec else {}),
+            # Recorded only when it differs from the default, so default plans keep their inputs.
+            **({"min_edge": spec["market_skill_methodology"]["min_edge"]}
+               if "market_skill_methodology" in spec and spec["market_skill_methodology"]["min_edge"] != 0.02 else {})}
 
 
 def freeze_reviewed_plan(path, *, expected_hash, now=None, **inputs):

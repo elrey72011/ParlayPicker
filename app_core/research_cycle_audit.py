@@ -109,6 +109,9 @@ def sanitize_cycle(report):
                                           "predictions": board.get("predictions") if isinstance(
                                               board.get("predictions"), int) else None,
                                           "error": _code(board.get("error")) if board.get("error") else None}
+    pinnacle = _pinnacle_allowance(report.get("api_budget"))
+    if pinnacle is not None:
+        result["pinnacle_allowance"] = pinnacle
     failure = report.get("failure_stages", {}).get("canonical")
     if isinstance(failure, dict):
         result["canonical_failure"] = {"stage": _code(failure.get("stage")),
@@ -169,6 +172,9 @@ def sanitize_cycle(report):
                 calibration = model.get("calibration_cycle")
                 if isinstance(calibration, dict) and isinstance(calibration.get("markets"), dict):
                     row["calibration_cycle"] = _calibration_summary(calibration["markets"])
+        if isinstance(cycle, dict) and cycle.get("pinnacle") in ("on", "off", "allowance_spent"):
+            # Whether this cycle's capture included Pinnacle (allowance_spent: captured without it).
+            row["pinnacle_capture"] = cycle["pinnacle"].upper()
         budget = health.get("api_budget")
         if isinstance(budget, dict):
             row["api_budget"] = {key: _code(budget[key]) for key in ("provider", "status")
@@ -180,6 +186,23 @@ def sanitize_cycle(report):
 def _counts(value):
     return ({key: value[key] for key in value if isinstance(key, str) and type(value[key]) is int and value[key] >= 0}
             if isinstance(value, dict) else {})
+
+
+def _pinnacle_allowance(budget):
+    """Pinnacle's own credit allowance (research_api_budget.PINNACLE_LIMITS): used and limit, today and
+    over 31 days, and whether it ran out (captures then continue without Pinnacle)."""
+    if not isinstance(budget, dict):
+        return None
+    usage, limits = budget.get("pinnacle_usage"), budget.get("pinnacle_limits")
+    if not isinstance(usage, dict) or not isinstance(limits, dict):
+        return None
+    number = lambda v: v if type(v) is int and v >= 0 else None  # noqa: E731
+    paused = [code for code in budget.get("paused") or [] if isinstance(code, str) and code.startswith("PINNACLE:")]
+    return {"used_today": number(usage.get("daily")), "daily_limit": number(limits.get("daily")),
+            "used_31_days": number(usage.get("rolling_31_days")),
+            "limit_31_days": number(limits.get("rolling_31_days")),
+            "spent": sorted({{"PINNACLE:daily": "DAILY", "PINNACLE:rolling_31_days": "ROLLING_31_DAYS"}[code]
+                             for code in paused if code in ("PINNACLE:daily", "PINNACLE:rolling_31_days")})}
 
 
 def _calibration_summary(markets):
