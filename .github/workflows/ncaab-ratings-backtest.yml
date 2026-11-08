@@ -1,0 +1,39 @@
+name: NCAAB ratings backtest (research only)
+# Owner 2026-11-08: do opponent-adjusted CBBD ratings beat archived NCAAB opening or closing lines?
+# About 45 CollegeBasketballData calls (date windows); no Odds API calls; writes nothing to Drive or the store.
+on:
+  workflow_dispatch:
+    inputs:
+      scored_season:
+        description: 'Season to score (CBBD numbering, 2025 = 2024-25); the two before set priors and calibrate'
+        default: '2025'
+permissions:
+  contents: read
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CBBD_API_KEY: ${{ secrets.CBBD_API_KEY }}
+      CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+      SCORED_SEASON: ${{ inputs.scored_season }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Backtest
+        run: >-
+          python -u scripts/ncaab_ratings_backtest.py
+          --output "${{ runner.temp }}/ncaab-ratings/ncaab-ratings-backtest.json"
+          --scored-season "$SCORED_SEASON"
+      - name: Keep the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncaab-ratings-backtest
+          path: ${{ runner.temp }}/ncaab-ratings/
+          if-no-files-found: warn

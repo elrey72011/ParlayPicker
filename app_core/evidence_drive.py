@@ -39,6 +39,26 @@ def _read(session, url, **kwargs):
 from app_core.evidence_config import EvidenceStorageError
 
 API = "https://www.googleapis.com/drive/v3/files"
+# Uploads Drive rejected with a definite 429/5xx answer are retried after a readback check
+# (owner 2026-11-08); a lost response is never re-sent (see ``put_object``).
+RETRYABLE_UPLOAD_STATUS = (429, 500, 502, 503, 504)
+UPLOAD_ATTEMPTS = 3
+UPLOAD_BACKOFF_SECONDS = 5
+RATE_LIMIT_REASONS = {"rateLimitExceeded", "userRateLimitExceeded"}
+
+
+def _retryable_upload(response):
+    """A definite rejection worth retrying: 429/5xx, or a 403 whose reason is a Drive rate limit."""
+    status = getattr(response, "status_code", None)
+    if status in RETRYABLE_UPLOAD_STATUS:
+        return True
+    if status != 403:
+        return False
+    try:
+        errors = (response.json().get("error") or {}).get("errors") or []
+    except (ValueError, AttributeError):
+        return False
+    return any(isinstance(e, dict) and e.get("reason") in RATE_LIMIT_REASONS for e in errors)
 
 
 def _checksum(item):
@@ -466,32 +486,48 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         body = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode() + metadata
                 + f"\r\n--{boundary}\r\nContent-Type: application/json\r\n\r\n".encode() + Body
                 + f"\r\n--{boundary}--\r\n".encode())
-        try:
-            response = self.session.post("https://www.googleapis.com/upload/drive/v3/files",
-                                         params={"uploadType": "multipart", "supportsAllDrives": "true", "fields": "id"},
-                                         headers={"Content-Type": f"multipart/related; boundary={boundary}"}, data=body, timeout=30)
-        except (requests.Timeout, requests.ConnectionError):
-            # The server may have committed the immutable object before the
-            # response was lost. Never repeat an uncertain upload. A bounded
-            # listing and full-byte readback may establish that it completed.
-            for attempt in range(3):
-                if attempt:
-                    time.sleep(attempt * 2)
-                files = list(self._files(Key))
-                if not files:
-                    continue
-                if self._read_files(files) != Body:
-                    raise EvidenceStorageError("Timed-out upload conflicts with remote evidence")
-                self.created_ids[Key] = files[0]["id"]
-                return
-            raise
-        response.raise_for_status()
-        file_id = response.json().get("id")
-        if not isinstance(file_id, str) or not file_id:
-            raise EvidenceStorageError("Drive accepted upload but returned no file ID; retry synchronization.")
-        self.created_ids[Key] = file_id
-        # The caller reads every matching object back, detecting conflicts even
-        # when another writer races this creation or a timed-out upload is retried.
+        for attempt in range(UPLOAD_ATTEMPTS):
+            try:
+                response = self.session.post("https://www.googleapis.com/upload/drive/v3/files",
+                                             params={"uploadType": "multipart", "supportsAllDrives": "true", "fields": "id"},
+                                             headers={"Content-Type": f"multipart/related; boundary={boundary}"},
+                                             data=body, timeout=30)
+            except (requests.Timeout, requests.ConnectionError):
+                # The server may have committed the immutable object before the
+                # response was lost. Never repeat an uncertain upload. A bounded
+                # listing and full-byte readback may establish that it completed.
+                if self._confirm_created(Key, Body, attempts=3):
+                    return
+                raise
+            if _retryable_upload(response) and attempt < UPLOAD_ATTEMPTS - 1:
+                # Drive answered 429/5xx (2026-11-08: one stopped a whole research cycle). Wait,
+                # confirm by readback that the object was not created after all, then send again.
+                time.sleep(UPLOAD_BACKOFF_SECONDS * (attempt + 1))
+                if self._confirm_created(Key, Body, attempts=1):
+                    return
+                continue
+            response.raise_for_status()
+            file_id = response.json().get("id")
+            if not isinstance(file_id, str) or not file_id:
+                raise EvidenceStorageError("Drive accepted upload but returned no file ID; retry synchronization.")
+            self.created_ids[Key] = file_id
+            # The caller reads every matching object back, detecting conflicts even
+            # when another writer races this creation or a timed-out upload is retried.
+            return
+
+    def _confirm_created(self, Key, Body, *, attempts):
+        """True when ``Key`` exists with exactly ``Body``; raises when it exists with other bytes."""
+        for attempt in range(attempts):
+            if attempt:
+                time.sleep(attempt * 2)
+            files = list(self._files(Key))
+            if not files:
+                continue
+            if self._read_files(files) != Body:
+                raise EvidenceStorageError("Uncertain upload conflicts with remote evidence")
+            self.created_ids[Key] = files[0]["id"]
+            return True
+        return False
 
     def get_paginator(self, name):
         if name != "list_objects_v2":
