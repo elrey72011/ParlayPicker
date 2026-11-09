@@ -26,6 +26,8 @@ from core.clv import no_vig_prob
 from app_core import prospective_evidence as evidence
 
 THRESHOLDS = (0.0, 0.02, 0.04)
+# How long before the start the best price was quoted (roadmap M5: outcomes by book and timing).
+TIMING = ((0, 1, "under 1 h"), (1, 3, "1-3 h"), (3, 6, "3-6 h"), (6, 24, "6-24 h"), (24, None, "24 h or more"))
 REFERENCE_BOOK = "pinnacle"  # D4: sharp reference, never a bettable price or a consensus member
 
 
@@ -84,6 +86,9 @@ def screen(events, quotes, closes, scores, *, min_books=3):
                    "line": best["line"], "sportsbook": best["sportsbook"], "decimal_odds": best["decimal_odds"],
                    "fair_probability": consensus[side], "books": len(fair),
                    "ev": consensus[side] * best["decimal_odds"] - 1}
+            lead = _hours_before_start(event, best)
+            if lead is not None:
+                row["hours_before_start"] = lead
             if sharp is not None:
                 row["pinnacle_fair"] = sharp if side == first else 1 - sharp
                 row["ev_vs_pinnacle"] = row["pinnacle_fair"] * best["decimal_odds"] - 1
@@ -97,6 +102,60 @@ def screen(events, quotes, closes, scores, *, min_books=3):
                     score["home_score"], score["away_score"], best["line"])
             candidates.append(row)
     return candidates
+
+
+def _hours_before_start(event, quote):
+    try:
+        start = evidence._time(event["scheduled_start"], "scheduled_start")
+        return (start - evidence._time(quote["quote_timestamp"], "quote_timestamp")).total_seconds() / 3600
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def timing_label(hours):
+    if hours is None or hours < 0:
+        return None
+    return next(label for low, high, label in TIMING if hours >= low and (high is None or hours < high))
+
+
+def _mean_se(values):
+    """(mean, standard error); the error is None with fewer than 2 values."""
+    if not values:
+        return None, None
+    mean = sum(values) / len(values)
+    if len(values) < 2:
+        return mean, None
+    variance = sum((v - mean) ** 2 for v in values) / (len(values) - 1)
+    return mean, (variance / len(values)) ** 0.5
+
+
+def group(picks):
+    """One breakdown row: EV, closing-line value and results for ``picks``, with standard errors."""
+    clv = [c["price_clv"] for c in picks if "price_clv" in c]
+    settled = [c for c in picks if c.get("outcome") in ("WIN", "LOSS", "PUSH")]
+    returns = [c["decimal_odds"] - 1 if c["outcome"] == "WIN" else (-1.0 if c["outcome"] == "LOSS" else 0.0)
+               for c in settled]
+    mean_clv, clv_se = _mean_se(clv)
+    roi, roi_se = _mean_se(returns)
+    return {"picks": len(picks), "mean_ev": sum(c["ev"] for c in picks) / len(picks) if picks else None,
+            "with_comparable_close": len(clv), "mean_price_clv": mean_clv, "price_clv_se": clv_se,
+            "beat_close_share": sum(1 for v in clv if v > 0) / len(clv) if clv else None,
+            "settled": len(settled), "wins": sum(1 for c in settled if c["outcome"] == "WIN"),
+            "roi_per_pick": roi, "roi_se": roi_se}
+
+
+def breakdown(candidates):
+    """The best-price candidates split by the book that had the best price, and by how long before
+    the start it was quoted. Every candidate counts (no EV threshold): the question is where the
+    best available price beats the close, not which picks a threshold would have kept."""
+    by_book, by_timing = {}, {}
+    for c in candidates:
+        by_book.setdefault(c["sportsbook"], []).append(c)
+        label = timing_label(c.get("hours_before_start"))
+        if label is not None:
+            by_timing.setdefault(label, []).append(c)
+    return {"by_book": {book: group(picks) for book, picks in sorted(by_book.items())},
+            "by_timing": {label: group(by_timing[label]) for _, _, label in TIMING if label in by_timing}}
 
 
 def summarize(candidates, thresholds=THRESHOLDS, ev_key="ev"):
@@ -137,4 +196,5 @@ def from_store(path, sport, market, *, min_books=3):
     return {"sport": sport, "market_family": market, "candidates": len(candidates),
             "by_threshold": summarize(candidates),
             "with_pinnacle": sum(1 for c in candidates if "ev_vs_pinnacle" in c),
-            "by_threshold_vs_pinnacle": summarize(candidates, ev_key="ev_vs_pinnacle")}
+            "by_threshold_vs_pinnacle": summarize(candidates, ev_key="ev_vs_pinnacle"),
+            **breakdown(candidates)}

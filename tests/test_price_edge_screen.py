@@ -67,3 +67,23 @@ def test_all_bucket_grades_every_best_price_even_without_a_flag():
     assert summary["0.00"]["picks"] == 0                 # -110 at a fair 50% is negative EV
     assert summary["all"]["picks"] == 2 and summary["all"]["mean_ev"] < 0
     assert summary["all"]["with_comparable_close"] == 1 and summary["all"]["beat_close_share"] == 1.0
+
+
+def test_breakdown_by_book_and_by_quote_timing_with_standard_errors():
+    event = dict(EVENT, scheduled_start="2026-11-10T00:00:00+00:00")
+    quotes = [dict(q, quote_timestamp="2026-11-09T22:00:00+00:00") for q in _market()]     # 2 hours before
+    closes = [{"event_id": "e1", "market_family": "SPREAD", "selection": "Home", "sportsbook": "soft",
+               "line": -3.5, "decimal_odds": _decimal(-115), "close_verified": True}]
+    rows = screen.screen([event], quotes, closes, [{"event_id": "e1", "home_score": 110, "away_score": 100}])
+    assert {round(r["hours_before_start"], 3) for r in rows} == {2.0}
+    out = screen.breakdown(rows)
+    assert set(out["by_timing"]) == {"1-3 h"} and out["by_timing"]["1-3 h"]["picks"] == len(rows) == 2
+    soft = out["by_book"]["soft"]
+    assert soft["picks"] == 1 and soft["with_comparable_close"] == 1 and soft["beat_close_share"] == 1.0
+    assert soft["wins"] == 1 and soft["price_clv_se"] is None and soft["roi_se"] is None   # one pick: no error bar
+    assert sum(g["picks"] for g in out["by_book"].values()) == 2
+    assert screen.timing_label(0.5) == "under 1 h" and screen.timing_label(30) == "24 h or more"
+    assert screen.timing_label(None) is None and screen.timing_label(-1) is None           # quoted after the start
+    mean, se = screen._mean_se([0.01, 0.03])
+    assert mean == 0.02 and round(se, 4) == 0.01
+    assert screen.breakdown(screen.screen([EVENT], _market(), [], []))["by_timing"] == {}  # no timestamps stored
