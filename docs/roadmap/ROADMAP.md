@@ -1,6 +1,6 @@
 # ParlayPicker roadmap: the best pick for each game
 
-Version 3, 2026-11-05; updated 2026-11-07 (§2a) and 2026-11-08 (§2b). This supersedes version 2 (same day). Version 2 was written
+Version 3, 2026-11-05; updated 2026-11-07 (§2a), 2026-11-08 (§2b) and 2026-11-09 (§2c). This supersedes version 2 (same day). Version 2 was written
 without a full audit of the repository and planned parallel systems for things the
 repository already does. Version 3 is built around the authority chain that already
 exists. Statuses were checked against `main` `cc42eac` plus open PR #2457.
@@ -168,6 +168,16 @@ the read-only first-edge replays for NCAAB and NBA spreads, now with Novig price
    `PARLAYPICKER_QUALIFIED_MARKET_FILE=true` in the app, configure the bankroll and limits
    (activation panel), activate the market, and set `PARLAYPICKER_DECISION_MARKETS`.
 2. Review and freeze the next NCAAB plan if Wednesday's replay supports it.
+
+## 2c. Update 2026-11-09: validation audit
+
+Full audit and the implementation roadmap: `docs/roadmap/VALIDATION-ROADMAP-2026-11-09.md`. In short:
+
+- No strategy produces bets yet (0 at 1% and 2% in today's NCAAB and NBA replays with Novig).
+- The current plan gates pass a true 2% edge about 1 time in 4 (`scripts/plan_gate_power.py`).
+- A passing market still stakes $0: three defects after the review (bridge start time, bridge line,
+  sport cap; the last is D23).
+- Milestones M1 to M5 and owner decisions D23 (reopened) and D26 to D29 are in that document.
 
 ## 3. Milestones, in order
 
