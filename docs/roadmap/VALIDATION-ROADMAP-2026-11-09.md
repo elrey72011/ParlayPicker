@@ -31,7 +31,7 @@ can recognise it, and three fixes at the end of the chain.
 | NCAAB TOTAL | 213 | 50 | 478 | No candidate model (needs 120 training games; has 0) |
 | NBA SPREAD | 33 | 15 | 238 | No candidate model; Pinnacle model has no calibration yet |
 | NBA TOTAL | 33 | 9 | 108 | Same |
-| NHL PUCK_LINE / TOTAL | 35 | 0 | 0 | Score settlement not enabled; no model |
+| NHL PUCK_LINE / TOTAL | 35 | 0 | 0 | No candidate model (needs 120 training games). Settlement is on (corrected 2026-11-09) |
 | NFL, NCAAF, MLB | 0 in the research store | — | — | No prospective events (football capture paused, D25; MLB out of season) |
 
 The store holds 0 validation artifacts and 0 deployment reviews. The research score models have 0
@@ -117,7 +117,7 @@ in the audit notes of this session; the rows below are the ones that matter for 
 | 2 | Novig against Pinnacle without news | 14% of control snapshots ≥1% in the lag study. Today's replay on once-a-game capture: 0 bets | 0 so far | Needs frequent capture to test (M2) |
 | 3 | Research score models (NBA, NCAAB, NHL) | None yet; 0 training games | Unknown | Accrues on its own; no date until teams have history |
 | 4 | NCAAF totals against opening lines | 54.7% on 179 picks, 0.6 standard errors above break-even | — | Within noise; needs opening-line capture; football paused |
-| 5 | MLB props | 58.6% on 741 graded, never compared with price (the first logged price, −141, breaks even at 58.5%) | — | Benchmark offline before spending anything |
+| 5 | MLB props | 58.6% on 741 graded against a 61.3% mean break-even at the logged prices: ROI −4.4% (M5 screen, 2026-11-09) | — | No edge. No further work |
 | — | Legacy blend, NCAAB and NCAAF form and ratings, NFL and MLB score models | At or below the market in every test | — | No further work |
 
 Never measured, and cheap to measure from data already stored: the price screen's outcomes by
@@ -260,10 +260,23 @@ M2 says go. If M2 says no-go, the next candidates are the research score models 
 ### M5. Second-line candidates (parallel, low cost)
 
 1. Research score models: no work until 120 training games exist; then draft, replay, and treat like
-   any candidate. Enable NHL score settlement so NHL accrues too.
+   any candidate. NHL score settlement is already on (checked 2026-11-09).
 2. Offline, from stored data, no credits: price-screen outcomes by book and timing; TheOver signals
    against results; props against their logged prices.
 3. Football stays paused (D25) unless a screen shows an edge.
+
+**Status 2026-11-09.** The screens that the repository's own data allows are done:
+`docs/roadmap/M5-OFFLINE-SCREENS-2026-11-09.md` (`scripts/offline_edge_screens.py`). MLB props lose
+2.7 points to their logged prices (ROI −4.4%), graded best picks sit at break-even and lose 1.6
+points to Kalshi, and no segment beats its price. The price screen by book and timing ran against
+the research store the same day: no book or timing bucket is profitable beyond noise; the best
+NCAAB spread price beats its own book's close by 0.8% (about 2.7 standard errors) but still returns
+−2.7%. No new candidate.
+
+NHL score settlement is already on: the workflows receive `PARLAYPICKER_NHL_SETTLEMENT=official_check`
+(D17). NHL's blocker is the same as the others', 120 training games for a candidate model. The
+"not enabled" status in section 2 came from the Bound plan workflow, which was not given the
+variable; it is now.
 
 ### Order and dependencies
 

@@ -229,6 +229,7 @@ def markdown(result):
                          f"{flagged} | {pct(t.get('mean_ev'))} | {t.get('with_comparable_close', '')} | "
                          f"{pct(t.get('mean_price_clv'))} | {pct(t.get('beat_close_share'))} | {t.get('settled', '')} | "
                          f"{pct(t.get('roi_per_pick'))} |")
+        lines += _price_breakdown(edges, pct)
     covered = [row for row in result.get('close_coverage') or [] if row.get('by_minutes_before_start')]
     if covered:
         from app_core.close_coverage import BUCKETS
@@ -246,6 +247,26 @@ def markdown(result):
         from app_core import plan_progress
         lines += plan_progress.markdown(result['plan_progress'])
     return '\n'.join(lines) + '\n'
+
+
+def _price_breakdown(edges, pct):
+    """Price screen by the book with the best price, and by quote timing (roadmap M5). Research only."""
+    lines = []
+    for key, title in (('by_book', 'book with the best price'), ('by_timing', 'best price quoted before the start')):
+        rows = [(row, name, g) for row in edges for name, g in (row.get(key) or {}).items()]
+        if not rows:
+            continue
+        lines += ['', f'| price screen by {title} | picks | mean EV | closes | mean CLV (SE) | beat close | settled | '
+                  'wins | ROI (SE) |', '|---|---|---|---|---|---|---|---|---|']
+
+        def with_se(value, se):
+            return '' if value is None else pct(value) + ('' if se is None else f' ({se:.1%})')
+        for row, name, g in rows:
+            lines.append(f"| {row['sport']} {row['market_family']}: {name} | {g['picks']} | {pct(g['mean_ev'])} | "
+                         f"{g['with_comparable_close']} | {with_se(g['mean_price_clv'], g['price_clv_se'])} | "
+                         f"{pct(g['beat_close_share'])} | {g['settled']} | {g['wins']} | "
+                         f"{with_se(g['roi_per_pick'], g['roi_se'])} |")
+    return lines
 
 
 def main(argv=None):
