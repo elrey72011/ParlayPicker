@@ -204,6 +204,10 @@ def decision_quotes(events, quotes, now, *, predicted=None, horizon=HORIZON, max
         start, stamp = _time(event["scheduled_start"]), _time(quote["quote_timestamp"])
         if not (now < start <= now + horizon and now - max_age <= stamp <= now):
             continue
+        from app_core.market_skill_validation import response_key
+        received = response_key(quote.get("raw_source"))
+        if received is not None and _time(received) > now:
+            continue  # the response holding it arrived after ``now`` (audit 2026-11-09)
         if abs(2 * quote["line"] - round(2 * quote["line"])) > 1e-8:
             continue
         if not evidence.verify_provider_offer(event, quote):

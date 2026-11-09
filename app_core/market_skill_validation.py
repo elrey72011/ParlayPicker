@@ -148,8 +148,11 @@ def first_edge_bet(db, plan, quote, rules, as_of):
     from app_core import prospective_evidence as pe
     event = pe._event(db, quote["event_id"])
     start = pe._time(event["scheduled_start"], "scheduled_start")
+    # Decision capture's predictions (``decision-prediction:``) depend on a switch not frozen with the
+    # plan, so they never enter the bet stream (audit 2026-11-09).
     rows = db.execute("""SELECT observation_id FROM prospective_prediction WHERE event_id=? AND market_family=?
-        AND model_id=? AND calibration_id=? ORDER BY prediction_timestamp, observation_id""",
+        AND model_id=? AND calibration_id=? AND observation_id NOT LIKE 'decision-prediction:%'
+        ORDER BY prediction_timestamp, observation_id""",
                       (quote["event_id"], quote["market_family"], plan["model_id"], plan["calibration_id"])).fetchall()
     for row in rows:
         prediction = pe._stored(db, "prospective_prediction", "observation_id", row[0])
@@ -176,7 +179,7 @@ def first_edge_bet(db, plan, quote, rules, as_of):
         result = pe._latest_result(db, entry["event_id"], entry["market_family"], prediction["selection"],
                                    as_of if as_of is not None else pe._clock())
         if result is None:
-            return None
+            continue  # this side is not settled: a later prediction of the game may still be the bet
         outcome = pe._outcome_at_quote_line(db, result, entry, result["outcome"])
         if outcome not in ("WIN", "LOSS"):
             return None

@@ -607,7 +607,11 @@ def run_cycle(path, sport, *, now=None):
             entry["calibration"] = fit_calibration(path, sport, market, candidate["model_id"], now=now)
             if entry["calibration"]["status"] != "PRESENT":
                 entry["candidate_predictions"] = predict_candidate(path, sport, market, now=now)
-        entry["bound_predictions"] = predict_bound(path, sport, market, now=now)
+        # A fresh clock for the plan's predictions (audit 2026-11-09): settlement, calibration and the
+        # candidate predictions above can take minutes, and a prediction stamped more than 5 minutes
+        # before it is stored is refused as backdated, which dropped the rest of the sport's bound
+        # predictions that cycle.
+        entry["bound_predictions"] = predict_bound(path, sport, market, now=max(now, evidence._clock()))
         entry["pinnacle_model"] = pinnacle_cycle(path, sport, market, now=now)
         report["markets"][market] = entry
     return report
