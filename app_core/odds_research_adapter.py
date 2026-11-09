@@ -228,6 +228,7 @@ def scores(records):
 
 
 UNRESOLVED_LISTED = 25
+MAX_START_DELAY = timedelta(hours=12)   # owner 2026-11-09: a later tip-off on the same day
 UNRESOLVED_DAYS = 30
 ATTEMPT_DAYS = 7
 EXPIRED_REPORTED = "SCORE_WINDOW_EXPIRED_REPORTED"
@@ -474,7 +475,13 @@ class OddsResearchAdapter:
             captured_event = pending[gid]
             original_start = timestamp(captured_event["start"])
             reported_start = timestamp(ident["start"])
-            if any(ident[k] != captured_event[k] for k in ("event_id", "home", "away")) or abs(reported_start-original_start) > timedelta(minutes=15):
+            # A later start (the provider corrected the tip-off, as for Chicago St at Incarnate Word on
+            # 2026-11-05: captured 6 PM ET, played 7 PM ET) keeps every captured price pregame, so the
+            # score is accepted up to MAX_START_DELAY later. An earlier start by more than 15 minutes
+            # still rejects: prices captured between the real and the scheduled start were in-game.
+            moved = reported_start - original_start
+            if (any(ident[k] != captured_event[k] for k in ("event_id", "home", "away"))
+                    or moved < -timedelta(minutes=15) or moved > MAX_START_DELAY):
                 result["score_rejections"][gid] = "score_event_identity_changed"
                 continue
             updated = timestamp(row.get("last_update"))
