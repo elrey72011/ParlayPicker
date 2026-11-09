@@ -172,6 +172,15 @@ def sanitize_cycle(report):
                 calibration = model.get("calibration_cycle")
                 if isinstance(calibration, dict) and isinstance(calibration.get("markets"), dict):
                     row["calibration_cycle"] = _calibration_summary(calibration["markets"])
+        audit = cycle.get("audit") if isinstance(cycle, dict) else None
+        if isinstance(audit, dict) and type(audit.get("unresolved_past_score_window")) is int:
+            # Games past the provider's score window and the last outcome of their score check.
+            checks = {}
+            for event in audit.get("unresolved_events") or []:
+                code = _code(str((event or {}).get("last_check", "")).upper()) if isinstance(event, dict) else None
+                if code:
+                    checks[code] = checks.get(code, 0) + 1
+            row["score_window"] = {"unresolved": max(0, audit["unresolved_past_score_window"]), "last_check": checks}
         if isinstance(cycle, dict) and cycle.get("pinnacle") in ("on", "off", "allowance_spent"):
             # Whether this cycle's capture included Pinnacle (allowance_spent: captured without it).
             row["pinnacle_capture"] = cycle["pinnacle"].upper()

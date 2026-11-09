@@ -265,6 +265,7 @@ def run_ncaaf(path, state, cfbd_key, odds_key, backup, request_get=None):
 
 BACKLOG_ONLY = "DUE_SCORE_BATCH_LIMIT"
 BUDGET_PAUSED = "budget_paused"
+EXPIRED_REPORTED = "SCORE_WINDOW_EXPIRED_REPORTED"
 GRADE_FAILURES = frozenset({"SCORE_SOURCE_IDENTITY_OR_TIMING_REJECTED", "SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW"})
 
 
@@ -523,12 +524,14 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
     report["api_budget"]=budget.report()
     def grade_ok(s):
         # A score backlog alone (more finished games than one run grades; the next run
-        # continues) is not a failure. Rejected scores or games past the provider's score
-        # window still are. The health entry keeps "partial" and the blocker stays listed.
+        # continues) is not a failure. Rejected scores or games newly past the provider's score
+        # window still are. A game already reported past the window (EXPIRED_REPORTED, owner
+        # 2026-11-09) stays listed but does not fail every later cycle. The health entry keeps
+        # "partial" and the blocker stays listed.
         if report["health"][s]["grade"] in ("success", BUDGET_PAUSED):
             return True
         blockers = set(report["sports"].get(s, {}).get("blockers") or [])
-        return (report["health"][s]["grade"] == "partial" and BACKLOG_ONLY in blockers
+        return (report["health"][s]["grade"] == "partial" and bool(blockers & {BACKLOG_ONLY, EXPIRED_REPORTED})
                 and not blockers & GRADE_FAILURES)
     report["grade_backlog_only"] = sorted(
         s for s in sports if s in report["health"] and report["health"][s]["grade"] != "success" and grade_ok(s))

@@ -357,3 +357,56 @@ def test_health_keeps_last_success_after_new_failure_and_scopes_errors(tmp_path,
     # A budget pause alone is not a failure (owner 2026-11-07); it stays visible.
     assert third["errors"] == [] and third["requested_slate_success"] is True
     assert third["budget_paused_sports"] == ["NBA"]
+
+
+def test_games_past_the_score_window_are_listed_with_their_last_score_check(tmp_path, monkeypatch):
+    from app_core.research_cycle_audit import sanitize_cycle
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    clock = [now]
+    monkeypatch.setattr(odds, "utcnow", lambda: clock[0])
+    event, participants, odds_event, score = fixture_payload("NCAAB", now)
+    score["completed"] = False                       # the provider never marks the game final
+    get, _ = provider_for(event, participants, odds_event, score)
+    adapter = registry.get_adapter("NCAAB")
+    path = tmp_path / adapter.path_name
+    adapter.capture_pregame(path, {}, "key", get, lambda: None)
+    state = {}
+    clock[0] = now + timedelta(hours=4)
+    assert adapter.grade(path, "key", get, lambda: None, state)["graded"] == 0
+    assert state["ncaab_score_check_status"] == {"abc123": "not_completed"}
+    clock[0] = now + timedelta(days=4)
+    audit = adapter.audit(path, state)
+    assert audit["unresolved_past_score_window"] == 1
+    assert audit["unresolved_events"] == [{"event_id": "abc123", "home": "Home Team", "away": "Away Team",
+                                           "start": odds_event["commence_time"], "last_check": "not_completed"}]
+    assert adapter.audit(path)["unresolved_events"][0]["last_check"] == "never_checked"
+    report = {"requested_sports": ["NCAAB"], "health": {"NCAAB": {}}, "sports": {"NCAAB": {"audit": audit}}}
+    assert sanitize_cycle(report)["sports"]["NCAAB"]["score_window"] == {"unresolved": 1,
+                                                                        "last_check": {"NOT_COMPLETED": 1}}
+
+
+def test_an_expired_game_fails_one_cycle_then_stays_listed(tmp_path, monkeypatch):
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    clock = [now]
+    monkeypatch.setattr(odds, "utcnow", lambda: clock[0])
+    event, participants, odds_event, score = fixture_payload("NCAAB", now)
+    get, _ = provider_for(event, participants, odds_event, None)
+    adapter = registry.get_adapter("NCAAB")
+    path = tmp_path / adapter.path_name
+    adapter.capture_pregame(path, {}, "key", get, lambda: None)
+    idle = {"graded": 0, "corrected": 0, "score_rejections": {}, "deferred_grade_events": 0}
+    monkeypatch.setattr(adapter, "grade", lambda *a, **k: dict(idle))
+    monkeypatch.setattr(adapter, "capture_pregame", lambda *a, **k: {"identity_blocked": 0,
+                        "price_unavailable_events": 0, "deferred_due_events": 0})
+    monkeypatch.setattr(adapter, "capture_closes", lambda *a, **k: {"deferred_close_events": 0,
+                        "close_identity_rejections": 0, "close_price_unavailable_events": 0})
+    clock[0] = now + timedelta(days=4)
+    state = {}
+    budget = type("NoCalls", (), {"request": None})()
+    first = adapter.run_cycle(path, state, None, "key", lambda: None, budget)
+    assert "SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW" in first["blockers"] and first["audit"]["newly_expired"] == 1
+    assert first["grade_status"] == "partial" and state["ncaab_expired_reported"] == ["abc123"]
+    second = adapter.run_cycle(path, state, None, "key", lambda: None, budget)
+    assert "SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW" not in second["blockers"]
+    assert "SCORE_WINDOW_EXPIRED_REPORTED" in second["blockers"] and second["audit"]["newly_expired"] == 0
+    assert second["audit"]["unresolved_events"][0]["event_id"] == "abc123"   # still listed

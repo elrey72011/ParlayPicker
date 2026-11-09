@@ -59,3 +59,16 @@ def test_budget_pause_is_not_a_failure(monkeypatch, tmp_path, cycle, success):
     assert result["requested_slate_success"] is success
     assert result["execution_state"] == ("COMPLETE" if success else "FAILED")
     assert result["budget_paused_sports"] == ["NFL"]                  # still visible
+
+
+@pytest.mark.parametrize("blockers,success", [
+    (["SCORE_WINDOW_EXPIRED_REPORTED"], True),                                        # already reported once
+    (["SCORE_WINDOW_EXPIRED_REPORTED", "DUE_SCORE_BATCH_LIMIT"], True),
+    (["SCORE_WINDOW_EXPIRED_REPORTED", "SCORE_SOURCE_IDENTITY_OR_TIMING_REJECTED"], False),  # a new rejection
+    (["SCORE_WINDOW_EXPIRED_REPORTED", "SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW"], False),   # a newly expired game
+])
+def test_a_game_already_reported_past_the_score_window_does_not_fail_every_cycle(monkeypatch, tmp_path,
+                                                                                blockers, success):
+    result = _run(monkeypatch, tmp_path, {"errors": [], "grade_status": "partial", "blockers": blockers})
+    assert result["requested_slate_success"] is success
+    assert result["health"]["NFL"]["grade"] == "partial"

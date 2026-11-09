@@ -227,6 +227,10 @@ def scores(records):
     return result
 
 
+UNRESOLVED_LISTED = 25
+EXPIRED_REPORTED = "SCORE_WINDOW_EXPIRED_REPORTED"
+
+
 class OddsResearchAdapter:
     supported_markets = ()
 
@@ -432,8 +436,17 @@ class OddsResearchAdapter:
                 return result
             state[last_key] = now.isoformat()
         selected = sorted(pending, key=lambda gid: (attempts.get(gid, ""), gid))[:24]
+        # The last outcome of each game's score check, kept so a game that is never graded
+        # (past the provider's score window) can be reported with its reason.
+        status = state.setdefault(self.sport.lower() + "_score_check_status", {})
+        if not isinstance(status, dict):
+            raise ValueError("invalid_score_status_state")
+        for gid in [g for g in status if g not in captured or g in completed]:
+            del status[gid]
         for gid in selected:
             attempts[gid] = now.isoformat()
+            if gid not in completed:
+                status[gid] = "not_returned"
         payload = fetch(self.sport, "scores", odds_key, request_get,
                         params={"daysFrom": 3, "eventIds": ",".join(selected)})
         seen = set()
@@ -446,6 +459,8 @@ class OddsResearchAdapter:
                 raise ValueError("provider_duplicate_score")
             seen.add(gid)
             if row.get("completed") is not True:
+                if gid not in completed:
+                    status[gid] = "not_completed"
                 continue
             captured_event = pending[gid]
             original_start = timestamp(captured_event["start"])
@@ -493,18 +508,36 @@ class OddsResearchAdapter:
                                                  "revises_score_record_id": previous["record_id"] if previous else None,
                                                  "source_hash": digest(row), "raw_source": row}}, path)
             result["corrected" if previous else "graded"] += 1
+            status.pop(gid, None)
             backup()
+        for gid, reason in result["score_rejections"].items():
+            if gid not in completed:
+                status[gid] = reason
         return result
 
-    def audit(self, path):
+    def unresolved(self, path):
+        """Captured games past the provider's 3-day score window with no score, oldest first."""
+        records = self.store.records(path)
+        captured, graded = captures(records), scores(records)
+        return sorted((gid for gid, event in captured.items() if gid not in graded and
+                       utcnow() - timestamp(event["start"]) > timedelta(days=3)),
+                      key=lambda gid: (captured[gid]["start"], gid))
+
+    def audit(self, path, state=None):
         records = self.store.records(path)
         captured, graded = captures(records), scores(records)
         by_market = Counter(quote["market_family"] for event in captured.values() for quote in event["quotes"])
+        unresolved = self.unresolved(path)
+        status = (state or {}).get(self.sport.lower() + "_score_check_status") or {}
         return {"captured_events": len(captured), "settled_events": len(set(captured) & set(graded)),
                 "quote_rows_by_market": dict(by_market), "production_eligible": False,
-                "unresolved_past_score_window": sum(
-                    1 for gid, event in captured.items() if gid not in graded and
-                    utcnow() - timestamp(event["start"]) > timedelta(days=3)),
+                "unresolved_past_score_window": len(unresolved),
+                # Which games, and the last outcome of their score check ("never_checked" when the
+                # game was never due inside the window), so the cause can be read from the run log.
+                "unresolved_events": [{"event_id": gid, "home": captured[gid]["home"],
+                                       "away": captured[gid]["away"], "start": captured[gid]["start"],
+                                       "last_check": status.get(gid, "never_checked")}
+                                      for gid in unresolved[:UNRESOLVED_LISTED]],
                 "model_status": "MISSING_SPORT_MARKET_MODEL",
                 "calibration_status": "MISSING_CALIBRATION",
                 "close_status": "NO_VERIFIED_CLOSE_QUOTES"}
@@ -585,9 +618,21 @@ class OddsResearchAdapter:
         except Exception:
             result["errors"].append("close_capture_failed")
             result["close_capture_status"] = "failed"
-        result["audit"] = self.audit(path)
+        result["audit"] = self.audit(path, state)
         if result["audit"]["unresolved_past_score_window"]:
-            result["blockers"].append("SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW")
+            # A game past the provider's score window can never be graded from it. It fails the
+            # cycle once, when first found (SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW); after that it
+            # stays listed in every audit (SCORE_WINDOW_EXPIRED_REPORTED) without failing each
+            # later cycle, so a new failure is not hidden behind a permanent one (owner 2026-11-09).
+            reported = state.setdefault(self.sport.lower() + "_expired_reported", [])
+            if not isinstance(reported, list):
+                raise ValueError("invalid_expired_reported_state")
+            unresolved = self.unresolved(path)
+            new = [gid for gid in unresolved if gid not in reported]
+            result["blockers"].append("SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW" if new
+                                      else EXPIRED_REPORTED)
+            reported.extend(new)
+            result["audit"]["newly_expired"] = len(new)
             if result["grade_status"] == "success":
                 result["grade_status"] = "partial"
         return result

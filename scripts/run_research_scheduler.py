@@ -76,6 +76,12 @@ def main():
             Path(os.getenv("PARLAYPICKER_EVIDENCE_DIR","output/scheduled-research")) / "prospective-evidence.sqlite3",
             DriveStore(folder))
         print("Research model board: " + json.dumps(result["research_model_board"]), flush=True)
+        # Games past the provider's score window (they fail the cycle), with the last outcome of
+        # each game's score check, so the cause is in the run log (team names and times only).
+        for sport, cycle in (result.get("sports") or {}).items():
+            listed = ((cycle or {}).get("audit") or {}).get("unresolved_events") if isinstance(cycle, dict) else None
+            if listed:
+                print("Unresolved past score window " + sport + ": " + json.dumps(listed, default=str), flush=True)
     except Exception as exc:
         result={"requested_sports":result.get("requested_sports",[]),"health":{},
                 "errors":["scheduler:"+type(exc).__name__],"requested_slate_success":False,
