@@ -32,11 +32,22 @@ on:
         type: choice
         options: [research, pinnacle]
       methodology:
-        description: "draft only: market_skill (scored against the market's no-vig price, D19 B) or v1"
+        description: "draft only: market_skill (scored against the market's no-vig price, D19 B), market_skill_v2 (CLV-led gates, D26) or v1"
         required: false
         default: market_skill
         type: choice
-        options: [market_skill, v1]
+        options: [market_skill, market_skill_v2, v1]
+      min_bets:
+        description: "draft only, market_skill_v2: bets needed in each window (locks at the freeze)"
+        required: false
+        default: "75"
+        type: choice
+        options: ["50", "60", "75", "100"]
+      pool:
+        description: "draft only, market_skill_v2 with the pinnacle model: count bets across NBA and NCAAB (D27)"
+        required: false
+        default: false
+        type: boolean
       min_edge:
         description: "draft only, market_skill: minimum EV for a bet (locks at the freeze; see the replay estimate)"
         required: false
@@ -98,6 +109,8 @@ jobs:
           MODEL: ${{ inputs.model }}
           MIN_EDGE: ${{ inputs.min_edge }}
           ENTRY_RULE: ${{ inputs.entry_rule }}
+          MIN_BETS: ${{ inputs.min_bets }}
+          POOL: ${{ inputs.pool }}
           FREEZE_INPUTS: ${{ inputs.freeze_inputs }}
           EXPECTED_HASH: ${{ inputs.expected_hash }}
           OUT: ${{ runner.temp }}/bound-plan
@@ -106,7 +119,8 @@ jobs:
           args=("$ACTION" --directory "$OUT/evidence" --output "$OUT/report/bound-plan.json"
                 --cache-dir "$RUNNER_TEMP/drive-cache" --sport "$SPORT" --market "$MARKET")
           if [ "$ACTION" = draft ] && [ -n "$VALIDATION_START" ]; then args+=(--validation-start "$VALIDATION_START"); fi
-          if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}" --model "${MODEL:-research}" --min-edge "${MIN_EDGE:-0.02}" --entry-rule "${ENTRY_RULE:-earliest}"); fi
+          if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}" --model "${MODEL:-research}" --min-edge "${MIN_EDGE:-0.02}" --entry-rule "${ENTRY_RULE:-earliest}" --min-bets "${MIN_BETS:-75}"); fi
+          if [ "$ACTION" = draft ] && [ "$POOL" = true ]; then args+=(--pool); fi
           if [ "$ACTION" = freeze ]; then args+=(--inputs "$FREEZE_INPUTS" --expected-hash "$EXPECTED_HASH"); fi
           python -u scripts/bound_plan.py "${args[@]}"
       - name: Save the verified Drive object cache

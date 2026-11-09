@@ -1814,8 +1814,12 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
         if details:
             # D19 option B: the probability gate is skill against the de-vigged entry price.
             from app_core import market_skill_validation as market_skill
-            skill = {name: market_skill.skill(db, pairs, as_of=cutoff, rules=method[market_skill.KEY], plan=plan)
+            own_bets = {name: {} for name in details}
+            skill = {name: market_skill.skill(db, pairs, as_of=cutoff, rules=method[market_skill.KEY], plan=plan,
+                                              collect=own_bets[name])
                      for name, pairs in details.items()}
+            # Owner D27: a pooled market-skill-v2 plan scores its bet gates on every pool scope's bets.
+            pool = market_skill.pool_results(db, plan, method, cutoff, _cohort, own_bets)
     if "football_v2_methodology" in method:
         from app_core.football_validation_v2 import evaluate as evaluate_football_v2
         decision = evaluate_football_v2(plan, method, validation, holdout, cutoff)
@@ -1869,11 +1873,15 @@ def evaluate_validation_plan(path: str | Path | None, validation_plan_id: str,
     extra = {}
     if details:
         for cohort in (validation, holdout):
-            blockers.extend(market_skill.blockers(cohort["name"].upper(), cohort, skill[cohort["name"]], method))
+            blockers.extend(market_skill.blockers(cohort["name"].upper(), cohort, skill[cohort["name"]], method,
+                                                  pool=pool and pool[cohort["name"]]))
         extra["market_skill"] = skill
+        if pool is not None:
+            extra["market_skill_pool"] = pool
         # The provisional stake tier's prior-CLV input (core.live_wager_contract reads
-        # validation_report.metrics.price_clv_lower_95): the holdout bets' CLV lower 95% bound.
-        extra["metrics"] = {"price_clv_lower_95": skill["holdout"].get("bet_clv_lower_95")}
+        # validation_report.metrics.price_clv_lower_95): the holdout bets' CLV lower 95% bound
+        # (a pooled plan: the pool's, the same statistic its gate passed on).
+        extra["metrics"] = {"price_clv_lower_95": (pool or skill)["holdout"].get("bet_clv_lower_95")}
     return dict(validation_plan_id=plan["validation_plan_id"], sport=plan["sport"],
                 market_family=plan["market_family"], model_id=plan["model_id"],
                 calibration_id=plan["calibration_id"], plan_artifact_hash=plan["artifact_hash"],

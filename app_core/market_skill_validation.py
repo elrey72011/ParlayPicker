@@ -27,6 +27,26 @@ Everything else in the v1 template still applies unchanged (calibration error, c
 sample sizes, verified entry prices, certified-close coverage). The
 absolute bounds are set to a coin flip (0.25, ln 2) as a sanity floor. Plans frozen
 without this key are evaluated exactly as before.
+
+``market-skill-v2`` (owner D26, 2026-11-09; ``methodology_v2``) is for plans frozen from then on.
+A simulation of the v1 gates (``scripts/plan_gate_power.py``) passes a true 2% edge about 1 time
+in 4: Brier and log loss "no worse than the market" on 200 games is close to a coin flip, and
+ROI >= 0 on 50 bets has a standard error near 13 points. Closing-line value is the one precise
+measure, so v2 leads with it. In each window:
+
+* at least ``min_bets`` bets, and their mean CLV at least ``min_clv_t`` standard errors above zero;
+* a certified close for at least ``min_bet_close_coverage`` of the bets;
+* bet ROI at or above a loss floor (``min_bet_roi``, negative: it catches a broken plan, not noise);
+* the market reference for at least ``min_market_reference_coverage`` of scored games.
+
+Brier and log loss against the market are reported, never blocking. The absolute probability
+bounds are a coin flip plus room for sampling noise (``V2_THRESHOLDS``). The holdout bets' CLV
+lower 95% bound is the staking terms' input, so a plan that passes can stake.
+
+A v2 plan may pool its bets with named companion plans (owner D27: the Pinnacle/Novig lag only,
+NBA with NCAAB, same market family). Every companion is frozen with the same rules and windows.
+The bet gates above are then scored on all the pool's bets, each scope's own results are reported,
+and each scope still needs ``min_scope_bets`` of its own. v1 plans never pool.
 """
 from __future__ import annotations
 
@@ -37,6 +57,17 @@ VERSION = "market-skill-v1"
 COIN_FLIP = {"max_brier": 0.25, "max_log_loss": round(math.log(2), 6)}
 
 
+VERSION_V2 = "market-skill-v2"
+# v2 absolute bounds: a coin flip (0.25, ln 2) plus room for sampling noise. A model that agrees
+# with a market near 50% scores about 0.249 with a standard error near 0.002 on 200 games, so the
+# exact coin-flip bound would fail a sound plan about 1 time in 4.
+V2_THRESHOLDS = {"max_brier": 0.26, "max_log_loss": 0.715, "max_calibration_error": 0.15}
+DEFAULT_MIN_BETS = 75
+ALLOWED_MIN_BETS = (50, 60, 75, 100)        # chosen when the plan is drafted; locks at the freeze
+MIN_CLV_T = 2.0
+V2_MIN_BET_ROI = -0.25                      # a loss floor: 75 bets' ROI has a standard error near 11 points
+MIN_SCOPE_BETS = 10
+POOL_SPORTS = ("NBA", "NCAAB")              # owner D27: the Pinnacle/Novig lag only
 DEFAULT_MIN_EDGE = 0.02
 # The bet threshold is chosen when the plan is drafted and frozen (owner 2026-11-07; the
 # bound plan draft's replay estimate shows the bet rate at each). It locks at the freeze.
@@ -85,6 +116,74 @@ def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None, pu
             raise ValueError(f"push_rule must be {PUSH_ZERO_RETURN}")
         rules["push_rule"] = PUSH_ZERO_RETURN
     return rules
+
+
+def pool_scopes(sport, family):
+    """The scopes a pooled v2 plan for ``sport`` / ``family`` counts bets across (owner D27)."""
+    if sport not in POOL_SPORTS or family not in ("SPREAD", "TOTAL"):
+        raise ValueError("pooling is for NBA and NCAAB spreads or totals only")
+    return [f"{s}:{family}" for s in POOL_SPORTS]
+
+
+def methodology_v2(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None, min_bets=DEFAULT_MIN_BETS,
+                   max_entry_overround=None, pool=None):
+    """The ``market-skill-v2`` rules (owner D26). ``pool``: the scopes whose bets count together
+    (``pool_scopes``; owner D27), or None for a plan that validates alone."""
+    if min_edge not in ALLOWED_MIN_EDGES:
+        raise ValueError(f"min_edge must be one of {ALLOWED_MIN_EDGES}")
+    if entry_rule is not None and entry_rule not in ENTRY_RULES:
+        raise ValueError(f"entry_rule must be one of {ENTRY_RULES}")
+    if min_bets not in ALLOWED_MIN_BETS:
+        raise ValueError(f"min_bets must be one of {ALLOWED_MIN_BETS}")
+    rules = {"version": VERSION_V2, "primary_gate": "BET_MEAN_CLV_STANDARD_ERRORS_ABOVE_ZERO",
+             "min_clv_t": MIN_CLV_T, "min_bets": min_bets, "min_bet_close_coverage": 0.8,
+             "min_bet_roi": V2_MIN_BET_ROI, "paper_roi_scope": "BETS",
+             "probability_gate": "MODEL_VS_MARKET_REPORTED_NOT_BLOCKING",
+             "market_reference": "SAME_BOOK_OPPOSITE_SIDE_SAME_LINE_SAME_TIMESTAMP",
+             "min_market_reference_coverage": 0.9,
+             "bet_rule": "EITHER_SIDE_EV_AT_ENTRY_PRICE_AT_LEAST_MIN_EDGE", "min_edge": min_edge,
+             "absolute_bounds": "COIN_FLIP_PLUS_SAMPLING_NOISE", "window_sizing": "EXPECTED_BETS",
+             "staking_statistic": "HOLDOUT_BET_CLV_LOWER_95",
+             "other_model_predictions": "REPORTED_NOT_BLOCKING", "push_rule": PUSH_ZERO_RETURN,
+             "decision_record": "D26 (owner 2026-11-09)"}
+    if entry_books:
+        rules["entry_books"] = sorted(entry_books)
+    if entry_rule == FIRST_EDGE_CAPTURE:
+        rules["entry_rule"] = FIRST_EDGE_CAPTURE
+    if max_entry_overround is not None:
+        if not 1.0 < max_entry_overround <= 1.5:
+            raise ValueError("max_entry_overround must be above 1 and at most 1.5")
+        rules["max_entry_overround"] = max_entry_overround   # owner D29: junk prices never enter
+    if pool is not None:
+        scopes = sorted(pool)
+        sports = [s.split(":")[0] for s in scopes]
+        if (len(scopes) < 2 or len(set(scopes)) != len(scopes) or any(s not in POOL_SPORTS for s in sports)
+                or len({s.split(":")[1] for s in scopes}) != 1 or len(set(sports)) != len(sports)):
+            raise ValueError("a pool is one market family across NBA and NCAAB")
+        rules["pool"] = {"scopes": scopes, "min_scope_bets": MIN_SCOPE_BETS,
+                         "gate": "BET_GATES_ON_ALL_POOL_BETS_EACH_SCOPE_REPORTED", "decision_record": "D27 (owner 2026-11-09)"}
+    return rules
+
+
+def template_v2(base, **kwargs):
+    """The v1 template with the ``market-skill-v2`` gates."""
+    spec = dict(base)
+    rules = methodology_v2(**kwargs)
+    spec["probability_thresholds"] = dict(base["probability_thresholds"], **V2_THRESHOLDS)
+    # Close coverage is gated on the bets (``min_bet_close_coverage``); over every game it is reported.
+    spec["clv_policy"] = dict(base["clv_policy"], min_comparable_close_coverage=0.0)
+    # Windows are sized by bets. Each scope still needs this many settled games of its own.
+    sample = rules["pool"]["min_scope_bets"] if "pool" in rules else rules["min_bets"]
+    spec["minimum_independent_sample"] = spec["minimum_effective_sample"] = sample
+    if "pool" in rules:
+        spec["model_scope"] = dict(base["model_scope"],
+                                   cross_sport_or_market_pooling="BET_GATES_POOLED_ACROSS_NAMED_SCOPES_D27")
+    spec[KEY] = rules
+    return spec
+
+
+def is_v2(method):
+    return (method.get(KEY) or {}).get("version") == VERSION_V2
 
 
 def template(base, min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None, push_rule=None):
@@ -198,8 +297,10 @@ def first_edge_bet(db, plan, quote, rules, as_of):
     return None
 
 
-def skill(db, scored, *, as_of=None, rules=None, plan=None):
+def skill(db, scored, *, as_of=None, rules=None, plan=None, collect=None):
     """Model vs market, and the model's bets, on the scored games. ``scored``: [(p, y, quote)].
+
+    ``collect``, when a dict, receives the bets' ``returns`` and ``clvs`` (for a pool).
 
     ``p`` is the decided probability for ``quote``'s side and ``y`` its WIN (1) / LOSS (0).
     Under ``FIRST_EDGE_CAPTURE`` the bets come from ``first_edge_bet`` (``plan`` names the model
@@ -238,6 +339,10 @@ def skill(db, scored, *, as_of=None, rules=None, plan=None):
            "bet_mean_clv": sum(clvs) / len(clvs) if clvs else None,
            # Mean CLV minus 1.96 standard errors: the staking terms' prior-CLV bound (app_core.staking_terms).
            "bet_clv_lower_95": _lower_95(clvs)}
+    if rules.get("version") == VERSION_V2:
+        out["bet_clv_t"] = _t_statistic(clvs)
+    if collect is not None:
+        collect.update(returns=returns, clvs=clvs)
     if paired:
         out["model_brier"], out["model_log_loss"] = _scores([(p, y) for p, _, y in paired])
         out["market_brier"], out["market_log_loss"] = _scores([(m, y) for _, m, y in paired])
@@ -252,8 +357,106 @@ def _lower_95(values):
     return mean - 1.96 * sd / math.sqrt(len(values))
 
 
-def blockers(label, cohort, result, method):
+def _t_statistic(values):
+    """Mean over its standard error; None with fewer than 2 values or no spread."""
+    if len(values) < 2:
+        return None
+    mean = sum(values) / len(values)
+    sd = math.sqrt(sum((v - mean) ** 2 for v in values) / (len(values) - 1))
+    return mean / (sd / math.sqrt(len(values))) if sd > 0 else None
+
+
+def _bet_summary(returns, clvs):
+    return {"bets": len(returns), "bet_roi": sum(returns) / len(returns) if returns else None,
+            "bets_with_close": len(clvs), "bet_close_coverage": len(clvs) / len(returns) if returns else 0.0,
+            "bet_mean_clv": sum(clvs) / len(clvs) if clvs else None, "bet_clv_t": _t_statistic(clvs),
+            "bet_clv_lower_95": _lower_95(clvs)}
+
+
+WINDOW_COLUMNS = ("validation_start", "validation_end", "holdout_start", "holdout_end")
+
+
+def pool_results(db, plan, method, as_of, cohort, own):
+    """{window: pooled bet summary} for a pooled v2 plan, or None when the plan does not pool.
+
+    ``own``: {window: {"returns", "clvs"}} already collected for ``plan``. Each companion is the
+    latest plan of its scope and must be frozen with the same rules and windows and bound to a
+    model and calibration; otherwise the pool is ``complete: False`` and blocks. ``cohort`` is
+    ``prospective_evidence._cohort``.
+    """
+    from app_core import prospective_evidence as pe
     rules = method[KEY]
+    pool = rules.get("pool") if rules.get("version") == VERSION_V2 else None
+    if not pool:
+        return None
+    mine = f"{plan['sport']}:{plan['market_family']}"
+    collected, problems = {mine: own}, []
+    if mine not in pool["scopes"]:
+        problems.append("OWN_SCOPE_NOT_IN_POOL")
+    for scope in pool["scopes"]:
+        if scope == mine:
+            continue
+        sport, family = scope.split(":")
+        row = db.execute("""SELECT validation_plan_id FROM prospective_validation_plan WHERE sport=? AND market_family=?
+            ORDER BY version DESC LIMIT 1""", (sport, family)).fetchone()
+        other = pe._stored(db, "prospective_validation_plan", "validation_plan_id", row[0]) if row else None
+        if other is None:
+            problems.append(f"{scope}_NO_PLAN")
+            continue
+        if (json_rules(other) != rules or any(other[c] != plan[c] for c in WINDOW_COLUMNS)
+                or other["model_id"] is None or other["calibration_id"] is None or not pe.plan_integrity(other)):
+            problems.append(f"{scope}_PLAN_DIFFERS")
+            continue
+        collected[scope] = {}
+        for window in ("validation", "holdout"):
+            pairs, bets = [], {}
+            cohort(db, other, window, as_of, pairs)
+            skill(db, pairs, as_of=as_of, rules=rules, plan=other, collect=bets)
+            collected[scope][window] = bets
+    out = {}
+    for window in ("validation", "holdout"):
+        scopes = {scope: _bet_summary(data[window]["returns"], data[window]["clvs"])
+                  for scope, data in sorted(collected.items())}
+        out[window] = dict(_bet_summary([r for d in collected.values() for r in d[window]["returns"]],
+                                        [c for d in collected.values() for c in d[window]["clvs"]]),
+                           complete=not problems, problems=problems, scopes=scopes)
+    return out
+
+
+def json_rules(plan):
+    import json
+    try:
+        return json.loads(plan["payload"]).get(KEY)
+    except (TypeError, ValueError, KeyError):
+        return None
+
+
+def _v2_blockers(label, result, rules, pool):
+    found = []
+    if result["market_reference_coverage"] < rules["min_market_reference_coverage"]:
+        found.append(f"{label}_MARKET_REFERENCE_COVERAGE_TOO_LOW")
+    bets = result
+    if "pool" in rules:
+        if pool is None or not pool["complete"]:
+            return found + [f"{label}_POOL_INCOMPLETE"]
+        if result["bets"] < rules["pool"]["min_scope_bets"]:
+            found.append(f"{label}_NEED_{rules['pool']['min_scope_bets'] - result['bets']}_MORE_BETS_IN_THIS_SCOPE")
+        bets = pool
+    if bets["bets"] < rules["min_bets"]:
+        found.append(f"{label}_NEED_{rules['min_bets'] - bets['bets']}_MORE_BETS")
+    if bets["bet_roi"] is None or bets["bet_roi"] < rules["min_bet_roi"]:
+        found.append(f"{label}_BET_ROI_BELOW_LOSS_FLOOR")
+    if bets["bet_close_coverage"] < rules["min_bet_close_coverage"]:
+        found.append(f"{label}_BET_CLOSE_COVERAGE_TOO_LOW")
+    if bets["bet_clv_t"] is None or bets["bet_clv_t"] < rules["min_clv_t"]:
+        found.append(f"{label}_BET_CLV_NOT_{rules['min_clv_t']:g}_STANDARD_ERRORS_ABOVE_ZERO")
+    return found
+
+
+def blockers(label, cohort, result, method, pool=None):
+    rules = method[KEY]
+    if rules.get("version") == VERSION_V2:
+        return _v2_blockers(label, result, rules, pool)
     found = []
     if result["market_reference_coverage"] < rules["min_market_reference_coverage"]:
         found.append(f"{label}_MARKET_REFERENCE_COVERAGE_TOO_LOW")

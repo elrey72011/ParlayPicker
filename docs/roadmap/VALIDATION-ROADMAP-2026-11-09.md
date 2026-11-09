@@ -206,6 +206,45 @@ After D26 and D27, add a `market-skill-v2` methodology for new plans only:
 `scripts/plan_gate_power.py` becomes the acceptance check: the design must pass a true 1% CLV at
 least 90% of the time and no edge at most 5% of the time.
 
+**Status 2026-11-09 (owner decided D26: CLV-led v2, and D27: pooling for the lag strategy only).**
+
+Built, for plans frozen from now on (`app_core/market_skill_validation.py`, `methodology_v2`):
+
+- Blocking in each window: at least `min_bets` bets (75 by default; 50, 60, 75 or 100, chosen at the
+  draft); mean bet CLV at least 2 standard errors above zero; a certified close for 80% of bets; bet
+  ROI at or above −25% (a loss floor, about 2 standard errors at 75 bets); the market reference for
+  90% of scored games. The integrity gates (provenance, verified entry prices, coverage, settled
+  outcomes) are unchanged.
+- Reported, not blocking: Brier and log loss against the market; close coverage over every game.
+- Absolute bounds: Brier 0.26, log loss 0.715, calibration error 0.15. The exact coin-flip bound
+  would fail a sound plan about 1 time in 4 from sampling noise alone.
+- Windows are sized by expected bets from the replay. A plan cannot be drafted while the replay
+  shows no bets.
+- The holdout bets' CLV lower 95% bound is the staking input, so a plan that passes can stake.
+- The junk-price limit (D29) is a frozen term, `max_entry_overround` 1.15, for Pinnacle plans.
+- Pooling (D27): a Pinnacle plan may name NBA and NCAAB for one market family. Each scope freezes
+  its own plan with identical rules and windows. The bet gates are scored on all the pool's bets,
+  each scope's results are reported, and each scope needs 10 bets of its own. A companion that is
+  missing or differs blocks every plan in the pool.
+- Draft with the Bound plan workflow: methodology `market_skill_v2`, `min_bets`, `pool`.
+
+Acceptance (`scripts/plan_gate_power.py`, both windows, every noisy blocking gate, 75 bets):
+
+| True mean CLV | Per-bet CLV spread 2% | 3% |
+|---|---|---|
+| 0% | 0% pass | 0% |
+| 0.5% | 32% | 8% |
+| 1% | 96% | 65% |
+| 2% | 98% | 98% |
+
+The 90% target is met at the 2% spread the roadmap assumed. The real spread of per-bet CLV is not
+measured yet; if it is nearer 3%, a 1% edge needs 100 bets a window (83%). The M2 report will
+measure it before a plan is frozen.
+
+Known limit: CLV is measured against the same book's close. Positive CLV at a book with a 4.5% vig
+is not by itself a profit. Bets are chosen at 1% or 2% EV against Pinnacle's no-vig price, and the
+stake books are mostly Novig (low vig), but ROI is only a loss floor in this design.
+
 ### M4. Freeze, validate, review, activate (calendar time; owner steps)
 
 1. Freeze a plan only when M2's replay shows the bet rate. Do not freeze today's v3 draft
@@ -236,8 +275,8 @@ M5 never blocks.
 | ID | Decision | Recommendation |
 |---|---|---|
 | D23 | What a stake needs besides the market activation | **Owner-chosen 2026-11-09: yes.** The verified market activation supplies the sport cap; no second legacy policy is needed for market-skill markets. Implemented in M1 |
-| D26 | Gate design for plans frozen from now on | CLV-led `market-skill-v2` as in M3. Current gates pass a true 2% edge about 1 time in 4 |
-| D27 | May one plan count bets across NBA and NCAAB for the same strategy | Yes, for the Pinnacle/Novig lag only, with per-sport results reported. Plans prohibit pooling today; without it the news edge needs most of a season |
+| D26 | Gate design for plans frozen from now on | **Owner-chosen 2026-11-09: CLV-led v2.** CLV-led `market-skill-v2` as in M3. Current gates pass a true 2% edge about 1 time in 4 |
+| D27 | May one plan count bets across NBA and NCAAB for the same strategy | **Owner-chosen 2026-11-09: yes, lag strategy only.** Yes, for the Pinnacle/Novig lag only, with per-sport results reported. Plans prohibit pooling today; without it the news edge needs most of a season |
 | D28 | Credits for the fixed-interval watch | **Owner-chosen 2026-11-09: both sports.** About 100 a day per sport for 7 days (its own allowance: 200 a day, 1,400 in all), then review |
 | D29 | Novig junk-price filter | **Owner-chosen 2026-11-09: approve.** In the replay now; in predictions as a frozen term of the next plan (M3) |
 

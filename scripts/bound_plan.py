@@ -58,7 +58,7 @@ def statuses(path, now):
 
 
 def draft(path, *, sport=None, market=None, validation_start=None, now=None, methodology='market_skill',
-          model='research', min_edge=None, entry_rule=None):
+          model='research', min_edge=None, entry_rule=None, min_bets=None, pool=False):
     now = now or datetime.now(timezone.utc)
     result = {'mode': 'DRAFT_READ_ONLY', 'as_of': now.isoformat(), 'markets': statuses(path, now)}
     if sport and market:
@@ -72,19 +72,30 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                 if found is None:
                     raise ValueError('no Pinnacle model registered for this market yet')
                 model_id = found['model_id']
+            skill = methodology in ('market_skill', 'market_skill_v2')
+            v2 = methodology == 'market_skill_v2'
+            if pool and not (v2 and model == 'pinnacle'):
+                raise ValueError('pooling needs --methodology market_skill_v2 and --model pinnacle (owner D27)')
             spec = calibration.draft_bound_plan(path, sport, market, validation_start=start,
                                                 methodology=methodology, model_id=model_id,
-                                                min_edge=min_edge if methodology == 'market_skill' else None,
+                                                min_edge=min_edge if skill else None,
                                                 # A Pinnacle plan enters only where its picks can be staked.
                                                 entry_books=(pinnacle_model.PLAN_BOOKS if model == 'pinnacle'
-                                                             and methodology == 'market_skill' else None),
+                                                             and skill else None),
                                                 # The staking terms a Pinnacle plan needs to ever stake.
                                                 staking_terms=('pinnacle-provisional-v1' if model == 'pinnacle'
-                                                               and methodology == 'market_skill' else None),
-                                                entry_rule=entry_rule if methodology == 'market_skill' else None,
-                                                # Owner 2026-11-09: new plans count a push as a zero-return bet.
+                                                               and skill else None),
+                                                entry_rule=entry_rule if skill else None,
+                                                # Owner 2026-11-09: new plans count a push as a zero-return bet
+                                                # (market_skill_v2 always does).
                                                 push_rule=(market_skill_validation.PUSH_ZERO_RETURN
-                                                           if methodology == 'market_skill' else None))
+                                                           if methodology == 'market_skill' else None),
+                                                # Owner D26, D27, D29: bets per window, the NBA and NCAAB pool,
+                                                # and no entry at a junk price.
+                                                min_bets=min_bets if v2 else None,
+                                                pool=market_skill_validation.pool_scopes(sport, market) if pool else None,
+                                                max_entry_overround=(pinnacle_model.MAX_OVERROUND
+                                                                     if v2 and model == 'pinnacle' else None))
         except ValueError as exc:
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'NOT_DRAFTABLE', 'reason': str(exc)}
         else:
@@ -136,6 +147,16 @@ def markdown(result):
                       *([f"- bet rule: EV at least {plan['market_skill_methodology']['min_edge']:.0%} at the entry "
                          f"price, at least {plan['market_skill_methodology']['min_bets']} bets per window"]
                         if 'market_skill_methodology' in plan else []),
+                      *([f"- gates (market-skill-v2): mean bet CLV at least "
+                         f"{plan['market_skill_methodology']['min_clv_t']:g} standard errors above zero, a close for "
+                         f"{plan['market_skill_methodology']['min_bet_close_coverage']:.0%} of bets, bet ROI at least "
+                         f"{plan['market_skill_methodology']['min_bet_roi']:.0%}; Brier and log loss against the "
+                         "market are reported only"]
+                        if plan.get('market_skill_methodology', {}).get('version') == 'market-skill-v2' else []),
+                      *([f"- pool: bets counted across {', '.join(plan['market_skill_methodology']['pool']['scopes'])}; "
+                         f"each needs {plan['market_skill_methodology']['pool']['min_scope_bets']} bets of its own. "
+                         "Freeze the same draft for every scope, with the same validation start"]
+                        if 'pool' in plan.get('market_skill_methodology', {}) else []),
                       *([f"- staking terms: {plan['deployment_criteria']['staking_terms']} (tenth Kelly, "
                          f"{plan['deployment_criteria']['validated_policy']['provisional_stake_cap']:.1%} of bankroll per pick, "
                          f"{plan['deployment_criteria']['validated_policy']['sport_exposure_cap']:.0%} open at once)"]
@@ -195,8 +216,13 @@ def main(argv=None):
     parser.add_argument('--sport')
     parser.add_argument('--market')
     parser.add_argument('--validation-start', help='ISO timestamp; default is the next UTC midnight')
-    parser.add_argument('--methodology', choices=('market_skill', 'v1'), default='market_skill',
-                        help='market_skill: scored against the de-vigged entry price (D19 option B); v1: absolute thresholds')
+    parser.add_argument('--methodology', choices=('market_skill', 'market_skill_v2', 'v1'), default='market_skill',
+                        help='market_skill: scored against the de-vigged entry price (D19 option B); '
+                             'market_skill_v2: CLV-led gates (D26); v1: absolute thresholds')
+    parser.add_argument('--min-bets', type=int, choices=(50, 60, 75, 100), default=75,
+                        help='draft, market_skill_v2: bets needed in each window (locks at the freeze)')
+    parser.add_argument('--pool', action='store_true',
+                        help='draft, market_skill_v2 with the Pinnacle model: count bets across NBA and NCAAB (D27)')
     parser.add_argument('--model', choices=('research', 'pinnacle'), default='research',
                         help="research: the pinned research score model; pinnacle: Pinnacle's no-vig price")
     parser.add_argument('--min-edge', type=float, choices=(0.01, 0.02), default=0.02,
@@ -217,7 +243,8 @@ def main(argv=None):
         restore = sync(path, guarded, folder, {})
         result = draft(path, sport=args.sport, market=args.market, validation_start=args.validation_start,
                        methodology=args.methodology, model=args.model, min_edge=args.min_edge,
-                       entry_rule=('FIRST_EDGE_CAPTURE' if args.entry_rule == 'first_edge' else None))
+                       entry_rule=('FIRST_EDGE_CAPTURE' if args.entry_rule == 'first_edge' else None),
+                       min_bets=args.min_bets, pool=args.pool)
         result['restore'] = dict(restore, writes_refused=guarded.writes_refused)
     else:
         if not (args.sport and args.market and args.inputs and args.expected_hash):
