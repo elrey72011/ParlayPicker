@@ -228,6 +228,7 @@ def scores(records):
 
 
 UNRESOLVED_LISTED = 25
+EXPIRED_REPORTED = "SCORE_WINDOW_EXPIRED_REPORTED"
 
 
 class OddsResearchAdapter:
@@ -514,13 +515,19 @@ class OddsResearchAdapter:
                 status[gid] = reason
         return result
 
+    def unresolved(self, path):
+        """Captured games past the provider's 3-day score window with no score, oldest first."""
+        records = self.store.records(path)
+        captured, graded = captures(records), scores(records)
+        return sorted((gid for gid, event in captured.items() if gid not in graded and
+                       utcnow() - timestamp(event["start"]) > timedelta(days=3)),
+                      key=lambda gid: (captured[gid]["start"], gid))
+
     def audit(self, path, state=None):
         records = self.store.records(path)
         captured, graded = captures(records), scores(records)
         by_market = Counter(quote["market_family"] for event in captured.values() for quote in event["quotes"])
-        unresolved = sorted((gid for gid, event in captured.items() if gid not in graded and
-                             utcnow() - timestamp(event["start"]) > timedelta(days=3)),
-                            key=lambda gid: (captured[gid]["start"], gid))
+        unresolved = self.unresolved(path)
         status = (state or {}).get(self.sport.lower() + "_score_check_status") or {}
         return {"captured_events": len(captured), "settled_events": len(set(captured) & set(graded)),
                 "quote_rows_by_market": dict(by_market), "production_eligible": False,
@@ -613,7 +620,19 @@ class OddsResearchAdapter:
             result["close_capture_status"] = "failed"
         result["audit"] = self.audit(path, state)
         if result["audit"]["unresolved_past_score_window"]:
-            result["blockers"].append("SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW")
+            # A game past the provider's score window can never be graded from it. It fails the
+            # cycle once, when first found (SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW); after that it
+            # stays listed in every audit (SCORE_WINDOW_EXPIRED_REPORTED) without failing each
+            # later cycle, so a new failure is not hidden behind a permanent one (owner 2026-11-09).
+            reported = state.setdefault(self.sport.lower() + "_expired_reported", [])
+            if not isinstance(reported, list):
+                raise ValueError("invalid_expired_reported_state")
+            unresolved = self.unresolved(path)
+            new = [gid for gid in unresolved if gid not in reported]
+            result["blockers"].append("SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW" if new
+                                      else EXPIRED_REPORTED)
+            reported.extend(new)
+            result["audit"]["newly_expired"] = len(new)
             if result["grade_status"] == "success":
                 result["grade_status"] = "partial"
         return result
