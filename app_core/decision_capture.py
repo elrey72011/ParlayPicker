@@ -126,7 +126,10 @@ def charging(request_get, budget, cost, flag, result):
         spent = getattr(response, "headers", {}).get("x-requests-last")
         if spent is not None and str(spent).strip() not in {str(n) for n in range(cost + 1)}:
             budget.state[flag] = str(spent)
-            budget.persist()
+            try:  # the provider already charged it: count the credits above the reservation
+                budget.record_overage("ODDS", int(str(spent).strip()) - cost)
+            except ValueError:
+                budget.persist()
             result["blocker"] = flag
         return response
     return charged_get
