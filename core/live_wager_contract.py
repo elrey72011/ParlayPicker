@@ -314,7 +314,9 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
     # Missing committed exposure/caps cannot be interpreted as unused bankroll.
     caps=config.get('exposure',{})
     caps = dict(caps) if isinstance(caps,dict) else {}
-    if config.get('automatic_maturity') and finite(caps.get('bankroll'))!=finite(bankroll): caps={}
+    # The ledger's bankroll must match the bankroll used for sizing on every path, not only with
+    # automatic maturity (audit 2026-11-09): a mismatch leaves no caps, so nothing is funded.
+    if caps and finite(caps.get('bankroll'))!=finite(bankroll): caps={}
     if config.get('automatic_maturity') and caps:
         for key in ('total_cap','daily_cap','weekly_cap','game_cap','team_cap'):
             validated=[finite((config.get('validation_results',{}).get(s,{ }).get('supported_policy') or {}).get('exposure_limits',{}).get(key)) or 0 for s,p in policies.items() if p.deployment_state!='UNVALIDATED']

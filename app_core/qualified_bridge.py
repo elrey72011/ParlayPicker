@@ -99,8 +99,13 @@ def rows(path, qualified, *, now=None, policy_versions=None):
         latest = {}
         for p in evidence.read_records(path, "prospective_prediction", sport=sport, market_family=family):
             event, quote = events.get(p["event_id"]), quotes.get(p["quote_id"])
-            if (event is None or quote is None or quote["sportsbook"] in REFERENCE_BOOKS
-                    or not t(p["prediction_timestamp"], "prediction") <= now < t(event["scheduled_start"], "start")):
+            if event is None or quote is None or quote["sportsbook"] in REFERENCE_BOOKS:
+                continue
+            try:
+                timely = t(p["prediction_timestamp"], "prediction") <= now < t(event["scheduled_start"], "start")
+            except ValueError:  # one malformed record drops its own row, not the whole bridge (audit 2026-11-09)
+                continue
+            if not timely:
                 continue
             best = latest.get(p["event_id"])
             if best is None or _rank(p, quote) > _rank(*best[:2]):

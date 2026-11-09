@@ -14,11 +14,35 @@ def _text(row, *columns, default="Not available"):
     return default
 
 
-def daily_board(frame: pd.DataFrame) -> pd.DataFrame:
-    """Reconcile authorization before presenting any daily decision."""
+STALE_QUOTE_MINUTES = 30   # the market gate's own limit (core.sport_market_gate)
+
+
+def daily_board(frame: pd.DataFrame, now=None) -> pd.DataFrame:
+    """Reconcile authorization before presenting any daily decision.
+
+    The market gate checks quote freshness only when picks are refreshed, so an approved stake
+    stayed on screen after its quote aged out (audit 2026-11-09). An approved row whose quote is
+    older than ``STALE_QUOTE_MINUTES`` now shows as a PASS with no stake until picks are refreshed.
+    """
     if frame is None or frame.empty:
         return pd.DataFrame()
-    return label_wager_export(frame).reset_index(drop=True)
+    board = label_wager_export(frame).reset_index(drop=True)
+    if "Bettable" not in board:
+        return board
+    from datetime import datetime, timedelta, timezone
+    now = now or datetime.now(timezone.utc)
+    column = next((c for c in ("odds_recorded_at", "quote_timestamp", "quote_time") if c in board), None)
+    if column is None:
+        return board
+    stamps = pd.to_datetime(board[column], utc=True, errors="coerce")
+    stale = board["Bettable"].astype(bool) & stamps.notna() & (stamps < now - timedelta(minutes=STALE_QUOTE_MINUTES))
+    if stale.any():
+        board.loc[stale, "Bettable"] = False
+        if "Play_Stake" in board:
+            board.loc[stale, "Play_Stake"] = 0
+        board.loc[stale, "Production_Gate_Reason"] = (
+            f"Quote older than {STALE_QUOTE_MINUTES} minutes: refresh picks before placing this wager")
+    return board
 
 
 def wager_rejection_summary(board):
