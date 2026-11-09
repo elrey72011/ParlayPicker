@@ -74,3 +74,35 @@ def test_plan_evaluations_report_errors_instead_of_guessing(tmp_path):
     assert mr.plan_evaluations(tmp_path / 'absent.sqlite3') == []
     assert mr._scalars({'n': 3, 'rows': [1, 2], 'status': 'X'}) == {'n': 3, 'status': 'X'}
     assert mr._scalars(['MISSING_MODEL', 'NO_CLOSES']) == ['MISSING_MODEL', 'NO_CLOSES'] and mr._scalars([{}]) == 1
+
+
+def test_pinnacle_replay_covers_each_scope_twice_and_reports_errors(tmp_path, monkeypatch):
+    from app_core import pinnacle_model
+    assert mr.pinnacle_replay(tmp_path / 'SYNTHETIC-absent.sqlite3') == []
+    store = tmp_path / 'SYNTHETIC-store.sqlite3'
+    store.write_bytes(b'')
+    calls = []
+
+    def estimate(path, sport, family, *, now, lookback_days, books):
+        calls.append((sport, family, lookback_days, books))
+        if (sport, family) == ('NBA', 'TOTAL'):
+            raise ValueError('SYNTHETIC_FAILURE')
+        if lookback_days == 1:
+            return {'sport': sport, 'market_family': family, 'games_started': 0, 'status': 'NO_GAMES'}
+        return {'sport': sport, 'market_family': family, 'status': 'ESTIMATED', 'games_started': 40, 'plan_games': 12,
+                'junk_quotes_dropped': 3, 'variants': [
+                    {'entry_rule': 'EARLIEST_SHARED_LINE', 'probability': 'PINNACLE_NO_VIG',
+                     'by_edge': {'1%': {'bets': 0, 'bets_per_day': 0.0}, '2%': {'bets': 0, 'bets_per_day': 0.0}}},
+                    {'entry_rule': 'FIRST_EDGE_CAPTURE', 'probability': 'PINNACLE_NO_VIG',
+                     'by_edge': {'1%': {'bets': 5, 'bets_per_day': 1.25}, '2%': {'bets': 2, 'bets_per_day': 0.5}}}]}
+    monkeypatch.setattr(pinnacle_model, 'replay_estimate', estimate)
+    rows = mr.pinnacle_replay(store)
+    assert len(rows) == 8 and {c[2] for c in calls} == {1, 14}
+    assert all(c[3] == pinnacle_model.PLAN_BOOKS for c in calls)
+    assert {r['window'] for r in rows} == {'last 24 hours', 'last 14 days'}
+    failed = [r for r in rows if 'evaluation_error' in r]
+    assert len(failed) == 2 and all('SYNTHETIC_FAILURE' in r['evaluation_error'] for r in failed)
+    text = '\n'.join(mr._replay_markdown(rows))
+    assert '| NCAAB SPREAD | last 14 days | 40 | 12 | 3 | 0 (0.0/day) | 0 (0.0/day) | 5 (1.25/day) | 2 (0.5/day) |' in text
+    assert '| NCAAB SPREAD | last 24 hours | 0 |' in text and 'SYNTHETIC_FAILURE' in text
+    assert mr._replay_markdown([]) == []
