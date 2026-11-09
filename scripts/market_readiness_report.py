@@ -81,7 +81,58 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 research_bindings=research_bindings(root / 'prospective-evidence.sqlite3'),
                 price_edge=price_edge(root / 'prospective-evidence.sqlite3'),
                 close_coverage=close_coverage(root / 'prospective-evidence.sqlite3'),
-                plan_progress=_plan_progress(root / 'prospective-evidence.sqlite3'))
+                plan_progress=_plan_progress(root / 'prospective-evidence.sqlite3'),
+                pinnacle_replay=pinnacle_replay(root / 'prospective-evidence.sqlite3'))
+
+
+REPLAY_WINDOWS = ((1, 'last 24 hours'), (14, 'last 14 days'))
+
+
+def pinnacle_replay(path, now=None):
+    """Bets a Pinnacle plan would have made on games already started (pinnacle_model.replay_estimate),
+    for the stake books, over the last day and the last 14 days. Read-only; results are never read.
+
+    It runs here because this workflow has its own queue. The Bound plan draft prints the same
+    estimate for one market, but waits behind research capture for hours on a game night."""
+    from datetime import datetime, timezone
+    from app_core import pinnacle_model
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport, families in pinnacle_model.FAMILIES.items():
+        for family in families:
+            for days, label in REPLAY_WINDOWS:
+                try:
+                    row = pinnacle_model.replay_estimate(path, sport, family, now=now, lookback_days=days,
+                                                         books=pinnacle_model.PLAN_BOOKS)
+                except Exception as exc:  # report, never guess
+                    row = dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300])
+                out.append(dict(row, window=label))
+    return out
+
+
+def _replay_markdown(rows):
+    if not rows:
+        return []
+    lines = ['', "Pinnacle replay: bets a plan would have made on games already started, at the stake books "
+             "(Novig, DraftKings, FanDuel, BetMGM). A game not yet started is not counted. Results are not read.", '',
+             '| market | window | games started | at Pinnacle\'s line | junk quotes dropped | earliest capture: bets at 1% | at 2% '
+             '| first capture that clears: bets at 1% | at 2% |', '|---|---|---|---|---|---|---|---|---|']
+    for row in rows:
+        name = f"{row['sport']} {row['market_family']} | {row.get('window', '')}"
+        if row.get('status') != 'ESTIMATED':
+            lines.append(f"| {name} | {row.get('games_started', row.get('evaluation_error', ''))} | | | | | | |")
+            continue
+        cells = {}
+        for variant in row['variants']:
+            if variant['probability'] == 'PINNACLE_NO_VIG':
+                for edge, found in variant['by_edge'].items():
+                    cells[(variant['entry_rule'], edge)] = f"{found['bets']} ({found['bets_per_day']}/day)"
+        lines.append(f"| {name} | {row['games_started']} | {row['plan_games']} | {row.get('junk_quotes_dropped', '')} | "
+                     f"{cells.get(('EARLIEST_SHARED_LINE', '1%'), '')} | {cells.get(('EARLIEST_SHARED_LINE', '2%'), '')} | "
+                     f"{cells.get(('FIRST_EDGE_CAPTURE', '1%'), '')} | {cells.get(('FIRST_EDGE_CAPTURE', '2%'), '')} |")
+    return lines
 
 
 def _plan_progress(path):
@@ -243,6 +294,7 @@ def markdown(result):
                 b = row['by_minutes_before_start'][label]
                 cells.append('' if b['share'] is None else f"{b['share']:.0%} ({b['comparable']}/{b['with_close_fetched']})")
             lines.append(f"| {row['sport']} {row['market_family']} | " + ' | '.join(cells) + ' |')
+    lines += _replay_markdown(result.get('pinnacle_replay') or [])
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
         from app_core import plan_progress
         lines += plan_progress.markdown(result['plan_progress'])
