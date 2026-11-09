@@ -8,7 +8,8 @@ This runs ``scripts/run_research_scheduler.py`` (unchanged; its own operating wi
 budgets and audit apply) as a fresh process every ``--interval`` minutes until
 ``--minutes`` have passed, so one scheduled start yields about a dozen cycles.
 
-* A cycle that fails or is outside the operating window does not end the loop.
+* A cycle that fails or is outside the operating window does not end the loop, except that a
+  skipped cycle after a successful one (the window has closed) ends it.
 * A new cycle starts only if at least ``MIN_CYCLE_MINUTES`` remain.
 * Before each cycle it checks for a queued or waiting Bound plan / Deployment review
   run (owner steps that share the evidence lock) and, if one is waiting, ends so it can run.
@@ -80,6 +81,11 @@ def loop(minutes, interval, *, out_dir, cycle=None, waiting=owner_run_waiting, c
         totals[kind] += 1
         print(json.dumps({"cycle": totals["cycles"], "exit": code, "execution_state": state,
                           "minutes": round((clock() - started) / 60, 1)}), flush=True)
+        if kind == "skipped" and totals["succeeded"]:
+            # The operating window closed after this loop had run cycles in it: the rest would
+            # only be skipped while holding the research concurrency group (audit 2026-11-09).
+            totals["ended"] = "window_closed"
+            break
         next_start = max(clock(), started + interval * 60)
         if next_start + MIN_CYCLE_MINUTES * 60 > deadline:
             break

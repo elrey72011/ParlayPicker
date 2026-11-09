@@ -83,7 +83,9 @@ def checklist(sport, family, *, path=None, now=None, setting=None, secret=None,
     activation = _item("activation", "Owner market activation", WAIT, "needs a validated deployment first",
                        "After the review passes: python scripts/activate_sport_market.py --sport "
                        f"{sport} --market-family {family} --evidence-db <store> --ledger <ledger> "
-                       "--policy <reviewed-policy.json> --owner-id <you> --expires-at <date> --confirm")
+                       "--policy <reviewed-policy.json> --owner-id <you> --expires-at <date> --confirm. "
+                       "Stakes also need the live wager policy (PARLAYPICKER_WAGER_POLICY_PATH, activation-v1) "
+                       "to carry this sport's validated exposure limits; without it every stake is $0")
     if validated and snapshot is not None:
         try:
             from core.sport_market_activation import verify_market_activation
@@ -120,7 +122,8 @@ def checklist(sport, family, *, path=None, now=None, setting=None, secret=None,
     gemini = _present("GEMINI_API_KEY", secret) or _present("GOOGLE_API_KEY", secret)
     items.append(_item("gemini", "Gemini secondary review available", PASS if gemini else ACTION,
                        "key present" if gemini else "no GEMINI_API_KEY or GOOGLE_API_KEY",
-                       None if gemini else "Add GEMINI_API_KEY to the app's secrets (without it, stakes are capped)"))
+                       None if gemini else "Add GEMINI_API_KEY to the app's secrets (without it, a staked pick is "
+                       "held at $0 unless an outage policy allows a capped stake)"))
     return items
 
 

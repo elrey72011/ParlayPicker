@@ -13,6 +13,7 @@ on:
         default: "340"
   schedule:
     - cron: '47 21 * * *'     # 4:47 PM EST / 5:47 PM EDT, through the evening slate
+    - cron: '47 22 * * *'     # backup start: GitHub often skips or delays scheduled runs (2026-11-09)
 permissions:
   contents: read
 concurrency:
@@ -37,7 +38,16 @@ jobs:
           cache: pip
       - name: Install runtime dependencies
         run: python -m pip install -r requirements.txt
+      - name: Restore the verified Drive object cache
+        # Read-only: the restore (about 100,000 objects) otherwise downloads the whole store
+        # each night and eats into the slate (audit 2026-11-09).
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-${{ github.workflow }}-${{ github.run_id }}
+          restore-keys: drive-cache-
       - name: Watch injury reports and capture prices after news
         env:
           MINUTES: ${{ inputs.minutes || '340' }}
+          PARLAYPICKER_DRIVE_CACHE_DIR: ${{ runner.temp }}/drive-cache
         run: python -u scripts/news_capture_loop.py --minutes "$MINUTES" --interval 5

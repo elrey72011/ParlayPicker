@@ -20,6 +20,10 @@ from datetime import datetime, timezone
 import json
 
 WINDOWS = (("validation", "validation_start", "validation_end"), ("holdout", "holdout_start", "holdout_end"))
+# Below this share of a window, a straight line is mostly noise: ``games`` already counts games
+# predicted but not yet played (about a day ahead), so the first hours projected thousands
+# (audit 2026-11-09). Projections and on_pace start once this much of the window has passed.
+MIN_ELAPSED_FOR_PACE = 0.1
 
 
 def _time(value):
@@ -57,7 +61,7 @@ def progress(plan: dict, evaluation: dict, *, now: datetime) -> list[dict]:
                "min_games": int(spec.get("minimum_independent_sample") or 0)}
 
         def projected(count):
-            return round(count / elapsed) if elapsed > 0 else None
+            return round(count / elapsed) if elapsed >= MIN_ELAPSED_FOR_PACE else None
         row["projected_games"] = projected(games)
         pace = [row["projected_games"] is not None and row["projected_games"] >= row["min_games"]]
         if method:
@@ -68,7 +72,7 @@ def progress(plan: dict, evaluation: dict, *, now: datetime) -> list[dict]:
                        min_edge=method.get("min_edge"))
             pace.append(row["projected_bets"] is not None and row["projected_bets"] >= row["min_bets"])
             pace.append(bets == 0 or row["bet_close_coverage"] >= row["min_close_coverage"])
-        row["on_pace"] = all(pace)
+        row["on_pace"] = all(pace) if elapsed >= MIN_ELAPSED_FOR_PACE else None  # None: too early to say
         rows.append(row)
     return rows
 
@@ -108,7 +112,8 @@ def markdown(rows: list[dict]) -> list[str]:
             f"{r['games']} ({r['graded']} / {r['ungraded']}) | {r['projected_games']} / {r['min_games']} | "
             f"{r.get('bets', '')} | {r.get('projected_bets', '')} / {r.get('min_bets', '')} | "
             f"{'' if 'bet_close_coverage' not in r else format(r['bet_close_coverage'], '.0%')} | "
-            f"{pct(r.get('bet_roi'))} | {pct(r.get('bet_mean_clv'))} | {'yes' if r['on_pace'] else '**NO**'} |")
-    lines += ["", "Projections are straight-line to each window's end. A window passes only with its minimum "
+            f"{pct(r.get('bet_roi'))} | {pct(r.get('bet_mean_clv'))} | {'too early' if r['on_pace'] is None else 'yes' if r['on_pace'] else '**NO**'} |")
+    lines += ["", "Projections are straight-line to each window's end, shown once "
+                  f"{MIN_ELAPSED_FOR_PACE:.0%} of a window has passed. A window passes only with its minimum "
                   "games and bets, ROI and mean CLV >= 0, and closes for enough of its bets."]
     return lines

@@ -71,11 +71,26 @@ def render(games):
             except (ValueError,KeyError,TypeError) as e:st.error(str(e))
 
 
+def _stale(contract, now=None, minutes=30):
+    """True when a recommendation's quote is older than the market gate allows (audit 2026-11-09):
+    it is no longer offered as a recommended wager to mark as placed until picks are refreshed.
+    A wager placed anyway can still be recorded with the manual upload below."""
+    from datetime import datetime, timedelta, timezone
+    stamp=contract.get('quote_timestamp')
+    try:
+        at=datetime.fromisoformat(str(stamp).replace('Z','+00:00'))
+    except ValueError:
+        return False
+    if at.tzinfo is None:at=at.replace(tzinfo=timezone.utc)
+    return at<(now or datetime.now(timezone.utc))-timedelta(minutes=minutes)
+
+
 def render_placement_form(games, ledger):
     import ast, uuid
     from core.owner_wager_records import placement_record
     if games is None or games.empty:return
-    choices={str(i):r for i,r in games.iterrows() if isinstance(r.get('wager_contract'),dict) and r['wager_contract'].get('production_eligible') is True}
+    choices={str(i):r for i,r in games.iterrows() if isinstance(r.get('wager_contract'),dict) and r['wager_contract'].get('production_eligible') is True
+             and not _stale(r['wager_contract'])}
     if not choices:return
     with st.expander('Mark a recommended wager as placed'):
         key=st.selectbox('Recommended wager',list(choices),format_func=lambda k:choices[k]['wager_contract']['selection'])

@@ -15,8 +15,9 @@ newest slice of each owner-activated market (looking back ``LOOKBACK_SLOTS``), m
 one local store (``store_path``), and swaps it in atomically. The live contract and the bridge
 then read that store, so the authority chain runs unchanged on it:
 ``deployment_state`` re-evaluates the plan and checks the artifact hash, and the gate replays the
-quote from its retained provider bytes. The slice adds no authority, and a forged or partial
-slice fails those same checks.
+quote from its retained provider bytes. The slice adds no authority, and a partial slice fails
+those same checks. Records are self-hashed, not signed: like the full store, a slice is trusted
+as far as write access to the Drive folder is (audit 2026-11-09).
 """
 from __future__ import annotations
 

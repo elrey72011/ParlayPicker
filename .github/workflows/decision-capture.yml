@@ -38,7 +38,16 @@ jobs:
           cache: pip
       - name: Install runtime dependencies
         run: python -m pip install -r requirements.txt
+      - name: Restore the verified Drive object cache
+        # Read-only: the restore (about 100,000 objects) otherwise downloads the whole store
+        # each night and eats into the slate (audit 2026-11-09).
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-${{ github.workflow }}-${{ github.run_id }}
+          restore-keys: drive-cache-
       - name: Capture decision quotes and predictions through the slate
         env:
           MINUTES: ${{ inputs.minutes || '340' }}
+          PARLAYPICKER_DRIVE_CACHE_DIR: ${{ runner.temp }}/drive-cache
         run: python -u scripts/decision_capture_loop.py --minutes "$MINUTES" --interval 15

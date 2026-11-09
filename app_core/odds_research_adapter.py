@@ -228,7 +228,16 @@ def scores(records):
 
 
 UNRESOLVED_LISTED = 25
+UNRESOLVED_DAYS = 30
+ATTEMPT_DAYS = 7
 EXPIRED_REPORTED = "SCORE_WINDOW_EXPIRED_REPORTED"
+
+
+def _prune_attempts(attempts, now):
+    """Drop attempt timestamps older than ``ATTEMPT_DAYS``: they only order games still due."""
+    for gid in [g for g, at in attempts.items()
+                if timestamp(at) is None or now - timestamp(at) > timedelta(days=ATTEMPT_DAYS)]:
+        del attempts[gid]
 
 
 class OddsResearchAdapter:
@@ -286,6 +295,7 @@ class OddsResearchAdapter:
         attempts = state.setdefault(self.sport.lower() + "_capture_attempts", {})
         if not isinstance(attempts, dict):
             raise ValueError("invalid_capture_attempt_state")
+        _prune_attempts(attempts, utcnow())
         allowed = sorted(due, key=lambda gid: (attempts.get(gid, ""),
                                                 due[gid]["commence_time"], gid))[:limit]
         for gid in allowed:
@@ -443,10 +453,9 @@ class OddsResearchAdapter:
             raise ValueError("invalid_score_status_state")
         for gid in [g for g in status if g not in captured or g in completed]:
             del status[gid]
+        _prune_attempts(attempts, now)
         for gid in selected:
             attempts[gid] = now.isoformat()
-            if gid not in completed:
-                status[gid] = "not_returned"
         payload = fetch(self.sport, "scores", odds_key, request_get,
                         params={"daysFrom": 3, "eventIds": ",".join(selected)})
         seen = set()
@@ -510,17 +519,26 @@ class OddsResearchAdapter:
             result["corrected" if previous else "graded"] += 1
             status.pop(gid, None)
             backup()
+        # Set only once the provider answered (audit 2026-11-09): a budget pause or provider
+        # error leaves each game's previous outcome in place.
+        for gid in selected:
+            if gid not in seen and gid not in completed:
+                status[gid] = "not_returned"
         for gid, reason in result["score_rejections"].items():
             if gid not in completed:
                 status[gid] = reason
         return result
 
     def unresolved(self, path):
-        """Captured games past the provider's 3-day score window with no score, oldest first."""
+        """Captured games past the provider's 3-day score window with no score, oldest first.
+
+        Only games that started in the last ``UNRESOLVED_DAYS`` days: an older one has long
+        been reported, and keeping every one forever grew the state and audit without end."""
         records = self.store.records(path)
         captured, graded = captures(records), scores(records)
+        now = utcnow()
         return sorted((gid for gid, event in captured.items() if gid not in graded and
-                       utcnow() - timestamp(event["start"]) > timedelta(days=3)),
+                       timedelta(days=3) < now - timestamp(event["start"]) <= timedelta(days=UNRESOLVED_DAYS)),
                       key=lambda gid: (captured[gid]["start"], gid))
 
     def audit(self, path, state=None):
@@ -631,7 +649,10 @@ class OddsResearchAdapter:
             new = [gid for gid in unresolved if gid not in reported]
             result["blockers"].append("SCORE_UNAVAILABLE_AFTER_PROVIDER_WINDOW" if new
                                       else EXPIRED_REPORTED)
-            reported.extend(new)
+            # Recorded as reported only when grading ran: a budget-paused or failed grade does not
+            # fail the cycle for this reason, so the game must still fail one later cycle.
+            if result.get("grade_status") in ("success", "partial"):
+                reported[:] = [gid for gid in reported if gid in set(unresolved)] + new
             result["audit"]["newly_expired"] = len(new)
             if result["grade_status"] == "success":
                 result["grade_status"] = "partial"

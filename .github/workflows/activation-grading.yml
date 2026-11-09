@@ -3,6 +3,11 @@ on:
   workflow_dispatch:
   # Reused by activation-grading-backup.yml (a second daily start; GitHub often skips this one).
   workflow_call:
+    secrets:
+      PARLAYPICKER_DRIVE_FOLDER_ID:
+        required: false
+      PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT:
+        required: false
   schedule:
     - cron: '0 14 * * *'
 permissions:

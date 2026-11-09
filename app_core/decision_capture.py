@@ -126,7 +126,10 @@ def charging(request_get, budget, cost, flag, result):
         spent = getattr(response, "headers", {}).get("x-requests-last")
         if spent is not None and str(spent).strip() not in {str(n) for n in range(cost + 1)}:
             budget.state[flag] = str(spent)
-            budget.persist()
+            try:  # the provider already charged it: count the credits above the reservation
+                budget.record_overage("ODDS", int(str(spent).strip()) - cost)
+            except ValueError:
+                budget.persist()
             result["blocker"] = flag
         return response
     return charged_get
@@ -201,6 +204,10 @@ def decision_quotes(events, quotes, now, *, predicted=None, horizon=HORIZON, max
         start, stamp = _time(event["scheduled_start"]), _time(quote["quote_timestamp"])
         if not (now < start <= now + horizon and now - max_age <= stamp <= now):
             continue
+        from app_core.market_skill_validation import response_key
+        received = response_key(quote.get("raw_source"))
+        if received is not None and _time(received) > now:
+            continue  # the response holding it arrived after ``now`` (audit 2026-11-09)
         if abs(2 * quote["line"] - round(2 * quote["line"])) > 1e-8:
             continue
         if not evidence.verify_provider_offer(event, quote):

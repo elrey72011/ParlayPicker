@@ -538,6 +538,11 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
     # A provider budget pause is not a failure (owner 2026-11-07): the daily credit cap
     # was reached on purpose and the next day's cycles continue. The health entry keeps
     # "budget_paused" and the sport is listed in budget_paused_sports. Errors still fail.
+    # The provider charged more than a request was reserved for: every research Odds request
+    # stops until the owner reviews it. That pause is not a budget pause, so the run fails and
+    # says so instead of reporting green (audit 2026-11-09).
+    if state.get("api_budget_cost_mismatch"):
+        report["errors"].append("scheduler:PROVIDER_COST_REVIEW_REQUIRED")
     report["budget_paused_sports"] = sorted(
         s for s in sports if report["sports"].get(s, {}).get("budget_paused") is True)
     report["requested_slate_success"] = not report["errors"] and all(

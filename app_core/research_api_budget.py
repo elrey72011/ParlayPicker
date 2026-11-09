@@ -13,8 +13,13 @@ NEW_SPORT_CALL_LIMITS = {"daily": 45, "rolling_31_days": 1200}
 # Per-sport overrides of the two limits above. Owner 2026-11-07: NCAAB (55-65 games a
 # day) spent its 40 credits by mid-afternoon, pausing closes all day and capture from
 # about 4 PM ET. NCAAB gets 120 credits / 135 requests a day; NBA and NHL keep the
-# defaults. Every credit still counts against the plan-wide ODDS cap above (200/day),
+# defaults. Every credit still counts against the research ODDS cap above (200/day),
 # so total spend is unchanged; NCAAB can use more of it.
+# The ODDS cap covers the research scheduler only. Decision capture, NBA news capture and
+# certified closes each have their own allowance and ledger (decision_capture.DECISION_LIMITS,
+# news_capture.NEWS_LIMITS, CERTIFIED_CLOSE_LIMITS below); a few owner-run jobs (legacy
+# closing capture, run picks, the football stages, one-time studies) have none. The account's
+# monthly quota is the only limit over all of them (audit 2026-11-09).
 SPORT_CREDIT_LIMITS = {"NCAAB": {"daily": 120, "rolling_31_days": 3700}}
 SPORT_CALL_LIMITS = {"NCAAB": {"daily": 135, "rolling_31_days": 4200}}
 
@@ -147,6 +152,15 @@ class Budget:
         self.persist()
         return today
 
+    def record_overage(self, provider, units):
+        """Record credits the provider already charged above a reservation (never refused)."""
+        if isinstance(units, bool) or not isinstance(units, int) or units <= 0:
+            return
+        today = self.clock().astimezone(timezone.utc).date().isoformat()
+        days = self.ledger.setdefault(provider, {})
+        days[today] = days.get(today, 0) + units
+        self.persist()
+
     def reserve_pinnacle(self, units):
         """Charge the extra Pinnacle credits to their own allowance and to the plan-wide ODDS total."""
         usage = self.usage("PINNACLE", self.pinnacle_ledger)
@@ -272,6 +286,16 @@ class Budget:
             usage = self.usage("PINNACLE", self.pinnacle_ledger)
             if any(usage[w] + extra > limit for w, limit in PINNACLE_LIMITS.items()):
                 code = "PINNACLE:" + next(w for w, limit in PINNACLE_LIMITS.items() if usage[w] + extra > limit)
+                self.blocked.append(code)
+                raise BudgetLimit("api_budget:" + code)
+            # The plan-wide ODDS cap must hold the base and the extra credits together. Checked
+            # before the base is reserved (audit 2026-11-09): reserving the base first left a
+            # charge for a request never made, and the error then hid the cheaper US-only retry.
+            overall = self.usage("ODDS")
+            fits_base = all(overall[w] + units <= limit for w, limit in self.limits["ODDS"].items())
+            short = [w for w, limit in self.limits["ODDS"].items() if overall[w] + units + extra > limit]
+            if short and fits_base:
+                code = "PINNACLE:ODDS_" + short[0]
                 self.blocked.append(code)
                 raise BudgetLimit("api_budget:" + code)
         reserved_day=self.reserve(provider,units,sport)

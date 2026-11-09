@@ -19,6 +19,8 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+REFRESH_MINUTES = 60
+
 
 def publish_slices(path, client, report, *, publish=None):
     """Publish the slice of every qualified market the cycle ran (``app_core.qualified_market_file``)."""
@@ -44,11 +46,14 @@ def run(minutes, interval, *, root, client, folder, key, request_get, setting=No
     root.mkdir(parents=True, exist_ok=True)
     path = root / "prospective-evidence.sqlite3"
     session = {}
+    started = clock()  # the slate's minutes count from the start, restore included (audit 2026-11-09)
+    deadline = started + minutes * 60
+    last_restore = started
     sync(path, client, folder, session)  # restore before anything is read or written
     state = decision.load_state(client, folder)
     budget = decision.budget_for(state, lambda: decision.save_state(client, folder, state))
-    deadline = clock() + minutes * 60
     totals = {"status": "RAN", "cycles": 0, "stored_quotes": 0, "predictions": 0, "backups": 0, "errors": 0}
+    pending = False
     while True:
         totals["cycles"] += 1
         try:
@@ -64,9 +69,16 @@ def run(minutes, interval, *, root, client, folder, key, request_get, setting=No
             totals["predictions"] += made
             changed += stored + made
         print(json.dumps({"cycle": totals["cycles"], **report}, default=str), flush=True)
-        if changed:
-            sync(path, client, folder, session)
-            totals["backups"] += 1
+        pending = pending or bool(changed)
+        if pending:
+            try:  # a failed backup is retried at the next cycle; it never ends the slate
+                sync(path, client, folder, session)
+            except Exception as exc:
+                totals["backup_errors"] = totals.get("backup_errors", 0) + 1
+                print(json.dumps({"cycle": totals["cycles"], "backup_error": type(exc).__name__}), flush=True)
+            else:
+                pending = False
+                totals["backups"] += 1
         # The app's small qualified-market file (app_core.qualified_market_file): one slice per
         # qualified market per 15-minute slot, from the store just backed up.
         published = publish_slices(path, client, report)
@@ -74,8 +86,18 @@ def run(minutes, interval, *, root, client, folder, key, request_get, setting=No
             totals["published"] = totals.get("published", 0) + sum(
                 1 for p in published.values() if p.get("status") == "PUBLISHED")
             print(json.dumps({"cycle": totals["cycles"], "qualified_market_file": published}, default=str), flush=True)
-        if clock() + interval * 60 > deadline:
+        now = clock()
+        if now + interval * 60 > deadline:
             return totals
+        if now - last_restore >= REFRESH_MINUTES * 60:
+            # Games the research loop captured after this slate began are only in the remote
+            # store: restore again with a fresh session, every REFRESH_MINUTES (audit 2026-11-09).
+            try:
+                session = {}
+                sync(path, client, folder, session)
+                last_restore = now
+            except Exception as exc:
+                print(json.dumps({"cycle": totals["cycles"], "restore_error": type(exc).__name__}), flush=True)
         sleep(interval * 60)
 
 

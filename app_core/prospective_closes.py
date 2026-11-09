@@ -189,6 +189,7 @@ def _charged(response):
 
 
 REQUESTED_STATE = "certified_close_requested_v1"
+COST_FLAG = "certified_close_cost_review_required"
 
 
 def _scope(quote):
@@ -219,6 +220,12 @@ def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.
         return report
     if not key:
         report["skipped"].append("ODDS_API_KEY_MISSING")
+        return report
+    state = getattr(budget, "state", None)
+    if isinstance(state, dict) and (state.get(COST_FLAG) or state.get("api_budget_cost_mismatch")):
+        # A provider charge above plan (here or in research capture) stops certified closes too,
+        # until the owner reviews it (audit 2026-11-09).
+        report["skipped"].append("PROVIDER_COST_REVIEW_REQUIRED")
         return report
     requested = _requested_scopes(budget, now)
     pending = []
@@ -264,6 +271,9 @@ def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.
             report["errors"].append(f"{event['event_id']}:COST_MISMATCH:planned={credits}:charged={actual}")
             if budget is not None:
                 budget.reserve_certified_close(event["sport"], actual - credits, already_spent=True)
+                if isinstance(state, dict):
+                    state[COST_FLAG] = f"planned={credits}:charged={actual}"  # sticky until reviewed
+                    budget.persist()
             report["stopped"] = "COST_MISMATCH"
             break
     return report
