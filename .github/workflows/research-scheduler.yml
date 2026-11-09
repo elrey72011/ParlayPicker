@@ -16,10 +16,21 @@ on:
     - cron: '15,45 0-7,15-23 * * *'
 permissions:
   contents: read
-concurrency:
-  group: research-capture-and-grading
-  cancel-in-progress: false
+  actions: read
 jobs:
+  loop-check:
+    # Outside the concurrency group: a scheduled run that would queue behind a research loop
+    # and cancel it (GitHub keeps one pending run per group) does nothing instead (audit 2026-11-09).
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      active: ${{ steps.loop.outputs.active }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: loop
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/research_loop_active.py
   configuration-preflight:
     if: (github.event_name == 'workflow_dispatch' || vars.RESEARCH_SCHEDULER_ENABLED == 'true') && inputs.football_v3_audit != true && inputs.sports != 'FOOTBALL_STAGE1'
     runs-on: ubuntu-latest
@@ -37,9 +48,12 @@ jobs:
       - name: Report configuration presence only
         run: python scripts/research_actions_preflight.py
   research:
-    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.football_v3_audit != true && inputs.sports != 'FOOTBALL_STAGE1'
-    needs: configuration-preflight
+    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true' && inputs.football_v3_audit != true && inputs.sports != 'FOOTBALL_STAGE1' && needs.loop-check.outputs.active != 'true'
+    needs: [configuration-preflight, loop-check]
     runs-on: ubuntu-latest
+    concurrency:
+      group: research-capture-and-grading
+      cancel-in-progress: false
     # G7: every evidence record is its own Drive object, uploaded at about 2.4/s, so a
     # large slate (e.g. ~150 NCAAB games, ~5,500 records) needs ~40 minutes of upload
     # alone. A run killed mid-upload loses its unsaved records. Public repository:
@@ -114,6 +128,9 @@ jobs:
   # activation-evidence (closing-line capture) moved to closing-capture.yml (roadmap E1.4)
   football-v3-feasibility:
     if: github.event_name == 'workflow_dispatch' && inputs.football_v3_audit == true
+    concurrency:
+      group: research-capture-and-grading
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -141,6 +158,9 @@ jobs:
           if-no-files-found: warn
   football-stage1-branch-dispatch:
     if: github.event_name == 'workflow_dispatch' && inputs.sports == 'FOOTBALL_STAGE1' && inputs.football_v3_audit != true
+    concurrency:
+      group: research-capture-and-grading
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
