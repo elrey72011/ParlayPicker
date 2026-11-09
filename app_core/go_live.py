@@ -7,6 +7,8 @@ holds. This lists each link, in order, with its status and the next step:
 * ``ACTION``  the owner can do the next step now (the command or setting is named);
 * ``WAIT``    it needs more games or an earlier item first.
 
+``full_checklist`` adds ``stake_checks``: whether a stake above $0 is reachable at all.
+
 It reads the canonical store, the exposure ledger, the market activation directory and
 the app's settings (only whether a key is present, never its value). It writes nothing
 and never stakes: the live gate (``core.sport_market_gate``) still decides every pick.
@@ -83,9 +85,7 @@ def checklist(sport, family, *, path=None, now=None, setting=None, secret=None,
     activation = _item("activation", "Owner market activation", WAIT, "needs a validated deployment first",
                        "After the review passes: python scripts/activate_sport_market.py --sport "
                        f"{sport} --market-family {family} --evidence-db <store> --ledger <ledger> "
-                       "--policy <reviewed-policy.json> --owner-id <you> --expires-at <date> --confirm. "
-                       "Stakes also need the live wager policy (PARLAYPICKER_WAGER_POLICY_PATH, activation-v1) "
-                       "to carry this sport's validated exposure limits; without it every stake is $0")
+                       "--policy <reviewed-policy.json> --owner-id <you> --expires-at <date> --confirm")
     if validated and snapshot is not None:
         try:
             from core.sport_market_activation import verify_market_activation
@@ -125,6 +125,87 @@ def checklist(sport, family, *, path=None, now=None, setting=None, secret=None,
                        None if gemini else "Add GEMINI_API_KEY to the app's secrets (without it, a staked pick is "
                        "held at $0 unless an outage policy allows a capped stake)"))
     return items
+
+
+def stake_checks(sport, family, *, path=None, now=None, setting=None, ledger_path=None, wager_policy_path=None,
+                 activations_dir=None):
+    """Two more items: can a validated, activated pick be given a stake above $0?
+
+    ``checklist`` can pass in full while every stake is still $0 (audit 2026-11-09, R1):
+
+    * ``staking_clv``      the staking terms' maturity rule needs the holdout bets' CLV lower 95%
+      bound at or above its floor; below it every pick stays under the lowest staking tier.
+    * ``stake_reachable``  the exposure allocator takes the sport's cap from the verified market
+      activation's own policy (owner D23, 2026-11-09) or from the live wager policy
+      (``core.live_wager_contract.wager_policies``); with neither the cap is 0 and so is every stake.
+
+    Read-only, like ``checklist``; it grants nothing and sizes no real pick.
+    """
+    from app_core import prospective_evidence as evidence
+    now = now or datetime.now(timezone.utc)
+    setting = setting or os.environ.get
+    state = evidence.deployment_state(path, sport, family)
+    validated = state["deployment_state"] in {"PROVISIONAL_VALIDATED", "STANDARD_VALIDATED", "PREMIUM_VALIDATED"}
+    items = []
+
+    title = "Holdout bets' closing-line value supports a stake (lower 95% bound)"
+    rules = state.get("maturity_rules") or (state.get("deployment_criteria") or {}).get("maturity_rules") or {}
+    floors = [r.get("min_prior_clv") for r in rules.values() if isinstance(r, dict) and r.get("min_prior_clv") is not None]
+    lower = ((state.get("validation_report") or {}).get("metrics") or {}).get("price_clv_lower_95")
+    if not validated:
+        items.append(_item("staking_clv", title, WAIT, "needs a validated deployment first",
+                           "Wait for validation, holdout and the deployment review"))
+    elif not floors:
+        items.append(_item("staking_clv", title, ACTION, "the deployment has no staking maturity rules",
+                           "Staking needs a plan frozen with staking terms (pinnacle-provisional-v1)"))
+    elif lower is None or lower < min(floors):
+        items.append(_item("staking_clv", title, WAIT,
+                           f"lower 95% bound {lower if lower is None else round(lower, 5)}; needs {min(floors)} or more",
+                           "Every stake is $0 until a later validation's holdout bets beat the close with "
+                           "enough bets for the bound to clear the floor"))
+    else:
+        items.append(_item("staking_clv", title, PASS, f"lower 95% bound {round(lower, 5)} (floor {min(floors)})"))
+
+    title = "A stake above $0 is reachable (sport exposure cap)"
+    from core.live_wager_contract import wager_policies
+    policy_path = wager_policy_path or setting("PARLAYPICKER_WAGER_POLICY_PATH", None) or "data/policies/active_wager_policy.json"
+    policy = wager_policies(now, policy_path)[0].get(sport)
+    cap = float(getattr(policy, "sport_exposure_cap", 0) or 0)
+    bankroll = None
+    try:
+        from core.exposure_ledger import snapshot as ledger_snapshot
+        ledger_path = ledger_path or setting("PARLAYPICKER_EXPOSURE_LEDGER", None) or "data/exposure/exposure.sqlite3"
+        snapshot = ledger_snapshot(ledger_path, now=now)
+        bankroll = float(snapshot["bankroll"])
+        if validated:  # the same verification the gate runs before it lends the market's policy
+            from core.sport_market_activation import verify_market_activation
+            directory = Path(activations_dir or setting("PARLAYPICKER_MARKET_ACTIVATIONS_DIR", None)
+                             or "data/policies/active_markets")
+            record = json.loads((directory / f"{sport}-{family}.json").read_text(encoding="utf-8"))
+            verify_market_activation(record, state, snapshot, now=now)
+            cap = max(cap, float(record["policy"].get("sport_exposure_cap") or 0))
+    except Exception:
+        pass
+    if cap > 0 and bankroll:
+        items.append(_item("stake_reachable", title, PASS,
+                           f"{sport} cap {cap:.2%} of bankroll: up to ${cap * bankroll:,.2f} open on {sport}"))
+    elif cap > 0:
+        items.append(_item("stake_reachable", title, ACTION, f"{sport} cap {cap:.2%}, but no bankroll is configured",
+                           "Configure the exposure ledger (bankroll and limits)"))
+    else:
+        items.append(_item("stake_reachable", title, ACTION if validated else WAIT,
+                           f"{sport} exposure cap is 0 (no verified market activation, and no verified {sport} "
+                           f"entry in {policy_path}): every stake is $0",
+                           "Activate the market with a reviewed policy whose sport_exposure_cap is above 0"))
+    return items
+
+
+def full_checklist(sport, family, **kwargs):
+    """``checklist`` plus ``stake_checks``: what the owner sees. It is not ready while a stake is $0."""
+    wager_policy_path = kwargs.pop("wager_policy_path", None)
+    items = checklist(sport, family, **kwargs)
+    shared = {k: kwargs.get(k) for k in ("path", "now", "setting", "ledger_path", "activations_dir")}
+    return items + stake_checks(sport, family, wager_policy_path=wager_policy_path, **shared)
 
 
 def summary(items):

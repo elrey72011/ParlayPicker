@@ -81,22 +81,22 @@ def news(slot, previous_rows, rows):
     return lag.candidates([{"reports": [entry]}])
 
 
-def due_events(path, now):
-    """Stored Odds API NBA events starting within ``HORIZON`` of ``now``."""
-    return [e for e in evidence.read_records(path, "prospective_event", sport=SPORT)
+def due_events(path, now, *, sport=SPORT, horizon=HORIZON):
+    """Stored Odds API events of ``sport`` starting within ``horizon`` of ``now``."""
+    return [e for e in evidence.read_records(path, "prospective_event", sport=sport)
             if e["provider_namespace"] == "THE_ODDS_API"
-            and now < evidence._time(e["scheduled_start"], "scheduled_start") <= now + HORIZON]
+            and now < evidence._time(e["scheduled_start"], "scheduled_start") <= now + horizon]
 
 
-def capture(path, events, *, key, request_get, budget, clock=_utcnow):
+def capture(path, events, *, key, request_get, budget, clock=_utcnow, sport=SPORT, flag=COST_FLAG):
     """One request for ``events`` ({provider id: event}); store spreads and totals, Pinnacle included."""
     from app_core import odds_research_adapter as adapter
     from app_core.research_api_budget import BudgetLimit, capture_bookmakers
     result = {"events": len(events), "requested": False, "stored_quotes": 0, "replay_blocked": 0, "blocker": None}
     if not events:
         return result
-    if budget.state.get(COST_FLAG):
-        result["blocker"] = COST_FLAG  # sticky until the owner reviews the provider's charge
+    if budget.state.get(flag):
+        result["blocker"] = flag  # sticky until the owner reviews the provider's charge
         return result
     try:
         budget.reserve("ODDS", CREDITS_PER_REQUEST)
@@ -104,28 +104,28 @@ def capture(path, events, *, key, request_get, budget, clock=_utcnow):
         result["blocker"] = str(exc)
         return result
     result["requested"] = True
-    charged_get = decision.charging(request_get, budget, CREDITS_PER_REQUEST, COST_FLAG, result)
+    charged_get = decision.charging(request_get, budget, CREDITS_PER_REQUEST, flag, result)
     try:
-        payload = adapter.fetch(SPORT, "odds", key, charged_get, params={
-            "bookmakers": capture_bookmakers(SPORT), "markets": "spreads,totals", "oddsFormat": "american",
+        payload = adapter.fetch(sport, "odds", key, charged_get, params={
+            "bookmakers": capture_bookmakers(sport), "markets": "spreads,totals", "oddsFormat": "american",
             "eventIds": ",".join(sorted(events))})
     except BudgetLimit as exc:  # a retry the allowance could not cover
         result["blocker"] = str(exc)
         return result
     for family in FAMILIES:
-        stored, blocked = decision.store_quotes(path, SPORT, family, events, payload, clock=clock, reference=True)
+        stored, blocked = decision.store_quotes(path, sport, family, events, payload, clock=clock, reference=True)
         result["stored_quotes"] += stored
         result["replay_blocked"] += blocked
     return result
 
 
-def predict(path, now):
+def predict(path, now, *, sport=SPORT):
     """Bound predictions at the fresh quotes, where a frozen plan binds the market."""
     from app_core import prospective_calibration as calibration
     out = {}
     for family in FAMILIES:
         try:
-            out[family] = calibration.predict_bound(path, SPORT, family, now=now)
+            out[family] = calibration.predict_bound(path, sport, family, now=now)
         except Exception as exc:  # a prediction failure never loses the stored quotes
             out[family] = {"error": type(exc).__name__}
     return out

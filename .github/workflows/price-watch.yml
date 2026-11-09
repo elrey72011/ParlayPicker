@@ -1,0 +1,51 @@
+name: Price watch (research)
+# Roadmap M2 (owner D28, 2026-11-09): every 15 minutes (NBA) or 30 (NCAAB), capture prices for
+# the stored games starting within 3 hours (US books, Pinnacle, Novig where switched on; spreads
+# and totals). 4 Odds API credits per request, from its own allowance (200 a day, 1,400 in all).
+# The owner approved both sports for 7 days: the code stops by itself after the night of
+# 2026-11-16 (app_core/price_watch.py UNTIL). Set the PARLAYPICKER_PRICE_WATCH repository
+# variable to OFF to stop sooner, or to one sport. No stake or wager authority.
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "How long to keep watching (max 340)"
+        required: false
+        default: "340"
+  schedule:
+    - cron: '17 21 * * *'     # 4:17 PM EST, through the evening slate
+    - cron: '30 16 * * 6,0'   # 11:30 AM EST on Saturday and Sunday, for afternoon games
+permissions:
+  contents: read
+concurrency:
+  group: price-watch
+  cancel-in-progress: false
+jobs:
+  price-watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      PARLAYPICKER_PRICE_WATCH: ${{ vars.PARLAYPICKER_PRICE_WATCH || 'NBA,NCAAB' }}
+      PARLAYPICKER_NOVIG_SPORTS: ${{ vars.PARLAYPICKER_NOVIG_SPORTS }}
+      PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
+      PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Restore the verified Drive object cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-${{ github.workflow }}-${{ github.run_id }}
+          restore-keys: drive-cache-
+      - name: Watch prices for games in their last 3 hours
+        env:
+          MINUTES: ${{ inputs.minutes || '340' }}
+          PARLAYPICKER_DRIVE_CACHE_DIR: ${{ runner.temp }}/drive-cache
+        run: python -u scripts/price_watch_loop.py --minutes "$MINUTES" --interval 5

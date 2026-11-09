@@ -1,6 +1,6 @@
 # ParlayPicker roadmap: the best pick for each game
 
-Version 3, 2026-11-05; updated 2026-11-07 (§2a) and 2026-11-08 (§2b). This supersedes version 2 (same day). Version 2 was written
+Version 3, 2026-11-05; updated 2026-11-07 (§2a), 2026-11-08 (§2b) and 2026-11-09 (§2c). This supersedes version 2 (same day). Version 2 was written
 without a full audit of the repository and planned parallel systems for things the
 repository already does. Version 3 is built around the authority chain that already
 exists. Statuses were checked against `main` `cc42eac` plus open PR #2457.
@@ -169,6 +169,16 @@ the read-only first-edge replays for NCAAB and NBA spreads, now with Novig price
    (activation panel), activate the market, and set `PARLAYPICKER_DECISION_MARKETS`.
 2. Review and freeze the next NCAAB plan if Wednesday's replay supports it.
 
+## 2c. Update 2026-11-09: validation audit
+
+Full audit and the implementation roadmap: `docs/roadmap/VALIDATION-ROADMAP-2026-11-09.md`. In short:
+
+- No strategy produces bets yet (0 at 1% and 2% in today's NCAAB and NBA replays with Novig).
+- The current plan gates pass a true 2% edge about 1 time in 4 (`scripts/plan_gate_power.py`).
+- A passing market still stakes $0: three defects after the review (bridge start time, bridge line,
+  sport cap; the last is D23).
+- Milestones M1 to M5 and owner decisions D23 (decided) and D26 to D29 are in that document.
+
 ## 3. Milestones, in order
 
 ### C0: Read where every market stands (first; ~0.5 day)
@@ -256,7 +266,7 @@ The 20 blockers in `docs/paid-launch/paid-launch-owner-actions.md` stay as they 
 | D20 | How a push counts in a plan's bets | **Owner-chosen 2026-11-09: count it as a zero-return bet, for plans frozen from now on.** `market_skill_validation.PUSH_ZERO_RETURN` is recorded in the plan's rules (the Bound plan workflow drafts it). Plans frozen before (`prospective-ncaab-spread-bound-v2`) keep their rules and hash: a push stays out of their bets |
 | D21 | Bind a Pinnacle plan to its prediction code | **Owner-chosen 2026-11-09: new plans only.** A newly drafted Pinnacle plan records `pinnacle_model.code_hash()` (the prediction functions, docstrings and formatting ignored) in its model scope; if that code changes while the plan runs, its bound and decision predictions stop with `*_PINNACLE_RUNTIME_CHANGED`. The running v2 plan has no recorded hash and is not checked |
 | D22 | Recheck a frozen plan's hash; as-of filtering | **Owner-chosen 2026-11-09: recheck yes, as-of filtering no.** `deployment_state` grants nothing unless `prospective_evidence.plan_integrity` passes (the payload still hashes to the frozen artifact hash and the columns match). The readiness report's Plan progress shows it per plan; confirmed OK for the running v2 plan before merge. Past-dated evaluations are not filtered (no evaluation runs at a past date) |
-| D23 | What a stake needs besides the market activation | **Owner-chosen 2026-11-09: defer until a market validates.** Today a non-zero stake needs the market activation record and a live wager policy (`PARLAYPICKER_WAGER_POLICY_PATH`, activation-v1) with the sport's validated exposure limits; the go-live checklist says so. When a market validates, the activation step should write both in one owner action, loosening nothing |
+| D23 | What a stake needs besides the market activation | **Owner-chosen 2026-11-09 (later the same day): the verified market activation's own policy supplies the sport exposure cap; implemented in `core/live_wager_contract.py`.** Earlier choice, superseded: defer until a market validates. Before the change a non-zero stake needs the market activation record and a live wager policy (`PARLAYPICKER_WAGER_POLICY_PATH`, activation-v1) with the sport's validated exposure limits |
 | D24 | Two app sessions sizing against the same headroom | **Owner-chosen 2026-11-09: no change.** One owner uses the app; recommended stakes are not reserved between sessions |
 | D25 | Football Stage 1 schedule | **Owner-chosen 2026-11-09: paused, manual runs kept.** Every run failed on NCAAF games with revised kickoffs (a fix needs NCAAF runtime approval), neither football screen found an edge, and it spent about 4 Odds credits an hour outside research-loop hours. Restore the cron when football work resumes |
 

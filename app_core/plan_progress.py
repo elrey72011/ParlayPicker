@@ -49,7 +49,8 @@ def progress(plan: dict, evaluation: dict, *, now: datetime) -> list[dict]:
         span = (end - start).total_seconds()
         elapsed = min(1.0, max(0.0, (now - start).total_seconds() / span)) if span > 0 else 1.0
         cohort = evaluation.get(name) or {}
-        skill = (evaluation.get("market_skill") or {}).get(name) or {}
+        # A pooled market-skill-v2 plan (owner D27) is gated on the pool's bets: show those.
+        skill = (evaluation.get("market_skill_pool") or evaluation.get("market_skill") or {}).get(name) or {}
         outcomes = cohort.get("outcomes") or {}
         games = int(cohort.get("unique_events") or 0)
         bets = int(skill.get("bets") or 0)

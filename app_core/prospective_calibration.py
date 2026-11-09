@@ -412,15 +412,18 @@ def predict_bound(path, sport, market, *, now=None):
     select = None
     rules = _plan_rules(plan)
     books = rules.get("entry_books") or None
-    if books or rules.get("entry_rule"):
+    limit = rules.get("max_entry_overround")
+    if books or rules.get("entry_rule") or limit:
         from app_core import pinnacle_model
         artifact = json.loads(calibration["payload"]).get("calibration_artifact") if calibration else None
         # The plan's own probability, so the entry and the bet rule agree (FIRST_EDGE_CAPTURE).
         adjust = ((lambda p: calibrated({"win": p, "push": 0.0, "loss": 1 - p}, artifact)["win"])
                   if artifact and rules.get("entry_rule") else None)
         # The plan froze the books it may enter at (the books its picks can be staked at) and its entry rule.
+        # A plan frozen with ``max_entry_overround`` (owner D29) never enters at a junk price.
         select = lambda events, quotes, at: pinnacle_model.plan_quotes(  # noqa: E731
-            events, quotes, at, books=frozenset(books) if books else None, entry_rule=rules.get("entry_rule"),
+            events, pinnacle_model.without_junk(quotes, limit)[0] if limit else quotes, at,
+            books=frozenset(books) if books else None, entry_rule=rules.get("entry_rule"),
             min_edge=rules.get("min_edge"), adjust=adjust)
     result = _predict(path, sport, market, model, calibration, now=now, policy_version=POLICY_VERSION, tag="BOUND",
                       select=select)
@@ -448,9 +451,27 @@ def window_days(target, rate, *, coverage=0.8, margin=1.25, minimum=7):
     return max(minimum, math.ceil(target / (rate * coverage) * margin))
 
 
+def expected_bets_per_day(path, scopes, *, now, min_edge, entry_books=None, entry_rule=None):
+    """Bets per day a Pinnacle plan would have made over the games already captured, summed over
+    ``scopes`` (``pinnacle_model.replay_estimate``, raw no-vig price, junk prices left out)."""
+    from app_core import pinnacle_model
+    total = 0.0
+    for scope in scopes:
+        sport, family = scope.split(":")
+        replay = pinnacle_model.replay_estimate(path, sport, family, now=now, edges=(min_edge,),
+                                                books=frozenset(entry_books) if entry_books else None)
+        if replay.get("status") != "ESTIMATED":
+            continue
+        rule = entry_rule or "EARLIEST_SHARED_LINE"
+        row = next(v for v in replay["variants"] if v["entry_rule"] == rule and v["probability"] == "PINNACLE_NO_VIG")
+        total += row["by_edge"][f"{min_edge:.0%}"]["bets_per_day"]
+    return total
+
+
 def draft_bound_plan(path, sport, market, *, validation_start, validation_days=None, holdout_days=None,
                      model_id=None, calibration_id=None, rate=None, methodology="v1", min_edge=None,
-                     entry_books=None, staking_terms=None, entry_rule=None, push_rule=None):
+                     entry_books=None, staking_terms=None, entry_rule=None, push_rule=None,
+                     min_bets=None, pool=None, max_entry_overround=None):
     """A proposed plan version binding the candidate model and its calibration. Nothing is frozen.
 
     Thresholds, sample minimums and policies are the frozen v1 template's
@@ -482,9 +503,33 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
     calibration = evidence.load_record(path, "prospective_calibration", calibration_id)
     start = _time(validation_start)
     target = _template(sport, market)["minimum_independent_sample"]
+    v2 = methodology == "market_skill_v2"
+    if v2:
+        from app_core import market_skill_validation as market_skill
+        from app_core import pinnacle_model
+        edge = market_skill.DEFAULT_MIN_EDGE if min_edge is None else min_edge
+        if pool and not pinnacle_model.is_pinnacle(model):
+            raise ValueError("only a Pinnacle plan may pool (owner D27: the Pinnacle/Novig lag only)")
+        if pool and sorted(pool) != market_skill.pool_scopes(sport, market):
+            raise ValueError("the pool must be this market family across NBA and NCAAB")
+        # Built first so a bad choice fails before any window is sized.
+        v2_rules = dict(min_edge=edge, entry_books=entry_books, entry_rule=entry_rule,
+                        min_bets=market_skill.DEFAULT_MIN_BETS if min_bets is None else min_bets,
+                        max_entry_overround=max_entry_overround, pool=pool)
+        target = market_skill.methodology_v2(**v2_rules)["min_bets"]
+    elif min_bets is not None or pool or max_entry_overround is not None:
+        raise ValueError("min_bets, pool and max_entry_overround apply only to the market_skill_v2 methodology")
     if validation_days is None or holdout_days is None:
         if rate is not None:
             observed = rate
+        elif v2:
+            # Windows sized by expected bets (owner D26), over every pool scope's games.
+            if not pinnacle_model.is_pinnacle(model):
+                raise ValueError("give validation_days and holdout_days: bets can be estimated only for a Pinnacle plan")
+            observed = expected_bets_per_day(path, pool or [f"{sport}:{market}"], now=start, min_edge=edge,
+                                             entry_books=entry_books, entry_rule=entry_rule)
+            if observed <= 0:
+                raise ValueError("no bets in the captured games yet: the window cannot be sized by bets")
         else:
             from app_core import pinnacle_model
             # A Pinnacle plan predicts only games where a US book posts Pinnacle's line
@@ -501,7 +546,11 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
     holdout_end = validation_end + timedelta(days=holdout_days)
     version = previous["version"] + 1
     spec = _template(sport, market)
-    if methodology == "market_skill":
+    if v2:
+        if push_rule is not None:
+            raise ValueError("market_skill_v2 always counts a push as a zero-return bet")
+        spec = market_skill.template_v2(spec, **v2_rules)
+    elif methodology == "market_skill":
         from app_core.market_skill_validation import DEFAULT_MIN_EDGE, template as market_skill_template
         spec = market_skill_template(spec, DEFAULT_MIN_EDGE if min_edge is None else min_edge, entry_books,
                                      entry_rule, push_rule)
@@ -541,7 +590,13 @@ def freeze_inputs(spec):
             "calibration_id": spec["calibration_id"], "validation_start": spec["validation_start"],
             "validation_days": (_time(spec["validation_end"]) - _time(spec["validation_start"])).days,
             "holdout_days": (_time(spec["holdout_end"]) - _time(spec["holdout_start"])).days,
-            **({"methodology": "market_skill"} if "market_skill_methodology" in spec else {}),
+            **({"methodology": "market_skill_v2", "min_bets": spec["market_skill_methodology"]["min_bets"],
+                **({"pool": spec["market_skill_methodology"]["pool"]["scopes"]}
+                   if "pool" in spec["market_skill_methodology"] else {}),
+                **({"max_entry_overround": spec["market_skill_methodology"]["max_entry_overround"]}
+                   if "max_entry_overround" in spec["market_skill_methodology"] else {})}
+               if spec.get("market_skill_methodology", {}).get("version") == "market-skill-v2" else
+               {"methodology": "market_skill"} if "market_skill_methodology" in spec else {}),
             # Recorded only when it differs from the default, so default plans keep their inputs.
             **({"min_edge": spec["market_skill_methodology"]["min_edge"]}
                if "market_skill_methodology" in spec and spec["market_skill_methodology"]["min_edge"] != 0.02 else {}),
@@ -550,7 +605,8 @@ def freeze_inputs(spec):
             **({"entry_rule": spec["market_skill_methodology"]["entry_rule"]}
                if "entry_rule" in spec.get("market_skill_methodology", {}) else {}),
             **({"push_rule": spec["market_skill_methodology"]["push_rule"]}
-               if "push_rule" in spec.get("market_skill_methodology", {}) else {}),
+               if "push_rule" in spec.get("market_skill_methodology", {})
+               and spec["market_skill_methodology"].get("version") != "market-skill-v2" else {}),
             **({"staking_terms": spec["deployment_criteria"]["staking_terms"]}
                if "staking_terms" in spec.get("deployment_criteria", {}) else {})}
 
