@@ -42,6 +42,21 @@ def _payload(event: dict) -> str:
     return json.dumps(value, sort_keys=True, allow_nan=False)
 
 
+def _missing(exc) -> bool:
+    return (isinstance(exc, (KeyError, FileNotFoundError)) or type(exc).__name__ in {"NoSuchKey", "NotFound"}
+            or "missing" in str(exc).lower())
+
+
+# A remote sync that ended in one of these leaves the local ledger possibly incomplete. When the
+# remote is switched on, the app then sizes no stake from it (``core.live_wager_contract``).
+UNSAFE_STATUSES = frozenset({"SYNC_FAILED", "DIVERGED", "CONFLICT", "MISSING_CREDENTIALS"})
+
+
+def unsafe(result) -> bool:
+    """True when a ``before_read`` result means the local ledger may be missing committed events."""
+    return isinstance(result, dict) and result.get("status") in UNSAFE_STATUSES
+
+
 def remote_events(client) -> list[dict]:
     """The remote events in order, each verified against its own hash."""
     from core.exposure_ledger import digest
@@ -49,8 +64,13 @@ def remote_events(client) -> list[dict]:
     for seq in range(1, MAX_EVENTS + 1):
         try:
             raw = client.get_object(Key=key(seq))["Body"].read()
-        except Exception:
-            break
+        except Exception as exc:
+            # Only a missing object ends the ledger. Any other failure (a transient Drive error,
+            # conflicting duplicates) raises: stopping early would restore part of the ledger and
+            # undercount committed exposure (audit 2026-11-09).
+            if _missing(exc):
+                break
+            raise
         value = json.loads(raw)
         event_id = value.pop("ledger_event_id", None)
         if event_id != digest(value):

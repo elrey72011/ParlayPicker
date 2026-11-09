@@ -188,6 +188,28 @@ def _charged(response):
         return None
 
 
+REQUESTED_STATE = "certified_close_requested_v1"
+
+
+def _scope(quote):
+    return f"{quote['market_family']}|{quote['sportsbook']}|{quote['selection']}"
+
+
+def _requested_scopes(budget, now):
+    """{event_id: {start, scopes}} of snapshots already fetched, kept in the budget's own state
+    (saved with it) and pruned once the event is past the lookback; None without a budget."""
+    state = getattr(budget, "state", None)
+    if not isinstance(state, dict):
+        return None
+    requested = state.setdefault(REQUESTED_STATE, {})
+    if not isinstance(requested, dict):
+        requested = state[REQUESTED_STATE] = {}
+    for event_id in [e for e, v in requested.items()
+                     if not isinstance(v, dict) or _time(v.get("start")) < now - LOOKBACK - timedelta(days=1)]:
+        del requested[event_id]
+    return requested
+
+
 def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.environ.get, max_events=20):
     """Fetch and store certified closes for due events. Returns a sanitized report; never raises on one event."""
     sports = enabled_sports(setting) if sports is None else tuple(sports)
@@ -198,7 +220,19 @@ def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.
     if not key:
         report["skipped"].append("ODDS_API_KEY_MISSING")
         return report
-    for event, quotes in due(path, now, sports=sports, setting=setting)[:max_events]:
+    requested = _requested_scopes(budget, now)
+    pending = []
+    for event, quotes in due(path, now, sports=sports, setting=setting):
+        # A historical snapshot at the last pregame second never changes, so a book missing from
+        # it stays missing. Ask once per scope, never again every cycle (audit 2026-11-09).
+        done = set(((requested or {}).get(event["event_id"]) or {}).get("scopes") or ())
+        left = [q for q in quotes if _scope(q) not in done]
+        if left:
+            pending.append((event, left))
+        elif quotes:
+            report.setdefault("already_requested", 0)
+            report["already_requested"] += 1
+    for event, quotes in pending[:max_events]:
         report["events"] += 1
         url, params, credits = request_plan(event, quotes)
         try:
@@ -214,6 +248,9 @@ def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.
             continue
         report["requests"] += 1
         report["credits"] += credits
+        if requested is not None:
+            entry = requested.setdefault(event["event_id"], {"start": event["scheduled_start"], "scopes": []})
+            entry["scopes"] = sorted(set(entry["scopes"]) | {_scope(q) for q in quotes})
         for row in closes_from_snapshot(event, quotes, payload, now):
             try:
                 evidence.insert_certified_close(path, row)

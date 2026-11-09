@@ -50,6 +50,10 @@ ALLOWED_MIN_EDGES = (0.01, 0.02)
 EARLIEST_SHARED_LINE = "EARLIEST_SHARED_LINE"
 FIRST_EDGE_CAPTURE = "FIRST_EDGE_CAPTURE"
 ENTRY_RULES = (EARLIEST_SHARED_LINE, FIRST_EDGE_CAPTURE)
+# A first-edge entry must be bettable when it is predicted (audit 2026-11-09): its capture must be
+# at most this old at the prediction time. Price gaps after news last about 10 to 30 minutes, so a
+# capture found to clear hours later is no longer a price anyone could take.
+FIRST_EDGE_MAX_ENTRY_AGE_MINUTES = 15
 
 
 def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None):
@@ -86,14 +90,31 @@ def template(base, min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None)
 QUOTE_COLUMNS = "quote_id,event_id,market_family,selection,line,sportsbook,quote_timestamp,decimal_odds"
 
 
+def response_key(raw):
+    """When the provider response holding a quote was received, for quotes stored with their own
+    response (``prospective_evidence.quote_source``); None for a first-capture quote."""
+    from app_core import prospective_evidence as pe
+    value = pe._source_json(raw)
+    return value.get("response_received_at") if isinstance(value, dict) and set(value) == pe.QUOTE_SOURCE_KEYS else None
+
+
 def opposite(db, quote):
-    """The same book's other side at the same line and timestamp, or None."""
+    """The same book's other side at the same line and timestamp, or None.
+
+    Later captures store the full snapshot each time (``decision_capture.store_quotes``), so an
+    unchanged price can be stored more than once. Then the other side is taken from the same
+    response as ``quote``. With one candidate (every quote stored before 2026-11-09) nothing changes.
+    """
     line = quote["line"] if quote["market_family"] == "TOTAL" else -quote["line"]
-    rows = db.execute(f"""SELECT {QUOTE_COLUMNS} FROM prospective_quote WHERE event_id=? AND market_family=?
+    rows = db.execute(f"""SELECT {QUOTE_COLUMNS},raw_source FROM prospective_quote WHERE event_id=? AND market_family=?
         AND sportsbook=? AND quote_timestamp=? AND selection<>? AND line=? AND quote_verified=1""",
                       (quote["event_id"], quote["market_family"], quote["sportsbook"],
                        quote["quote_timestamp"], quote["selection"], line)).fetchall()
-    return dict(zip(QUOTE_COLUMNS.split(","), rows[0])) if len(rows) == 1 else None
+    if len(rows) > 1:
+        mine = db.execute("SELECT raw_source FROM prospective_quote WHERE quote_id=?", (quote.get("quote_id"),)).fetchone()
+        key = response_key(mine[0]) if mine else None
+        rows = [row for row in rows if response_key(row[-1]) == key]
+    return dict(zip(QUOTE_COLUMNS.split(","), rows[0][:-1])) if len(rows) == 1 else None
 
 
 def market_probability(db, quote):
@@ -141,6 +162,10 @@ def first_edge_bet(db, plan, quote, rules, as_of):
                 or mean is None or loss is None or mean + loss <= 0
                 or pe._time(entry["quote_timestamp"], "quote_timestamp") > made):
             continue
+        from datetime import timedelta
+        from app_core.pinnacle_model import capture_time
+        if made - capture_time(event, entry) > timedelta(minutes=FIRST_EDGE_MAX_ENTRY_AGE_MINUTES):
+            continue  # predicted from a capture too old to still be bettable
         other = opposite(db, entry)
         if other is None:
             continue

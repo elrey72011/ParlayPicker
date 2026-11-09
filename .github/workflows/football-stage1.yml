@@ -11,13 +11,28 @@ on:
     - cron: '20 * * * *'
 permissions:
   contents: read
-concurrency:
-  group: research-capture-and-grading
-  cancel-in-progress: false
+  actions: read
 jobs:
-  football-stage1:
-    if: github.event_name == 'workflow_dispatch' || vars.RESEARCH_SCHEDULER_ENABLED == 'true'
+  loop-check:
+    # Outside the concurrency group: a scheduled run that would queue behind a research loop
+    # and cancel it (GitHub keeps one pending run per group) does nothing instead (audit 2026-11-09).
     runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      active: ${{ steps.loop.outputs.active }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: loop
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/research_loop_active.py
+  football-stage1:
+    if: (github.event_name == 'workflow_dispatch' || vars.RESEARCH_SCHEDULER_ENABLED == 'true') && needs.loop-check.outputs.active != 'true'
+    needs: loop-check
+    runs-on: ubuntu-latest
+    concurrency:
+      group: research-capture-and-grading
+      cancel-in-progress: false
     timeout-minutes: 120
     env:
       PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}

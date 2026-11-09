@@ -91,25 +91,45 @@ def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow, pin
         result["blocker"] = str(exc)
         return result
     result["requested"] = True
-
-    def charged_get(url, **kwargs):
-        response = request_get(url, **kwargs)
-        spent = getattr(response, "headers", {}).get("x-requests-last")
-        if spent is not None and str(spent).strip() not in {str(n) for n in range(cost + 1)}:
-            budget.state[COST_FLAG] = str(spent)
-            budget.persist()
-            result["blocker"] = COST_FLAG
-        return response
+    charged_get = charging(request_get, budget, cost, COST_FLAG, result)
 
     from app_core.research_api_budget import capture_bookmakers
     books = {"bookmakers": capture_bookmakers(sport)} if pinnacle else {"regions": "us"}
-    payload = adapter.fetch(sport, "odds", key, charged_get, params={
-        **books, "markets": _market_key(sport, family), "oddsFormat": "american",
-        "eventIds": ",".join(sorted(events))})
+    try:
+        payload = adapter.fetch(sport, "odds", key, charged_get, params={
+            **books, "markets": _market_key(sport, family), "oddsFormat": "american",
+            "eventIds": ",".join(sorted(events))})
+    except BudgetLimit as exc:  # a retry the allowance could not cover
+        result["blocker"] = str(exc)
+        return result
     stored, blocked = store_quotes(path, sport, family, events, payload, clock=clock, reference=pinnacle)
     result["stored_quotes"] += stored
     result["replay_blocked"] += blocked
     return result
+
+
+def charging(request_get, budget, cost, flag, result):
+    """``request_get`` that charges every provider attempt (audit 2026-11-09).
+
+    The caller reserves the first attempt. ``odds_research_adapter.fetch`` retries a timeout,
+    429 or 5xx up to twice, and the provider may charge each attempt, so every retry reserves
+    ``cost`` again first (a ``BudgetLimit`` ends the request). A charge above ``cost`` sets the
+    sticky ``flag`` until the owner reviews it.
+    """
+    attempts = [0]
+
+    def charged_get(url, **kwargs):
+        attempts[0] += 1
+        if attempts[0] > 1:
+            budget.reserve("ODDS", cost)
+        response = request_get(url, **kwargs)
+        spent = getattr(response, "headers", {}).get("x-requests-last")
+        if spent is not None and str(spent).strip() not in {str(n) for n in range(cost + 1)}:
+            budget.state[flag] = str(spent)
+            budget.persist()
+            result["blocker"] = flag
+        return response
+    return charged_get
 
 
 def store_quotes(path, sport, family, events, payload, *, clock=_utcnow, reference=False):
@@ -117,6 +137,13 @@ def store_quotes(path, sport, family, events, payload, *, clock=_utcnow, referen
 
     Each quote keeps its own provider response, so it replays like a first-capture quote.
     Reference books (Pinnacle) are stored only with ``reference``. Returns (stored, replay-blocked).
+
+    The quote id includes the response time (audit 2026-11-09): every capture stores the full
+    snapshot, including a book whose price did not change since an earlier capture. A first-edge
+    plan compares each stake-book price with Pinnacle's price **from the same response**
+    (``pinnacle_model.plan_quotes``), so a book that has not moved after Pinnacle moved (the lag the
+    news study found) must be stored again with the new response. It also keeps two loops
+    (decision and news capture) from writing the same quote id with different response bytes.
     """
     from app_core import odds_research_adapter as adapter
     stored = blocked = 0
@@ -132,7 +159,8 @@ def store_quotes(path, sport, family, events, payload, *, clock=_utcnow, referen
             # (decision_quotes skips it).
             if quote["market_family"] != family or (quote["sportsbook"] in REFERENCE_BOOKS and not reference):
                 continue
-            quote_id = f"odds-quote:{sport}:{research._digest([event['provider_event_id'], quote['source_id']])[:24]}"
+            quote_id = (f"odds-quote:{sport}:"
+                        f"{research._digest([event['provider_event_id'], quote['source_id'], observed.isoformat()])[:24]}")
             if quote_id in have:
                 continue
             try:

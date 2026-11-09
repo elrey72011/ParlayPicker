@@ -104,19 +104,14 @@ def capture(path, events, *, key, request_get, budget, clock=_utcnow):
         result["blocker"] = str(exc)
         return result
     result["requested"] = True
-
-    def charged_get(url, **kwargs):
-        response = request_get(url, **kwargs)
-        spent = getattr(response, "headers", {}).get("x-requests-last")
-        if spent is not None and str(spent).strip() not in {str(n) for n in range(CREDITS_PER_REQUEST + 1)}:
-            budget.state[COST_FLAG] = str(spent)
-            budget.persist()
-            result["blocker"] = COST_FLAG
-        return response
-
-    payload = adapter.fetch(SPORT, "odds", key, charged_get, params={
-        "bookmakers": capture_bookmakers(SPORT), "markets": "spreads,totals", "oddsFormat": "american",
-        "eventIds": ",".join(sorted(events))})
+    charged_get = decision.charging(request_get, budget, CREDITS_PER_REQUEST, COST_FLAG, result)
+    try:
+        payload = adapter.fetch(SPORT, "odds", key, charged_get, params={
+            "bookmakers": capture_bookmakers(SPORT), "markets": "spreads,totals", "oddsFormat": "american",
+            "eventIds": ",".join(sorted(events))})
+    except BudgetLimit as exc:  # a retry the allowance could not cover
+        result["blocker"] = str(exc)
+        return result
     for family in FAMILIES:
         stored, blocked = decision.store_quotes(path, SPORT, family, events, payload, clock=clock, reference=True)
         result["stored_quotes"] += stored

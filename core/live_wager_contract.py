@@ -69,8 +69,12 @@ def load_configuration(now):
     try:
         from core.exposure_ledger import snapshot as ledger_snapshot
         ledger_path=os.environ.get('PARLAYPICKER_EXPOSURE_LEDGER','data/exposure/exposure.sqlite3')
-        from app_core.exposure_ledger_remote import before_read
-        before_read(ledger_path)  # restore from Drive after a reboot (off unless enabled; never raises)
+        from app_core.exposure_ledger_remote import before_read, unsafe
+        restored=before_read(ledger_path)  # restore from Drive after a reboot (off unless enabled; never raises)
+        if unsafe(restored):
+            # The remote is on but the restore failed or diverged: the local ledger may be missing
+            # committed wagers, so no exposure is reported and every stake stays blocked (fail closed).
+            raise ValueError('exposure_ledger_remote_'+str(restored.get('status')).lower())
         config['exposure']=ledger_snapshot(ledger_path,now=now)
         config['unit_value']=config['exposure']['unit_value']
     except ValueError:

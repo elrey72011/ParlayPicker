@@ -143,6 +143,11 @@ def _other_side(quote, quotes):
     found = [q for q in quotes if q["event_id"] == quote["event_id"] and q["sportsbook"] == quote["sportsbook"]
              and q["quote_timestamp"] == quote["quote_timestamp"] and q["selection"] != quote["selection"]
              and q["line"] == line and q["quote_verified"]]
+    if len(found) > 1:
+        # The same unchanged price stored by more than one capture: take the same response's side.
+        from app_core.market_skill_validation import response_key
+        key = response_key(quote.get("raw_source"))
+        found = [q for q in found if response_key(q.get("raw_source")) == key]
     return found[0] if len(found) == 1 else None
 
 
