@@ -141,3 +141,52 @@ def test_original_browser_assertions_and_deadline_are_frozen():
     assert len(nodes)==9
     assert hashlib.sha256(json.dumps(nodes,separators=(',',':')).encode()).hexdigest()=='515cb2c6ae77d0568a077344086acf5d3e81744d1693b70a0d6dd413b860b814'
     assert owner.CHROME_SECONDS==40
+
+
+def _browser(tmp_path,body):
+    """A synthetic browser: counts its launches in a file, then runs ``body``."""
+    script=tmp_path/'browser.py';count=tmp_path/'launches.txt'
+    script.write_text('import sys,threading\nfrom pathlib import Path\n'
+        f'count=Path({str(count)!r})\nn=int(count.read_text())+1 if count.exists() else 1\ncount.write_text(str(n))\n'+body)
+    return [sys.executable,'-B',str(script),'--user-data-dir='+str(tmp_path/'unused')],count
+
+
+def _evidence(tmp_path):
+    found=[json.loads(p.read_bytes()) for p in tmp_path.glob('browser-evidence-*/browser-process.json')]
+    return sorted(found,key=lambda e:e['launch_attempt'])
+
+
+def test_silent_timeout_is_relaunched_once_and_the_second_launch_decides(tmp_path,monkeypatch):
+    monkeypatch.setattr(owner,'CHROME_SECONDS',2)
+    command,count=_browser(tmp_path,'if n==1:threading.Event().wait(30)\nprint("owned-output",flush=True)\n')
+    result=owner.run_browser(command,tmp_path)
+    assert result.returncode==0 and b'owned-output' in result.stdout and count.read_text()=='2'
+    first,second=_evidence(tmp_path)
+    assert first['phase']=='EXECUTION_TIMEOUT' and first['relaunch']=='ONE_RELAUNCH_AFTER_SILENT_TIMEOUT'
+    assert first['output'][0]['total_bytes']==0 and first['profile_removed']
+    assert second['launch_attempt']==2 and second['phase']=='DIRECT_PROCESS_EXITED' and 'relaunch' not in second
+    assert not list(tmp_path.glob('browser-evidence-*/owned-profile-*'))
+
+
+def test_second_silent_timeout_fails_and_there_is_never_a_third_launch(tmp_path,monkeypatch):
+    monkeypatch.setattr(owner,'CHROME_SECONDS',1)
+    command,count=_browser(tmp_path,'threading.Event().wait(30)\n')
+    with pytest.raises(subprocess.TimeoutExpired):
+        owner.run_browser(command,tmp_path)
+    assert count.read_text()=='2'
+    first,second=_evidence(tmp_path)
+    assert first['relaunch']=='ONE_RELAUNCH_AFTER_SILENT_TIMEOUT' and 'relaunch' not in second
+    assert second['phase']=='EXECUTION_TIMEOUT'
+
+
+def test_a_timeout_after_any_output_and_a_failed_exit_are_never_relaunched(tmp_path,monkeypatch):
+    monkeypatch.setattr(owner,'CHROME_SECONDS',2)
+    command,count=_browser(tmp_path,'print("partial-page",flush=True)\nthreading.Event().wait(30)\n')
+    with pytest.raises(subprocess.TimeoutExpired):
+        owner.run_browser(command,tmp_path)
+    assert count.read_text()=='1'
+    only,=_evidence(tmp_path)
+    assert only['output'][0]['total_bytes']>0 and 'relaunch' not in only
+    other=tmp_path/'exit';other.mkdir()
+    command,count=_browser(other,'sys.exit(3)\n')
+    assert owner.run_browser(command,other).returncode==3 and count.read_text()=='1'

@@ -119,7 +119,10 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: full-suite-test-results-${{ matrix.shard }}
+          # The attempt is part of the name: after "re-run failed jobs" a shard has a report from each
+          # attempt, and reconciliation takes the newest (scripts/run_ci_tests.py). With one fixed name
+          # the stale failed report could be the one downloaded, and the check could never turn green.
+          name: full-suite-test-results-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
           path: |
             test-results/full-suite-${{ matrix.shard }}.xml
             test-results/full-suite-${{ matrix.shard }}-assignment.json

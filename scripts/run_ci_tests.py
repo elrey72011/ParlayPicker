@@ -179,9 +179,33 @@ class FileShard:
         return self.manifest['exit_code']
 
 
+def latest_attempts(paths):
+    """One manifest per shard: the one from the highest run attempt.
+
+    Each shard's report is uploaded as ``full-suite-test-results-<shard>-attempt-<n>``, so after
+    "re-run failed jobs" a re-run shard has a report from each attempt and the others only their
+    first. A directory without ``-attempt-<n>`` counts as attempt 1. Two manifests for the same
+    shard and attempt are kept, so the caller's count check rejects them.
+    """
+    newest = {}
+    for path in paths:
+        name = re.fullmatch(r'full-suite-(\d+)-assignment\.json', path.name)
+        if name is None:
+            newest[(str(path), 0)] = (0, [path])  # an unexpected name is counted, never dropped
+            continue
+        attempts = [int(m.group(1)) for part in path.parts[:-1] if (m := re.search(r'-attempt-(\d+)$', part))]
+        attempt = max(attempts, default=1)
+        held = newest.get(name.group(1))
+        if held is None or attempt > held[0]:
+            newest[name.group(1)] = (attempt, [path])
+        elif attempt == held[0]:
+            held[1].append(path)
+    return sorted(path for _, found in newest.values() for path in found)
+
+
 def reconcile(directory, count):
     require(type(count) is int and count > 0, 'Invalid reconciliation shard count')
-    paths = sorted(Path(directory).rglob('full-suite-*-assignment.json'))
+    paths = latest_attempts(sorted(Path(directory).rglob('full-suite-*-assignment.json')))
     require(len(paths) == count, 'Missing or duplicate shard manifests')
     indices, selected, reference = set(), [], None
     for path in paths:

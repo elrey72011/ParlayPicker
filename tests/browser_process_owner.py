@@ -89,7 +89,7 @@ class Capture:
 
 
 def run_owned(command,*,timeout=CHROME_SECONDS,evidence=None):
-    """One launch, no retry. A separate bounded cleanup is never execution time."""
+    """One launch, no retry (``run_browser`` decides the one relaunch). A separate bounded cleanup is never execution time."""
     from tests.browser_process_windows import WindowsChild
     started=time.monotonic();child=None;captures=[];failure=None;cleanup_failure=None;code=None
     report=dict(schema='owned-browser-v1',deadline_seconds=timeout,phase='LAUNCH',spawned=False)
@@ -133,8 +133,25 @@ def run_owned(command,*,timeout=CHROME_SECONDS,evidence=None):
 
 
 def run_browser(command,directory):
-    """Fresh owned profile; preserve the rendered input and every launch option."""
-    directory=Path(directory);record={};evidence=Path(tempfile.mkdtemp(prefix='browser-evidence-',dir=directory))
+    """Fresh owned profile; preserve the rendered input and every launch option.
+
+    One relaunch, and only for a silent timeout (owner 2026-11-09): the browser ran to the deadline
+    without writing one byte to stdout, so no page was ever dumped. Headless Chrome occasionally
+    hangs that way on a CI runner with every process asleep. A launch that wrote any stdout, exited,
+    or failed in any other way is never repeated, and a second silent timeout fails as before. Both
+    launches keep their own evidence directory; the deadline per launch is unchanged.
+    """
+    result,failure,silent=_launch(command,directory,1)
+    if failure is not None and silent:
+        result,failure,_=_launch(command,directory,2)
+    if failure:raise failure
+    return result
+
+
+def _launch(command,directory,attempt):
+    """(result, failure, silent timeout) for one owned launch with its own profile and evidence."""
+    directory=Path(directory);record=dict(launch_attempt=attempt);silent=False
+    evidence=Path(tempfile.mkdtemp(prefix='browser-evidence-',dir=directory))
     profile=tempfile.TemporaryDirectory(prefix='owned-profile-',dir=evidence);failure=None;result=None
     actual=[('--user-data-dir='+profile.name) if arg.startswith('--user-data-dir=') else arg for arg in command]
     assert sum(arg.startswith('--user-data-dir=') for arg in actual)==1
@@ -149,10 +166,12 @@ def run_browser(command,directory):
             else:failure=error
         finally:
             stdout=record.pop('_stdout',b'');stderr=record.pop('_stderr',b'')
+            silent=(isinstance(failure,subprocess.TimeoutExpired) and bool(record.get('output'))
+                    and record['output'][0]['total_bytes']==0 and record.get('profile_removed') is True)
+            if silent and attempt==1:record['relaunch']='ONE_RELAUNCH_AFTER_SILENT_TIMEOUT'
             (evidence/'browser-process.stdout').write_bytes(stdout)
             (evidence/'browser-process.stderr').write_bytes(stderr)
             (evidence/'browser-process.json').write_text(json.dumps(record,indent=2,sort_keys=True)+'\n',encoding='utf-8')
             context=_INVOCATION.get()
             if context is not None:context['evidence']=evidence
-    if failure:raise failure
-    return result
+    return result,failure,silent
