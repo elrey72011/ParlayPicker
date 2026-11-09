@@ -1642,6 +1642,7 @@ def _comparable_close(db: sqlite3.Connection, quote: dict, as_of: datetime) -> d
 def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime,
             detail: list | None = None) -> dict:
     is_v2 = "football_v2_methodology" in json.loads(plan["payload"])
+    push_bets = (json.loads(plan["payload"]).get("market_skill_methodology") or {}).get("push_rule") is not None
     start = _time(plan[f"{name}_start"], f"{name}_start")
     end = _time(plan[f"{name}_end"], f"{name}_end")
     rows = db.execute("""SELECT p.observation_id,e.scheduled_start FROM prospective_prediction p
@@ -1744,6 +1745,13 @@ def _cohort(db: sqlite3.Connection, plan: dict, name: str, as_of: datetime,
             unconditional_probabilities.append(prediction["mean_probability"])
             if detail is not None and valid_quote:
                 detail.append((conditional, int(outcome == "WIN"), quote))
+        elif (outcome == "PUSH" and detail is not None and valid_quote and push_bets and
+              prediction["mean_probability"] is not None and prediction["loss_probability"] is not None and
+              prediction["mean_probability"] + prediction["loss_probability"] > 0):
+            # Plans frozen with ``push_rule`` (owner 2026-11-09): a push is a zero-return bet in the
+            # market-skill bets, never a probability-gate outcome.
+            detail.append((prediction["mean_probability"] / (
+                prediction["mean_probability"] + prediction["loss_probability"]), None, quote))
         if valid_quote and outcome in {"WIN", "LOSS", "PUSH", "VOID"}:
             returns.append(quote["decimal_odds"] - 1 if outcome == "WIN" else
                            -1.0 if outcome == "LOSS" else 0.0)
@@ -1927,6 +1935,25 @@ def record_deployment_review(path: str | Path | None, review: Mapping) -> str:
         return _insert(db, "prospective_deployment_review", "deployment_id", values, values)
 
 
+PLAN_HASH_COLUMNS = ("validation_plan_id", "sport", "market_family", "version", "supersedes_plan_id", "model_id",
+                     "calibration_id", "training_cutoff", "validation_start", "validation_end", "holdout_start",
+                     "holdout_end", "minimum_independent_sample", "minimum_effective_sample", "frozen_at")
+
+
+def plan_integrity(plan: Mapping) -> bool:
+    """True when a stored plan still hashes to the artifact hash it was frozen with, and its columns
+    match its payload (owner decision 2026-11-09). Rows are append-only, but a store file or a
+    restored remote copy could still be edited; this catches that."""
+    try:
+        payload = json.loads(plan["payload"])
+        stored = payload.pop("artifact_hash")
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
+    if stored != plan.get("artifact_hash") or _sha(_json(payload)) != stored:
+        return False
+    return all(payload.get(column) == plan.get(column) for column in PLAN_HASH_COLUMNS)
+
+
 def deployment_state(path: str | Path | None, sport: str, market_family: str) -> dict:
     """Exact sport/market status; even reviewed validation grants $0 by itself."""
     _scope(sport, market_family)
@@ -1952,6 +1979,8 @@ def deployment_state(path: str | Path | None, sport: str, market_family: str) ->
             WHERE sport=? AND market_family=?""", (sport, market_family)).fetchone()[0]
         if plan["version"] != latest_version or artifact["status"] != "VALIDATION_PASSED":
             return baseline
+        if not plan_integrity(plan):
+            return baseline  # the plan no longer hashes to what was frozen: grant nothing
         plan_payload = json.loads(plan["payload"])
         report = json.loads(artifact["payload"])["report"]
         model = (_stored(db, "prospective_model", "model_id", plan["model_id"])

@@ -50,13 +50,17 @@ ALLOWED_MIN_EDGES = (0.01, 0.02)
 EARLIEST_SHARED_LINE = "EARLIEST_SHARED_LINE"
 FIRST_EDGE_CAPTURE = "FIRST_EDGE_CAPTURE"
 ENTRY_RULES = (EARLIEST_SHARED_LINE, FIRST_EDGE_CAPTURE)
+# How a bet that pushes counts (owner 2026-11-09). Plans frozen without ``push_rule`` leave a push
+# out of the bets entirely; ``PUSH_ZERO_RETURN`` counts it as a bet that returned its stake (0), so
+# whole-number lines do not flatter ROI. Recorded only when chosen, so frozen plans keep their hash.
+PUSH_ZERO_RETURN = "PUSH_COUNTS_AS_ZERO_RETURN_BET"
 # A first-edge entry must be bettable when it is predicted (audit 2026-11-09): its capture must be
 # at most this old at the prediction time. Price gaps after news last about 10 to 30 minutes, so a
 # capture found to clear hours later is no longer a price anyone could take.
 FIRST_EDGE_MAX_ENTRY_AGE_MINUTES = 15
 
 
-def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None):
+def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None, push_rule=None):
     """The market-skill rules. ``entry_books`` (canonical book labels), when given, is the set of
     books the plan may enter at, frozen with the plan (a Pinnacle plan: the books a pick can be
     staked at, ``pinnacle_model.PLAN_BOOKS``). ``entry_rule`` is recorded only when it is not the
@@ -76,14 +80,18 @@ def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None):
         rules["entry_books"] = sorted(entry_books)
     if entry_rule == FIRST_EDGE_CAPTURE:
         rules["entry_rule"] = FIRST_EDGE_CAPTURE
+    if push_rule is not None:
+        if push_rule != PUSH_ZERO_RETURN:
+            raise ValueError(f"push_rule must be {PUSH_ZERO_RETURN}")
+        rules["push_rule"] = PUSH_ZERO_RETURN
     return rules
 
 
-def template(base, min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None):
+def template(base, min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None, push_rule=None):
     """The v1 template with the market-skill gates: coin-flip absolute bounds plus ``KEY``."""
     spec = dict(base)
     spec["probability_thresholds"] = dict(base["probability_thresholds"], **COIN_FLIP)
-    spec[KEY] = methodology(min_edge, entry_books, entry_rule)
+    spec[KEY] = methodology(min_edge, entry_books, entry_rule, push_rule)
     return spec
 
 
@@ -181,6 +189,8 @@ def first_edge_bet(db, plan, quote, rules, as_of):
         if result is None:
             continue  # this side is not settled: a later prediction of the game may still be the bet
         outcome = pe._outcome_at_quote_line(db, result, entry, result["outcome"])
+        if outcome == "PUSH" and rules.get("push_rule") == PUSH_ZERO_RETURN:
+            return ev, side, None  # a bet that returned its stake
         if outcome not in ("WIN", "LOSS"):
             return None
         won = int(outcome == "WIN")
@@ -204,17 +214,19 @@ def skill(db, scored, *, as_of=None, rules=None, plan=None):
         if other is None:
             continue
         mine, theirs = 1 / quote["decimal_odds"], 1 / other["decimal_odds"]
-        paired.append((p, mine / (mine + theirs), y))
+        if y is not None:  # a push (``push_rule``) is a bet, never a probability-gate outcome
+            paired.append((p, mine / (mine + theirs), y))
         if first_edge:
             bet = first_edge_bet(db, plan, quote, rules, as_of)
             if bet is None:
                 continue
             ev, chosen, won = bet
         else:
-            ev, chosen, won = _best_side(p, y, quote, other)
+            ev, chosen, won = _best_side(p, 0 if y is None else y, quote, other)
+            won = None if y is None else won
         if ev < rules["min_edge"]:
             continue
-        returns.append(chosen["decimal_odds"] - 1 if won else -1.0)
+        returns.append(0.0 if won is None else chosen["decimal_odds"] - 1 if won else -1.0)
         close = _comparable_close(db, chosen, as_of) if as_of is not None else None
         if close is not None:
             clvs.append(chosen["decimal_odds"] / close["decimal_odds"] - 1)
