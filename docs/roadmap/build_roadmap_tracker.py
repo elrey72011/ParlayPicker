@@ -91,8 +91,8 @@ ACTIONS = [
     ("Merge PRs #2513 (roadmap, M1 to M3) and #2514 (M5 screens)", "After CI", "Done", "2026-11-09"),
     ("Read the M2 go/no-go report; decide whether capture continues past the price watch", "2026-11-16", "Open", None),
     ("Choose 75 or 100 bets a window for the first v2 plan (from the measured CLV spread)", "Before the freeze", "Open", None),
-    ("Draft the pooled v2 plan for NBA and NCAAB with one validation start, review, freeze both",
-     "If M2 says go", "Open", None),
+    ("Draft the pooled v2 plans for NBA and NCAAB (spreads, and totals as a second plan), each with one "
+     "validation start; review; freeze both sports of a plan together", "If M2 says go", "Open", None),
 ]
 
 DECISIONS = [
