@@ -1,4 +1,4 @@
-"""Build docs/roadmap/ParlayPicker-roadmap-tracker.xlsx from the roadmap (2026-11-05 snapshot).
+"""Build docs/roadmap/ParlayPicker-roadmap-tracker.xlsx from the roadmap (2026-11-05 snapshot; validation roadmap rows added 2026-11-09).
 
 Run: python docs/roadmap/build_roadmap_tracker.py
 The workbook is a tracking copy; docs/roadmap/ROADMAP.md stays the source of truth.
@@ -42,6 +42,20 @@ STAGES = [
     ("C6", "Selector switch (app shows qualified picks)", "C4, D7", "Claude", "In progress",
      "Bridge + pipeline hookup (#2472); decision capture: fresh quotes and both-side predictions (step 1). "
      "App store refresh (read-only, every 10 min). Left: owner activation after C4", None),
+    # Validation roadmap (docs/roadmap/VALIDATION-ROADMAP-2026-11-09.md). "V" keeps these apart from the old M0/M1.
+    ("V-M1", "A validated, activated pick reaches a stake (bridge fixes, sport cap, checklist)", "D23", "Claude",
+     "Done", "#2513; end-to-end test reaches a $5.00 stake on a $1,000 bankroll", None, "2026-11-09"),
+    ("V-M2", "Price watch: does the Pinnacle/Novig lag have volume?", "D28, D29", "Claude", "Waiting on data",
+     "#2513; watch runs through the night of 2026-11-16 (200 credits a day, 1,400 in all). Go: 2 bets a day "
+     "across NBA and NCAAB with mean CLV above zero", "2026-11-16"),
+    ("V-M3", "market-skill-v2: CLV-led plan design, NBA and NCAAB pooling", "D26, D27", "Claude", "Done",
+     "#2513; 75 bets a window by default (100 if the per-bet CLV spread is near 3%)", None, "2026-11-09"),
+    ("V-M4", "Freeze, validate, review, activate the first v2 plan", "V-M1, V-M2 go, V-M3", "Owner", "Blocked",
+     "M4-RUNBOOK-2026-11-09.md. Not draftable on 2026-11-09: replay shows 0 bets; NBA has no calibration. "
+     "Two windows of 15 to 59 days each, by bet rate", None),
+    ("V-M5", "Second-line candidates and offline screens", "—", "Claude", "Waiting on data",
+     "#2514; props, graded picks and the price screen by book show no edge. Research score models need 120 "
+     "training games each (NHL settlement is on)", None),
 ]
 
 # sport, market, priority, games/day estimate, target sample, window days estimate, status, notes
@@ -74,6 +88,11 @@ ACTIONS = [
     ("Run Bound plan → draft for NCAAB SPREAD, review, then freeze with the hash", "When readiness shows READY_FOR_OWNER_REVIEW", "Open", None),
     ("Decide D11: who reviews plan bindings and deployment reviews", "Before first freeze", "Open", None),
     ("Validation review and market activation (C4)", "After validation and holdout", "Open", None),
+    ("Merge PRs #2513 (roadmap, M1 to M3) and #2514 (M5 screens)", "After CI", "Done", "2026-11-09"),
+    ("Read the M2 go/no-go report; decide whether capture continues past the price watch", "2026-11-16", "Open", None),
+    ("Choose 75 or 100 bets a window for the first v2 plan (from the measured CLV spread)", "Before the freeze", "Open", None),
+    ("Draft the pooled v2 plans for NBA and NCAAB (spreads, and totals as a second plan), each with one "
+     "validation start; review; freeze both sports of a plan together", "If M2 says go", "Open", None),
 ]
 
 DECISIONS = [
@@ -96,6 +115,23 @@ DECISIONS = [
     ("D16", "Research capture window", "Decided", "PARLAYPICKER_RESEARCH_CAPTURE_HOURS=18"),
     ("D17", "NHL settlement against the official final", "Decided", "PARLAYPICKER_NHL_SETTLEMENT=official_check"),
     ("D18", "NCAAF model trained on history", "Decided", "Backtest: no edge over 2025 lines; not bound to a plan"),
+    ("D19", "Plan probability thresholds for spreads and totals", "Decided",
+     "Option B: scored against the market's no-vig price (market-skill plans)"),
+    ("D20", "How a push counts in a plan's bets", "Decided", "A zero-return bet, for plans frozen from 2026-11-09"),
+    ("D21", "Bind a Pinnacle plan to its prediction code", "Decided", "New plans record the code hash; predictions stop if it changes"),
+    ("D22", "Recheck a frozen plan's hash; as-of filtering", "Decided", "Recheck yes; as-of filtering no"),
+    ("D23", "What a stake needs besides the market activation", "Decided",
+     "The verified market activation supplies the sport exposure cap; no second legacy policy (built, #2513)"),
+    ("D24", "Two app sessions sizing against the same headroom", "Decided", "No change: one owner uses the app"),
+    ("D25", "Football Stage 1 schedule", "Decided", "Paused; manual runs kept"),
+    ("D26", "Gate design for plans frozen from now on", "Decided",
+     "CLV-led market-skill-v2: mean bet CLV 2 standard errors above zero in each window (built, #2513)"),
+    ("D27", "One plan counting bets across NBA and NCAAB", "Decided",
+     "Yes, for the Pinnacle/Novig lag only; each sport's results reported (built, #2513)"),
+    ("D28", "Credits for the fixed-interval price watch", "Decided",
+     "Both sports, 7 days: 200 credits a day, 1,400 in all; review on 2026-11-16 (running)"),
+    ("D29", "Novig junk-price filter", "Decided",
+     "Approved: two-sided overround above 1.15 is dropped from the replay and from new plans' entries (built, #2513)"),
 ]
 
 
@@ -178,10 +214,11 @@ def build():
     st = wb.create_sheet("Stages")
     header(st, 1, ["ID", "Stage", "Depends on", "Owner", "Status", "Notes / PR", "Target date", "Done date"],
            [7, 48, 14, 10, 16, 44, 13, 13])
-    for r, (sid, name, deps, owner, status, notes, target) in enumerate(STAGES, start=2):
+    for r, (sid, name, deps, owner, status, notes, target, *finished) in enumerate(STAGES, start=2):
+        done = date.fromisoformat(finished[0]) if finished else date(2026, 11, 5)
         st.append([sid, name, deps, owner, status, notes,
                    date.fromisoformat(target) if target else None,
-                   date(2026, 11, 5) if status == "Done" else None])
+                   done if status == "Done" else None])
         style_row(st, r, 8, inputs=(5, 6, 7, 8))
         st.cell(row=r, column=7).number_format = "yyyy-mm-dd"
         st.cell(row=r, column=8).number_format = "yyyy-mm-dd"
