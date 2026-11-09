@@ -1,0 +1,42 @@
+name: NCAAF ratings backtest (research only)
+# Owner 2026-11-09: are weekly NCAAF power ratings or CFBD's pregame Elo ahead of archived opening lines?
+# About 18 CollegeFootballData calls; no Odds API calls; writes nothing to Drive or the store.
+on:
+  workflow_dispatch:
+    inputs:
+      first_season:
+        description: 'First season (builds ratings only); the next three calibrate, later ones are scored'
+        default: '2021'
+      last_season:
+        description: 'Last season scored (the current season is scored to date)'
+        default: '2026'
+permissions:
+  contents: read
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+      FIRST_SEASON: ${{ inputs.first_season }}
+      LAST_SEASON: ${{ inputs.last_season }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Backtest
+        run: >-
+          python -u scripts/ncaaf_ratings_backtest.py
+          --output "${{ runner.temp }}/ncaaf-ratings/ncaaf-ratings-backtest.json"
+          --first-season "$FIRST_SEASON" --last-season "$LAST_SEASON"
+      - name: Keep the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncaaf-ratings-backtest
+          path: ${{ runner.temp }}/ncaaf-ratings/
+          if-no-files-found: warn
