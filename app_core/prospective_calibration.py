@@ -385,12 +385,28 @@ def _plan_rules(plan):
     return rules if isinstance(rules, dict) else {}
 
 
+def runtime_blocker(plan, tag="BOUND"):
+    """A blocker when the plan recorded a Pinnacle code hash that the current code no longer has."""
+    try:
+        scope = json.loads(plan.get("payload") or "{}").get("model_scope") or {}
+    except (TypeError, ValueError, AttributeError):
+        return None
+    recorded = scope.get("pinnacle_runtime_hash") if isinstance(scope, dict) else None
+    if recorded is None:
+        return None  # plans frozen before 2026-11-09 are not bound to the code
+    from app_core import pinnacle_model
+    return None if recorded == pinnacle_model.code_hash() else f"{tag}_PINNACLE_RUNTIME_CHANGED"
+
+
 def predict_bound(path, sport, market, *, now=None):
     """Freeze pregame predictions with the bound plan's exact model and calibration."""
     now = now or datetime.now(timezone.utc)
     plan = bound_plan(path, sport, market)
     if plan is None:
         return {"predictions": 0, "blocker": "NO_BOUND_PLAN"}
+    blocked = runtime_blocker(plan)
+    if blocked:
+        return {"predictions": 0, "blocker": blocked, "validation_plan_id": plan["validation_plan_id"]}
     model = evidence.load_record(path, "prospective_model", plan["model_id"])
     calibration = evidence.load_record(path, "prospective_calibration", plan["calibration_id"])
     select = None
@@ -434,7 +450,7 @@ def window_days(target, rate, *, coverage=0.8, margin=1.25, minimum=7):
 
 def draft_bound_plan(path, sport, market, *, validation_start, validation_days=None, holdout_days=None,
                      model_id=None, calibration_id=None, rate=None, methodology="v1", min_edge=None,
-                     entry_books=None, staking_terms=None, entry_rule=None):
+                     entry_books=None, staking_terms=None, entry_rule=None, push_rule=None):
     """A proposed plan version binding the candidate model and its calibration. Nothing is frozen.
 
     Thresholds, sample minimums and policies are the frozen v1 template's
@@ -488,8 +504,8 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
     if methodology == "market_skill":
         from app_core.market_skill_validation import DEFAULT_MIN_EDGE, template as market_skill_template
         spec = market_skill_template(spec, DEFAULT_MIN_EDGE if min_edge is None else min_edge, entry_books,
-                                     entry_rule)
-    elif min_edge is not None or entry_books or entry_rule:
+                                     entry_rule, push_rule)
+    elif min_edge is not None or entry_books or entry_rule or push_rule:
         raise ValueError("min_edge, entry_books and entry_rule apply only to the market_skill methodology")
     elif methodology != "v1":
         raise ValueError("unknown plan methodology")
@@ -501,6 +517,10 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
         validation_start=start.isoformat(), validation_end=validation_end.isoformat(),
         holdout_start=validation_end.isoformat(), holdout_end=holdout_end.isoformat())
     spec["model_scope"] = dict(spec["model_scope"], initial_binding="BOUND_EXACT_MODEL_AND_CALIBRATION")
+    from app_core import pinnacle_model
+    if pinnacle_model.is_pinnacle(model):
+        # Owner 2026-11-09: a Pinnacle plan is bound to its prediction code, not only to its model.
+        spec["model_scope"]["pinnacle_runtime_hash"] = pinnacle_model.code_hash()
     if staking_terms:
         # The policy the owner activates and the stake-tier rules, frozen with the plan (app_core.staking_terms).
         from app_core.staking_terms import terms
@@ -529,6 +549,8 @@ def freeze_inputs(spec):
                if "entry_books" in spec.get("market_skill_methodology", {}) else {}),
             **({"entry_rule": spec["market_skill_methodology"]["entry_rule"]}
                if "entry_rule" in spec.get("market_skill_methodology", {}) else {}),
+            **({"push_rule": spec["market_skill_methodology"]["push_rule"]}
+               if "push_rule" in spec.get("market_skill_methodology", {}) else {}),
             **({"staking_terms": spec["deployment_criteria"]["staking_terms"]}
                if "staking_terms" in spec.get("deployment_criteria", {}) else {})}
 

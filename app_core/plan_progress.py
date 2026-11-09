@@ -73,6 +73,10 @@ def progress(plan: dict, evaluation: dict, *, now: datetime) -> list[dict]:
             pace.append(row["projected_bets"] is not None and row["projected_bets"] >= row["min_bets"])
             pace.append(bets == 0 or row["bet_close_coverage"] >= row["min_close_coverage"])
         row["on_pace"] = all(pace) if elapsed >= MIN_ELAPSED_FOR_PACE else None  # None: too early to say
+        if "payload" in plan and "artifact_hash" in plan:
+            # The frozen plan still hashes to what was frozen (prospective_evidence.plan_integrity).
+            from app_core.prospective_evidence import plan_integrity
+            row["plan_integrity"] = "OK" if plan_integrity(plan) else "MISMATCH"
         rows.append(row)
     return rows
 
@@ -113,6 +117,10 @@ def markdown(rows: list[dict]) -> list[str]:
             f"{r.get('bets', '')} | {r.get('projected_bets', '')} / {r.get('min_bets', '')} | "
             f"{'' if 'bet_close_coverage' not in r else format(r['bet_close_coverage'], '.0%')} | "
             f"{pct(r.get('bet_roi'))} | {pct(r.get('bet_mean_clv'))} | {'too early' if r['on_pace'] is None else 'yes' if r['on_pace'] else '**NO**'} |")
+    checked = sorted({(r["plan"], r["plan_integrity"]) for r in rows if r.get("plan_integrity")})
+    if checked:
+        lines += ["", "Plan integrity (frozen hash recomputed): "
+                  + ", ".join(f"{plan} {state}" for plan, state in checked)]
     lines += ["", "Projections are straight-line to each window's end, shown once "
                   f"{MIN_ELAPSED_FOR_PACE:.0%} of a window has passed. A window passes only with its minimum "
                   "games and bets, ROI and mean CLV >= 0, and closes for enough of its bets."]

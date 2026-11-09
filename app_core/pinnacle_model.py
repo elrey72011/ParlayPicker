@@ -87,6 +87,31 @@ def register(path, sport, family, *, now=None, commit="UNAVAILABLE"):
     return evidence.load_record(path, "prospective_model", model_id)
 
 
+# The functions that decide a Pinnacle plan's predictions. A plan drafted from 2026-11-09 records
+# their hash (``code_hash``) in its model scope; its predictions stop, visibly, if this code changes
+# while it runs (owner decision 2026-11-09). Plans frozen before keep no hash and are not checked.
+PREDICTION_FUNCTIONS = ("artifact", "_home_line", "_canonical", "capture_time", "pairs", "fair", "_other_side",
+                        "_plan_book", "plan_quotes", "predict")
+
+
+def code_hash():
+    """SHA-256 of the prediction functions' code, ignoring docstrings, comments and formatting."""
+    import ast
+    import hashlib
+    import inspect
+    import sys
+    module = sys.modules[__name__]
+    parts = []
+    for name in PREDICTION_FUNCTIONS:
+        node = ast.parse(inspect.getsource(getattr(module, name)).strip()).body[0]
+        body = node.body
+        if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant) \
+                and isinstance(body[0].value.value, str):
+            node.body = body[1:] or [ast.Pass()]
+        parts.append(ast.dump(node, annotate_fields=False, include_attributes=False))
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
 def _home_line(event, quote):
     if quote["market_family"] == "TOTAL" or quote["selection"] == event["home_team"]:
         return round(float(quote["line"]), 2)

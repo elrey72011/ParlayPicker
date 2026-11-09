@@ -28,6 +28,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app_core import prospective_calibration as calibration  # noqa: E402
+from app_core import market_skill_validation  # noqa: E402
 from app_core import prospective_research_models as research  # noqa: E402
 
 CANONICAL = 'prospective-evidence.sqlite3'
@@ -80,7 +81,10 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                                                 # The staking terms a Pinnacle plan needs to ever stake.
                                                 staking_terms=('pinnacle-provisional-v1' if model == 'pinnacle'
                                                                and methodology == 'market_skill' else None),
-                                                entry_rule=entry_rule if methodology == 'market_skill' else None)
+                                                entry_rule=entry_rule if methodology == 'market_skill' else None,
+                                                # Owner 2026-11-09: new plans count a push as a zero-return bet.
+                                                push_rule=(market_skill_validation.PUSH_ZERO_RETURN
+                                                           if methodology == 'market_skill' else None))
         except ValueError as exc:
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'NOT_DRAFTABLE', 'reason': str(exc)}
         else:

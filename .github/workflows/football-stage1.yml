@@ -7,8 +7,10 @@ on:
         type: boolean
         required: false
         default: false
-  schedule:
-    - cron: '20 * * * *'
+  # Schedule paused (owner decision 2026-11-09): every run failed on NCAAF games with revised
+  # kickoffs (NCAAF runtime code needs owner approval to change), neither football screen found
+  # an edge, and outside research-loop hours it spent about 4 Odds API credits an hour. Manual
+  # runs still work; restore the cron when football work resumes.
 permissions:
   contents: read
   actions: read

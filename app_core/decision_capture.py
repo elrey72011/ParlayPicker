@@ -226,6 +226,9 @@ def predict(path, sport, family, *, now):
     plan = calibration.bound_plan(path, sport, family)
     if plan is None:
         return {"predictions": 0, "blocker": "NO_BOUND_PLAN"}
+    blocked = calibration.runtime_blocker(plan, "DECISION")
+    if blocked:
+        return {"predictions": 0, "blocker": blocked, "validation_plan_id": plan["validation_plan_id"]}
     model = evidence.load_record(path, "prospective_model", plan["model_id"])
     cal = evidence.load_record(path, "prospective_calibration", plan["calibration_id"])
     # Validation scores each game's *first* prediction, so a decision prediction is made only
