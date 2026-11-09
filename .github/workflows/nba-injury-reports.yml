@@ -6,6 +6,7 @@ name: NBA injury reports (research)
 on:
   schedule:
     - cron: '17 12 * * *'     # 7:17 AM EST / 8:17 AM EDT
+    - cron: '47 14 * * *'     # backup start: GitHub skipped the 7:17 AM run on 2026-11-09
   workflow_dispatch:
     inputs:
       start:

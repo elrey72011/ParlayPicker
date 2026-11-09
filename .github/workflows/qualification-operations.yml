@@ -32,7 +32,10 @@ jobs:
           set -euo pipefail
           if [ "$EVENT" != pull_request ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           changed="$(git diff --name-only "$BASE...$HEAD")"
-          if printf '%s\n' "$changed" | grep -Eq '^(tests/qualification_ops/|\.github/workflows/qualification-operations\.yml$)'; then
+          # The suite also loads the driver and its config template from the checkout (audit
+          # 2026-11-09). A here-string, not a pipe: with pipefail, grep -q closing a long pipe
+          # early fails the producer and would read as "no change".
+          if grep -Eq '^(tests/qualification_ops/|tools/qualification/|docs/operations/snapshot-acquisition\.example\.json\.template$|\.github/workflows/qualification-operations\.yml$)' <<< "$changed"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"

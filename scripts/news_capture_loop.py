@@ -10,6 +10,7 @@ poll that stored a quote. Credits come from the loop's own allowance (``NEWS_LIM
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,14 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+REFRESH_MINUTES = 60
+
+
+def slate_over(now) -> bool:
+    """2 AM to 11 AM Eastern: the night's games are over and the next slate has not started."""
+    from zoneinfo import ZoneInfo
+    return 2 <= now.astimezone(ZoneInfo("America/New_York")).hour < 11
 
 
 def fetch_report(url):
@@ -26,7 +35,7 @@ def fetch_report(url):
 
 
 def run(minutes, interval, *, root, client, folder, key, request_get, fetch=fetch_report, setting=None, sync=None,
-        clock=time.monotonic, sleep=time.sleep, watcher=None):
+        clock=time.monotonic, sleep=time.sleep, watcher=None, wall=None):
     from app_core import news_capture as news
     if not news.enabled(setting):
         return {"status": "OFF", "polls": 0}
@@ -35,12 +44,15 @@ def run(minutes, interval, *, root, client, folder, key, request_get, fetch=fetc
     root.mkdir(parents=True, exist_ok=True)
     path = root / "prospective-evidence.sqlite3"
     session = {}
+    started = clock()  # the slate's minutes count from the start, restore included (audit 2026-11-09)
+    deadline = started + minutes * 60
+    last_restore = started
     sync(path, client, folder, session)  # restore before anything is read or written
     state = news.load_state(client, folder)
     budget = news.budget_for(state, lambda: news.save_state(client, folder, state))
     watcher = watcher or news.Watcher()
-    deadline = clock() + minutes * 60
     totals = {"status": "RAN", "polls": 0, "news": 0, "captures": 0, "stored_quotes": 0, "backups": 0, "errors": 0}
+    pending = False
     while True:
         totals["polls"] += 1
         try:
@@ -53,11 +65,31 @@ def run(minutes, interval, *, root, client, folder, key, request_get, fetch=fetc
         totals["captures"] += int(bool(capture.get("requested")))
         totals["stored_quotes"] += capture.get("stored_quotes", 0)
         print(json.dumps({"poll": totals["polls"], **report}, default=str), flush=True)
-        if capture.get("stored_quotes"):
-            sync(path, client, folder, session)
-            totals["backups"] += 1
-        if clock() + interval * 60 > deadline:
+        pending = pending or bool(capture.get("stored_quotes"))
+        if pending:
+            try:  # a failed backup is retried at the next poll; it never ends the slate
+                sync(path, client, folder, session)
+            except Exception as exc:
+                totals["backup_errors"] = totals.get("backup_errors", 0) + 1
+                print(json.dumps({"poll": totals["polls"], "backup_error": type(exc).__name__}), flush=True)
+            else:
+                pending = False
+                totals["backups"] += 1
+        now = clock()
+        if now + interval * 60 > deadline:
             return totals
+        if wall is not None and slate_over(wall()):
+            totals["ended"] = "slate_over"   # a backup start that began late stops with the slate
+            return totals
+        if now - last_restore >= REFRESH_MINUTES * 60:
+            # Games the research loop captured after this slate began are only in the remote
+            # store: restore again with a fresh session, every REFRESH_MINUTES (audit 2026-11-09).
+            try:
+                session = {}
+                sync(path, client, folder, session)
+                last_restore = now
+            except Exception as exc:
+                print(json.dumps({"poll": totals["polls"], "restore_error": type(exc).__name__}), flush=True)
         sleep(interval * 60)
 
 
@@ -76,7 +108,8 @@ def main(argv=None):
     from app_core.evidence_remote import settings
     folder, _ = settings()
     result = run(args.minutes, args.interval, root=Path(args.root), client=DriveStore(folder), folder=folder,
-                 key=os.getenv("ODDS_API_KEY"), request_get=requests.get)
+                 key=os.getenv("ODDS_API_KEY"), request_get=requests.get,
+                 wall=lambda: datetime.now(timezone.utc))
     print(json.dumps(result), flush=True)
     return 0
 

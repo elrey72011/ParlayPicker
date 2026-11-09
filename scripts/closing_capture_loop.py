@@ -35,6 +35,19 @@ def run(database, minutes, interval, *, capture=None, restore=None, backup=None,
     restore(database)
     deadline = clock() + minutes * 60
     totals = {"cycles": 0, "verified": 0, "unavailable": 0, "backups": 0, "errors": 0}
+    pending = False
+
+    def back_up():
+        # A failed backup is retried at the next cycle; it never ends the slate (audit 2026-11-09).
+        nonlocal pending
+        try:
+            backup(database)
+        except Exception as exc:
+            totals["backup_errors"] = totals.get("backup_errors", 0) + 1
+            print(json.dumps({"cycle": totals["cycles"], "backup_error": type(exc).__name__}), flush=True)
+            return
+        pending = False
+        totals["backups"] += 1
     while True:
         totals["cycles"] += 1
         unmatched = {}
@@ -51,9 +64,9 @@ def run(database, minutes, interval, *, capture=None, restore=None, backup=None,
         print(json.dumps({"cycle": totals["cycles"], **{k: v for k, v in result.items() if k != "reasons"},
                           "reasons": result.get("reasons"),
                           **({"unmatched_detail": unmatched} if unmatched else {})}), flush=True)
-        if result.get("verified"):
-            backup(database)
-            totals["backups"] += 1
+        pending = pending or bool(result.get("verified"))
+        if pending:
+            back_up()
         if clock() + interval * 60 > deadline:
             return totals
         sleep(interval * 60)

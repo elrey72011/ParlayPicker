@@ -109,6 +109,9 @@ jobs:
           PARLAYPICKER_NOVIG_SPORTS: ${{ vars.PARLAYPICKER_NOVIG_SPORTS }}
           # D17: NHL settles only per game against the NHL official final ("official_check").
           PARLAYPICKER_NHL_SETTLEMENT: ${{ vars.PARLAYPICKER_NHL_SETTLEMENT }}
+          # The same fewer, fuller provider requests as the research loop, whose 30-minute
+          # cycles this run replaces when no loop is active (audit 2026-11-09).
+          PARLAYPICKER_RESEARCH_BATCHING: "true"
         run: python -u scripts/run_research_scheduler.py
       - name: Save the verified Drive object cache
         if: ${{ always() && steps.window.outputs.active == 'true' }}
