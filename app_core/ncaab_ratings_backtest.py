@@ -36,15 +36,15 @@ WIN = 100 / 110
 SEGMENTS = (("Nov-Dec", (11, 12)), ("Jan-Apr", (1, 2, 3, 4)))
 
 
-def select_lines(rows):
+def select_lines(rows, order=PROVIDER_ORDER):
     """{game_id: {spread, total, spread_open, total_open, provider}} with one provider per game."""
-    rank = {name: i for i, name in enumerate(PROVIDER_ORDER)}
+    rank = {name: i for i, name in enumerate(order)}
     out = {}
     for row in rows:
         game_id = _first(row, "gameId", "id")
         found = {"spread": None, "total": None, "spread_open": None, "total_open": None, "provider": None}
         for line in sorted((l for l in row.get("lines") or [] if isinstance(l, dict)),
-                           key=lambda l: rank.get(l.get("provider"), len(PROVIDER_ORDER))):
+                           key=lambda l: rank.get(l.get("provider"), len(order))):
             for key, names in (("spread", ("spread",)), ("total", ("overUnder", "over_under", "total")),
                                ("spread_open", ("spreadOpen", "spread_open")),
                                ("total_open", ("overUnderOpen", "over_under_open", "totalOpen"))):
@@ -67,10 +67,17 @@ def _accumulate(matrix, vector, terms, y):
                 matrix[i, j] += vi * vj
 
 
+# Basketball defaults; another sport passes its own (``ncaaf_ratings_backtest.PARAMS``).
+PARAMS = {"margin_cap": MARGIN_CAP, "carry": CARRY, "prior_weight": PRIOR_WEIGHT,
+          "hca_prior": HCA_PRIOR, "hca_weight": HCA_WEIGHT, "team_points": 70.0}
+
+
 class RatingBook:
     """Ridge ratings accumulated game by game; ``solve`` gives the ratings as of now."""
 
-    def __init__(self, teams, prior=None):
+    def __init__(self, teams, prior=None, params=None):
+        self.p = {**PARAMS, **(params or {})}
+        carry = self.p["carry"]
         self.index = {t: i for i, t in enumerate(sorted(teams))}
         n = len(self.index)
         self.n = n
@@ -83,15 +90,16 @@ class RatingBook:
         self.t_prior = np.zeros(2 * n + 2)
         for team, i in self.index.items():
             r, o, d = (prior.get(team) or (0.0, 0.0, 0.0))
-            self.m_prior[i], self.t_prior[i], self.t_prior[n + i] = CARRY * r, CARRY * o, CARRY * d
-        self.m_prior[n] = HCA_PRIOR
-        self.t_prior[2 * n] = prior.get("__mu__", (0.0, 70.0, 0.0))[1]
+            self.m_prior[i], self.t_prior[i], self.t_prior[n + i] = carry * r, carry * o, carry * d
+        self.m_prior[n] = self.p["hca_prior"]
+        self.t_prior[2 * n] = prior.get("__mu__", (0.0, self.p["team_points"], 0.0))[1]
         self.games = 0
 
     def add(self, game):
         h, a = self.index[game["home"]], self.index[game["away"]]
         home = 0.0 if game["neutral"] else 1.0
-        margin = max(-MARGIN_CAP, min(MARGIN_CAP, game["home_points"] - game["away_points"]))
+        cap = self.p["margin_cap"]
+        margin = max(-cap, min(cap, game["home_points"] - game["away_points"]))
         n = self.n
         _accumulate(self.m_mat, self.m_vec, ((h, 1.0), (a, -1.0), (n, home)), margin)
         for scorer, defender, points, at_home in ((h, a, game["home_points"], home),
@@ -102,13 +110,13 @@ class RatingBook:
 
     def solve(self):
         n = self.n
-        mw = np.full(n + 1, PRIOR_WEIGHT)
-        mw[n] = HCA_WEIGHT
+        mw = np.full(n + 1, self.p["prior_weight"])
+        mw[n] = self.p["hca_weight"]
         margin = np.linalg.solve(self.m_mat + np.diag(mw), self.m_vec + mw * self.m_prior)
-        tw = np.full(2 * n + 2, PRIOR_WEIGHT)
-        tw[2 * n], tw[2 * n + 1] = 1e-3, HCA_WEIGHT
+        tw = np.full(2 * n + 2, self.p["prior_weight"])
+        tw[2 * n], tw[2 * n + 1] = 1e-3, self.p["hca_weight"]
         prior = self.t_prior.copy()
-        prior[2 * n + 1] = HCA_PRIOR / 2
+        prior[2 * n + 1] = self.p["hca_prior"] / 2
         totals = np.linalg.solve(self.t_mat + np.diag(tw), self.t_vec + tw * prior)
         return margin, totals
 
@@ -128,10 +136,10 @@ class RatingBook:
         return out
 
 
-def season_predictions(games, prior=None):
+def season_predictions(games, prior=None, params=None):
     """{game_id: (model margin, model total)} for each game, from the ratings as of its day."""
     teams = {g["home"] for g in games} | {g["away"] for g in games}
-    book = RatingBook(teams, prior)
+    book = RatingBook(teams, prior, params)
     out, day, solved = {}, None, None
     for game in games:
         today = game["start"].date()
