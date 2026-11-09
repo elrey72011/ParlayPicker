@@ -17,6 +17,12 @@ the market it predicts at the fresh quotes; otherwise the quotes feed the replay
 Off unless ``PARLAYPICKER_PRICE_WATCH`` names the sport, and off for good from ``UNTIL`` (the owner
 approved 7 days, then a review). Credits come from their own allowance (``WATCH_LIMITS``: 200 a
 day, 1,400 in all) in a separate ledger on the evidence remote. It grants no authority.
+
+**Fast mode** (prepared 2026-11-09, off; turning it on is a new spend decision for the owner).
+The gaps last about 10 to 30 minutes, so a 15-minute poll can miss one entirely. With
+``PARLAYPICKER_PRICE_WATCH_FAST=true`` both sports are polled every ``FAST_INTERVAL_MINUTES`` and the
+allowance is ``FAST_LIMITS`` (600 a day, 4,200 in all): about three times the credits. ``UNTIL``
+is unchanged, and the same ledger counts both modes.
 """
 from __future__ import annotations
 
@@ -32,6 +38,9 @@ WINDOW = timedelta(hours=3)
 INTERVAL_MINUTES = {"NBA": 15, "NCAAB": 30}     # NCAAB slates run twice as long; both stay near 100 credits a day
 MAX_EVENTS = 100                                # one request whatever the number of games; soonest first
 WATCH_LIMITS = {"daily": 200, "rolling_31_days": 1400}
+FAST_ENV = "PARLAYPICKER_PRICE_WATCH_FAST"
+FAST_INTERVAL_MINUTES = 5                       # the loop's own poll interval: every poll captures
+FAST_LIMITS = {"daily": 600, "rolling_31_days": 4200}
 UNTIL = datetime(2026, 11, 17, 7, 0, tzinfo=timezone.utc)   # 2 AM ET: the night of 2026-11-16 is the last
 STATE_PREFIX = "parlaypicker/price-watch-v1/state/"
 COST_FLAG = "price_watch_cost_review_required"
@@ -54,6 +63,19 @@ def enabled(setting=None, *, now=None) -> bool:
     return bool(sports(setting, now=now))
 
 
+def fast(setting=None) -> bool:
+    """Fast mode is on only for the exact value ``true`` (any case); anything else is the normal watch."""
+    return str((setting or os.environ.get)(FAST_ENV, "") or "").strip().lower() == "true"
+
+
+def interval_minutes(sport, setting=None) -> int:
+    return FAST_INTERVAL_MINUTES if fast(setting) else INTERVAL_MINUTES[sport]
+
+
+def limits(setting=None) -> dict:
+    return dict(FAST_LIMITS if fast(setting) else WATCH_LIMITS)
+
+
 class Watcher:
     """The loop's memory between polls: when each sport is next due."""
 
@@ -71,7 +93,7 @@ class Watcher:
                             key=lambda e: (e["scheduled_start"], e["provider_event_id"]))[:MAX_EVENTS]
             if not events:
                 continue                 # no game in its window: ask again at the next poll, at no cost
-            self.due[sport] = now + timedelta(minutes=INTERVAL_MINUTES[sport])
+            self.due[sport] = now + timedelta(minutes=interval_minutes(sport, self.setting))
             result = news.capture(path, {e["provider_event_id"]: e for e in events}, key=key, request_get=request_get,
                                   budget=budget, clock=clock, sport=sport, flag=COST_FLAG)
             if result["stored_quotes"]:
@@ -93,6 +115,6 @@ def save_state(client, folder, state, *, clock=_utcnow):
     return decision.save_state(client, folder, state, clock=clock, prefix=STATE_PREFIX)
 
 
-def budget_for(state, persist, *, clock=_utcnow):
+def budget_for(state, persist, *, clock=_utcnow, setting=None):
     from app_core.research_api_budget import Budget
-    return Budget(state, persist, clock=clock, limits={"ODDS": WATCH_LIMITS})
+    return Budget(state, persist, clock=clock, limits={"ODDS": limits(setting)})

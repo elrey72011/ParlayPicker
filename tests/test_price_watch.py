@@ -151,3 +151,36 @@ def test_junk_filter_drops_only_two_sided_prices_above_the_overround_limit():
 
 def test_the_filter_does_not_touch_the_functions_a_running_plan_hashes():
     assert "without_junk" not in pm.PREDICTION_FUNCTIONS and "replay_estimate" not in pm.PREDICTION_FUNCTIONS
+
+
+def test_fast_mode_is_off_unless_switched_on_and_changes_only_interval_and_allowance(tmp_path, clock):
+    assert pw.fast({}.get) is False and pw.fast({pw.FAST_ENV: "yes"}.get) is False
+    assert pw.interval_minutes("NBA", {}.get) == 15 and pw.interval_minutes("NCAAB", {}.get) == 30
+    assert pw.limits({}.get) == pw.WATCH_LIMITS == {"daily": 200, "rolling_31_days": 1400}
+    on = {pw.WATCH_ENV: "NBA,NCAAB", pw.FAST_ENV: "True"}.get
+    assert pw.fast(on) and pw.interval_minutes("NBA", on) == pw.interval_minutes("NCAAB", on) == 5
+    assert pw.limits(on) == {"daily": 600, "rolling_31_days": 4200}
+    assert pw.enabled(on, now=pw.UNTIL) is False                                      # the end date is the same
+
+    path = tmp_path / "SYNTHETIC-evidence.sqlite3"
+    games = [_event(path, "NBA", "nba-soon", NOW + timedelta(hours=2)),
+             _event(path, "NCAAB", "cbb-soon", NOW + timedelta(hours=1))]
+    provider = _Provider(clock, games)
+    budget = pw.budget_for({}, lambda: None, clock=lambda: clock[0], setting=on)
+    watcher = pw.Watcher(on)
+    for minutes in (0, 3, 5, 10):
+        clock[0] = NOW + timedelta(minutes=minutes)
+        _poll(watcher, path, provider, budget, clock)
+    assert len(provider.calls) == 6                                                   # both sports at 0, 5 and 10; none at 3
+    assert budget.usage("ODDS")["daily"] == 24
+    for _ in range((600 - 24) // 4):
+        budget.reserve("ODDS", 4)
+    clock[0] = NOW + timedelta(minutes=15)
+    capped = _poll(watcher, path, provider, budget, clock)
+    assert capped["sports"]["NBA"]["blocker"] == "api_budget:ODDS:daily" and len(provider.calls) == 6
+
+
+def test_the_workflow_passes_fast_mode_only_from_the_input_or_the_variable():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / ".github/workflows/price-watch.yml").read_text(encoding="utf-8")
+    assert "PARLAYPICKER_PRICE_WATCH_FAST: ${{ inputs.fast && 'true' || vars.PARLAYPICKER_PRICE_WATCH_FAST }}" in text
