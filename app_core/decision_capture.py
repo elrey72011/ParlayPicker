@@ -106,6 +106,20 @@ def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow, pin
     payload = adapter.fetch(sport, "odds", key, charged_get, params={
         **books, "markets": _market_key(sport, family), "oddsFormat": "american",
         "eventIds": ",".join(sorted(events))})
+    stored, blocked = store_quotes(path, sport, family, events, payload, clock=clock, reference=pinnacle)
+    result["stored_quotes"] += stored
+    result["replay_blocked"] += blocked
+    return result
+
+
+def store_quotes(path, sport, family, events, payload, *, clock=_utcnow, reference=False):
+    """Store each verified ``family`` quote in ``payload`` for ``events`` ({provider id: event}).
+
+    Each quote keeps its own provider response, so it replays like a first-capture quote.
+    Reference books (Pinnacle) are stored only with ``reference``. Returns (stored, replay-blocked).
+    """
+    from app_core import odds_research_adapter as adapter
+    stored = blocked = 0
     have = {q["quote_id"] for q in evidence.read_records(path, "prospective_quote", sport=sport, market_family=family)}
     for row in payload:
         event = events.get(row.get("id")) if isinstance(row, dict) else None
@@ -116,7 +130,7 @@ def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow, pin
         for quote in valid:
             # Pinnacle is stored only as the Pinnacle model's reference; it is never an entry price
             # (decision_quotes skips it).
-            if quote["market_family"] != family or (quote["sportsbook"] in REFERENCE_BOOKS and not pinnacle):
+            if quote["market_family"] != family or (quote["sportsbook"] in REFERENCE_BOOKS and not reference):
                 continue
             quote_id = f"odds-quote:{sport}:{research._digest([event['provider_event_id'], quote['source_id']])[:24]}"
             if quote_id in have:
@@ -132,11 +146,11 @@ def capture(path, sport, family, *, key, request_get, budget, clock=_utcnow, pin
             except evidence.EvidenceConflict:
                 raise
             except ValueError:
-                result["replay_blocked"] += 1
+                blocked += 1
                 continue
             have.add(quote_id)
-            result["stored_quotes"] += 1
-    return result
+            stored += 1
+    return stored, blocked
 
 
 def decision_quotes(events, quotes, now, *, predicted=None, horizon=HORIZON, max_age=MAX_QUOTE_AGE, books=None):
@@ -231,11 +245,11 @@ def run_once(path, *, key, request_get, budget, setting=None, assess=None, clock
 STATE_PREFIX = "parlaypicker/decision-capture-v1/state/"
 
 
-def load_state(client, folder):
-    """The loop's own credit ledger, newest object under ``STATE_PREFIX`` (``{}`` when none)."""
+def load_state(client, folder, *, prefix=STATE_PREFIX):
+    """The loop's own credit ledger, newest object under ``prefix`` (``{}`` when none)."""
     import hashlib
     import json
-    keys = [o["Key"] for page in client.get_paginator("list_objects_v2").paginate(Bucket=folder, Prefix=STATE_PREFIX)
+    keys = [o["Key"] for page in client.get_paginator("list_objects_v2").paginate(Bucket=folder, Prefix=prefix)
             for o in page.get("Contents", [])]
     if not keys:
         return {}
@@ -247,12 +261,12 @@ def load_state(client, folder):
     return json.loads(raw)
 
 
-def save_state(client, folder, state, *, clock=_utcnow):
+def save_state(client, folder, state, *, clock=_utcnow, prefix=STATE_PREFIX):
     """Write a new immutable state object and read it back before any provider call."""
     import hashlib
     import json
     raw = json.dumps(state, sort_keys=True, allow_nan=False).encode()
-    key = STATE_PREFIX + clock().strftime("%Y%m%dT%H%M%S%f") + "-" + hashlib.sha256(raw).hexdigest() + ".json"
+    key = prefix + clock().strftime("%Y%m%dT%H%M%S%f") + "-" + hashlib.sha256(raw).hexdigest() + ".json"
     client.put_object(Bucket=folder, Key=key, Body=raw, ContentType="application/json", IfNoneMatch="*")
     with client.get_object(Bucket=folder, Key=key)["Body"] as body:
         if body.read() != raw:
