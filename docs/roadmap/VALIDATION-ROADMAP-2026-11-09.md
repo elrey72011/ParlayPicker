@@ -144,7 +144,7 @@ Dates are targets in ET and assume owner approval of each PR.
 4. The go-live checklist gains a "stake reachable" item that runs the same sizing code and shows the
    dollar amount, and a staking-CLV item (holdout lower 95% bound).
 
-**Status 2026-11-09 (items 1, 2 and 4 done; item 3 waits for D23).**
+**Status 2026-11-09: all four items done (owner decided D23 the same day).**
 
 - B1 and B2 are fixed in `app_core/qualified_bridge.py`. The end-to-end test found a third bridge
   defect of the same kind: the pipeline's line guard rebuilds the line from `line_source` and
@@ -152,11 +152,14 @@ Dates are targets in ET and assume owner approval of each PR.
   carries those names too. The bridge label also uses the wager contract's format, so a
   whole-number line ("-3.0") still matches its Gemini review.
 - `tests/test_go_live_end_to_end.py` runs the whole chain on a synthetic store (about 50 seconds).
-  With the validated market policy supplied, the stake is $5.00 on a $1,000 bankroll. With the
-  app's own configuration it is still $0 (B3).
+  In the app's own configuration (no legacy wager policy file) the stake is $5.00 on a $1,000
+  bankroll.
+- B3 (D23, owner 2026-11-09): `finalize_live_wagers` takes a sport's exposure cap from the policy
+  of a market activation the market gate verified for a candidate in that run. The legacy wager
+  policy still supplies caps for its own sports. Without a verified activation the cap stays 0.
 - `app_core/go_live.py` has `stake_checks` (`staking_clv`, `stake_reachable`) and `full_checklist`.
   The go-live script and the app's readiness report use `full_checklist`, which is not ready while
-  the sport exposure cap is 0. The item shows the cap in dollars; it does not size a real pick.
+  the sport exposure cap is 0 (it reads the verified activation's policy, as the contract does). The item shows the cap in dollars; it does not size a real pick.
 
 Done when the test passes and the checklist cannot show all-pass with a $0 stake.
 
@@ -217,7 +220,7 @@ M5 never blocks.
 
 | ID | Decision | Recommendation |
 |---|---|---|
-| D23 (reopened) | What a stake needs besides the market activation | The verified market activation supplies the sport cap; drop the second legacy policy for market-skill markets |
+| D23 | What a stake needs besides the market activation | **Owner-chosen 2026-11-09: yes.** The verified market activation supplies the sport cap; no second legacy policy is needed for market-skill markets. Implemented in M1 |
 | D26 | Gate design for plans frozen from now on | CLV-led `market-skill-v2` as in M3. Current gates pass a true 2% edge about 1 time in 4 |
 | D27 | May one plan count bets across NBA and NCAAB for the same strategy | Yes, for the Pinnacle/Novig lag only, with per-sport results reported. Plans prohibit pooling today; without it the news edge needs most of a season |
 | D28 | Credits for the fixed-interval watch | About 100 a day per sport for 7 days, from the news allowance, then review |

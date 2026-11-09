@@ -5,9 +5,9 @@ chain with the production functions: calibration, frozen bound plan, validation 
 windows, ``VALIDATION_PASSED``, deployment audit and review, exposure ledger, owner market
 activation, decision capture, the app bridge, best-pick construction and the wager contract.
 
-It pins the two bridge defects the audit found (B1: no ``game_start_utc``; B2: the label changed
-under the Gemini review) and what the go-live checklist says about the open one (B3: the sport
-exposure cap comes from the wager policy, so the stake is $0 without it; owner decision D23).
+It pins the three defects the audit found (B1: no ``game_start_utc``; B2: the label changed under
+the Gemini review; B3: the sport exposure cap came only from the legacy wager policy, so the stake
+was $0). Owner decision D23 (2026-11-09): the verified market activation supplies the sport cap.
 """
 from datetime import datetime, timedelta, timezone
 import json
@@ -210,8 +210,8 @@ def _settings(rehearsal):
     return lambda name, default=None: values.get(name, default)
 
 
-def test_checklist_is_not_ready_while_the_stake_is_zero(rehearsal):
-    """R1: the eight chain items all pass, and the full checklist still says a stake is not reachable."""
+def test_checklist_is_ready_only_when_a_stake_is_reachable(rehearsal, tmp_path):
+    """R1 and D23: the activation's own policy makes a stake reachable; without it the checklist is not ready."""
     kwargs = dict(path=rehearsal["path"], now=rehearsal["now"], setting=_settings(rehearsal),
                   ledger_path=rehearsal["ledger"], activations_dir=rehearsal["active"])
     chain = go_live.checklist(SPORT, FAM, **kwargs)
@@ -220,10 +220,14 @@ def test_checklist_is_not_ready_while_the_stake_is_zero(rehearsal):
     by_key = {i["key"]: i for i in items}
     assert [i["key"] for i in items][8:] == ["staking_clv", "stake_reachable"]
     assert by_key["staking_clv"]["status"] == "PASS"
-    assert by_key["stake_reachable"]["status"] == "ACTION" and "every stake is $0" in by_key["stake_reachable"]["detail"]
-    head = go_live.summary(items)
-    assert head["ready"] is False and head["next"]["key"] == "stake_reachable"
-    assert "Ready to stake" not in go_live.markdown(SPORT, FAM, items)
+    assert by_key["stake_reachable"]["status"] == "PASS" and "$30.00" in by_key["stake_reachable"]["detail"]
+    assert go_live.summary(items)["ready"] is True
+    # No activation record: the chain's activation item and the stake item both stop it.
+    item = go_live.stake_checks(SPORT, FAM, **{**{k: kwargs[k] for k in ("path", "now", "setting", "ledger_path")},
+                                               "activations_dir": tmp_path})[1]
+    assert item["status"] == "ACTION" and "every stake is $0" in item["detail"]
+    head = go_live.summary(go_live.full_checklist(SPORT, FAM, **{**kwargs, "activations_dir": tmp_path}))
+    assert head["ready"] is False
 
 
 def _bridged(rehearsal):
@@ -265,11 +269,10 @@ def _finalize(rehearsal, **kwargs):
     return out.iloc[0]
 
 
-def test_matched_review_and_market_policy_reach_a_stake(rehearsal):
-    """B2 end to end: the approved review still matches the row, and the validated policy stakes it."""
-    _, config, _ = lwc.load_configuration(rehearsal["now"])
+def test_matched_review_and_market_activation_reach_a_stake(rehearsal):
+    """B2 and B3 end to end, in the app's own configuration (no legacy wager policy file)."""
     policy = SportPolicy(**rehearsal["record"]["policy"])
-    row = _finalize(rehearsal, policies={SPORT: policy}, config=config)
+    row = _finalize(rehearsal)
     assert row["selection"] == rehearsal["game"]["home"] and row["gemini_review_status"] == "APPROVE"
     assert row["maturity"] == "PROVISIONAL" and not row["production_gate_reason"]
     assert bool(row["production_eligible"]) is True
@@ -280,5 +283,13 @@ def test_stake_checks_agree_with_the_wager_contract(rehearsal):
     """The checklist's ``stake_reachable`` item and the contract's own stake never disagree."""
     row = _finalize(rehearsal)                # the app's configuration: no wager policy file
     item = go_live.stake_checks(SPORT, FAM, path=rehearsal["path"], now=rehearsal["now"],
-                                setting=_settings(rehearsal), ledger_path=rehearsal["ledger"])[1]
-    assert (row["production_bet_amount"] > 0) == (item["status"] == "PASS")
+                                setting=_settings(rehearsal), ledger_path=rehearsal["ledger"],
+                                activations_dir=rehearsal["active"])[1]
+    assert row["production_bet_amount"] > 0 and item["status"] == "PASS"
+
+
+def test_without_a_verified_activation_the_sport_cap_stays_zero(rehearsal, tmp_path, monkeypatch):
+    """D23 lends the cap only through the market gate: no activation record, no stake."""
+    monkeypatch.setenv("PARLAYPICKER_MARKET_ACTIVATIONS_DIR", str(tmp_path))
+    row = _finalize(rehearsal)
+    assert not row["production_bet_amount"] and not bool(row["production_eligible"])

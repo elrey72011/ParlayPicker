@@ -29,7 +29,8 @@ def wager_policies(now, path=None):
 
     A sport keeps its zero-cap research policy unless the file is an activation-v1 artifact
     whose entry for that sport verifies now. ``allocate_exposure`` takes each sport's exposure
-    cap from these policies, so a sport without a verified entry stakes $0.
+    cap from these policies, or (owner D23, 2026-11-09) from the policy of a market activation
+    the market gate verified for a candidate in this run; with neither the sport stakes $0.
     """
     path = path or os.environ.get('PARLAYPICKER_WAGER_POLICY_PATH','data/policies/active_wager_policy.json')
     policies, config, reason = research_policies(), {}, 'No validated live sport policy configured'
@@ -193,6 +194,7 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
     from core.streamlit_pipeline import _format_best_pick
     from collections import defaultdict
     grouped = defaultdict(list)
+    market_sport_caps={}  # owner D23: a verified market activation supplies its sport's exposure cap
     for _,series in candidates.iterrows():
         raw = _clean(series.to_dict())
         if not production_market(raw.get('market_type')):
@@ -227,6 +229,7 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
                           [dict(gate='market_authority', status='PASS', code=None)])
         if authority_policy is not None:
             policy=authority_policy
+            market_sport_caps[row['sport']]=max(market_sport_caps.get(row['sport'],0),finite(policy.sport_exposure_cap) or 0)
             row.update(market_family=family,validation_id=deployment['validation_id'],
                        validation_artifact_id=deployment['artifact_id'],
                        deployment_state=deployment['deployment_state'])
@@ -342,7 +345,7 @@ def finalize_live_wagers(candidates, best, bankroll, *, now=None, policies=None,
         daily_cap=caps.get('daily_cap',0) if valid_exposure else 0,
         weekly_cap=caps.get('weekly_cap',0) if valid_exposure else 0,
         game_cap=caps.get('game_cap',0) if valid_exposure else 0,team_cap=caps.get('team_cap',0) if valid_exposure else 0,
-        sport_caps={s:p.sport_exposure_cap for s,p in policies.items()},committed=committed if valid_exposure else {})
+        sport_caps={**{s:p.sport_exposure_cap for s,p in policies.items()},**market_sport_caps},committed=committed if valid_exposure else {})
     lookup={(r.get('sport'),str(r.get('game_id'))):r for r in allocated}
     output=[]
     for template, decision in zip(templates,selected):
