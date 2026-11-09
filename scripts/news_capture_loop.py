@@ -35,8 +35,11 @@ def fetch_report(url):
 
 
 def run(minutes, interval, *, root, client, folder, key, request_get, fetch=fetch_report, setting=None, sync=None,
-        clock=time.monotonic, sleep=time.sleep, watcher=None, wall=None):
-    from app_core import news_capture as news
+        clock=time.monotonic, sleep=time.sleep, watcher=None, wall=None, source=None):
+    """``source``: the module that decides what to capture (``news_capture``, or ``price_watch``)."""
+    if source is None:
+        from app_core import news_capture as source
+    news = source
     if not news.enabled(setting):
         return {"status": "OFF", "polls": 0}
     if sync is None:

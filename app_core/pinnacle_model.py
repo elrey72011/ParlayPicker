@@ -275,6 +275,32 @@ def plan_games_per_day(path, sport, family, *, now, lookback_days=14, books=None
 
 
 REPLAY_EDGES = (0.01, 0.02)
+# A book's two sides at one line, as implied probabilities, sum to about 1.02 to 1.09. Novig also
+# posts alternate lines nobody has offered at, priced far worse on both sides (owner D29,
+# 2026-11-09): above this sum the quote is not a price anyone would take, and is left out.
+MAX_OVERROUND = 1.15
+
+
+def without_junk(quotes, max_overround=MAX_OVERROUND):
+    """(kept quotes, number dropped): US-book quotes whose two-sided overround is above the limit.
+
+    The two sides are the same book, same quote timestamp and same line (``_other_side``). A
+    quote with no other side is kept; ``plan_quotes`` already ignores it. Reference books are
+    never dropped. Stored quotes are untouched: this filters what a replay reads.
+    """
+    from app_core.research_api_budget import REFERENCE_BOOKS
+    groups = {}
+    for q in quotes:
+        if q["sportsbook"] not in REFERENCE_BOOKS and q["quote_verified"] and q["line"] is not None:
+            groups.setdefault((q["event_id"], q["sportsbook"], q["quote_timestamp"], abs(q["line"])), []).append(q)
+    junk = set()
+    for members in groups.values():
+        for q in members:
+            line = q["line"] if q["market_family"] == "TOTAL" else -q["line"]
+            if any(o["selection"] != q["selection"] and o["line"] == line
+                   and 1 / q["decimal_odds"] + 1 / o["decimal_odds"] > max_overround for o in members):
+                junk.add(id(q))
+    return [q for q in quotes if id(q) not in junk], len(junk)
 
 
 def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_EDGES,
@@ -294,7 +320,8 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     rate is the same; only the bets differ.
 
     It never reads results or scores, so the bet threshold is chosen before seeing which
-    bets won.
+    bets won. Junk prices (``without_junk``, owner D29) are left out; ``junk_quotes_dropped``
+    counts them. A running plan's predictions are not filtered: its rules were frozen without it.
     """
     from app_core import prospective_research_models as research
     events, quotes, _ = research._read_scope(path, sport, family)
@@ -302,6 +329,7 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
     if not started:
         return {"sport": sport, "market_family": family, "games_started": 0, "status": "NO_GAMES"}
+    quotes, dropped = without_junk(quotes)
     chosen = plan_quotes(started, quotes, now, books=books)
     first = min(_t(e["scheduled_start"]) for e in started.values())
     days = max(1.0, (now - first).total_seconds() / 86400)
@@ -310,7 +338,8 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
            "games_started": len(started), "plan_games": len(chosen),
            "plan_share": round(len(chosen) / len(started), 3), "plan_games_per_day": round(games_per_day, 2),
            "days_for_min_sample": (round(min_sample / games_per_day, 1) if games_per_day else None),
-           "min_sample": min_sample, "min_bets": min_bets}
+           "min_sample": min_sample, "min_bets": min_bets, "junk_quotes_dropped": dropped,
+           "max_overround": MAX_OVERROUND}
 
     def row(bets):
         per_day = bets / days

@@ -177,6 +177,21 @@ Done when the test passes and the checklist cannot show all-pass with a $0 stake
 
 Go or no-go on 2026-11-16: at least 2 bets a day across NBA and NCAAB with mean CLV above zero.
 
+**Status 2026-11-09 (owner approved D28 for both sports and D29 the same day).**
+
+- Item 2 is built: `app_core/price_watch.py`, `scripts/price_watch_loop.py` and the
+  `price-watch.yml` workflow. NBA every 15 minutes, NCAAB every 30 (its slates run about twice as
+  long), stored games starting within 3 hours, one 4-credit request per sport per interval. Its
+  own allowance is 200 credits a day and 1,400 in all, and the code stops after the night of
+  2026-11-16. The schedule runs once this is merged to `main`: 4:17 PM ET each day for 340
+  minutes, and 11:30 AM ET on Saturday and Sunday. A game that tips after about 10 PM ET loses the
+  last part of its window, and on a full weekend day the daily cap can end the watch early.
+- Item 3: `pinnacle_model.without_junk` drops US-book quotes whose two sides sum above 1.15, and
+  `replay_estimate` uses it and reports the count. Prediction inputs are **not** filtered yet. A
+  running plan's rules are frozen, and the functions it hashes were left untouched so that plan
+  v2 keeps predicting. The filter becomes a frozen term of the next plan design (M3).
+- Items 1 and 4 are reads of captured data and follow as it arrives.
+
 ### M3. A plan design that can pass a real edge (owner decision, then code; about 3 days)
 
 After D26 and D27, add a `market-skill-v2` methodology for new plans only:
@@ -223,8 +238,8 @@ M5 never blocks.
 | D23 | What a stake needs besides the market activation | **Owner-chosen 2026-11-09: yes.** The verified market activation supplies the sport cap; no second legacy policy is needed for market-skill markets. Implemented in M1 |
 | D26 | Gate design for plans frozen from now on | CLV-led `market-skill-v2` as in M3. Current gates pass a true 2% edge about 1 time in 4 |
 | D27 | May one plan count bets across NBA and NCAAB for the same strategy | Yes, for the Pinnacle/Novig lag only, with per-sport results reported. Plans prohibit pooling today; without it the news edge needs most of a season |
-| D28 | Credits for the fixed-interval watch | About 100 a day per sport for 7 days, from the news allowance, then review |
-| D29 | Novig junk-price filter | Approve |
+| D28 | Credits for the fixed-interval watch | **Owner-chosen 2026-11-09: both sports.** About 100 a day per sport for 7 days (its own allowance: 200 a day, 1,400 in all), then review |
+| D29 | Novig junk-price filter | **Owner-chosen 2026-11-09: approve.** In the replay now; in predictions as a frozen term of the next plan (M3) |
 
 ## 8. What would change this roadmap
 

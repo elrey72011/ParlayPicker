@@ -1,0 +1,153 @@
+"""Fixed-interval price watch (roadmap M2, D28) and the junk-price filter (D29). SYNTHETIC."""
+from datetime import datetime, timedelta, timezone
+import importlib
+
+import pytest
+
+from app_core import pinnacle_model as pm
+from app_core import price_watch as pw
+from app_core import prospective_evidence as pe
+
+NOW = datetime(2026, 11, 10, 22, 0, tzinfo=timezone.utc)         # 5:00 PM ET
+ON = {pw.WATCH_ENV: "nba, ncaab"}.get
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    state = [NOW]
+    monkeypatch.setattr(pe, "_clock", lambda: state[0])
+    return state
+
+
+def _event(path, sport, name, start):
+    key = {"NBA": "basketball_nba", "NCAAB": "basketball_ncaab"}[sport]
+    raw = {"id": name, "sport_key": key, "home_team": f"{name} Home", "away_team": f"{name} Away",
+           "commence_time": start.isoformat()}
+    pe.insert_event(path, {"event_id": name, "sport": sport, "game_id": name, "provider_namespace": "THE_ODDS_API",
+                           "provider_event_id": name, "home_team": raw["home_team"], "away_team": raw["away_team"],
+                           "home_team_id": f"{name}-h", "away_team_id": f"{name}-a",
+                           "scheduled_start": start.isoformat(), "observed_at": (NOW - timedelta(hours=8)).isoformat(),
+                           "source_id": f"capture-{name}", "raw_source": raw})
+    return raw
+
+
+class _Reply:
+    status_code = 200
+
+    def __init__(self, payload):
+        self.payload, self.headers = payload, {"x-requests-last": "4"}
+
+    def json(self):
+        return self.payload
+
+
+class _Provider:
+    def __init__(self, clock, games):
+        self.clock, self.games, self.calls = clock, games, []
+
+    def __call__(self, url, params=None, **kwargs):
+        self.calls.append((url, params))
+        stamp = self.clock[0].isoformat()
+        wanted = set(params["eventIds"].split(","))
+        return _Reply([dict(raw, bookmakers=[{"key": book, "markets": [{"key": "spreads", "last_update": stamp, "outcomes": [
+            {"name": raw["home_team"], "point": -3.5, "price": -110},
+            {"name": raw["away_team"], "point": 3.5, "price": -110}]}]} for book in ("pinnacle", "novig")])
+            for raw in self.games if raw["id"] in wanted and raw["sport_key"] in url])
+
+
+def _poll(watcher, path, provider, budget, clock):
+    return watcher.poll(path, key="k", request_get=provider, budget=budget, clock=lambda: clock[0])
+
+
+def test_off_by_default_and_after_the_approved_week():
+    assert pw.enabled({}.get, now=NOW) is False
+    assert pw.sports(ON, now=NOW) == ("NBA", "NCAAB")
+    assert pw.sports({pw.WATCH_ENV: "OFF"}.get, now=NOW) == ()
+    assert pw.sports({pw.WATCH_ENV: "NHL,NBA"}.get, now=NOW) == ("NBA",)
+    assert pw.enabled(ON, now=pw.UNTIL) is False
+
+
+def test_watches_games_in_their_last_three_hours_at_each_sports_interval(tmp_path, clock):
+    path = tmp_path / "SYNTHETIC-evidence.sqlite3"
+    games = [_event(path, "NBA", "nba-soon", NOW + timedelta(hours=2)),
+             _event(path, "NBA", "nba-late", NOW + timedelta(hours=5)),
+             _event(path, "NCAAB", "cbb-soon", NOW + timedelta(hours=1))]
+    provider = _Provider(clock, games)
+    budget = pw.budget_for({}, lambda: None, clock=lambda: clock[0])
+    watcher = pw.Watcher(ON)
+    first = _poll(watcher, path, provider, budget, clock)
+    assert set(first["sports"]) == {"NBA", "NCAAB"} and first["capture"] == {"requested": True, "stored_quotes": 8}
+    assert [p["eventIds"] for _, p in provider.calls] == ["nba-soon", "cbb-soon"]     # not the game 5 hours out
+    assert all("pinnacle" in p["bookmakers"] and p["markets"] == "spreads,totals" for _, p in provider.calls)
+    clock[0] = NOW + timedelta(minutes=10)
+    assert _poll(watcher, path, provider, budget, clock)["capture"] is None           # neither sport is due
+    clock[0] = NOW + timedelta(minutes=15)
+    assert set(_poll(watcher, path, provider, budget, clock)["sports"]) == {"NBA"}    # NBA every 15 minutes
+    clock[0] = NOW + timedelta(minutes=30)
+    assert set(_poll(watcher, path, provider, budget, clock)["sports"]) == {"NBA", "NCAAB"}   # NCAAB every 30
+    assert budget.usage("ODDS")["daily"] == 5 * 4
+    clock[0] = NOW + timedelta(hours=2, minutes=1)                # both started; the later game is now inside 3 hours
+    assert set(_poll(watcher, path, provider, budget, clock)["sports"]) == {"NBA"}
+    assert provider.calls[-1][1]["eventIds"] == "nba-late" and len(provider.calls) == 6
+    quotes = pe.read_records(path, "prospective_quote", sport="NCAAB")
+    assert {q["sportsbook"] for q in quotes} == {"pinnacle", "novig"}
+
+
+def test_no_game_in_the_window_spends_nothing_and_the_allowance_stops_the_watch(tmp_path, clock):
+    path = tmp_path / "SYNTHETIC-evidence.sqlite3"
+    games = [_event(path, "NBA", "nba-late", NOW + timedelta(hours=5))]
+    provider = _Provider(clock, games)
+    budget = pw.budget_for({}, lambda: None, clock=lambda: clock[0])
+    watcher = pw.Watcher(ON)
+    assert _poll(watcher, path, provider, budget, clock)["capture"] is None and provider.calls == []
+    clock[0] = NOW + timedelta(hours=3)
+    for _ in range(pw.WATCH_LIMITS["daily"] // 4):
+        budget.reserve("ODDS", 4)
+    capped = _poll(watcher, path, provider, budget, clock)
+    assert capped["sports"]["NBA"]["blocker"] == "api_budget:ODDS:daily" and provider.calls == []
+    assert pw.WATCH_LIMITS == {"daily": 200, "rolling_31_days": 1400}                 # owner D28: 7 days, both sports
+
+
+def test_the_shared_loop_runs_the_watch(tmp_path):
+    loop = importlib.import_module("scripts.news_capture_loop")
+    assert loop.run(1, 5, root=tmp_path, client=None, folder="f", key="k", request_get=None, setting={}.get,
+                    source=pw)["status"] == "OFF"
+
+    class Watcher:
+        def poll(self, path, **kwargs):
+            assert "fetch" in kwargs
+            return {"news": [], "capture": {"requested": True, "stored_quotes": 8}}
+
+    syncs = []
+    original = pw.load_state, pw.save_state
+    pw.load_state, pw.save_state = (lambda client, folder: {}), (lambda *a, **k: None)
+    try:
+        ticks = iter([0, 400])
+        result = loop.run(5, 5, root=tmp_path, client=None, folder="f", key="k", request_get=None, setting=ON,
+                          sync=lambda *a: syncs.append(1), clock=lambda: next(ticks), sleep=lambda s: None,
+                          watcher=Watcher(), source=pw)
+    finally:
+        pw.load_state, pw.save_state = original
+    assert result["polls"] == 1 and result["captures"] == 1 and result["stored_quotes"] == 8 and len(syncs) == 2
+
+
+def _quote(quote_id, book, selection, line, odds, family="SPREAD", stamp="2026-11-10T22:00:00+00:00"):
+    return {"quote_id": quote_id, "event_id": "g", "sportsbook": book, "selection": selection, "line": line,
+            "decimal_odds": odds, "market_family": family, "quote_timestamp": stamp, "quote_verified": 1}
+
+
+def test_junk_filter_drops_only_two_sided_prices_above_the_overround_limit():
+    quotes = [_quote("ok-h", "novig", "HOME", -3.5, 1.95), _quote("ok-a", "novig", "AWAY", 3.5, 1.93),
+              _quote("junk-h", "novig", "HOME", -9.5, 1.40), _quote("junk-a", "novig", "AWAY", 9.5, 1.40),
+              _quote("alone", "novig", "HOME", -6.5, 1.20),
+              _quote("edge-o", "draftkings", "OVER", 220.5, 1.80, "TOTAL"),
+              _quote("edge-u", "draftkings", "UNDER", 220.5, 1.70, "TOTAL"),
+              _quote("pin-h", "pinnacle", "HOME", -9.5, 1.30), _quote("pin-a", "pinnacle", "AWAY", 9.5, 1.30)]
+    kept, dropped = pm.without_junk(quotes)
+    assert dropped == 2 and [q["quote_id"] for q in kept] == ["ok-h", "ok-a", "alone", "edge-o", "edge-u", "pin-h", "pin-a"]
+    assert 1 / 1.80 + 1 / 1.70 < pm.MAX_OVERROUND < 1 / 1.40 + 1 / 1.40
+    assert pm.without_junk(quotes, max_overround=1.10)[1] == 4
+
+
+def test_the_filter_does_not_touch_the_functions_a_running_plan_hashes():
+    assert "without_junk" not in pm.PREDICTION_FUNCTIONS and "replay_estimate" not in pm.PREDICTION_FUNCTIONS
