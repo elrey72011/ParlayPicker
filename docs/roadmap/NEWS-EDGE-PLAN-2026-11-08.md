@@ -93,3 +93,26 @@ All 115 pieces of pregame news from 2026-10-21 to 2026-11-07 were studied (114 m
 captures. Even without news, Novig's NBA prices were ≥ 1% better than Pinnacle's in 14% of
 the control snapshots. The question is whether an NBA plan entering at Novig, with frequent
 captures, reaches about 2.3 bets a day.
+
+## Step 3 built: news-triggered capture (owner 2026-11-09)
+
+The owner chose news-triggered capture over an injury-adjusted model. In the lag study, Pinnacle
+moved on the news before the stake books whenever it moved, so a model that adjusts the line for
+injuries would only repeat Pinnacle's price. The edge the data shows is the short window when a
+stake book (almost always Novig) has not moved yet.
+
+- `app_core/news_capture.py`, `scripts/news_capture_loop.py`, workflow **NBA news capture (research)**:
+  through the evening slate (4:47 PM EST, up to 340 minutes), every 5 minutes it reads the newest
+  official report and diffs it with the previous one (the lag study's `candidates`: flips into or out
+  of Out/Doubtful, and first listings as Out/Doubtful within 3 hours of tip-off, at least 10 minutes
+  before the start).
+- For stored NBA games with news it makes one Odds API request (US books, Pinnacle, and Novig where
+  `PARLAYPICKER_NOVIG_SPORTS` names NBA; spreads and totals: 4 credits), then another 10 minutes
+  later. Quotes are stored with their provider responses (`decision_capture.store_quotes`).
+- Where a frozen plan binds NBA SPREAD or TOTAL, `predict_bound` predicts at the fresh quote at once,
+  so a `FIRST_EDGE_CAPTURE` plan enters while the gap is open. Until then the quotes feed the replay.
+- **Off unless the repository variable `PARLAYPICKER_NEWS_CAPTURE` is `NBA`.** Credits come from its
+  own allowance: 100 a day and 2,500 per 31 days (at most 25 requests a day), in a separate ledger
+  under `parlaypicker/news-capture-v1/state/`. A provider charge above 4 credits stops it until reviewed.
+- Next: after a week of capture, replay `FIRST_EDGE_CAPTURE` on NBA spreads (`replay_estimate`) and
+  count the bets a day at Novig. Freeze an NBA plan only if it can reach about 2.3 a day.
