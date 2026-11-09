@@ -24,9 +24,14 @@ GEMINI_REVIEW_PROVENANCE_FIELDS = (
 )
 
 
-def load_configuration(now):
-    """Only explicit, unexpired policy artifacts can authorize live exposure."""
-    path = os.environ.get('PARLAYPICKER_WAGER_POLICY_PATH','data/policies/active_wager_policy.json')
+def wager_policies(now, path=None):
+    """(policies, config, reason) from the live wager policy file alone. Reads one file; writes nothing.
+
+    A sport keeps its zero-cap research policy unless the file is an activation-v1 artifact
+    whose entry for that sport verifies now. ``allocate_exposure`` takes each sport's exposure
+    cap from these policies, so a sport without a verified entry stakes $0.
+    """
+    path = path or os.environ.get('PARLAYPICKER_WAGER_POLICY_PATH','data/policies/active_wager_policy.json')
     policies, config, reason = research_policies(), {}, 'No validated live sport policy configured'
     try:
         from core.activation_policy import verify_sport
@@ -44,6 +49,12 @@ def load_configuration(now):
             config={}
     except (OSError,ValueError,TypeError,KeyError,AttributeError):
         config={}
+    return policies,config,reason
+
+
+def load_configuration(now):
+    """Only explicit, unexpired policy artifacts can authorize live exposure."""
+    policies,config,reason=wager_policies(now)
     # Only owner-confirmed records in this dedicated directory may be used.
     # They are independently verified against the current canonical deployment
     # and ledger for every candidate below; loading JSON is not authorization.

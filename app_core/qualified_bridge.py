@@ -34,7 +34,9 @@ def _market_type(family, event, selection):
 
 
 def _label(selection, line, family):
-    return f"{selection} {line:g}" if family == "TOTAL" else f"{selection} {line:+g}"
+    # The same text the wager contract writes back (``core.streamlit_pipeline._format_best_pick``),
+    # so the Gemini review of this row still matches it after that rewrite (whole-number lines too).
+    return f"{selection} {line:.1f}" if family == "TOTAL" else f"{selection} {line:+.1f}"
 
 
 def row(prediction, quote, event, policy_version=None):
@@ -49,6 +51,14 @@ def row(prediction, quote, event, policy_version=None):
         "selection": quote["selection"], "line": quote["line"], "odds_american": quote["american_odds"],
         "decimal_odds": quote["decimal_odds"], "book": quote["sportsbook"], "quote_time": quote["quote_timestamp"],
         "start": event["scheduled_start"],
+        # The names the app pipeline reads: without them best-pick construction drops the row
+        # (game_start_missing) and the wager contract relabels it "(No Line)" (audit 2026-11-09 B1, B2).
+        "game_start_utc": event["scheduled_start"], "market_line_used": quote["line"],
+        # The verified provider quote is the live line. The pipeline's line guard rebuilds the
+        # line from these names and rejects a row without them as "line unresolved".
+        "line_source": "live_qualified_bridge",
+        **({"live_total_line": quote["line"], "total_line": quote["line"]} if family == "TOTAL" else
+           {"live_spread_line": quote["line"], "spread_line": quote["line"]}),
         # exact model and calibration scope
         "model_id": prediction["model_id"], "model_version": prediction["model_version"],
         "calibration_id": prediction["calibration_id"], "calibration_version": prediction["calibration_version"],

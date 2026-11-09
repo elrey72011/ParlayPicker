@@ -144,6 +144,20 @@ Dates are targets in ET and assume owner approval of each PR.
 4. The go-live checklist gains a "stake reachable" item that runs the same sizing code and shows the
    dollar amount, and a staking-CLV item (holdout lower 95% bound).
 
+**Status 2026-11-09 (items 1, 2 and 4 done; item 3 waits for D23).**
+
+- B1 and B2 are fixed in `app_core/qualified_bridge.py`. The end-to-end test found a third bridge
+  defect of the same kind: the pipeline's line guard rebuilds the line from `line_source` and
+  `live_spread_line` / `live_total_line`, so the rebuilt row read "line unresolved". The row now
+  carries those names too. The bridge label also uses the wager contract's format, so a
+  whole-number line ("-3.0") still matches its Gemini review.
+- `tests/test_go_live_end_to_end.py` runs the whole chain on a synthetic store (about 50 seconds).
+  With the validated market policy supplied, the stake is $5.00 on a $1,000 bankroll. With the
+  app's own configuration it is still $0 (B3).
+- `app_core/go_live.py` has `stake_checks` (`staking_clv`, `stake_reachable`) and `full_checklist`.
+  The go-live script and the app's readiness report use `full_checklist`, which is not ready while
+  the sport exposure cap is 0. The item shows the cap in dollars; it does not size a real pick.
+
 Done when the test passes and the checklist cannot show all-pass with a $0 stake.
 
 ### M2. Find out whether the Novig lag has volume (capture; first answer 2026-11-16)

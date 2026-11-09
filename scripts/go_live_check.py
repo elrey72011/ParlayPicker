@@ -26,7 +26,7 @@ def main(argv=None):
     parser.add_argument("--output", type=Path)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    from app_core.go_live import checklist, markdown, summary
+    from app_core.go_live import full_checklist as checklist, markdown, summary
     sport, family = args.sport.upper(), args.market_family.upper()
     items = checklist(sport, family, path=args.database, ledger_path=args.ledger)
     text = json.dumps({"items": items, **summary(items)}, indent=2) if args.json else markdown(sport, family, items)

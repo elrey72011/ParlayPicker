@@ -129,7 +129,7 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             if st.button("Check go-live requirements", key="go_live_check"):
                 try:
                     import os
-                    from app_core.go_live import checklist, summary
+                    from app_core.go_live import full_checklist as checklist, summary
 
                     def secret(name, default=None):
                         try:
