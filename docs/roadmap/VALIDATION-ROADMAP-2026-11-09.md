@@ -117,7 +117,7 @@ in the audit notes of this session; the rows below are the ones that matter for 
 | 2 | Novig against Pinnacle without news | 14% of control snapshots ≥1% in the lag study. Today's replay on once-a-game capture: 0 bets | 0 so far | Needs frequent capture to test (M2) |
 | 3 | Research score models (NBA, NCAAB, NHL) | None yet; 0 training games | Unknown | Accrues on its own; no date until teams have history |
 | 4 | NCAAF totals against opening lines | 54.7% on 179 picks, 0.6 standard errors above break-even | — | Within noise; needs opening-line capture; football paused |
-| 5 | MLB props | 58.6% on 741 graded, never compared with price (the first logged price, −141, breaks even at 58.5%) | — | Benchmark offline before spending anything |
+| 5 | MLB props | 58.6% on 741 graded against a 61.3% mean break-even at the logged prices: ROI −4.4% (M5 screen, 2026-11-09) | — | No edge. No further work |
 | — | Legacy blend, NCAAB and NCAAF form and ratings, NFL and MLB score models | At or below the market in every test | — | No further work |
 
 Never measured, and cheap to measure from data already stored: the price screen's outcomes by
@@ -264,6 +264,13 @@ M2 says go. If M2 says no-go, the next candidates are the research score models 
 2. Offline, from stored data, no credits: price-screen outcomes by book and timing; TheOver signals
    against results; props against their logged prices.
 3. Football stays paused (D25) unless a screen shows an edge.
+
+**Status 2026-11-09.** The screens that the repository's own data allows are done:
+`docs/roadmap/M5-OFFLINE-SCREENS-2026-11-09.md` (`scripts/offline_edge_screens.py`). MLB props lose
+2.7 points to their logged prices (ROI −4.4%), graded best picks sit at break-even and lose 1.6
+points to Kalshi, and no segment beats its price. No new candidate. Still open: price-screen
+outcomes by book and timing (needs the research store), and NHL score settlement, which is the
+owner's switch (`PARLAYPICKER_NHL_SETTLEMENT=official_check`, D17).
 
 ### Order and dependencies
 
