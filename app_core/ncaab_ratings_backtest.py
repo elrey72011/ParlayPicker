@@ -11,7 +11,7 @@ CollegeBasketballData (CBBD) data, the kind of reason a model could disagree wit
   ``CARRY`` (so early-season ratings start from last season, regressed to the mean).
 * **Edge vs the line**: model cover margin ``margin + spread`` and total error ``total - line``,
   shrunk by ``k`` and turned into a probability with ``sigma``, both fitted on the calibration
-  season (never the scored one).
+  season (never the scored one), separately for closing and opening lines.
 * **Scored season**, split into November-December and January on, against **closing** lines and,
   where CBBD has them, **opening** lines (early lines are where public ratings can still be ahead).
 
@@ -198,17 +198,23 @@ def run(prior_games, calibration_games, scored_games, calibration_lines, scored_
     scored_predictions, _ = season_predictions(scored_games, calibration_finals)
     report = {}
     for market, close_key, open_key in (("SPREAD", "spread", "spread_open"), ("TOTAL", "total", "total_open")):
-        fit = calibrate(_cases(calibration_games, calibration_predictions, calibration_lines, market, close_key))
-        if fit is None:
-            report[market] = {"blocker": "TOO_FEW_CALIBRATION_GAMES"}
-            continue
-        entry = {"fit": fit, "lines": {}}
+        entry = {"fits": {}, "lines": {}}
         for label, key in (("closing", close_key), ("opening", open_key)):
+            # Each line type gets its own k and sigma from the calibration season's lines of that type:
+            # a model can add nothing to closing lines and still be ahead of opening ones.
+            fit = calibrate(_cases(calibration_games, calibration_predictions, calibration_lines, market, key))
+            entry["fits"][label] = fit
             cases = _cases(scored_games, scored_predictions, scored_lines, market, key)
             entry["lines"][label] = {"games": len(cases)}
+            if fit is None:
+                entry["lines"][label]["blocker"] = "TOO_FEW_CALIBRATION_GAMES"
+                continue
             for name, months in SEGMENTS:
                 part = [c for c in cases if c[2]["start"].month in months]
                 entry["lines"][label][name] = score(part, fit) if part else {"games": 0}
+        if not any(entry["fits"].values()):
+            report[market] = {"blocker": "TOO_FEW_CALIBRATION_GAMES"}
+            continue
         report[market] = entry
     return report
 
@@ -227,6 +233,12 @@ def markdown(result):
             lines.append(f"| {market} | | | | {entry['blocker']} | | | | |")
             continue
         for label, by_line in entry["lines"].items():
+            fit = (entry.get("fits") or {}).get(label) or {}
+            lines.append(f"| {market} | {label} | fit: k = {fit.get('k', 0):.2f}, sigma = {fit.get('sigma', 0):.1f} "
+                         f"({fit.get('games', 0)} calibration games) | | | | | | |")
+            if by_line.get("blocker"):
+                lines.append(f"| {market} | {label} | {by_line['blocker']} | | | | | | |")
+                continue
             for segment, _ in SEGMENTS:
                 part = by_line.get(segment) or {}
                 if not part.get("games"):
@@ -238,9 +250,6 @@ def markdown(result):
                     roi = "" if row["roi_per_pick"] is None else f"{row['roi_per_pick']:+.3f}"
                     lines.append(f"| {market} | {label} | {segment} | {part['games']} | {brier} | {threshold} | "
                                  f"{row['picks']} | {hit} | {roi} |")
-        fit = entry.get("fit") or {}
-        lines.append(f"| {market} | fit | k = {fit.get('k', 0):.2f}, sigma = {fit.get('sigma', 0):.1f} "
-                     f"({fit.get('games')} games) | | | | | | |")
     lines += ["", "A pick is the side whose probability clears the threshold, graded at -110. Archived lines "
                   "have no quote timestamp; this screens the idea and is not plan evidence."]
     return "\n".join(lines) + "\n"
