@@ -30,6 +30,8 @@ class StageTimer:
             self.timings[self.name] = self.timings.get(self.name, 0)+elapsed
             logging.getLogger(__name__).warning('PERFORMANCE stage=%s seconds=%.3f records=%s',
                                                 self.name, elapsed, self.records)
+            from app_core import memory_readout
+            memory_readout.record(self.name)  # where memory grew (owner 2026-11-10); never raises
             self.span.set(records_returned=self.records)
             self.span.__exit__(None, None, None)
             self.span = None
