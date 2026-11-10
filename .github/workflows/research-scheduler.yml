@@ -102,6 +102,9 @@ jobs:
           # variable names sports. Option B: NBA, spread market only.
           PARLAYPICKER_CERTIFIED_CLOSE_SPORTS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_SPORTS }}
           PARLAYPICKER_CERTIFIED_CLOSE_MARKETS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_MARKETS }}
+          # Whole-game closes (40 credits) may use a quarter of the daily close allowance; the rest is kept for
+          # bets' own closes (10 credits) on games still to start (2026-11-10). 1 restores the old behaviour.
+          PARLAYPICKER_CERTIFIED_CLOSE_REST_SHARE: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_REST_SHARE || '0.25' }}
           # D16: hours ahead to capture NBA/NCAAB/NHL prices (default 2, range 2-24).
           PARLAYPICKER_RESEARCH_CAPTURE_HOURS: ${{ vars.PARLAYPICKER_RESEARCH_CAPTURE_HOURS }}
           # D4 option A: Pinnacle as the fair-price reference ("NBA,NCAAB"); unset = off.

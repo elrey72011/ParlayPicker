@@ -124,6 +124,31 @@ def due(path, now, *, sports, lookback=LOOKBACK, setting=os.environ.get):
     The replay's first-edge bets count as bets too (2026-11-10, ``_replay_scopes``): their book
     and market are closed first, so the allowance goes to the closes that can be measured.
     """
+    priority, rest = due_split(path, now, sports=sports, lookback=lookback, setting=setting)
+    return priority + rest
+
+
+REST_SHARE_ENV = "PARLAYPICKER_CERTIFIED_CLOSE_REST_SHARE"
+
+
+def rest_share(setting=os.environ.get):
+    """The share of a sport's daily close allowance that whole-game closes (no bet) may use: 0 to 1.
+
+    1 (the default) is the behaviour before 2026-11-10. A whole game costs 40 credits and a bet's
+    own book and market 10. Left alone, the first games to start each day spent the allowance
+    on whole-game closes, and bets on later games had none (2026-11-10: NCAAB at 400 of 400).
+    With a share of 0.25, a whole-game request is made only while the day's use stays within a
+    quarter of the allowance; the rest is kept for bets. Anything unreadable is 1.
+    """
+    try:
+        share = float(str(setting(REST_SHARE_ENV, "") or "").strip())
+    except ValueError:
+        return 1.0
+    return share if 0 <= share <= 1 else 1.0
+
+
+def due_split(path, now, *, sports, lookback=LOOKBACK, setting=os.environ.get):
+    """``due`` as two lists: (bet scopes at the bet's book, every other due game and book)."""
     priority, rest = [], []
     for sport in sports:
         bets = _bet_scopes(path, sport) | _replay_scopes(path, sport, now, lookback, setting)
@@ -134,7 +159,7 @@ def due(path, now, *, sports, lookback=LOOKBACK, setting=os.environ.get):
                 priority.append((event, first))
             if later:
                 rest.append((event, later))
-    return priority + rest
+    return priority, rest
 
 
 def _due_sport(path, now, sport, lookback, setting):
@@ -244,6 +269,18 @@ def _requested_scopes(budget, now):
     return requested
 
 
+def _over_rest_share(budget, sport, credits, share):
+    """True when a whole-game request would take the day's close use past ``share`` of the allowance."""
+    try:
+        from app_core.research_api_budget import ALL_CERTIFIED_CLOSE_LIMITS
+        limit = (ALL_CERTIFIED_CLOSE_LIMITS.get(sport) or {}).get("daily")
+        if budget is None or limit is None:
+            return False
+        return budget.usage(sport, budget.close_ledger)["daily"] + credits > share * limit
+    except Exception:  # an unreadable ledger never blocks a close the allowance itself would allow
+        return False
+
+
 def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.environ.get, max_events=20):
     """Fetch and store certified closes for due events. Returns a sanitized report; never raises on one event."""
     sports = enabled_sports(setting) if sports is None else tuple(sports)
@@ -262,19 +299,26 @@ def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.
         return report
     requested = _requested_scopes(budget, now)
     pending = []
-    for event, quotes in due(path, now, sports=sports, setting=setting):
+    bets_first, others = due_split(path, now, sports=sports, setting=setting)
+    whole_game = {id(quotes) for _, quotes in others}
+    share = rest_share(setting)
+    for event, quotes in bets_first + others:
         # A historical snapshot at the last pregame second never changes, so a book missing from
         # it stays missing. Ask once per scope, never again every cycle (audit 2026-11-09).
         done = set(((requested or {}).get(event["event_id"]) or {}).get("scopes") or ())
         left = [q for q in quotes if _scope(q) not in done]
         if left:
-            pending.append((event, left))
+            pending.append((event, left, id(quotes) in whole_game))
         elif quotes:
             report.setdefault("already_requested", 0)
             report["already_requested"] += 1
-    for event, quotes in pending[:max_events]:
-        report["events"] += 1
+    for event, quotes, is_whole_game in pending[:max_events]:
         url, params, credits = request_plan(event, quotes)
+        if is_whole_game and share < 1 and _over_rest_share(budget, event["sport"], credits, share):
+            report.setdefault("held_for_bets", 0)     # allowance kept for bets on games still to start
+            report["held_for_bets"] += 1
+            continue
+        report["events"] += 1
         try:
             if budget is not None:
                 budget.reserve_certified_close(event["sport"], credits)
@@ -323,13 +367,19 @@ def summary(report, sport=None, budget=None):
     kinds = {}
     for error in report.get("errors") or []:
         parts = str(error).split(":")
-        kind = parts[1] if len(parts) > 1 else "ERROR"
-        if kind == "BudgetLimit":
+        named = [p for p in parts if p.endswith(("Error", "Exception", "Limit", "Conflict", "Timeout")) and p.isalnum()]
+        if "BudgetLimit" in parts:                                 # an event id can hold a colon (run 2026-11-10)
             kind = "BudgetLimit:" + parts[-1][:20]                 # the window that ran out: daily or rolling_31_days
-        elif kind not in ("COST_MISMATCH",) and not kind.replace("_", "").isalnum():
-            kind = "ERROR"
+        elif "COST_MISMATCH" in parts:
+            kind = "COST_MISMATCH"
+        elif named:
+            kind = named[0]
+        else:
+            kind = parts[1] if len(parts) > 1 and parts[1].replace("_", "").isalnum() else "ERROR"
         kinds[kind] = kinds.get(kind, 0) + 1
     out = {key: int(report.get(key) or 0) for key in ("events", "requests", "credits", "stored", "already_requested")}
+    if report.get("held_for_bets"):
+        out["held_for_bets"] = int(report["held_for_bets"])
     out["skipped"] = [str(code)[:60] for code in report.get("skipped") or []]
     out["errors"] = kinds
     if budget is not None and sport is not None:
