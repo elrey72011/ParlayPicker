@@ -135,6 +135,28 @@ DRIVE_CACHE_ENV = "PARLAYPICKER_DRIVE_CACHE_DIR"
 DRIVE_INVENTORY_REUSE_ENV = "PARLAYPICKER_DRIVE_INVENTORY_REUSE_SECONDS"
 
 
+DRIVE_WORKERS_ENV = "PARLAYPICKER_DRIVE_WORKERS"
+DEFAULT_WORKERS = 4
+MAX_WORKERS = 32
+
+
+def parallel_workers():
+    """Workers ``run_parallel`` uses: 4 unless ``PARLAYPICKER_DRIVE_WORKERS`` gives 1 to 32.
+
+    Each stored quote costs about 1.6 seconds of Drive calls (existence check, upload, read
+    back). With 4 workers a 1,400-quote capture took 10 minutes to back up, and the price
+    watch cannot poll while it does (2026-11-09: a "5-minute" fast run polled every 10).
+    A workflow that needs the backup faster sets the variable; every other caller keeps 4.
+    Anything unreadable or out of range is the default: a typo never widens the load on Drive.
+    """
+    raw = os.environ.get(DRIVE_WORKERS_ENV, "").strip()
+    try:
+        workers = int(raw)
+    except ValueError:
+        return DEFAULT_WORKERS
+    return workers if 1 <= workers <= MAX_WORKERS else DEFAULT_WORKERS
+
+
 class DriveStore:
     """Small object-store interface used by the evidence replication layer.
 
@@ -259,7 +281,7 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
                 sessions.append(worker.session)
                 state.store = worker
             return operation(state.store, item)
-        pool = ThreadPoolExecutor(max_workers=min(4, len(items)))
+        pool = ThreadPoolExecutor(max_workers=min(parallel_workers(), len(items)))
         futures = {}
         try:
             futures = {pool.submit(run, item): i for i, item in enumerate(items)}
