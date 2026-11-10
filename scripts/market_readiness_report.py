@@ -101,6 +101,7 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 pace_comparison=timed('pace_comparison', pace_comparison, store, extra=EXTRA_REPLAY_SCOPES),
                 replay_clv=timed('replay_clv', replay_clv, store, extra=EXTRA_REPLAY_SCOPES),
                 late_entry_clv=timed('late_entry_clv', late_entry_clv, store, extra=EXTRA_REPLAY_SCOPES),
+                line_movement=timed('line_movement', line_movement, store, extra=EXTRA_REPLAY_SCOPES),
                 nightly_record=timed('nightly_record', nightly_record, store, extra=EXTRA_REPLAY_SCOPES),
                 pace_recommendation=timed('pace_recommendation', pace_recommendation, store, extra=EXTRA_REPLAY_SCOPES))
 
@@ -234,6 +235,53 @@ def _clv_markdown(rows, caption=CLV_CAPTION):
                          + ' | '.join(str((found.get('not_comparable') or {}).get(reason, ''))
                                       for reason in ('CLOSE_NOT_FETCHED', 'BOOK_NOT_IN_CLOSE', 'LINE_MOVED',
                                                      'CLOSE_BEFORE_BET')) + ' |')
+    return lines
+
+
+def line_movement(path, now=None, extra=None):
+    """Pinnacle's line movement before each started game and whether the stake books followed
+    (pinnacle_model.line_movement), over the last 24 hours. Read-only."""
+    from datetime import datetime, timezone
+    from app_core import pinnacle_model
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport, families in {**pinnacle_model.FAMILIES, **(extra or {})}.items():
+        for family in families:
+            try:
+                out.append(pinnacle_model.line_movement(path, sport, family, now=now))
+            except Exception as exc:  # report, never guess
+                out.append(dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
+
+
+def _movement_markdown(rows):
+    rows = [r for r in rows if r.get('evaluation_error') or r.get('games_tracked')]
+    if not rows:
+        return []
+    lines = ['', "Line movement (last 24 hours): how Pinnacle's main line moved between its first and last capture "
+             'before each game, and whether the stake books (Novig, DraftKings, FanDuel, BetMGM) followed. The nearest '
+             'thing to market sentiment in the stored prices; no betting splits are captured. Captures are hours apart '
+             "until a game's last three hours, so an early move shows only as a difference between snapshots.", '',
+             '| market | games tracked / started | line moved | mean move (points) | price shift when the line held | '
+             "stake books at Pinnacle's final line | median minutes to follow | captures per game |",
+             '|---|---|---|---|---|---|---|---|']
+
+    def pct(value, digits=0):
+        return '' if value is None else f'{value:.{digits}%}'
+    for row in rows:
+        name = f"{row['sport']} {row['market_family']}"
+        if 'evaluation_error' in row:
+            lines.append(f"| {name} | {row['evaluation_error']} | | | | | | |")
+            continue
+        move = '' if row['mean_abs_move'] is None else f"{row['mean_abs_move']:.2f}"
+        follow = '' if row['median_follow_minutes'] is None else f"{row['median_follow_minutes']:g}"
+        lines.append(f"| {name} | {row['games_tracked']} / {row['games_started']} | "
+                     f"{row['games_moved']} ({pct(row['share_moved'])}) | {move} | "
+                     f"{pct(row['mean_prob_shift_when_held'], 1)} | "
+                     f"{row['stake_books_at_final_line']} of {row['stake_book_games']} ({pct(row['share_followed'])}) | "
+                     f"{follow} | {row['captures_per_game']:g} |")
     return lines
 
 
@@ -555,6 +603,7 @@ def markdown(result):
     lines += _pace_markdown(result.get('pace_comparison') or [])
     lines += _clv_markdown(result.get('replay_clv') or [])
     lines += _clv_markdown(result.get('late_entry_clv') or [], LATE_CLV_CAPTION)
+    lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
         from app_core import plan_progress
