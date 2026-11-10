@@ -223,3 +223,37 @@ def test_bet_scopes_read_predicted_quotes(monkeypatch):
         return [dict(quote_id="q1"), dict(quote_id="missing")]
     monkeypatch.setattr(pc.evidence, "read_records", read)
     assert pc._bet_scopes("unused", "NBA") == {("A", "TOTAL", "dk")}
+
+
+def test_summary_keeps_counts_and_codes_and_never_copies_a_provider_error_text():
+    # Owner 2026-11-10: a night with no closes certified left no trace of why.
+    from app_core import prospective_closes as closes
+
+    class Budget:
+        close_ledger = {}
+
+        def usage(self, sport, ledger):
+            return {"daily": 100, "rolling_31_days": 640}
+
+    report = dict(sports=["NBA"], events=3, requests=1, credits=40, stored=26, already_requested=5,
+                  skipped=["PROVIDER_COST_REVIEW_REQUIRED"],
+                  errors=["evt-1:HTTPError:401 Client Error for url: https://api.example/odds?apiKey=SECRET",
+                          "evt-2:BudgetLimit:api_budget:NBA:certified_close:daily",
+                          "evt-3:COST_MISMATCH:planned=20:charged=40", "certified-close:abc:conflict text"])
+    out = closes.summary(report, "NBA", Budget())
+    assert out["events"] == 3 and out["requests"] == 1 and out["credits"] == 40 and out["stored"] == 26
+    assert out["already_requested"] == 5 and out["skipped"] == ["PROVIDER_COST_REVIEW_REQUIRED"]
+    assert out["errors"] == {"HTTPError": 1, "BudgetLimit:daily": 1, "COST_MISMATCH": 1, "abc": 1}
+    assert out["allowance"] == {"used": {"daily": 100, "rolling_31_days": 640},
+                                "limits": {"daily": 100, "rolling_31_days": 2500}}
+    import json
+    text = json.dumps(out)
+    assert "SECRET" not in text and "http" not in text and "evt-1" not in text
+    assert closes.summary({}) == {"events": 0, "requests": 0, "credits": 0, "stored": 0, "already_requested": 0,
+                                  "skipped": [], "errors": {}}
+
+
+def test_the_scheduler_prints_the_certified_close_result_line():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / "app_core/research_scheduler.py").read_text(encoding="utf-8")
+    assert '"stage": "CERTIFIED_CLOSES_RESULT"' in text and "prospective_closes.summary(" in text

@@ -457,6 +457,10 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None, audit_callba
                     result["certified_closes"] = prospective_closes.record(
                         canonical_path, now=utcnow(), key=odds_key, request_get=_requests.get,
                         budget=budget, sports=(sport,))
+                    # Why closes were or were not certified, in the run log (2026-11-10): counts and codes only.
+                    print(json.dumps({"sport": sport, "stage": "CERTIFIED_CLOSES_RESULT",
+                                      **prospective_closes.summary(result["certified_closes"], sport, budget)}),
+                          flush=True)
                 report["errors"].extend(sport+":"+reason for reason in result["errors"])
                 health["capture"] = result.get("capture_status", "success" if not result["errors"] else "failed")
                 health["grade"] = result.get("grade_status", "success" if not result["errors"] else "failed")

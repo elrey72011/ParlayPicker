@@ -511,6 +511,92 @@ def pace_comparison(path, sport, family, *, now, lookback_days=1, paces=PACES, e
     return out
 
 
+def first_edge_bets(started, sample, now, edge, books=None):
+    """The bets ``FIRST_EDGE_CAPTURE`` makes in ``sample`` at ``edge``: (event_id, the quote bet, its EV).
+
+    The quote bet is the side with the larger EV against Pinnacle's no-vig price: the picked
+    quote or the same book's other side.
+    """
+    grouped = by_event(sample)
+    picked = plan_quotes_by_event(started, grouped, now, books=books, entry_rule=FIRST_EDGE_CAPTURE, min_edge=edge)
+    out = []
+    for event_id, quote in sorted(picked.items()):
+        mine = grouped[event_id]
+        p, other = fair(started[event_id], quote, mine, now=now), _other_side(quote, mine)
+        if p is None or other is None:
+            continue
+        ev, bet = max(((p * quote["decimal_odds"] - 1, quote), ((1 - p) * other["decimal_odds"] - 1, other)),
+                      key=lambda pair: pair[0])
+        if ev >= edge:
+            out.append((event_id, bet, ev))
+    return out
+
+
+# Why a bet has no comparable close, in the order checked: the game's close was never fetched for
+# this market; it was fetched but not for the bet's book and selection; the book closed at another
+# line; the only close at the bet's line was taken before the bet.
+NOT_COMPARABLE = ("CLOSE_NOT_FETCHED", "BOOK_NOT_IN_CLOSE", "LINE_MOVED", "CLOSE_BEFORE_BET")
+
+
+def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES, books=None):
+    """Closing-line value of the replay's first-edge bets (owner 2026-11-10; read-only).
+
+    The replay counts bets; this asks whether they beat the close. For each bet on a started
+    game it looks for a certified close at the same sportsbook, selection and line, taken at
+    or after the bet's quote (the rule a plan's bets are held to,
+    ``prospective_evidence._comparable_close``). Price CLV is bet odds / close odds - 1.
+
+    Per edge: bets; bets on a game whose close was fetched at all; bets with a comparable
+    close; mean price CLV with its standard error; and the share that beat the close. A plan
+    needs a comparable close for 80% of its bets and mean CLV with t >= 2. Results (wins and
+    losses) are never read. A bet with no comparable close is left out of the mean, which
+    can flatter it: a line the market moved off has no close at that line.
+    """
+    from app_core import prospective_research_models as research
+    from app_core.price_edge_screen import _mean_se
+    events, quotes, _ = research._read_scope(path, sport, family)
+    start = now - timedelta(days=lookback_days)
+    started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
+    out = {"sport": sport, "market_family": family, "games_started": len(started),
+           "status": "MEASURED" if started else "NO_GAMES", "by_edge": {}}
+    if not started:
+        return out
+    closes, fetched, at_book = {}, set(), set()
+    for close in evidence.read_records(path, "prospective_close", sport=sport, market_family=family):
+        if close.get("close_verified") and close["event_id"] in started:
+            fetched.add(close["event_id"])
+            at_book.add((close["event_id"], close["selection"], close["sportsbook"]))
+            closes.setdefault((close["event_id"], close["selection"], close["sportsbook"], close["line"]),
+                              []).append(close)
+    quotes, _ = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
+    for edge in edges:
+        bets = first_edge_bets(started, quotes, now, edge, books)
+        clv, why = [], {reason: 0 for reason in NOT_COMPARABLE}
+        for event_id, bet, _ in bets:
+            same_line = closes.get((event_id, bet["selection"], bet["sportsbook"], bet["line"]), [])
+            later = [c for c in same_line if _t(c["close_timestamp"]) >= _t(bet["quote_timestamp"])]
+            if later:
+                close = max(later, key=lambda c: (_t(c["close_timestamp"]), c["close_id"]))
+                clv.append(bet["decimal_odds"] / close["decimal_odds"] - 1)
+            elif event_id not in fetched:
+                why["CLOSE_NOT_FETCHED"] += 1
+            elif (event_id, bet["selection"], bet["sportsbook"]) not in at_book:
+                why["BOOK_NOT_IN_CLOSE"] += 1
+            elif not same_line:
+                why["LINE_MOVED"] += 1
+            else:
+                why["CLOSE_BEFORE_BET"] += 1
+        mean, se = _mean_se(clv)
+        out["by_edge"][f"{edge:.0%}"] = {
+            "bets": len(bets), "close_fetched": sum(1 for event_id, _, _ in bets if event_id in fetched),
+            "comparable": len(clv), "coverage": len(clv) / len(bets) if bets else None,
+            "not_comparable": why,
+            "mean_price_clv": mean, "price_clv_se": se,
+            "t": (mean / se if mean is not None and se else None),
+            "beat_close_share": sum(1 for v in clv if v > 0) / len(clv) if clv else None}
+    return out
+
+
 SLATE_ZONE = "America/New_York"
 SLATE_ROLLOVER = timedelta(hours=6)      # a game starting before 6 AM ET belongs to the night before
 PACE_KEEP = 0.85                         # a slower pace is enough when it keeps this share of the bets
