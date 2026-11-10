@@ -677,3 +677,41 @@ def test_second_best_pick_is_blank_without_another_market_family(monkeypatch):
 def _second_label(analysis, market_type):
     from core.streamlit_pipeline import _format_best_pick
     return _format_best_pick(analysis[analysis["market_type"].eq(market_type)].iloc[0])
+
+
+def test_moneyline_pick_is_the_market_favorite_shown_after_the_picks_and_never_the_best_pick(monkeypatch):
+    # Owner 2026-11-10: the best pick, then the second best pick, then the moneyline. Display only.
+    from core.streamlit_pipeline import _moneyline_favorite
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+    rows = [
+        _candidate("total_over", probability=0.64, ev=0.10),
+        _candidate("total_under", probability=0.36, ev=-0.10),
+        _candidate("spread_home", probability=0.58, ev=0.05),
+        _candidate("spread_away", probability=0.42, ev=-0.05),
+    ]
+    for row in rows:
+        row.update(game_home_ml_price=-150, game_away_ml_price=130)
+    analysis = pd.DataFrame(rows)
+    plain = build_best_picks_df(pd.DataFrame([dict(r, game_home_ml_price=None, game_away_ml_price=None) for r in rows]))
+    best = build_best_picks_df(analysis)
+    winner = best.iloc[0]
+    assert winner["market_type"] == "total_over" == plain.iloc[0]["market_type"]          # the pick does not change
+    assert winner["second_best_pick"] == plain.iloc[0]["second_best_pick"] != ""
+    assert winner["moneyline_pick"] == f"{analysis.iloc[0]['home_team']} ML (-150)"
+    assert float(winner["moneyline_pick_odds"]) == -150
+    assert float(winner["moneyline_pick_probability"]) == pytest.approx(0.6 / (0.6 + 100 / 230))
+    assert plain.iloc[0]["moneyline_pick"] == "" and pd.isna(plain.iloc[0]["moneyline_pick_probability"])
+    columns = list(best.columns)
+    assert columns.index("best_pick") < columns.index("second_best_pick") < columns.index("moneyline_pick")
+
+    assert _moneyline_favorite("H", "A", 120, -140)[0] == "A ML (-140)"
+    assert _moneyline_favorite("H", "A", -110, -110)[0] == ""                             # no favorite
+    assert _moneyline_favorite("H", "A", None, -140)[0] == "" and _moneyline_favorite("H", "A", 50, -140)[0] == ""
+    assert _moneyline_favorite("", "A", -200, 170)[0] == ""
+
+
+def test_the_board_lists_the_moneyline_after_the_best_and_second_best_picks():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(encoding="utf-8")
+    assert '"Best Pick", "2nd Best Pick", "2nd Best Prob", "Moneyline Pick", "Moneyline Prob", "Gemini Pick"' in text

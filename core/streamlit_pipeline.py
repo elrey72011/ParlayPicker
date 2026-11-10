@@ -203,6 +203,9 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "best_available_runner_up_score",
     "second_best_pick",
     "second_best_probability",
+    "moneyline_pick",
+    "moneyline_pick_odds",
+    "moneyline_pick_probability",
     "best_available_score_gap",
     "best_available_candidate_count",
     "best_available_selection_verified",
@@ -373,6 +376,9 @@ def ensure_best_pick_export_columns(
         "best_available_runner_up_pick": "",
         "second_best_pick": "",
         "second_best_probability": pd.NA,
+        "moneyline_pick": "",
+        "moneyline_pick_odds": pd.NA,
+        "moneyline_pick_probability": pd.NA,
         "best_available_runner_up_market_type": "",
         "best_available_runner_up_score": pd.NA,
         "best_available_score_gap": pd.NA,
@@ -435,7 +441,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"odds_feed_source", "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_reason", "recent_regime_bucket", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "second_best_pick", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
+        if col in {"odds_feed_source", "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_reason", "recent_regime_bucket", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "second_best_pick", "moneyline_pick", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     # The public card always answers which candidate ranked first for the game.
@@ -561,6 +567,7 @@ BEST_PICK_COLUMNS = [
     "best_available_runner_up_pick", "best_available_runner_up_market_type",
     "best_available_runner_up_score", "best_available_score_gap",
     "second_best_pick", "second_best_probability",
+    "moneyline_pick", "moneyline_pick_odds", "moneyline_pick_probability",
     "best_available_candidate_count", "best_available_selection_verified",
     "best_available_ranking_verified", "final_pick_valid", "final_pick_valid_reason",
     "quote_chronology_status", "selected_quote_recorded_at",
@@ -4257,6 +4264,29 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _moneyline_favorite(home_team, away_team, home_price, away_price):
+    """The side a two-way moneyline favors: (label, American odds, no-vig probability).
+
+    Blank when either price is missing or invalid, or the two sides are priced the same
+    (no favorite). Display only (owner 2026-11-10): the market's favorite, not a model pick.
+    """
+    def implied(price):
+        price = pd.to_numeric(price, errors="coerce")
+        if pd.isna(price) or abs(float(price)) < 100:
+            return None
+        price = float(price)
+        return 100.0 / (price + 100.0) if price > 0 else -price / (-price + 100.0)
+
+    home, away = implied(home_price), implied(away_price)
+    if home is None or away is None or home == away:
+        return "", float("nan"), float("nan")
+    team, price, chance = (home_team, home_price, home) if home > away else (away_team, away_price, away)
+    team = str(team or "").strip()
+    if not team:
+        return "", float("nan"), float("nan")
+    return f"{team} ML ({int(round(float(price))):+d})", float(price), chance / (home + away)
+
+
 def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None = None) -> pd.DataFrame:
     logger.info(f"BEST PICKS AUDIT: Received analysis_df with {len(analysis_df)} rows")
     if analysis_df is None or analysis_df.empty:
@@ -4929,6 +4959,22 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["second_best_probability"] = pd.to_numeric(
         pool["matchup_id"].map(second_best_probability_by_matchup), errors="coerce"
     )
+    # Moneyline Pick (owner 2026-11-10): shown after Best Pick and 2nd Best Pick, never
+    # ahead of them. It is the side the game's two-way moneyline favors, with its
+    # no-vig probability. Display only: moneyline never enters this pool, so it is
+    # never the Best Pick, never ranked against it and never staked.
+    moneyline = [
+        _moneyline_favorite(home, away, home_price, away_price)
+        for home, away, home_price, away_price in zip(
+            _string_series(pool, "home_team"), _string_series(pool, "away_team"),
+            _numeric_series(pool, "game_home_ml_price"), _numeric_series(pool, "game_away_ml_price"),
+        )
+    ]
+    pool["moneyline_pick"] = [m[0] for m in moneyline]
+    pool["moneyline_pick_odds"] = pd.to_numeric(pd.Series([m[1] for m in moneyline], index=pool.index), errors="coerce")
+    pool["moneyline_pick_probability"] = pd.to_numeric(
+        pd.Series([m[2] for m in moneyline], index=pool.index), errors="coerce"
+    )
     pool["best_available_candidate_count"] = (
         pd.to_numeric(pool["matchup_id"].map(candidate_count_by_matchup), errors="coerce")
         .fillna(0)
@@ -5013,6 +5059,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_runner_up_pick", "best_available_runner_up_market_type",
         "best_available_runner_up_score", "best_available_score_gap",
         "second_best_pick", "second_best_probability",
+        "moneyline_pick", "moneyline_pick_odds", "moneyline_pick_probability",
         "best_available_candidate_count", "best_available_selection_verified",
         "best_available_ranking_verified", "best_available_rejection_reason",
         "quote_chronology_status", "selected_quote_recorded_at",
