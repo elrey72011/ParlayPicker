@@ -280,3 +280,27 @@ def test_the_workflow_passes_automatic_pace_only_from_the_variable():
     from pathlib import Path
     text = (Path(__file__).resolve().parents[1] / ".github/workflows/price-watch.yml").read_text(encoding="utf-8")
     assert "PARLAYPICKER_PRICE_WATCH_AUTO_PACE: ${{ vars.PARLAYPICKER_PRICE_WATCH_AUTO_PACE }}" in text
+
+
+def test_polls_start_an_interval_apart_however_long_the_backup_takes(tmp_path):
+    # Run 2026-11-10: a "5-minute" watch stored a capture every 9 minutes (5 of sleep after a 4-minute backup).
+    loop = importlib.import_module("scripts.news_capture_loop")
+    assert loop.poll_wait(5, 1000.0, None) == 300                              # first poll: the whole interval
+    assert loop.poll_wait(5, 1240.0, 1000.0) == 60 + loop.WAKE_PAD_SECONDS     # 4 minutes of work: sleep the fifth
+    assert loop.poll_wait(5, 1400.0, 1000.0) == loop.WAKE_PAD_SECONDS          # work longer than the interval
+
+    class Watcher:
+        def poll(self, path, **kwargs):
+            return {"news": [], "capture": {"requested": True, "stored_quotes": 8}}
+
+    slept = []
+    original = pw.load_state, pw.save_state, getattr(pw, "after_poll")
+    pw.load_state, pw.save_state, pw.after_poll = (lambda client, folder: {}), (lambda *a, **k: None), (lambda *a, **k: None)
+    try:
+        # clock readings: start, then after each poll's backup. Backups take 240 s; sleeps are instant here.
+        ticks = iter([0, 240, 240 + 300 + 240, 2000])
+        loop.run(20, 5, root=tmp_path, client=None, folder="f", key="k", request_get=None, setting=ON,
+                 sync=lambda *a: None, clock=lambda: next(ticks), sleep=slept.append, watcher=Watcher(), source=pw)
+    finally:
+        pw.load_state, pw.save_state, pw.after_poll = original
+    assert slept == [300, 63]          # the first wait is the whole interval; the next makes the cycle 5 minutes

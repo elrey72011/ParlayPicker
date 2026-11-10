@@ -34,6 +34,23 @@ def fetch_report(url):
     return response.status_code, (response.content if response.status_code == 200 else b"")
 
 
+WAKE_PAD_SECONDS = 3   # wake just after the interval, never a moment before a sport is due again
+
+
+def poll_wait(interval, now, began):
+    """Seconds to sleep so polls start ``interval`` minutes apart, not ``interval`` after the backup ends.
+
+    Run 2026-11-10: with a 5-minute interval a capture was stored every 9 minutes, because the
+    loop slept the whole interval after a backup that took 3 to 5. The wait is now the interval
+    less the time the poll and its backup took, plus ``WAKE_PAD_SECONDS``. The first poll
+    (``began`` unknown) waits the whole interval, as before; work longer than the interval waits
+    only the pad.
+    """
+    if began is None:
+        return interval * 60
+    return max(0.0, interval * 60 - (now - began)) + WAKE_PAD_SECONDS
+
+
 def run(minutes, interval, *, root, client, folder, key, request_get, fetch=fetch_report, setting=None, sync=None,
         clock=time.monotonic, sleep=time.sleep, watcher=None, wall=None, source=None):
     """``source``: the module that decides what to capture (``news_capture``, or ``price_watch``)."""
@@ -56,6 +73,7 @@ def run(minutes, interval, *, root, client, folder, key, request_get, fetch=fetc
     watcher = watcher or news.Watcher()
     totals = {"status": "RAN", "polls": 0, "news": 0, "captures": 0, "stored_quotes": 0, "backups": 0, "errors": 0}
     pending = False
+    began = None   # when this poll began, on ``clock``: the last reading plus the sleep that followed it
     while True:
         totals["polls"] += 1
         try:
@@ -98,7 +116,9 @@ def run(minutes, interval, *, root, client, folder, key, request_get, fetch=fetc
                 last_restore = now
             except Exception as exc:
                 print(json.dumps({"poll": totals["polls"], "restore_error": type(exc).__name__}), flush=True)
-        sleep(interval * 60)
+        wait = poll_wait(interval, now, began)
+        began = now + wait
+        sleep(wait)
 
 
 def main(argv=None):
