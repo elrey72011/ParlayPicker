@@ -112,3 +112,39 @@ def test_one_game_at_a_time_and_slim_sources_change_no_entry_or_capture_time():
         assert key(pm.plan_quotes_by_event(events, stored, NOW, **rules)) == key(whole) and len(whole) == 4
         assert key(pm.plan_quotes_by_event(events, pm.by_event(slim), NOW, **rules)) == key(whole)
     assert pm.plan_quotes_by_event({"absent": events["long"]}, stored, NOW) == {}
+
+
+def test_the_nightly_record_counts_each_et_slate_night_by_itself(monkeypatch):
+    events, quotes = _scope([("a", 60, 20), ("b", 60, 20), ("none", 0, 0)])
+    late, found = _game("late", 60, 20)                         # same games a night earlier: shift every time back a day
+    day = timedelta(days=1)
+    shift = lambda text: (datetime.fromisoformat(text) - day).isoformat()  # noqa: E731
+    late = dict(late, scheduled_start=shift(late["scheduled_start"]), observed_at=shift(late["observed_at"]))
+    found = [dict(q, **{k: shift(q[k]) for k in q if isinstance(q[k], str) and q[k][:4] in ("2029", "2030") and "T" in q[k]})
+             for q in found]
+    events["late"] = late
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes + found, []))
+    out = pm.nightly_record("db", "NCAAB", "SPREAD", now=NOW)
+    assert [n["night"] for n in out["nights"]] == ["2029-12-31", "2030-01-01"]   # 8 PM UTC is 3 PM ET the same day
+    assert [n["games_started"] for n in out["nights"]] == [1, 3]
+    assert [n["bets"]["2%"] for n in out["nights"]] == [1, 2] and out["nights"][1]["captures_per_game"] == 37
+    assert pm.slate_night({"scheduled_start": "2030-01-02T04:30:00+00:00"}).isoformat() == "2030-01-01"   # 11:30 PM ET
+
+
+def _comparison(captured, by_pace, captures=36):
+    paces = [{"pace": "as captured", "captures_per_game": captures, "bets": {"1%": {"mean": captured}}}]
+    paces += [{"pace": f"{m} min", "captures_per_game": 1, "bets": {"1%": {"mean": n}}} for m, n in by_pace.items()]
+    return {"paces": paces}
+
+
+def test_the_recommended_pace_is_the_slowest_that_keeps_85_percent_and_needs_dense_captures():
+    rows = [_comparison(10, {15: 10, 30: 9, 60: 6}), _comparison(10, {15: 10, 30: 8.5, 60: 7})]
+    out = pm.recommended_pace(rows)
+    assert out["status"] == "RECOMMENDED" and out["minutes"] == 30 and out["kept"]["60 min"] == 0.65
+    assert pm.recommended_pace([_comparison(20, {15: 16, 30: 12, 60: 8})])["status"] == "KEEP_CURRENT"
+    few = pm.recommended_pace([_comparison(4, {15: 4, 30: 4, 60: 4})])
+    assert few["status"] == "NOT_ENOUGH_BETS" and few["minutes"] is None
+    # captures already thinned to 30 minutes say nothing about 15: no ratchet to ever slower polls
+    sparse = pm.recommended_pace([_comparison(20, {15: 20, 30: 20, 60: 19}, captures=6)])
+    assert sparse["status"] == "NEEDS_DENSE_CAPTURES" and sparse["minutes"] is None
+    assert pm.recommended_pace([])["minutes"] is None

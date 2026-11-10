@@ -119,3 +119,31 @@ def test_pinnacle_replay_adds_the_extra_pool_scopes_only_when_asked(tmp_path, mo
     assert len(rows) == 12
     assert {(r['sport'], r['market_family']) for r in rows if r['sport'] == 'NHL'} == {('NHL', 'PUCK_LINE'), ('NHL', 'TOTAL')}
     assert '| NHL PUCK_LINE | last 24 hours | 0 |' in '\n'.join(mr._replay_markdown(rows))
+
+
+def test_nightly_record_pace_recommendation_and_capture_warnings_are_reported():
+    import scripts.market_readiness_report as report
+    replay = [dict(sport='NBA', market_family='SPREAD', window='last 24 hours', status='ESTIMATED', games_started=8, plan_games=3),
+              dict(sport='NBA', market_family='SPREAD', window='last 14 days', status='ESTIMATED', games_started=30, plan_games=3),
+              dict(sport='NCAAB', market_family='SPREAD', window='last 24 hours', status='ESTIMATED', games_started=2, plan_games=0)]
+    paces = [dict(sport='NHL', market_family='TOTAL', games_started=5,
+                  paces=[dict(pace='as captured', captures_per_game=1, bets={})]),
+             dict(sport='NBA', market_family='SPREAD', games_started=8,
+                  paces=[dict(pace='as captured', captures_per_game=12, bets={})])]
+    flags = report.capture_health(replay, paces)
+    assert [(f['flag'], f['sport']) for f in flags] == [('WATCH_NOT_CAPTURING', 'NHL'), ('PINNACLE_LINE_LOW', 'NBA')]
+    result = dict(
+        pinnacle_replay=replay, pace_comparison=paces,
+        nightly_record=[dict(sport='NBA', market_family='SPREAD', nights=[
+            dict(night='2026-11-09', games_started=7, captures_per_game=10, bets={'1%': 5, '2%': 1}),
+            dict(night='2026-11-10', games_started=6, captures_per_game=30, bets={'1%': 1, '2%': 0})])],
+        pace_recommendation=[dict(sport='NBA', current_minutes=15, minutes=30, status='RECOMMENDED', bets_as_captured=12.0,
+                                  captures_per_game=30, kept={'15 min': 1.0, '30 min': 0.9, '60 min': 0.6}),
+                             dict(sport='NHL', evaluation_error='ValueError: x')])
+    text = '\n'.join(report._pipeline_markdown(result))
+    assert '| NBA SPREAD | 5 / 1 [7] | 1 / 0 [6] | 1 of 2 |' in text
+    assert '| NBA | 15 min | 30 min | RECOMMENDED | 12 | 30 | 100% / 90% / 60% |' in text
+    assert '| WATCH_NOT_CAPTURING | NHL TOTAL | 5 games started with one capture each |' in text
+    assert "| PINNACLE_LINE_LOW | NBA SPREAD | 3 of 8 games at Pinnacle's line |" in text
+    assert report._pipeline_markdown(dict(pace_comparison=paces[1:], pinnacle_replay=[]))[-1].endswith('none.')
+    assert report._pipeline_markdown({}) == []

@@ -457,6 +457,25 @@ def thin_captures(events, quotes, minutes, offset=0.0):
             and capture_time(events[q["event_id"]], q) in kept[q["event_id"]]]
 
 
+def _first_edge_counts(started, sample, now, edges, books):
+    """Bets ``FIRST_EDGE_CAPTURE`` finds in ``sample`` per edge, and the median captures per game."""
+    from statistics import median
+    grouped = by_event(sample)
+    per_game = {event_id: {capture_time(started[event_id], q) for q in found} for event_id, found in grouped.items()}
+    found = {}
+    for edge in edges:
+        picked = plan_quotes_by_event(started, grouped, now, books=books, entry_rule=FIRST_EDGE_CAPTURE,
+                                      min_edge=edge)
+        count = 0
+        for event_id, quote in picked.items():
+            mine = grouped[event_id]
+            p, other = fair(started[event_id], quote, mine, now=now), _other_side(quote, mine)
+            if p is not None and other is not None:
+                count += max(p * quote["decimal_odds"] - 1, (1 - p) * other["decimal_odds"] - 1) >= edge
+        found[f"{edge:.0%}"] = count
+    return found, (median(len(v) for v in per_game.values()) if per_game else 0)
+
+
 def pace_comparison(path, sport, family, *, now, lookback_days=1, paces=PACES, edges=REPLAY_EDGES, books=None):
     """Bets the first-edge rule finds at each capture pace, on the same started games (read-only).
 
@@ -477,20 +496,7 @@ def pace_comparison(path, sport, family, *, now, lookback_days=1, paces=PACES, e
     quotes, _ = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
 
     def measure(sample):
-        grouped = by_event(sample)
-        per_game = {event_id: {capture_time(started[event_id], q) for q in found} for event_id, found in grouped.items()}
-        found = {}
-        for edge in edges:
-            picked = plan_quotes_by_event(started, grouped, now, books=books, entry_rule=FIRST_EDGE_CAPTURE,
-                                          min_edge=edge)
-            count = 0
-            for event_id, quote in picked.items():
-                mine = grouped[event_id]
-                p, other = fair(started[event_id], quote, mine, now=now), _other_side(quote, mine)
-                if p is not None and other is not None:
-                    count += max(p * quote["decimal_odds"] - 1, (1 - p) * other["decimal_odds"] - 1) >= edge
-            found[f"{edge:.0%}"] = count
-        return found, (median(len(v) for v in per_game.values()) if per_game else 0)
+        return _first_edge_counts(started, sample, now, edges, books)
 
     bets, captures = measure(quotes)
     out["paces"].append({"pace": "as captured", "captures_per_game": captures,
@@ -503,6 +509,69 @@ def pace_comparison(path, sport, family, *, now, lookback_days=1, paces=PACES, e
                                              "low": min(r[0][edge] for r in runs), "high": max(r[0][edge] for r in runs)}
                                       for edge in bets}})
     return out
+
+
+SLATE_ZONE = "America/New_York"
+SLATE_ROLLOVER = timedelta(hours=6)      # a game starting before 6 AM ET belongs to the night before
+PACE_KEEP = 0.85                         # a slower pace is enough when it keeps this share of the bets
+PACE_MIN_BETS = 10                       # fewer bets than this as captured: no recommendation
+PACE_EDGE = "1%"
+PACE_DENSE_CAPTURES = 12                 # captures per game as stored: a 15-minute poll over 3 hours, or faster
+
+
+def slate_night(event):
+    """The ET date of the slate a game belongs to."""
+    from zoneinfo import ZoneInfo
+    return (_t(event["scheduled_start"]).astimezone(ZoneInfo(SLATE_ZONE)) - SLATE_ROLLOVER).date()
+
+
+def nightly_record(path, sport, family, *, now, nights=7, edges=REPLAY_EDGES, books=None):
+    """Per slate night: games started and the bets the first-edge rule finds (read-only).
+
+    The running record behind the go/no-go on a plan (2 bets a day): one row per ET night with a
+    started game, newest last. Volume only; results are never read.
+    """
+    from app_core import prospective_research_models as research
+    events, quotes, _ = research._read_scope(path, sport, family)
+    start = now - timedelta(days=nights)
+    started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
+    by_night = {}
+    for event_id, event in started.items():
+        by_night.setdefault(slate_night(event), {})[event_id] = event
+    quotes, _ = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
+    rows = []
+    for night, games in sorted(by_night.items()):
+        bets, captures = _first_edge_counts(games, [q for q in quotes if q["event_id"] in games], now, edges, books)
+        rows.append({"night": night.isoformat(), "games_started": len(games), "captures_per_game": captures,
+                     "bets": bets})
+    return {"sport": sport, "market_family": family, "nights": rows}
+
+
+def recommended_pace(comparisons, *, keep=PACE_KEEP, min_bets=PACE_MIN_BETS, edge=PACE_EDGE,
+                     dense=PACE_DENSE_CAPTURES):
+    """The slowest pace that keeps ``keep`` of the bets found as captured, summed over ``comparisons``
+    (``pace_comparison`` rows of one sport). ``minutes`` is None when it cannot say.
+
+    It can only say a slower poll would do: it cannot see gaps shorter than the stored captures.
+    So it answers only when the games were captured densely (``dense`` captures a game) and
+    produced ``min_bets``. Captures already thinned to a slow pace say nothing about a faster
+    one, and without this a slowed watch would keep recommending something slower still.
+    """
+    totals, captures = {}, []
+    for row in comparisons:
+        captures += [p["captures_per_game"] for p in row.get("paces") or [] if p["pace"] == "as captured"]
+        for pace in row.get("paces") or []:
+            totals[pace["pace"]] = totals.get(pace["pace"], 0.0) + pace["bets"].get(edge, {}).get("mean", 0)
+    captured = totals.get("as captured", 0.0)
+    out = {"edge": edge, "bets_as_captured": captured, "keep": keep, "minutes": None,
+           "kept": {label: round(n / captured, 2) for label, n in totals.items() if captured and label != "as captured"}}
+    out["captures_per_game"] = min(captures) if captures else 0
+    if out["captures_per_game"] < dense:
+        return dict(out, status="NEEDS_DENSE_CAPTURES")
+    if captured < min_bets:
+        return dict(out, status="NOT_ENOUGH_BETS")
+    enough = [int(label.split()[0]) for label, n in totals.items() if label != "as captured" and n >= keep * captured]
+    return dict(out, status="RECOMMENDED" if enough else "KEEP_CURRENT", minutes=max(enough) if enough else None)
 
 
 def _settled_at(result, quote):

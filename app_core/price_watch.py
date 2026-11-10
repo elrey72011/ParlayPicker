@@ -28,6 +28,12 @@ The gaps last about 10 to 30 minutes, so a 15-minute poll can miss one entirely.
 ``PARLAYPICKER_PRICE_WATCH_FAST=true`` both sports are polled every ``FAST_INTERVAL_MINUTES`` and the
 allowance is ``FAST_LIMITS`` (600 a day, 4,200 in all): about three times the credits. ``UNTIL``
 is unchanged, and the same ledger counts both modes.
+
+**Automatic pace** (prepared 2026-11-10, off). With ``PARLAYPICKER_PRICE_WATCH_AUTO_PACE=true`` each
+sport's interval is the slowest one that kept 85% of the bets the replay found over the last
+``AUTO_LOOKBACK_DAYS`` days (``pinnacle_model.recommended_pace``), where that is slower than the
+interval above. It can only slow a sport down, so it never spends more than the mode it runs in,
+and it changes nothing when the stored captures are too sparse or too few bets were found.
 """
 from __future__ import annotations
 
@@ -50,6 +56,9 @@ EXTRA_LIMITS = {"daily": 100, "rolling_31_days": 700}        # per extra sport s
 FAST_ENV = "PARLAYPICKER_PRICE_WATCH_FAST"
 FAST_INTERVAL_MINUTES = 5                       # the loop's own poll interval: every poll captures
 FAST_LIMITS = {"daily": 600, "rolling_31_days": 4200}
+AUTO_ENV = "PARLAYPICKER_PRICE_WATCH_AUTO_PACE"
+AUTO_LOOKBACK_DAYS = 7
+WATCH_START = datetime(2026, 11, 9, 20, 0, tzinfo=timezone.utc)   # games before the watch have one capture each
 UNTIL = datetime(2026, 11, 17, 7, 0, tzinfo=timezone.utc)   # 2 AM ET: the night of 2026-11-16 is the last
 STATE_PREFIX = "parlaypicker/price-watch-v1/state/"
 COST_FLAG = "price_watch_cost_review_required"
@@ -88,6 +97,21 @@ def interval_minutes(sport, setting=None) -> int:
     return FAST_INTERVAL_MINUTES if fast(setting) else INTERVAL_MINUTES.get(sport, EXTRA_INTERVAL_MINUTES)
 
 
+def auto_pace(setting=None) -> bool:
+    """Automatic pace is on only for the exact value ``true`` (any case)."""
+    return str((setting or os.environ.get)(AUTO_ENV, "") or "").strip().lower() == "true"
+
+
+def recommended(path, sport, now):
+    """``pinnacle_model.recommended_pace`` for ``sport`` over the last ``AUTO_LOOKBACK_DAYS`` days of started
+    games, none from before the watch began."""
+    from app_core import pinnacle_model
+    days = min(float(AUTO_LOOKBACK_DAYS), max((now - WATCH_START) / timedelta(days=1), 0.0))
+    return pinnacle_model.recommended_pace([
+        pinnacle_model.pace_comparison(path, sport, family, now=now, lookback_days=days,
+                                       books=pinnacle_model.PLAN_BOOKS) for family in news.families(sport)])
+
+
 def limits(setting=None) -> dict:
     """The allowance: the two-sport base (normal or fast), plus ``EXTRA_LIMITS`` per extra sport on."""
     base = dict(FAST_LIMITS if fast(setting) else WATCH_LIMITS)
@@ -101,6 +125,19 @@ class Watcher:
     def __init__(self, setting=None):
         self.setting = setting
         self.due = {}
+        self.paces = {}
+
+    def interval(self, path, sport, now) -> int:
+        """Minutes to the sport's next capture: the mode's interval, or a slower recommended one."""
+        base = interval_minutes(sport, self.setting)
+        if not auto_pace(self.setting):
+            return base
+        if sport not in self.paces:                     # once a run: the replay reads the whole scope
+            try:
+                self.paces[sport] = recommended(path, sport, now)
+            except Exception as exc:                    # a recommendation must never stop the watch
+                self.paces[sport] = {"status": f"ERROR:{type(exc).__name__}", "minutes": None}
+        return max(base, self.paces[sport].get("minutes") or base)
 
     def poll(self, path, *, key, request_get, budget, clock=_utcnow, fetch=None):
         now = clock()
@@ -112,11 +149,14 @@ class Watcher:
                             key=lambda e: (e["scheduled_start"], e["provider_event_id"]))[:MAX_EVENTS]
             if not events:
                 continue                 # no game in its window: ask again at the next poll, at no cost
-            self.due[sport] = now + timedelta(minutes=interval_minutes(sport, self.setting))
+            minutes = self.interval(path, sport, now)
+            self.due[sport] = now + timedelta(minutes=minutes)
             result = news.capture(path, {e["provider_event_id"]: e for e in events}, key=key, request_get=request_get,
                                   budget=budget, clock=clock, sport=sport, flag=COST_FLAG)
             if result["stored_quotes"]:
                 result["predictions"] = news.predict(path, clock(), sport=sport)
+            if sport in self.paces:
+                result["pace"] = {"interval_minutes": minutes, "status": self.paces[sport].get("status")}
             report["sports"][sport] = result
         if report["sports"]:
             results = report["sports"].values()

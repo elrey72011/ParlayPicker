@@ -96,7 +96,9 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 close_coverage=timed('close_coverage', close_coverage, store),
                 plan_progress=timed('plan_progress', _plan_progress, store),
                 pinnacle_replay=timed('pinnacle_replay', pinnacle_replay, store, extra=EXTRA_REPLAY_SCOPES),
-                pace_comparison=timed('pace_comparison', pace_comparison, store, extra=EXTRA_REPLAY_SCOPES))
+                pace_comparison=timed('pace_comparison', pace_comparison, store, extra=EXTRA_REPLAY_SCOPES),
+                nightly_record=timed('nightly_record', nightly_record, store, extra=EXTRA_REPLAY_SCOPES),
+                pace_recommendation=timed('pace_recommendation', pace_recommendation, store, extra=EXTRA_REPLAY_SCOPES))
 
 
 REPLAY_WINDOWS = ((1, 'last 24 hours'), (14, 'last 14 days'))
@@ -145,6 +147,112 @@ def pace_comparison(path, now=None, extra=None):
             except Exception as exc:  # report, never guess
                 out.append(dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
     return out
+
+
+GO_BETS_PER_NIGHT = 2        # the go/no-go line for a plan (roadmap M2)
+RECORD_NIGHTS = 7
+
+
+def nightly_record(path, now=None, extra=None):
+    """Per ET slate night, games started and first-edge bets per market (pinnacle_model.nightly_record)."""
+    from datetime import datetime, timezone
+    from app_core import pinnacle_model
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport, families in {**pinnacle_model.FAMILIES, **(extra or {})}.items():
+        for family in families:
+            try:
+                out.append(pinnacle_model.nightly_record(path, sport, family, now=now, nights=RECORD_NIGHTS,
+                                                         books=pinnacle_model.PLAN_BOOKS))
+            except Exception as exc:  # report, never guess
+                out.append(dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
+
+
+def pace_recommendation(path, now=None, extra=None):
+    """Per sport, the slowest capture pace that kept 85% of the bets over the last 7 days
+    (price_watch.recommended): what the watch's automatic pace would use. Read-only."""
+    from datetime import datetime, timezone
+    from app_core import pinnacle_model, price_watch
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport in {**pinnacle_model.FAMILIES, **(extra or {})}:
+        try:
+            out.append(dict(price_watch.recommended(path, sport, now), sport=sport,
+                            current_minutes=price_watch.interval_minutes(sport, {}.get)))
+        except Exception as exc:  # report, never guess
+            out.append(dict(sport=sport, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
+
+
+HEALTH_MIN_GAMES = 3
+HEALTH_MIN_PINNACLE_SHARE = 0.5
+
+
+def capture_health(replay, paces):
+    """Warnings from the last 24 hours of the replay and pace rows: no new store read.
+
+    * ``WATCH_NOT_CAPTURING``: games started but each has only its one research capture, so
+      the price watch did not run for that sport (a scheduled start that never fired looks like this);
+    * ``PINNACLE_LINE_LOW``: under half the started games had Pinnacle at a stake book's line.
+    """
+    flags = []
+    for row in paces:
+        captured = next((p for p in row.get('paces') or [] if p['pace'] == 'as captured'), None)
+        if captured and row['games_started'] >= HEALTH_MIN_GAMES and captured['captures_per_game'] <= 1:
+            flags.append(dict(sport=row['sport'], market_family=row['market_family'], flag='WATCH_NOT_CAPTURING',
+                              detail=f"{row['games_started']} games started with one capture each"))
+    for row in replay:
+        if row.get('window') != REPLAY_WINDOWS[0][1] or row.get('status') != 'ESTIMATED':
+            continue
+        if row['games_started'] >= HEALTH_MIN_GAMES and row['plan_games'] / row['games_started'] < HEALTH_MIN_PINNACLE_SHARE:
+            flags.append(dict(sport=row['sport'], market_family=row['market_family'], flag='PINNACLE_LINE_LOW',
+                              detail=f"{row['plan_games']} of {row['games_started']} games at Pinnacle's line"))
+    return flags
+
+
+def _pipeline_markdown(result):
+    """Nightly record, pace recommendation and capture warnings (2026-11-10). Research only."""
+    lines = []
+    record = [r for r in result.get('nightly_record') or [] if r.get('nights')]
+    if record:
+        nights = sorted({n['night'] for r in record for n in r['nights']})
+        lines += ['', f'Nightly record: first-clearing bets at 1% / 2% per ET slate night (games started in brackets). '
+                  f'The go line for a plan is {GO_BETS_PER_NIGHT} bets a night. Volume only: results are not read.', '',
+                  '| market | ' + ' | '.join(nights) + f' | nights at {GO_BETS_PER_NIGHT}+ (1%) |',
+                  '|---|' + '---|' * (len(nights) + 1)]
+        for row in record:
+            by_night = {n['night']: n for n in row['nights']}
+            cells = [f"{by_night[n]['bets'].get('1%', '')} / {by_night[n]['bets'].get('2%', '')} [{by_night[n]['games_started']}]"
+                     if n in by_night else '' for n in nights]
+            reached = sum(1 for n in row['nights'] if n['bets'].get('1%', 0) >= GO_BETS_PER_NIGHT)
+            lines.append(f"| {row['sport']} {row['market_family']} | " + ' | '.join(cells) + f" | {reached} of {len(row['nights'])} |")
+    recommended = result.get('pace_recommendation') or []
+    if recommended:
+        lines += ['', 'Capture pace recommendation (last 7 days): the slowest poll that kept 85% of the bets found as '
+                  'captured. The watch uses it only when automatic pace is switched on, and only to slow a sport down.', '',
+                  '| sport | normal pace | recommended | status | bets as captured (1%) | captures per game | share kept at 15 / 30 / 60 min |',
+                  '|---|---|---|---|---|---|---|']
+        for row in recommended:
+            if 'evaluation_error' in row:
+                lines.append(f"| {row['sport']} | | | {row['evaluation_error']} | | | |")
+                continue
+            kept = row.get('kept') or {}
+            shares = ' / '.join(f"{kept[k]:.0%}" if k in kept else '' for k in ('15 min', '30 min', '60 min'))
+            lines.append(f"| {row['sport']} | {row['current_minutes']} min | "
+                         f"{str(row['minutes']) + ' min' if row.get('minutes') else ''} | {row['status']} | "
+                         f"{row['bets_as_captured']:g} | {row.get('captures_per_game', '')} | {shares} |")
+    flags = capture_health(result.get('pinnacle_replay') or [], result.get('pace_comparison') or [])
+    if flags:
+        lines += ['', '| capture warning (last 24 hours) | market | detail |', '|---|---|---|']
+        lines += [f"| {f['flag']} | {f['sport']} {f['market_family']} | {f['detail']} |" for f in flags]
+    elif result.get('pace_comparison'):
+        lines += ['', 'Capture warnings (last 24 hours): none.']
+    return lines
 
 
 def _pace_markdown(rows):
@@ -357,6 +465,7 @@ def markdown(result):
             lines.append(f"| {row['sport']} {row['market_family']} | " + ' | '.join(cells) + ' |')
     lines += _replay_markdown(result.get('pinnacle_replay') or [])
     lines += _pace_markdown(result.get('pace_comparison') or [])
+    lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
         from app_core import plan_progress
         lines += plan_progress.markdown(result['plan_progress'])
