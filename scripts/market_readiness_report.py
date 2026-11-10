@@ -15,8 +15,10 @@ The canonical store is tens of thousands of small Drive objects. With
 are reused only when their SHA-256 matches Drive's fresh checksum, so a cache
 kept between runs (actions/cache) makes later runs fast without trusting it.
 
-It never writes to Drive. The Drive client is wrapped so that any upload raises
-``READ_ONLY_VIOLATION`` and fails the run. Unlike ``load_readiness(authenticate=True)``,
+It never writes to the evidence. The Drive client it restores through is wrapped so that any
+upload raises ``READ_ONLY_VIOLATION`` and fails the run. With ``--publish`` (owner 2026-11-10) the
+finished report is uploaded as one object under its own prefix, outside the evidence, for the
+app to show (``app_core.readiness_report_remote``); a failed upload never fails the report. Unlike ``load_readiness(authenticate=True)``,
 it skips the local reconciliation and the backup that follows it. It makes no
 Odds API or CFBD calls.
 """
@@ -498,6 +500,8 @@ def main(argv=None):
     parser.add_argument('--output', type=Path, required=True, help='JSON report path')
     parser.add_argument('--cache-dir', type=Path, help='checksum-verified Drive object cache kept between runs')
     parser.add_argument('--with-sources', action='store_true', help="also restore each sport's research store")
+    parser.add_argument('--publish', action='store_true',
+                        help='also upload the finished report to Drive for the app (one object, outside the evidence)')
     args = parser.parse_args(argv)
     result = report(args.directory, cache_dir=args.cache_dir, with_sources=args.with_sources)
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -509,7 +513,23 @@ def main(argv=None):
         with open(summary, 'a', encoding='utf-8') as fh:
             fh.write('## Prospective market readiness (read-only restore)\n\n' + table)
     print(table)
+    if args.publish:
+        print('publish: ' + json.dumps(publish(result, table)), flush=True)
     return 0
+
+
+def publish(result, table, client=None, folder=None):
+    """Upload the finished report for the app. The report is already written: an error here is reported, not raised."""
+    from app_core import readiness_report_remote
+    try:
+        if client is None:
+            from app_core.evidence_drive import DriveStore
+            from app_core.evidence_remote import settings
+            folder = settings()[0]
+            client = DriveStore(folder)
+        return readiness_report_remote.publish(client, folder, result, table)
+    except Exception as exc:
+        return dict(status='PUBLISH_FAILED', error=type(exc).__name__)
 
 
 if __name__ == '__main__':

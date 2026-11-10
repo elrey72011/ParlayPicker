@@ -2,6 +2,8 @@ name: Market readiness (read-only)
 # Roadmap C0: restore the Drive evidence into an empty runner directory and report
 # all 12 sport x market families with their next blocker. Read-only: the Drive client
 # refuses every upload (scripts/market_readiness_report.py). No Odds API or CFBD calls.
+# --publish (owner 2026-11-10) uploads the finished report as one object under its own
+# prefix, outside the evidence, so the app can show it.
 # The canonical store is ~80k small Drive objects; a checksum-verified object cache is
 # kept between runs (actions/cache), so only the first run downloads everything.
 on:
@@ -52,6 +54,7 @@ jobs:
           --directory "${{ runner.temp }}/readiness-evidence"
           --output "${{ runner.temp }}/readiness/market-readiness.json"
           --cache-dir "${{ runner.temp }}/drive-cache"
+          --publish
           ${{ inputs.with_sources && '--with-sources' || '' }}
       - name: Save the verified Drive object cache
         if: ${{ always() }}
