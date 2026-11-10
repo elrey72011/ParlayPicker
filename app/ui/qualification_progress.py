@@ -17,6 +17,19 @@ def _token():
         value = None
     return value or os.environ.get("PARLAYPICKER_GITHUB_READ_TOKEN", "")
 
+
+
+def _from_drive():
+    """The newest report the readiness workflow published to the Shared Drive (a few small reads)."""
+    from app_core import readiness_report_remote
+    from app_core.evidence_drive import DriveStore
+    from app_core.evidence_remote import settings
+    folder = settings()[0]
+    if not folder:
+        raise RuntimeError("MISSING_DRIVE_FOLDER")
+    return readiness_report_remote.latest(DriveStore(folder), folder)
+
+
 COLUMNS = ("sport", "market", "stage", "training_games", "training_progress", "calibration_decided",
            "calibration_progress", "validation_settled", "validation_progress", "games_per_day",
            "window_days", "price_screen_picks", "price_screen_beat_close", "next_blocker")
@@ -38,6 +51,19 @@ def render_qualification_progress():
         elif not token:
             st.caption("To load the daily report automatically, add a read-only GitHub token as the "
                        "Streamlit secret PARLAYPICKER_GITHUB_READ_TOKEN.")
+        if st.button("Load latest report from Google Drive", key="qualification_progress_drive"):
+            try:
+                with st.spinner("Reading the latest readiness report from Drive…"):
+                    found = _from_drive()
+                if found is None:
+                    st.warning("No readiness report was published to Drive in the last 48 hours.")
+                else:
+                    st.session_state["qualification_progress"] = rows(found["report"])
+                    st.session_state["qualification_progress_at"] = found.get("generated_at")
+                    st.session_state["readiness_report_markdown"] = (found.get("generated_at"), found["markdown"])
+            except Exception as exc:
+                st.error(f"The report could not be read from Drive ({type(exc).__name__}). "
+                         "Check PARLAYPICKER_DRIVE_FOLDER_ID and PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT in Streamlit Secrets.")
         upload = st.file_uploader("market-readiness.json", type=["json"], key="qualification_progress_upload")
         if upload is not None:
             try:
@@ -51,6 +77,7 @@ def render_qualification_progress():
         progress = st.session_state.get("qualification_progress")
         if progress is None:
             return
+        full = st.session_state.get("readiness_report_markdown")
         st.write(summary(progress, st.session_state.get("qualification_progress_at")))
         percent = {name: st.column_config.ProgressColumn(name.replace("_", " "), min_value=0.0, max_value=1.0,
                                                           format="percent")
@@ -59,6 +86,12 @@ def render_qualification_progress():
         st.caption("Gates: 120 training games for the pinned model, 40 settled calibration predictions, "
                    "then 200 settled games in the frozen validation window. Price screen: picks at 2%+ EV "
                    "and the share that beat the certified close.")
+        if full:
+            st.markdown(f"**Full readiness report** ({full[0]} UTC): price screen, Pinnacle replay, capture pace, "
+                        "nightly record and plan progress. Research only: nothing here authorizes a wager.")
+            st.markdown(full[1])
+            st.download_button("Download the full report", full[1], file_name="market-readiness.md",
+                               mime="text/markdown", key="readiness_report_download")
 
 
 def _render_research_picks(token):

@@ -228,3 +228,55 @@ def test_nhl_is_an_extra_sport_with_its_own_switch_and_allowance(tmp_path, clock
     assert {q["sportsbook"] for q in quotes} == {"pinnacle", "draftkings"}
     from app_core import news_capture as nc
     assert nc.families("NHL") == ("PUCK_LINE", "TOTAL") and nc.families("NBA") == ("SPREAD", "TOTAL")
+
+
+def test_automatic_pace_is_off_by_default_and_can_only_slow_a_sport_down(tmp_path, clock, monkeypatch):
+    assert pw.auto_pace({}.get) is False and pw.auto_pace({pw.AUTO_ENV: "yes"}.get) is False
+    path = tmp_path / "SYNTHETIC-evidence.sqlite3"
+    games = [_event(path, "NBA", "nba-soon", NOW + timedelta(hours=2)),
+             _event(path, "NCAAB", "cbb-soon", NOW + timedelta(hours=1))]
+    asked = []
+
+    def recommended(_path, sport, now):
+        asked.append(sport)
+        if sport == "NCAAB":
+            raise RuntimeError("replay failed")                                       # never stops the watch
+        return {"status": "RECOMMENDED", "minutes": 30}
+    monkeypatch.setattr(pw, "recommended", recommended)
+
+    def calls(setting, minutes):
+        provider = _Provider(clock, games)
+        budget = pw.budget_for({}, lambda: None, clock=lambda: clock[0], setting=setting)
+        watcher, reports = pw.Watcher(setting), []
+        for minute in minutes:
+            clock[0] = NOW + timedelta(minutes=minute)
+            reports.append(_poll(watcher, path, provider, budget, clock))
+        return [url.split("/sports/")[1].split("/")[0] for url, _ in provider.calls], reports
+
+    off, reports = calls({pw.WATCH_ENV: "NBA,NCAAB"}.get, (0, 15, 30))
+    assert off.count("basketball_nba") == 3 and asked == [] and "pace" not in reports[0]["sports"]["NBA"]
+    on, reports = calls({pw.WATCH_ENV: "NBA,NCAAB", pw.AUTO_ENV: "true"}.get, (0, 15, 30))
+    assert on.count("basketball_nba") == 2 and on.count("basketball_ncaab") == 2     # NBA slowed to 30; NCAAB as before
+    assert asked == ["NBA", "NCAAB"]                                                  # once a run for each sport
+    assert reports[0]["sports"]["NBA"]["pace"] == {"interval_minutes": 30, "status": "RECOMMENDED"}
+    assert reports[0]["sports"]["NCAAB"]["pace"] == {"interval_minutes": 30, "status": "ERROR:RuntimeError"}
+    # a recommendation faster than the mode's interval is ignored: NCAAB stays at 30 on a 15-minute recommendation
+    monkeypatch.setattr(pw, "recommended", lambda *a: {"status": "RECOMMENDED", "minutes": 15})
+    quick, _ = calls({pw.WATCH_ENV: "NCAAB", pw.AUTO_ENV: "true"}.get, (0, 15, 30))
+    assert quick.count("basketball_ncaab") == 2
+    fast, _ = calls({pw.WATCH_ENV: "NBA", pw.AUTO_ENV: "true", pw.FAST_ENV: "true"}.get, (0, 5, 10, 15))
+    assert fast.count("basketball_nba") == 2                                          # fast mode slowed to 15, never faster
+
+
+def test_the_recommendation_never_reads_games_from_before_the_watch(monkeypatch):
+    seen = []
+    monkeypatch.setattr(pm, "pace_comparison", lambda *a, **k: seen.append(k["lookback_days"]) or {"paces": []})
+    pw.recommended("db", "NBA", pw.WATCH_START + timedelta(days=2))
+    pw.recommended("db", "NBA", pw.WATCH_START + timedelta(days=30))
+    assert seen == [2.0, 2.0, 7.0, 7.0]
+
+
+def test_the_workflow_passes_automatic_pace_only_from_the_variable():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / ".github/workflows/price-watch.yml").read_text(encoding="utf-8")
+    assert "PARLAYPICKER_PRICE_WATCH_AUTO_PACE: ${{ vars.PARLAYPICKER_PRICE_WATCH_AUTO_PACE }}" in text

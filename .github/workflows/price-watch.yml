@@ -37,6 +37,9 @@ jobs:
       # Fast mode is off unless this run was started with the fast input, or the repository variable
       # PARLAYPICKER_PRICE_WATCH_FAST is true (every run, scheduled ones included).
       PARLAYPICKER_PRICE_WATCH_FAST: ${{ inputs.fast && 'true' || vars.PARLAYPICKER_PRICE_WATCH_FAST }}
+      # Automatic pace (off unless the variable is true): a sport is polled more slowly where the replay
+      # shows a slower poll kept 85% of the bets. It never polls faster, so it never adds credits.
+      PARLAYPICKER_PRICE_WATCH_AUTO_PACE: ${{ vars.PARLAYPICKER_PRICE_WATCH_AUTO_PACE }}
       PARLAYPICKER_NOVIG_SPORTS: ${{ vars.PARLAYPICKER_NOVIG_SPORTS }}
       PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
       PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
