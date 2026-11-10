@@ -671,7 +671,7 @@ def line_movement(path, sport, family, *, now, lookback_days=1, books=None):
                        if all(later == last_line for _, later, _ in track[i:]))
         seen = {}
         for q in found:
-            if q["sportsbook"] in books and q["quote_verified"] and q["line"] is not None:
+            if _plan_book(q, books) and q["quote_verified"] and q["line"] is not None:   # stored names are provider keys
                 when = capture_time(event, q)
                 if when <= kickoff:
                     seen.setdefault(q["sportsbook"], {}).setdefault(when, set()).add(_home_line(event, q))

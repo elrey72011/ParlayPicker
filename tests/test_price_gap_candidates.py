@@ -142,3 +142,17 @@ def test_the_panel_marks_the_candidates_unproven_and_flags_a_stale_list():
     assert any("1 candidate(s) at 1% or more" in m.value for m in at.markdown)
     from pathlib import Path
     assert "render_price_gap_candidates()" in (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(encoding="utf-8")
+
+
+def test_stake_books_are_matched_by_label_because_stored_names_are_provider_keys():
+    # Found 2026-11-10 on real data: the store holds "novig" and "draftkings", the stake books are named "Novig", "DraftKings".
+    events = {"open": _event("open")}
+    received = START - timedelta(minutes=60)
+    stamp = (received - timedelta(seconds=30)).isoformat()
+    quotes = (both("pinnacle", -2.5, -110, -110, received.isoformat(), stamp, "open")
+              + both("novig", -2.5, +106, -110, received.isoformat(), stamp, "open")
+              + both("draftkings", -2.5, +104, -110, received.isoformat(), stamp, "open")
+              + both("bovada", -2.5, +120, -110, received.isoformat(), stamp, "open"))
+    rows = gaps.current("db", NOW, sports=("NBA",), read_scope=lambda path, sport, family: (
+        (events, quotes, []) if family == "SPREAD" else ({}, [], [])))
+    assert [(r["sportsbook"], r["pick"]) for r in rows] == [("Novig", "H -2.5"), ("DraftKings", "H -2.5")]
