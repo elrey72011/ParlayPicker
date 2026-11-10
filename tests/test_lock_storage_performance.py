@@ -165,3 +165,35 @@ def test_failed_save_does_not_publish_success_or_website(monkeypatch):
     assert not app.exception and not published
     assert not any('Your locks are saved' in message.value for message in app.success)
     assert app.error
+
+
+def test_parallel_workers_default_to_four_and_follow_the_variable_only_within_bounds(monkeypatch):
+    # 2026-11-10: the price watch backs up each capture before its next poll; 4 workers took 10 minutes.
+    from threading import Barrier as _Barrier
+    from app_core import evidence_drive
+    monkeypatch.delenv(evidence_drive.DRIVE_WORKERS_ENV, raising=False)
+    assert evidence_drive.parallel_workers() == 4
+    for raw, expected in (("16", 16), ("1", 1), ("32", 32), ("0", 4), ("33", 4), ("many", 4), ("", 4), (" 8 ", 8)):
+        monkeypatch.setenv(evidence_drive.DRIVE_WORKERS_ENV, raw)
+        assert evidence_drive.parallel_workers() == expected
+
+    monkeypatch.setenv(evidence_drive.DRIVE_WORKERS_ENV, "8")
+    store = DriveStore('folder', session=CountingSession())
+    sessions, barrier = [], _Barrier(8)
+
+    def factory():
+        sessions.append(CountingSession())
+        return sessions[-1]
+    store._session_factory = factory
+
+    def operation(worker, item):
+        barrier.wait(timeout=5)                       # passes only when 8 calls run at once
+        return item
+    assert store.run_parallel(operation, range(16)) == list(range(16))
+    assert len(sessions) == 8 and all(session.closed for session in sessions)
+
+
+def test_the_price_watch_workflow_sets_sixteen_drive_workers_unless_the_variable_says_otherwise():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / ".github/workflows/price-watch.yml").read_text(encoding="utf-8")
+    assert "PARLAYPICKER_DRIVE_WORKERS: ${{ vars.PARLAYPICKER_DRIVE_WORKERS || '16' }}" in text
