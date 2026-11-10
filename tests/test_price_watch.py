@@ -184,3 +184,47 @@ def test_the_workflow_passes_fast_mode_only_from_the_input_or_the_variable():
     from pathlib import Path
     text = (Path(__file__).resolve().parents[1] / ".github/workflows/price-watch.yml").read_text(encoding="utf-8")
     assert "PARLAYPICKER_PRICE_WATCH_FAST: ${{ inputs.fast && 'true' || vars.PARLAYPICKER_PRICE_WATCH_FAST }}" in text
+
+
+def test_nhl_is_an_extra_sport_with_its_own_switch_and_allowance(tmp_path, clock):
+    base = {pw.WATCH_ENV: "NBA,NCAAB"}
+    assert pw.extra_sports(base.get) == () and pw.sports(base.get, now=NOW) == ("NBA", "NCAAB")
+    assert pw.limits(base.get) == {"daily": 200, "rolling_31_days": 1400}             # D28 as approved, NHL off
+    nhl = {**base, pw.EXTRA_ENV: "nhl, mlb"}
+    assert pw.sports(nhl.get, now=NOW) == ("NBA", "NCAAB", "NHL") and pw.interval_minutes("NHL", nhl.get) == 15
+    assert pw.limits(nhl.get) == {"daily": 300, "rolling_31_days": 2100}
+    fast = {**nhl, pw.FAST_ENV: "true"}
+    assert pw.interval_minutes("NHL", fast.get) == 5 and pw.limits(fast.get) == {"daily": 900, "rolling_31_days": 6300}
+    assert pw.sports({pw.EXTRA_ENV: "OFF", **base}.get, now=NOW) == ("NBA", "NCAAB")
+    assert pw.sports(nhl.get, now=pw.UNTIL) == ()                                      # the end date covers NHL too
+
+    path = tmp_path / "SYNTHETIC-evidence.sqlite3"
+    start = NOW + timedelta(hours=2)
+    raw = {"id": "nhl-soon", "sport_key": "icehockey_nhl", "home_team": "nhl-soon Home", "away_team": "nhl-soon Away",
+           "commence_time": start.isoformat()}
+    pe.insert_event(path, {"event_id": "nhl-soon", "sport": "NHL", "game_id": "nhl-soon", "provider_namespace": "THE_ODDS_API",
+                           "provider_event_id": "nhl-soon", "home_team": raw["home_team"], "away_team": raw["away_team"],
+                           "home_team_id": "nhl-h", "away_team_id": "nhl-a", "scheduled_start": start.isoformat(),
+                           "observed_at": (NOW - timedelta(hours=8)).isoformat(), "source_id": "capture-nhl-soon",
+                           "raw_source": raw})
+    calls = []
+
+    def provider(url, params=None, **kwargs):
+        stamp = clock[0].isoformat()
+        calls.append((url, params))
+        return _Reply([dict(raw, bookmakers=[{"key": book, "markets": [
+            {"key": "spreads", "last_update": stamp, "outcomes": [
+                {"name": raw["home_team"], "point": -1.5, "price": 180}, {"name": raw["away_team"], "point": 1.5, "price": -220}]},
+            {"key": "totals", "last_update": stamp, "outcomes": [
+                {"name": "Over", "point": 6.5, "price": -110}, {"name": "Under", "point": 6.5, "price": -110}]}]}
+            for book in ("pinnacle", "draftkings")])])
+    only = {pw.EXTRA_ENV: "NHL"}.get
+    report = pw.Watcher(only).poll(path, key="k", request_get=provider, clock=lambda: clock[0],
+                                   budget=pw.budget_for({}, lambda: None, clock=lambda: clock[0], setting=only))
+    assert set(report["sports"]) == {"NHL"} and report["capture"]["stored_quotes"] == 8
+    assert "icehockey_nhl" in calls[0][0] and calls[0][1]["markets"] == "spreads,totals"
+    quotes = pe.read_records(path, "prospective_quote", sport="NHL")
+    assert {q["market_family"] for q in quotes} == {"PUCK_LINE", "TOTAL"}
+    assert {q["sportsbook"] for q in quotes} == {"pinnacle", "draftkings"}
+    from app_core import news_capture as nc
+    assert nc.families("NHL") == ("PUCK_LINE", "TOTAL") and nc.families("NBA") == ("SPREAD", "TOTAL")

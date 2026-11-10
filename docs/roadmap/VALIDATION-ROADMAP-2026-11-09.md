@@ -289,7 +289,7 @@ M5 never blocks.
 |---|---|---|
 | D23 | What a stake needs besides the market activation | **Owner-chosen 2026-11-09: yes.** The verified market activation supplies the sport cap; no second legacy policy is needed for market-skill markets. Implemented in M1 |
 | D26 | Gate design for plans frozen from now on | **Owner-chosen 2026-11-09: CLV-led v2.** CLV-led `market-skill-v2` as in M3. Current gates pass a true 2% edge about 1 time in 4 |
-| D27 | May one plan count bets across NBA and NCAAB for the same strategy | **Owner-chosen 2026-11-09: yes, lag strategy only.** Yes, for the Pinnacle/Novig lag only, with per-sport results reported. Plans prohibit pooling today; without it the news edge needs most of a season |
+| D27 | May one plan count bets across NBA and NCAAB for the same strategy | **Owner-chosen 2026-11-09: yes, lag strategy only; NHL may join a pool (same evening).** Yes, for the Pinnacle/Novig lag only, with per-sport results reported. Plans prohibit pooling today; without it the news edge needs most of a season |
 | D28 | Credits for the fixed-interval watch | **Owner-chosen 2026-11-09: both sports.** About 100 a day per sport for 7 days (its own allowance: 200 a day, 1,400 in all), then review |
 | D29 | Novig junk-price filter | **Owner-chosen 2026-11-09: approve.** In the replay now; in predictions as a frozen term of the next plan (M3) |
 

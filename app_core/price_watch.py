@@ -18,6 +18,11 @@ Off unless ``PARLAYPICKER_PRICE_WATCH`` names the sport, and off for good from `
 approved 7 days, then a review). Credits come from their own allowance (``WATCH_LIMITS``: 200 a
 day, 1,400 in all) in a separate ledger on the evidence remote. It grants no authority.
 
+**NHL** (owner 2026-11-09: widen the lag pool) is an extra sport with its own switch,
+``PARLAYPICKER_PRICE_WATCH_EXTRA_SPORTS``: puck lines and totals every 15 minutes. Each extra sport
+adds ``EXTRA_LIMITS`` to the allowance (100 a day, 700 in all; three times that in fast mode), so
+the two-sport allowance the owner approved first (D28) is unchanged when NHL is off.
+
 **Fast mode** (prepared 2026-11-09, off; turning it on is a new spend decision for the owner).
 The gaps last about 10 to 30 minutes, so a 15-minute poll can miss one entirely. With
 ``PARLAYPICKER_PRICE_WATCH_FAST=true`` both sports are polled every ``FAST_INTERVAL_MINUTES`` and the
@@ -38,6 +43,10 @@ WINDOW = timedelta(hours=3)
 INTERVAL_MINUTES = {"NBA": 15, "NCAAB": 30}     # NCAAB slates run twice as long; both stay near 100 credits a day
 MAX_EVENTS = 100                                # one request whatever the number of games; soonest first
 WATCH_LIMITS = {"daily": 200, "rolling_31_days": 1400}
+EXTRA_ENV = "PARLAYPICKER_PRICE_WATCH_EXTRA_SPORTS"
+EXTRA_SPORTS = ("NHL",)
+EXTRA_INTERVAL_MINUTES = 15
+EXTRA_LIMITS = {"daily": 100, "rolling_31_days": 700}        # per extra sport switched on
 FAST_ENV = "PARLAYPICKER_PRICE_WATCH_FAST"
 FAST_INTERVAL_MINUTES = 5                       # the loop's own poll interval: every poll captures
 FAST_LIMITS = {"daily": 600, "rolling_31_days": 4200}
@@ -56,7 +65,14 @@ def sports(setting=None, *, now=None):
         return ()
     raw = (setting or os.environ.get)(WATCH_ENV, "") or ""
     named = {s.strip().upper() for s in raw.split(",")}
-    return tuple(s for s in SPORTS if s in named)
+    return tuple(s for s in SPORTS if s in named) + extra_sports(setting)
+
+
+def extra_sports(setting=None):
+    """The extra sports switched on (``PARLAYPICKER_PRICE_WATCH_EXTRA_SPORTS``, e.g. "NHL")."""
+    raw = (setting or os.environ.get)(EXTRA_ENV, "") or ""
+    named = {s.strip().upper() for s in raw.split(",")}
+    return tuple(s for s in EXTRA_SPORTS if s in named)
 
 
 def enabled(setting=None, *, now=None) -> bool:
@@ -69,11 +85,14 @@ def fast(setting=None) -> bool:
 
 
 def interval_minutes(sport, setting=None) -> int:
-    return FAST_INTERVAL_MINUTES if fast(setting) else INTERVAL_MINUTES[sport]
+    return FAST_INTERVAL_MINUTES if fast(setting) else INTERVAL_MINUTES.get(sport, EXTRA_INTERVAL_MINUTES)
 
 
 def limits(setting=None) -> dict:
-    return dict(FAST_LIMITS if fast(setting) else WATCH_LIMITS)
+    """The allowance: the two-sport base (normal or fast), plus ``EXTRA_LIMITS`` per extra sport on."""
+    base = dict(FAST_LIMITS if fast(setting) else WATCH_LIMITS)
+    scale = len(extra_sports(setting)) * (FAST_LIMITS["daily"] // WATCH_LIMITS["daily"] if fast(setting) else 1)
+    return {window: base[window] + scale * EXTRA_LIMITS[window] for window in base}
 
 
 class Watcher:

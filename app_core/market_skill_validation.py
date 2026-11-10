@@ -43,8 +43,9 @@ Brier and log loss against the market are reported, never blocking. The absolute
 bounds are a coin flip plus room for sampling noise (``V2_THRESHOLDS``). The holdout bets' CLV
 lower 95% bound is the staking terms' input, so a plan that passes can stake.
 
-A v2 plan may pool its bets with named companion plans (owner D27: the Pinnacle/Novig lag only,
-NBA with NCAAB, same market family). Every companion is frozen with the same rules and windows.
+A v2 plan may pool its bets with named companion plans (owner D27: the Pinnacle/Novig lag only;
+NBA and NCAAB, and NHL from 2026-11-09). A pool is one kind of market across sports: every scope's
+total, or every scope's side market (spread, or the NHL puck line), never both. Every companion is frozen with the same rules and windows.
 The bet gates above are then scored on all the pool's bets, each scope's own results are reported,
 and each scope still needs ``min_scope_bets`` of its own. v1 plans never pool.
 """
@@ -67,7 +68,9 @@ ALLOWED_MIN_BETS = (50, 60, 75, 100)        # chosen when the plan is drafted; l
 MIN_CLV_T = 2.0
 V2_MIN_BET_ROI = -0.25                      # a loss floor: 75 bets' ROI has a standard error near 11 points
 MIN_SCOPE_BETS = 10
-POOL_SPORTS = ("NBA", "NCAAB")              # owner D27: the Pinnacle/Novig lag only
+POOL_SPORTS = ("NBA", "NCAAB", "NHL")       # owner D27: the Pinnacle/Novig lag only; NHL added 2026-11-09
+DEFAULT_POOL_SPORTS = ("NBA", "NCAAB")
+SIDE_FAMILY = {"NBA": "SPREAD", "NCAAB": "SPREAD", "NHL": "PUCK_LINE"}
 DEFAULT_MIN_EDGE = 0.02
 # The bet threshold is chosen when the plan is drafted and frozen (owner 2026-11-07; the
 # bound plan draft's replay estimate shows the bet rate at each). It locks at the freeze.
@@ -118,11 +121,32 @@ def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None, pu
     return rules
 
 
-def pool_scopes(sport, family):
-    """The scopes a pooled v2 plan for ``sport`` / ``family`` counts bets across (owner D27)."""
-    if sport not in POOL_SPORTS or family not in ("SPREAD", "TOTAL"):
-        raise ValueError("pooling is for NBA and NCAAB spreads or totals only")
-    return [f"{s}:{family}" for s in POOL_SPORTS]
+def _valid_pool(scopes):
+    """True for two or more scopes, one per sport, all totals or all side markets."""
+    try:
+        parts = [scope.split(":") for scope in scopes]
+        sports = [p[0] for p in parts]
+        if (len(parts) < 2 or any(len(p) != 2 for p in parts) or len(set(sports)) != len(sports)
+                or any(s not in POOL_SPORTS for s in sports)):
+            return False
+        return all(f == "TOTAL" for _, f in parts) or all(f == SIDE_FAMILY[s] for s, f in parts)
+    except (AttributeError, TypeError):
+        return False
+
+
+def pool_scopes(sport, family, sports=None):
+    """The scopes a pooled v2 plan for ``sport`` / ``family`` counts bets across (owner D27).
+
+    ``sports`` are the pool's sports (default NBA and NCAAB) and must include ``sport``; each brings
+    its total, or its side market (spread, NHL puck line), to match ``family``.
+    """
+    chosen = tuple(dict.fromkeys(sports or DEFAULT_POOL_SPORTS))
+    if sport not in chosen or family not in ("TOTAL", SIDE_FAMILY.get(sport)):
+        raise ValueError("name the pool's sports, this one included; a pool is side markets or totals of NBA, NCAAB and NHL")
+    scopes = sorted(f"{s}:{'TOTAL' if family == 'TOTAL' else SIDE_FAMILY.get(s)}" for s in chosen)
+    if not _valid_pool(scopes):
+        raise ValueError("a pool is two or more of NBA, NCAAB and NHL")
+    return scopes
 
 
 def methodology_v2(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None, min_bets=DEFAULT_MIN_BETS,
@@ -156,10 +180,8 @@ def methodology_v2(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None,
         rules["max_entry_overround"] = max_entry_overround   # owner D29: junk prices never enter
     if pool is not None:
         scopes = sorted(pool)
-        sports = [s.split(":")[0] for s in scopes]
-        if (len(scopes) < 2 or len(set(scopes)) != len(scopes) or any(s not in POOL_SPORTS for s in sports)
-                or len({s.split(":")[1] for s in scopes}) != 1 or len(set(sports)) != len(sports)):
-            raise ValueError("a pool is one market family across NBA and NCAAB")
+        if not _valid_pool(scopes):
+            raise ValueError("a pool is totals, or side markets, across two or more of NBA, NCAAB and NHL")
         rules["pool"] = {"scopes": scopes, "min_scope_bets": MIN_SCOPE_BETS,
                          "gate": "BET_GATES_ON_ALL_POOL_BETS_EACH_SCOPE_REPORTED", "decision_record": "D27 (owner 2026-11-09)"}
     return rules

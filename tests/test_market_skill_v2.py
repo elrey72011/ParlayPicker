@@ -314,3 +314,21 @@ def test_a_plan_frozen_with_the_junk_term_never_selects_a_junk_price(monkeypatch
     pc.predict_bound("path", "NBA", "SPREAD")
     seen["select"]({}, quotes, None)
     assert len(seen["quotes"]) == 4
+
+
+def test_nhl_joins_a_pool_only_when_named_and_never_mixes_sides_with_totals():
+    """Owner 2026-11-09: NHL may widen the lag pool. Its side market is the puck line."""
+    assert ms.pool_scopes("NBA", "SPREAD") == ["NBA:SPREAD", "NCAAB:SPREAD"]                       # the default is unchanged
+    assert ms.pool_scopes("NBA", "SPREAD", ["NBA", "NCAAB", "NHL"]) == ["NBA:SPREAD", "NCAAB:SPREAD", "NHL:PUCK_LINE"]
+    assert ms.pool_scopes("NHL", "PUCK_LINE", ["NBA", "NHL"]) == ["NBA:SPREAD", "NHL:PUCK_LINE"]
+    assert ms.pool_scopes("NHL", "TOTAL", ["NBA", "NCAAB", "NHL"]) == ["NBA:TOTAL", "NCAAB:TOTAL", "NHL:TOTAL"]
+    for bad in (("NHL", "PUCK_LINE", None), ("NHL", "SPREAD", ["NBA", "NHL"]), ("NBA", "PUCK_LINE", ["NBA", "NHL"]),
+                ("MLB", "TOTAL", ["NBA", "MLB"]), ("NBA", "TOTAL", ["NBA"])):
+        with pytest.raises(ValueError):
+            ms.pool_scopes(*bad)
+    rules = ms.methodology_v2(pool=ms.pool_scopes("NCAAB", "TOTAL", ["NBA", "NCAAB", "NHL"]))
+    assert rules["pool"]["scopes"] == ["NBA:TOTAL", "NCAAB:TOTAL", "NHL:TOTAL"]
+    for bad in (["NBA:SPREAD", "NHL:TOTAL"], ["NBA:TOTAL", "NHL:PUCK_LINE"], ["NHL:PUCK_LINE"],
+                ["NBA:SPREAD", "NHL:SPREAD"], ["NBA:SPREAD", "MLB:RUN_LINE"], ["NBA:SPREAD", "NBA:TOTAL"]):
+        with pytest.raises(ValueError):
+            ms.methodology_v2(pool=bad)

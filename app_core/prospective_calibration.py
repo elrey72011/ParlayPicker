@@ -510,8 +510,8 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
         edge = market_skill.DEFAULT_MIN_EDGE if min_edge is None else min_edge
         if pool and not pinnacle_model.is_pinnacle(model):
             raise ValueError("only a Pinnacle plan may pool (owner D27: the Pinnacle/Novig lag only)")
-        if pool and sorted(pool) != market_skill.pool_scopes(sport, market):
-            raise ValueError("the pool must be this market family across NBA and NCAAB")
+        if pool and f"{sport}:{market}" not in pool:
+            raise ValueError("the pool must include this plan's own market")
         # Built first so a bad choice fails before any window is sized.
         v2_rules = dict(min_edge=edge, entry_books=entry_books, entry_rule=entry_rule,
                         min_bets=market_skill.DEFAULT_MIN_BETS if min_bets is None else min_bets,

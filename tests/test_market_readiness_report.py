@@ -106,3 +106,16 @@ def test_pinnacle_replay_covers_each_scope_twice_and_reports_errors(tmp_path, mo
     assert '| NCAAB SPREAD | last 14 days | 40 | 12 | 3 | 0 (0.0/day) | 0 (0.0/day) | 5 (1.25/day) | 2 (0.5/day) |' in text
     assert '| NCAAB SPREAD | last 24 hours | 0 |' in text and 'SYNTHETIC_FAILURE' in text
     assert mr._replay_markdown([]) == []
+
+
+def test_pinnacle_replay_adds_the_extra_pool_scopes_only_when_asked(tmp_path, monkeypatch):
+    from app_core import pinnacle_model
+    store = tmp_path / 'SYNTHETIC-store.sqlite3'
+    store.write_bytes(b'')
+    monkeypatch.setattr(pinnacle_model, 'replay_estimate', lambda path, sport, family, **k: {
+        'sport': sport, 'market_family': family, 'games_started': 0, 'status': 'NO_GAMES'})
+    assert len(mr.pinnacle_replay(store)) == 8
+    rows = mr.pinnacle_replay(store, extra=mr.EXTRA_REPLAY_SCOPES)
+    assert len(rows) == 12
+    assert {(r['sport'], r['market_family']) for r in rows if r['sport'] == 'NHL'} == {('NHL', 'PUCK_LINE'), ('NHL', 'TOTAL')}
+    assert '| NHL PUCK_LINE | last 24 hours | 0 |' in '\n'.join(mr._replay_markdown(rows))

@@ -81,6 +81,11 @@ def news(slot, previous_rows, rows):
     return lag.candidates([{"reports": [entry]}])
 
 
+def families(sport):
+    """The market families captured for ``sport``: its side market and its total."""
+    return (evidence.ODDS_API_SIDE_MARKETS.get(sport, "SPREAD"), "TOTAL")
+
+
 def due_events(path, now, *, sport=SPORT, horizon=HORIZON):
     """Stored Odds API events of ``sport`` starting within ``horizon`` of ``now``."""
     return [e for e in evidence.read_records(path, "prospective_event", sport=sport)
@@ -112,7 +117,7 @@ def capture(path, events, *, key, request_get, budget, clock=_utcnow, sport=SPOR
     except BudgetLimit as exc:  # a retry the allowance could not cover
         result["blocker"] = str(exc)
         return result
-    for family in FAMILIES:
+    for family in families(sport):
         stored, blocked = decision.store_quotes(path, sport, family, events, payload, clock=clock, reference=True)
         result["stored_quotes"] += stored
         result["replay_blocked"] += blocked
@@ -123,7 +128,7 @@ def predict(path, now, *, sport=SPORT):
     """Bound predictions at the fresh quotes, where a frozen plan binds the market."""
     from app_core import prospective_calibration as calibration
     out = {}
-    for family in FAMILIES:
+    for family in families(sport):
         try:
             out[family] = calibration.predict_bound(path, sport, family, now=now)
         except Exception as exc:  # a prediction failure never loses the stored quotes
