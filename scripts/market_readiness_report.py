@@ -100,6 +100,7 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 pinnacle_replay=timed('pinnacle_replay', pinnacle_replay, store, extra=EXTRA_REPLAY_SCOPES),
                 pace_comparison=timed('pace_comparison', pace_comparison, store, extra=EXTRA_REPLAY_SCOPES),
                 replay_clv=timed('replay_clv', replay_clv, store, extra=EXTRA_REPLAY_SCOPES),
+                late_entry_clv=timed('late_entry_clv', late_entry_clv, store, extra=EXTRA_REPLAY_SCOPES),
                 nightly_record=timed('nightly_record', nightly_record, store, extra=EXTRA_REPLAY_SCOPES),
                 pace_recommendation=timed('pace_recommendation', pace_recommendation, store, extra=EXTRA_REPLAY_SCOPES))
 
@@ -175,13 +176,42 @@ def replay_clv(path, now=None, extra=None):
     return out
 
 
-def _clv_markdown(rows):
+def late_entry_clv(path, now=None, extra=None):
+    """The same measurement for a later entry (owner 2026-11-10): only captures within
+    ``pinnacle_model.LATE_ENTRY_MINUTES`` of the start can make a bet. A bet taken early often sits at a
+    line the book later leaves; this shows what a later entry costs in bets and gains in close coverage."""
+    from datetime import datetime, timezone
+    from app_core import pinnacle_model
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport, families in {**pinnacle_model.FAMILIES, **(extra or {})}.items():
+        for family in families:
+            for days, label in CLV_WINDOWS:
+                try:
+                    row = pinnacle_model.replay_clv(path, sport, family, now=now, lookback_days=days,
+                                                    books=pinnacle_model.PLAN_BOOKS,
+                                                    entry_within_minutes=pinnacle_model.LATE_ENTRY_MINUTES)
+                except Exception as exc:  # report, never guess
+                    row = dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300])
+                out.append(dict(row, window=label))
+    return out
+
+
+CLV_CAPTION = ('Replay closing-line value: do the first-clearing bets beat the certified close at the same book, '
+               'selection and line? A plan needs a comparable close for 80% of its bets and mean CLV with t of 2 or more. '
+               'A bet with no comparable close is left out of the mean, which can flatter it. Results are not read.')
+LATE_CLV_CAPTION = ('Later entry: the same measurement when only captures in the last 60 minutes before the start can '
+                    'make a bet. Compare bets and comparable closes with the table above: a later entry trades bets '
+                    'for close coverage.')
+
+
+def _clv_markdown(rows, caption=CLV_CAPTION):
     rows = [r for r in rows if r.get('evaluation_error') or any(e['bets'] for e in (r.get('by_edge') or {}).values())]
     if not rows:
         return []
-    lines = ['', 'Replay closing-line value: do the first-clearing bets beat the certified close at the same book, '
-             'selection and line? A plan needs a comparable close for 80% of its bets and mean CLV with t of 2 or more. '
-             'A bet with no comparable close is left out of the mean, which can flatter it. Results are not read.', '',
+    lines = ['', caption, '',
              '| market | window | edge | bets | close fetched | comparable (share of bets) | mean CLV (SE) | t | beat close '
              '| no close: not fetched | book missing | line moved | close before bet |',
              '|---|---|---|---|---|---|---|---|---|---|---|---|---|']
@@ -524,6 +554,7 @@ def markdown(result):
     lines += _replay_markdown(result.get('pinnacle_replay') or [])
     lines += _pace_markdown(result.get('pace_comparison') or [])
     lines += _clv_markdown(result.get('replay_clv') or [])
+    lines += _clv_markdown(result.get('late_entry_clv') or [], LATE_CLV_CAPTION)
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
         from app_core import plan_progress

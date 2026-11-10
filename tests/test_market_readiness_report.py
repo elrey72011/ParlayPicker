@@ -175,3 +175,28 @@ def test_replay_clv_is_reported_per_market_window_and_edge(tmp_path, monkeypatch
     assert '| NBA SPREAD | last 24 hours | 2% |' not in text                  # an edge with no bets has no row
     assert 'ValueError: bad scope' in text
     assert report._clv_markdown([]) == [] and report.replay_clv(tmp_path / 'missing.sqlite3') == []
+
+
+def test_the_later_entry_table_is_separate_and_leaves_the_any_time_table_as_it_was(tmp_path, monkeypatch):
+    import scripts.market_readiness_report as report
+    from app_core import pinnacle_model
+    store = tmp_path / 'SYNTHETIC.sqlite3'
+    store.write_bytes(b'')
+    seen = []
+
+    def fake(path, sport, family, *, now, lookback_days, books, entry_within_minutes=None):
+        seen.append(entry_within_minutes)
+        bets = 6 if entry_within_minutes is None else 3
+        return dict(sport=sport, market_family=family, games_started=8, status='MEASURED', by_edge={
+            '1%': dict(bets=bets, close_fetched=bets, comparable=3, coverage=3 / bets, mean_price_clv=0.004,
+                       price_clv_se=0.002, t=2.0, beat_close_share=2 / 3,
+                       not_comparable=dict(CLOSE_NOT_FETCHED=0, BOOK_NOT_IN_CLOSE=0, LINE_MOVED=bets - 3, CLOSE_BEFORE_BET=0))})
+    monkeypatch.setattr(pinnacle_model, 'replay_clv', fake)
+    any_time, late = report.replay_clv(store), report.late_entry_clv(store)
+    assert len(any_time) == len(late) and set(seen) == {None, 60} and pinnacle_model.LATE_ENTRY_MINUTES == 60
+    text = report.markdown(dict(markets=[], replay_clv=any_time, late_entry_clv=late))
+    first, second = text.index('Replay closing-line value'), text.index('Later entry: the same measurement')
+    assert first < second
+    assert '| NBA SPREAD | last 24 hours | 1% | 6 | 6 | 3 (50%) | +0.4% (0.2%) | 2.0 | 67% | 0 | 0 | 3 | 0 |' in text[first:second]
+    assert '| NBA SPREAD | last 24 hours | 1% | 3 | 3 | 3 (100%) | +0.4% (0.2%) | 2.0 | 67% | 0 | 0 | 0 | 0 |' in text[second:]
+    assert report.late_entry_clv(tmp_path / 'missing.sqlite3') == []

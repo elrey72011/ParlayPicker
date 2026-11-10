@@ -538,7 +538,18 @@ def first_edge_bets(started, sample, now, edge, books=None):
 NOT_COMPARABLE = ("CLOSE_NOT_FETCHED", "BOOK_NOT_IN_CLOSE", "LINE_MOVED", "CLOSE_BEFORE_BET")
 
 
-def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES, books=None):
+LATE_ENTRY_MINUTES = 60    # entries this close to the start had a comparable close about 90% of the time (2026-11-07)
+
+
+def late_captures(started, quotes, minutes):
+    """``quotes`` captured within ``minutes`` before their game's start (whole captures, so books still pair)."""
+    window = timedelta(minutes=minutes)
+    return [q for q in quotes if q["event_id"] in started and timedelta(0) <= (
+        _t(started[q["event_id"]]["scheduled_start"]) - capture_time(started[q["event_id"]], q)) <= window]
+
+
+def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES, books=None,
+               entry_within_minutes=None):
     """Closing-line value of the replay's first-edge bets (owner 2026-11-10; read-only).
 
     The replay counts bets; this asks whether they beat the close. For each bet on a started
@@ -551,6 +562,11 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
     needs a comparable close for 80% of its bets and mean CLV with t >= 2. Results (wins and
     losses) are never read. A bet with no comparable close is left out of the mean, which
     can flatter it: a line the market moved off has no close at that line.
+
+    ``entry_within_minutes`` (owner 2026-11-10) replays a later entry: only captures taken
+    that close to the start can make a bet. On 2026-11-09, 4 of the 9 bets whose close was
+    fetched sat at a line the book later left; a later entry trades bets for coverage, and
+    this shows how many of each.
     """
     from app_core import prospective_research_models as research
     from app_core.price_edge_screen import _mean_se
@@ -558,6 +574,7 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
     start = now - timedelta(days=lookback_days)
     started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
     out = {"sport": sport, "market_family": family, "games_started": len(started),
+           "entry_within_minutes": entry_within_minutes,
            "status": "MEASURED" if started else "NO_GAMES", "by_edge": {}}
     if not started:
         return out
@@ -569,6 +586,8 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
             closes.setdefault((close["event_id"], close["selection"], close["sportsbook"], close["line"]),
                               []).append(close)
     quotes, _ = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
+    if entry_within_minutes is not None:
+        quotes = late_captures(started, quotes, entry_within_minutes)
     for edge in edges:
         bets = first_edge_bets(started, quotes, now, edge, books)
         clv, why = [], {reason: 0 for reason in NOT_COMPARABLE}
