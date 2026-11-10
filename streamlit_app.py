@@ -2136,6 +2136,10 @@ def main() -> None:
 
         from app.ui.readiness_dashboard import render_readiness_dashboard
         render_readiness_dashboard(diagnostics.get("candidate_authority_df"), best_picks_df, diagnostics)
+        # Its own panel, outside the dashboard: the dashboard's tables are counted by its tests, and the
+        # memory notes are process-wide, so they vary with whatever ran before (CI 2026-11-10).
+        from app.ui.memory_readout import render_memory_readout
+        render_memory_readout()
 
     with today_tab:
         from app.ui.ncaaf_inventory import render_inventory

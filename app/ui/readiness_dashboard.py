@@ -153,8 +153,6 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
                            f"{market}: next is \"{head['next']['title']}\" ({head['next']['status']}).")
         from app.ui.qualification_progress import render_qualification_progress
         render_qualification_progress()
-        from app.ui.memory_readout import render_memory_readout
-        render_memory_readout()
         if st.button("Prepare research performance report", key="research_performance_prepare"):
             try:
                 from core.research_performance import rebuild
