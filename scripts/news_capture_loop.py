@@ -68,6 +68,11 @@ def run(minutes, interval, *, root, client, folder, key, request_get, fetch=fetc
         totals["captures"] += int(bool(capture.get("requested")))
         totals["stored_quotes"] += capture.get("stored_quotes", 0)
         print(json.dumps({"poll": totals["polls"], **report}, default=str), flush=True)
+        after_poll = getattr(news, "after_poll", None)
+        if after_poll is not None:   # the price watch publishes its live candidates before the slow backup
+            published = after_poll(path, client, folder, report, setting=setting)
+            if published is not None:
+                print(json.dumps({"poll": totals["polls"], "candidates": published}), flush=True)
         pending = pending or bool(capture.get("stored_quotes"))
         if pending:
             try:  # a failed backup is retried at the next poll; it never ends the slate

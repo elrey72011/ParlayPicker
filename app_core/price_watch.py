@@ -177,3 +177,22 @@ def save_state(client, folder, state, *, clock=_utcnow):
 def budget_for(state, persist, *, clock=_utcnow, setting=None):
     from app_core.research_api_budget import Budget
     return Budget(state, persist, clock=clock, limits={"ODDS": limits(setting)})
+
+
+def after_poll(path, client, folder, report, *, setting=None, clock=_utcnow):
+    """After a poll that stored prices: publish the live price-gap candidates for the app (research only).
+
+    Called by the shared loop before the Drive backup, which can take minutes. It never raises:
+    a failure is returned as a status and the watch goes on.
+    """
+    if not (report.get("capture") or {}).get("stored_quotes"):
+        return None
+    try:
+        from app_core import price_gap_candidates as gaps
+        now = clock()
+        watched = sports(setting, now=now)
+        rows = gaps.current(path, now, sports=watched)
+        return gaps.publish(client, folder, rows, now=now, sports=watched)
+    except Exception as exc:
+        return {"status": "CANDIDATES_FAILED", "error": type(exc).__name__}
+

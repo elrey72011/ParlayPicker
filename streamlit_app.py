@@ -2140,6 +2140,9 @@ def main() -> None:
         # memory notes are process-wide, so they vary with whatever ran before (CI 2026-11-10).
         from app.ui.memory_readout import render_memory_readout
         render_memory_readout()
+        # Research only: live gaps against Pinnacle, marked unproven and never a wager (owner 2026-11-10).
+        from app.ui.price_gap_candidates import render_price_gap_candidates
+        render_price_gap_candidates()
 
     with today_tab:
         from app.ui.ncaaf_inventory import render_inventory
