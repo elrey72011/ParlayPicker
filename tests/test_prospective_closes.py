@@ -257,3 +257,47 @@ def test_the_scheduler_prints_the_certified_close_result_line():
     from pathlib import Path
     text = (Path(__file__).resolve().parents[1] / "app_core/research_scheduler.py").read_text(encoding="utf-8")
     assert '"stage": "CERTIFIED_CLOSES_RESULT"' in text and "prospective_closes.summary(" in text
+
+
+def test_the_replays_first_edge_bets_are_closed_first_at_their_own_book(monkeypatch):
+    # Owner 2026-11-10 ("fix the closes"): 13 of Monday's 22 replay bets had no close; a whole game costs 40 credits.
+    from datetime import datetime, timedelta, timezone
+    from app_core import prospective_closes as closes
+    from tests.test_pinnacle_plan_selection import both
+    start = datetime(2030, 1, 1, 20, 0, tzinfo=timezone.utc)
+    now = start + timedelta(hours=1)
+
+    def game(event_id, novig_home):
+        event = {"event_id": event_id, "home_team": "H", "away_team": "A", "scheduled_start": start.isoformat(),
+                 "observed_at": (start - timedelta(hours=8)).isoformat()}
+        received = start - timedelta(minutes=45)
+        stamp = (received - timedelta(seconds=30)).isoformat()
+        return event, (both("pinnacle", -2.5, -110, -110, received.isoformat(), stamp, event_id)
+                       + both("Novig", -2.5, novig_home, -110, received.isoformat(), stamp, event_id)
+                       + both("FanDuel", -2.5, -110, -110, received.isoformat(), stamp, event_id))
+    gap, gap_quotes = game("gap", +106)
+    flat, flat_quotes = game("flat", -110)
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda path, sport, family: (
+        ({"gap": gap, "flat": flat}, gap_quotes + flat_quotes, []) if family == "SPREAD" else ({}, [], [])))
+    setting = {"PARLAYPICKER_CERTIFIED_CLOSE_MARKETS": "SPREAD,TOTAL"}.get
+    assert closes._replay_scopes("db", "NBA", now, closes.LOOKBACK, setting) == {("gap", "SPREAD", "Novig")}
+    assert closes._replay_scopes("db", "NBA", now - timedelta(days=3), closes.LOOKBACK, setting) == set()   # not started
+
+    def broken(*a):
+        raise RuntimeError("unreadable")
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", broken)
+    assert closes._replay_scopes("db", "NBA", now, closes.LOOKBACK, setting) == set()                        # never fails a run
+
+    # in the order of requests: the bet's book and market first (10 credits), then the rest of that game
+    events = {e: {"event_id": e, "sport": "NBA", "provider_event_id": e, "scheduled_start": start.isoformat()}
+              for e in ("gap", "flat")}
+    books = ["Novig"] + ["book%02d" % i for i in range(11)]
+    quotes = lambda event: [dict(quote_id=f"{event}-{b}-{f}-{s}", event_id=event, market_family=f, selection=s, sportsbook=b)  # noqa: E731
+                            for b in books for f in ("SPREAD", "TOTAL") for s in ("One", "Two")]
+    monkeypatch.setattr(closes, "_due_sport", lambda path, now, sport, lookback, setting:
+                        [(events["flat"], quotes("flat")), (events["gap"], quotes("gap"))])
+    monkeypatch.setattr(closes, "_bet_scopes", lambda path, sport: set())
+    monkeypatch.setattr(closes, "_replay_scopes", lambda path, sport, now, lookback, setting: {("gap", "SPREAD", "Novig")})
+    due = closes.due("db", now, sports=("NBA",))
+    assert [(e["event_id"], len(q)) for e, q in due] == [("gap", 2), ("flat", 48), ("gap", 46)]
+    assert closes.request_plan(due[0][0], due[0][1])[2] == 10 and closes.request_plan(due[1][0], due[1][1])[2] == 40

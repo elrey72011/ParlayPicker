@@ -82,6 +82,36 @@ def _bet_scopes(path, sport):
     return scopes
 
 
+REPLAY_EDGE = 0.01     # the replay's lower edge: its bets at 2% are among these
+
+
+def _replay_scopes(path, sport, now, lookback, setting=os.environ.get):
+    """{(event_id, market_family, sportsbook)} of the replay's first-edge bets on started games (2026-11-10).
+
+    The closing-line value of those bets is what a go/no-go rests on, and on 2026-11-09 13 of
+    the 22 had no close: a whole-game request costs 40 credits (two markets, 12 books), so the
+    daily allowance covered two NBA games. Closing only the bet's own book and market costs 10.
+    Both entry rules count (any capture, and the last hour only). Read-only; an unreadable scope
+    is an empty set, never a failed close run.
+    """
+    try:
+        from app_core import pinnacle_model as pm
+        from app_core.prospective_research_models import _read_scope
+        scopes = set()
+        for family in sorted(enabled_families(sport, setting)):
+            events, quotes, _ = _read_scope(path, sport, family)
+            started = {e["event_id"]: e for e in events.values() if now - lookback <= _time(e["scheduled_start"]) <= now}
+            if not started:
+                continue
+            kept, _ = pm.without_junk(pm.slim_sources([q for q in quotes if q["event_id"] in started]))
+            for sample in (kept, pm.late_captures(started, kept, pm.LATE_ENTRY_MINUTES)):
+                for event_id, bet, _ in pm.first_edge_bets(started, sample, now, REPLAY_EDGE, pm.PLAN_BOOKS):
+                    scopes.add((event_id, family, bet["sportsbook"]))
+        return scopes
+    except Exception:
+        return set()
+
+
 def due(path, now, *, sports, lookback=LOOKBACK, setting=os.environ.get):
     """[(event, [verified quotes])] for started events still missing a certified close per quote scope.
 
@@ -90,10 +120,13 @@ def due(path, now, *, sports, lookback=LOOKBACK, setting=os.environ.get):
     prediction, the books of the predicted quotes (both sides, that market) come first as
     their own entries, at 10 credits per market; every other due game and book follows in
     the usual order, while the daily allowance lasts. Without predictions nothing changes.
+
+    The replay's first-edge bets count as bets too (2026-11-10, ``_replay_scopes``): their book
+    and market are closed first, so the allowance goes to the closes that can be measured.
     """
     priority, rest = [], []
     for sport in sports:
-        bets = _bet_scopes(path, sport)
+        bets = _bet_scopes(path, sport) | _replay_scopes(path, sport, now, lookback, setting)
         for event, quotes in _due_sport(path, now, sport, lookback, setting):
             first = [q for q in quotes if (q["event_id"], q["market_family"], q["sportsbook"]) in bets]
             later = [q for q in quotes if (q["event_id"], q["market_family"], q["sportsbook"]) not in bets]
