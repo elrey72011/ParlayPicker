@@ -18,13 +18,13 @@ on:
         required: false
         default: NCAAB
         type: choice
-        options: [NCAAB, NBA]
+        options: [NCAAB, NBA, NHL]
       market:
         description: "Market family"
         required: false
         default: SPREAD
         type: choice
-        options: [SPREAD, TOTAL]
+        options: [SPREAD, TOTAL, PUCK_LINE]
       model:
         description: "draft only: research (the pinned score model) or pinnacle (Pinnacle's no-vig price)"
         required: false
@@ -44,10 +44,16 @@ on:
         type: choice
         options: ["50", "60", "75", "100"]
       pool:
-        description: "draft only, market_skill_v2 with the pinnacle model: count bets across NBA and NCAAB (D27)"
+        description: "draft only, market_skill_v2 with the pinnacle model: count bets across sports (D27)"
         required: false
         default: false
         type: boolean
+      pool_sports:
+        description: "draft only, with pool: the sports pooled (every one must freeze the same plan)"
+        required: false
+        default: "NBA,NCAAB"
+        type: choice
+        options: ["NBA,NCAAB", "NBA,NCAAB,NHL", "NBA,NHL", "NCAAB,NHL"]
       min_edge:
         description: "draft only, market_skill: minimum EV for a bet (locks at the freeze; see the replay estimate)"
         required: false
@@ -113,6 +119,7 @@ jobs:
           ENTRY_RULE: ${{ inputs.entry_rule }}
           MIN_BETS: ${{ inputs.min_bets }}
           POOL: ${{ inputs.pool }}
+          POOL_SPORTS: ${{ inputs.pool_sports }}
           FREEZE_INPUTS: ${{ inputs.freeze_inputs }}
           EXPECTED_HASH: ${{ inputs.expected_hash }}
           OUT: ${{ runner.temp }}/bound-plan
@@ -122,7 +129,7 @@ jobs:
                 --cache-dir "$RUNNER_TEMP/drive-cache" --sport "$SPORT" --market "$MARKET")
           if [ "$ACTION" = draft ] && [ -n "$VALIDATION_START" ]; then args+=(--validation-start "$VALIDATION_START"); fi
           if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}" --model "${MODEL:-research}" --min-edge "${MIN_EDGE:-0.02}" --entry-rule "${ENTRY_RULE:-earliest}" --min-bets "${MIN_BETS:-75}"); fi
-          if [ "$ACTION" = draft ] && [ "$POOL" = true ]; then args+=(--pool); fi
+          if [ "$ACTION" = draft ] && [ "$POOL" = true ]; then args+=(--pool --pool-sports "${POOL_SPORTS:-NBA,NCAAB}"); fi
           if [ "$ACTION" = freeze ]; then args+=(--inputs "$FREEZE_INPUTS" --expected-hash "$EXPECTED_HASH"); fi
           python -u scripts/bound_plan.py "${args[@]}"
       - name: Save the verified Drive object cache

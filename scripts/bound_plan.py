@@ -58,7 +58,7 @@ def statuses(path, now):
 
 
 def draft(path, *, sport=None, market=None, validation_start=None, now=None, methodology='market_skill',
-          model='research', min_edge=None, entry_rule=None, min_bets=None, pool=False):
+          model='research', min_edge=None, entry_rule=None, min_bets=None, pool=False, pool_sports=None):
     now = now or datetime.now(timezone.utc)
     result = {'mode': 'DRAFT_READ_ONLY', 'as_of': now.isoformat(), 'markets': statuses(path, now)}
     if sport and market:
@@ -93,7 +93,8 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                                                 # Owner D26, D27, D29: bets per window, the NBA and NCAAB pool,
                                                 # and no entry at a junk price.
                                                 min_bets=min_bets if v2 else None,
-                                                pool=market_skill_validation.pool_scopes(sport, market) if pool else None,
+                                                pool=(market_skill_validation.pool_scopes(sport, market, pool_sports)
+                                                      if pool else None),
                                                 max_entry_overround=(pinnacle_model.MAX_OVERROUND
                                                                      if v2 and model == 'pinnacle' else None))
         except ValueError as exc:
@@ -222,7 +223,9 @@ def main(argv=None):
     parser.add_argument('--min-bets', type=int, choices=(50, 60, 75, 100), default=75,
                         help='draft, market_skill_v2: bets needed in each window (locks at the freeze)')
     parser.add_argument('--pool', action='store_true',
-                        help='draft, market_skill_v2 with the Pinnacle model: count bets across NBA and NCAAB (D27)')
+                        help='draft, market_skill_v2 with the Pinnacle model: count bets across sports (D27)')
+    parser.add_argument('--pool-sports', default='NBA,NCAAB',
+                        help='draft with --pool: the sports pooled, e.g. NBA,NCAAB,NHL (every one must freeze the same plan)')
     parser.add_argument('--model', choices=('research', 'pinnacle'), default='research',
                         help="research: the pinned research score model; pinnacle: Pinnacle's no-vig price")
     parser.add_argument('--min-edge', type=float, choices=(0.01, 0.02), default=0.02,
@@ -244,7 +247,8 @@ def main(argv=None):
         result = draft(path, sport=args.sport, market=args.market, validation_start=args.validation_start,
                        methodology=args.methodology, model=args.model, min_edge=args.min_edge,
                        entry_rule=('FIRST_EDGE_CAPTURE' if args.entry_rule == 'first_edge' else None),
-                       min_bets=args.min_bets, pool=args.pool)
+                       min_bets=args.min_bets, pool=args.pool,
+                       pool_sports=[s.strip().upper() for s in args.pool_sports.split(',') if s.strip()])
         result['restore'] = dict(restore, writes_refused=guarded.writes_refused)
     else:
         if not (args.sport and args.market and args.inputs and args.expected_hash):

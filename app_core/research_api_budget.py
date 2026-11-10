@@ -57,7 +57,7 @@ PINNACLE_BOOKMAKERS = ",".join(US_BOOKMAKERS + ("pinnacle",))
 # request costs the same. NCAAF keeps the 12-book request (its frozen runtime and binding name it).
 NOVIG_ENV = "PARLAYPICKER_NOVIG_SPORTS"
 NOVIG_BOOKMAKER = "novig"
-NOVIG_SPORTS = ("NBA", "NCAAB")
+NOVIG_SPORTS = ("NBA", "NCAAB", "NHL")  # NHL 2026-11-09: only when the variable names it
 PINNACLE_NOVIG_BOOKMAKERS = PINNACLE_BOOKMAKERS + "," + NOVIG_BOOKMAKER
 PINNACLE_EXTRA_UNITS = 2
 

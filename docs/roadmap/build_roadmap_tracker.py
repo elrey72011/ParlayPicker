@@ -127,7 +127,8 @@ DECISIONS = [
     ("D26", "Gate design for plans frozen from now on", "Decided",
      "CLV-led market-skill-v2: mean bet CLV 2 standard errors above zero in each window (built, #2513)"),
     ("D27", "One plan counting bets across NBA and NCAAB", "Decided",
-     "Yes, for the Pinnacle/Novig lag only; each sport's results reported (built, #2513)"),
+     "Yes, for the Pinnacle/Novig lag only; each sport's results reported (built, #2513). NHL may join a pool "
+     "(watch and replay built 2026-11-09; an NHL plan still needs D4 extended)"),
     ("D28", "Credits for the fixed-interval price watch", "Decided",
      "Both sports, 7 days: 200 credits a day, 1,400 in all; review on 2026-11-16 (running)"),
     ("D29", "Novig junk-price filter", "Decided",

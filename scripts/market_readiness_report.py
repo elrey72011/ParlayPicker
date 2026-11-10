@@ -82,13 +82,17 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 price_edge=price_edge(root / 'prospective-evidence.sqlite3'),
                 close_coverage=close_coverage(root / 'prospective-evidence.sqlite3'),
                 plan_progress=_plan_progress(root / 'prospective-evidence.sqlite3'),
-                pinnacle_replay=pinnacle_replay(root / 'prospective-evidence.sqlite3'))
+                pinnacle_replay=pinnacle_replay(root / 'prospective-evidence.sqlite3', extra=EXTRA_REPLAY_SCOPES))
 
 
 REPLAY_WINDOWS = ((1, 'last 24 hours'), (14, 'last 14 days'))
 
 
-def pinnacle_replay(path, now=None):
+# The lag pool's other sports (owner 2026-11-09), replayed beside the Pinnacle model's own.
+EXTRA_REPLAY_SCOPES = {'NHL': ('PUCK_LINE', 'TOTAL')}
+
+
+def pinnacle_replay(path, now=None, extra=None):
     """Bets a Pinnacle plan would have made on games already started (pinnacle_model.replay_estimate),
     for the stake books, over the last day and the last 14 days. Read-only; results are never read.
 
@@ -100,7 +104,7 @@ def pinnacle_replay(path, now=None):
         return []
     now = now or datetime.now(timezone.utc)
     out = []
-    for sport, families in pinnacle_model.FAMILIES.items():
+    for sport, families in {**pinnacle_model.FAMILIES, **(extra or {})}.items():
         for family in families:
             for days, label in REPLAY_WINDOWS:
                 try:

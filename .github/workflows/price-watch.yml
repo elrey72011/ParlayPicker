@@ -31,6 +31,9 @@ jobs:
     timeout-minutes: 355
     env:
       PARLAYPICKER_PRICE_WATCH: ${{ vars.PARLAYPICKER_PRICE_WATCH || 'NBA,NCAAB' }}
+      # NHL (owner 2026-11-09): on unless the PARLAYPICKER_PRICE_WATCH_EXTRA_SPORTS variable says otherwise (OFF stops it).
+      # It adds about 100 credits a day (300 in fast mode) to the allowance.
+      PARLAYPICKER_PRICE_WATCH_EXTRA_SPORTS: ${{ vars.PARLAYPICKER_PRICE_WATCH_EXTRA_SPORTS || 'NHL' }}
       # Fast mode is off unless this run was started with the fast input, or the repository variable
       # PARLAYPICKER_PRICE_WATCH_FAST is true (every run, scheduled ones included).
       PARLAYPICKER_PRICE_WATCH_FAST: ${{ inputs.fast && 'true' || vars.PARLAYPICKER_PRICE_WATCH_FAST }}
