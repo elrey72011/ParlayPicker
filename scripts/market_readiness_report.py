@@ -71,19 +71,32 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
         client = DriveStore(folder)
     guarded = ReadOnlyDrive(client, cache_dir)
     counts = restore(root, guarded, folder, with_sources=with_sources)
+    import time
+    loaded = time.monotonic()
     readiness = load_readiness(root, authenticate=False)  # local read of the restored copy
+    print(f'section readiness: {time.monotonic() - loaded:.0f}s', flush=True)
     markets = [dict(row, remote_evidence_status='RESTORED_READ_ONLY', remote_evidence_verified=True)
                for row in readiness['markets']]
+    store = root / 'prospective-evidence.sqlite3'
+
+    def timed(name, section, *args, **kwargs):
+        """Run one report section and print how long it took: a slow section must be visible in the log."""
+        import time
+        started = time.monotonic()
+        try:
+            return section(*args, **kwargs)
+        finally:
+            print(f'section {name}: {time.monotonic() - started:.0f}s', flush=True)
     return dict(remote=dict(status='RESTORED_READ_ONLY', writes_refused=guarded.writes_refused, counts=counts),
                 markets=markets, sources=readiness['sources'],
-                tables=table_counts(root / 'prospective-evidence.sqlite3'),
-                plans=plan_evaluations(root / 'prospective-evidence.sqlite3'),
-                research_bindings=research_bindings(root / 'prospective-evidence.sqlite3'),
-                price_edge=price_edge(root / 'prospective-evidence.sqlite3'),
-                close_coverage=close_coverage(root / 'prospective-evidence.sqlite3'),
-                plan_progress=_plan_progress(root / 'prospective-evidence.sqlite3'),
-                pinnacle_replay=pinnacle_replay(root / 'prospective-evidence.sqlite3', extra=EXTRA_REPLAY_SCOPES),
-                pace_comparison=pace_comparison(root / 'prospective-evidence.sqlite3', extra=EXTRA_REPLAY_SCOPES))
+                tables=timed('tables', table_counts, store),
+                plans=timed('plans', plan_evaluations, store),
+                research_bindings=timed('research_bindings', research_bindings, store),
+                price_edge=timed('price_edge', price_edge, store),
+                close_coverage=timed('close_coverage', close_coverage, store),
+                plan_progress=timed('plan_progress', _plan_progress, store),
+                pinnacle_replay=timed('pinnacle_replay', pinnacle_replay, store, extra=EXTRA_REPLAY_SCOPES),
+                pace_comparison=timed('pace_comparison', pace_comparison, store, extra=EXTRA_REPLAY_SCOPES))
 
 
 REPLAY_WINDOWS = ((1, 'last 24 hours'), (14, 'last 14 days'))

@@ -91,3 +91,24 @@ def test_readiness_report_prints_the_pace_table_and_reports_errors(tmp_path, mon
     assert "| NCAAB SPREAD | 20 | 9 / 4 [30] | 6.3 (5-8) / 3 [11] |  |  |" in text
     assert "| NHL PUCK_LINE | 20 |" in text and "SYNTHETIC_FAILURE" in text
     assert mr._pace_markdown([]) == []
+
+
+def test_one_game_at_a_time_and_slim_sources_change_no_entry_or_capture_time():
+    """The speed-ups are exact: same entry quote per game under both rules, same capture times."""
+    import json
+    events, quotes = _scope([("long", 120, 60), ("mid", 90, 20), ("short-a", 60, 10), ("none", 0, 0)])
+    stored = [dict(q, raw_source=json.dumps(dict(q["raw_source"], event_response={"big": "x" * 500}))
+                   if "response_received_at" in q["raw_source"] else json.dumps(q["raw_source"])) for q in quotes]
+    slim = pm.slim_sources(stored)
+    assert [pm.capture_time(events[q["event_id"]], q) for q in slim] == \
+        [pm.capture_time(events[q["event_id"]], q) for q in stored]
+    assert all(q["raw_source"] in ({}, {"event_response": None, "market": None,
+                                        "response_received_at": q["raw_source"].get("response_received_at")}) for q in slim)
+    assert stored[0]["raw_source"] != slim[0]["raw_source"] and isinstance(stored[-1]["raw_source"], str)   # copies
+    key = lambda chosen: {e: (q["sportsbook"], q["selection"], q["line"], q["quote_timestamp"]) for e, q in chosen.items()}  # noqa: E731
+    for rules in ({}, {"entry_rule": pm.FIRST_EDGE_CAPTURE, "min_edge": 0.01},
+                  {"entry_rule": pm.FIRST_EDGE_CAPTURE, "min_edge": 0.02, "books": frozenset({"Novig"})}):
+        whole = pm.plan_quotes(events, stored, NOW, **rules)
+        assert key(pm.plan_quotes_by_event(events, stored, NOW, **rules)) == key(whole) and len(whole) == 4
+        assert key(pm.plan_quotes_by_event(events, pm.by_event(slim), NOW, **rules)) == key(whole)
+    assert pm.plan_quotes_by_event({"absent": events["long"]}, stored, NOW) == {}

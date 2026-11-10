@@ -255,6 +255,49 @@ def plan_quotes(events, quotes, now, *, books=None, entry_rule=None, min_edge=No
     return chosen
 
 
+def slim_sources(quotes):
+    """Copies of ``quotes`` whose ``raw_source`` keeps only what a replay reads: when its response arrived.
+
+    A later capture's quote stores its whole provider response, and ``capture_time`` parses that
+    JSON on every call. A replay asks for a quote's capture time many times, so the parsing, not
+    the arithmetic, was most of its run time. Parsed once here, the answer is the same: a quote
+    with its own response keeps ``response_received_at``; any other quote falls back to the
+    event's first capture, as before. For read-only replays; never for a stored record.
+    """
+    out = []
+    for q in quotes:
+        raw = evidence._source_json(q.get("raw_source"))
+        own = isinstance(raw, dict) and set(raw) == evidence.QUOTE_SOURCE_KEYS
+        out.append(dict(q, raw_source=({"event_response": None, "market": None,
+                                        "response_received_at": raw["response_received_at"]} if own else {})))
+    return out
+
+
+def by_event(quotes):
+    """{event_id: [quotes]}, in the stored order."""
+    grouped = {}
+    for q in quotes:
+        grouped.setdefault(q["event_id"], []).append(q)
+    return grouped
+
+
+def plan_quotes_by_event(events, quotes, now, **rules):
+    """``plan_quotes``, one game at a time: the same entries, without scanning every game's quotes.
+
+    ``plan_quotes`` looks through the whole quote list for each candidate (its Pinnacle pairs and
+    its other side). Every one of those lookups is within a single game, so giving it one game's
+    quotes at a time returns the same entries. With a capture every 5 minutes a night holds tens
+    of thousands of quotes per market, and the whole-list scan took minutes per call (2026-11-09).
+    """
+    grouped = quotes if isinstance(quotes, dict) else by_event(quotes)
+    chosen = {}
+    for event_id, event in events.items():
+        found = grouped.get(event_id)
+        if found:
+            chosen.update(plan_quotes({event_id: event}, found, now, **rules))
+    return chosen
+
+
 def plan_games_per_day(path, sport, family, *, now, lookback_days=14, books=None):
     """Games per day the plan can predict (``plan_quotes``), over the days actually observed.
 
@@ -268,7 +311,7 @@ def plan_games_per_day(path, sport, family, *, now, lookback_days=14, books=None
     started = [e for e in events.values() if start <= _t(e["scheduled_start"]) < now]
     if not started:
         return 0.0
-    covered = plan_quotes({e["event_id"]: e for e in started}, quotes, now, books=books)
+    covered = plan_quotes_by_event({e["event_id"]: e for e in started}, quotes, now, books=books)
     first = min(_t(e["scheduled_start"]) for e in started)
     days = max(1.0, (now - first).total_seconds() / 86400)
     return len(covered) / days
@@ -329,8 +372,9 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
     if not started:
         return {"sport": sport, "market_family": family, "games_started": 0, "status": "NO_GAMES"}
-    quotes, dropped = without_junk(quotes)
-    chosen = plan_quotes(started, quotes, now, books=books)
+    quotes, dropped = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
+    grouped = by_event(quotes)
+    chosen = plan_quotes_by_event(started, grouped, now, books=books)
     first = min(_t(e["scheduled_start"]) for e in started.values())
     days = max(1.0, (now - first).total_seconds() / 86400)
     games_per_day = len(chosen) / days
@@ -352,8 +396,8 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     def bets(picked, edge, adjust):
         count = 0
         for event_id, quote in picked.items():
-            p = fair(started[event_id], quote, quotes, now=now)
-            other = _other_side(quote, quotes)
+            p = fair(started[event_id], quote, grouped[event_id], now=now)
+            other = _other_side(quote, grouped[event_id])
             if p is None or other is None:
                 continue
             p = adjust(p) if adjust else p
@@ -373,7 +417,7 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
             by_edge = {}
             for edge in edges:
                 picked = (chosen if rule == EARLIEST_SHARED_LINE else
-                          plan_quotes(started, quotes, now, books=books, entry_rule=rule, min_edge=edge,
+                          plan_quotes_by_event(started, grouped, now, books=books, entry_rule=rule, min_edge=edge,
                                       adjust=adjust))
                 by_edge[f"{edge:.0%}"] = row(bets(picked, edge, adjust))
             out["variants"].append({"entry_rule": rule, "probability": label, "by_edge": by_edge})
@@ -430,18 +474,19 @@ def pace_comparison(path, sport, family, *, now, lookback_days=1, paces=PACES, e
            "status": "COMPARED" if started else "NO_GAMES", "paces": []}
     if not started:
         return out
-    quotes, _ = without_junk([q for q in quotes if q["event_id"] in started])
+    quotes, _ = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
 
     def measure(sample):
-        per_game = {}
-        for q in sample:
-            per_game.setdefault(q["event_id"], set()).add(capture_time(started[q["event_id"]], q))
+        grouped = by_event(sample)
+        per_game = {event_id: {capture_time(started[event_id], q) for q in found} for event_id, found in grouped.items()}
         found = {}
         for edge in edges:
-            picked = plan_quotes(started, sample, now, books=books, entry_rule=FIRST_EDGE_CAPTURE, min_edge=edge)
+            picked = plan_quotes_by_event(started, grouped, now, books=books, entry_rule=FIRST_EDGE_CAPTURE,
+                                          min_edge=edge)
             count = 0
             for event_id, quote in picked.items():
-                p, other = fair(started[event_id], quote, sample, now=now), _other_side(quote, sample)
+                mine = grouped[event_id]
+                p, other = fair(started[event_id], quote, mine, now=now), _other_side(quote, mine)
                 if p is not None and other is not None:
                     count += max(p * quote["decimal_odds"] - 1, (1 - p) * other["decimal_odds"] - 1) >= edge
             found[f"{edge:.0%}"] = count
