@@ -277,3 +277,34 @@ def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.
             report["stopped"] = "COST_MISMATCH"
             break
     return report
+
+
+def summary(report, sport=None, budget=None):
+    """One log line's worth of a ``record`` report: counts and codes only (owner 2026-11-10).
+
+    The report was kept in the cycle result but printed nowhere, so a night with no closes
+    certified left no trace of why. Errors are reduced to their kind: a provider error's text
+    can carry a request URL, so it is never copied. With ``budget``, the sport's
+    certified-close credits used against its allowance are added.
+    """
+    kinds = {}
+    for error in report.get("errors") or []:
+        parts = str(error).split(":")
+        kind = parts[1] if len(parts) > 1 else "ERROR"
+        if kind == "BudgetLimit":
+            kind = "BudgetLimit:" + parts[-1][:20]                 # the window that ran out: daily or rolling_31_days
+        elif kind not in ("COST_MISMATCH",) and not kind.replace("_", "").isalnum():
+            kind = "ERROR"
+        kinds[kind] = kinds.get(kind, 0) + 1
+    out = {key: int(report.get(key) or 0) for key in ("events", "requests", "credits", "stored", "already_requested")}
+    out["skipped"] = [str(code)[:60] for code in report.get("skipped") or []]
+    out["errors"] = kinds
+    if budget is not None and sport is not None:
+        try:
+            from app_core.research_api_budget import ALL_CERTIFIED_CLOSE_LIMITS
+            out["allowance"] = {"used": budget.usage(sport, budget.close_ledger),
+                                "limits": ALL_CERTIFIED_CLOSE_LIMITS.get(sport)}
+        except Exception:  # a summary never fails a cycle
+            pass
+    return out
+

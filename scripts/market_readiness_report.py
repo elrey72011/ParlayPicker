@@ -182,15 +182,16 @@ def _clv_markdown(rows):
     lines = ['', 'Replay closing-line value: do the first-clearing bets beat the certified close at the same book, '
              'selection and line? A plan needs a comparable close for 80% of its bets and mean CLV with t of 2 or more. '
              'A bet with no comparable close is left out of the mean, which can flatter it. Results are not read.', '',
-             '| market | window | edge | bets | close fetched | comparable (share of bets) | mean CLV (SE) | t | beat close |',
-             '|---|---|---|---|---|---|---|---|---|']
+             '| market | window | edge | bets | close fetched | comparable (share of bets) | mean CLV (SE) | t | beat close '
+             '| no close: not fetched | book missing | line moved | close before bet |',
+             '|---|---|---|---|---|---|---|---|---|---|---|---|---|']
 
     def pct(value, signed=True):
         return '' if value is None else (f'{value:+.1%}' if signed else f'{value:.0%}')
     for row in rows:
         name = f"{row['sport']} {row['market_family']} | {row.get('window', '')}"
         if 'evaluation_error' in row:
-            lines.append(f"| {name} | | {row['evaluation_error']} | | | | | |")
+            lines.append(f"| {name} | | {row['evaluation_error']} | | | | | | | | | |")
             continue
         for edge, found in row['by_edge'].items():
             if not found['bets']:
@@ -199,7 +200,10 @@ def _clv_markdown(rows):
             t = '' if found['t'] is None else f"{found['t']:.1f}"
             lines.append(f"| {name} | {edge} | {found['bets']} | {found['close_fetched']} | "
                          f"{found['comparable']} ({pct(found['coverage'], signed=False)}) | "
-                         f"{pct(found['mean_price_clv'])}{se} | {t} | {pct(found['beat_close_share'], signed=False)} |")
+                         f"{pct(found['mean_price_clv'])}{se} | {t} | {pct(found['beat_close_share'], signed=False)} | "
+                         + ' | '.join(str((found.get('not_comparable') or {}).get(reason, ''))
+                                      for reason in ('CLOSE_NOT_FETCHED', 'BOOK_NOT_IN_CLOSE', 'LINE_MOVED',
+                                                     'CLOSE_BEFORE_BET')) + ' |')
     return lines
 
 

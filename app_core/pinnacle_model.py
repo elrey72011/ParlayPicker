@@ -532,6 +532,12 @@ def first_edge_bets(started, sample, now, edge, books=None):
     return out
 
 
+# Why a bet has no comparable close, in the order checked: the game's close was never fetched for
+# this market; it was fetched but not for the bet's book and selection; the book closed at another
+# line; the only close at the bet's line was taken before the bet.
+NOT_COMPARABLE = ("CLOSE_NOT_FETCHED", "BOOK_NOT_IN_CLOSE", "LINE_MOVED", "CLOSE_BEFORE_BET")
+
+
 def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES, books=None):
     """Closing-line value of the replay's first-edge bets (owner 2026-11-10; read-only).
 
@@ -555,26 +561,36 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
            "status": "MEASURED" if started else "NO_GAMES", "by_edge": {}}
     if not started:
         return out
-    closes, fetched = {}, set()
+    closes, fetched, at_book = {}, set(), set()
     for close in evidence.read_records(path, "prospective_close", sport=sport, market_family=family):
         if close.get("close_verified") and close["event_id"] in started:
             fetched.add(close["event_id"])
+            at_book.add((close["event_id"], close["selection"], close["sportsbook"]))
             closes.setdefault((close["event_id"], close["selection"], close["sportsbook"], close["line"]),
                               []).append(close)
     quotes, _ = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
     for edge in edges:
         bets = first_edge_bets(started, quotes, now, edge, books)
-        clv = []
+        clv, why = [], {reason: 0 for reason in NOT_COMPARABLE}
         for event_id, bet, _ in bets:
-            later = [c for c in closes.get((event_id, bet["selection"], bet["sportsbook"], bet["line"]), [])
-                     if _t(c["close_timestamp"]) >= _t(bet["quote_timestamp"])]
+            same_line = closes.get((event_id, bet["selection"], bet["sportsbook"], bet["line"]), [])
+            later = [c for c in same_line if _t(c["close_timestamp"]) >= _t(bet["quote_timestamp"])]
             if later:
                 close = max(later, key=lambda c: (_t(c["close_timestamp"]), c["close_id"]))
                 clv.append(bet["decimal_odds"] / close["decimal_odds"] - 1)
+            elif event_id not in fetched:
+                why["CLOSE_NOT_FETCHED"] += 1
+            elif (event_id, bet["selection"], bet["sportsbook"]) not in at_book:
+                why["BOOK_NOT_IN_CLOSE"] += 1
+            elif not same_line:
+                why["LINE_MOVED"] += 1
+            else:
+                why["CLOSE_BEFORE_BET"] += 1
         mean, se = _mean_se(clv)
         out["by_edge"][f"{edge:.0%}"] = {
             "bets": len(bets), "close_fetched": sum(1 for event_id, _, _ in bets if event_id in fetched),
             "comparable": len(clv), "coverage": len(clv) / len(bets) if bets else None,
+            "not_comparable": why,
             "mean_price_clv": mean, "price_clv_se": se,
             "t": (mean / se if mean is not None and se else None),
             "beat_close_share": sum(1 for v in clv if v > 0) / len(clv) if clv else None}

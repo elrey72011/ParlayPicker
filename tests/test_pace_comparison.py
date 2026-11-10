@@ -177,10 +177,17 @@ def test_replay_clv_measures_first_edge_bets_against_the_comparable_certified_cl
     assert out["status"] == "MEASURED" and out["games_started"] == 5
     found = out["by_edge"]["2%"]
     assert (found["bets"], found["close_fetched"], found["comparable"]) == (4, 3, 2) and found["coverage"] == 0.5
+    assert found["not_comparable"] == {"CLOSE_NOT_FETCHED": 1, "BOOK_NOT_IN_CLOSE": 0, "LINE_MOVED": 1,
+                                       "CLOSE_BEFORE_BET": 0}
     beat, lost = 2.06 / (1 + 100 / 110) - 1, 2.06 / 2.2 - 1
     assert found["mean_price_clv"] == pytest.approx((beat + lost) / 2) and found["beat_close_share"] == 0.5
     assert found["price_clv_se"] == pytest.approx(abs(beat - lost) / 2) and found["t"] == pytest.approx(
         found["mean_price_clv"] / found["price_clv_se"])
+    # the same night with other closes: only a close before the bet, and only another book's close
+    closes[:] = [_close("beat", "H", -2.5, -200, 300), _close("lost", "H", -2.5, -110, 1, book="fanduel")]
+    other = pm.replay_clv("db", "NCAAB", "SPREAD", now=NOW)["by_edge"]["2%"]
+    assert other["comparable"] == 0 and other["mean_price_clv"] is None and other["not_comparable"] == {
+        "CLOSE_NOT_FETCHED": 2, "BOOK_NOT_IN_CLOSE": 1, "LINE_MOVED": 0, "CLOSE_BEFORE_BET": 1}
     bets = pm.first_edge_bets(events, quotes, NOW, 0.02)
     assert {(e, b["sportsbook"], b["selection"], b["line"]) for e, b, _ in bets} == {
         (g, "novig", "H", -2.5) for g in ("beat", "lost", "moved", "unfetched")}

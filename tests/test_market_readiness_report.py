@@ -162,7 +162,8 @@ def test_replay_clv_is_reported_per_market_window_and_edge(tmp_path, monkeypatch
             raise ValueError('bad scope')
         return dict(sport=sport, market_family=family, games_started=8, status='MEASURED', by_edge={
             '1%': dict(bets=6, close_fetched=5, comparable=4, coverage=4 / 6, mean_price_clv=0.012,
-                       price_clv_se=0.004, t=3.0, beat_close_share=0.75),
+                       price_clv_se=0.004, t=3.0, beat_close_share=0.75,
+                       not_comparable=dict(CLOSE_NOT_FETCHED=1, BOOK_NOT_IN_CLOSE=0, LINE_MOVED=1, CLOSE_BEFORE_BET=0)),
             '2%': dict(bets=0, close_fetched=0, comparable=0, coverage=None, mean_price_clv=None,
                        price_clv_se=None, t=None, beat_close_share=None)})
     monkeypatch.setattr(pinnacle_model, 'replay_clv', fake)
@@ -170,7 +171,7 @@ def test_replay_clv_is_reported_per_market_window_and_edge(tmp_path, monkeypatch
     assert len(rows) == 2 * (sum(len(f) for f in pinnacle_model.FAMILIES.values()) + 1)
     assert ('NHL', 'TOTAL', 7) in calls and {days for _, _, days in calls} == {1, 7}
     text = '\n'.join(report._clv_markdown(rows))
-    assert '| NBA SPREAD | last 24 hours | 1% | 6 | 5 | 4 (67%) | +1.2% (0.4%) | 3.0 | 75% |' in text
+    assert '| NBA SPREAD | last 24 hours | 1% | 6 | 5 | 4 (67%) | +1.2% (0.4%) | 3.0 | 75% | 1 | 0 | 1 | 0 |' in text
     assert '| NBA SPREAD | last 24 hours | 2% |' not in text                  # an edge with no bets has no row
     assert 'ValueError: bad scope' in text
     assert report._clv_markdown([]) == [] and report.replay_clv(tmp_path / 'missing.sqlite3') == []
