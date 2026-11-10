@@ -50,6 +50,7 @@ def _label(quote):
 def current(path, now, *, sports, min_edge=MIN_EDGE, books=None, read_scope=None):
     """Stake-book quotes in each upcoming game's newest capture whose EV against Pinnacle is ``min_edge`` or more."""
     from app_core import news_capture, pinnacle_model as pm
+    from app_core.public_quote_policy import canonical_book_label
     if read_scope is None:
         from app_core.prospective_research_models import _read_scope as read_scope
     books = pm.PLAN_BOOKS if books is None else books
@@ -67,7 +68,8 @@ def current(path, now, *, sports, min_edge=MIN_EDGE, books=None, read_scope=None
                     continue
                 live = [q for q in found if pm.capture_time(event, q) == newest]
                 for quote in live:
-                    if quote["sportsbook"] not in books or not quote["quote_verified"] or quote["line"] is None:
+                    # Stored names are provider keys ("draftkings"); the stake books are named by label.
+                    if not pm._plan_book(quote, books) or not quote["quote_verified"] or quote["line"] is None:
                         continue
                     fair = pm.fair(event, quote, live, now=now)
                     if fair is None:
@@ -77,7 +79,7 @@ def current(path, now, *, sports, min_edge=MIN_EDGE, books=None, read_scope=None
                         continue
                     out.append({"sport": sport, "market_family": family, "away_team": event["away_team"],
                                 "home_team": event["home_team"], "scheduled_start": event["scheduled_start"],
-                                "sportsbook": quote["sportsbook"], "pick": _label(quote),
+                                "sportsbook": canonical_book_label(quote["sportsbook"]), "pick": _label(quote),
                                 "american_odds": quote.get("american_odds"), "fair_probability": round(fair, 4),
                                 "fair_american_odds": _american(fair), "edge": round(edge, 4),
                                 "captured_at": newest.isoformat(timespec="seconds")})

@@ -87,3 +87,13 @@ def test_the_report_prints_the_movement_table_and_reports_errors(tmp_path, monke
     assert "ValueError: bad scope" in text and "no betting splits are captured" in text
     assert report._movement_markdown([dict(sport="NHL", market_family="TOTAL", games_tracked=0)]) == []
     assert report.line_movement(tmp_path / "missing.sqlite3") == []
+
+
+def test_stake_books_are_matched_by_label_because_stored_names_are_provider_keys(monkeypatch):
+    # First real run, 2026-11-10: "0 of 0" stake books, because the store holds "novig", not "Novig".
+    events = {"moved": _event("moved")}
+    quotes = (_capture("moved", 120, {"pinnacle": -2.5, "novig": -2.5, "draftkings": -2.5, "bovada": -2.5})
+              + _capture("moved", 60, {"pinnacle": -3.5, "novig": -3.5, "draftkings": -2.5, "bovada": -3.5}))
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, []))
+    out = pm.line_movement("db", "NBA", "SPREAD", now=NOW)
+    assert (out["stake_books_at_final_line"], out["stake_book_games"]) == (1, 2) and out["median_follow_minutes"] == 0.0
