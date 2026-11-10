@@ -301,3 +301,75 @@ def test_the_replays_first_edge_bets_are_closed_first_at_their_own_book(monkeypa
     due = closes.due("db", now, sports=("NBA",))
     assert [(e["event_id"], len(q)) for e, q in due] == [("gap", 2), ("flat", 48), ("gap", 46)]
     assert closes.request_plan(due[0][0], due[0][1])[2] == 10 and closes.request_plan(due[1][0], due[1][1])[2] == 40
+
+
+def test_whole_game_closes_keep_to_their_share_so_bets_on_later_games_still_get_theirs(monkeypatch):
+    # Run 2026-11-10: NCAAB at 400 of 400 credits by midday, every one spent on whole-game closes (40 each).
+    from datetime import datetime, timezone
+    from app_core import prospective_closes as closes
+    now = datetime(2026, 11, 11, 1, 0, tzinfo=timezone.utc)
+    assert closes.rest_share({}.get) == 1.0 and closes.rest_share({closes.REST_SHARE_ENV: "0.25"}.get) == 0.25
+    assert closes.rest_share({closes.REST_SHARE_ENV: "many"}.get) == 1.0 == closes.rest_share({closes.REST_SHARE_ENV: "7"}.get)
+
+    def event(name):
+        return {"event_id": name, "sport": "NCAAB", "provider_event_id": name, "scheduled_start": "2026-11-11T00:00:00+00:00"}
+    books = ["Novig"] + ["book%02d" % i for i in range(11)]
+
+    def quotes(name, only=None):
+        return [dict(quote_id=f"{name}-{b}-{f}-{s}", event_id=name, market_family=f, selection=s, sportsbook=b)
+                for b in (only or books) for f in ("SPREAD", "TOTAL") for s in ("One", "Two")]
+    games = [f"g{i}" for i in range(6)]
+    monkeypatch.setattr(closes, "due_split", lambda path, now, *, sports, lookback=closes.LOOKBACK, setting=None: (
+        [(event("bet"), [q for q in quotes("bet", ["Novig"]) if q["market_family"] == "SPREAD"])],
+        [(event(g), quotes(g)) for g in games]))
+
+    class Budget:
+        def __init__(self):
+            self.state, self.close_ledger, self.spent, self.asked = {}, {}, 0, []
+
+        def usage(self, sport, ledger):
+            return {"daily": self.spent, "rolling_31_days": self.spent}
+
+        def reserve_certified_close(self, sport, units, already_spent=False):
+            self.spent += units
+            self.asked.append(units)
+
+    class Reply:
+        headers = {}
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"data": {}}
+
+    def run(share):
+        budget = Budget()
+        setting = {"PARLAYPICKER_CERTIFIED_CLOSE_SPORTS": "NCAAB", closes.REST_SHARE_ENV: share}.get
+        report = closes.record("db", now=now, key="k", request_get=lambda *a, **k: Reply(), budget=budget,
+                               sports=("NCAAB",), setting=setting)
+        return budget, report
+    budget, report = run("0.25")
+    assert budget.asked == [10, 40, 40]                        # the bet first; then whole games only up to 100 of 400
+    assert report["held_for_bets"] == 4 and report["events"] == 3
+    assert closes.summary(report)["held_for_bets"] == 4
+    budget, report = run("1")
+    assert budget.asked == [10] + [40] * 6 and "held_for_bets" not in report          # the old behaviour
+    budget, report = run("0")
+    assert budget.asked == [10] and report["held_for_bets"] == 6                      # bets only
+
+
+def test_the_summary_names_a_budget_limit_even_when_the_event_id_holds_a_colon():
+    from app_core import prospective_closes as closes
+    out = closes.summary({"errors": ["NBA:abc123:BudgetLimit:api_budget:NBA:certified_close:daily",
+                                     "NCAAB:x:HTTPError:500 Server Error for url: https://api.example/odds?apiKey=SECRET",
+                                     "NCAAB:y:COST_MISMATCH:planned=20:charged=40"]})
+    assert out["errors"] == {"BudgetLimit:daily": 1, "HTTPError": 1, "COST_MISMATCH": 1}
+
+
+def test_the_research_workflows_keep_three_quarters_of_the_close_allowance_for_bets():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / ".github/workflows"
+    line = "PARLAYPICKER_CERTIFIED_CLOSE_REST_SHARE: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_REST_SHARE || '0.25' }}"
+    assert line in (root / "research-loop.yml").read_text(encoding="utf-8")
+    assert line in (root / "research-scheduler.yml").read_text(encoding="utf-8")
