@@ -84,3 +84,12 @@ def test_the_memory_panel_shows_use_the_limit_and_the_largest_rise():
     assert len(at.warning) == 1 and "within 20% of the limit" in at.warning[0].value
     assert any('Largest rise so far: 1,400 MB during "Fetch odds"' in c.value for c in at.caption)
     assert len(at.dataframe) == 1
+
+
+def test_the_panel_is_rendered_by_the_app_and_not_inside_the_readiness_dashboard():
+    # CI 2026-11-10: memory notes are process-wide, so a panel inside the dashboard added a table whose
+    # presence depended on what had run before, and the dashboard's own table count failed.
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    assert "render_memory_readout" not in (root / "app/ui/readiness_dashboard.py").read_text(encoding="utf-8")
+    assert "render_memory_readout()" in (root / "streamlit_app.py").read_text(encoding="utf-8")

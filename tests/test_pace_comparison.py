@@ -202,3 +202,22 @@ def test_replay_clv_is_outside_the_functions_a_running_plan_hashes():
     assert "replay_clv" not in pm.PREDICTION_FUNCTIONS and "first_edge_bets" not in pm.PREDICTION_FUNCTIONS
     # No literal hash here: code_hash() goes through ast.dump, whose text differs between Python versions.
     assert len(pm.code_hash()) == 64 and pm.code_hash() == pm.code_hash()
+
+
+def test_a_later_entry_only_bets_on_captures_close_to_the_start(monkeypatch):
+    # Owner 2026-11-10: a bet taken early often sits at a line the book later leaves.
+    games = [("early", 150, 20), ("late", 45, 20), ("spanning", 70, 30), ("none", 0, 0)]
+    events, quotes = _scope(games)
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, []))
+    monkeypatch.setattr(pm.evidence, "read_records", lambda path, table, **k: [])
+    any_time = pm.replay_clv("db", "NCAAB", "SPREAD", now=NOW)
+    late = pm.replay_clv("db", "NCAAB", "SPREAD", now=NOW, entry_within_minutes=pm.LATE_ENTRY_MINUTES)
+    assert any_time["entry_within_minutes"] is None and any_time["by_edge"]["2%"]["bets"] == 3
+    assert late["entry_within_minutes"] == 60 and late["by_edge"]["2%"]["bets"] == 2      # the early gap is gone
+    slim = pm.slim_sources(quotes)
+    kept = pm.late_captures(events, slim, 60)
+    assert kept and all(timedelta(0) <= START - pm.capture_time(events[q["event_id"]], q) <= timedelta(minutes=60)
+                        for q in kept)
+    assert {e for e, _, _ in pm.first_edge_bets(events, kept, NOW, 0.02)} == {"late", "spanning"}
+    assert pm.late_captures({}, slim, 60) == []
+
