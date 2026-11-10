@@ -82,7 +82,8 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 price_edge=price_edge(root / 'prospective-evidence.sqlite3'),
                 close_coverage=close_coverage(root / 'prospective-evidence.sqlite3'),
                 plan_progress=_plan_progress(root / 'prospective-evidence.sqlite3'),
-                pinnacle_replay=pinnacle_replay(root / 'prospective-evidence.sqlite3', extra=EXTRA_REPLAY_SCOPES))
+                pinnacle_replay=pinnacle_replay(root / 'prospective-evidence.sqlite3', extra=EXTRA_REPLAY_SCOPES),
+                pace_comparison=pace_comparison(root / 'prospective-evidence.sqlite3', extra=EXTRA_REPLAY_SCOPES))
 
 
 REPLAY_WINDOWS = ((1, 'last 24 hours'), (14, 'last 14 days'))
@@ -114,6 +115,49 @@ def pinnacle_replay(path, now=None, extra=None):
                     row = dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300])
                 out.append(dict(row, window=label))
     return out
+
+
+def pace_comparison(path, now=None, extra=None):
+    """Bets found at each capture pace on the last day's started games (pinnacle_model.pace_comparison)."""
+    from datetime import datetime, timezone
+    from app_core import pinnacle_model
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport, families in {**pinnacle_model.FAMILIES, **(extra or {})}.items():
+        for family in families:
+            try:
+                out.append(pinnacle_model.pace_comparison(path, sport, family, now=now, books=pinnacle_model.PLAN_BOOKS))
+            except Exception as exc:  # report, never guess
+                out.append(dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
+
+
+def _pace_markdown(rows):
+    rows = [r for r in rows if r.get('paces') or r.get('evaluation_error')]
+    if not rows:
+        return []
+    lines = ['', 'Capture pace: bets the first-clearing rule finds on the last 24 hours of started games when the stored '
+             'captures are thinned to a slower poll. Each cell is bets at 1% / bets at 2%, with captures per game in '
+             'brackets; slower paces are the mean of three alignments (range). An estimate: a slower poll would have '
+             'landed at times that were not captured.', '',
+             '| market | games started | as captured | every 15 min | every 30 min | every 60 min |', '|---|---|---|---|---|---|']
+
+    def cell(pace):
+        def one(found):
+            return str(found['mean']) if found['low'] == found['high'] else f"{found['mean']} ({found['low']}-{found['high']})"
+        bets = pace['bets']
+        return f"{one(bets.get('1%', {'mean': '', 'low': 0, 'high': 0}))} / {one(bets.get('2%', {'mean': '', 'low': 0, 'high': 0}))} [{pace['captures_per_game']}]"
+    for row in rows:
+        name = f"{row['sport']} {row['market_family']}"
+        if 'evaluation_error' in row:
+            lines.append(f"| {name} | {row['evaluation_error']} | | | | |")
+            continue
+        by_pace = {p['pace']: p for p in row['paces']}
+        lines.append(f"| {name} | {row['games_started']} | " + ' | '.join(
+            cell(by_pace[label]) if label in by_pace else '' for label in ('as captured', '15 min', '30 min', '60 min')) + ' |')
+    return lines
 
 
 def _replay_markdown(rows):
@@ -299,6 +343,7 @@ def markdown(result):
                 cells.append('' if b['share'] is None else f"{b['share']:.0%} ({b['comparable']}/{b['with_close_fetched']})")
             lines.append(f"| {row['sport']} {row['market_family']} | " + ' | '.join(cells) + ' |')
     lines += _replay_markdown(result.get('pinnacle_replay') or [])
+    lines += _pace_markdown(result.get('pace_comparison') or [])
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
         from app_core import plan_progress
         lines += plan_progress.markdown(result['plan_progress'])

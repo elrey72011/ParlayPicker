@@ -380,6 +380,86 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     return out
 
 
+PACES = (15, 30, 60)             # minutes between captures, compared with the captures as stored
+PACE_ALIGNMENTS = 3              # where a slower poll's first capture falls is arbitrary: average over this many
+PACE_TOLERANCE = timedelta(seconds=60)
+
+
+def thin_captures(events, quotes, minutes, offset=0.0):
+    """``quotes`` as a poll every ``minutes`` would have stored them (owner question 2026-11-09).
+
+    Per game: its first capture is always kept (research capture prices each game once, hours
+    ahead). After that a capture is kept only if it comes at least ``minutes`` after the last one
+    kept, starting ``offset`` minutes after the game's second capture. Whole captures are kept or dropped, so
+    Pinnacle and the stake books still pair up. A poll that fell between two stored captures
+    would have seen prices this does not have, so the count is an estimate, not a re-run.
+    """
+    times = {}
+    for q in quotes:
+        event = events.get(q["event_id"])
+        if event is not None:
+            times.setdefault(q["event_id"], set()).add(capture_time(event, q))
+    kept = {}
+    for event_id, found in times.items():
+        ordered = sorted(found)
+        chosen, last = {ordered[0]}, None
+        gate = (ordered[1] if len(ordered) > 1 else ordered[0]) + timedelta(minutes=offset)
+        for when in ordered[1:]:
+            if when >= gate and (last is None or when - last >= timedelta(minutes=minutes) - PACE_TOLERANCE):
+                chosen.add(when)
+                last = when
+        kept[event_id] = chosen
+    return [q for q in quotes if q["event_id"] in kept
+            and capture_time(events[q["event_id"]], q) in kept[q["event_id"]]]
+
+
+def pace_comparison(path, sport, family, *, now, lookback_days=1, paces=PACES, edges=REPLAY_EDGES, books=None):
+    """Bets the first-edge rule finds at each capture pace, on the same started games (read-only).
+
+    The price gaps this looks for last about 10 to 30 minutes, so a slower poll sees fewer. The
+    stored captures are thinned to each pace (``thin_captures``) and replayed with
+    ``FIRST_EDGE_CAPTURE`` on Pinnacle's raw no-vig price. Each slower pace is averaged over
+    ``PACE_ALIGNMENTS`` starting points, with the range. Results are never read.
+    """
+    from statistics import median
+    from app_core import prospective_research_models as research
+    events, quotes, _ = research._read_scope(path, sport, family)
+    start = now - timedelta(days=lookback_days)
+    started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
+    out = {"sport": sport, "market_family": family, "games_started": len(started),
+           "status": "COMPARED" if started else "NO_GAMES", "paces": []}
+    if not started:
+        return out
+    quotes, _ = without_junk([q for q in quotes if q["event_id"] in started])
+
+    def measure(sample):
+        per_game = {}
+        for q in sample:
+            per_game.setdefault(q["event_id"], set()).add(capture_time(started[q["event_id"]], q))
+        found = {}
+        for edge in edges:
+            picked = plan_quotes(started, sample, now, books=books, entry_rule=FIRST_EDGE_CAPTURE, min_edge=edge)
+            count = 0
+            for event_id, quote in picked.items():
+                p, other = fair(started[event_id], quote, sample, now=now), _other_side(quote, sample)
+                if p is not None and other is not None:
+                    count += max(p * quote["decimal_odds"] - 1, (1 - p) * other["decimal_odds"] - 1) >= edge
+            found[f"{edge:.0%}"] = count
+        return found, (median(len(v) for v in per_game.values()) if per_game else 0)
+
+    bets, captures = measure(quotes)
+    out["paces"].append({"pace": "as captured", "captures_per_game": captures,
+                         "bets": {edge: {"mean": n, "low": n, "high": n} for edge, n in bets.items()}})
+    for minutes in paces:
+        runs = [measure(thin_captures(started, quotes, minutes, offset=minutes * k / PACE_ALIGNMENTS))
+                for k in range(PACE_ALIGNMENTS)]
+        out["paces"].append({"pace": f"{minutes} min", "captures_per_game": median(c for _, c in runs),
+                             "bets": {edge: {"mean": round(sum(r[0][edge] for r in runs) / len(runs), 1),
+                                             "low": min(r[0][edge] for r in runs), "high": max(r[0][edge] for r in runs)}
+                                      for edge in bets}})
+    return out
+
+
 def _settled_at(result, quote):
     """True when ``result`` was settled at exactly ``quote`` (its stored settlement rule names it)."""
     rule = evidence._source_json(result.get("raw_source"))
