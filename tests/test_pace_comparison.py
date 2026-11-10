@@ -1,4 +1,5 @@
 """Capture pace: how many first-edge bets survive a slower poll (owner question 2026-11-09). SYNTHETIC quotes."""
+import pytest
 from datetime import datetime, timedelta, timezone
 
 from app_core import pinnacle_model as pm
@@ -148,3 +149,48 @@ def test_the_recommended_pace_is_the_slowest_that_keeps_85_percent_and_needs_den
     sparse = pm.recommended_pace([_comparison(20, {15: 20, 30: 20, 60: 19}, captures=6)])
     assert sparse["status"] == "NEEDS_DENSE_CAPTURES" and sparse["minutes"] is None
     assert pm.recommended_pace([])["minutes"] is None
+
+
+def _close(event_id, selection, line, american, minutes_before, book="novig", verified=1):
+    decimal = 1 + (american / 100 if american > 0 else 100 / -american)
+    return {"close_id": f"c-{event_id}-{selection}-{line}-{minutes_before}", "event_id": event_id, "selection": selection,
+            "sportsbook": book, "line": line, "decimal_odds": decimal, "close_verified": verified,
+            "close_timestamp": (START - timedelta(minutes=minutes_before)).isoformat()}
+
+
+def test_replay_clv_measures_first_edge_bets_against_the_comparable_certified_close(monkeypatch):
+    # Owner 2026-11-10: bets are volume, not edge. Do they beat the close at the same book, selection and line?
+    games = [("beat", 60, 20), ("lost", 60, 20), ("moved", 60, 20), ("unfetched", 60, 20), ("none", 0, 0)]
+    events, quotes = _scope(games)
+    closes = [
+        _close("beat", "H", -2.5, -110, 1),            # bet at +106, closed at -110: beat the close
+        _close("beat", "H", -2.5, -200, 300),          # a close from before the bet's quote never counts
+        _close("lost", "H", -2.5, +120, 1),            # closed at a better price than the bet
+        _close("moved", "H", -3.5, -110, 1),           # the market moved off the bet's line: fetched, not comparable
+        _close("moved", "H", -2.5, -110, 1, book="fanduel"),            # another book's close is not comparable
+        _close("unfetched", "H", -2.5, -110, 1, verified=0),            # an unverified close is no close
+        _close("none", "H", -2.5, -110, 1),
+    ]
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, []))
+    monkeypatch.setattr(pm.evidence, "read_records", lambda path, table, **k: closes if table == "prospective_close" else [])
+    out = pm.replay_clv("db", "NCAAB", "SPREAD", now=NOW)
+    assert out["status"] == "MEASURED" and out["games_started"] == 5
+    found = out["by_edge"]["2%"]
+    assert (found["bets"], found["close_fetched"], found["comparable"]) == (4, 3, 2) and found["coverage"] == 0.5
+    beat, lost = 2.06 / (1 + 100 / 110) - 1, 2.06 / 2.2 - 1
+    assert found["mean_price_clv"] == pytest.approx((beat + lost) / 2) and found["beat_close_share"] == 0.5
+    assert found["price_clv_se"] == pytest.approx(abs(beat - lost) / 2) and found["t"] == pytest.approx(
+        found["mean_price_clv"] / found["price_clv_se"])
+    bets = pm.first_edge_bets(events, quotes, NOW, 0.02)
+    assert {(e, b["sportsbook"], b["selection"], b["line"]) for e, b, _ in bets} == {
+        (g, "novig", "H", -2.5) for g in ("beat", "lost", "moved", "unfetched")}
+    assert all(ev >= 0.02 for _, _, ev in bets)
+
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: ({}, [], []))
+    empty = pm.replay_clv("db", "NCAAB", "SPREAD", now=NOW)
+    assert empty["status"] == "NO_GAMES" and empty["by_edge"] == {}
+
+
+def test_replay_clv_is_outside_the_functions_a_running_plan_hashes():
+    assert "replay_clv" not in pm.PREDICTION_FUNCTIONS and "first_edge_bets" not in pm.PREDICTION_FUNCTIONS
+    assert pm.code_hash().startswith("0727688db5fe")
