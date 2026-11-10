@@ -616,6 +616,83 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
     return out
 
 
+def _main_lines(event, quotes, family):
+    """[(capture_time, home_line, p_canonical)] per Pinnacle capture, at its main line (price nearest even)."""
+    by_capture = {}
+    for captured, line, p in pairs(event, quotes, family):
+        best = by_capture.get(captured)
+        if best is None or abs(p - 0.5) < abs(best[1] - 0.5):
+            by_capture[captured] = (line, p)
+    return [(captured, line, p) for captured, (line, p) in sorted(by_capture.items())]
+
+
+def line_movement(path, sport, family, *, now, lookback_days=1, books=None):
+    """How Pinnacle's line moved before each started game, and whether the stake books followed (read-only).
+
+    The nearest thing to market sentiment the stored captures hold (owner 2026-11-10): no
+    betting splits are captured, but the sharpest book's line moving is money arriving. Per
+    started game with at least two Pinnacle captures before the start:
+
+    * the move: Pinnacle's main line at its last capture minus its first (home line for a side
+      market, the total for a total), and for games whose line held, the change in its no-vig
+      probability;
+    * the follow: at each stake book's last capture, whether it quoted Pinnacle's final line;
+      and how long after Pinnacle settled on that line the book first quoted it (0 when it
+      was already there), to the resolution of the captures.
+
+    Captures are hours apart until a game's last three hours, so an early move is seen only
+    as a difference between two snapshots. Results are never read.
+    """
+    from statistics import median
+    from app_core import prospective_research_models as research
+    books = PLAN_BOOKS if books is None else books
+    events, quotes, _ = research._read_scope(path, sport, family)
+    start = now - timedelta(days=lookback_days)
+    started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
+    out = {"sport": sport, "market_family": family, "games_started": len(started), "games_tracked": 0,
+           "status": "MEASURED" if started else "NO_GAMES"}
+    if not started:
+        return out
+    grouped = by_event(slim_sources([q for q in quotes if q["event_id"] in started]))
+    moves, shifts, lags, captures, at_final, book_games = [], [], [], [], 0, 0
+    for event_id, found in grouped.items():
+        event = started[event_id]
+        kickoff = _t(event["scheduled_start"])
+        track = [row for row in _main_lines(event, found, family) if row[0] <= kickoff]
+        if len(track) < 2:
+            continue
+        captures.append(len(track))
+        (_, first_line, first_p), (_, last_line, last_p) = track[0], track[-1]
+        moves.append(last_line - first_line)
+        if last_line == first_line:
+            shifts.append(abs(last_p - first_p))
+            continue
+        settled = next(captured for i, (captured, line, _) in enumerate(track)
+                       if all(later == last_line for _, later, _ in track[i:]))
+        seen = {}
+        for q in found:
+            if q["sportsbook"] in books and q["quote_verified"] and q["line"] is not None:
+                when = capture_time(event, q)
+                if when <= kickoff:
+                    seen.setdefault(q["sportsbook"], {}).setdefault(when, set()).add(_home_line(event, q))
+        for by_time in seen.values():
+            book_games += 1
+            at_final += last_line in by_time[max(by_time)]
+            reached = [when for when in sorted(by_time) if when >= settled and last_line in by_time[when]]
+            if reached:
+                lags.append((reached[0] - settled).total_seconds() / 60)
+    moved = [m for m in moves if m]
+    out.update(games_tracked=len(moves), games_moved=len(moved),
+               share_moved=len(moved) / len(moves) if moves else None,
+               mean_abs_move=sum(abs(m) for m in moved) / len(moved) if moved else None,
+               mean_prob_shift_when_held=sum(shifts) / len(shifts) if shifts else None,
+               stake_books_at_final_line=at_final, stake_book_games=book_games,
+               share_followed=at_final / book_games if book_games else None,
+               median_follow_minutes=round(median(lags), 1) if lags else None,
+               captures_per_game=median(captures) if captures else 0)
+    return out
+
+
 SLATE_ZONE = "America/New_York"
 SLATE_ROLLOVER = timedelta(hours=6)      # a game starting before 6 AM ET belongs to the night before
 PACE_KEEP = 0.85                         # a slower pace is enough when it keeps this share of the bets
