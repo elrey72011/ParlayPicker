@@ -59,7 +59,7 @@ def statuses(path, now):
 
 def draft(path, *, sport=None, market=None, validation_start=None, now=None, methodology='market_skill',
           model='research', min_edge=None, entry_rule=None, min_bets=None, pool=False, pool_sports=None,
-          entry_books=None):
+          entry_books=None, entry_within_minutes=None):
     now = now or datetime.now(timezone.utc)
     result = {'mode': 'DRAFT_READ_ONLY', 'as_of': now.isoformat(), 'markets': statuses(path, now)}
     if sport and market:
@@ -77,6 +77,9 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
             v2 = methodology == 'market_skill_v2'
             if entry_books and not (skill and model == 'pinnacle'):
                 raise ValueError('entry books apply only to a market-skill plan with --model pinnacle')
+            if entry_within_minutes and not (v2 and model == 'pinnacle' and entry_rule):
+                raise ValueError('a late entry window needs --methodology market_skill_v2, --model pinnacle '
+                                 'and --entry-rule first_edge')
             if pool and not (v2 and model == 'pinnacle'):
                 raise ValueError('pooling needs --methodology market_skill_v2 and --model pinnacle (owner D27)')
             spec = calibration.draft_bound_plan(path, sport, market, validation_start=start,
@@ -101,7 +104,9 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                                                 pool=(market_skill_validation.pool_scopes(sport, market, pool_sports)
                                                       if pool else None),
                                                 max_entry_overround=(pinnacle_model.MAX_OVERROUND
-                                                                     if v2 and model == 'pinnacle' else None))
+                                                                     if v2 and model == 'pinnacle' else None),
+                                                # Owner 2026-11-11: enter only this close to the start.
+                                                entry_within_minutes=entry_within_minutes)
         except ValueError as exc:
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'NOT_DRAFTABLE', 'reason': str(exc)}
         else:
@@ -122,7 +127,8 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                 result['replay_estimate'] = pinnacle_model.replay_estimate(path, sport, market, now=now,
                                                                            books=(entry_books
                                                                                   or pinnacle_model.PLAN_BOOKS),
-                                                                           calibration=artifact)
+                                                                           calibration=artifact,
+                                                                           entry_within_minutes=entry_within_minutes)
             except Exception as exc:  # an estimate must never block the draft
                 result['replay_estimate'] = {'status': 'ERROR', 'error': type(exc).__name__}
     return result
@@ -187,6 +193,10 @@ def markdown(result):
                       *([f"- entry books: {', '.join(plan['market_skill_methodology']['entry_books'])} "
                          "(the books its picks can be staked at)"]
                         if 'entry_books' in plan.get('market_skill_methodology', {}) else []),
+                      *([f"- entry window: only captures taken within "
+                         f"{plan['market_skill_methodology']['entry_within_minutes']} minutes of the start "
+                         "(an earlier price is never predicted or bet)"]
+                        if 'entry_within_minutes' in plan.get('market_skill_methodology', {}) else []),
                       f"- **plan hash:** `{item['plan_hash']}`", '',
                       'To freeze after review, run the workflow with action `freeze`, this hash, and these inputs:',
                       '', '```json', json.dumps(item['freeze_inputs'], sort_keys=True), '```']
@@ -197,6 +207,9 @@ def markdown(result):
         lines += ['', f"### Replay estimate {replay.get('sport', '')} {replay.get('market_family', '')}: "
                       f"{replay.get('status')}"]
         if replay.get('status') == 'ESTIMATED':
+            if replay.get('entry_within_minutes'):
+                lines += ['', f"Only captures within {replay['entry_within_minutes']} minutes of each start are "
+                              'replayed (the drafted entry window).']
             lines += ['', f"Over {replay['days_observed']} days of captured games (results not read): "
                           f"{replay['plan_games']} of {replay['games_started']} games had a US book at Pinnacle's line "
                           f"({replay['plan_share']:.0%}), {replay['plan_games_per_day']} a day; "
@@ -253,6 +266,9 @@ def main(argv=None):
     parser.add_argument('--entry-rule', choices=('earliest', 'first_edge'), default='earliest',
                         help='draft, market_skill: enter at the earliest shared-line capture, or at the first '
                              'capture that clears the bet threshold (FIRST_EDGE_CAPTURE)')
+    parser.add_argument('--entry-within-minutes', type=int, choices=(60,),
+                        help='draft, market_skill_v2 with first_edge: enter only at captures taken this close '
+                             'to the start (locks at the freeze); blank is any time before the start')
     parser.add_argument('--entry-books', default='',
                         help='draft, market_skill with the Pinnacle model: comma-separated stake books the plan '
                              'may enter at, e.g. Novig (blank: Novig, DraftKings, FanDuel and BetMGM)')
@@ -271,6 +287,7 @@ def main(argv=None):
                        methodology=args.methodology, model=args.model, min_edge=args.min_edge,
                        entry_rule=('FIRST_EDGE_CAPTURE' if args.entry_rule == 'first_edge' else None),
                        min_bets=args.min_bets, pool=args.pool, entry_books=entry_books(args.entry_books),
+                       entry_within_minutes=args.entry_within_minutes,
                        pool_sports=[s.strip().upper() for s in args.pool_sports.split(',') if s.strip()])
         result['restore'] = dict(restore, writes_refused=guarded.writes_refused)
     else:

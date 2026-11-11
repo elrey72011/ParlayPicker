@@ -347,7 +347,7 @@ def without_junk(quotes, max_overround=MAX_OVERROUND):
 
 
 def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_EDGES,
-                    min_sample=200, min_bets=50, books=None, calibration=None):
+                    min_sample=200, min_bets=50, books=None, calibration=None, entry_within_minutes=None):
     """How fast a Pinnacle plan would fill, replayed over games already captured (read-only).
 
     For games started in the last ``lookback_days`` (counted over the days actually
@@ -365,6 +365,9 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     It never reads results or scores, so the bet threshold is chosen before seeing which
     bets won. Junk prices (``without_junk``, owner D29) are left out; ``junk_quotes_dropped``
     counts them. A running plan's predictions are not filtered: its rules were frozen without it.
+
+    ``entry_within_minutes`` (owner 2026-11-11) replays a plan frozen to enter only that close to
+    the start: only those captures are read, for every rule and count here.
     """
     from app_core import prospective_research_models as research
     events, quotes, _ = research._read_scope(path, sport, family)
@@ -373,6 +376,8 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
     if not started:
         return {"sport": sport, "market_family": family, "games_started": 0, "status": "NO_GAMES"}
     quotes, dropped = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
+    if entry_within_minutes is not None:
+        quotes = late_captures(started, quotes, entry_within_minutes)
     grouped = by_event(quotes)
     chosen = plan_quotes_by_event(started, grouped, now, books=books)
     first = min(_t(e["scheduled_start"]) for e in started.values())
@@ -383,7 +388,7 @@ def replay_estimate(path, sport, family, *, now, lookback_days=14, edges=REPLAY_
            "plan_share": round(len(chosen) / len(started), 3), "plan_games_per_day": round(games_per_day, 2),
            "days_for_min_sample": (round(min_sample / games_per_day, 1) if games_per_day else None),
            "min_sample": min_sample, "min_bets": min_bets, "junk_quotes_dropped": dropped,
-           "max_overround": MAX_OVERROUND}
+           "max_overround": MAX_OVERROUND, "entry_within_minutes": entry_within_minutes}
 
     def row(bets):
         per_day = bets / days

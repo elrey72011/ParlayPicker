@@ -92,6 +92,12 @@ PUSH_ZERO_RETURN = "PUSH_COUNTS_AS_ZERO_RETURN_BET"
 # at most this old at the prediction time. Price gaps after news last about 10 to 30 minutes, so a
 # capture found to clear hours later is no longer a price anyone could take.
 FIRST_EDGE_MAX_ENTRY_AGE_MINUTES = 15
+# A first-edge plan may also be frozen to enter only this close to the start (owner 2026-11-11).
+# A bet needs a certified close at its own book and line for the 80% close gate, and a line taken
+# hours early is often one the book later leaves: in the week of 2026-11-09, 64% of NCAAB spread
+# bets at Novig had such a close at any entry time and 80% within the last 60 minutes. Recorded
+# only when chosen, so plans frozen without it keep their hash.
+ALLOWED_ENTRY_WITHIN_MINUTES = (60,)
 
 
 def methodology(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None, push_rule=None):
@@ -150,7 +156,7 @@ def pool_scopes(sport, family, sports=None):
 
 
 def methodology_v2(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None, min_bets=DEFAULT_MIN_BETS,
-                   max_entry_overround=None, pool=None):
+                   max_entry_overround=None, pool=None, entry_within_minutes=None):
     """The ``market-skill-v2`` rules (owner D26). ``pool``: the scopes whose bets count together
     (``pool_scopes``; owner D27), or None for a plan that validates alone."""
     if min_edge not in ALLOWED_MIN_EDGES:
@@ -178,6 +184,12 @@ def methodology_v2(min_edge=DEFAULT_MIN_EDGE, entry_books=None, entry_rule=None,
         if not 1.0 < max_entry_overround <= 1.5:
             raise ValueError("max_entry_overround must be above 1 and at most 1.5")
         rules["max_entry_overround"] = max_entry_overround   # owner D29: junk prices never enter
+    if entry_within_minutes is not None:
+        if entry_within_minutes not in ALLOWED_ENTRY_WITHIN_MINUTES:
+            raise ValueError(f"entry_within_minutes must be one of {ALLOWED_ENTRY_WITHIN_MINUTES}")
+        if entry_rule != FIRST_EDGE_CAPTURE:
+            raise ValueError("entry_within_minutes needs the FIRST_EDGE_CAPTURE entry rule")
+        rules["entry_within_minutes"] = entry_within_minutes   # owner 2026-11-11: late entries only
     if pool is not None:
         scopes = sorted(pool)
         if not _valid_pool(scopes):
@@ -298,6 +310,9 @@ def first_edge_bet(db, plan, quote, rules, as_of):
         from app_core.pinnacle_model import capture_time
         if made - capture_time(event, entry) > timedelta(minutes=FIRST_EDGE_MAX_ENTRY_AGE_MINUTES):
             continue  # predicted from a capture too old to still be bettable
+        if rules.get("entry_within_minutes") and start - capture_time(event, entry) > timedelta(
+                minutes=rules["entry_within_minutes"]):
+            continue  # the plan froze late entries only: this capture is too early to be its bet
         other = opposite(db, entry)
         if other is None:
             continue
