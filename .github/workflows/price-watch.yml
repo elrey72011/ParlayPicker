@@ -17,6 +17,11 @@ on:
         required: false
         default: false
         type: boolean
+      steady:
+        description: "Steady mode for this run: poll every sport every 15 minutes (about a quarter more credits than normal)"
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: '17 21 * * *'     # 4:17 PM EST, through the evening slate
     - cron: '30 16 * * 6,0'   # 11:30 AM EST on Saturday and Sunday, for afternoon games
@@ -37,6 +42,9 @@ jobs:
       # Fast mode is off unless this run was started with the fast input, or the repository variable
       # PARLAYPICKER_PRICE_WATCH_FAST is true (every run, scheduled ones included).
       PARLAYPICKER_PRICE_WATCH_FAST: ${{ inputs.fast && 'true' || vars.PARLAYPICKER_PRICE_WATCH_FAST }}
+      # Steady mode (15 minutes for every sport; NCAAB is 30 otherwise): this run's input, or the repository
+      # variable PARLAYPICKER_PRICE_WATCH_STEADY for every run. Fast mode wins when both are on.
+      PARLAYPICKER_PRICE_WATCH_STEADY: ${{ inputs.steady && 'true' || vars.PARLAYPICKER_PRICE_WATCH_STEADY }}
       # Automatic pace (off unless the variable is true): a sport is polled more slowly where the replay
       # shows a slower poll kept 85% of the bets. It never polls faster, so it never adds credits.
       PARLAYPICKER_PRICE_WATCH_AUTO_PACE: ${{ vars.PARLAYPICKER_PRICE_WATCH_AUTO_PACE }}
