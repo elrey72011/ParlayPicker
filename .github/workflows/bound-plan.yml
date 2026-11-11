@@ -66,6 +66,18 @@ on:
         default: earliest
         type: choice
         options: [earliest, first_edge]
+      entry_window:
+        description: "draft only, market_skill_v2 with first_edge: enter at any time, or only in the last 60 minutes before the start (locks at the freeze)"
+        required: false
+        default: any
+        type: choice
+        options: [any, last_60_minutes]
+      entry_books:
+        description: "draft only, pinnacle model: the stake books the plan may enter at (locks at the freeze)"
+        required: false
+        default: all
+        type: choice
+        options: [all, Novig]
       validation_start:
         description: "draft only: ISO validation start (blank = next UTC midnight)"
         required: false
@@ -120,6 +132,8 @@ jobs:
           MIN_BETS: ${{ inputs.min_bets }}
           POOL: ${{ inputs.pool }}
           POOL_SPORTS: ${{ inputs.pool_sports }}
+          ENTRY_BOOKS: ${{ inputs.entry_books }}
+          ENTRY_WINDOW: ${{ inputs.entry_window }}
           FREEZE_INPUTS: ${{ inputs.freeze_inputs }}
           EXPECTED_HASH: ${{ inputs.expected_hash }}
           OUT: ${{ runner.temp }}/bound-plan
@@ -130,6 +144,8 @@ jobs:
           if [ "$ACTION" = draft ] && [ -n "$VALIDATION_START" ]; then args+=(--validation-start "$VALIDATION_START"); fi
           if [ "$ACTION" = draft ]; then args+=(--methodology "${METHODOLOGY:-market_skill}" --model "${MODEL:-research}" --min-edge "${MIN_EDGE:-0.02}" --entry-rule "${ENTRY_RULE:-earliest}" --min-bets "${MIN_BETS:-75}"); fi
           if [ "$ACTION" = draft ] && [ "$POOL" = true ]; then args+=(--pool --pool-sports "${POOL_SPORTS:-NBA,NCAAB}"); fi
+          if [ "$ACTION" = draft ] && [ -n "${ENTRY_BOOKS:-}" ] && [ "$ENTRY_BOOKS" != all ]; then args+=(--entry-books "$ENTRY_BOOKS"); fi
+          if [ "$ACTION" = draft ] && [ "${ENTRY_WINDOW:-any}" = last_60_minutes ]; then args+=(--entry-within-minutes 60); fi
           if [ "$ACTION" = freeze ]; then args+=(--inputs "$FREEZE_INPUTS" --expected-hash "$EXPECTED_HASH"); fi
           python -u scripts/bound_plan.py "${args[@]}"
       - name: Save the verified Drive object cache

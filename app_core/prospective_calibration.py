@@ -421,10 +421,17 @@ def predict_bound(path, sport, market, *, now=None):
                   if artifact and rules.get("entry_rule") else None)
         # The plan froze the books it may enter at (the books its picks can be staked at) and its entry rule.
         # A plan frozen with ``max_entry_overround`` (owner D29) never enters at a junk price.
-        select = lambda events, quotes, at: pinnacle_model.plan_quotes(  # noqa: E731
-            events, pinnacle_model.without_junk(quotes, limit)[0] if limit else quotes, at,
-            books=frozenset(books) if books else None, entry_rule=rules.get("entry_rule"),
-            min_edge=rules.get("min_edge"), adjust=adjust)
+        late = rules.get("entry_within_minutes")
+
+        def select(events, quotes, at):
+            kept = pinnacle_model.without_junk(quotes, limit)[0] if limit else quotes
+            if late:
+                # A plan frozen with ``entry_within_minutes`` (owner 2026-11-11) reads only the captures
+                # taken that close to each game's start, so it never predicts or bets at an earlier price.
+                kept = pinnacle_model.late_captures(events, kept, late)
+            return pinnacle_model.plan_quotes(
+                events, kept, at, books=frozenset(books) if books else None, entry_rule=rules.get("entry_rule"),
+                min_edge=rules.get("min_edge"), adjust=adjust)
     result = _predict(path, sport, market, model, calibration, now=now, policy_version=POLICY_VERSION, tag="BOUND",
                       select=select)
     return dict(result, validation_plan_id=plan["validation_plan_id"])
@@ -451,7 +458,8 @@ def window_days(target, rate, *, coverage=0.8, margin=1.25, minimum=7):
     return max(minimum, math.ceil(target / (rate * coverage) * margin))
 
 
-def expected_bets_per_day(path, scopes, *, now, min_edge, entry_books=None, entry_rule=None):
+def expected_bets_per_day(path, scopes, *, now, min_edge, entry_books=None, entry_rule=None,
+                          entry_within_minutes=None):
     """Bets per day a Pinnacle plan would have made over the games already captured, summed over
     ``scopes`` (``pinnacle_model.replay_estimate``, raw no-vig price, junk prices left out)."""
     from app_core import pinnacle_model
@@ -459,7 +467,8 @@ def expected_bets_per_day(path, scopes, *, now, min_edge, entry_books=None, entr
     for scope in scopes:
         sport, family = scope.split(":")
         replay = pinnacle_model.replay_estimate(path, sport, family, now=now, edges=(min_edge,),
-                                                books=frozenset(entry_books) if entry_books else None)
+                                                books=frozenset(entry_books) if entry_books else None,
+                                                entry_within_minutes=entry_within_minutes)
         if replay.get("status") != "ESTIMATED":
             continue
         rule = entry_rule or "EARLIEST_SHARED_LINE"
@@ -471,7 +480,7 @@ def expected_bets_per_day(path, scopes, *, now, min_edge, entry_books=None, entr
 def draft_bound_plan(path, sport, market, *, validation_start, validation_days=None, holdout_days=None,
                      model_id=None, calibration_id=None, rate=None, methodology="v1", min_edge=None,
                      entry_books=None, staking_terms=None, entry_rule=None, push_rule=None,
-                     min_bets=None, pool=None, max_entry_overround=None):
+                     min_bets=None, pool=None, max_entry_overround=None, entry_within_minutes=None):
     """A proposed plan version binding the candidate model and its calibration. Nothing is frozen.
 
     Thresholds, sample minimums and policies are the frozen v1 template's
@@ -515,10 +524,12 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
         # Built first so a bad choice fails before any window is sized.
         v2_rules = dict(min_edge=edge, entry_books=entry_books, entry_rule=entry_rule,
                         min_bets=market_skill.DEFAULT_MIN_BETS if min_bets is None else min_bets,
-                        max_entry_overround=max_entry_overround, pool=pool)
+                        max_entry_overround=max_entry_overround, pool=pool,
+                        **({"entry_within_minutes": entry_within_minutes} if entry_within_minutes is not None else {}))
         target = market_skill.methodology_v2(**v2_rules)["min_bets"]
-    elif min_bets is not None or pool or max_entry_overround is not None:
-        raise ValueError("min_bets, pool and max_entry_overround apply only to the market_skill_v2 methodology")
+    elif min_bets is not None or pool or max_entry_overround is not None or entry_within_minutes is not None:
+        raise ValueError("min_bets, pool, max_entry_overround and entry_within_minutes apply only to the "
+                         "market_skill_v2 methodology")
     if validation_days is None or holdout_days is None:
         if rate is not None:
             observed = rate
@@ -527,7 +538,8 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
             if not pinnacle_model.is_pinnacle(model):
                 raise ValueError("give validation_days and holdout_days: bets can be estimated only for a Pinnacle plan")
             observed = expected_bets_per_day(path, pool or [f"{sport}:{market}"], now=start, min_edge=edge,
-                                             entry_books=entry_books, entry_rule=entry_rule)
+                                             entry_books=entry_books, entry_rule=entry_rule,
+                                             entry_within_minutes=entry_within_minutes)
             if observed <= 0:
                 raise ValueError("no bets in the captured games yet: the window cannot be sized by bets")
         else:
@@ -594,7 +606,9 @@ def freeze_inputs(spec):
                 **({"pool": spec["market_skill_methodology"]["pool"]["scopes"]}
                    if "pool" in spec["market_skill_methodology"] else {}),
                 **({"max_entry_overround": spec["market_skill_methodology"]["max_entry_overround"]}
-                   if "max_entry_overround" in spec["market_skill_methodology"] else {})}
+                   if "max_entry_overround" in spec["market_skill_methodology"] else {}),
+                **({"entry_within_minutes": spec["market_skill_methodology"]["entry_within_minutes"]}
+                   if "entry_within_minutes" in spec["market_skill_methodology"] else {})}
                if spec.get("market_skill_methodology", {}).get("version") == "market-skill-v2" else
                {"methodology": "market_skill"} if "market_skill_methodology" in spec else {}),
             # Recorded only when it differs from the default, so default plans keep their inputs.
