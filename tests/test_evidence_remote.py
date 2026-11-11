@@ -223,3 +223,36 @@ def test_restore_bulk_read_keeps_identity_validation(frozen, cloud, tmp_path):
     cloud.objects[key + 'wrong'] = cloud.objects.pop(key)
     with pytest.raises(Exception, match='identity'):
         remote.restore(tmp_path/'bad-bulk.sqlite3', client=cloud)
+
+
+def test_restore_releases_each_file_and_row_as_it_goes(frozen, cloud, tmp_path, monkeypatch):
+    """2026-11-11: 224 snapshots were about 1 GB; holding the downloaded bytes and the decoded rows
+    together crashed the hosted app one second after the merge. Each is released once it is used."""
+    _, db, _ = frozen
+    save_fixture(frozen)
+    assert remote.sync(db)
+    handed = {}
+
+    def read_objects(*, Prefix):
+        handed[Prefix] = [(k, v) for k, v in cloud.objects.items() if k.startswith(Prefix)]
+        return handed[Prefix]
+    cloud.read_objects = read_objects
+    live_rows = []
+    original = remote._receipt
+
+    def receipt(table, row):
+        live_rows.append(row)
+        return original(table, row)
+    monkeypatch.setattr(remote, '_receipt', receipt)
+    fresh = tmp_path / 'released.sqlite3'
+    assert remote.restore(fresh, client=cloud) == 1
+    files = [item for items in handed.values() for item in items]
+    assert files and all(raw is None for _, raw in files)          # the downloaded bytes are not kept
+    assert {key for key, _ in files} == set(cloud.objects)          # every file was still read and counted
+    assert len(live_rows) == len(files)                             # every row still gets its receipt
+    # The restored copy is complete and already verified: an incremental sync uploads nothing.
+    monkeypatch.setattr(cloud, 'put_object', lambda **kwargs: pytest.fail('nothing new to upload'))
+    assert remote.sync(fresh, incremental=True)
+    original_frame, _ = evidence.materialize(db)
+    restored_frame, _ = evidence.materialize(fresh)
+    assert original_frame.to_csv(index=False) == restored_frame.to_csv(index=False)

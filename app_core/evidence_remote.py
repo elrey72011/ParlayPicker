@@ -234,8 +234,15 @@ def _restore(path=None, *, client=None, full_verification=False, ids=None):
             with PerformanceSpan("evidence_decode_validate", ids=ids,
                                  database_generation=_database_generation(database),
                                  storage_scope_hash=scope_hash, table_or_kind=table) as table_span:
-                for key, raw in objects_by_prefix[table_prefix]:
+                entries = objects_by_prefix[table_prefix]
+                release = isinstance(entries, list)
+                for index, (key, raw) in enumerate(entries):
+                    if release:
+                        # Drop each downloaded file once it is decoded (2026-11-11): 224 snapshots were
+                        # about 1 GB, and holding the bytes and the decoded rows together crashed the app.
+                        entries[index] = (key, None)
                     row = _decode(raw, table)
+                    del raw
                     if key != _key(table, row):
                         raise EvidenceStorageError("Remote record key does not match its identity")
                     rows[table].append(row)
@@ -257,11 +264,16 @@ def _restore(path=None, *, client=None, full_verification=False, ids=None):
     unchanged = 0
     with PerformanceSpan("evidence_local_merge", ids=ids, database_generation=_database_generation(database),
                          storage_scope_hash=scope_hash) as merge_span:
+        receipts, counts = [], {}
         with closing(connect(database)) as db, db:
             for table, entries in rows.items():
                 if table == "score_revisions":
                     entries.sort(key=lambda row: (row[2], row[1]))
-                for row in entries:
+                counts[table] = len(entries)
+                for index, row in enumerate(entries):
+                    # Keep only the row's receipt once SQLite has it, so the decoded copies are released too.
+                    receipts.append(_receipt(table, row))
+                    entries[index] = None
                     where = " AND ".join(f"{TABLES[table][i]}=?" for i in KEYS[table])
                     identity = tuple(row[i] for i in KEYS[table])
                     existing = db.execute(f"SELECT {','.join(TABLES[table])} FROM {table} WHERE {where}", identity).fetchone()
@@ -274,11 +286,10 @@ def _restore(path=None, *, client=None, full_verification=False, ids=None):
                     else:
                         unchanged += 1
         merge_span.set(records_imported=imported, records_unchanged=unchanged,
-                       records_returned=sum(len(entries) for entries in rows.values()),
+                       records_returned=sum(counts.values()),
                        verification_status="transaction_committed")
     with _lock:
-        _verified.setdefault(_scope(path, client), set()).update(
-            _receipt(table, row) for table, entries in rows.items() for row in entries)
+        _verified.setdefault(_scope(path, client), set()).update(receipts)
     _status.update(status="restored", restored_snapshots=_status.get("restored_snapshots", 0) + imported, error=None)
     return imported
 
