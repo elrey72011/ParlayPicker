@@ -373,3 +373,41 @@ def test_the_research_workflows_keep_three_quarters_of_the_close_allowance_for_b
     line = "PARLAYPICKER_CERTIFIED_CLOSE_REST_SHARE: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_REST_SHARE || '0.25' }}"
     assert line in (root / "research-loop.yml").read_text(encoding="utf-8")
     assert line in (root / "research-scheduler.yml").read_text(encoding="utf-8")
+
+
+def test_a_close_allowance_can_be_raised_for_a_budgeted_sport_only_and_bad_values_change_nothing(monkeypatch):
+    # Owner 2026-11-11 (option B): NCAAB 700 a day and 15,000 per 31 days. The defaults in code stay as they are.
+    from datetime import datetime, timezone
+    from app_core import research_api_budget as rab
+    default = {"NBA": {"daily": 100, "rolling_31_days": 2500}, "NCAAB": {"daily": 400, "rolling_31_days": 4500}}
+    assert rab.certified_close_limits({}.get) == default == rab.ALL_CERTIFIED_CLOSE_LIMITS
+    raised = rab.certified_close_limits({rab.CLOSE_LIMITS_ENV: "NCAAB=700/15000"}.get)
+    assert raised["NCAAB"] == {"daily": 700, "rolling_31_days": 15000} and raised["NBA"] == default["NBA"]
+    assert rab.ALL_CERTIFIED_CLOSE_LIMITS["NCAAB"] == {"daily": 400, "rolling_31_days": 4500}       # the default is not mutated
+    for bad in ("NCAAB=700", "NCAAB=many/15000", "NHL=300/3000", "NCAAB=0/100", "NCAAB=900/800",
+                "NCAAB=9999/15000", "NCAAB=700/999999", ""):
+        assert rab.certified_close_limits({rab.CLOSE_LIMITS_ENV: bad}.get) == default
+    both = rab.certified_close_limits({rab.CLOSE_LIMITS_ENV: " nba = 200 / 5000 , NCAAB=700/15000"}.get)
+    assert both == {"NBA": {"daily": 200, "rolling_31_days": 5000}, "NCAAB": {"daily": 700, "rolling_31_days": 15000}}
+
+    at = datetime(2026, 11, 12, 1, 0, tzinfo=timezone.utc)
+    monkeypatch.delenv(rab.CLOSE_LIMITS_ENV, raising=False)
+    budget = rab.Budget({}, lambda: None, clock=lambda: at)
+    budget.reserve_certified_close("NCAAB", 400)
+    with pytest.raises(rab.BudgetLimit):
+        budget.reserve_certified_close("NCAAB", 10)                       # the default cap still holds without the setting
+    monkeypatch.setenv(rab.CLOSE_LIMITS_ENV, "NCAAB=700/15000")
+    budget.reserve_certified_close("NCAAB", 300)                          # 700 in the day
+    with pytest.raises(rab.BudgetLimit):
+        budget.reserve_certified_close("NCAAB", 10)
+    with pytest.raises(rab.BudgetLimit):
+        budget.reserve_certified_close("NBA", 110)                        # NBA is unchanged
+    assert budget.report()["certified_close_limits"]["NCAAB"] == {"daily": 700, "rolling_31_days": 15000}
+
+
+def test_the_research_workflows_set_the_ncaab_close_allowance_the_owner_approved():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / ".github/workflows"
+    line = "PARLAYPICKER_CERTIFIED_CLOSE_LIMITS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_LIMITS || 'NCAAB=700/15000' }}"
+    assert line in (root / "research-loop.yml").read_text(encoding="utf-8")
+    assert line in (root / "research-scheduler.yml").read_text(encoding="utf-8")

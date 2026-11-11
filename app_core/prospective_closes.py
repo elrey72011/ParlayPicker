@@ -272,8 +272,8 @@ def _requested_scopes(budget, now):
 def _over_rest_share(budget, sport, credits, share):
     """True when a whole-game request would take the day's close use past ``share`` of the allowance."""
     try:
-        from app_core.research_api_budget import ALL_CERTIFIED_CLOSE_LIMITS
-        limit = (ALL_CERTIFIED_CLOSE_LIMITS.get(sport) or {}).get("daily")
+        from app_core.research_api_budget import certified_close_limits
+        limit = (certified_close_limits().get(sport) or {}).get("daily")
         if budget is None or limit is None:
             return False
         return budget.usage(sport, budget.close_ledger)["daily"] + credits > share * limit
@@ -384,9 +384,9 @@ def summary(report, sport=None, budget=None):
     out["errors"] = kinds
     if budget is not None and sport is not None:
         try:
-            from app_core.research_api_budget import ALL_CERTIFIED_CLOSE_LIMITS
+            from app_core.research_api_budget import certified_close_limits
             out["allowance"] = {"used": budget.usage(sport, budget.close_ledger),
-                                "limits": ALL_CERTIFIED_CLOSE_LIMITS.get(sport)}
+                                "limits": certified_close_limits().get(sport)}
         except Exception:  # a summary never fails a cycle
             pass
     return out
