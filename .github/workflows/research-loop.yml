@@ -45,6 +45,9 @@ jobs:
       # Whole-game closes (40 credits) may use a quarter of the daily close allowance; the rest is kept for
       # bets' own closes (10 credits) on games still to start (2026-11-10). 1 restores the old behaviour.
       PARLAYPICKER_CERTIFIED_CLOSE_REST_SHARE: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_REST_SHARE || '0.25' }}
+      # NCAAB close allowance (owner 2026-11-11, option B): 700 a day and 15,000 per 31 days, so every bet's
+      # close can be fetched. The code default stays 400 and 4,500; NBA stays 100 and 2,500.
+      PARLAYPICKER_CERTIFIED_CLOSE_LIMITS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_LIMITS || 'NCAAB=700/15000' }}
       PARLAYPICKER_RESEARCH_CAPTURE_HOURS: ${{ vars.PARLAYPICKER_RESEARCH_CAPTURE_HOURS }}
       PARLAYPICKER_PINNACLE_SPORTS: ${{ vars.PARLAYPICKER_PINNACLE_SPORTS }}
       PARLAYPICKER_NOVIG_SPORTS: ${{ vars.PARLAYPICKER_NOVIG_SPORTS }}

@@ -39,6 +39,31 @@ def sport_call_limits(sport):
 CERTIFIED_CLOSE_LIMITS = {"NBA": {"daily": 100, "rolling_31_days": 2500}}  # D13
 NCAAB_CERTIFIED_CLOSE_LIMITS = {"NCAAB": {"daily": 400, "rolling_31_days": 4500}}  # D14
 ALL_CERTIFIED_CLOSE_LIMITS = {**CERTIFIED_CLOSE_LIMITS, **NCAAB_CERTIFIED_CLOSE_LIMITS}
+# The allowances above are the defaults. ``PARLAYPICKER_CERTIFIED_CLOSE_LIMITS`` replaces one for a sport
+# that already has an allowance, as ``SPORT=daily/31-day`` (several separated by commas). Owner
+# 2026-11-11: NCAAB 700 a day and 15,000 per 31 days. At 400 a day the bets' own closes ran out
+# by 8:51 PM ET, 10 of 29 NCAAB bets had none, and the 4,500 cap would have ended all NCAAB
+# closes within a week. A sport with no allowance cannot be given one here, and anything
+# unreadable or out of range leaves the default in place.
+CLOSE_LIMITS_ENV = "PARLAYPICKER_CERTIFIED_CLOSE_LIMITS"
+MAX_CLOSE_LIMITS = {"daily": 5000, "rolling_31_days": 100000}
+
+
+def certified_close_limits(setting=None):
+    """{sport: {"daily", "rolling_31_days"}}: the defaults, with any valid override applied."""
+    import os
+    import re
+    limits = {sport: dict(windows) for sport, windows in ALL_CERTIFIED_CLOSE_LIMITS.items()}
+    raw = str((setting or os.environ.get)(CLOSE_LIMITS_ENV, "") or "")
+    for part in raw.split(","):
+        found = re.fullmatch(r"\s*([A-Za-z]+)\s*=\s*(\d+)\s*/\s*(\d+)\s*", part)
+        if not found:
+            continue
+        sport, daily, rolling = found.group(1).upper(), int(found.group(2)), int(found.group(3))
+        if (sport in limits and 0 < daily <= MAX_CLOSE_LIMITS["daily"]
+                and daily <= rolling <= MAX_CLOSE_LIMITS["rolling_31_days"]):
+            limits[sport] = {"daily": daily, "rolling_31_days": rolling}
+    return limits
 # D4 option A (owner-chosen 2026-11-06): Pinnacle as the fair-price reference for NBA and
 # NCAAB spreads. The capture request names the US-region books plus Pinnacle instead of
 # ``regions=us``, so one raw response holds every book and each quote still replays
@@ -186,7 +211,7 @@ class Budget:
         ``already_spent=True`` records credits the provider has already charged (a cost
         above the reservation): it is always recorded, never refused.
         """
-        limits = ALL_CERTIFIED_CLOSE_LIMITS.get(sport)
+        limits = certified_close_limits().get(sport)
         if limits is None and not already_spent:
             self.blocked.append(f"{sport}:certified_close:not_budgeted")
             raise BudgetLimit(f"api_budget:{sport}:certified_close:not_budgeted")
@@ -327,7 +352,7 @@ class Budget:
                                 "calls":self.usage(s,self.call_ledger)}
                             for s in ("NFL","NCAAF",*sorted(NEW_SPORT_KEYS.values()))},
                 "new_sport_credit_limits":NEW_SPORT_CREDIT_LIMITS,
-                "certified_close_limits":ALL_CERTIFIED_CLOSE_LIMITS,
+                "certified_close_limits":certified_close_limits(),
                 "certified_close_usage":{s:self.usage(s,self.close_ledger) for s in ALL_CERTIFIED_CLOSE_LIMITS},
                 "new_sport_call_limits":NEW_SPORT_CALL_LIMITS,
                 "sport_credit_limits":{s:sport_credit_limits(s) for s in sorted(NEW_SPORT_KEYS.values())},
