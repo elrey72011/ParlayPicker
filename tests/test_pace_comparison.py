@@ -221,3 +221,30 @@ def test_a_later_entry_only_bets_on_captures_close_to_the_start(monkeypatch):
     assert {e for e, _, _ in pm.first_edge_bets(events, kept, NOW, 0.02)} == {"late", "spanning"}
     assert pm.late_captures({}, slim, 60) == []
 
+
+
+def test_replay_clv_splits_the_bets_by_the_stake_book_they_were_at(monkeypatch):
+    # Owner 2026-11-11: the stake is placed at Novig, so the split by book matters before a freeze.
+    def game(event_id, book):
+        event = {"event_id": event_id, "home_team": "H", "away_team": "A", "observed_at": FIRST.isoformat(),
+                 "scheduled_start": START.isoformat()}
+        received = START - timedelta(minutes=45)
+        stamp = (received - timedelta(seconds=30)).isoformat()
+        quotes = (both("pinnacle", -2.5, -110, -110, received.isoformat(), stamp, event_id)
+                  + both(book, -2.5, +106, -110, received.isoformat(), stamp, event_id))
+        return event, quotes
+    events, quotes = {}, []
+    for event_id, book in (("n1", "novig"), ("n2", "novig"), ("d1", "draftkings")):
+        events[event_id], found = game(event_id, book)
+        quotes += found
+    closes = [_close("n1", "H", -2.5, -110, 1, book="novig"), _close("d1", "H", -2.5, +120, 1, book="draftkings")]
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, []))
+    monkeypatch.setattr(pm.evidence, "read_records", lambda path, table, **k: closes if table == "prospective_close" else [])
+    found = pm.replay_clv("db", "NCAAB", "SPREAD", now=NOW, books=pm.PLAN_BOOKS)["by_edge"]["2%"]
+    assert found["bets"] == 3 and found["comparable"] == 2
+    assert set(found["by_book"]) == {"Novig", "DraftKings"}                      # labels, not provider keys
+    novig, draftkings = found["by_book"]["Novig"], found["by_book"]["DraftKings"]
+    assert (novig["bets"], novig["close_fetched"], novig["comparable"]) == (2, 1, 1) and novig["coverage"] == 0.5
+    assert novig["mean_price_clv"] == pytest.approx(2.06 / (1 + 100 / 110) - 1) and novig["beat_close_share"] == 1.0
+    assert (draftkings["bets"], draftkings["comparable"]) == (1, 1) and draftkings["mean_price_clv"] < 0
+    assert sum(b["bets"] for b in found["by_book"].values()) == found["bets"]
