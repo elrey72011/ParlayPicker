@@ -200,3 +200,24 @@ def test_the_later_entry_table_is_separate_and_leaves_the_any_time_table_as_it_w
     assert '| NBA SPREAD | last 24 hours | 1% | 6 | 6 | 3 (50%) | +0.4% (0.2%) | 2.0 | 67% | 0 | 0 | 3 | 0 |' in text[first:second]
     assert '| NBA SPREAD | last 24 hours | 1% | 3 | 3 | 3 (100%) | +0.4% (0.2%) | 2.0 | 67% | 0 | 0 | 0 | 0 |' in text[second:]
     assert report.late_entry_clv(tmp_path / 'missing.sqlite3') == []
+
+
+def test_the_closing_line_table_is_also_split_by_stake_book_for_seven_days_at_one_percent():
+    import scripts.market_readiness_report as report
+
+    def row(window, bets, mean):
+        book = dict(bets=bets, close_fetched=bets, comparable=bets - 1, coverage=(bets - 1) / bets, mean_price_clv=mean,
+                    price_clv_se=0.005, t=2.0, beat_close_share=0.75)
+        return dict(sport='NCAAB', market_family='SPREAD', window=window, by_edge={
+            '1%': dict(bets=bets, by_book={'Novig': book, 'FanDuel': dict(book, bets=0)}),
+            '2%': dict(bets=1, by_book={'Novig': dict(book, mean_price_clv=0.5)})})
+    any_time = [row('last 24 hours', 9, 0.09), row('last 7 days', 5, 0.016), dict(sport='NBA', market_family='TOTAL',
+                                                                                 window='last 7 days', evaluation_error='x')]
+    late = [row('last 7 days', 4, 0.009)]
+    text = '\n'.join(report._clv_by_book_markdown(any_time, late))
+    assert '| NCAAB SPREAD | any time | Novig | 5 | 5 | 4 (80%) | +1.6% (0.5%) | 75% |' in text
+    assert '| NCAAB SPREAD | last 60 min | Novig | 4 | 4 | 3 (75%) | +0.9% (0.5%) | 75% |' in text
+    assert 'FanDuel' not in text and '+9.0%' not in text and '+50.0%' not in text     # no bets; other window; other edge
+    assert report._clv_by_book_markdown([], []) == []
+    assert report._clv_by_book_markdown([dict(sport='NBA', market_family='SPREAD', window='last 7 days',
+                                              by_edge={'1%': dict(bets=3)})], []) == []   # older rows without the split

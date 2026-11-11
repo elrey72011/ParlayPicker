@@ -538,6 +538,19 @@ def first_edge_bets(started, sample, now, edge, books=None):
 NOT_COMPARABLE = ("CLOSE_NOT_FETCHED", "BOOK_NOT_IN_CLOSE", "LINE_MOVED", "CLOSE_BEFORE_BET")
 
 
+def _book_label(sportsbook):
+    from app_core.public_quote_policy import canonical_book_label
+    return canonical_book_label(sportsbook)
+
+
+def _clv_summary(bets, close_fetched, clv, mean_se):
+    mean, se = mean_se(clv)
+    return {"bets": bets, "close_fetched": close_fetched, "comparable": len(clv),
+            "coverage": len(clv) / bets if bets else None, "mean_price_clv": mean, "price_clv_se": se,
+            "t": (mean / se if mean is not None and se else None),
+            "beat_close_share": sum(1 for v in clv if v > 0) / len(clv) if clv else None}
+
+
 LATE_ENTRY_MINUTES = 60    # entries this close to the start had a comparable close about 90% of the time (2026-11-07)
 
 
@@ -590,13 +603,17 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
         quotes = late_captures(started, quotes, entry_within_minutes)
     for edge in edges:
         bets = first_edge_bets(started, quotes, now, edge, books)
-        clv, why = [], {reason: 0 for reason in NOT_COMPARABLE}
+        clv, why, books_seen = [], {reason: 0 for reason in NOT_COMPARABLE}, {}
         for event_id, bet, _ in bets:
+            book = books_seen.setdefault(_book_label(bet["sportsbook"]), {"bets": 0, "close_fetched": 0, "clv": []})
+            book["bets"] += 1
+            book["close_fetched"] += event_id in fetched
             same_line = closes.get((event_id, bet["selection"], bet["sportsbook"], bet["line"]), [])
             later = [c for c in same_line if _t(c["close_timestamp"]) >= _t(bet["quote_timestamp"])]
             if later:
                 close = max(later, key=lambda c: (_t(c["close_timestamp"]), c["close_id"]))
                 clv.append(bet["decimal_odds"] / close["decimal_odds"] - 1)
+                book["clv"].append(clv[-1])
             elif event_id not in fetched:
                 why["CLOSE_NOT_FETCHED"] += 1
             elif (event_id, bet["selection"], bet["sportsbook"]) not in at_book:
@@ -610,6 +627,9 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
             "bets": len(bets), "close_fetched": sum(1 for event_id, _, _ in bets if event_id in fetched),
             "comparable": len(clv), "coverage": len(clv) / len(bets) if bets else None,
             "not_comparable": why,
+            # The same measures per stake book (owner 2026-11-11: the stake is placed at Novig).
+            "by_book": {label: _clv_summary(found["bets"], found["close_fetched"], found["clv"], _mean_se)
+                        for label, found in sorted(books_seen.items())},
             "mean_price_clv": mean, "price_clv_se": se,
             "t": (mean / se if mean is not None and se else None),
             "beat_close_share": sum(1 for v in clv if v > 0) / len(clv) if clv else None}

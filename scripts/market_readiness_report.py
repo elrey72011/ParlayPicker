@@ -208,6 +208,35 @@ LATE_CLV_CAPTION = ('Later entry: the same measurement when only captures in the
                     'for close coverage.')
 
 
+BY_BOOK_WINDOW = 'last 7 days'
+BY_BOOK_EDGE = '1%'
+
+
+def _clv_by_book_markdown(any_time, late):
+    """The closing-line table split by the stake book the bet was at (owner 2026-11-11; the stake is at Novig).
+    One window and edge, the largest sample: the last 7 days at a 1% edge, for both entry timings."""
+    lines = []
+    for label, rows in (('any time', any_time), ('last 60 min', late)):
+        for row in rows:
+            if row.get('window') != BY_BOOK_WINDOW or 'evaluation_error' in row:
+                continue
+            for book, found in ((row.get('by_edge') or {}).get(BY_BOOK_EDGE) or {}).get('by_book', {}).items():
+                if not found['bets']:
+                    continue
+                mean = '' if found['mean_price_clv'] is None else f"{found['mean_price_clv']:+.1%}"
+                se = '' if found['price_clv_se'] is None else f" ({found['price_clv_se']:.1%})"
+                beat = '' if found['beat_close_share'] is None else f"{found['beat_close_share']:.0%}"
+                share = '' if found['coverage'] is None else f" ({found['coverage']:.0%})"
+                lines.append(f"| {row['sport']} {row['market_family']} | {label} | {book} | {found['bets']} | "
+                             f"{found['close_fetched']} | {found['comparable']}{share} | {mean}{se} | {beat} |")
+    if not lines:
+        return []
+    return ['', f'Closing-line value by stake book ({BY_BOOK_WINDOW}, {BY_BOOK_EDGE} edge): the same bets as above, split by '
+            'the book the bet was at. Small counts; read the pattern, not the decimals.', '',
+            '| market | entry | book | bets | close fetched | comparable (share of bets) | mean CLV (SE) | beat close |',
+            '|---|---|---|---|---|---|---|---|'] + lines
+
+
 def _clv_markdown(rows, caption=CLV_CAPTION):
     rows = [r for r in rows if r.get('evaluation_error') or any(e['bets'] for e in (r.get('by_edge') or {}).values())]
     if not rows:
@@ -603,6 +632,7 @@ def markdown(result):
     lines += _pace_markdown(result.get('pace_comparison') or [])
     lines += _clv_markdown(result.get('replay_clv') or [])
     lines += _clv_markdown(result.get('late_entry_clv') or [], LATE_CLV_CAPTION)
+    lines += _clv_by_book_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
