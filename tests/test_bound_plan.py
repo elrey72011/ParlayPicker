@@ -91,3 +91,33 @@ def test_an_undraftable_market_is_reported_not_raised(calibrated):
     path, state = calibrated
     result = _script("bound_plan").draft(path, sport="NBA", market="TOTAL", now=state[0])
     assert result["draft"]["status"] == "NOT_DRAFTABLE" and result["draft"]["reason"] == "no candidate model"
+
+
+def test_entry_books_option_names_only_stake_books():
+    """Owner 2026-11-11: a plan may be drafted for some of the stake books (Novig only)."""
+    import importlib
+    import pytest
+    from app_core import market_skill_validation as ms
+    from app_core import pinnacle_model as pm
+    from app_core import prospective_calibration as pc
+    bound_plan = importlib.import_module("scripts.bound_plan")
+    assert bound_plan.entry_books("") is None and bound_plan.entry_books(None) is None   # blank: all four
+    assert bound_plan.entry_books("novig") == frozenset({"Novig"})
+    assert bound_plan.entry_books(" Novig , fanduel ") == frozenset({"Novig", "FanDuel"})
+    assert bound_plan.entry_books("Novig") <= pm.PLAN_BOOKS
+    with pytest.raises(SystemExit, match="caesars"):
+        bound_plan.entry_books("Novig,Caesars")
+    rules = ms.methodology_v2(0.01, bound_plan.entry_books("Novig"), "FIRST_EDGE_CAPTURE", 75)
+    assert rules["entry_books"] == ["Novig"]
+    spec = {"sport": "NCAAB", "market_family": "SPREAD", "model_id": "m", "calibration_id": "c",
+            "validation_start": "2030-01-02T00:00:00+00:00", "validation_end": "2030-01-12T00:00:00+00:00",
+            "holdout_start": "2030-01-12T00:00:00+00:00", "holdout_end": "2030-01-22T00:00:00+00:00",
+            "market_skill_methodology": rules}
+    assert pc.freeze_inputs(spec)["entry_books"] == ["Novig"]            # the freeze redrafts the same books
+
+
+def test_bound_plan_workflow_passes_the_entry_books():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / ".github/workflows/bound-plan.yml").read_text(encoding="utf-8")
+    assert "options: [all, Novig]" in text
+    assert '--entry-books "$ENTRY_BOOKS"' in text and '"$ENTRY_BOOKS" != all' in text

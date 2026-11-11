@@ -58,7 +58,8 @@ def statuses(path, now):
 
 
 def draft(path, *, sport=None, market=None, validation_start=None, now=None, methodology='market_skill',
-          model='research', min_edge=None, entry_rule=None, min_bets=None, pool=False, pool_sports=None):
+          model='research', min_edge=None, entry_rule=None, min_bets=None, pool=False, pool_sports=None,
+          entry_books=None):
     now = now or datetime.now(timezone.utc)
     result = {'mode': 'DRAFT_READ_ONLY', 'as_of': now.isoformat(), 'markets': statuses(path, now)}
     if sport and market:
@@ -74,14 +75,18 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                 model_id = found['model_id']
             skill = methodology in ('market_skill', 'market_skill_v2')
             v2 = methodology == 'market_skill_v2'
+            if entry_books and not (skill and model == 'pinnacle'):
+                raise ValueError('entry books apply only to a market-skill plan with --model pinnacle')
             if pool and not (v2 and model == 'pinnacle'):
                 raise ValueError('pooling needs --methodology market_skill_v2 and --model pinnacle (owner D27)')
             spec = calibration.draft_bound_plan(path, sport, market, validation_start=start,
                                                 methodology=methodology, model_id=model_id,
                                                 min_edge=min_edge if skill else None,
                                                 # A Pinnacle plan enters only where its picks can be staked.
-                                                entry_books=(pinnacle_model.PLAN_BOOKS if model == 'pinnacle'
-                                                             and skill else None),
+                                                # Owner 2026-11-11: optionally only some of them (Novig, where
+                                                # the stake is placed and nearly every replay bet was).
+                                                entry_books=((entry_books or pinnacle_model.PLAN_BOOKS)
+                                                             if model == 'pinnacle' and skill else None),
                                                 # The staking terms a Pinnacle plan needs to ever stake.
                                                 staking_terms=('pinnacle-provisional-v1' if model == 'pinnacle'
                                                                and skill else None),
@@ -115,11 +120,26 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                     found = evidence.load_record(path, 'prospective_calibration', drafted['calibration_id'])
                     artifact = json.loads(found['payload']).get('calibration_artifact') if found else None
                 result['replay_estimate'] = pinnacle_model.replay_estimate(path, sport, market, now=now,
-                                                                           books=pinnacle_model.PLAN_BOOKS,
+                                                                           books=(entry_books
+                                                                                  or pinnacle_model.PLAN_BOOKS),
                                                                            calibration=artifact)
             except Exception as exc:  # an estimate must never block the draft
                 result['replay_estimate'] = {'status': 'ERROR', 'error': type(exc).__name__}
     return result
+
+
+def entry_books(text):
+    """The stake books named in ``text`` (comma-separated labels), or ``None`` for all of them.
+    A name that is not a stake book is refused, so a typo cannot freeze a plan that never bets."""
+    from app_core import pinnacle_model
+    wanted = {name.strip().lower() for name in (text or '').split(',') if name.strip()}
+    if not wanted:
+        return None
+    labels = {label.lower(): label for label in pinnacle_model.PLAN_BOOKS}
+    unknown = sorted(wanted - set(labels))
+    if unknown:
+        raise SystemExit(f"unknown stake book(s): {', '.join(unknown)}; choose from {', '.join(sorted(labels.values()))}")
+    return frozenset(labels[name] for name in wanted)
 
 
 ENTRY_RULE_TEXT = {
@@ -233,6 +253,9 @@ def main(argv=None):
     parser.add_argument('--entry-rule', choices=('earliest', 'first_edge'), default='earliest',
                         help='draft, market_skill: enter at the earliest shared-line capture, or at the first '
                              'capture that clears the bet threshold (FIRST_EDGE_CAPTURE)')
+    parser.add_argument('--entry-books', default='',
+                        help='draft, market_skill with the Pinnacle model: comma-separated stake books the plan '
+                             'may enter at, e.g. Novig (blank: Novig, DraftKings, FanDuel and BetMGM)')
     parser.add_argument('--inputs', help='freeze inputs JSON printed by the reviewed draft')
     parser.add_argument('--expected-hash', help='plan hash printed by the reviewed draft')
     args = parser.parse_args(argv)
@@ -247,7 +270,7 @@ def main(argv=None):
         result = draft(path, sport=args.sport, market=args.market, validation_start=args.validation_start,
                        methodology=args.methodology, model=args.model, min_edge=args.min_edge,
                        entry_rule=('FIRST_EDGE_CAPTURE' if args.entry_rule == 'first_edge' else None),
-                       min_bets=args.min_bets, pool=args.pool,
+                       min_bets=args.min_bets, pool=args.pool, entry_books=entry_books(args.entry_books),
                        pool_sports=[s.strip().upper() for s in args.pool_sports.split(',') if s.strip()])
         result['restore'] = dict(restore, writes_refused=guarded.writes_refused)
     else:
