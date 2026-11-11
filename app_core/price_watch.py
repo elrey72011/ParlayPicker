@@ -29,6 +29,13 @@ The gaps last about 10 to 30 minutes, so a 15-minute poll can miss one entirely.
 allowance is ``FAST_LIMITS`` (600 a day, 4,200 in all): about three times the credits. ``UNTIL``
 is unchanged, and the same ledger counts both modes.
 
+**Steady mode** (owner 2026-11-10: extend the faster polling only where it pays without costing much).
+The replay of 2026-11-09 kept nearly every bet at a 15-minute pace and lost a quarter to a third at
+30 minutes; going from 15 to 5 showed no gain. So the gain is NCAAB at 15 minutes instead of 30.
+With ``PARLAYPICKER_PRICE_WATCH_STEADY=true`` every sport is polled every ``STEADY_INTERVAL_MINUTES``
+and the two-sport allowance is ``STEADY_LIMITS`` (300 a day, 2,100 in all): about 14 more requests
+on a weekday night, roughly a quarter more credits than the normal watch. Fast mode, when on, wins.
+
 **Automatic pace** (prepared 2026-11-10, off). With ``PARLAYPICKER_PRICE_WATCH_AUTO_PACE=true`` each
 sport's interval is the slowest one that kept 85% of the bets the replay found over the last
 ``AUTO_LOOKBACK_DAYS`` days (``pinnacle_model.recommended_pace``), where that is slower than the
@@ -56,6 +63,9 @@ EXTRA_LIMITS = {"daily": 100, "rolling_31_days": 700}        # per extra sport s
 FAST_ENV = "PARLAYPICKER_PRICE_WATCH_FAST"
 FAST_INTERVAL_MINUTES = 5                       # the loop's own poll interval: every poll captures
 FAST_LIMITS = {"daily": 600, "rolling_31_days": 4200}
+STEADY_ENV = "PARLAYPICKER_PRICE_WATCH_STEADY"
+STEADY_INTERVAL_MINUTES = 15
+STEADY_LIMITS = {"daily": 300, "rolling_31_days": 2100}
 AUTO_ENV = "PARLAYPICKER_PRICE_WATCH_AUTO_PACE"
 AUTO_LOOKBACK_DAYS = 7
 WATCH_START = datetime(2026, 11, 9, 20, 0, tzinfo=timezone.utc)   # games before the watch have one capture each
@@ -93,8 +103,17 @@ def fast(setting=None) -> bool:
     return str((setting or os.environ.get)(FAST_ENV, "") or "").strip().lower() == "true"
 
 
+def steady(setting=None) -> bool:
+    """Steady mode is on only for the exact value ``true`` (any case); fast mode, when on, takes precedence."""
+    return str((setting or os.environ.get)(STEADY_ENV, "") or "").strip().lower() == "true"
+
+
 def interval_minutes(sport, setting=None) -> int:
-    return FAST_INTERVAL_MINUTES if fast(setting) else INTERVAL_MINUTES.get(sport, EXTRA_INTERVAL_MINUTES)
+    if fast(setting):
+        return FAST_INTERVAL_MINUTES
+    if steady(setting):
+        return STEADY_INTERVAL_MINUTES
+    return INTERVAL_MINUTES.get(sport, EXTRA_INTERVAL_MINUTES)
 
 
 def auto_pace(setting=None) -> bool:
@@ -114,7 +133,7 @@ def recommended(path, sport, now):
 
 def limits(setting=None) -> dict:
     """The allowance: the two-sport base (normal or fast), plus ``EXTRA_LIMITS`` per extra sport on."""
-    base = dict(FAST_LIMITS if fast(setting) else WATCH_LIMITS)
+    base = dict(FAST_LIMITS if fast(setting) else STEADY_LIMITS if steady(setting) else WATCH_LIMITS)
     scale = len(extra_sports(setting)) * (FAST_LIMITS["daily"] // WATCH_LIMITS["daily"] if fast(setting) else 1)
     return {window: base[window] + scale * EXTRA_LIMITS[window] for window in base}
 

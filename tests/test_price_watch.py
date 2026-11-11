@@ -304,3 +304,33 @@ def test_polls_start_an_interval_apart_however_long_the_backup_takes(tmp_path):
     finally:
         pw.load_state, pw.save_state, pw.after_poll = original
     assert slept == [300, 63]          # the first wait is the whole interval; the next makes the cycle 5 minutes
+
+
+def test_steady_mode_polls_every_sport_every_fifteen_minutes_for_a_modestly_larger_allowance(tmp_path, clock):
+    # Owner 2026-11-10: extend the faster polling only where it pays. The replay's gain was 30 -> 15 minutes (NCAAB).
+    assert pw.steady({}.get) is False and pw.steady({pw.STEADY_ENV: "yes"}.get) is False
+    base = {pw.WATCH_ENV: "NBA,NCAAB", pw.EXTRA_ENV: "NHL"}
+    on = dict(base, **{pw.STEADY_ENV: "True"}).get
+    assert [pw.interval_minutes(s, on) for s in ("NBA", "NCAAB", "NHL")] == [15, 15, 15]
+    assert [pw.interval_minutes(s, base.get) for s in ("NBA", "NCAAB", "NHL")] == [15, 30, 15]     # normal is unchanged
+    assert pw.limits(on) == {"daily": 400, "rolling_31_days": 2800}                               # 300 + NHL's 100
+    assert pw.limits(base.get) == {"daily": 300, "rolling_31_days": 2100}
+    both = dict(base, **{pw.STEADY_ENV: "true", pw.FAST_ENV: "true"}).get
+    assert pw.interval_minutes("NCAAB", both) == 5 and pw.limits(both) == {"daily": 900, "rolling_31_days": 6300}
+
+    path = tmp_path / "SYNTHETIC-evidence.sqlite3"
+    games = [_event(path, "NCAAB", "cbb-soon", NOW + timedelta(hours=2))]
+    provider = _Provider(clock, games)
+    steady_only = {pw.WATCH_ENV: "NCAAB", pw.STEADY_ENV: "true"}.get
+    budget = pw.budget_for({}, lambda: None, clock=lambda: clock[0], setting=steady_only)
+    watcher = pw.Watcher(steady_only)
+    for minutes in (0, 5, 15, 20, 30):
+        clock[0] = NOW + timedelta(minutes=minutes)
+        _poll(watcher, path, provider, budget, clock)
+    assert len(provider.calls) == 3                                    # 0, 15 and 30: twice the normal watch's captures
+
+
+def test_the_workflow_passes_steady_mode_only_from_the_input_or_the_variable():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / ".github/workflows/price-watch.yml").read_text(encoding="utf-8")
+    assert "PARLAYPICKER_PRICE_WATCH_STEADY: ${{ inputs.steady && 'true' || vars.PARLAYPICKER_PRICE_WATCH_STEADY }}" in text
