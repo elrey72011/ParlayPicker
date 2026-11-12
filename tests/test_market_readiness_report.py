@@ -247,3 +247,25 @@ def test_the_line_adjusted_table_counts_the_moved_lines_and_names_its_assumption
     assert report._clv_line_adjusted_markdown([], []) == []
     assert report._clv_line_adjusted_markdown([dict(sport='NBA', market_family='SPREAD', window='last 7 days',
                                                     by_edge={'1%': dict(bets=3, comparable=1)})], []) == []   # older rows
+
+
+def test_large_moves_are_listed_and_not_scored():
+    import scripts.market_readiness_report as report
+
+    def row(sport, adjusted, window='last 7 days'):
+        return dict(sport=sport, market_family='SPREAD', window=window,
+                    by_edge={'1%': dict(bets=10, comparable=6, line_adjusted=adjusted)})
+    found = dict(moved_with_close=12, large_moves=3, largest_move=27.0, median_points_in_favour=-0.5,
+                 max_scored_points=3.0)
+    text = '\n'.join(report._clv_large_moves_markdown(
+        [row('NCAAB', found), row('NCAAB', dict(found, large_moves=9), window='last 24 hours'),
+         row('NBA', dict(moved_with_close=0, large_moves=0, max_scored_points=3.0))],
+        [row('NCAAB', dict(found, moved_with_close=5, large_moves=0, largest_move=None))]))
+    assert '| NCAAB SPREAD | any time | 12 | 9 | -0.50 | 3 | +27.0 |' in text
+    assert '| NCAAB SPREAD | last 60 min | 5 | 5 | -0.50 | 0 |  |' in text
+    assert 'more than 3 points from the bet' in text and 'NOT scored' in text
+    assert 'NBA' not in text and '| 9 | +27.0 |' not in text            # nothing moved; the other window
+    assert report._clv_large_moves_markdown([], []) == []
+    older = dict(sport='NCAAB', market_family='SPREAD', window='last 7 days',
+                 by_edge={'1%': dict(bets=3, line_adjusted=dict(moved_with_close=2))})
+    assert report._clv_large_moves_markdown([older], []) == []          # rows from before the split
