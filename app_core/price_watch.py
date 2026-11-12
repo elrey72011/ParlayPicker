@@ -131,11 +131,31 @@ def recommended(path, sport, now):
                                        books=pinnacle_model.PLAN_BOOKS) for family in news.families(sport)])
 
 
-def limits(setting=None) -> dict:
-    """The allowance: the two-sport base (normal or fast), plus ``EXTRA_LIMITS`` per extra sport on."""
+# Weekend allowance (owner approved 2026-11-12, for the weekend of 2026-11-14 and 15: the watch stops
+# after 2026-11-16). A credit day runs 7 PM to 7 PM ET (the UTC day), so Saturday's afternoon run is
+# counted with Friday night's: about 700 credits against the steady 400, which would have stopped the
+# watch early on Saturday afternoon, on the largest college slate of the week. In steady mode the
+# daily allowance is 800 on the UTC Saturday and Sunday, and the rolling allowance carries those 800
+# extra credits (two days of 400) on every day, so the days after are not blocked by them.
+WEEKEND_DAILY = 800
+WEEKEND_ROLLING_EXTRA = 800
+
+
+def limits(setting=None, now=None) -> dict:
+    """The allowance: the two-sport base (normal or fast), plus ``EXTRA_LIMITS`` per extra sport on.
+
+    With ``now`` (the running watch passes it) and steady mode on, the weekend allowance applies:
+    ``WEEKEND_DAILY`` on the UTC Saturday and Sunday, and ``WEEKEND_ROLLING_EXTRA`` on the rolling window.
+    Fast mode already allows more and is left as it is.
+    """
     base = dict(FAST_LIMITS if fast(setting) else STEADY_LIMITS if steady(setting) else WATCH_LIMITS)
     scale = len(extra_sports(setting)) * (FAST_LIMITS["daily"] // WATCH_LIMITS["daily"] if fast(setting) else 1)
-    return {window: base[window] + scale * EXTRA_LIMITS[window] for window in base}
+    out = {window: base[window] + scale * EXTRA_LIMITS[window] for window in base}
+    if now is not None and steady(setting) and not fast(setting):
+        out["rolling_31_days"] += WEEKEND_ROLLING_EXTRA
+        if now.astimezone(timezone.utc).weekday() in (5, 6):
+            out["daily"] = max(out["daily"], WEEKEND_DAILY)
+    return out
 
 
 class Watcher:
@@ -195,7 +215,7 @@ def save_state(client, folder, state, *, clock=_utcnow):
 
 def budget_for(state, persist, *, clock=_utcnow, setting=None):
     from app_core.research_api_budget import Budget
-    return Budget(state, persist, clock=clock, limits={"ODDS": limits(setting)})
+    return Budget(state, persist, clock=clock, limits={"ODDS": limits(setting, clock())})
 
 
 def after_poll(path, client, folder, report, *, setting=None, clock=_utcnow):
