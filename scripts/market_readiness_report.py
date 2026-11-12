@@ -328,6 +328,21 @@ def _clv_large_moves_markdown(any_time, late):
     limit = next((((row.get('by_edge') or {}).get(BY_BOOK_EDGE) or {}).get('line_adjusted') or {}).get('max_scored_points')
                  for rows in (any_time, late) for row in rows
                  if (((row.get('by_edge') or {}).get(BY_BOOK_EDGE) or {}).get('line_adjusted') or {}).get('max_scored_points'))
+    traced = []
+    for label, rows in (('any time', any_time), ('last 60 min', late)):
+        for row in rows:
+            if row.get('window') != BY_BOOK_WINDOW or 'evaluation_error' in row:
+                continue
+            adjusted = ((row.get('by_edge') or {}).get(BY_BOOK_EDGE) or {}).get('line_adjusted') or {}
+            for bet in adjusted.get('large_move_bets') or []:
+                traced.append(f"| {row['sport']} {row['market_family']} | {label} | {str(bet['event_id'])[:12]} | "
+                              f"{bet['sportsbook']} | {bet['selection']} | {bet['bet_line']:+g} | {bet['close_line']:+g} | "
+                              f"{bet['points']:+.1f} | {'yes' if bet['same_size_opposite_sign'] else 'no'} | "
+                              f"{bet['bet_quote_at']} | {bet['close_at']} |")
+    if traced:
+        lines += ['', 'Each large move (to trace: a real move, another line of the game, or a sign error in the close):', '',
+                  '| market | entry | event | book | selection | bet line | close line | points | same size, opposite sign '
+                  '| bet quoted at | close at |', '|---|---|---|---|---|---|---|---|---|---|---|'] + traced
     return ['', f'Moved lines, scored and not: a close more than {limit:g} points from the bet is counted in "moved in favour / '
             'against" above but is NOT scored, and is left out of the mean points gained. A value per point holds only near the '
             'line, and a close that far from the bet may be another line of the same game rather than a move of the main one.',

@@ -583,7 +583,15 @@ def _line_adjusted(sport, family, same, moved, mean_se):
     large = [gained for _, _, gained in every if abs(gained) > MAX_SCORED_POINTS]
     moved = [(bet, close) for bet, close, gained in every if abs(gained) <= MAX_SCORED_POINTS]
     points = [gained for _, _, gained in every if abs(gained) <= MAX_SCORED_POINTS]
-    out = {"moved_with_close": len(every), "moved_in_favour": sum(1 for _, _, p in every if p > 0),
+    # Each large move, so it can be traced: a real move, another line of the game, or a sign error.
+    listed = [{"event_id": bet["event_id"], "sportsbook": bet["sportsbook"], "selection": bet["selection"],
+               "bet_line": bet["line"], "close_line": close["line"], "points": gained,
+               "bet_quote_at": bet.get("quote_timestamp"), "close_at": close.get("close_timestamp"),
+               "same_size_opposite_sign": bet["line"] is not None and close["line"] is not None
+               and abs(bet["line"] + close["line"]) < 1e-9 and bet["line"] != 0}
+              for bet, close, gained in every if abs(gained) > MAX_SCORED_POINTS]
+    out = {"large_move_bets": listed,
+           "moved_with_close": len(every), "moved_in_favour": sum(1 for _, _, p in every if p > 0),
            "moved_against": sum(1 for _, _, p in every if p < 0),
            "mean_points_in_favour": sum(points) / len(points) if points else None,
            "median_points_in_favour": median(points) if points else None,

@@ -269,3 +269,19 @@ def test_large_moves_are_listed_and_not_scored():
     older = dict(sport='NCAAB', market_family='SPREAD', window='last 7 days',
                  by_edge={'1%': dict(bets=3, line_adjusted=dict(moved_with_close=2))})
     assert report._clv_large_moves_markdown([older], []) == []          # rows from before the split
+
+
+def test_each_large_move_is_listed_so_it_can_be_traced():
+    import scripts.market_readiness_report as report
+    bet = dict(event_id='abcdef0123456789', sportsbook='novig', selection='Home U', bet_line=-10.5, close_line=10.5,
+               points=-21.0, bet_quote_at='2026-11-11T23:10:00+00:00', close_at='2026-11-12T00:00:00+00:00',
+               same_size_opposite_sign=True)
+    found = dict(moved_with_close=2, large_moves=1, largest_move=-21.0, median_points_in_favour=-1.0,
+                 max_scored_points=3.0, large_move_bets=[bet])
+    row = dict(sport='NCAAB', market_family='SPREAD', window='last 7 days',
+               by_edge={'1%': dict(bets=10, comparable=6, line_adjusted=found)})
+    text = '\n'.join(report._clv_large_moves_markdown([row], []))
+    assert '| NCAAB SPREAD | any time | abcdef012345 | novig | Home U | -10.5 | +10.5 | -21.0 | yes |' in text
+    assert text.index('| NCAAB SPREAD | any time | 2 | 1 |') < text.index('Each large move')
+    without = dict(row, by_edge={'1%': dict(bets=10, comparable=6, line_adjusted=dict(found, large_move_bets=[]))})
+    assert 'Each large move' not in '\n'.join(report._clv_large_moves_markdown([without], []))
