@@ -267,6 +267,45 @@ def _clv_markdown(rows, caption=CLV_CAPTION):
     return lines
 
 
+def _clv_line_adjusted_markdown(any_time, late):
+    """Closing-line value with the moved lines counted (owner 2026-11-12): the bets the tables above leave out
+    because the book closed at another line, scored with an assumed value per point. Same window and edge as
+    the by-book table."""
+    lines = []
+    for label, rows in (('any time', any_time), ('last 60 min', late)):
+        for row in rows:
+            if row.get('window') != BY_BOOK_WINDOW or 'evaluation_error' in row:
+                continue
+            found = (row.get('by_edge') or {}).get(BY_BOOK_EDGE) or {}
+            adjusted = found.get('line_adjusted')
+            if not adjusted or not found.get('bets'):
+                continue
+            points = adjusted['mean_points_in_favour']
+            scored = adjusted['scored']
+            if adjusted['point_value'] is None:
+                result = 'no point value assumed | | | '
+            else:
+                mean = '' if adjusted['mean_clv'] is None else f"{adjusted['mean_clv']:+.1%}"
+                se = '' if adjusted['clv_se'] is None else f" ({adjusted['clv_se']:.1%})"
+                t = '' if adjusted['t'] is None else f"{adjusted['t']:.1f}"
+                moved = '' if adjusted.get('moved_mean_clv') is None else f"{adjusted['moved_mean_clv']:+.1%}"
+                result = f"{mean}{se} | {t} | {moved} | {adjusted['point_value']:.1%}"
+            lines.append(f"| {row['sport']} {row['market_family']} | {label} | {found['bets']} | {found['comparable']} | "
+                         f"{adjusted['moved_with_close']} | {adjusted['moved_in_favour']} / {adjusted['moved_against']} | "
+                         f"{'' if points is None else f'{points:+.2f}'} | {scored} ({scored / found['bets']:.0%}) | "
+                         f"{result} |")
+    if not lines:
+        return []
+    return ['', f'Line-adjusted closing-line value ({BY_BOOK_WINDOW}, {BY_BOOK_EDGE} edge): the same bets with the moved lines '
+            'counted. A bet whose book closed at another line is scored as its odds times (the close\'s implied '
+            'probability plus the points it gained times an ASSUMED value per point) minus 1. "In favour / against" '
+            'and the mean points need no assumption: they say whether the bet ended with the better number. A plan '
+            'is not held to this measure; it shows whether the edge survives when the moved lines are counted.', '',
+            '| market | entry | bets | same line | moved, close found | moved in favour / against | mean points gained '
+            '| scored (share of bets) | mean CLV, all scored (SE) | t | mean CLV, moved only | assumed value per point |',
+            '|---|---|---|---|---|---|---|---|---|---|---|---|'] + lines
+
+
 def line_movement(path, now=None, extra=None):
     """Pinnacle's line movement before each started game and whether the stake books followed
     (pinnacle_model.line_movement), over the last 24 hours. Read-only."""
@@ -633,6 +672,7 @@ def markdown(result):
     lines += _clv_markdown(result.get('replay_clv') or [])
     lines += _clv_markdown(result.get('late_entry_clv') or [], LATE_CLV_CAPTION)
     lines += _clv_by_book_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
+    lines += _clv_line_adjusted_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running

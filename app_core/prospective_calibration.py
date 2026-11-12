@@ -480,7 +480,7 @@ def expected_bets_per_day(path, scopes, *, now, min_edge, entry_books=None, entr
 def draft_bound_plan(path, sport, market, *, validation_start, validation_days=None, holdout_days=None,
                      model_id=None, calibration_id=None, rate=None, methodology="v1", min_edge=None,
                      entry_books=None, staking_terms=None, entry_rule=None, push_rule=None,
-                     min_bets=None, pool=None, max_entry_overround=None, entry_within_minutes=None):
+                     min_bets=None, pool=None, max_entry_overround=None, entry_within_minutes=None, as_of=None):
     """A proposed plan version binding the candidate model and its calibration. Nothing is frozen.
 
     Thresholds, sample minimums and policies are the frozen v1 template's
@@ -490,6 +490,10 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
     loss (``app_core.market_skill_validation``). The windows are the owner's decision: v1 validates
     for a year and holds out for another year. Freezing is a separate, explicit call
     to ``prospective_evidence.freeze_validation_plan`` after review.
+
+    ``as_of`` is when the draft is made. A Pinnacle plan's windows are sized by the rate observed up
+    to then, not up to a validation start set days ahead: the empty days in between diluted the rate
+    and stretched the windows (found 2026-11-12: 3.6 bets a day sized as 2.9, 40 days instead of 33).
     """
     from datetime import timedelta
     from app_core.prospective_validation_plans import _template
@@ -511,6 +515,7 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
         calibration_id = max(found, key=lambda r: r["available_at"])["calibration_id"]
     calibration = evidence.load_record(path, "prospective_calibration", calibration_id)
     start = _time(validation_start)
+    measured_at = min(start, as_of) if as_of is not None else start
     target = _template(sport, market)["minimum_independent_sample"]
     v2 = methodology == "market_skill_v2"
     if v2:
@@ -537,7 +542,7 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
             # Windows sized by expected bets (owner D26), over every pool scope's games.
             if not pinnacle_model.is_pinnacle(model):
                 raise ValueError("give validation_days and holdout_days: bets can be estimated only for a Pinnacle plan")
-            observed = expected_bets_per_day(path, pool or [f"{sport}:{market}"], now=start, min_edge=edge,
+            observed = expected_bets_per_day(path, pool or [f"{sport}:{market}"], now=measured_at, min_edge=edge,
                                              entry_books=entry_books, entry_rule=entry_rule,
                                              entry_within_minutes=entry_within_minutes)
             if observed <= 0:
@@ -546,7 +551,7 @@ def draft_bound_plan(path, sport, market, *, validation_start, validation_days=N
             from app_core import pinnacle_model
             # A Pinnacle plan predicts only games where a US book posts Pinnacle's line
             # (pinnacle_model.plan_quotes): size its windows by those, over the observed days.
-            observed = (pinnacle_model.plan_games_per_day(path, sport, market, now=start,
+            observed = (pinnacle_model.plan_games_per_day(path, sport, market, now=measured_at,
                                                           books=frozenset(entry_books) if entry_books else None)
                         if pinnacle_model.is_pinnacle(model) else games_per_day(path, sport, market, now=start))
         sized = window_days(target, observed)

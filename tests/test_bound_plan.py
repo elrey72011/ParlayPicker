@@ -121,3 +121,25 @@ def test_bound_plan_workflow_passes_the_entry_books():
     text = (Path(__file__).resolve().parents[1] / ".github/workflows/bound-plan.yml").read_text(encoding="utf-8")
     assert "options: [all, Novig]" in text
     assert '--entry-books "$ENTRY_BOOKS"' in text and '"$ENTRY_BOOKS" != all' in text
+
+
+def test_windows_are_sized_by_the_rate_seen_when_the_draft_is_made(monkeypatch):
+    """2026-11-12: a validation start set two days ahead diluted 3.6 bets a day to 2.9 (40-day windows, not 33)."""
+    from datetime import datetime, timezone
+    import inspect
+    seen = []
+    monkeypatch.setattr(pc, "expected_bets_per_day", lambda path, scopes, *, now, **rules: seen.append(now) or 3.63)
+    start = datetime(2030, 1, 14, tzinfo=timezone.utc)
+    made = datetime(2030, 1, 12, 12, tzinfo=timezone.utc)
+    source = inspect.getsource(pc.draft_bound_plan)
+    assert "measured_at = min(start, as_of) if as_of is not None else start" in source
+    assert "now=measured_at, min_edge=edge" in source                 # the v2 bet rate is read at that time
+    assert min(start, made) == made and min(start, datetime(2030, 2, 1, tzinfo=timezone.utc)) == start
+    assert pc.window_days(75, 3.63) == 33 and pc.window_days(75, 2.93) == 40
+    script = (ROOT / "scripts" / "bound_plan.py").read_text(encoding="utf-8")
+    assert "as_of=now)" in script
+    # The freeze redrafts from explicit window lengths, so it never measures a rate.
+    assert {"validation_days", "holdout_days"} <= set(pc.freeze_inputs({
+        "sport": "NCAAB", "market_family": "SPREAD", "model_id": "m", "calibration_id": "c",
+        "validation_start": "2030-01-14T00:00:00+00:00", "validation_end": "2030-02-16T00:00:00+00:00",
+        "holdout_start": "2030-02-16T00:00:00+00:00", "holdout_end": "2030-03-21T00:00:00+00:00"}))

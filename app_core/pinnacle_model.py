@@ -543,6 +543,50 @@ def first_edge_bets(started, sample, now, edge, books=None):
 NOT_COMPARABLE = ("CLOSE_NOT_FETCHED", "BOOK_NOT_IN_CLOSE", "LINE_MOVED", "CLOSE_BEFORE_BET")
 
 
+# The assumed value of one point of line in win probability, for scoring a bet whose book closed at
+# another line (owner 2026-11-12). A normal margin gives pdf(0) / sd per point near an even price:
+# sd about 11 points for an NCAAB side and 12 for an NBA side, 16.5 and 18 for their totals. These
+# are assumptions, not measurements, and the report says so. Hockey is left out: a puck line does
+# not move by points, and half a goal on a total is far from linear.
+POINT_VALUE = {("NCAAB", "SPREAD"): 0.036, ("NBA", "SPREAD"): 0.033, ("NCAAB", "TOTAL"): 0.024, ("NBA", "TOTAL"): 0.022}
+
+
+def points_in_favour(family, bet, close):
+    """How many points better the bet's line is than the close's, for the bet's own side.
+
+    A side's own line is signed (+3.5 gets points, -3.5 gives them), so a higher line is better.
+    An Over wants a lower total and an Under a higher one.
+    """
+    if family == "TOTAL":
+        return (close["line"] - bet["line"]) * (1 if str(bet["selection"]).lower().startswith("over") else -1)
+    return bet["line"] - close["line"]
+
+
+def _line_adjusted(sport, family, same, moved, mean_se):
+    """Closing-line value counting bets whose book closed at another line (``moved``: [(bet, close)]).
+
+    ``same`` are the price CLVs of the bets with a close at their own line. A moved bet is scored as
+    bet odds x (the close's implied probability + points in favour x ``POINT_VALUE``) - 1: the
+    close's price carried to the bet's line. Also reported without any assumption: how many moved
+    bets ended with the better number, and the mean points gained.
+    """
+    value = POINT_VALUE.get((sport, family))
+    points = [points_in_favour(family, bet, close) for bet, close in moved]
+    out = {"moved_with_close": len(moved), "moved_in_favour": sum(1 for p in points if p > 0),
+           "moved_against": sum(1 for p in points if p < 0),
+           "mean_points_in_favour": sum(points) / len(points) if points else None, "point_value": value}
+    if value is None:
+        return dict(out, scored=len(same), mean_clv=None, clv_se=None, t=None, beat_close_share=None)
+    adjusted = [bet["decimal_odds"] * min(0.99, max(0.01, 1 / close["decimal_odds"] + gained * value)) - 1
+                for (bet, close), gained in zip(moved, points)]
+    values = list(same) + adjusted
+    mean, se = mean_se(values)
+    moved_mean, _ = mean_se(adjusted)
+    return dict(out, scored=len(values), mean_clv=mean, clv_se=se, t=(mean / se if mean is not None and se else None),
+                beat_close_share=sum(1 for v in values if v > 0) / len(values) if values else None,
+                moved_mean_clv=moved_mean)
+
+
 def _book_label(sportsbook):
     from app_core.public_quote_policy import canonical_book_label
     return canonical_book_label(sportsbook)
@@ -596,11 +640,12 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
            "status": "MEASURED" if started else "NO_GAMES", "by_edge": {}}
     if not started:
         return out
-    closes, fetched, at_book = {}, set(), set()
+    closes, fetched, at_book, any_line = {}, set(), set(), {}
     for close in evidence.read_records(path, "prospective_close", sport=sport, market_family=family):
         if close.get("close_verified") and close["event_id"] in started:
             fetched.add(close["event_id"])
             at_book.add((close["event_id"], close["selection"], close["sportsbook"]))
+            any_line.setdefault((close["event_id"], close["selection"], close["sportsbook"]), []).append(close)
             closes.setdefault((close["event_id"], close["selection"], close["sportsbook"], close["line"]),
                               []).append(close)
     quotes, _ = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
@@ -608,7 +653,7 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
         quotes = late_captures(started, quotes, entry_within_minutes)
     for edge in edges:
         bets = first_edge_bets(started, quotes, now, edge, books)
-        clv, why, books_seen = [], {reason: 0 for reason in NOT_COMPARABLE}, {}
+        clv, why, books_seen, moved = [], {reason: 0 for reason in NOT_COMPARABLE}, {}, []
         for event_id, bet, _ in bets:
             book = books_seen.setdefault(_book_label(bet["sportsbook"]), {"bets": 0, "close_fetched": 0, "clv": []})
             book["bets"] += 1
@@ -625,6 +670,11 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
                 why["BOOK_NOT_IN_CLOSE"] += 1
             elif not same_line:
                 why["LINE_MOVED"] += 1
+                # The book's close at its new line, taken at or after the bet: scored separately.
+                elsewhere = [c for c in any_line[(event_id, bet["selection"], bet["sportsbook"])]
+                             if c["line"] is not None and _t(c["close_timestamp"]) >= _t(bet["quote_timestamp"])]
+                if elsewhere:
+                    moved.append((bet, max(elsewhere, key=lambda c: (_t(c["close_timestamp"]), c["close_id"]))))
             else:
                 why["CLOSE_BEFORE_BET"] += 1
         mean, se = _mean_se(clv)
@@ -635,6 +685,8 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
             # The same measures per stake book (owner 2026-11-11: the stake is placed at Novig).
             "by_book": {label: _clv_summary(found["bets"], found["close_fetched"], found["clv"], _mean_se)
                         for label, found in sorted(books_seen.items())},
+            # The same bets with the moved lines counted (owner 2026-11-12): see ``_line_adjusted``.
+            "line_adjusted": _line_adjusted(sport, family, clv, moved, _mean_se),
             "mean_price_clv": mean, "price_clv_se": se,
             "t": (mean / se if mean is not None and se else None),
             "beat_close_share": sum(1 for v in clv if v > 0) / len(clv) if clv else None}

@@ -248,3 +248,49 @@ def test_replay_clv_splits_the_bets_by_the_stake_book_they_were_at(monkeypatch):
     assert novig["mean_price_clv"] == pytest.approx(2.06 / (1 + 100 / 110) - 1) and novig["beat_close_share"] == 1.0
     assert (draftkings["bets"], draftkings["comparable"]) == (1, 1) and draftkings["mean_price_clv"] < 0
     assert sum(b["bets"] for b in found["by_book"].values()) == found["bets"]
+
+
+def test_line_adjusted_clv_counts_the_bets_whose_book_closed_at_another_line(monkeypatch):
+    """Owner 2026-11-12: a third of the NCAAB bets were left out because Novig left the line. Count them:
+    which way did the line go, and what is the close worth at the bet's line (an assumed value per point)?"""
+    games = [("same", 60, 20), ("better", 60, 20), ("worse", 60, 20), ("early", 60, 20), ("unfetched", 60, 20)]
+    events, quotes = _scope(games)
+    closes = [
+        _close("same", "H", -2.5, -110, 1),                 # the bet's own line: an ordinary price CLV
+        _close("better", "H", -3.5, -110, 1),               # bet at -2.5, closed -3.5: one point in the bet's favour
+        _close("better", "H", -4.5, -110, 300),             # a close from before the bet never counts
+        _close("worse", "H", -1.5, -110, 1),                # closed -1.5: the bet gives a point more than the close
+        _close("early", "H", -3.5, -110, 300),              # the only close elsewhere is from before the bet
+        _close("unfetched", "H", -3.5, -110, 1, verified=0),
+    ]
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, []))
+    monkeypatch.setattr(pm.evidence, "read_records", lambda path, table, **k: closes if table == "prospective_close" else [])
+    found = pm.replay_clv("db", "NCAAB", "SPREAD", now=NOW)["by_edge"]["2%"]
+    assert (found["bets"], found["comparable"]) == (5, 1)                      # the plan's rule is unchanged
+    assert found["not_comparable"]["LINE_MOVED"] == 3
+    adjusted = found["line_adjusted"]
+    assert (adjusted["moved_with_close"], adjusted["moved_in_favour"], adjusted["moved_against"]) == (2, 1, 1)
+    assert adjusted["mean_points_in_favour"] == 0.0 and adjusted["scored"] == 3
+    value = pm.POINT_VALUE[("NCAAB", "SPREAD")]
+    implied = 1 / (1 + 100 / 110)
+    same, better, worse = 2.06 * implied - 1, 2.06 * (implied + value) - 1, 2.06 * (implied - value) - 1
+    assert adjusted["mean_clv"] == pytest.approx((same + better + worse) / 3)
+    assert adjusted["moved_mean_clv"] == pytest.approx((better + worse) / 2)
+    assert adjusted["beat_close_share"] == sum(v > 0 for v in (same, better, worse)) / 3
+    assert better > same > worse and adjusted["point_value"] == value
+    assert found["mean_price_clv"] == pytest.approx(same)                      # the unadjusted mean is untouched
+    # Hockey has no assumed point value: the direction is still reported, nothing is scored beyond the same-line bets.
+    hockey = pm.replay_clv("db", "NHL", "PUCK_LINE", now=NOW)["by_edge"]["2%"]["line_adjusted"]
+    assert hockey["point_value"] is None and hockey["mean_clv"] is None and hockey["moved_with_close"] == 2
+    assert hockey["scored"] == 1
+
+
+def test_points_in_favour_follow_the_bets_own_side():
+    bet = lambda selection, line: {"selection": selection, "line": line}     # noqa: E731
+    assert pm.points_in_favour("SPREAD", bet("H", -2.5), {"line": -3.5}) == 1.0     # gives fewer points than the close
+    assert pm.points_in_favour("SPREAD", bet("A", +2.5), {"line": +3.5}) == -1.0    # gets fewer points than the close
+    assert pm.points_in_favour("TOTAL", bet("Over", 150.5), {"line": 152.5}) == 2.0
+    assert pm.points_in_favour("TOTAL", bet("Under", 150.5), {"line": 152.5}) == -2.0
+    assert pm.points_in_favour("TOTAL", bet("over", 150.5), {"line": 149.5}) == -1.0
+    assert set(pm.POINT_VALUE) == {("NCAAB", "SPREAD"), ("NBA", "SPREAD"), ("NCAAB", "TOTAL"), ("NBA", "TOTAL")}
+    assert "_line_adjusted" not in pm.PREDICTION_FUNCTIONS and "points_in_favour" not in pm.PREDICTION_FUNCTIONS
