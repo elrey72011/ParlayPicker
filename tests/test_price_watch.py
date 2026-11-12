@@ -334,3 +334,19 @@ def test_the_workflow_passes_steady_mode_only_from_the_input_or_the_variable():
     from pathlib import Path
     text = (Path(__file__).resolve().parents[1] / ".github/workflows/price-watch.yml").read_text(encoding="utf-8")
     assert "PARLAYPICKER_PRICE_WATCH_STEADY: ${{ inputs.steady && 'true' || vars.PARLAYPICKER_PRICE_WATCH_STEADY }}" in text
+
+
+def test_a_scheduled_start_is_steady_and_each_run_leaves_its_cache_for_the_next():
+    """2026-11-11: GitHub's late scheduled start replaced the queued steady run with a normal-mode one, and
+    restored for 17 minutes (15,297 objects downloaded again) while three games tipped off."""
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / ".github/workflows/price-watch.yml").read_text(encoding="utf-8")
+    assert "SCHEDULED_START: ${{ github.event_name == 'schedule' }}" in text
+    assert 'if [ "$SCHEDULED_START" = true ]; then export PARLAYPICKER_PRICE_WATCH_STEADY=true; fi' in text
+    assert text.index("export PARLAYPICKER_PRICE_WATCH_STEADY=true") < text.index("python -u scripts/price_watch_loop.py")
+    assert "inputs.fast && 'true' || vars.PARLAYPICKER_PRICE_WATCH_FAST" in text       # fast still needs its own switch
+    watch = text.index("scripts/price_watch_loop.py")
+    save = text.index("uses: actions/cache/save@v4")
+    assert save > watch and "key: drive-cache-price-watch-${{ github.run_id }}" in text[save:]
+    assert "if: ${{ always() }}" in text[watch:save]                                  # saved even when the watch fails
+    assert "restore-keys: drive-cache-" in text                                       # so the next run finds it

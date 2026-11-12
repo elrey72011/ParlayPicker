@@ -73,4 +73,17 @@ jobs:
         env:
           MINUTES: ${{ inputs.minutes || '340' }}
           PARLAYPICKER_DRIVE_CACHE_DIR: ${{ runner.temp }}/drive-cache
-        run: python -u scripts/price_watch_loop.py --minutes "$MINUTES" --interval 5
+          # A scheduled start is steady too (owner approved steady for every sport from 2026-11-11): GitHub
+          # starts the schedule hours late, and on 2026-11-11 its normal-mode run replaced the queued steady one.
+          SCHEDULED_START: ${{ github.event_name == 'schedule' }}
+        run: |
+          if [ "$SCHEDULED_START" = true ]; then export PARLAYPICKER_PRICE_WATCH_STEADY=true; fi
+          python -u scripts/price_watch_loop.py --minutes "$MINUTES" --interval 5
+      # The next run restores from this (2026-11-12). Without it the run that took over on 2026-11-11
+      # downloaded 15,297 objects again and captured nothing for 17 minutes, across three tip-offs.
+      - name: Save the verified Drive object cache
+        if: ${{ always() }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/drive-cache
+          key: drive-cache-price-watch-${{ github.run_id }}
