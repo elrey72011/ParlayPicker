@@ -583,7 +583,15 @@ def _line_adjusted(sport, family, same, moved, mean_se):
     large = [gained for _, _, gained in every if abs(gained) > MAX_SCORED_POINTS]
     moved = [(bet, close) for bet, close, gained in every if abs(gained) <= MAX_SCORED_POINTS]
     points = [gained for _, _, gained in every if abs(gained) <= MAX_SCORED_POINTS]
-    out = {"moved_with_close": len(every), "moved_in_favour": sum(1 for _, _, p in every if p > 0),
+    # Each large move, so it can be traced: a real move, another line of the game, or a sign error.
+    listed = [{"event_id": bet["event_id"], "sportsbook": bet["sportsbook"], "selection": bet["selection"],
+               "bet_line": bet["line"], "close_line": close["line"], "points": gained,
+               "bet_quote_at": bet.get("quote_timestamp"), "close_at": close.get("close_timestamp"),
+               "same_size_opposite_sign": bet["line"] is not None and close["line"] is not None
+               and abs(bet["line"] + close["line"]) < 1e-9 and bet["line"] != 0}
+              for bet, close, gained in every if abs(gained) > MAX_SCORED_POINTS]
+    out = {"large_move_bets": listed,
+           "moved_with_close": len(every), "moved_in_favour": sum(1 for _, _, p in every if p > 0),
            "moved_against": sum(1 for _, _, p in every if p < 0),
            "mean_points_in_favour": sum(points) / len(points) if points else None,
            "median_points_in_favour": median(points) if points else None,
@@ -599,6 +607,70 @@ def _line_adjusted(sport, family, same, moved, mean_se):
     return dict(out, scored=len(values), mean_clv=mean, clv_se=se, t=(mean / se if mean is not None and se else None),
                 beat_close_share=sum(1 for v in values if v > 0) / len(values) if values else None,
                 moved_mean_clv=moved_mean)
+
+
+# Pinnacle's last capture counts as its closing price only when taken this close to the start.
+PINNACLE_CLOSE_WITHIN = timedelta(minutes=30)
+
+
+def _vs_pinnacle_close(started, quotes, bets, family, mean_se):
+    """The bets valued at Pinnacle's last no-vig price before the start (owner 2026-11-12; read-only).
+
+    The certified close at the stake book proved a poor yardstick for an exchange: on 2026-11-12
+    Novig's closing snapshots for seven bets sat 4 to 25 points from the market minutes before
+    tip-off (Colgate +29.5 bet, "+11.5" close), so they say nothing about the bet. Pinnacle's
+    closing price is the usual benchmark and the price watch captures it every 15 minutes.
+
+    A bet is priced when Pinnacle's last capture, within ``PINNACLE_CLOSE_WITHIN`` of the start,
+    quotes the bet's line: value = bet odds x Pinnacle's no-vig probability for the bet's side - 1.
+    When Pinnacle closed at another line the bet is counted by direction (the better or the worse
+    number), not priced. This is closing EV against the sharp price, not the plan's CLV, and the
+    captures are not certified closes.
+
+    A bet entered at Pinnacle's last capture is NOT priced (``entered_at_last_capture``): it was
+    chosen because it beat Pinnacle's price in that very capture, so pricing it there would only
+    repeat the entry edge. The first table (2026-11-12) did that and showed 100% of totals bets
+    positive with a standard error of 0.2%: the bet rule measuring itself. Only a later Pinnacle
+    capture says whether the edge was still there at the close.
+    """
+    grouped = by_event(quotes)
+    values, favour, against, no_capture, at_last, waits = [], 0, 0, 0, 0, []
+    for event_id, bet, _ in bets:
+        event = started[event_id]
+        kickoff = _t(event["scheduled_start"])
+        track = [row for row in pairs(event, grouped.get(event_id, []), family) if row[0] <= kickoff]
+        last = max((captured for captured, _, _ in track), default=None)
+        if last is None or kickoff - last > PINNACLE_CLOSE_WITHIN:
+            no_capture += 1
+            continue
+        entered = capture_time(event, bet)
+        if last <= entered:
+            at_last += 1
+            continue
+        mine = _home_line(event, bet)
+        at_line = [p for captured, line, p in track if captured == last and line == mine]
+        if at_line:
+            p = at_line[0] if bet["selection"] == _canonical(event, family) else 1 - at_line[0]
+            values.append(bet["decimal_odds"] * p - 1)
+            waits.append((last - entered).total_seconds() / 60)
+            continue
+        # Pinnacle's main line at its last capture, as the bet's own side would read it.
+        main = min(((abs(p - 0.5), line) for captured, line, p in track if captured == last))[1]
+        canonical = bet["selection"] == _canonical(event, family)
+        if family == "TOTAL":
+            gained = (main - mine) * (1 if canonical else -1)        # an Over wants the lower number
+        else:
+            gained = (mine - main) * (1 if canonical else -1)        # the home line; the away side is its negative
+        favour += gained > 0
+        against += gained < 0
+    mean, se = mean_se(values)
+    return {"bets": len(bets), "priced": len(values), "coverage": len(values) / len(bets) if bets else None,
+            "mean_closing_ev": mean, "se": se, "t": (mean / se if mean is not None and se else None),
+            "beat_close_share": sum(1 for v in values if v > 0) / len(values) if values else None,
+            "pinnacle_moved_in_favour": favour, "pinnacle_moved_against": against, "no_late_pinnacle_capture": no_capture,
+            "entered_at_last_capture": at_last,
+            "median_minutes_entry_to_close": sorted(waits)[len(waits) // 2] if waits else None,
+            "within_minutes": PINNACLE_CLOSE_WITHIN.total_seconds() / 60}
 
 
 def _book_label(sportsbook):
@@ -701,6 +773,8 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
                         for label, found in sorted(books_seen.items())},
             # The same bets with the moved lines counted (owner 2026-11-12): see ``_line_adjusted``.
             "line_adjusted": _line_adjusted(sport, family, clv, moved, _mean_se),
+            # The same bets against Pinnacle's last price before the start: see ``_vs_pinnacle_close``.
+            "vs_pinnacle": _vs_pinnacle_close(started, quotes, bets, family, _mean_se),
             "mean_price_clv": mean, "price_clv_se": se,
             "t": (mean / se if mean is not None and se else None),
             "beat_close_share": sum(1 for v in clv if v > 0) / len(clv) if clv else None}

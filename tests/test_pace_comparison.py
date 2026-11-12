@@ -315,3 +315,48 @@ def test_a_close_far_from_the_bet_is_counted_but_not_scored(monkeypatch):
     near = 2.06 * (implied - pm.POINT_VALUE[("NCAAB", "SPREAD")]) - 1
     assert adjusted["moved_mean_clv"] == pytest.approx(near)
     assert adjusted["mean_clv"] == pytest.approx((2.06 * implied - 1 + near) / 2)
+
+
+def test_bets_are_valued_at_pinnacles_last_price_before_the_start():
+    """2026-11-12: Novig's closing snapshots sat 4 to 25 points from the market (Colgate +29.5 bet, "+11.5" close).
+    Pinnacle's last capture before the start is the benchmark that does not depend on them."""
+    from tests.test_pinnacle_plan_selection import both
+    start = datetime(2030, 1, 1, 20, 0, tzinfo=timezone.utc)
+
+    def event(name):
+        return {"event_id": name, "home_team": "H", "away_team": "A", "scheduled_start": start.isoformat(),
+                "observed_at": (start - timedelta(hours=8)).isoformat()}
+
+    def capture(name, minutes_before, line, home, away):
+        received = start - timedelta(minutes=minutes_before)
+        return both("pinnacle", line, home, away, received.isoformat(), (received - timedelta(seconds=30)).isoformat(), name)
+
+    def bet(name, selection, line, odds, minutes_before=120):
+        received = (start - timedelta(minutes=minutes_before)).isoformat()
+        return (name, {"event_id": name, "selection": selection, "line": line, "decimal_odds": odds,
+                       "market_family": "SPREAD", "sportsbook": "novig", "quote_timestamp": received,
+                       "raw_source": {"event_response": {}, "market": {}, "response_received_at": received}}, 0.02)
+    events = {name: event(name) for name in ("held", "away", "moved", "stale", "none")}
+    quotes = (capture("held", 120, -2.5, -110, -110) + capture("held", 10, -2.5, -130, +110)     # the home side shortens
+              + capture("away", 10, -2.5, -130, +110)
+              + capture("moved", 120, -2.5, -110, -110) + capture("moved", 10, -3.5, -110, -110)  # the line moves on
+              + capture("stale", 120, -2.5, -110, -110))                                          # last seen two hours out
+    bets = [bet("held", "H", -2.5, 2.0), bet("away", "A", 2.5, 2.0), bet("moved", "H", -2.5, 2.0),
+            bet("stale", "H", -2.5, 2.0), bet("none", "H", -2.5, 2.0)]
+    out = pm._vs_pinnacle_close(events, quotes, bets, "SPREAD", lambda values: (
+        (sum(values) / len(values), None) if values else (None, None)))
+    home = (130 / 230) / (130 / 230 + 100 / 210)                          # Pinnacle's no-vig home probability at the close
+    assert out["bets"] == 5 and out["priced"] == 2 and out["coverage"] == 0.4
+    assert out["mean_closing_ev"] == pytest.approx(((2.0 * home - 1) + (2.0 * (1 - home) - 1)) / 2)
+    assert out["beat_close_share"] == 0.5                                 # the home bet beat it, the away bet did not
+    assert (out["pinnacle_moved_in_favour"], out["pinnacle_moved_against"]) == (1, 0)   # -2.5 held against a -3.5 close
+    assert out["no_late_pinnacle_capture"] == 2 and out["within_minutes"] == 30
+    assert "_vs_pinnacle_close" not in pm.PREDICTION_FUNCTIONS
+    assert out["entered_at_last_capture"] == 0 and out["median_minutes_entry_to_close"] == 110
+    # A bet entered at Pinnacle's last capture beat Pinnacle in that same capture: pricing it there would only
+    # repeat the entry edge (the first real table showed 100% positive with a 0.2% standard error).
+    same = pm._vs_pinnacle_close(events, quotes, [bet("held", "H", -2.5, 2.0, minutes_before=10)], "SPREAD",
+                                 lambda values: (None, None))
+    assert same["priced"] == 0 and same["entered_at_last_capture"] == 1 and same["median_minutes_entry_to_close"] is None
+    worse = pm._vs_pinnacle_close(events, quotes, [bet("moved", "A", 2.5, 2.0)], "SPREAD", lambda v: (None, None))
+    assert (worse["pinnacle_moved_in_favour"], worse["pinnacle_moved_against"]) == (0, 1)   # +2.5 against a +3.5 close

@@ -269,3 +269,41 @@ def test_large_moves_are_listed_and_not_scored():
     older = dict(sport='NCAAB', market_family='SPREAD', window='last 7 days',
                  by_edge={'1%': dict(bets=3, line_adjusted=dict(moved_with_close=2))})
     assert report._clv_large_moves_markdown([older], []) == []          # rows from before the split
+
+
+def test_each_large_move_is_listed_so_it_can_be_traced():
+    import scripts.market_readiness_report as report
+    bet = dict(event_id='abcdef0123456789', sportsbook='novig', selection='Home U', bet_line=-10.5, close_line=10.5,
+               points=-21.0, bet_quote_at='2026-11-11T23:10:00+00:00', close_at='2026-11-12T00:00:00+00:00',
+               same_size_opposite_sign=True)
+    found = dict(moved_with_close=2, large_moves=1, largest_move=-21.0, median_points_in_favour=-1.0,
+                 max_scored_points=3.0, large_move_bets=[bet])
+    row = dict(sport='NCAAB', market_family='SPREAD', window='last 7 days',
+               by_edge={'1%': dict(bets=10, comparable=6, line_adjusted=found)})
+    text = '\n'.join(report._clv_large_moves_markdown([row], []))
+    assert '| NCAAB SPREAD | any time | abcdef012345 | novig | Home U | -10.5 | +10.5 | -21.0 | yes |' in text
+    assert text.index('| NCAAB SPREAD | any time | 2 | 1 |') < text.index('Each large move')
+    without = dict(row, by_edge={'1%': dict(bets=10, comparable=6, line_adjusted=dict(found, large_move_bets=[]))})
+    assert 'Each large move' not in '\n'.join(report._clv_large_moves_markdown([without], []))
+
+
+def test_the_report_values_the_bets_at_pinnacles_close():
+    import scripts.market_readiness_report as report
+    found = dict(bets=24, priced=18, coverage=0.75, mean_closing_ev=0.011, se=0.004, t=2.8, beat_close_share=0.61,
+                 pinnacle_moved_in_favour=4, pinnacle_moved_against=1, no_late_pinnacle_capture=1, within_minutes=30)
+    row = dict(sport='NCAAB', market_family='SPREAD', window='last 7 days',
+               by_edge={'1%': dict(bets=24, vs_pinnacle=found), '2%': dict(bets=0, vs_pinnacle=dict(found, bets=0))})
+    text = '\n'.join(report._clv_vs_pinnacle_markdown(
+        [row, dict(sport='NBA', market_family='TOTAL', window='last 7 days', evaluation_error='x')],
+        [dict(row, by_edge={'1%': dict(bets=9, vs_pinnacle=dict(found, bets=9, priced=9, coverage=1.0))})]))
+    assert '| NCAAB SPREAD | last 7 days | any time | 1% | 24 | 18 (75%) | +1.1% (0.4%) | 2.8 | 61% | 4 / 1 | 1 |' in text
+    assert '| NCAAB SPREAD | last 7 days | last 60 min | 1% | 9 | 9 (100%) |' in text
+    assert "Pinnacle's last no-vig price before the start" in text and 'a plan is not held to this measure' in text
+    assert '| 2% |' not in text and 'NBA' not in text                      # no bets at that edge; an error row
+    assert 'Not priced above' not in text                                  # rows from before the split say nothing
+    later = dict(row, by_edge={'1%': dict(bets=24, vs_pinnacle=dict(found, entered_at_last_capture=6,
+                                                                    median_minutes_entry_to_close=31.0))})
+    split = '\n'.join(report._clv_vs_pinnacle_markdown([later], []))
+    assert '| NCAAB SPREAD | last 7 days | any time | 1% | 6 | 31 |' in split and 'only repeat the entry edge' in split
+    assert report._clv_vs_pinnacle_markdown([], []) == []
+    assert report._clv_vs_pinnacle_markdown([dict(row, by_edge={'1%': dict(bets=3)})], []) == []   # older rows
