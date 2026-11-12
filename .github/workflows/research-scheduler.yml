@@ -108,6 +108,9 @@ jobs:
           # NCAAB close allowance (owner 2026-11-11, option B): 700 a day and 15,000 per 31 days, so every bet's
           # close can be fetched. The code default stays 400 and 4,500; NBA stays 100 and 2,500.
           PARLAYPICKER_CERTIFIED_CLOSE_LIMITS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_LIMITS || 'NCAAB=700/15000' }}
+          # Also fetch Pinnacle's close with each bet's own (2026-11-12): the benchmark a bet at an exchange
+          # can be judged against. Same request, same cost. Set the variable to false to stop.
+          PARLAYPICKER_CERTIFIED_CLOSE_PINNACLE: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_PINNACLE || 'true' }}
           # D16: hours ahead to capture NBA/NCAAB/NHL prices (default 2, range 2-24).
           PARLAYPICKER_RESEARCH_CAPTURE_HOURS: ${{ vars.PARLAYPICKER_RESEARCH_CAPTURE_HOURS }}
           # D4 option A: Pinnacle as the fair-price reference ("NBA,NCAAB"); unset = off.

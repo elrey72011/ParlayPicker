@@ -147,14 +147,60 @@ def rest_share(setting=os.environ.get):
     return share if 0 <= share <= 1 else 1.0
 
 
+PINNACLE_ENV = "PARLAYPICKER_CERTIFIED_CLOSE_PINNACLE"
+
+
+def pinnacle_closes(setting=os.environ.get):
+    """Whether a bet's close request also asks for Pinnacle's close (off unless the variable says so).
+
+    Found 2026-11-12: Novig's closing snapshots sat 4 to 25 points from the market minutes before
+    tip-off, so the close at the stake book cannot judge a bet there. Pinnacle's close is the usual
+    benchmark, and until now it was never fetched (reference books are left out of the closes).
+    A request is charged per 10 bookmakers, so adding Pinnacle to a bet's own book costs nothing.
+    """
+    return str(setting(PINNACLE_ENV, "") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _pinnacle_quotes(path, sport, families):
+    """{(event_id, market_family): [one verified Pinnacle quote per selection still without a close]}."""
+    closed = {(c["event_id"], c["market_family"], c["selection"])
+              for c in evidence.read_records(path, "prospective_close", sport=sport)
+              if c["close_verified"] and c["sportsbook"] in REFERENCE_BOOKS}
+    found = {}
+    for quote in evidence.read_records(path, "prospective_quote", sport=sport):
+        scope = (quote["event_id"], quote["market_family"], quote["selection"])
+        if (quote["sportsbook"] in REFERENCE_BOOKS and quote["quote_verified"] and quote["market_family"] in families
+                and scope not in closed):
+            found.setdefault(scope[:2], {}).setdefault(quote["selection"], quote)
+    return {key: list(by_selection.values()) for key, by_selection in found.items()}
+
+
+def _with_pinnacle(first, reference):
+    """``first`` plus Pinnacle's quotes for the same games and markets, while the request costs the same."""
+    books = {q["sportsbook"] for q in first}
+    extra = [q for key in sorted({(q["event_id"], q["market_family"]) for q in first}) for q in reference.get(key, [])]
+    added = {q["sportsbook"] for q in extra}
+    if not extra or math.ceil(len(books | added) / 10) > math.ceil(len(books) / 10):
+        return first
+    return first + extra
+
+
 def due_split(path, now, *, sports, lookback=LOOKBACK, setting=os.environ.get):
-    """``due`` as two lists: (bet scopes at the bet's book, every other due game and book)."""
+    """``due`` as two lists: (bet scopes at the bet's book, every other due game and book).
+
+    With ``PARLAYPICKER_CERTIFIED_CLOSE_PINNACLE`` on, a bet's request also asks for Pinnacle's close
+    for the same game and market (``pinnacle_closes``), at no extra cost.
+    """
     priority, rest = [], []
     for sport in sports:
         bets = _bet_scopes(path, sport) | _replay_scopes(path, sport, now, lookback, setting)
+        reference = (_pinnacle_quotes(path, sport, enabled_families(sport, setting))
+                     if pinnacle_closes(setting) else {})
         for event, quotes in _due_sport(path, now, sport, lookback, setting):
             first = [q for q in quotes if (q["event_id"], q["market_family"], q["sportsbook"]) in bets]
             later = [q for q in quotes if (q["event_id"], q["market_family"], q["sportsbook"]) not in bets]
+            if first and reference:
+                first = _with_pinnacle(first, reference)
             if first:
                 priority.append((event, first))
             if later:

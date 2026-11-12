@@ -411,3 +411,75 @@ def test_the_research_workflows_set_the_ncaab_close_allowance_the_owner_approved
     line = "PARLAYPICKER_CERTIFIED_CLOSE_LIMITS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_LIMITS || 'NCAAB=700/15000' }}"
     assert line in (root / "research-loop.yml").read_text(encoding="utf-8")
     assert line in (root / "research-scheduler.yml").read_text(encoding="utf-8")
+
+
+def test_a_bets_close_request_also_asks_for_pinnacle_at_no_extra_cost(monkeypatch):
+    """2026-11-12: Novig's closing snapshots sat far from the market; Pinnacle's close was never fetched."""
+    event = {"event_id": "A", "sport": "NCAAB", "provider_event_id": "A", "scheduled_start": at(1)}
+
+    def quote(book, selection, family="SPREAD", verified=1):
+        return dict(quote_id=f"{book}-{family}-{selection}", event_id="A", market_family=family, selection=selection,
+                    sportsbook=book, quote_verified=verified)
+    stake = [quote(b, s) for b in ("novig", "fanduel") for s in ("Home", "Away")]
+    stored = stake + [quote("pinnacle", "Home"), quote("pinnacle", "Away"), quote("pinnacle", "Home"),
+                      quote("pinnacle", "Over", family="TOTAL"), quote("pinnacle", "Away", verified=0)]
+    monkeypatch.setattr(pc, "_due_sport", lambda path, now, sport, lookback, setting: [(event, stake)])
+    monkeypatch.setattr(pc, "_bet_scopes", lambda path, sport: {("A", "SPREAD", "novig")})
+    monkeypatch.setattr(pc, "_replay_scopes", lambda *a, **k: set())
+    monkeypatch.setattr(pc.evidence, "read_records", lambda path, table, **k: stored if table == "prospective_quote" else [])
+    off, _ = pc.due_split("db", BASE, sports=("NCAAB",), setting={}.get)
+    assert [q["sportsbook"] for q in off[0][1]] == ["novig", "novig"]                 # off unless switched on
+    on = {pc.PINNACLE_ENV: "true"}.get
+    priority, rest = pc.due_split("db", BASE, sports=("NCAAB",), setting=on)
+    asked = priority[0][1]
+    assert sorted((q["sportsbook"], q["selection"]) for q in asked) == [
+        ("novig", "Away"), ("novig", "Home"), ("pinnacle", "Away"), ("pinnacle", "Home")]   # one per side, this market only
+    url, params, credits = pc.request_plan(event, asked)
+    assert params["bookmakers"] == "novig,pinnacle" and credits == 10                 # charged per 10 bookmakers
+    assert [q["sportsbook"] for q in rest[0][1]] == ["fanduel", "fanduel"]            # whole-game closes are unchanged
+    # A Pinnacle close already stored is not asked for again.
+    closed = [dict(event_id="A", market_family="SPREAD", selection=s, sportsbook="pinnacle", close_verified=1)
+              for s in ("Home", "Away")]
+    monkeypatch.setattr(pc.evidence, "read_records", lambda path, table, **k: (
+        stored if table == "prospective_quote" else closed))
+    again, _ = pc.due_split("db", BASE, sports=("NCAAB",), setting=on)
+    assert [q["sportsbook"] for q in again[0][1]] == ["novig", "novig"]
+    # Never when it would add a charge: ten stake books already fill the request.
+    ten = [quote(f"book{i:02d}", s) for i in range(10) for s in ("Home", "Away")]
+    assert pc._with_pinnacle(ten, {("A", "SPREAD"): [quote("pinnacle", "Home")]}) == ten
+    assert pc.pinnacle_closes({pc.PINNACLE_ENV: "false"}.get) is False and pc.pinnacle_closes({}.get) is False
+
+
+def test_the_research_workflows_fetch_pinnacles_close_unless_switched_off():
+    from pathlib import Path
+    for name in ("research-loop.yml", "research-scheduler.yml"):
+        text = (Path(__file__).resolve().parents[1] / ".github/workflows" / name).read_text(encoding="utf-8")
+        assert "PARLAYPICKER_CERTIFIED_CLOSE_PINNACLE: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_PINNACLE || 'true' }}" in text
+
+
+def test_pinnacles_close_is_stored_as_a_certified_close_beside_the_bets(store, clock, monkeypatch):
+    """End to end on a real store: one request, both books' closes, the same 10 credits."""
+    full = provider_event()
+    full["bookmakers"].append({"key": "pinnacle", "markets": [market(0, price=-108)]})
+    later = {"event_response": full, "market": full["bookmakers"][1]["markets"][0], "response_received_at": at(0)}
+    pe.insert_quote(store, dict(quote_id="SYNTHETIC-P1", event_id="SYNTHETIC-E1", sport="NBA", market_family="SPREAD",
+        selection="Home", line=-2.5, american_odds=-108, decimal_odds=1.925925926, sportsbook="pinnacle",
+        quote_timestamp=at(0), quote_source="THE_ODDS_API", quote_verified=True,
+        source_id=f"SYNTHETIC-E1:pinnacle:spreads:Home:{at(0)}", raw_source=later))
+    monkeypatch.setattr(pc, "_bet_scopes", lambda path, sport: {("SYNTHETIC-E1", "SPREAD", "TestBook")})
+    monkeypatch.setattr(pc, "_replay_scopes", lambda *a, **k: set())
+    payload = snapshot()
+    payload["data"]["bookmakers"].append({"key": "pinnacle", "markets": [market(50, line=-3.5, price=-104)]})
+    clock(1, 5)
+    now = BASE + timedelta(hours=1, minutes=5)
+    provider = Provider(payload)
+    report = pc.record(store, now=now, key="SYNTHETIC-KEY", request_get=provider, sports=("NBA",),
+                       setting={pc.PINNACLE_ENV: "true", "PARLAYPICKER_CERTIFIED_CLOSE_SPORTS": "NBA"}.get)
+    assert (report["requests"], report["stored"], report["credits"], report["errors"]) == (1, 2, 10, [])
+    assert provider.calls[0][1]["bookmakers"] == "TestBook,pinnacle"
+    closes = {c["sportsbook"]: c for c in pe.read_records(store, "prospective_close", sport="NBA")}
+    assert closes["pinnacle"]["close_verified"] == 1 and closes["pinnacle"]["line"] == -3.5
+    assert closes["pinnacle"]["american_odds"] == -104 and closes["TestBook"]["american_odds"] == -105
+    again = pc.record(store, now=now, key="SYNTHETIC-KEY", request_get=provider, sports=("NBA",),
+                      setting={pc.PINNACLE_ENV: "true", "PARLAYPICKER_CERTIFIED_CLOSE_SPORTS": "NBA"}.get)
+    assert again["events"] == 0 and len(provider.calls) == 1            # neither close is bought twice
