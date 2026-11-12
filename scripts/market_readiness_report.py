@@ -306,6 +306,35 @@ def _clv_line_adjusted_markdown(any_time, late):
             '|---|---|---|---|---|---|---|---|---|---|---|---|'] + lines
 
 
+def _clv_large_moves_markdown(any_time, late):
+    """The moved bets the line-adjusted table does not score (2026-11-12): a close more than
+    ``max_scored_points`` from the bet. Same window and edge as that table."""
+    lines = []
+    for label, rows in (('any time', any_time), ('last 60 min', late)):
+        for row in rows:
+            if row.get('window') != BY_BOOK_WINDOW or 'evaluation_error' in row:
+                continue
+            adjusted = ((row.get('by_edge') or {}).get(BY_BOOK_EDGE) or {}).get('line_adjusted') or {}
+            if 'large_moves' not in adjusted or not adjusted.get('moved_with_close'):
+                continue
+            median = adjusted.get('median_points_in_favour')
+            biggest = adjusted.get('largest_move')
+            lines.append(f"| {row['sport']} {row['market_family']} | {label} | {adjusted['moved_with_close']} | "
+                         f"{adjusted['moved_with_close'] - adjusted['large_moves']} | "
+                         f"{'' if median is None else f'{median:+.2f}'} | {adjusted['large_moves']} | "
+                         f"{'' if biggest is None else f'{biggest:+.1f}'} |")
+    if not lines:
+        return []
+    limit = next((((row.get('by_edge') or {}).get(BY_BOOK_EDGE) or {}).get('line_adjusted') or {}).get('max_scored_points')
+                 for rows in (any_time, late) for row in rows
+                 if (((row.get('by_edge') or {}).get(BY_BOOK_EDGE) or {}).get('line_adjusted') or {}).get('max_scored_points'))
+    return ['', f'Moved lines, scored and not: a close more than {limit:g} points from the bet is counted in "moved in favour / '
+            'against" above but is NOT scored, and is left out of the mean points gained. A value per point holds only near the '
+            'line, and a close that far from the bet may be another line of the same game rather than a move of the main one.',
+            '', '| market | entry | moved, close found | scored moves | median points gained (scored) | large moves, not scored '
+            '| largest |', '|---|---|---|---|---|---|---|'] + lines
+
+
 def line_movement(path, now=None, extra=None):
     """Pinnacle's line movement before each started game and whether the stake books followed
     (pinnacle_model.line_movement), over the last 24 hours. Read-only."""
@@ -673,6 +702,7 @@ def markdown(result):
     lines += _clv_markdown(result.get('late_entry_clv') or [], LATE_CLV_CAPTION)
     lines += _clv_by_book_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _clv_line_adjusted_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
+    lines += _clv_large_moves_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running

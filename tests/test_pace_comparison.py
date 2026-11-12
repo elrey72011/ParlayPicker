@@ -294,3 +294,24 @@ def test_points_in_favour_follow_the_bets_own_side():
     assert pm.points_in_favour("TOTAL", bet("over", 150.5), {"line": 149.5}) == -1.0
     assert set(pm.POINT_VALUE) == {("NCAAB", "SPREAD"), ("NBA", "SPREAD"), ("NCAAB", "TOTAL"), ("NBA", "TOTAL")}
     assert "_line_adjusted" not in pm.PREDICTION_FUNCTIONS and "points_in_favour" not in pm.PREDICTION_FUNCTIONS
+
+
+def test_a_close_far_from_the_bet_is_counted_but_not_scored(monkeypatch):
+    """2026-11-12, first real table: 12 moved NCAAB spread bets were 3 in favour and 9 against, yet averaged
+    +2.1 points and +21% CLV. A few very large "moves" carried the mean."""
+    games = [("same", 60, 20), ("near", 60, 20), ("far", 60, 20)]
+    events, quotes = _scope(games)
+    closes = [_close("same", "H", -2.5, -110, 1),
+              _close("near", "H", -1.5, -110, 1),        # one point against the bet
+              _close("far", "H", -28.5, -110, 1)]        # 26 points "in favour": another line, not a move
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, []))
+    monkeypatch.setattr(pm.evidence, "read_records", lambda path, table, **k: closes if table == "prospective_close" else [])
+    adjusted = pm.replay_clv("db", "NCAAB", "SPREAD", now=NOW)["by_edge"]["2%"]["line_adjusted"]
+    assert (adjusted["moved_with_close"], adjusted["moved_in_favour"], adjusted["moved_against"]) == (2, 1, 1)
+    assert adjusted["large_moves"] == 1 and adjusted["largest_move"] == 26.0 and adjusted["max_scored_points"] == 3.0
+    assert adjusted["mean_points_in_favour"] == -1.0 and adjusted["median_points_in_favour"] == -1.0
+    assert adjusted["scored"] == 2                                      # the same-line bet and the near move only
+    implied = 1 / (1 + 100 / 110)
+    near = 2.06 * (implied - pm.POINT_VALUE[("NCAAB", "SPREAD")]) - 1
+    assert adjusted["moved_mean_clv"] == pytest.approx(near)
+    assert adjusted["mean_clv"] == pytest.approx((2.06 * implied - 1 + near) / 2)

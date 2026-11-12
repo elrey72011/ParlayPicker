@@ -350,3 +350,26 @@ def test_a_scheduled_start_is_steady_and_each_run_leaves_its_cache_for_the_next(
     assert save > watch and "key: drive-cache-price-watch-${{ github.run_id }}" in text[save:]
     assert "if: ${{ always() }}" in text[watch:save]                                  # saved even when the watch fails
     assert "restore-keys: drive-cache-" in text                                       # so the next run finds it
+
+
+def test_the_weekend_allowance_is_800_a_day_in_steady_mode_only(monkeypatch):
+    """Owner approved 2026-11-12: Saturday's afternoon run is counted with Friday night's (a credit day is the
+    UTC day, 7 PM to 7 PM ET), about 700 credits against the steady 400."""
+    steady = {pw.WATCH_ENV: "NBA,NCAAB", pw.EXTRA_ENV: "NHL", pw.STEADY_ENV: "true"}.get
+    friday = datetime(2026, 11, 13, 21, 5, tzinfo=timezone.utc)          # 4:05 PM ET Friday
+    saturday = datetime(2026, 11, 14, 16, 30, tzinfo=timezone.utc)       # 11:30 AM ET Saturday
+    friday_night = datetime(2026, 11, 14, 0, 30, tzinfo=timezone.utc)    # 7:30 PM ET Friday is already the UTC Saturday
+    sunday_night = datetime(2026, 11, 16, 1, 0, tzinfo=timezone.utc)     # 8 PM ET Sunday is the UTC Monday
+    assert pw.limits(steady) == {"daily": 400, "rolling_31_days": 2800}  # without a time: what it always was
+    assert pw.limits(steady, friday) == {"daily": 400, "rolling_31_days": 3600}
+    assert pw.limits(steady, saturday) == {"daily": 800, "rolling_31_days": 3600}
+    assert pw.limits(steady, friday_night)["daily"] == 800 and pw.limits(steady, sunday_night)["daily"] == 400
+    normal = {pw.WATCH_ENV: "NBA,NCAAB", pw.EXTRA_ENV: "NHL"}.get
+    assert pw.limits(normal, saturday) == {"daily": 300, "rolling_31_days": 2100}        # normal mode: unchanged
+    fast = {pw.WATCH_ENV: "NBA,NCAAB", pw.EXTRA_ENV: "NHL", pw.FAST_ENV: "true", pw.STEADY_ENV: "true"}.get
+    assert pw.limits(fast, saturday) == {"daily": 900, "rolling_31_days": 6300}          # fast mode: unchanged
+    seen = {}
+    import app_core.research_api_budget as budgets
+    monkeypatch.setattr(budgets, "Budget", lambda state, persist, *, clock, limits: seen.update(limits) or "budget")
+    assert pw.budget_for({}, None, clock=lambda: saturday, setting=steady) == "budget"
+    assert seen["ODDS"] == {"daily": 800, "rolling_31_days": 3600}       # the running watch gets the weekend allowance

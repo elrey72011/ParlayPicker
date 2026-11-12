@@ -551,6 +551,13 @@ NOT_COMPARABLE = ("CLOSE_NOT_FETCHED", "BOOK_NOT_IN_CLOSE", "LINE_MOVED", "CLOSE
 POINT_VALUE = {("NCAAB", "SPREAD"): 0.036, ("NBA", "SPREAD"): 0.033, ("NCAAB", "TOTAL"): 0.024, ("NBA", "TOTAL"): 0.022}
 
 
+# A move larger than this is not scored (2026-11-12, first real table): 12 moved NCAAB spread bets
+# were 3 in favour and 9 against, yet averaged +2.1 points and +21% because of a few very large
+# "moves". A value per point holds only near the line, and a close that far from the bet is more
+# likely another line of the same game than a move of the main one. They are counted, not scored.
+MAX_SCORED_POINTS = 3.0
+
+
 def points_in_favour(family, bet, close):
     """How many points better the bet's line is than the close's, for the bet's own side.
 
@@ -570,11 +577,18 @@ def _line_adjusted(sport, family, same, moved, mean_se):
     close's price carried to the bet's line. Also reported without any assumption: how many moved
     bets ended with the better number, and the mean points gained.
     """
+    from statistics import median
     value = POINT_VALUE.get((sport, family))
-    points = [points_in_favour(family, bet, close) for bet, close in moved]
-    out = {"moved_with_close": len(moved), "moved_in_favour": sum(1 for p in points if p > 0),
-           "moved_against": sum(1 for p in points if p < 0),
-           "mean_points_in_favour": sum(points) / len(points) if points else None, "point_value": value}
+    every = [(bet, close, points_in_favour(family, bet, close)) for bet, close in moved]
+    large = [gained for _, _, gained in every if abs(gained) > MAX_SCORED_POINTS]
+    moved = [(bet, close) for bet, close, gained in every if abs(gained) <= MAX_SCORED_POINTS]
+    points = [gained for _, _, gained in every if abs(gained) <= MAX_SCORED_POINTS]
+    out = {"moved_with_close": len(every), "moved_in_favour": sum(1 for _, _, p in every if p > 0),
+           "moved_against": sum(1 for _, _, p in every if p < 0),
+           "mean_points_in_favour": sum(points) / len(points) if points else None,
+           "median_points_in_favour": median(points) if points else None,
+           "large_moves": len(large), "largest_move": max(large, key=abs) if large else None,
+           "max_scored_points": MAX_SCORED_POINTS, "point_value": value}
     if value is None:
         return dict(out, scored=len(same), mean_clv=None, clv_se=None, t=None, beat_close_share=None)
     adjusted = [bet["decimal_odds"] * min(0.99, max(0.01, 1 / close["decimal_odds"] + gained * value)) - 1
