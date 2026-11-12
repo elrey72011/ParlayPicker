@@ -350,6 +350,38 @@ def _clv_large_moves_markdown(any_time, late):
             '| largest |', '|---|---|---|---|---|---|---|'] + lines
 
 
+def _clv_vs_pinnacle_markdown(any_time, late):
+    """The first-edge bets valued at Pinnacle's last no-vig price before the start (owner 2026-11-12)."""
+    lines = []
+    for label, rows in (('any time', any_time), ('last 60 min', late)):
+        for row in rows:
+            if 'evaluation_error' in row:
+                continue
+            for edge, found in (row.get('by_edge') or {}).items():
+                against = found.get('vs_pinnacle')
+                if not against or not against.get('bets'):
+                    continue
+                mean = '' if against['mean_closing_ev'] is None else f"{against['mean_closing_ev']:+.1%}"
+                se = '' if against['se'] is None else f" ({against['se']:.1%})"
+                t = '' if against['t'] is None else f"{against['t']:.1f}"
+                beat = '' if against['beat_close_share'] is None else f"{against['beat_close_share']:.0%}"
+                lines.append(f"| {row['sport']} {row['market_family']} | {row.get('window', '')} | {label} | {edge} | "
+                             f"{against['bets']} | {against['priced']} ({against['coverage']:.0%}) | {mean}{se} | {t} | "
+                             f"{beat} | {against['pinnacle_moved_in_favour']} / {against['pinnacle_moved_against']} | "
+                             f"{against['no_late_pinnacle_capture']} |")
+    if not lines:
+        return []
+    return ['', "Closing value against Pinnacle: the same bets valued at Pinnacle's last no-vig price before the start "
+            '(its last capture, within 30 minutes of the start, at the bet\'s line): bet odds times that probability, minus '
+            '1. Pinnacle\'s close is the usual benchmark, and it does not depend on the stake book\'s closing snapshot, which '
+            'for an exchange can sit far from the market minutes before tip-off. When Pinnacle closed at another line the '
+            'bet is counted by direction, not priced. These captures are not certified closes and a plan is not held to '
+            'this measure.', '',
+            '| market | window | entry | edge | bets | priced at Pinnacle\'s close (share) | mean closing EV (SE) | t '
+            '| positive | Pinnacle moved in favour / against | no late Pinnacle capture |',
+            '|---|---|---|---|---|---|---|---|---|---|---|'] + lines
+
+
 def line_movement(path, now=None, extra=None):
     """Pinnacle's line movement before each started game and whether the stake books followed
     (pinnacle_model.line_movement), over the last 24 hours. Read-only."""
@@ -718,6 +750,7 @@ def markdown(result):
     lines += _clv_by_book_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _clv_line_adjusted_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _clv_large_moves_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
+    lines += _clv_vs_pinnacle_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
