@@ -156,3 +156,95 @@ def test_stake_books_are_matched_by_label_because_stored_names_are_provider_keys
     rows = gaps.current("db", NOW, sports=("NBA",), read_scope=lambda path, sport, family: (
         (events, quotes, []) if family == "SPREAD" else ({}, [], [])))
     assert [(r["sportsbook"], r["pick"]) for r in rows] == [("Novig", "H -2.5"), ("DraftKings", "H -2.5")]
+
+
+def _moving(event_id, minutes_before, pinnacle, novig_line, fanduel_line, start=START):
+    """One capture: Pinnacle at (home line, home price, away price); the stake books at their own lines."""
+    received = start - timedelta(minutes=minutes_before)
+    stamp = (received - timedelta(seconds=30)).isoformat()
+    line, home, away = pinnacle
+    return (both("pinnacle", line, home, away, received.isoformat(), stamp, event_id)
+            + both("novig", novig_line, -110, -110, received.isoformat(), stamp, event_id)
+            + both("fanduel", fanduel_line, -110, -110, received.isoformat(), stamp, event_id)
+            + both("bovada", line, -110, -110, received.isoformat(), stamp, event_id))
+
+
+def test_movement_shows_where_pinnacle_started_and_which_stake_books_followed():
+    """Owner 2026-11-12: per game, Pinnacle's first and current line and price, and the books at its line."""
+    events = {name: _event(name) for name in ("moved", "held", "single")}
+    events["started"] = _event("started", START - timedelta(hours=2))
+    events["far"] = _event("far", START + timedelta(hours=20))
+    quotes = (
+        # The home line goes from -2.5 to -3.5 (money on the home side). Novig followed; FanDuel has not.
+        _moving("moved", 300, (-2.5, -110, -110), -2.5, -2.5) + _moving("moved", 60, (-3.5, -110, -110), -3.5, -2.5)
+        # The line holds and the home price shortens from -110 to -125.
+        + _moving("held", 300, (-2.5, -110, -110), -2.5, -2.5) + _moving("held", 60, (-2.5, -125, +105), -2.5, -2.5)
+        + _moving("single", 60, (-1.5, -110, -110), -1.5, -1.5)
+        + _moving("started", 60, (-2.5, -110, -110), -2.5, -2.5, START - timedelta(hours=2))
+        + _moving("far", 60, (-2.5, -110, -110), -2.5, -2.5, START + timedelta(hours=20)))
+    for name, event in events.items():
+        event["home_team"], event["away_team"] = "H", "A"
+    rows = gaps.movement("db", NOW, sports=("NCAAB",), read_scope=lambda path, sport, family: (
+        (events, quotes, []) if family == "SPREAD" else ({}, [], [])))
+    by_first = {row["first_capture_at"] + str(row["pinnacle_line"]): row for row in rows}
+    assert len(rows) == 3 and len(by_first) == 3                 # the started game and the far one are left out
+    moved, held, single = rows                                   # the biggest line move first, then the price shift
+    assert (moved["pinnacle_first_line"], moved["pinnacle_line"], moved["line_move"]) == (-2.5, -3.5, -1.0)
+    assert moved["moved_toward"] == "H" and moved["captures"] == 2
+    assert moved["stake_books_at_line"] == ["Novig"] and moved["stake_books_off_line"] == ["FanDuel"]
+    assert held["line_move"] == 0 and held["probability_shift"] == pytest.approx(0.0325, abs=0.001)
+    assert held["pinnacle_first_probability"] == 0.5 and held["moved_toward"] == "H"
+    assert held["stake_books_at_line"] == ["FanDuel", "Novig"] and held["stake_books_off_line"] == []
+    assert single["captures"] == 1 and single["line_move"] == 0 and single["moved_toward"] is None
+    # A capture taken after ``now`` is never read.
+    early = START - timedelta(minutes=200)
+    seen = gaps.movement("db", early, sports=("NCAAB",), read_scope=lambda path, sport, family: (
+        (events, quotes, []) if family == "SPREAD" else ({}, [], [])))
+    assert {row["pinnacle_line"] for row in seen} == {-2.5} and all(row["captures"] == 1 for row in seen)
+    # Totals: a total going up moved toward the Over; a line or price going the other way, toward the away side.
+    assert gaps._toward(events["moved"], "TOTAL", 1.0, 0.0) == "Over"
+    assert gaps._toward(events["moved"], "TOTAL", -0.5, 0.0) == "Under"
+    assert gaps._toward(events["moved"], "SPREAD", 1.0, 0.0) == "A"
+    assert gaps._toward(events["moved"], "SPREAD", 0, -0.02) == "A" and gaps._toward(events["moved"], "SPREAD", 0, 0.001) is None
+
+
+def test_movement_is_published_with_the_candidates_and_shown_in_the_panel(monkeypatch):
+    drive, at = Drive(), datetime(2026, 11, 12, 23, 7, tzinfo=timezone.utc)
+    move = dict(sport="NBA", market_family="SPREAD", away_team="A", home_team="H",
+                scheduled_start="2026-11-13T00:10:00+00:00", pinnacle_first_line=-2.5, pinnacle_line=-3.5, line_move=-1.0,
+                pinnacle_first_probability=0.5, pinnacle_probability=0.5, probability_shift=0.0, moved_toward="H",
+                captures=2, first_capture_at="2026-11-12T18:00:00+00:00", last_capture_at="2026-11-12T23:05:00+00:00",
+                stake_books_at_line=["Novig"], stake_books_off_line=["FanDuel"])
+    gaps.publish(drive, "f", [], now=at, sports=("NBA",), movement=[move])
+    found = gaps.latest(drive, "f", now=at + timedelta(minutes=2))
+    assert found["movement"] == [move] and found["candidates"] == []
+    # Without movement the object is what it was before, so older readers and tests see no new key.
+    gaps.publish(drive, "f", [], now=at + timedelta(minutes=5), sports=("NBA",))
+    assert "movement" not in gaps.latest(drive, "f", now=at + timedelta(minutes=6))
+    # The price watch publishes both; a movement failure still publishes the candidates.
+    on = {pw.WATCH_ENV: "NBA"}.get
+    stored = {"capture": {"requested": True, "stored_quotes": 52}}
+    monkeypatch.setattr(gaps, "current", lambda path, now, *, sports: [])
+    monkeypatch.setattr(gaps, "movement", lambda path, now, *, sports: [move])
+    watch = Drive()
+    assert pw.after_poll("db", watch, "f", stored, setting=on, clock=lambda: at)["status"] == "PUBLISHED"
+    assert json.loads(next(iter(watch.objects.values())))["movement"] == [move]
+
+    def broken(*a, **k):
+        raise RuntimeError("scope unreadable")
+    monkeypatch.setattr(gaps, "movement", broken)
+    watch = Drive()
+    assert pw.after_poll("db", watch, "f", stored, setting=on, clock=lambda: at)["status"] == "PUBLISHED"
+    assert "movement" not in json.loads(next(iter(watch.objects.values())))
+    payload = dict(found, age_minutes=2.0, stale=False)
+    script = ("import json\nimport app.ui.price_gap_candidates as panel\n"
+              f"panel._from_drive = lambda: json.loads({json.dumps(json.dumps(payload))})\n"
+              "panel.render_price_gap_candidates()\n")
+    app = AppTest.from_string(script)
+    app.run(timeout=30)
+    next(b for b in app.button if b.key == "price_gap_candidates_load").click().run(timeout=30)
+    assert not app.exception and len(app.dataframe) == 1           # no candidates; the movement table
+    shown = app.dataframe[0].value
+    assert shown.loc[0, "stake_books_at_line"] == "Novig" and shown.loc[0, "stake_books_off_line"] == "FanDuel"
+    assert any("Pinnacle line movement, per game" in m.value for m in app.markdown)
+    assert any("a move is not a reason to bet" in c.value for c in app.caption)

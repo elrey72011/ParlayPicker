@@ -211,7 +211,11 @@ def after_poll(path, client, folder, report, *, setting=None, clock=_utcnow):
         now = clock()
         watched = sports(setting, now=now)
         rows = gaps.current(path, now, sports=watched)
-        return gaps.publish(client, folder, rows, now=now, sports=watched)
+        try:
+            moves = gaps.movement(path, now, sports=watched)
+        except Exception:
+            moves = None  # the candidates are still published without the movement table
+        return gaps.publish(client, folder, rows, now=now, sports=watched, movement=moves)
     except Exception as exc:
         return {"status": "CANDIDATES_FAILED", "error": type(exc).__name__}
 
