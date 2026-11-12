@@ -106,7 +106,9 @@ def draft(path, *, sport=None, market=None, validation_start=None, now=None, met
                                                 max_entry_overround=(pinnacle_model.MAX_OVERROUND
                                                                      if v2 and model == 'pinnacle' else None),
                                                 # Owner 2026-11-11: enter only this close to the start.
-                                                entry_within_minutes=entry_within_minutes)
+                                                entry_within_minutes=entry_within_minutes,
+                                                # Size the windows by the rate seen so far, not up to a later start.
+                                                as_of=now)
         except ValueError as exc:
             result['draft'] = {'sport': sport, 'market_family': market, 'status': 'NOT_DRAFTABLE', 'reason': str(exc)}
         else:

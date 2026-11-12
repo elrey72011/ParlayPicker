@@ -221,3 +221,29 @@ def test_the_closing_line_table_is_also_split_by_stake_book_for_seven_days_at_on
     assert report._clv_by_book_markdown([], []) == []
     assert report._clv_by_book_markdown([dict(sport='NBA', market_family='SPREAD', window='last 7 days',
                                               by_edge={'1%': dict(bets=3)})], []) == []   # older rows without the split
+
+
+def test_the_line_adjusted_table_counts_the_moved_lines_and_names_its_assumption():
+    import scripts.market_readiness_report as report
+
+    def row(sport, window, adjusted, bets=10, comparable=6):
+        return dict(sport=sport, market_family='SPREAD', window=window, by_edge={
+            '1%': dict(bets=bets, comparable=comparable, line_adjusted=adjusted),
+            '2%': dict(bets=4, comparable=1, line_adjusted=dict(adjusted, mean_clv=0.5))})
+    scored = dict(moved_with_close=3, moved_in_favour=2, moved_against=1, mean_points_in_favour=0.5, point_value=0.036,
+                  scored=9, mean_clv=0.012, clv_se=0.004, t=3.0, beat_close_share=0.6, moved_mean_clv=0.021)
+    hockey = dict(moved_with_close=1, moved_in_favour=0, moved_against=1, mean_points_in_favour=-1.0, point_value=None,
+                  scored=2, mean_clv=None, clv_se=None, t=None, beat_close_share=None)
+    any_time = [row('NCAAB', 'last 7 days', scored), row('NCAAB', 'last 24 hours', dict(scored, mean_clv=0.09)),
+                row('NHL', 'last 7 days', hockey, bets=3, comparable=2),
+                dict(sport='NBA', market_family='TOTAL', window='last 7 days', evaluation_error='x')]
+    late = [row('NCAAB', 'last 7 days', dict(scored, scored=8, mean_clv=0.008), bets=8)]
+    text = '\n'.join(report._clv_line_adjusted_markdown(any_time, late))
+    assert '| NCAAB SPREAD | any time | 10 | 6 | 3 | 2 / 1 | +0.50 | 9 (90%) | +1.2% (0.4%) | 3.0 | +2.1% | 3.6% |' in text
+    assert '| NCAAB SPREAD | last 60 min | 8 | 6 | 3 | 2 / 1 | +0.50 | 8 (100%) | +0.8% (0.4%) | 3.0 | +2.1% | 3.6% |' in text
+    assert '| NHL SPREAD | any time | 3 | 2 | 1 | 0 / 1 | -1.00 | 2 (67%) | no point value assumed | | |  |' in text
+    assert 'ASSUMED value per point' in text and 'A plan is not held to this measure' in text
+    assert '+9.0%' not in text and '+50.0%' not in text                       # the other window; the other edge
+    assert report._clv_line_adjusted_markdown([], []) == []
+    assert report._clv_line_adjusted_markdown([dict(sport='NBA', market_family='SPREAD', window='last 7 days',
+                                                    by_edge={'1%': dict(bets=3, comparable=1)})], []) == []   # older rows
