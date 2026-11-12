@@ -371,6 +371,21 @@ def _clv_vs_pinnacle_markdown(any_time, late):
                              f"{against['no_late_pinnacle_capture']} |")
     if not lines:
         return []
+    waits = []
+    for label, rows in (('any time', any_time), ('last 60 min', late)):
+        for row in rows:
+            for edge, found in ((row.get('by_edge') or {}) if 'evaluation_error' not in row else {}).items():
+                against = found.get('vs_pinnacle') or {}
+                if against.get('bets') and 'entered_at_last_capture' in against:
+                    wait = against.get('median_minutes_entry_to_close')
+                    waits.append(f"| {row['sport']} {row['market_family']} | {row.get('window', '')} | {label} | {edge} | "
+                                 f"{against['entered_at_last_capture']} | {'' if wait is None else f'{wait:.0f}'} |")
+    if waits:
+        lines += ['', 'Not priced above: a bet entered at Pinnacle\'s last capture was chosen because it beat Pinnacle in that '
+                  'same capture, so pricing it there would only repeat the entry edge. The median minutes show how long after '
+                  'entry the priced bets were valued.', '',
+                  '| market | window | entry | edge | entered at the last capture (not priced) | median minutes from entry to close |',
+                  '|---|---|---|---|---|---|'] + waits
     return ['', "Closing value against Pinnacle: the same bets valued at Pinnacle's last no-vig price before the start "
             '(its last capture, within 30 minutes of the start, at the bet\'s line): bet odds times that probability, minus '
             '1. Pinnacle\'s close is the usual benchmark, and it does not depend on the stake book\'s closing snapshot, which '

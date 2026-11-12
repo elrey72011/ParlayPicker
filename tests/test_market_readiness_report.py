@@ -300,5 +300,10 @@ def test_the_report_values_the_bets_at_pinnacles_close():
     assert '| NCAAB SPREAD | last 7 days | last 60 min | 1% | 9 | 9 (100%) |' in text
     assert "Pinnacle's last no-vig price before the start" in text and 'a plan is not held to this measure' in text
     assert '| 2% |' not in text and 'NBA' not in text                      # no bets at that edge; an error row
+    assert 'Not priced above' not in text                                  # rows from before the split say nothing
+    later = dict(row, by_edge={'1%': dict(bets=24, vs_pinnacle=dict(found, entered_at_last_capture=6,
+                                                                    median_minutes_entry_to_close=31.0))})
+    split = '\n'.join(report._clv_vs_pinnacle_markdown([later], []))
+    assert '| NCAAB SPREAD | last 7 days | any time | 1% | 6 | 31 |' in split and 'only repeat the entry edge' in split
     assert report._clv_vs_pinnacle_markdown([], []) == []
     assert report._clv_vs_pinnacle_markdown([dict(row, by_edge={'1%': dict(bets=3)})], []) == []   # older rows

@@ -626,9 +626,15 @@ def _vs_pinnacle_close(started, quotes, bets, family, mean_se):
     When Pinnacle closed at another line the bet is counted by direction (the better or the worse
     number), not priced. This is closing EV against the sharp price, not the plan's CLV, and the
     captures are not certified closes.
+
+    A bet entered at Pinnacle's last capture is NOT priced (``entered_at_last_capture``): it was
+    chosen because it beat Pinnacle's price in that very capture, so pricing it there would only
+    repeat the entry edge. The first table (2026-11-12) did that and showed 100% of totals bets
+    positive with a standard error of 0.2%: the bet rule measuring itself. Only a later Pinnacle
+    capture says whether the edge was still there at the close.
     """
     grouped = by_event(quotes)
-    values, favour, against, no_capture = [], 0, 0, 0
+    values, favour, against, no_capture, at_last, waits = [], 0, 0, 0, 0, []
     for event_id, bet, _ in bets:
         event = started[event_id]
         kickoff = _t(event["scheduled_start"])
@@ -637,11 +643,16 @@ def _vs_pinnacle_close(started, quotes, bets, family, mean_se):
         if last is None or kickoff - last > PINNACLE_CLOSE_WITHIN:
             no_capture += 1
             continue
+        entered = capture_time(event, bet)
+        if last <= entered:
+            at_last += 1
+            continue
         mine = _home_line(event, bet)
         at_line = [p for captured, line, p in track if captured == last and line == mine]
         if at_line:
             p = at_line[0] if bet["selection"] == _canonical(event, family) else 1 - at_line[0]
             values.append(bet["decimal_odds"] * p - 1)
+            waits.append((last - entered).total_seconds() / 60)
             continue
         # Pinnacle's main line at its last capture, as the bet's own side would read it.
         main = min(((abs(p - 0.5), line) for captured, line, p in track if captured == last))[1]
@@ -657,6 +668,8 @@ def _vs_pinnacle_close(started, quotes, bets, family, mean_se):
             "mean_closing_ev": mean, "se": se, "t": (mean / se if mean is not None and se else None),
             "beat_close_share": sum(1 for v in values if v > 0) / len(values) if values else None,
             "pinnacle_moved_in_favour": favour, "pinnacle_moved_against": against, "no_late_pinnacle_capture": no_capture,
+            "entered_at_last_capture": at_last,
+            "median_minutes_entry_to_close": sorted(waits)[len(waits) // 2] if waits else None,
             "within_minutes": PINNACLE_CLOSE_WITHIN.total_seconds() / 60}
 
 

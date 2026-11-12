@@ -331,9 +331,11 @@ def test_bets_are_valued_at_pinnacles_last_price_before_the_start():
         received = start - timedelta(minutes=minutes_before)
         return both("pinnacle", line, home, away, received.isoformat(), (received - timedelta(seconds=30)).isoformat(), name)
 
-    def bet(name, selection, line, odds):
+    def bet(name, selection, line, odds, minutes_before=120):
+        received = (start - timedelta(minutes=minutes_before)).isoformat()
         return (name, {"event_id": name, "selection": selection, "line": line, "decimal_odds": odds,
-                       "market_family": "SPREAD", "sportsbook": "novig"}, 0.02)
+                       "market_family": "SPREAD", "sportsbook": "novig", "quote_timestamp": received,
+                       "raw_source": {"event_response": {}, "market": {}, "response_received_at": received}}, 0.02)
     events = {name: event(name) for name in ("held", "away", "moved", "stale", "none")}
     quotes = (capture("held", 120, -2.5, -110, -110) + capture("held", 10, -2.5, -130, +110)     # the home side shortens
               + capture("away", 10, -2.5, -130, +110)
@@ -350,5 +352,11 @@ def test_bets_are_valued_at_pinnacles_last_price_before_the_start():
     assert (out["pinnacle_moved_in_favour"], out["pinnacle_moved_against"]) == (1, 0)   # -2.5 held against a -3.5 close
     assert out["no_late_pinnacle_capture"] == 2 and out["within_minutes"] == 30
     assert "_vs_pinnacle_close" not in pm.PREDICTION_FUNCTIONS
+    assert out["entered_at_last_capture"] == 0 and out["median_minutes_entry_to_close"] == 110
+    # A bet entered at Pinnacle's last capture beat Pinnacle in that same capture: pricing it there would only
+    # repeat the entry edge (the first real table showed 100% positive with a 0.2% standard error).
+    same = pm._vs_pinnacle_close(events, quotes, [bet("held", "H", -2.5, 2.0, minutes_before=10)], "SPREAD",
+                                 lambda values: (None, None))
+    assert same["priced"] == 0 and same["entered_at_last_capture"] == 1 and same["median_minutes_entry_to_close"] is None
     worse = pm._vs_pinnacle_close(events, quotes, [bet("moved", "A", 2.5, 2.0)], "SPREAD", lambda v: (None, None))
     assert (worse["pinnacle_moved_in_favour"], worse["pinnacle_moved_against"]) == (0, 1)   # +2.5 against a +3.5 close
