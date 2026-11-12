@@ -27,6 +27,31 @@ def _from_drive():
     return gaps.latest(DriveStore(folder), folder)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _movement_from_drive():
+    """The newest published movement rows from the last 30 minutes; [] when there are none or Drive is unreachable."""
+    try:
+        from app_core.evidence_drive import DriveStore
+        from app_core.evidence_remote import settings
+        folder = settings()[0]
+        if not folder:
+            return []
+        found = gaps.latest(DriveStore(folder), folder, slots=6)
+        return list((found or {}).get("movement") or [])
+    except Exception:
+        return []
+
+
+def movement_for_export():
+    """Movement rows for the audit export: the list loaded in the panel, else the newest one on Drive
+    (read at most once every five minutes). Never raises: the export must not depend on it."""
+    try:
+        loaded = st.session_state.get("price_gap_candidates") or {}
+        return list(loaded.get("movement") or []) or _movement_from_drive()
+    except Exception:
+        return []
+
+
 def render_price_gap_candidates():
     with st.expander("Price-gap candidates (research only)", expanded=False):
         st.warning(gaps.NOTICE)

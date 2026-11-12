@@ -3228,9 +3228,12 @@ def main() -> None:
                     "exported rank-1 winner. Download this file to inspect every candidate, "
                     "the runner-up gap, and why each alternative lost."
                 )
+                from app.ui.price_gap_candidates import movement_for_export
+                from app_core.audit_movement import with_movement
                 st.download_button(
                     "Export Candidate Selection Audit",
-                    candidate_audit_df.to_csv(index=False, encoding="utf-8-sig"),
+                    # Pinnacle movement columns ride in the downloaded file only (research; owner 2026-11-12).
+                    with_movement(candidate_audit_df, movement_for_export()).to_csv(index=False, encoding="utf-8-sig"),
                     "best_picks_candidate_audit.csv",
                     mime="text/csv",
                     key="export_best_picks_candidate_audit",
