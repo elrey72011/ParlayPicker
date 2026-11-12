@@ -26,6 +26,7 @@ SLOT_MINUTES = 5
 LOOKBACK_SLOTS = 12                          # the app looks back one hour
 STALE_AFTER = timedelta(minutes=15)
 MAX_BYTES = 2_000_000
+MOVEMENT_WINDOW = timedelta(hours=12)       # movement is shown for games starting this soon
 MISSING = "Remote evidence object is missing"
 NOTICE = ("Research only. These gaps are unproven: they have not been shown to beat the closing price. "
           "Not approved to bet; no stake is attached.")
@@ -86,16 +87,80 @@ def current(path, now, *, sports, min_edge=MIN_EDGE, books=None, read_scope=None
     return sorted(out, key=lambda row: (-row["edge"], row["scheduled_start"], row["sportsbook"], row["pick"]))
 
 
+def _toward(event, family, line_move, shift):
+    """Which side Pinnacle moved toward: the line when it moved, else the price."""
+    home, away = (("Over", "Under") if family == "TOTAL" else (event["home_team"], event["away_team"]))
+    if line_move:
+        # A total going up favours the Over; a home line going down (more points to give) favours the home side.
+        return home if (line_move > 0) == (family == "TOTAL") else away
+    if shift and abs(shift) >= 0.005:
+        return home if shift > 0 else away
+    return None
+
+
+def movement(path, now, *, sports, books=None, read_scope=None, window=MOVEMENT_WINDOW):
+    """Per upcoming game: where Pinnacle's main line and no-vig price started, where they are now,
+    and which stake books quote Pinnacle's current line (owner 2026-11-12; research only).
+
+    The line is the home line for a side market and the total for a total; the probability is the
+    home side's or the Over's. The first capture is the earliest one stored, which can be hours
+    after the market opened, so this is movement since the watch first saw the game, not since
+    the open. Results are never read and nothing here approves a bet.
+    """
+    from app_core import news_capture, pinnacle_model as pm
+    from app_core.public_quote_policy import canonical_book_label
+    if read_scope is None:
+        from app_core.prospective_research_models import _read_scope as read_scope
+    books = pm.PLAN_BOOKS if books is None else books
+    out = []
+    for sport in sports:
+        for family in news_capture.families(sport):
+            events, quotes, _ = read_scope(path, sport, family)
+            upcoming = {e["event_id"]: e for e in events.values()
+                        if now < pm._t(e["scheduled_start"]) <= now + window}
+            kept = pm.slim_sources([q for q in quotes if q["event_id"] in upcoming])
+            for event_id, found in sorted(pm.by_event(kept).items()):
+                event = upcoming[event_id]
+                track = [row for row in pm._main_lines(event, found, family) if row[0] <= now]
+                if not track:
+                    continue
+                (first_at, first_line, first_p), (last_at, last_line, last_p) = track[0], track[-1]
+                seen = {}
+                for q in found:
+                    when = pm.capture_time(event, q)
+                    # Stored names are provider keys ("novig"); the stake books are named by label.
+                    if pm._plan_book(q, books) and q["quote_verified"] and q["line"] is not None and when <= now:
+                        seen.setdefault(canonical_book_label(q["sportsbook"]), {}).setdefault(when, set()).add(
+                            pm._home_line(event, q))
+                newest = {label: by_time[max(by_time)] for label, by_time in seen.items()}
+                line_move, shift = last_line - first_line, last_p - first_p
+                out.append({
+                    "sport": sport, "market_family": family, "away_team": event["away_team"],
+                    "home_team": event["home_team"], "scheduled_start": event["scheduled_start"],
+                    "pinnacle_first_line": first_line, "pinnacle_line": last_line, "line_move": line_move,
+                    "pinnacle_first_probability": round(first_p, 4), "pinnacle_probability": round(last_p, 4),
+                    "probability_shift": round(shift, 4), "moved_toward": _toward(event, family, line_move, shift),
+                    "captures": len(track), "first_capture_at": first_at.isoformat(timespec="seconds"),
+                    "last_capture_at": last_at.isoformat(timespec="seconds"),
+                    "stake_books_at_line": sorted(b for b, lines in newest.items() if last_line in lines),
+                    "stake_books_off_line": sorted(b for b, lines in newest.items() if last_line not in lines)})
+    return sorted(out, key=lambda row: (-abs(row["line_move"]), -abs(row["probability_shift"]),
+                                        row["scheduled_start"], row["home_team"], row["market_family"]))
+
+
 def key_for(when) -> str:
     when = when.astimezone(timezone.utc)
     return PREFIX + when.strftime("%Y%m%dT%H") + f"{when.minute - when.minute % SLOT_MINUTES:02d}.json"
 
 
-def publish(client, folder, rows, *, now, sports=()):
-    """Upload the list (an empty one too: "no gap right now" is information) as this slot's object."""
+def publish(client, folder, rows, *, now, sports=(), movement=None):
+    """Upload the list (an empty one too: "no gap right now" is information) as this slot's object.
+    ``movement`` (``movement()``'s rows) rides in the same object when given."""
     from app_core.evidence_drive import AlreadyExists
     raw = json.dumps({"generated_at": now.isoformat(timespec="seconds"), "min_edge": MIN_EDGE, "sports": list(sports),
-                      "notice": NOTICE, "candidates": rows}, sort_keys=True, default=str).encode()
+                      "notice": NOTICE, "candidates": rows,
+                      **({"movement": movement} if movement is not None else {})},
+                     sort_keys=True, default=str).encode()
     if len(raw) > MAX_BYTES:
         return {"status": "TOO_LARGE", "bytes": len(raw)}
     key = key_for(now)

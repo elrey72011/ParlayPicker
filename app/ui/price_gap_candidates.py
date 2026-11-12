@@ -6,6 +6,16 @@ from app_core import price_gap_candidates as gaps
 
 COLUMNS = ("sport", "market_family", "away_team", "home_team", "scheduled_start", "sportsbook", "pick",
            "american_odds", "fair_american_odds", "fair_probability", "edge", "captured_at")
+MOVEMENT_COLUMNS = ("sport", "market_family", "away_team", "home_team", "scheduled_start", "pinnacle_first_line",
+                    "pinnacle_line", "line_move", "pinnacle_first_probability", "pinnacle_probability",
+                    "probability_shift", "moved_toward", "stake_books_at_line", "stake_books_off_line", "captures")
+
+
+def _movement_frame(rows):
+    frame = pd.DataFrame(rows).reindex(columns=MOVEMENT_COLUMNS)
+    for column in ("stake_books_at_line", "stake_books_off_line"):
+        frame[column] = frame[column].map(lambda value: ", ".join(value) if isinstance(value, list) else "")
+    return frame
 
 
 def _from_drive():
@@ -47,3 +57,14 @@ def render_price_gap_candidates():
                                                                                           format="percent")})
         else:
             st.caption("No stake book was priced above Pinnacle's fair price in that capture.")
+        moves = found.get("movement")
+        if moves:
+            st.markdown("**Pinnacle line movement, per game**")
+            st.caption("Where Pinnacle's main line and fair price were when the watch first saw the game, and where "
+                       "they are now. The line is the home line (spreads) or the total; the probability is the home "
+                       "side's or the Over's. Movement is since the first stored capture, not since the market opened. "
+                       "A book listed as off the line has not followed Pinnacle yet. Research only: a move is not a "
+                       "reason to bet.")
+            st.dataframe(_movement_frame(moves), hide_index=True, column_config={
+                column: st.column_config.NumberColumn(column.replace("_", " "), format="percent")
+                for column in ("pinnacle_first_probability", "pinnacle_probability", "probability_shift")})
