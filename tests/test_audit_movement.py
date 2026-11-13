@@ -91,3 +91,21 @@ def test_the_export_adds_the_columns_and_the_reader_never_raises(monkeypatch):
     monkeypatch.setattr(panel.st, "session_state", {})
     monkeypatch.setattr(panel, "_movement_from_drive", broken)
     assert panel.movement_for_export() == []
+
+
+def test_names_the_provider_shortens_or_the_audit_squashes_still_match():
+    """Found 2026-11-13 on two real exports: 24 of 195 names did not match the provider's."""
+    pairs = [("Jackson State", "Jackson St Tigers"), ("Sam Houston State", "Sam Houston St Bearkats"),
+             ("Central Connecticut State", "Central Connecticut St Blue Devils"),
+             ("Arkansaspine Bluff", "Arkansas-Pine Bluff Golden Lions"), ("Bethunecookman", "Bethune-Cookman Wildcats"),
+             ("Marylandeastern Shore", "Maryland-Eastern Shore Hawks"), ("Saint Louis", "St Louis Blues"),
+             ("Montreal", "Montréal Canadiens"), ("California Baptist", "Cal Baptist Lancers"),
+             ("St. John's", "St. John's Red Storm"), ("New York", "New York Knicks")]
+    assert [short for short, full in pairs if not am._leads(short, full)] == []
+    # Still exact about which team.
+    assert not am._leads("York", "New York Knicks")
+    assert not am._leads("Michigan State", "Michigan Wolverines")
+    assert not am._leads("North Carolina Asheville", "UNC Asheville Bulldogs")   # no alias: left blank, never guessed
+    # A short name can lead two providers' names ("Michigan"): the start time and the other side decide.
+    assert am._leads("Michigan", "Michigan St Spartans") and am._leads("Michigan", "Michigan Wolverines")
+    assert not am._leads("Kent State", "Kentucky Wildcats") and not am._leads("", "Kent St Golden Flashes")

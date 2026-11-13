@@ -33,13 +33,36 @@ _SOURCE = {"pinnacle_first_line": "pinnacle_first_line", "pinnacle_current_line"
            "pinnacle_movement_at": "last_capture_at"}
 
 
+# The provider shortens names the audit spells out, and the audit drops hyphens (found 2026-11-13 on
+# two real exports: 24 of 195 names did not match, 18 of them "State" against "St").
+_TOKENS = {"state": "st", "saint": "st"}
+# A spelled-out "North Carolina Wilmington" against the provider's "UNC Wilmington" is deliberately
+# left unmatched (an existing test pins it): a blank is safer than an alias table that can go stale.
+_ALIASES = {"california baptist": "cal baptist"}
+
+
 def _words(name):
-    return re.sub(r"[^a-z0-9 ]", "", str(name or "").lower().replace("-", " ")).split()
+    import unicodedata
+    text = unicodedata.normalize("NFKD", str(name or "")).encode("ascii", "ignore").decode().lower()
+    words = re.sub(r"[^a-z0-9 ]", "", text.replace("-", " ")).split()
+    words = [_TOKENS.get(word, word) for word in words]
+    alias = _ALIASES.get(" ".join(words))
+    return alias.split() if alias else words
 
 
 def _leads(short, full):
+    """Whether the audit's short name is the start of the provider's full name.
+
+    Compared word by word, and also with the spaces removed, because the audit writes
+    "Arkansaspine Bluff" for the provider's "Arkansas-Pine Bluff Golden Lions".
+    """
     short, full = _words(short), _words(full)
-    return bool(short) and full[:len(short)] == short
+    if not short:
+        return False
+    if full[:len(short)] == short:
+        return True
+    joined = "".join(short)
+    return len(joined) >= 8 and "".join(full).startswith(joined)
 
 
 def _time(value):
