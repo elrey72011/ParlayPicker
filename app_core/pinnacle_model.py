@@ -784,6 +784,61 @@ def replay_clv(path, sport, family, *, now, lookback_days=1, edges=REPLAY_EDGES,
     return out
 
 
+def replay_results(path, sport, family, *, now, lookback_days=7, edges=REPLAY_EDGES, books=None,
+                   entry_within_minutes=None):
+    """Graded results of the replay's first-edge bets (owner 2026-11-13; read-only).
+
+    Unlike ``replay_estimate`` and ``replay_clv``, this READS results: the same bets
+    ``first_edge_bets`` makes, settled against the replay-verified final score at the bet's
+    own line (``prospective_evidence.score_settlement_outcome``). It answers "would this rule
+    have won?", which the closing-line measures do not. Nothing reads it back: no plan, rule
+    or threshold is chosen from it, and a rule picked after looking at this table needs a
+    fresh frozen window to be tested.
+
+    Per edge: bets, graded, ungraded (no verified final yet), wins, losses, pushes, and ROI
+    per graded bet (units at the bet's decimal odds, a push returns the stake) with its
+    standard error. ``entry_within_minutes`` replays a later entry exactly as ``replay_clv`` does.
+    """
+    from app_core import prospective_research_models as research
+    from app_core.price_edge_screen import _mean_se
+    events, quotes, scores = research._read_scope(path, sport, family)
+    start = now - timedelta(days=lookback_days)
+    started = {e["event_id"]: e for e in events.values() if start <= _t(e["scheduled_start"]) < now}
+    out = {"sport": sport, "market_family": family, "games_started": len(started),
+           "entry_within_minutes": entry_within_minutes,
+           "status": "MEASURED" if started else "NO_GAMES", "by_edge": {}}
+    if not started:
+        return out
+    final = {}
+    for score in scores:
+        held = final.get(score["event_id"])
+        if held is None or (score["grading_version"], score["available_at"], score["result_id"]) > \
+                (held["grading_version"], held["available_at"], held["result_id"]):
+            final[score["event_id"]] = score
+    quotes, _ = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
+    if entry_within_minutes is not None:
+        quotes = late_captures(started, quotes, entry_within_minutes)
+    for edge in edges:
+        bets = first_edge_bets(started, quotes, now, edge, books)
+        outcomes, returns = {"WIN": 0, "LOSS": 0, "PUSH": 0}, []
+        for event_id, bet, _ in bets:
+            score = final.get(event_id)
+            if score is None:
+                continue
+            event = started[event_id]
+            outcome = evidence.score_settlement_outcome(
+                sport, family, bet["selection"], event["home_team"], event["away_team"],
+                int(score["home_score"]), int(score["away_score"]), float(bet["line"]))
+            outcomes[outcome] += 1
+            returns.append(bet["decimal_odds"] - 1 if outcome == "WIN" else (-1.0 if outcome == "LOSS" else 0.0))
+        roi, se = _mean_se(returns)
+        out["by_edge"][f"{edge:.0%}"] = {
+            "bets": len(bets), "graded": len(returns), "ungraded": len(bets) - len(returns),
+            "wins": outcomes["WIN"], "losses": outcomes["LOSS"], "pushes": outcomes["PUSH"],
+            "roi_per_bet": roi, "roi_se": se, "units": sum(returns)}
+    return out
+
+
 def _main_lines(event, quotes, family):
     """[(capture_time, home_line, p_canonical)] per Pinnacle capture, at its main line (price nearest even)."""
     by_capture = {}
