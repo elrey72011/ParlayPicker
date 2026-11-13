@@ -101,6 +101,7 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 pace_comparison=timed('pace_comparison', pace_comparison, store, extra=EXTRA_REPLAY_SCOPES),
                 replay_clv=timed('replay_clv', replay_clv, store, extra=EXTRA_REPLAY_SCOPES),
                 late_entry_clv=timed('late_entry_clv', late_entry_clv, store, extra=EXTRA_REPLAY_SCOPES),
+                replay_results=timed('replay_results', replay_results, store, extra=EXTRA_REPLAY_SCOPES),
                 line_movement=timed('line_movement', line_movement, store, extra=EXTRA_REPLAY_SCOPES),
                 nightly_record=timed('nightly_record', nightly_record, store, extra=EXTRA_REPLAY_SCOPES),
                 pace_recommendation=timed('pace_recommendation', pace_recommendation, store, extra=EXTRA_REPLAY_SCOPES))
@@ -198,6 +199,64 @@ def late_entry_clv(path, now=None, extra=None):
                     row = dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300])
                 out.append(dict(row, window=label))
     return out
+
+
+RESULT_WINDOWS = ((7, 'last 7 days'), (14, 'last 14 days'))
+RESULT_ENTRIES = ((None, 'any time'), ('late', 'last 60 min'))
+
+
+def replay_results(path, now=None, extra=None):
+    """Graded results of the replay's first-edge bets, any-time entry and late entry side by side
+    (pinnacle_model.replay_results; owner 2026-11-13). This section READS results; the replay and CLV
+    sections above do not. Nothing reads it back."""
+    from datetime import datetime, timezone
+    from app_core import pinnacle_model
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport, families in {**pinnacle_model.FAMILIES, **(extra or {})}.items():
+        for family in families:
+            for days, label in RESULT_WINDOWS:
+                for entry, entry_label in RESULT_ENTRIES:
+                    minutes = pinnacle_model.LATE_ENTRY_MINUTES if entry == 'late' else None
+                    try:
+                        row = pinnacle_model.replay_results(path, sport, family, now=now, lookback_days=days,
+                                                            books=pinnacle_model.PLAN_BOOKS,
+                                                            entry_within_minutes=minutes)
+                    except Exception as exc:  # report, never guess
+                        row = dict(sport=sport, market_family=family,
+                                   evaluation_error=f'{type(exc).__name__}: {exc}'[:300])
+                    out.append(dict(row, window=label, entry=entry_label))
+    return out
+
+
+RESULTS_CAPTION = ('Replay results (owner 2026-11-13): the same first-clearing bets at the stake books, graded against '
+                   'the verified final score at the bet\'s line, for any-time entry and for entry only in the last 60 '
+                   'minutes. This table READS results, unlike the replay and CLV tables above. A rule chosen from it '
+                   'needs a fresh frozen window: these games cannot test it. Small counts; read the SE.')
+
+
+def _results_markdown(rows):
+    rows = [r for r in rows if r.get('evaluation_error') or any(e['bets'] for e in (r.get('by_edge') or {}).values())]
+    if not rows:
+        return []
+    lines = ['', RESULTS_CAPTION, '',
+             '| market | window | entry | edge | bets | graded | wins / losses / pushes | units | ROI per bet (SE) |',
+             '|---|---|---|---|---|---|---|---|---|']
+    for row in rows:
+        name = f"{row['sport']} {row['market_family']} | {row.get('window', '')} | {row.get('entry', '')}"
+        if 'evaluation_error' in row:
+            lines.append(f"| {name} | | {row['evaluation_error']} | | | | |")
+            continue
+        for edge, found in row['by_edge'].items():
+            if not found['bets']:
+                continue
+            roi = '' if found['roi_per_bet'] is None else f"{found['roi_per_bet']:+.1%}"
+            se = '' if found['roi_se'] is None else f" ({found['roi_se']:.1%})"
+            lines.append(f"| {name} | {edge} | {found['bets']} | {found['graded']} | "
+                         f"{found['wins']} / {found['losses']} / {found['pushes']} | {found['units']:+.2f} | {roi}{se} |")
+    return lines
 
 
 CLV_CAPTION = ('Replay closing-line value: do the first-clearing bets beat the certified close at the same book, '
@@ -766,6 +825,7 @@ def markdown(result):
     lines += _clv_line_adjusted_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _clv_large_moves_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _clv_vs_pinnacle_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
+    lines += _results_markdown(result.get('replay_results') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
