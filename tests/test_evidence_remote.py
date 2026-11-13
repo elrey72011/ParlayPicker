@@ -256,3 +256,109 @@ def test_restore_releases_each_file_and_row_as_it_goes(frozen, cloud, tmp_path, 
     original_frame, _ = evidence.materialize(db)
     restored_frame, _ = evidence.materialize(fresh)
     assert original_frame.to_csv(index=False) == restored_frame.to_csv(index=False)
+
+
+def _on_disk_client(cloud, tmp_path, reads):
+    """The Drive client's bulk read as the restore sees it: every verified file left in a local cache."""
+    import hashlib
+    from types import SimpleNamespace
+    from app_core.evidence_drive import CachedObject
+
+    class Counted(CachedObject):
+        def read(self):
+            reads.append(self.path.name)
+            return super().read()
+    cache = tmp_path / 'cache'
+    cache.mkdir()
+
+    def read_verified_prefixes(*, Prefixes, inventory=None, cache_dir=None, full_verify=False, ids=None,
+                               on_disk=False):
+        assert on_disk, 'the restore asks for files to stay on disk'
+        found = {}
+        for prefix in Prefixes:
+            found[prefix] = []
+            for key, raw in sorted(cloud.objects.items()):
+                if key.startswith(prefix):
+                    checksum = hashlib.sha256(raw).hexdigest()
+                    (cache / checksum).write_bytes(raw)
+                    found[prefix].append((key, Counted(cache / checksum, checksum)))
+        return found
+    cloud.discover_complete_inventory = lambda **kwargs: SimpleNamespace(operation_id='op')
+    cloud.read_verified_prefixes = read_verified_prefixes
+    cloud.get_paginator = lambda *a: pytest.fail('the bulk read replaces per-object listing')
+    return cache
+
+
+def test_restore_reads_saved_runs_from_disk_one_at_a_time(frozen, cloud, tmp_path, monkeypatch):
+    """2026-11-13: the hosted app kept passing its memory limit because every saved run (about 1 GB,
+    more with each Refresh) was held in memory during a restore. A saved run now stays in the local
+    cache: it is verified before any database exists and read again only as its row is stored."""
+    _, db, _ = frozen
+    save_fixture(frozen)
+    assert remote.sync(db)
+    reads = []
+    _on_disk_client(cloud, tmp_path, reads)
+    snapshot = next(raw for key, raw in cloud.objects.items() if '/snapshots/' in key)
+    import hashlib
+    name = hashlib.sha256(snapshot).hexdigest()
+    fresh = tmp_path / 'streamed.sqlite3'
+    assert remote.restore(fresh, client=cloud) == 1
+    assert reads.count(name) == 2                      # verified first, stored second; never kept between
+    assert len(reads) == len(cloud.objects) + 1        # small tables are read once
+    monkeypatch.setattr(cloud, 'put_object', lambda **kwargs: pytest.fail('nothing new to upload'))
+    assert remote.sync(fresh, incremental=True)
+    original_frame, _ = evidence.materialize(db)
+    restored_frame, _ = evidence.materialize(fresh)
+    assert original_frame.to_csv(index=False) == restored_frame.to_csv(index=False)
+
+
+def test_on_disk_restore_still_rejects_a_corrupt_file_before_any_database(frozen, cloud, tmp_path):
+    _, db, _ = frozen
+    save_fixture(frozen)
+    assert remote.sync(db)
+    key = next(k for k in cloud.objects if '/snapshots/' in k)
+    payload = json.loads(cloud.objects[key])
+    payload['row'][3] += 'tampered'
+    cloud.objects[key] = json.dumps(payload).encode()
+    _on_disk_client(cloud, tmp_path, [])
+    fresh = tmp_path / 'never.sqlite3'
+    with pytest.raises(ValueError, match='hash mismatch'):
+        remote.restore(fresh, client=cloud)
+    assert not fresh.exists()
+
+
+def test_cached_file_changed_after_verification_stores_nothing(frozen, cloud, tmp_path):
+    _, db, _ = frozen
+    save_fixture(frozen)
+    assert remote.sync(db)
+    reads = []
+    cache = _on_disk_client(cloud, tmp_path, reads)
+    import hashlib
+    name = hashlib.sha256(next(raw for key, raw in cloud.objects.items() if '/snapshots/' in key)).hexdigest()
+    original = remote._checked
+
+    def checked(table, key, raw):
+        row = original(table, key, raw)
+        if table == 'snapshots' and reads.count(name) == 1:
+            (cache / name).write_bytes(b'{}')          # the cache is damaged between the two reads
+        return row
+    import unittest.mock
+    fresh = tmp_path / 'damaged.sqlite3'
+    with unittest.mock.patch.object(remote, '_checked', checked):
+        with pytest.raises(Exception, match='changed after it was verified'):
+            remote.restore(fresh, client=cloud)
+    from contextlib import closing
+    with closing(evidence.connect(fresh)) as check:
+        assert check.execute('SELECT COUNT(*) FROM snapshots').fetchone()[0] == 0
+        assert check.execute('SELECT COUNT(*) FROM bundles').fetchone()[0] == 0     # the whole merge rolled back
+
+
+def test_iter_snapshots_matches_load_snapshots(frozen):
+    _, db, _ = frozen
+    save_fixture(frozen)
+    loaded = evidence.load_snapshots(db)
+    walked = list(evidence.iter_snapshots(db))
+    assert loaded and [sid for sid, _, _ in loaded] == [sid for sid, _, _ in walked]
+    for (_, audit, final), (_, audit2, final2) in zip(loaded, walked):
+        assert audit.equals(audit2) and final.equals(final2)
+    assert list(evidence.iter_snapshots(db.with_name('absent.sqlite3'))) == []

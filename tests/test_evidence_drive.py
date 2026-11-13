@@ -234,3 +234,18 @@ def test_read_objects_uses_the_verified_cache_only_when_the_cache_env_is_set(tmp
     files[0]['sha256Checksum'] = '0' * 64  # Drive's checksum changed: the cache is not trusted
     with pytest.raises(Exception, match='checksum changed'):
         store.read_objects(Prefix='canonical/')
+
+
+def test_cached_object_reads_verified_bytes_and_notices_damage(tmp_path):
+    import hashlib
+    import pytest
+    from app_core.evidence_drive import CachedObject, EvidenceStorageError
+    raw = b'{"schema":1}'
+    checksum = hashlib.sha256(raw).hexdigest()
+    (tmp_path / checksum).write_bytes(raw)
+    item = CachedObject(tmp_path / checksum, checksum)
+    assert item.read() == raw
+    assert item == CachedObject(tmp_path / 'elsewhere', checksum) and item != raw
+    (tmp_path / checksum).write_bytes(b'other')
+    with pytest.raises(EvidenceStorageError, match='changed after it was verified'):
+        item.read()
