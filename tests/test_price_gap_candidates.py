@@ -248,3 +248,29 @@ def test_movement_is_published_with_the_candidates_and_shown_in_the_panel(monkey
     assert shown.loc[0, "stake_books_at_line"] == "Novig" and shown.loc[0, "stake_books_off_line"] == "FanDuel"
     assert any("Pinnacle line movement, per game" in m.value for m in app.markdown)
     assert any("a move is not a reason to bet" in c.value for c in app.caption)
+
+
+def test_the_panel_can_reload_itself_and_stays_manual_by_default():
+    """Owner 2026-11-13: the candidates should move without a manual reload, while the page is open."""
+    payload = {"generated_at": "2026-11-13T00:05:00+00:00", "min_edge": 0.01, "age_minutes": 3.0, "stale": False,
+               "notice": gaps.NOTICE, "candidates": []}
+    script = ("import json\nimport app.ui.price_gap_candidates as panel\n"
+              "calls = panel.st.session_state.setdefault('calls', [])\n"
+              f"panel._from_drive = lambda: calls.append(1) or json.loads({json.dumps(json.dumps(payload))})\n"
+              "panel.render_price_gap_candidates()\n")
+    at = AppTest.from_string(script)
+    at.run(timeout=30)
+    assert not at.exception and at.session_state["calls"] == []            # nothing is read until asked
+    toggle = next(t for t in at.toggle if t.key == "price_gap_candidates_auto")
+    assert toggle.value is False and "every 5 minutes" in toggle.label
+    toggle.set_value(True).run(timeout=30)
+    assert not at.exception and len(at.session_state["calls"]) == 1        # switched on: read at once, no click
+    assert any("Last checked" in c.value and "Reloading every 5 minutes" in c.value for c in at.caption)
+    assert any("0 candidate(s) at 1% or more" in m.value for m in at.markdown)
+    at.run(timeout=30)                                                      # each later run of the panel reads again
+    assert len(at.session_state["calls"]) == 2
+    import app.ui.price_gap_candidates as panel
+    assert panel.AUTO_RELOAD_SECONDS == 300
+    import inspect
+    assert "st.fragment(_body, run_every=AUTO_RELOAD_SECONDS if auto else None)(auto)" in inspect.getsource(
+        panel.render_price_gap_candidates)
