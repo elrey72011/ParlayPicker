@@ -16,7 +16,7 @@ def physical(path):
 
 
 RUNTIME_BINDING='docs/integrity/ncaaf-runtime-binding-v2.json'
-_RUNTIME_BINDING_SHA256='c07c60b461280a0a3b3ae844ea917043125cd906806bc5f5410bec7e1c905ea7'
+_RUNTIME_BINDING_SHA256='dc6c288ea21ab65ee9c91af82409b147f5b38682b5e4d95120707a7de75b1425'
 SELF='scripts/ncaaf_private_refresh_scope.py'
 
 

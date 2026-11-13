@@ -105,8 +105,8 @@ def _body(auto):
             for column in ("pinnacle_first_probability", "pinnacle_probability", "probability_shift")})
 
 
-def render_price_gap_candidates():
-    with st.expander("Price-gap candidates (research only)", expanded=False):
+def render_price_gap_candidates(expanded=True):
+    with st.expander("Price-gap candidates (research only)", expanded=expanded):
         st.warning(gaps.NOTICE)
         st.caption("A stake book's price that is better than Pinnacle's fair price for the same side and line, in the "
                    "price watch's newest capture. The list is published while the price watch runs (evenings). "

@@ -170,6 +170,29 @@ def _decimal(odds):
     return 1 + odds / 100 if odds > 0 else 1 + 100 / abs(odds)
 
 
+BOOK_UNKNOWN = "Not recorded"
+
+
+def _entry_books(row):
+    """The book(s) offering this candidate's exact side, line and price; None when only Pinnacle does.
+
+    The feed's name (``the_odds_api``) is not a book (owner 2026-11-13). The saved bookmaker is used
+    when there is one; otherwise the books in the row's own provider quotes that match it exactly.
+    """
+    saved = _text(row, "quote_bookmaker", default="")
+    if saved:
+        return None if "pinnacle" in saved.lower() else saved
+    try:
+        from app_core.prediction_evidence import matching_quotes
+        books = sorted({str(quote.get("book") or "").strip() for quote in matching_quotes(row)} - {""})
+    except Exception:
+        books = []
+    if not books:
+        return BOOK_UNKNOWN
+    stake = [name for name in books if "pinnacle" not in name.lower()]
+    return ", ".join(stake) if stake else None
+
+
 def pinnacle_value_board(candidates, min_ev=PINNACLE_MIN_EV):
     """Candidates whose price beats Pinnacle's no-vig probability at the same line (research only).
 
@@ -192,8 +215,10 @@ def pinnacle_value_board(candidates, min_ev=PINNACLE_MIN_EV):
         decimal = _decimal(row.get("odds_american"))
         if decimal is None or pd.isna(fair) or not 0 < fair < 1:
             continue
-        book = _text(row, "quote_bookmaker", "odds_feed_source", "odds_source", default="")
-        if "pinnacle" in book.lower():
+        if "pinnacle" in _text(row, "quote_bookmaker", "odds_feed_source", "odds_source", default="").lower():
+            continue
+        book = _entry_books(row)
+        if book is None:
             continue
         ev = fair * decimal - 1
         if ev < min_ev:
