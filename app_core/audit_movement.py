@@ -90,6 +90,57 @@ def _match(row, moves):
     return found[0] if len(found) == 1 else None
 
 
+def _implied(price):
+    price = float(price)
+    if abs(price) < 100:
+        raise ValueError("not an American price")
+    return 100 / (price + 100) if price > 0 else -price / (-price + 100)
+
+
+def _refreshed(row, move):
+    """``move`` brought up to the audit row's own Pinnacle quote when that quote is the newer one.
+
+    The published movement can be hours old for a game the price watch has not reached yet: on
+    2026-11-13 it showed Pinnacle's total at 154 from 12:26 PM beside a fair price the 5:06 PM
+    Refresh had read at 152.5. The row's saved provider quotes are from that Refresh, so when they
+    hold both Pinnacle sides at one line, recorded after the movement's last capture, the current
+    line, price, direction and the books at that line are taken from them. The first line and
+    price stay the watch's. Anything unreadable leaves ``move`` as it was.
+    """
+    import json
+    try:
+        total = str(row.get("market_type") or "").startswith("total")
+        first, second = ("total_over", "total_under") if total else ("spread_home", "spread_away")
+        quotes = json.loads(row.get("provider_quotes") or "[]")
+        mine = {q.get("market_type"): q for q in quotes
+                if isinstance(q, dict) and "pinnacle" in str(q.get("book", "")).lower()}
+        one, other = mine[first], mine[second]
+        line = float(one["point"])
+        if abs(float(other["point"]) - (line if total else -line)) > 1e-8:
+            return move
+        seen = min(_time(one.get("recorded_at")), _time(other.get("recorded_at")))
+        if seen <= _time(move.get("last_capture_at")):
+            return move
+        a, b = _implied(one["price"]), _implied(other["price"])
+        probability = round(a / (a + b), 4)
+        line_move = line - float(move["pinnacle_first_line"])
+        shift = round(probability - float(move["pinnacle_first_probability"]), 4)
+        from app_core.price_gap_candidates import _toward
+        from app_core.public_quote_policy import canonical_book_label
+        at, off = set(), set()
+        for q in quotes:
+            book = str(q.get("book", "")) if isinstance(q, dict) else ""
+            if q.get("market_type") == first and book and "pinnacle" not in book.lower() and q.get("point") is not None:
+                (at if abs(float(q["point"]) - line) < 1e-8 else off).add(canonical_book_label(book))
+        return {**move, "pinnacle_line": line, "line_move": line_move, "pinnacle_probability": probability,
+                "probability_shift": shift,
+                "moved_toward": _toward(move, "TOTAL" if total else "SPREAD", line_move, shift),
+                "captures": int(move.get("captures") or 0) + 1, "last_capture_at": seen.isoformat(timespec="seconds"),
+                "stake_books_at_line": sorted(at), "stake_books_off_line": sorted(off - at)}
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return move
+
+
 def _with_pick(row, move):
     """Whether Pinnacle moved toward this row's side: True, False, or None when it did not move."""
     toward = move.get("moved_toward")
@@ -116,6 +167,8 @@ def with_movement(audit, moves):
     values = {column: [] for column in COLUMNS}
     for row in out.to_dict("records"):
         move = _match(row, moves)
+        if move is not None:
+            move = _refreshed(row, move)
         for column in COLUMNS:
             if move is None:
                 values[column].append(None)
