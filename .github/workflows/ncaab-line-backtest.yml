@@ -10,6 +10,14 @@ on:
       test_season:
         description: 'Season to calibrate (first half) and score (second half)'
         default: '2025'
+      report:
+        description: 'backtest (the line screen) or point_value (the measured value of a point of line; about 15 CBBD calls per season and endpoint)'
+        default: backtest
+        type: choice
+        options: [backtest, point_value]
+      seasons:
+        description: 'point_value only: CBBD seasons, comma-separated (2026 = 2025-26)'
+        default: '2025,2026'
 permissions:
   contents: read
 jobs:
@@ -29,7 +37,16 @@ jobs:
           cache: pip
       - name: Install runtime dependencies
         run: python -m pip install -r requirements.txt
+      - name: Value of a point
+        if: ${{ inputs.report == 'point_value' }}
+        env:
+          SEASONS: ${{ inputs.seasons }}
+        run: >-
+          python -u scripts/ncaab_point_value.py
+          --output "${{ runner.temp }}/ncaab-backtest/ncaab-point-value.json"
+          --seasons "${SEASONS:-2025,2026}"
       - name: Backtest
+        if: ${{ inputs.report != 'point_value' }}
         run: >-
           python -u scripts/ncaab_line_backtest.py
           --output "${{ runner.temp }}/ncaab-backtest/ncaab-line-backtest.json"
