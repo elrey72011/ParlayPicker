@@ -109,3 +109,68 @@ def test_names_the_provider_shortens_or_the_audit_squashes_still_match():
     # A short name can lead two providers' names ("Michigan"): the start time and the other side decide.
     assert am._leads("Michigan", "Michigan St Spartans") and am._leads("Michigan", "Michigan Wolverines")
     assert not am._leads("Kent State", "Kentucky Wildcats") and not am._leads("", "Kent St Golden Flashes")
+
+
+def _quotes(*items, at="2026-11-13T22:06:41Z"):
+    import json
+    return json.dumps([dict(book=book, market_type=kind, point=point, price=price, recorded_at=at)
+                       for book, kind, point, price in items])
+
+
+def _stale_total(**changes):
+    base = dict(sport="NCAAB", market_family="TOTAL", away_team="Stanford Cardinal", home_team="UNLV Rebels",
+                scheduled_start="2026-11-14T02:00:00+00:00", pinnacle_first_line=154.0, pinnacle_line=154.0,
+                line_move=0.0, pinnacle_first_probability=0.4957, pinnacle_probability=0.4957, probability_shift=0.0,
+                moved_toward=None, captures=1, last_capture_at="2026-11-13T17:26:00+00:00",
+                stake_books_at_line=[], stake_books_off_line=["BetMGM", "DraftKings", "FanDuel", "Novig"])
+    return _move(**dict(base, **changes))
+
+
+def _unlv(kind, quotes):
+    return pd.DataFrame([dict(league="NCAAB", home_team="Unlv", away_team="Stanford", market_type=kind,
+                              game_start_utc="2026-11-14T02:00:00Z", best_pick="x", provider_quotes=quotes)])
+
+
+def test_a_newer_pinnacle_quote_on_the_row_replaces_a_stale_current_line():
+    """2026-11-13: the movement said Pinnacle's total was 154 (seen 12:26 PM) beside a fair price the
+    5:06 PM Refresh read at 152.5. The row's own Pinnacle quote is newer, so it is the current line."""
+    quotes = _quotes(("pinnacle", "total_over", 152.5, -114), ("pinnacle", "total_under", 152.5, -106),
+                     ("novig", "total_over", 152.5, 102), ("draftkings", "total_over", 152.5, -110),
+                     ("fanduel", "total_over", 151.5, -110), ("betmgm", "total_over", 151.5, -110))
+    out = am.with_movement(_unlv("total_over", quotes), [_stale_total()]).iloc[0]
+    assert out["pinnacle_first_line"] == 154.0 and out["pinnacle_current_line"] == 152.5
+    assert out["pinnacle_line_move"] == -1.5 and out["pinnacle_moved_toward"] == "Under"
+    assert out["pinnacle_move_with_pick"] is False or out["pinnacle_move_with_pick"] == False  # noqa: E712
+    over, under = 114 / 214, 106 / 206
+    assert abs(out["pinnacle_current_probability"] - round(over / (over + under), 4)) < 1e-9
+    assert out["pinnacle_stake_books_at_line"] == "DraftKings, Novig"
+    assert out["pinnacle_stake_books_off_line"] == "BetMGM, FanDuel"
+    assert out["pinnacle_captures"] == 2 and out["pinnacle_movement_at"] == "2026-11-13T22:06:41+00:00"
+
+
+def test_the_published_movement_stands_when_it_is_newer_or_the_row_has_no_usable_pinnacle_pair():
+    pair = (("pinnacle", "total_over", 152.5, -114), ("pinnacle", "total_under", 152.5, -106))
+    fresh = _stale_total(last_capture_at="2026-11-13T22:11:06+00:00")
+    cases = [
+        (_quotes(*pair), fresh),                                                     # the watch saw it later
+        (_quotes(pair[0]), _stale_total()),                                          # one side only
+        (_quotes(pair[0], ("pinnacle", "total_under", 153.5, -106)), _stale_total()),  # sides at two lines
+        (_quotes(*pair, at=None), _stale_total()),                                   # no quote time
+        ("not json", _stale_total()),
+        (None, _stale_total()),
+    ]
+    for quotes, move in cases:
+        out = am.with_movement(_unlv("total_under", quotes), [move]).iloc[0]
+        assert out["pinnacle_current_line"] == 154.0 and out["pinnacle_line_move"] == 0.0
+        assert out["pinnacle_movement_at"] == move["last_capture_at"]
+
+
+def test_a_newer_spread_quote_uses_the_home_line():
+    move = _stale_total(market_family="SPREAD", pinnacle_first_line=3.0, pinnacle_line=3.0,
+                        pinnacle_first_probability=0.5156, pinnacle_probability=0.5156)
+    quotes = _quotes(("pinnacle", "spread_home", 2.5, -105), ("pinnacle", "spread_away", -2.5, -115),
+                     ("novig", "spread_home", 2.5, -111))
+    out = am.with_movement(_unlv("spread_away", quotes), [move]).iloc[0]
+    assert out["pinnacle_current_line"] == 2.5 and out["pinnacle_line_move"] == -0.5
+    assert out["pinnacle_moved_toward"] == "UNLV Rebels" and not out["pinnacle_move_with_pick"]
+    assert out["pinnacle_stake_books_at_line"] == "Novig"
