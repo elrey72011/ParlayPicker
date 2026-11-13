@@ -548,6 +548,9 @@ NOT_COMPARABLE = ("CLOSE_NOT_FETCHED", "BOOK_NOT_IN_CLOSE", "LINE_MOVED", "CLOSE
 # sd about 11 points for an NCAAB side and 12 for an NBA side, 16.5 and 18 for their totals. These
 # are assumptions, not measurements, and the report says so. Hockey is left out: a puck line does
 # not move by points, and half a goal on a total is far from linear.
+# Measured 2026-11-12 for NCAAB on 10,725 archived closing lines (``ncaab_point_value``): 3.72% a
+# point for a side and 2.36% for a total over a one-point move, 3.59% and 2.45% over three. The
+# NCAAB values below stand; the NBA values are still assumed.
 POINT_VALUE = {("NCAAB", "SPREAD"): 0.036, ("NBA", "SPREAD"): 0.033, ("NCAAB", "TOTAL"): 0.024, ("NBA", "TOTAL"): 0.022}
 
 

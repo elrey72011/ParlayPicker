@@ -75,11 +75,20 @@ shown to be unreliable and keeps dropping the bets that moved.
 
 ## What option B has to settle before a freeze
 
-1. **The value of a point.** The report uses assumed values (NCAAB spread 3.6% a point,
-   total 2.4%; NBA 3.3% and 2.2%), from a normal margin. They should be measured from the
-   stored prices before they are frozen: Pinnacle's own price at adjacent lines, where it
-   posts them, or the change in its no-vig price when its line moves. Until measured, the
-   alternative is to not carry at all and let moved bets count against coverage.
+1. **The value of a point: measured 2026-11-12.** From 10,725 NCAAB games with an archived
+   closing line (2024-25 and 2025-26, CollegeBasketballData; `app_core/ncaab_point_value.py`,
+   the "NCAAB line backtest" workflow with `report: point_value`):
+
+   | market | assumed | measured, 1-point move (SE) | measured, 3-point move (SE) |
+   |---|---|---|---|
+   | spread | 3.6% | 3.72% (0.13%) | 3.59% (0.07%) |
+   | total | 2.4% | 2.36% (0.10%) | 2.45% (0.06%) |
+
+   By line size the value runs from 3.4% to 4.0% for spreads and 2.2% to 2.5% for totals, within
+   about two standard errors of the overall figure, so one value per market is enough: **3.6%
+   for a side and 2.4% for a total can be frozen as measured**, and they hold out to the
+   3-point limit. Archived lines have one provider per game and no timestamp: this is how
+   results fall around a closing line, not any book's price. NBA (3.3%, 2.2%) is still assumed.
 2. **Selection.** The bet rule already compares the book's price with Pinnacle's at entry.
    A positive closing value says Pinnacle did not move against the bet afterwards. It does
    not say the price was available in size. That needs a separate check (below).
