@@ -57,3 +57,29 @@ def test_best_pick_export_carries_pinnacle_and_kalshi_gate():
     from core.streamlit_pipeline import BEST_PICK_COLUMNS, REQUIRED_BEST_PICK_EXPORT_COLUMNS
     for column in ("pinnacle_fair_probability", "pinnacle_ev", "kalshi_blend_gate"):
         assert column in BEST_PICK_COLUMNS and column in REQUIRED_BEST_PICK_EXPORT_COLUMNS
+
+
+def _quotes(*items):
+    import json
+    return json.dumps([dict(market_type=kind, book=book, price=price, point=point) for kind, book, price, point in items])
+
+
+def test_book_column_names_the_books_offering_the_exact_price_never_the_feed():
+    """Owner 2026-11-13: the Book column read ``the_odds_api``, which is the feed, not a book."""
+    from app.ui.daily_dashboard import BOOK_UNKNOWN
+    frame = pd.DataFrame([
+        _row(odds_feed_source="the_odds_api", spread_line=-3.5, provider_quotes=_quotes(
+            ("spread_home", "novig", 110, -3.5), ("spread_home", "fanduel", 110, -3.5),
+            ("spread_home", "draftkings", 105, -3.5), ("spread_home", "betmgm", 110, -4.0),
+            ("spread_away", "novig", 110, 3.5), ("spread_home", "pinnacle", 110, -3.5))),
+        _row(matchup_id="g2", odds_feed_source="the_odds_api"),                     # no quotes saved
+        _row(matchup_id="g3", quote_bookmaker="draftkings", odds_feed_source="the_odds_api"),
+    ])
+    board = pinnacle_value_board(frame)
+    assert board["Book"].tolist() == ["fanduel, novig", BOOK_UNKNOWN, "draftkings"]
+    assert not board["Book"].str.contains("odds_api").any()
+
+
+def test_a_price_only_pinnacle_offers_is_not_an_entry():
+    frame = pd.DataFrame([_row(spread_line=-3.5, provider_quotes=_quotes(("spread_home", "pinnacle", 110, -3.5)))])
+    assert pinnacle_value_board(frame).empty
