@@ -381,3 +381,20 @@ def test_missing_and_malformed_checksums_without_cache(checksum):
         drive.read_verified_prefixes(Prefixes=[prefix])
         drive.read_verified_prefixes(Prefixes=[prefix])
         assert session.downloads == 2
+
+
+def test_on_disk_read_returns_cached_objects_with_the_same_bytes(tmp_path):
+    """2026-11-13: a caller that asks for ``on_disk`` gets each verified file left in the cache."""
+    from app_core.evidence_drive import CachedObject
+    session = SyntheticDrive()
+    drive = DriveStore("folder", session=session)
+    prefix = "parlaypicker/public-history-v1/site-1234/confirmed/"
+    inventory = drive.discover_complete_inventory(namespace=prefix)
+    plain = drive.read_verified_prefixes(Prefixes=[prefix], inventory=inventory, cache_dir=tmp_path)
+    kept = drive.read_verified_prefixes(Prefixes=[prefix], inventory=inventory, cache_dir=tmp_path, on_disk=True)
+    assert plain[prefix] and [name for name, _ in plain[prefix]] == [name for name, _ in kept[prefix]]
+    assert all(isinstance(item, CachedObject) for _, item in kept[prefix])
+    assert [raw for _, raw in plain[prefix]] == [item.read() for _, item in kept[prefix]]
+    # Without a cache directory there is nowhere to leave a file, so bytes are returned as before.
+    loose = drive.read_verified_prefixes(Prefixes=[prefix], inventory=inventory, on_disk=True)
+    assert [raw for _, raw in loose[prefix]] == [raw for _, raw in plain[prefix]]

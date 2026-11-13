@@ -431,21 +431,27 @@ def capture_run(context, audit, final, inputs, *, path=None, authoritative_candi
     return audit, final
 
 
-def load_snapshots(path=None):
+def iter_snapshots(path=None):
+    """Each saved run as ``(snapshot_id, candidates, decisions)``, oldest first, one in memory at a time."""
     if path is None:
         from app_core.evidence_remote import restore_once
         restore_once()
     if not Path(path or database_path()).exists():
-        return []
+        return
     with closing(connect(path)) as db:
-        rows = db.execute("SELECT snapshot_id, candidates, decisions, inputs, payload_hash FROM snapshots ORDER BY generated_at").fetchall()
-    output = []
-    for sid, candidates, decisions, inputs, expected_hash in rows:
-        actual_hash = hashlib.sha256("\0".join([candidates, decisions, inputs]).encode()).hexdigest()
-        if actual_hash != expected_hash:
-            raise ValueError("Saved prediction payload failed its integrity check")
-        output.append((sid, pd.read_csv(StringIO(candidates)), pd.read_csv(StringIO(decisions))))
-    return output
+        ids = [row[0] for row in db.execute("SELECT snapshot_id FROM snapshots ORDER BY generated_at, rowid")]
+        for sid in ids:
+            candidates, decisions, inputs, expected_hash = db.execute(
+                "SELECT candidates, decisions, inputs, payload_hash FROM snapshots WHERE snapshot_id=?", (sid,)).fetchone()
+            actual_hash = hashlib.sha256("\0".join([candidates, decisions, inputs]).encode()).hexdigest()
+            if actual_hash != expected_hash:
+                raise ValueError("Saved prediction payload failed its integrity check")
+            del inputs
+            yield sid, pd.read_csv(StringIO(candidates)), pd.read_csv(StringIO(decisions))
+
+
+def load_snapshots(path=None):
+    return list(iter_snapshots(path))
 
 
 def record_scores(scored, *, path=None):
@@ -493,7 +499,7 @@ def materialize(path=None):
     from app_core.candidate_recap import _grade_candidate
 
     audits, finals = [], []
-    for sid, audit, final in load_snapshots(path):
+    for sid, audit, final in iter_snapshots(path):
         with closing(connect(path)) as db:
             revisions = db.execute("SELECT scores, recorded_at, evidence_hash FROM score_revisions WHERE snapshot_id=? ORDER BY recorded_at, evidence_hash", (sid,)).fetchall()
         if revisions:

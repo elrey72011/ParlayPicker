@@ -90,6 +90,25 @@ def _key(table, row):
     return f"{prefix}/{table}/{identity}.json"
 
 
+STREAMED = frozenset({"snapshots"})   # the large table: each row is a whole saved run
+
+
+class _Deferred:
+    """A verified remote file left in the local cache until its row is stored."""
+    __slots__ = ("key", "raw")
+
+    def __init__(self, key, raw):
+        self.key, self.raw = key, raw
+
+
+def _checked(table, key, raw):
+    """One remote file as its verified row; ``raw`` is bytes or an object left in the local cache."""
+    row = _decode(raw.read() if callable(getattr(raw, "read", None)) else raw, table)
+    if key != _key(table, row):
+        raise EvidenceStorageError("Remote record key does not match its identity")
+    return row
+
+
 def _decode(raw, table):
     try:
         item = json.loads(raw)
@@ -212,10 +231,20 @@ def _restore(path=None, *, client=None, full_verification=False, ids=None):
             _status["operation"] = "restore:discover"
             inventory = client.discover_complete_inventory(
                 operation_id=ids["action_id"], namespace=opaque_hash(prefix, os.environ.get("PARLAYPICKER_NETLIFY_SITE_ID", "")), ids=ids)
-            objects_by_prefix = client.read_verified_prefixes(
-                Prefixes=list(prefixes.values()), inventory=inventory,
-                cache_dir=database.with_name(database.name + ".remote-cache"),
-                full_verify=full_verification, ids=ids)
+            reader = client.read_verified_prefixes
+            cache = database.with_name(database.name + ".remote-cache")
+            try:
+                import inspect
+                on_disk = "on_disk" in inspect.signature(reader).parameters
+            except (TypeError, ValueError):
+                on_disk = False
+            if on_disk:
+                # Leave each verified file in the cache and read it when its row is stored (2026-11-13).
+                objects_by_prefix = reader(Prefixes=list(prefixes.values()), inventory=inventory, cache_dir=cache,
+                                           full_verify=full_verification, ids=ids, on_disk=True)
+            else:
+                objects_by_prefix = reader(Prefixes=list(prefixes.values()), inventory=inventory, cache_dir=cache,
+                                           full_verify=full_verification, ids=ids)
             read_report = getattr(client, "last_read_report", None)
             if read_report is not None:
                 _status["read_report"] = dict(read_report.__dict__)
@@ -241,11 +270,11 @@ def _restore(path=None, *, client=None, full_verification=False, ids=None):
                         # Drop each downloaded file once it is decoded (2026-11-11): 224 snapshots were
                         # about 1 GB, and holding the bytes and the decoded rows together crashed the app.
                         entries[index] = (key, None)
-                    row = _decode(raw, table)
-                    del raw
-                    if key != _key(table, row):
-                        raise EvidenceStorageError("Remote record key does not match its identity")
-                    rows[table].append(row)
+                    row = _checked(table, key, raw)
+                    # A file left in the local cache is verified here, before any database exists, and
+                    # read again when its row is stored: one saved run in memory at a time (2026-11-13).
+                    rows[table].append(_Deferred(key, raw) if table in STREAMED and callable(getattr(raw, "read", None)) else row)
+                    del raw, row
                 table_span.set(records_returned=len(rows[table]), verification_status="payload_verified")
         restore_span.set(
             listing_traversals=(getattr(getattr(client, "last_read_report", None), "listing_traversals", None)
@@ -272,8 +301,10 @@ def _restore(path=None, *, client=None, full_verification=False, ids=None):
                 counts[table] = len(entries)
                 for index, row in enumerate(entries):
                     # Keep only the row's receipt once SQLite has it, so the decoded copies are released too.
-                    receipts.append(_receipt(table, row))
                     entries[index] = None
+                    if isinstance(row, _Deferred):
+                        row = _checked(table, row.key, row.raw)
+                    receipts.append(_receipt(table, row))
                     where = " AND ".join(f"{TABLES[table][i]}=?" for i in KEYS[table])
                     identity = tuple(row[i] for i in KEYS[table])
                     existing = db.execute(f"SELECT {','.join(TABLES[table])} FROM {table} WHERE {where}", identity).fetchone()
@@ -329,17 +360,23 @@ def sync(path=None, *, client=None, incremental=False):
             client = client or _client()
             scope = _scope(path, client)
             verified = _verified.setdefault(scope, set())
+            # One row in memory at a time (2026-11-13): reading every table whole put every saved run,
+            # about 1 GB and growing, in memory after each Refresh. Rows are immutable, so the keys are
+            # listed once and each row is read by its key.
             with closing(connect(path or database_path())) as db:
-                db.execute("BEGIN")
-                records = {table: db.execute(f"SELECT {','.join(columns)} FROM {table}").fetchall() for table, columns in TABLES.items()}
-            for table, rows in records.items():
-                for row in rows:
-                    receipt = _receipt(table, row)
-                    if incremental and receipt in verified:
-                        continue
-                    _status["operation"] = f"upload_verify:{table}"
-                    _put(client, table, row)
-                    verified.add(receipt)
+                for table, columns in TABLES.items():
+                    key_columns = ",".join(columns[i] for i in KEYS[table])
+                    where = " AND ".join(f"{columns[i]}=?" for i in KEYS[table])
+                    for identity in db.execute(f"SELECT {key_columns} FROM {table}").fetchall():
+                        row = db.execute(f"SELECT {','.join(columns)} FROM {table} WHERE {where}", identity).fetchone()
+                        if row is None:
+                            continue
+                        receipt = _receipt(table, row)
+                        if incremental and receipt in verified:
+                            continue
+                        _status["operation"] = f"upload_verify:{table}"
+                        _put(client, table, row)
+                        verified.add(receipt)
             _status.update(status="synced", last_success_at=now_utc(), error=None, operation="complete")
             return True
         except Exception as exc:

@@ -157,6 +157,26 @@ def parallel_workers():
     return workers if 1 <= workers <= MAX_WORKERS else DEFAULT_WORKERS
 
 
+class CachedObject:
+    """One verified object left in the local cache: ``read()`` returns its bytes, checked again."""
+    __slots__ = ("path", "checksum")
+
+    def __init__(self, path, checksum):
+        self.path, self.checksum = Path(path), checksum
+
+    def read(self):
+        raw = self.path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != self.checksum:
+            raise EvidenceStorageError("Cached evidence changed after it was verified")
+        return raw
+
+    def __eq__(self, other):
+        return isinstance(other, CachedObject) and other.checksum == self.checksum
+
+    def __hash__(self):
+        return hash(self.checksum)
+
+
 class DriveStore:
     """Small object-store interface used by the evidence replication layer.
 
@@ -349,8 +369,12 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         return Path(cache_dir) / opaque_hash(self.storage_scope_hash(), namespace)
 
     def read_verified_prefixes(self, *, Prefixes, inventory=None, cache_dir=None,
-                               full_verify=False, progress=None, ids=None):
+                               full_verify=False, progress=None, ids=None, on_disk=False):
         """Read several prefixes from one complete inventory.
+
+        ``on_disk`` (2026-11-13): return a ``CachedObject`` in place of the bytes for every
+        object that was verified into the cache directory, so a caller can read one at a
+        time. The app's saved runs were about 1 GB and all of it was held at once.
 
         Cached bytes are reusable only when their local SHA-256 agrees with the
         fresh provider checksum. Missing checksums and full verification always
@@ -425,6 +449,8 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
                             temporary.replace(target)
                         finally:
                             temporary.unlink(missing_ok=True)
+                if on_disk and target is not None:
+                    raw = CachedObject(target, checksum)
                 contents.append(raw)
             if any(raw != contents[0] for raw in contents):
                 raise EvidenceStorageError("Drive contains conflicting duplicate evidence names")
