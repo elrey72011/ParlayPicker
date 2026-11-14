@@ -23,9 +23,13 @@ REFRESH_MINUTES = 60
 
 
 def slate_over(now) -> bool:
-    """2 AM to 11 AM Eastern: the night's games are over and the next slate has not started."""
+    """2 AM to 8 AM Eastern: the night's games are over and the next slate has not started.
+
+    The window ended at 11 AM until 2026-11-14, when a weekend start at 8:50 AM ET (to give noon
+    games their three hours of captures) stopped after one poll and nothing ran until 12:07 PM.
+    """
     from zoneinfo import ZoneInfo
-    return 2 <= now.astimezone(ZoneInfo("America/New_York")).hour < 11
+    return 2 <= now.astimezone(ZoneInfo("America/New_York")).hour < 8
 
 
 def fetch_report(url):
