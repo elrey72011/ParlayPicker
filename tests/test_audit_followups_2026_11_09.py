@@ -279,3 +279,15 @@ def test_one_malformed_prediction_drops_its_own_bridge_row(monkeypatch):
     monkeypatch.setattr(bridge_stake_fields, "fields", lambda *a, **k: {})
     rows = qb.rows("db", {("NBA", "SPREAD")}, now=NOW)
     assert [r["game_id"] for r in rows] == ["e2"]
+
+
+def test_a_weekend_morning_start_is_not_ended_as_slate_over():
+    """2026-11-14: a hand start at 8:50 AM ET for the noon games ended after one poll, because the
+    slate counted as over until 11 AM. Early morning still ends a run that started late at night."""
+    from datetime import datetime, timezone
+    from scripts import news_capture_loop as loop
+    assert not loop.slate_over(datetime(2026, 11, 14, 13, 50, tzinfo=timezone.utc))     # 8:50 AM ET
+    assert not loop.slate_over(datetime(2026, 11, 14, 13, 0, tzinfo=timezone.utc))      # 8:00 AM ET
+    assert loop.slate_over(datetime(2026, 11, 14, 12, 59, tzinfo=timezone.utc))         # 7:59 AM ET
+    assert loop.slate_over(datetime(2026, 11, 14, 7, 0, tzinfo=timezone.utc))           # 2:00 AM ET
+    assert not loop.slate_over(datetime(2026, 11, 14, 6, 59, tzinfo=timezone.utc))      # 1:59 AM ET
