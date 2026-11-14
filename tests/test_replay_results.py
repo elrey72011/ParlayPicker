@@ -113,3 +113,30 @@ def test_the_report_prints_the_split_for_seven_days_at_one_percent():
     assert "| NCAAB SPREAD | any time | after_pinnacle | MOVED_AGAINST | 4 | 1 / 3 / 0 | -2.00 | -50.0% (40.0%) |" in text
     assert text.count("MOVED_AGAINST") == 1 and "| X |" not in text
     assert report._results_splits_markdown([dict(row, by_edge={})]) == []
+
+
+def test_every_graded_bet_is_listed_for_a_hand_check(monkeypatch):
+    events, quotes = _scope([("won", 60, 20), ("lost", 60, 20), ("ungraded", 60, 20)])
+    scores = [_score("won", 80, 70), _score("lost", 71, 70)]
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, scores))
+    found = pm.replay_results("db", "NCAAB", "SPREAD", now=NOW)["by_edge"]["2%"]
+    listed = found["graded_bets"]
+    assert len(listed) == found["graded"] == 2
+    assert sorted(bet["outcome"] for bet in listed) == ["LOSS", "WIN"]
+    for bet in listed:
+        assert bet["selection"] in (bet["home_team"], bet["away_team"]) and bet["decimal_odds"] == pytest.approx(2.06)
+        assert {"scheduled_start", "line", "sportsbook", "entered_at", "home_score", "away_score", "after_pinnacle",
+                "closing_value"} <= set(bet)
+
+
+def test_the_report_lists_ncaab_late_bets_only():
+    from scripts import market_readiness_report as report
+    bet = dict(scheduled_start="2030-01-02T00:00:00+00:00", home_team="H", away_team="A", selection="H", line=-2.5,
+               decimal_odds=2.06, sportsbook="Novig", entered_at="2030-01-01T23:10:00+00:00", home_score=71, away_score=70,
+               outcome="LOSS", after_pinnacle="PRICED_POSITIVE", closing_value=0.021)
+    row = dict(sport="NCAAB", market_family="SPREAD", window="last 7 days", entry="last 60 min",
+               by_edge={"1%": dict(bets=1, graded_bets=[bet, dict(bet, decimal_odds=1.8, closing_value=None)])})
+    text = "\n".join(report._results_listed_markdown([row, dict(row, entry="any time"), dict(row, sport="NBA")]))
+    assert "| SPREAD | 2030-01-02T00:00 | A at H | H -2.5 | +106 | Novig | 23:10 | 70-71 | LOSS | PRICED_POSITIVE | +2.1% |" in text
+    assert "| -125 | Novig |" in text and text.count("A at H") == 2
+    assert report._results_listed_markdown([dict(row, by_edge={"1%": dict(bets=0, graded_bets=[])})]) == []

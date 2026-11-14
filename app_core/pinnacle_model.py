@@ -836,7 +836,7 @@ def replay_results(path, sport, family, *, now, lookback_days=7, edges=REPLAY_ED
     grouped = by_event(quotes)
     for edge in edges:
         bets = first_edge_bets(started, quotes, now, edge, books)
-        outcomes, returns, split = {"WIN": 0, "LOSS": 0, "PUSH": 0}, [], {}
+        outcomes, returns, split, listed = {"WIN": 0, "LOSS": 0, "PUSH": 0}, [], {}, []
         for event_id, bet, _ in bets:
             score = final.get(event_id)
             if score is None:
@@ -851,6 +851,12 @@ def replay_results(path, sport, family, *, now, lookback_days=7, edges=REPLAY_ED
             kind, value, _ = _after_pinnacle(event, grouped.get(event_id, []), bet, family)
             if kind == "PRICED":
                 kind = "PRICED_POSITIVE" if value > 0 else "PRICED_NOT_POSITIVE"
+            listed.append({"scheduled_start": event["scheduled_start"], "home_team": event["home_team"],
+                           "away_team": event["away_team"], "selection": bet["selection"], "line": float(bet["line"]),
+                           "decimal_odds": bet["decimal_odds"], "sportsbook": _book_label(bet["sportsbook"]),
+                           "entered_at": capture_time(event, bet).isoformat(timespec="seconds"),
+                           "home_score": int(score["home_score"]), "away_score": int(score["away_score"]),
+                           "outcome": outcome, "after_pinnacle": kind, "closing_value": value})
             side = bet["selection"] if family == "TOTAL" else ("home" if bet["selection"] == event["home_team"] else "away")
             for name in (("after_pinnacle", kind), ("side", side)):
                 held = split.setdefault(name, {"WIN": 0, "LOSS": 0, "PUSH": 0, "returns": []})
@@ -861,6 +867,8 @@ def replay_results(path, sport, family, *, now, lookback_days=7, edges=REPLAY_ED
             "bets": len(bets), "graded": len(returns), "ungraded": len(bets) - len(returns),
             "wins": outcomes["WIN"], "losses": outcomes["LOSS"], "pushes": outcomes["PUSH"],
             "roi_per_bet": roi, "roi_se": se, "units": sum(returns),
+            # Every graded bet, so a result can be checked by hand against the box score (2026-11-14).
+            "graded_bets": sorted(listed, key=lambda row: (row["scheduled_start"], row["home_team"])),
             # Where the results fell (2026-11-14): by what Pinnacle did after the bet, and by side.
             "splits": [{"by": by, "group": group, "graded": len(held["returns"]), "wins": held["WIN"],
                         "losses": held["LOSS"], "pushes": held["PUSH"], "units": sum(held["returns"]),

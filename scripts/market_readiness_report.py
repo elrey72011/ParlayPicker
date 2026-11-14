@@ -285,6 +285,33 @@ def _results_splits_markdown(rows):
             'ROI per bet (SE) |', '|---|---|---|---|---|---|---|---|'] + lines
 
 
+LISTED_BETS = {('NCAAB', 'SPREAD'), ('NCAAB', 'TOTAL')}
+LISTED_ENTRY = 'last 60 min'
+LISTED_CAPTION = ('Each graded bet behind the split above (NCAAB, last 7 days, 1% edge, last-60-minutes entry), to check by '
+                  'hand against the box score: on 2026-11-14 the spread bets still priced above Pinnacle at its last '
+                  'capture were 5-18. Times are UTC. The line is the bet\'s own.')
+
+
+def _results_listed_markdown(rows):
+    lines = []
+    for row in rows:
+        found = (row.get('by_edge') or {}).get(SPLIT_EDGE) or {}
+        if (row.get('window') != SPLIT_WINDOW or row.get('entry') != LISTED_ENTRY
+                or (row.get('sport'), row.get('market_family')) not in LISTED_BETS):
+            continue
+        for bet in found.get('graded_bets') or []:
+            odds = bet['decimal_odds']
+            american = f"{(odds - 1) * 100:+.0f}" if odds >= 2 else f"{-100 / (odds - 1):.0f}"
+            value = '' if bet['closing_value'] is None else f"{bet['closing_value']:+.1%}"
+            lines.append(f"| {row['market_family']} | {bet['scheduled_start'][:16]} | {bet['away_team']} at {bet['home_team']} | "
+                         f"{bet['selection']} {bet['line']:+g} | {american} | {bet['sportsbook']} | {bet['entered_at'][11:16]} | "
+                         f"{bet['away_score']}-{bet['home_score']} | {bet['outcome']} | {bet['after_pinnacle']} | {value} |")
+    if not lines:
+        return []
+    return ['', LISTED_CAPTION, '', '| market | start | game | bet | price | book | entered | final (away-home) | result | '
+            'after Pinnacle | closing value |', '|---|---|---|---|---|---|---|---|---|---|---|'] + lines
+
+
 CLV_CAPTION = ('Replay closing-line value: do the first-clearing bets beat the certified close at the same book, '
                'selection and line? A plan needs a comparable close for 80% of its bets and mean CLV with t of 2 or more. '
                'A bet with no comparable close is left out of the mean, which can flatter it. Results are not read.')
@@ -908,6 +935,7 @@ def markdown(result):
     lines += _clv_vs_pinnacle_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _results_markdown(result.get('replay_results') or [])
     lines += _results_splits_markdown(result.get('replay_results') or [])
+    lines += _results_listed_markdown(result.get('replay_results') or [])
     lines += _movement_results_markdown(result.get('movement_results') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
