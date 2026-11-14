@@ -104,6 +104,7 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 replay_results=timed('replay_results', replay_results, store, extra=EXTRA_REPLAY_SCOPES),
                 line_movement=timed('line_movement', line_movement, store, extra=EXTRA_REPLAY_SCOPES),
                 nightly_record=timed('nightly_record', nightly_record, store, extra=EXTRA_REPLAY_SCOPES),
+                movement_results=timed('movement_results', movement_results, store, extra=EXTRA_REPLAY_SCOPES),
                 pace_recommendation=timed('pace_recommendation', pace_recommendation, store, extra=EXTRA_REPLAY_SCOPES))
 
 
@@ -257,6 +258,58 @@ def _results_markdown(rows):
             lines.append(f"| {name} | {edge} | {found['bets']} | {found['graded']} | "
                          f"{found['wins']} / {found['losses']} / {found['pushes']} | {found['units']:+.2f} | {roi}{se} |")
     return lines
+
+
+SPLITS_CAPTION = ('Where the replay results fell (2026-11-14; last 7 days, 1% edge): the same graded bets split by '
+                  'what Pinnacle did after the bet (priced positive or not at its last capture, moved its line for or '
+                  'against, or not priced) and by side. If a price gap were information Pinnacle lacks, the bets it '
+                  'later moved against would carry the losses. Small counts; read the SE.')
+SPLIT_WINDOW, SPLIT_EDGE = 'last 7 days', '1%'
+
+
+def _results_splits_markdown(rows):
+    lines = []
+    for row in rows:
+        found = (row.get('by_edge') or {}).get(SPLIT_EDGE) or {}
+        if row.get('window') != SPLIT_WINDOW or not found.get('splits'):
+            continue
+        for part in found['splits']:
+            roi = '' if part['roi_per_bet'] is None else f"{part['roi_per_bet']:+.1%}"
+            se = '' if part['roi_se'] is None else f" ({part['roi_se']:.1%})"
+            lines.append(f"| {row['sport']} {row['market_family']} | {row.get('entry', '')} | {part['by']} | "
+                         f"{part['group']} | {part['graded']} | {part['wins']} / {part['losses']} / {part['pushes']} | "
+                         f"{part['units']:+.2f} | {roi}{se} |")
+    if not lines:
+        return []
+    return ['', SPLITS_CAPTION, '', '| market | entry | split | group | graded | wins / losses / pushes | units | '
+            'ROI per bet (SE) |', '|---|---|---|---|---|---|---|---|'] + lines
+
+
+LISTED_BETS = {('NCAAB', 'SPREAD'), ('NCAAB', 'TOTAL')}
+LISTED_ENTRY = 'last 60 min'
+LISTED_CAPTION = ('Each graded bet behind the split above (NCAAB, last 7 days, 1% edge, last-60-minutes entry), to check by '
+                  'hand against the box score: on 2026-11-14 the spread bets still priced above Pinnacle at its last '
+                  'capture were 5-18. Times are UTC. The line is the bet\'s own.')
+
+
+def _results_listed_markdown(rows):
+    lines = []
+    for row in rows:
+        found = (row.get('by_edge') or {}).get(SPLIT_EDGE) or {}
+        if (row.get('window') != SPLIT_WINDOW or row.get('entry') != LISTED_ENTRY
+                or (row.get('sport'), row.get('market_family')) not in LISTED_BETS):
+            continue
+        for bet in found.get('graded_bets') or []:
+            odds = bet['decimal_odds']
+            american = f"{(odds - 1) * 100:+.0f}" if odds >= 2 else f"{-100 / (odds - 1):.0f}"
+            value = '' if bet['closing_value'] is None else f"{bet['closing_value']:+.1%}"
+            lines.append(f"| {row['market_family']} | {bet['scheduled_start'][:16]} | {bet['away_team']} at {bet['home_team']} | "
+                         f"{bet['selection']} {bet['line']:+g} | {american} | {bet['sportsbook']} | {bet['entered_at'][11:16]} | "
+                         f"{bet['away_score']}-{bet['home_score']} | {bet['outcome']} | {bet['after_pinnacle']} | {value} |")
+    if not lines:
+        return []
+    return ['', LISTED_CAPTION, '', '| market | start | game | bet | price | book | entered | final (away-home) | result | '
+            'after Pinnacle | closing value |', '|---|---|---|---|---|---|---|---|---|---|---|'] + lines
 
 
 CLV_CAPTION = ('Replay closing-line value: do the first-clearing bets beat the certified close at the same book, '
@@ -500,6 +553,61 @@ def _movement_markdown(rows):
                      f"{pct(row['mean_prob_shift_when_held'], 1)} | "
                      f"{row['stake_books_at_final_line']} of {row['stake_book_games']} ({pct(row['share_followed'])}) | "
                      f"{follow} | {row['captures_per_game']:g} |")
+    return lines
+
+
+MOVEMENT_RESULT_NIGHTS = 14
+MOVEMENT_RESULTS_CAPTION = ('Pinnacle movement record (owner 2026-11-14): per ET slate night, how the side Pinnacle had '
+                            'moved toward 60 minutes before the start finished, graded at Pinnacle\'s line at that '
+                            'capture and paid at a flat -110. The side it moved against is the mirror. Wins - losses '
+                            '(pushes after a slash); the last column splits the total into games where the line moved '
+                            'and games where only the price did. This READS results. A direction test, not a bet at a '
+                            'book; four nights of exports suggested it and one night supplied most of that.')
+
+
+def movement_results(path, now=None, extra=None):
+    """Per ET slate night, the record of the side Pinnacle moved toward (pinnacle_model.movement_results)."""
+    from datetime import datetime, timezone
+    from app_core import pinnacle_model
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport, families in {**pinnacle_model.FAMILIES, **(extra or {})}.items():
+        for family in families:
+            try:
+                out.append(pinnacle_model.movement_results(path, sport, family, now=now, nights=MOVEMENT_RESULT_NIGHTS))
+            except Exception as exc:  # report, never guess
+                out.append(dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
+
+
+def _movement_results_markdown(rows):
+    rows = [r for r in rows if r.get('evaluation_error') or (r.get('total') or {}).get('games_started')]
+    if not rows:
+        return []
+
+    def record(found):
+        text = f"{found['wins']}-{found['losses']}"
+        return text + (f" /{found['pushes']}" if found['pushes'] else '')
+    nights = sorted({n['night'] for r in rows for n in r.get('nights', [])})[-7:]
+    lines = ['', MOVEMENT_RESULTS_CAPTION, '',
+             '| market | ' + ' | '.join(nights) + f' | last {MOVEMENT_RESULT_NIGHTS} days | win rate | ROI at -110 (SE) | '
+             'no move / games | line moved, price only |', '|---|' + '---|' * (len(nights) + 5)]
+    for row in rows:
+        name = f"{row['sport']} {row['market_family']}"
+        if 'evaluation_error' in row:
+            lines.append(f"| {name} | {row['evaluation_error']} |" + ' |' * (len(nights) + 4))
+            continue
+        by_night = {n['night']: n for n in row['nights']}
+        total = row['total']
+        decided = total['wins'] + total['losses']
+        rate = '' if not decided else f"{total['wins'] / decided:.0%}"
+        roi = '' if total['roi_per_bet'] is None else f"{total['roi_per_bet']:+.1%}"
+        se = '' if total['roi_se'] is None else f" ({total['roi_se']:.1%})"
+        lines.append(f"| {name} | " + ' | '.join(record(by_night[n]) if n in by_night else '' for n in nights)
+                     + f" | {record(total)} | {rate} | {roi}{se} | {total['no_move']} / {total['games_started']} | "
+                     f"{total['line_moves'][0]}-{total['line_moves'][1]}, {total['price_moves'][0]}-{total['price_moves'][1]} |")
     return lines
 
 
@@ -826,6 +934,9 @@ def markdown(result):
     lines += _clv_large_moves_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _clv_vs_pinnacle_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _results_markdown(result.get('replay_results') or [])
+    lines += _results_splits_markdown(result.get('replay_results') or [])
+    lines += _results_listed_markdown(result.get('replay_results') or [])
+    lines += _movement_results_markdown(result.get('movement_results') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
