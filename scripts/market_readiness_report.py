@@ -104,6 +104,7 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 replay_results=timed('replay_results', replay_results, store, extra=EXTRA_REPLAY_SCOPES),
                 line_movement=timed('line_movement', line_movement, store, extra=EXTRA_REPLAY_SCOPES),
                 nightly_record=timed('nightly_record', nightly_record, store, extra=EXTRA_REPLAY_SCOPES),
+                movement_results=timed('movement_results', movement_results, store, extra=EXTRA_REPLAY_SCOPES),
                 pace_recommendation=timed('pace_recommendation', pace_recommendation, store, extra=EXTRA_REPLAY_SCOPES))
 
 
@@ -528,6 +529,61 @@ def _movement_markdown(rows):
     return lines
 
 
+MOVEMENT_RESULT_NIGHTS = 14
+MOVEMENT_RESULTS_CAPTION = ('Pinnacle movement record (owner 2026-11-14): per ET slate night, how the side Pinnacle had '
+                            'moved toward 60 minutes before the start finished, graded at Pinnacle\'s line at that '
+                            'capture and paid at a flat -110. The side it moved against is the mirror. Wins - losses '
+                            '(pushes after a slash); the last column splits the total into games where the line moved '
+                            'and games where only the price did. This READS results. A direction test, not a bet at a '
+                            'book; four nights of exports suggested it and one night supplied most of that.')
+
+
+def movement_results(path, now=None, extra=None):
+    """Per ET slate night, the record of the side Pinnacle moved toward (pinnacle_model.movement_results)."""
+    from datetime import datetime, timezone
+    from app_core import pinnacle_model
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport, families in {**pinnacle_model.FAMILIES, **(extra or {})}.items():
+        for family in families:
+            try:
+                out.append(pinnacle_model.movement_results(path, sport, family, now=now, nights=MOVEMENT_RESULT_NIGHTS))
+            except Exception as exc:  # report, never guess
+                out.append(dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
+
+
+def _movement_results_markdown(rows):
+    rows = [r for r in rows if r.get('evaluation_error') or (r.get('total') or {}).get('games_started')]
+    if not rows:
+        return []
+
+    def record(found):
+        text = f"{found['wins']}-{found['losses']}"
+        return text + (f" /{found['pushes']}" if found['pushes'] else '')
+    nights = sorted({n['night'] for r in rows for n in r.get('nights', [])})[-7:]
+    lines = ['', MOVEMENT_RESULTS_CAPTION, '',
+             '| market | ' + ' | '.join(nights) + f' | last {MOVEMENT_RESULT_NIGHTS} days | win rate | ROI at -110 (SE) | '
+             'no move / games | line moved, price only |', '|---|' + '---|' * (len(nights) + 5)]
+    for row in rows:
+        name = f"{row['sport']} {row['market_family']}"
+        if 'evaluation_error' in row:
+            lines.append(f"| {name} | {row['evaluation_error']} |" + ' |' * (len(nights) + 4))
+            continue
+        by_night = {n['night']: n for n in row['nights']}
+        total = row['total']
+        decided = total['wins'] + total['losses']
+        rate = '' if not decided else f"{total['wins'] / decided:.0%}"
+        roi = '' if total['roi_per_bet'] is None else f"{total['roi_per_bet']:+.1%}"
+        se = '' if total['roi_se'] is None else f" ({total['roi_se']:.1%})"
+        lines.append(f"| {name} | " + ' | '.join(record(by_night[n]) if n in by_night else '' for n in nights)
+                     + f" | {record(total)} | {rate} | {roi}{se} | {total['no_move']} / {total['games_started']} | "
+                     f"{total['line_moves'][0]}-{total['line_moves'][1]}, {total['price_moves'][0]}-{total['price_moves'][1]} |")
+    return lines
+
+
 GO_BETS_PER_NIGHT = 2        # the go/no-go line for a plan (roadmap M2)
 RECORD_NIGHTS = 7
 
@@ -852,6 +908,7 @@ def markdown(result):
     lines += _clv_vs_pinnacle_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _results_markdown(result.get('replay_results') or [])
     lines += _results_splits_markdown(result.get('replay_results') or [])
+    lines += _movement_results_markdown(result.get('movement_results') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
