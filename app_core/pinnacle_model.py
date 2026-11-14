@@ -616,6 +616,40 @@ def _line_adjusted(sport, family, same, moved, mean_se):
 PINNACLE_CLOSE_WITHIN = timedelta(minutes=30)
 
 
+AFTER_PINNACLE = ("PRICED", "MOVED_IN_FAVOUR", "MOVED_AGAINST", "MOVED_LEVEL", "NO_LATE_CAPTURE",
+                  "ENTERED_AT_LAST_CAPTURE")
+
+
+def _after_pinnacle(event, quotes, bet, family):
+    """What Pinnacle's last capture before the start says about one bet: ``(kind, value, minutes)``.
+
+    ``PRICED`` carries the closing value (bet odds x Pinnacle's no-vig probability - 1) and the
+    minutes from entry to that capture; the other kinds carry None. ``_vs_pinnacle_close`` explains
+    each kind. ``quotes`` are the event's own.
+    """
+    kickoff = _t(event["scheduled_start"])
+    track = [row for row in pairs(event, quotes, family) if row[0] <= kickoff]
+    last = max((captured for captured, _, _ in track), default=None)
+    if last is None or kickoff - last > PINNACLE_CLOSE_WITHIN:
+        return "NO_LATE_CAPTURE", None, None
+    entered = capture_time(event, bet)
+    if last <= entered:
+        return "ENTERED_AT_LAST_CAPTURE", None, None
+    mine = _home_line(event, bet)
+    at_line = [p for captured, line, p in track if captured == last and line == mine]
+    if at_line:
+        p = at_line[0] if bet["selection"] == _canonical(event, family) else 1 - at_line[0]
+        return "PRICED", bet["decimal_odds"] * p - 1, (last - entered).total_seconds() / 60
+    # Pinnacle's main line at its last capture, as the bet's own side would read it.
+    main = min(((abs(p - 0.5), line) for captured, line, p in track if captured == last))[1]
+    canonical = bet["selection"] == _canonical(event, family)
+    if family == "TOTAL":
+        gained = (main - mine) * (1 if canonical else -1)        # an Over wants the lower number
+    else:
+        gained = (mine - main) * (1 if canonical else -1)        # the home line; the away side is its negative
+    return ("MOVED_IN_FAVOUR" if gained > 0 else "MOVED_AGAINST" if gained < 0 else "MOVED_LEVEL"), None, None
+
+
 def _vs_pinnacle_close(started, quotes, bets, family, mean_se):
     """The bets valued at Pinnacle's last no-vig price before the start (owner 2026-11-12; read-only).
 
@@ -639,33 +673,14 @@ def _vs_pinnacle_close(started, quotes, bets, family, mean_se):
     grouped = by_event(quotes)
     values, favour, against, no_capture, at_last, waits = [], 0, 0, 0, 0, []
     for event_id, bet, _ in bets:
-        event = started[event_id]
-        kickoff = _t(event["scheduled_start"])
-        track = [row for row in pairs(event, grouped.get(event_id, []), family) if row[0] <= kickoff]
-        last = max((captured for captured, _, _ in track), default=None)
-        if last is None or kickoff - last > PINNACLE_CLOSE_WITHIN:
-            no_capture += 1
-            continue
-        entered = capture_time(event, bet)
-        if last <= entered:
-            at_last += 1
-            continue
-        mine = _home_line(event, bet)
-        at_line = [p for captured, line, p in track if captured == last and line == mine]
-        if at_line:
-            p = at_line[0] if bet["selection"] == _canonical(event, family) else 1 - at_line[0]
-            values.append(bet["decimal_odds"] * p - 1)
-            waits.append((last - entered).total_seconds() / 60)
-            continue
-        # Pinnacle's main line at its last capture, as the bet's own side would read it.
-        main = min(((abs(p - 0.5), line) for captured, line, p in track if captured == last))[1]
-        canonical = bet["selection"] == _canonical(event, family)
-        if family == "TOTAL":
-            gained = (main - mine) * (1 if canonical else -1)        # an Over wants the lower number
-        else:
-            gained = (mine - main) * (1 if canonical else -1)        # the home line; the away side is its negative
-        favour += gained > 0
-        against += gained < 0
+        kind, value, wait = _after_pinnacle(started[event_id], grouped.get(event_id, []), bet, family)
+        if kind == "PRICED":
+            values.append(value)
+            waits.append(wait)
+        no_capture += kind == "NO_LATE_CAPTURE"
+        at_last += kind == "ENTERED_AT_LAST_CAPTURE"
+        favour += kind == "MOVED_IN_FAVOUR"
+        against += kind == "MOVED_AGAINST"
     mean, se = mean_se(values)
     return {"bets": len(bets), "priced": len(values), "coverage": len(values) / len(bets) if bets else None,
             "mean_closing_ev": mean, "se": se, "t": (mean / se if mean is not None and se else None),
@@ -818,9 +833,10 @@ def replay_results(path, sport, family, *, now, lookback_days=7, edges=REPLAY_ED
     quotes, _ = without_junk(slim_sources([q for q in quotes if q["event_id"] in started]))
     if entry_within_minutes is not None:
         quotes = late_captures(started, quotes, entry_within_minutes)
+    grouped = by_event(quotes)
     for edge in edges:
         bets = first_edge_bets(started, quotes, now, edge, books)
-        outcomes, returns = {"WIN": 0, "LOSS": 0, "PUSH": 0}, []
+        outcomes, returns, split = {"WIN": 0, "LOSS": 0, "PUSH": 0}, [], {}
         for event_id, bet, _ in bets:
             score = final.get(event_id)
             if score is None:
@@ -830,12 +846,26 @@ def replay_results(path, sport, family, *, now, lookback_days=7, edges=REPLAY_ED
                 sport, family, bet["selection"], event["home_team"], event["away_team"],
                 int(score["home_score"]), int(score["away_score"]), float(bet["line"]))
             outcomes[outcome] += 1
-            returns.append(bet["decimal_odds"] - 1 if outcome == "WIN" else (-1.0 if outcome == "LOSS" else 0.0))
+            gain = bet["decimal_odds"] - 1 if outcome == "WIN" else (-1.0 if outcome == "LOSS" else 0.0)
+            returns.append(gain)
+            kind, value, _ = _after_pinnacle(event, grouped.get(event_id, []), bet, family)
+            if kind == "PRICED":
+                kind = "PRICED_POSITIVE" if value > 0 else "PRICED_NOT_POSITIVE"
+            side = bet["selection"] if family == "TOTAL" else ("home" if bet["selection"] == event["home_team"] else "away")
+            for name in (("after_pinnacle", kind), ("side", side)):
+                held = split.setdefault(name, {"WIN": 0, "LOSS": 0, "PUSH": 0, "returns": []})
+                held[outcome] += 1
+                held["returns"].append(gain)
         roi, se = _mean_se(returns)
         out["by_edge"][f"{edge:.0%}"] = {
             "bets": len(bets), "graded": len(returns), "ungraded": len(bets) - len(returns),
             "wins": outcomes["WIN"], "losses": outcomes["LOSS"], "pushes": outcomes["PUSH"],
-            "roi_per_bet": roi, "roi_se": se, "units": sum(returns)}
+            "roi_per_bet": roi, "roi_se": se, "units": sum(returns),
+            # Where the results fell (2026-11-14): by what Pinnacle did after the bet, and by side.
+            "splits": [{"by": by, "group": group, "graded": len(held["returns"]), "wins": held["WIN"],
+                        "losses": held["LOSS"], "pushes": held["PUSH"], "units": sum(held["returns"]),
+                        "roi_per_bet": _mean_se(held["returns"])[0], "roi_se": _mean_se(held["returns"])[1]}
+                       for (by, group), held in sorted(split.items())]}
     return out
 
 

@@ -79,3 +79,37 @@ def test_the_report_prints_any_time_and_late_rows_and_reports_errors(tmp_path, m
     assert "| NCAAB SPREAD | last 7 days | last 60 min | 1% |" in text
     assert "ValueError: boom" in text
     assert report._results_markdown([]) == []
+
+
+def test_results_are_split_by_what_pinnacle_did_afterwards_and_by_side(monkeypatch):
+    """2026-11-14: the week's gap bets beat Pinnacle's later price and still lost. The split says where
+    the results fell: priced positive or not at Pinnacle's last capture, line moved for or against, not priced."""
+    games = [("won", 60, 20), ("lost", 60, 20)]
+    events, quotes = _scope(games)
+    scores = [_score("won", 80, 70), _score("lost", 71, 70)]
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, scores))
+    found = pm.replay_results("db", "NCAAB", "SPREAD", now=NOW)["by_edge"]["2%"]
+    parts = found["splits"]
+    assert {part["by"] for part in parts} == {"after_pinnacle", "side"}
+    for by in ("after_pinnacle", "side"):
+        mine = [part for part in parts if part["by"] == by]
+        assert sum(part["graded"] for part in mine) == found["graded"]
+        assert sum(part["wins"] for part in mine) == found["wins"]
+        assert sum(part["units"] for part in mine) == pytest.approx(found["units"])
+    kinds = {part["group"] for part in parts if part["by"] == "after_pinnacle"}
+    assert kinds <= {"PRICED_POSITIVE", "PRICED_NOT_POSITIVE", "MOVED_IN_FAVOUR", "MOVED_AGAINST", "MOVED_LEVEL",
+                     "NO_LATE_CAPTURE", "ENTERED_AT_LAST_CAPTURE"}
+    assert {part["group"] for part in parts if part["by"] == "side"} <= {"home", "away"}
+    assert "_after_pinnacle" not in pm.PREDICTION_FUNCTIONS
+
+
+def test_the_report_prints_the_split_for_seven_days_at_one_percent():
+    from scripts import market_readiness_report as report
+    part = dict(by="after_pinnacle", group="MOVED_AGAINST", graded=4, wins=1, losses=3, pushes=0, units=-2.0,
+                roi_per_bet=-0.5, roi_se=0.4)
+    row = dict(sport="NCAAB", market_family="SPREAD", window="last 7 days", entry="any time",
+               by_edge={"1%": dict(bets=4, splits=[part]), "2%": dict(bets=1, splits=[dict(part, group="X")])})
+    text = "\n".join(report._results_splits_markdown([row, dict(row, window="last 14 days")]))
+    assert "| NCAAB SPREAD | any time | after_pinnacle | MOVED_AGAINST | 4 | 1 / 3 / 0 | -2.00 | -50.0% (40.0%) |" in text
+    assert text.count("MOVED_AGAINST") == 1 and "| X |" not in text
+    assert report._results_splits_markdown([dict(row, by_edge={})]) == []

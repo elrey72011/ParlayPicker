@@ -259,6 +259,31 @@ def _results_markdown(rows):
     return lines
 
 
+SPLITS_CAPTION = ('Where the replay results fell (2026-11-14; last 7 days, 1% edge): the same graded bets split by '
+                  'what Pinnacle did after the bet (priced positive or not at its last capture, moved its line for or '
+                  'against, or not priced) and by side. If a price gap were information Pinnacle lacks, the bets it '
+                  'later moved against would carry the losses. Small counts; read the SE.')
+SPLIT_WINDOW, SPLIT_EDGE = 'last 7 days', '1%'
+
+
+def _results_splits_markdown(rows):
+    lines = []
+    for row in rows:
+        found = (row.get('by_edge') or {}).get(SPLIT_EDGE) or {}
+        if row.get('window') != SPLIT_WINDOW or not found.get('splits'):
+            continue
+        for part in found['splits']:
+            roi = '' if part['roi_per_bet'] is None else f"{part['roi_per_bet']:+.1%}"
+            se = '' if part['roi_se'] is None else f" ({part['roi_se']:.1%})"
+            lines.append(f"| {row['sport']} {row['market_family']} | {row.get('entry', '')} | {part['by']} | "
+                         f"{part['group']} | {part['graded']} | {part['wins']} / {part['losses']} / {part['pushes']} | "
+                         f"{part['units']:+.2f} | {roi}{se} |")
+    if not lines:
+        return []
+    return ['', SPLITS_CAPTION, '', '| market | entry | split | group | graded | wins / losses / pushes | units | '
+            'ROI per bet (SE) |', '|---|---|---|---|---|---|---|---|'] + lines
+
+
 CLV_CAPTION = ('Replay closing-line value: do the first-clearing bets beat the certified close at the same book, '
                'selection and line? A plan needs a comparable close for 80% of its bets and mean CLV with t of 2 or more. '
                'A bet with no comparable close is left out of the mean, which can flatter it. Results are not read.')
@@ -826,6 +851,7 @@ def markdown(result):
     lines += _clv_large_moves_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _clv_vs_pinnacle_markdown(result.get('replay_clv') or [], result.get('late_entry_clv') or [])
     lines += _results_markdown(result.get('replay_results') or [])
+    lines += _results_splits_markdown(result.get('replay_results') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running
