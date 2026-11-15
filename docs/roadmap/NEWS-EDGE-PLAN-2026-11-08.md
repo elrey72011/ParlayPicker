@@ -41,7 +41,8 @@ Questionable to Out at 5:30 PM; Thornton, Bruce: Out to Available at 1:45 PM.
    - No Odds API credits. Runs daily at 7:17 AM EST; backfill with the `start` input
      (season start 2026-10-21).
 2. **Lag study (built, `app_core/news_lag_study.py`, workflow "News lag study (one-time research)";
-   owner approved 5,000 credits on 2026-11-08).** It runs once per label (a write-once marker on
+   owner approved 5,000 credits on 2026-11-08; the workflow was removed on 2026-11-15 after its one
+   run, `scripts/news_lag_study.py` remains).** It runs once per label (a write-once marker on
    Drive) and stops at the 5,000 cap or when the account has fewer than 4,000 monthly credits left.
    Each piece of news costs 41 credits (the events list plus 4 spread snapshots: 30 minutes before,
    at, 10 and 30 after), so about 120 pieces of news. Flips come first, then first listings within
