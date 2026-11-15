@@ -174,3 +174,18 @@ def test_a_newer_spread_quote_uses_the_home_line():
     assert out["pinnacle_current_line"] == 2.5 and out["pinnacle_line_move"] == -0.5
     assert out["pinnacle_moved_toward"] == "UNLV Rebels" and not out["pinnacle_move_with_pick"]
     assert out["pinnacle_stake_books_at_line"] == "Novig"
+
+
+def test_la_salle_matches_although_the_audit_calls_it_los_angeles_salle():
+    """2026-11-15: the audit's name mapper turns "La Salle" into "Los Angeles Salle", and the Temple at
+    La Salle game got no movement columns. The mapper itself is a bound NCAAF component and is left alone."""
+    move = _move(sport="NCAAB", market_family="SPREAD", away_team="Temple Owls", home_team="La Salle Explorers",
+                 scheduled_start="2026-11-15T19:00:00+00:00", moved_toward="La Salle Explorers")
+    audit = pd.DataFrame([dict(league="NCAAB", home_team="Los Angeles Salle", away_team="Temple",
+                               market_type=kind, game_start_utc="2026-11-15T19:00:00Z", best_pick="x")
+                          for kind in ("spread_home", "spread_away")])
+    out = am.with_movement(audit, [move])
+    assert out["pinnacle_current_line"].notna().all()
+    assert out["pinnacle_move_with_pick"].tolist() == [True, False]
+    # A Los Angeles team is still itself.
+    assert am._words("Los Angeles Lakers") == ["los", "angeles", "lakers"]
