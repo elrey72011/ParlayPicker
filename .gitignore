@@ -87,3 +87,6 @@ data/prediction_evidence/
 
 # Shared pipeline local store (roadmap M1.4); holds signed private records
 data/pipeline/
+
+# Local launcher process id (start_streamlit.sh, run_streamlit_bg.sh)
+streamlit.pid
