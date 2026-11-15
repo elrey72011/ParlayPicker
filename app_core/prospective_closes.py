@@ -327,6 +327,53 @@ def _over_rest_share(budget, sport, credits, share):
         return False
 
 
+def rejection_reason(event, row, error=None):
+    """Which check refused a certified close row: a short code for the log, never data.
+
+    It repeats ``prospective_evidence.verify_provider_close``'s response-level checks in order
+    and names the first that fails; it decides nothing (the row was already refused). Minutes
+    are the provider's start minus the stored start.
+    """
+    try:
+        if isinstance(error, evidence.EvidenceConflict):
+            return "REJECTED_CONFLICT"
+        wrapper = json.loads(row["raw_source"])
+        response = wrapper["response"]
+        start, retrieved = _time(event["scheduled_start"]), _time(wrapper["retrieved_at"])
+        snapshot = _time(response.get("timestamp"))
+        if not snapshot < start:
+            return "REJECTED_SNAPSHOT_NOT_BEFORE_START"
+        if not start <= retrieved:
+            return "REJECTED_RETRIEVED_BEFORE_START"
+        following = response.get("next_timestamp")
+        if following is not None and _time(following) < start:
+            return "REJECTED_LATER_PREGAME_SNAPSHOT"
+        data = response.get("data") or {}
+        if data.get("id") != event["provider_event_id"]:
+            return "REJECTED_EVENT_ID"
+        if data.get("home_team") != event["home_team"] or data.get("away_team") != event["away_team"]:
+            return "REJECTED_TEAM_NAMES"
+        moved = (_time(data.get("commence_time")) - start).total_seconds() / 60
+        if moved:
+            size = "UNDER_15" if abs(moved) < 15 else "UNDER_60" if abs(moved) < 60 else "OVER_60"
+            return f"REJECTED_START_{'LATER' if moved > 0 else 'EARLIER'}_{size}_MIN"
+        books = [b for b in data.get("bookmakers") or [] if b.get("key") == row["sportsbook"]]
+        if len(books) != 1:
+            return "REJECTED_BOOK_COUNT"
+        key = _market_key(event["sport"], row["market_family"])
+        markets = [m for m in books[0].get("markets") or [] if m.get("key") == key]
+        if len(markets) != 1:
+            return "REJECTED_MARKET_COUNT"
+        if _time(markets[0].get("last_update")) > snapshot:
+            return "REJECTED_MARKET_UPDATED_AFTER_SNAPSHOT"
+        outcomes = markets[0].get("outcomes") or []
+        if len(outcomes) != 2:
+            return "REJECTED_OUTCOME_COUNT"
+        return "REJECTED_OUTCOMES_OR_PRICES"
+    except Exception:  # a diagnosis must never break the capture
+        return "REJECTED_UNREADABLE"
+
+
 def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.environ.get, max_events=20):
     """Fetch and store certified closes for due events. Returns a sanitized report; never raises on one event."""
     sports = enabled_sports(setting) if sports is None else tuple(sports)
@@ -372,7 +419,9 @@ def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.
             response.raise_for_status()
             payload = response.json()
         except Exception as exc:  # budget limits and provider errors end this event only
-            report["errors"].append(f"{event['event_id']}:{type(exc).__name__}:{str(exc)[:80]}")
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            code = f":HTTP_{int(status)}" if isinstance(status, int) else ""
+            report["errors"].append(f"{event['event_id']}:{type(exc).__name__}{code}:{str(exc)[:80]}")
             if type(exc).__name__ == "BudgetLimit":
                 break
             continue
@@ -386,7 +435,9 @@ def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.
                 evidence.insert_certified_close(path, row)
                 report["stored"] += 1
             except (ValueError, evidence.EvidenceConflict) as exc:
-                report["errors"].append(f"{row['close_id']}:{str(exc)[:80]}")
+                # The reason code says which check refused the row (2026-11-15: 134 rows were refused
+                # in one night and the log held only their ids).
+                report["errors"].append(f"{row['close_id']}:{rejection_reason(event, row, exc)}:{str(exc)[:80]}")
         actual = _charged(response)
         if actual is not None and actual > credits:
             # The provider charged more than planned: record the difference, then stop.
@@ -419,7 +470,11 @@ def summary(report, sport=None, budget=None):
         elif "COST_MISMATCH" in parts:
             kind = "COST_MISMATCH"
         elif named:
-            kind = named[0]
+            status = [p for p in parts if p.startswith("HTTP_") and p[5:].isdigit()]
+            kind = named[0] + (":" + status[0][5:] if status else "")
+        elif parts[0] == "certified-close" and len(parts) > 2 and parts[2].startswith("REJECTED_") \
+                and parts[2].replace("_", "").isalnum():
+            kind = parts[2]                                        # which check refused the row, not its id
         else:
             kind = parts[1] if len(parts) > 1 and parts[1].replace("_", "").isalnum() else "ERROR"
         kinds[kind] = kinds.get(kind, 0) + 1
