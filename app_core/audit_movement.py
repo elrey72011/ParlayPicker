@@ -38,7 +38,9 @@ _SOURCE = {"pinnacle_first_line": "pinnacle_first_line", "pinnacle_current_line"
 _TOKENS = {"state": "st", "saint": "st"}
 # A spelled-out "North Carolina Wilmington" against the provider's "UNC Wilmington" is deliberately
 # left unmatched (an existing test pins it): a blank is safer than an alias table that can go stale.
-_ALIASES = {"california baptist": "cal baptist"}
+# "Los Angeles Salle" is what the audit's name mapper makes of "La Salle" (2026-11-15). The mapper is a
+# reviewed component of the NCAAF model's compatibility binding, so the name is put right here instead.
+_ALIASES = {"california baptist": "cal baptist", "los angeles salle": "la salle"}
 
 
 def _words(name):

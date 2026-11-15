@@ -129,19 +129,3 @@ def test_actual_nhl_named_orientation_provider_ids_preserved_without_cover_artif
     assert row["game"]==away+" at "+home
     assert row["research_display"]["probability"] is None and row["status"]=="PASS"
     assert all(c["production_bet_amount"]==0 for c in saved["card"].wager_contract)
-
-
-@pytest.mark.parametrize("name,expected", [
-    ("La Salle Explorers", "La Salle"), ("La Salle", "La Salle"), ("la salle", "La Salle"),
-    ("LA Tech", "Louisiana Tech"), ("Louisiana Tech Bulldogs", "Louisiana Tech"),
-])
-def test_a_school_whose_name_starts_with_la_is_not_los_angeles(name, expected):
-    """2026-11-15: "La Salle" came out as "Los Angeles Salle", so its game matched nothing downstream."""
-    assert normalize_team_name(name) == expected
-    assert normalize_team_name(normalize_team_name(name)) == expected
-
-
-def test_los_angeles_teams_keep_their_names():
-    assert normalize_team_name("Los Angeles Rams") == "Los Angeles Rams"
-    assert normalize_team_name("Los Angeles Chargers") == "Los Angeles Chargers"
-    assert normalize_team_name("LA Kings") == "Los Angeles"

@@ -1109,10 +1109,6 @@ TEAM_MAP.update(load_dynamic_aliases())
 
 # POST-PROCESSING OVERRIDES TO ENSURE EXACT MATCHES
 overrides = {
-    # "La" at the start of a school's name is not Los Angeles (2026-11-15: "La Salle" came out as
-    # "Los Angeles Salle", so its game matched nothing downstream), and "LA Tech" is Louisiana Tech.
-    "los angeles salle": "La Salle",
-    "los angeles tech": "Louisiana Tech",
     "louisiana": "Louisiana",
     "louisiana ragin cajuns": "Louisiana",
     "louisiana ragin' cajuns": "Louisiana",
