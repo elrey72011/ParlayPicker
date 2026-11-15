@@ -4383,6 +4383,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool.loc[pool["best_available_probability_pair_normalized"], "best_available_probability_source"] = "calibrated_probability_pair_normalized"
     pool.loc[pool["best_available_probability"].isna(), "best_available_probability_source"] = "unavailable"
     pool["best_available_selection_policy"] = "probability-first-v1"
+    # The return at the row's own price for the probability the selection actually uses (2026-11-15).
+    # ``expected_value`` is deliberately left on the un-rebalanced production probability, which is what
+    # the wager checks read; on a pair whose two sides sum above one it reads higher than this does
+    # (Quinnipiac -4.5: +12.6% there, about zero here). Audit only: nothing reads this column back.
+    _price = _numeric_series(pool, "odds_american")
+    _decimal = (1 + _price / 100).where(_price > 0, 1 + 100 / _price.abs()).where(_price.abs() >= 100)
+    pool["best_available_expected_value"] = (pool["best_available_probability"] * _decimal - 1).round(4)
 
     # 2. Assign calibrated probability with a default
     pool["calibrated_probability"] = _numeric_series(pool, "calibrated_probability", 0.5)
@@ -5055,7 +5062,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "expected_value", "edge", "tier_score", "final_family_score",
         "_market_family", "best_available_rank", "best_available_family_rank",
         "best_available_finalist", "best_available_final_rank",
-        "best_available_selected", "best_available_score",
+        "best_available_selected", "best_available_score", "best_available_expected_value",
         "best_available_runner_up_pick", "best_available_runner_up_market_type",
         "best_available_runner_up_score", "best_available_score_gap",
         "second_best_pick", "second_best_probability",

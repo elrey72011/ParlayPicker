@@ -715,3 +715,29 @@ def test_the_board_lists_the_moneyline_after_the_best_and_second_best_picks():
     from pathlib import Path
     text = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(encoding="utf-8")
     assert '"Best Pick", "2nd Best Pick", "2nd Best Prob", "Moneyline Pick", "Moneyline Prob", "Gemini Pick"' in text
+
+
+def test_the_audit_gives_the_return_at_the_rebalanced_probability(monkeypatch):
+    """2026-11-15: on a pair whose two calibrated sides sum above one, ``expected_value`` (the
+    un-rebalanced production figure the wager checks read) is higher than the return at the
+    probability the selection uses. The audit now shows that second figure beside it."""
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+    analysis = pd.DataFrame([
+        _candidate("total_over", probability=0.64, ev=0.10),
+        _candidate("total_under", probability=0.56, ev=0.02),          # the pair sums to 1.20
+    ])
+    diagnostics: dict = {}
+    build_best_picks_df(analysis, diagnostics_out=diagnostics)
+    audit = diagnostics["candidate_audit_df"].set_index("market_type")
+    decimal = 1 + 100 / 110
+    for side in ("total_over", "total_under"):
+        row = audit.loc[side]
+        assert bool(row["best_available_probability_pair_normalized"])
+        assert float(row["best_available_expected_value"]) == pytest.approx(
+            round(float(row["best_available_probability"]) * decimal - 1, 4))
+    assert float(audit.loc["total_over", "best_available_probability"]) == pytest.approx(0.64 / 1.20)
+    assert float(audit.loc["total_over", "best_available_expected_value"]) == pytest.approx(0.0182, abs=1e-4)
+    # The production figure is untouched: it is still what came in.
+    assert float(audit.loc["total_over", "expected_value"]) == pytest.approx(0.10)
+    assert float(audit.loc["total_under", "expected_value"]) == pytest.approx(0.02)
