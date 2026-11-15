@@ -483,3 +483,74 @@ def test_pinnacles_close_is_stored_as_a_certified_close_beside_the_bets(store, c
     again = pc.record(store, now=now, key="SYNTHETIC-KEY", request_get=provider, sports=("NBA",),
                       setting={pc.PINNACLE_ENV: "true", "PARLAYPICKER_CERTIFIED_CLOSE_SPORTS": "NBA"}.get)
     assert again["events"] == 0 and len(provider.calls) == 1            # neither close is bought twice
+
+
+def _refused(**changes):
+    import json
+    response = {"timestamp": "2030-01-01T23:55:00Z", "next_timestamp": "2030-01-02T00:00:00Z",
+                "data": {"id": "p1", "home_team": "H", "away_team": "A", "commence_time": "2030-01-02T00:00:00Z",
+                         "bookmakers": [{"key": "novig", "markets": [{"key": "spreads", "last_update": "2030-01-01T23:54:00Z",
+                                                                      "outcomes": [{}, {}]}]}]}}
+    for path, value in changes.items():
+        target = response
+        *parents, leaf = path.split("__")
+        for part in parents:
+            target = target[part]
+        target[leaf] = value
+    event = {"event_id": "e1", "sport": "NCAAB", "provider_event_id": "p1", "home_team": "H", "away_team": "A",
+             "scheduled_start": "2030-01-02T00:00:00+00:00"}
+    row = {"close_id": "certified-close:" + "a" * 32, "sportsbook": "novig", "market_family": "SPREAD",
+           "raw_source": json.dumps({"retrieved_at": "2030-01-02T01:00:00+00:00", "response": response})}
+    return event, row
+
+
+def test_a_refused_close_row_is_logged_with_the_check_that_refused_it():
+    """2026-11-15: 134 close rows were refused in one night and the log held only their ids."""
+    reason = lambda **changes: pc.rejection_reason(*_refused(**changes))  # noqa: E731
+    assert reason(data__commence_time="2030-01-02T00:05:00Z") == "REJECTED_START_LATER_UNDER_15_MIN"
+    assert reason(data__commence_time="2030-01-01T23:30:00Z") == "REJECTED_START_EARLIER_UNDER_60_MIN"
+    assert reason(data__commence_time="2030-01-02T02:00:00Z") == "REJECTED_START_LATER_OVER_60_MIN"
+    assert reason(timestamp="2030-01-02T00:00:00Z") == "REJECTED_SNAPSHOT_NOT_BEFORE_START"
+    assert reason(next_timestamp="2030-01-01T23:58:00Z") == "REJECTED_LATER_PREGAME_SNAPSHOT"
+    assert reason(data__id="other") == "REJECTED_EVENT_ID"
+    assert reason(data__home_team="Home U") == "REJECTED_TEAM_NAMES"
+    assert reason(data__bookmakers=[]) == "REJECTED_BOOK_COUNT"
+    assert reason() == "REJECTED_OUTCOMES_OR_PRICES"                      # every response-level check passes
+    event, row = _refused()
+    assert pc.rejection_reason(event, row, pe.EvidenceConflict("x")) == "REJECTED_CONFLICT"
+    assert pc.rejection_reason(event, dict(row, raw_source="not json")) == "REJECTED_UNREADABLE"
+    assert pc.rejection_reason({}, {}) == "REJECTED_UNREADABLE"
+
+
+def test_the_summary_counts_refusals_by_reason_and_provider_errors_by_status():
+    close = "certified-close:" + "b" * 32
+    out = pc.summary({"errors": [
+        f"{close}:REJECTED_START_LATER_UNDER_15_MIN:certified close is not replayable",
+        "certified-close:" + "c" * 32 + ":REJECTED_START_LATER_UNDER_15_MIN:certified close is not replayable",
+        "NCAAB:evt:HTTPError:HTTP_422:422 Client Error for url: https://api.example/x?apiKey=SECRET",
+        "NCAAB:evt2:HTTPError:500 Server Error"]})
+    assert out["errors"] == {"REJECTED_START_LATER_UNDER_15_MIN": 2, "HTTPError:422": 1, "HTTPError": 1}
+    import json
+    assert "SECRET" not in json.dumps(out) and "api.example" not in json.dumps(out)
+
+
+def test_record_logs_the_reason_and_the_http_status(monkeypatch):
+    class Refused(Exception):
+        pass
+
+    class Response:
+        status_code = 422
+
+    class HTTPError(Exception):
+        response = Response()
+    event = {"event_id": "NCAAB:e1", "sport": "NCAAB", "provider_event_id": "p1", "home_team": "H", "away_team": "A",
+             "scheduled_start": "2030-01-02T00:00:00+00:00"}
+    quote = {"event_id": "NCAAB:e1", "sportsbook": "novig", "market_family": "SPREAD", "selection": "H"}
+    monkeypatch.setattr(pc, "due_split", lambda *a, **k: ([(event, [quote])], []))
+    monkeypatch.setattr(pc, "_requested_scopes", lambda budget, now: None)
+
+    def get(url, params, timeout):
+        raise HTTPError("422 Client Error for url: https://api.example/x?apiKey=SECRET")
+    report = pc.record("db", now=None, key="k", request_get=get, sports=("NCAAB",))
+    assert report["errors"] and report["errors"][0].startswith("NCAAB:e1:HTTPError:HTTP_422:")
+    assert pc.summary(report)["errors"] == {"HTTPError:422": 1}
