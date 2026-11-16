@@ -297,6 +297,74 @@ def _render_pinnacle_value(candidates):
                    "forward shadow before it can move any pick.")
 
 
+THEOVER_MODEL_COLUMNS = ["Sport", "Game", "Pick", "TheOver's line", "Odds", "Best price", "Best price book",
+                         "Model hit rate", "Also the app's pick"]
+THEOVER_MODEL_CAPTION = (
+    "TheOver's totals pick for each game where it lists the recent hit rate of the model behind it, at the app's "
+    "current line and price. Since 16 November 2026 the app blends this pick into its win estimate with the market, "
+    "Kalshi and its own model (the listed hit rate, counted as at most 70%), so it is the app's pick in most of "
+    "these games. Taken before the start over nine nights (7 to 15 November 2026) these went 147-92, ahead on "
+    "eight of the nine, while its totals picks with no hit rate listed went 113-119. Nine nights is not proof: the "
+    "record from here decides whether it stays. It cannot fund a stake: every wager still needs the market "
+    "authority. It needs the TheOver totals upload.")
+
+
+def theover_model_board(candidates):
+    """TheOver's totals pick for each game where it lists its model's hit rate (owner 2026-11-16).
+
+    These are the picks the blend uses as TheOver's input (``app_core.theover_model_totals``). From
+    the saved candidates: a total, on the side TheOver picked (``theover_pick_agrees`` 1), with
+    ``theover_model_hit_rate`` present, still a current pre-game candidate. One row per game, in
+    start order, at the app's own line and price with the best price among the stake books beside
+    it. The list itself reads the candidates and changes nothing.
+    """
+    needed = {"market_type", "theover_pick_agrees", "theover_model_hit_rate"}
+    if candidates is None or getattr(candidates, "empty", True) or not needed <= set(candidates.columns):
+        return pd.DataFrame(columns=THEOVER_MODEL_COLUMNS)
+    wanted = ["market_type", "theover_pick_agrees", "theover_model_hit_rate", "theover_pick_line", "candidate_context",
+              "pregame_quote_valid", "matchup_id", "league", "away_team", "home_team", "best_pick", "odds_american",
+              "best_line_price", "best_line_price_book", "best_available_selected", "game_start_utc"]
+    rows = []
+    for row in candidates[[c for c in wanted if c in candidates.columns]].to_dict("records"):
+        if str(row.get("market_type") or "").lower() not in {"total_over", "total_under"}:
+            continue
+        context = str(row.get("candidate_context") or "").upper()
+        if context not in {"", "NAN", "CURRENT_PREGAME"} or str(row.get("pregame_quote_valid", True)).lower() == "false":
+            continue
+        picked = pd.to_numeric(row.get("theover_pick_agrees"), errors="coerce")
+        hit = pd.to_numeric(row.get("theover_model_hit_rate"), errors="coerce")
+        if picked != 1 or pd.isna(hit) or not 0 < hit < 1:
+            continue
+        game = f"{_text(row, 'away_team', default='?')} at {_text(row, 'home_team', default='?')}"
+        number = lambda key: pd.to_numeric(row.get(key), errors="coerce")
+        rows.append({"key": _text(row, "matchup_id", default=game), "start": _text(row, "game_start_utc", default=""),
+                     "Sport": _text(row, "league", default=""), "Game": game, "Pick": _text(row, "best_pick", default=""),
+                     "TheOver's line": number("theover_pick_line"), "Odds": number("odds_american"),
+                     "Best price": number("best_line_price"), "Best price book": _text(row, "best_line_price_book", default=""),
+                     "Model hit rate": float(hit),
+                     "Also the app's pick": "Yes" if str(row.get("best_available_selected")).lower() == "true" else ""})
+    if not rows:
+        return pd.DataFrame(columns=THEOVER_MODEL_COLUMNS)
+    frame = pd.DataFrame(rows).sort_values(["start", "Game"], kind="mergesort")
+    return frame.drop_duplicates("key")[THEOVER_MODEL_COLUMNS].reset_index(drop=True)
+
+
+def _render_theover_model(candidates):
+    board = theover_model_board(candidates)
+    with st.expander(f"TheOver model totals · {len(board)} pick(s)", expanded=False):
+        if board.empty:
+            st.info("No TheOver totals pick with a listed model hit rate in this analysis. They come from the "
+                    "TheOver totals upload under Settings & research.")
+        else:
+            shown = board.copy()
+            shown["Model hit rate"] = shown["Model hit rate"].map(lambda v: f"{v:.0%}")
+            number = st.column_config.NumberColumn
+            st.dataframe(shown, hide_index=True, width="stretch",
+                         column_config={"Odds": number(format="%+.0f"), "Best price": number(format="%+.0f"),
+                                        "TheOver's line": number(format="%.1f")})
+        st.caption(THEOVER_MODEL_CAPTION)
+
+
 def _render_game_board(board, candidates, family):
     from app_core.per_game_boards import per_game_board
     from app_core.coverage_presentation import CoverageBindingConflict
@@ -404,6 +472,7 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.D
                 st.caption("Best over or under for each game, selected from the full ranked candidate audit.")
                 _render_game_board(board, candidates, "totals")
             _render_pinnacle_value(candidates)
+            _render_theover_model(candidates)
             if not approved.empty:
                 st.download_button("Download approved game wagers", approved.to_csv(index=False),
                                    "approved-game-wagers.csv", "text/csv", key="daily_approved_export")
