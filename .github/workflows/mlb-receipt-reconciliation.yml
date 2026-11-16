@@ -30,8 +30,16 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
+      # Scheduled runs do no work outside the MLB season (owner decision 2026-11-15): each one
+      # restored the whole receipt store for about 25 minutes with no game to capture or settle.
+      # The schedule stays, so the work resumes on its own in spring. Manual runs always do the
+      # work, and a gate that cannot be read counts as in season so capture is never lost to it.
+      - name: MLB season window
+        id: season
+        run: echo "active=$(python scripts/mlb_season_window.py || echo true)" >> "$GITHUB_OUTPUT"
       - name: Install runtime dependencies
         id: dependencies
+        if: github.event_name != 'schedule' || steps.season.outputs.active == 'true'
         run: python -m pip install -r requirements.txt
       - name: Classify setup or dependency failure
         id: classify_prerequisite
@@ -46,6 +54,7 @@ jobs:
           echo "::error title=$reason::$reason"
       - name: Restore, capture live receipts, reconcile, verify backup, and audit
         id: reconcile
+        if: github.event_name != 'schedule' || steps.season.outputs.active == 'true'
         run: |
           export PARLAYPICKER_EVIDENCE_DIR="$RUNNER_TEMP/mlb-receipt-evidence"
           if python -u scripts/capture_mlb_pregame_receipts.py reconcile-remote --max-feeds 100 --output "$RUNNER_TEMP/mlb-receipt-store-audit.json" --capture-live --max-capture-feeds 20; then
