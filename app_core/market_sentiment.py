@@ -10,6 +10,12 @@ capture, so more nights answer it instead of those six.
 The lean is read ``CUTOFF_MINUTES`` before the start, while a bet can still be placed. It READS
 results. Nothing reads it back: no pick, plan or stake depends on it, and it is outside the
 hashed prediction functions.
+
+``direction_results`` is the base rate beside it (2026-11-16): how each side finished at the retail
+books' main line at the same cutoff, Under against Over, away against home, underdog against
+favourite. The same six nights of exports had Unders at 246-177 (college basketball 135-88), one
+result among some 45 looks at those nights, so it proves nothing by itself; this counts every
+stored game so the nights that follow can.
 """
 from __future__ import annotations
 
@@ -115,17 +121,9 @@ def read(event, quotes, family, *, lean_book=EXCHANGE, against=RETAIL, cutoff_mi
                 min_gap=min_gap)
 
 
-def results_by_venue(path, sport, family, *, now, nights=14, lean_books=(EXCHANGE, SHARP), against=RETAIL):
-    """One record per lean book: per slate night, how the side it rated higher than ``against`` finished.
-
-    For every started game with a verified final, the side from ``lean``, graded at its own line.
-    Each graded side is counted twice: paid at a flat -110 (a direction test) and paid at the best
-    price an ``against`` book offered for it in that capture (what following the lean at a retail
-    book would have returned). The other side is the mirror at -110. The store is read once and
-    each game's quotes are paired once, whatever the number of lean books.
-    """
+def _scope(path, sport, family, now, nights):
+    """``(started games by id, newest final by game id, quotes by game id)`` for the last ``nights`` days."""
     from app_core import prospective_research_models as research
-    from app_core.price_edge_screen import _mean_se
     events, quotes, scores = research._read_scope(path, sport, family)
     start = now - timedelta(days=nights)
     started = {e["event_id"]: e for e in events.values() if start <= pm._t(e["scheduled_start"]) < now}
@@ -135,7 +133,20 @@ def results_by_venue(path, sport, family, *, now, nights=14, lean_books=(EXCHANG
         if held is None or (score["grading_version"], score["available_at"], score["result_id"]) > \
                 (held["grading_version"], held["available_at"], held["result_id"]):
             final[score["event_id"]] = score
-    grouped = pm.by_event(pm.slim_sources([q for q in quotes if q["event_id"] in started]))
+    return started, final, pm.by_event(pm.slim_sources([q for q in quotes if q["event_id"] in started]))
+
+
+def results_by_venue(path, sport, family, *, now, nights=14, lean_books=(EXCHANGE, SHARP), against=RETAIL):
+    """One record per lean book: per slate night, how the side it rated higher than ``against`` finished.
+
+    For every started game with a verified final, the side from ``lean``, graded at its own line.
+    Each graded side is counted twice: paid at a flat -110 (a direction test) and paid at the best
+    price an ``against`` book offered for it in that capture (what following the lean at a retail
+    book would have returned). The other side is the mirror at -110. The store is read once and
+    each game's quotes are paired once, whatever the number of lean books.
+    """
+    from app_core.price_edge_screen import _mean_se
+    started, final, grouped = _scope(path, sport, family, now, nights)
     by_night = {book: {} for book in lean_books}
     for event_id, event in started.items():
         limit = pm._t(event["scheduled_start"]) - timedelta(minutes=CUTOFF_MINUTES)
@@ -185,3 +196,92 @@ def results_by_venue(path, sport, family, *, now, nights=14, lean_books=(EXCHANG
 def results(path, sport, family, *, now, nights=14, lean_book=EXCHANGE, against=RETAIL):
     """``results_by_venue`` for one lean book."""
     return results_by_venue(path, sport, family, now=now, nights=nights, lean_books=(lean_book,), against=against)[0]
+
+
+def main_line(fairs, books=RETAIL):
+    """The line most of ``books`` quote both sides at, in the newest capture any of them is in; else None.
+
+    ``fairs`` is ``book_fairs``' result. Ties go to the line priced nearest even, then the lower
+    one. Returns ``(captured, home_line, best)`` with ``best`` the best decimal price for each
+    selection among those books at that line.
+    """
+    for captured in sorted(fairs, reverse=True):
+        held = {}
+        for book in books:
+            for line, pair in fairs[captured].get(book, {}).items():
+                held.setdefault(line, []).append(pair)
+        if not held:
+            continue
+        line = min(held, key=lambda at: (-len(held[at]), abs(sum(p for p, _ in held[at]) / len(held[at]) - 0.5), at))
+        best = {}
+        for _, sides in held[line]:
+            for selection, quote in sides.items():
+                best[selection] = max(best.get(selection, 0.0), quote["decimal_odds"])
+        return captured, line, best
+    return None
+
+
+def direction_results(path, sport, family, *, now, nights=14, books=RETAIL):
+    """Per slate night, how each side finished at the ``books``' main line ``CUTOFF_MINUTES`` before the start.
+
+    A base rate, not a signal. One record per split: Under against Over for a total; away against
+    home and underdog against favourite otherwise (a pick'em has no favourite and is left out of
+    that split). Wins and losses are the first-named side's. Each side is also paid at the best
+    price one of ``books`` offered for it at that line.
+    """
+    from app_core.price_edge_screen import _mean_se
+    started, final, grouped = _scope(path, sport, family, now, nights)
+    splits = (("Under", "Over"),) if family == "TOTAL" else (("Away", "Home"), ("Underdog", "Favourite"))
+    by_night = {split: {} for split in splits}
+
+    def blank():
+        return {"games": 0, "no_quote": 0, "ungraded": 0, "no_side": 0, "WIN": 0, "LOSS": 0, "PUSH": 0,
+                "first": [], "second": []}
+
+    def paid(outcome, decimal):
+        return decimal - 1 if outcome == "WIN" else (-1.0 if outcome == "LOSS" else 0.0)
+    for event_id, event in started.items():
+        night = pm.slate_night(event)
+        rows = [by_night[split].setdefault(night, blank()) for split in splits]
+        for row in rows:
+            row["games"] += 1
+        limit = pm._t(event["scheduled_start"]) - timedelta(minutes=CUTOFF_MINUTES)
+        found = main_line(book_fairs(event, grouped.get(event_id, []), family, limit), books)
+        score = final.get(event_id)
+        if found is None or score is None:
+            for row in rows:
+                row["no_quote" if found is None else "ungraded"] += 1
+            continue
+        _, home_line, best = found
+        canonical = pm._canonical(event, family)
+        other = next(selection for selection in best if selection != canonical)
+
+        def grade(selection):
+            line = home_line if (family == "TOTAL" or selection == canonical) else -home_line
+            return evidence.score_settlement_outcome(sport, family, selection, event["home_team"], event["away_team"],
+                                                     int(score["home_score"]), int(score["away_score"]), float(line))
+        for split, row in zip(splits, rows):
+            if split[0] == "Underdog":
+                if home_line == 0:
+                    row["no_side"] += 1
+                    continue
+                first, second = (canonical, other) if home_line > 0 else (other, canonical)
+            else:
+                first, second = other, canonical            # Under, or the away side
+            outcome = grade(first)
+            row[outcome] += 1
+            row["first"].append(paid(outcome, best[first]))
+            row["second"].append(paid(grade(second), best[second]))
+
+    def summary(rows):
+        first, first_se = _mean_se([v for r in rows for v in r["first"]])
+        second, second_se = _mean_se([v for r in rows for v in r["second"]])
+        return {"games_started": sum(r["games"] for r in rows), "no_quote": sum(r["no_quote"] for r in rows),
+                "ungraded": sum(r["ungraded"] for r in rows), "no_side": sum(r["no_side"] for r in rows),
+                "wins": sum(r["WIN"] for r in rows), "losses": sum(r["LOSS"] for r in rows),
+                "pushes": sum(r["PUSH"] for r in rows), "roi_first": first, "roi_first_se": first_se,
+                "roi_second": second, "roi_second_se": second_se}
+    return [{"sport": sport, "market_family": family, "first": split[0], "second": split[1], "books": list(books),
+             "cutoff_minutes": CUTOFF_MINUTES,
+             "nights": [dict(summary([row]), night=night.isoformat()) for night, row in sorted(by_night[split].items())],
+             "total": summary(list(by_night[split].values()))} for split in splits]

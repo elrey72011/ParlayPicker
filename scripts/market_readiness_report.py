@@ -106,6 +106,7 @@ def report(root: Path, *, client=None, folder=None, cache_dir=None, with_sources
                 nightly_record=timed('nightly_record', nightly_record, store, extra=EXTRA_REPLAY_SCOPES),
                 movement_results=timed('movement_results', movement_results, store, extra=EXTRA_REPLAY_SCOPES),
                 sentiment_results=timed('sentiment_results', sentiment_results, store, extra=EXTRA_REPLAY_SCOPES),
+                direction_results=timed('direction_results', direction_results, store, extra=EXTRA_REPLAY_SCOPES),
                 pace_recommendation=timed('pace_recommendation', pace_recommendation, store, extra=EXTRA_REPLAY_SCOPES))
 
 
@@ -679,6 +680,67 @@ def _sentiment_results_markdown(rows):
     return lines
 
 
+DIRECTION_RESULTS_CAPTION = ('Direction record (2026-11-16): per ET slate night, how each side finished at the main '
+                             'line of DraftKings, FanDuel and BetMGM 60 minutes before the start: Under against Over, '
+                             'away against home, underdog against favourite. Wins - losses are the first-named '
+                             'side\'s (pushes after a slash). ROI is each side paid at the best price one of the three '
+                             'offered at that line. A base rate, not a signal: this READS results. Six nights of app '
+                             'exports had Unders at 246-177 (college basketball 135-88), one result among some 45 '
+                             'looks at those nights, so a count that size is expected by chance; the nights after '
+                             '15 November are the test.')
+
+
+def direction_results(path, now=None, extra=None):
+    """Per ET slate night, how each side finished at the retail main line (market_sentiment.direction_results)."""
+    from datetime import datetime, timezone
+    from app_core import market_sentiment, pinnacle_model
+    if not Path(path).is_file():
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for sport, families in {**pinnacle_model.FAMILIES, **(extra or {})}.items():
+        for family in families:
+            try:
+                out.extend(market_sentiment.direction_results(path, sport, family, now=now, nights=SENTIMENT_RESULT_NIGHTS))
+            except Exception as exc:  # report, never guess
+                out.append(dict(sport=sport, market_family=family, evaluation_error=f'{type(exc).__name__}: {exc}'[:300]))
+    return out
+
+
+def _direction_results_markdown(rows):
+    rows = [r for r in rows if r.get('evaluation_error') or (r.get('total') or {}).get('games_started')]
+    if not rows:
+        return []
+
+    def record(found):
+        text = f"{found['wins']}-{found['losses']}"
+        return text + (f" /{found['pushes']}" if found['pushes'] else '')
+
+    def roi(value, se):
+        if value is None:
+            return ''
+        return f"{value:+.1%}" + ('' if se is None else f" ({se:.1%})")
+    nights = sorted({n['night'] for r in rows for n in r.get('nights', [])})[-7:]
+    lines = ['', DIRECTION_RESULTS_CAPTION, '',
+             '| market | split | ' + ' | '.join(nights) + f' | last {SENTIMENT_RESULT_NIGHTS} days | win rate | '
+             'ROI of the first side (SE) | ROI of the second side (SE) | no quote / games |',
+             '|---|---|' + '---|' * (len(nights) + 5)]
+    for row in rows:
+        name = f"{row['sport']} {row['market_family']}"
+        if 'evaluation_error' in row:
+            lines.append(f"| {name} |  | {row['evaluation_error']} |" + ' |' * (len(nights) + 4))
+            continue
+        by_night = {n['night']: n for n in row['nights']}
+        total = row['total']
+        decided = total['wins'] + total['losses']
+        rate = '' if not decided else f"{total['wins'] / decided:.0%}"
+        lines.append(f"| {name} | {row['first']}-{row['second']} | "
+                     + ' | '.join(record(by_night[n]) if n in by_night else '' for n in nights)
+                     + f" | {record(total)} | {rate} | {roi(total['roi_first'], total['roi_first_se'])} | "
+                     f"{roi(total['roi_second'], total['roi_second_se'])} | {total['no_quote']} / {total['games_started']} |")
+    return lines
+
+
 GO_BETS_PER_NIGHT = 2        # the go/no-go line for a plan (roadmap M2)
 RECORD_NIGHTS = 7
 
@@ -1006,6 +1068,7 @@ def markdown(result):
     lines += _results_listed_markdown(result.get('replay_results') or [])
     lines += _movement_results_markdown(result.get('movement_results') or [])
     lines += _sentiment_results_markdown(result.get('sentiment_results') or [])
+    lines += _direction_results_markdown(result.get('direction_results') or [])
     lines += _movement_markdown(result.get('line_movement') or [])
     lines += _pipeline_markdown(result)
     if result.get('plan_progress'):  # only once a frozen bound plan has a window running

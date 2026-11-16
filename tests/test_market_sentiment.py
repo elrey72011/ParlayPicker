@@ -223,3 +223,107 @@ def test_both_venues_come_from_one_read_of_the_store(monkeypatch):
     assert (exchange["lean_book"], exchange["total"]["wins"], exchange["total"]["losses"]) == ("novig", 0, 1)
     assert (sharp["lean_book"], sharp["total"]["wins"], sharp["total"]["losses"]) == ("pinnacle", 1, 0)
     assert ms.results("db", "NCAAB", "SPREAD", now=NOW, lean_book=ms.SHARP) == sharp
+
+
+# ---- the direction record: a base rate beside the sentiment record (2026-11-16) ----
+
+def test_the_retail_main_line_is_the_one_most_books_quote():
+    event, limit = _event("g"), START - timedelta(minutes=60)
+    quotes = (_pair("g", "draftkings", -3.0, 1.91, 1.91, 90) + _pair("g", "fanduel", -3.0, 1.95, 1.87, 90)
+              + _pair("g", "betmgm", -3.5, 2.00, 1.83, 90) + _pair("g", "novig", -4.0, 1.95, 1.95, 90))
+    captured, line, best = ms.main_line(ms.book_fairs(event, quotes, "SPREAD", limit))
+    assert (captured, line) == (START - timedelta(minutes=90), -3.0)
+    assert best == {"H": 1.95, "A": 1.91}                      # the best retail price for each side at that line
+    # One book at each of two lines: the one priced nearest even.
+    apart = _pair("g", "draftkings", -3.0, 1.80, 2.02, 90) + _pair("g", "fanduel", -3.5, 1.91, 1.91, 90)
+    assert ms.main_line(ms.book_fairs(event, apart, "SPREAD", limit))[1] == -3.5
+    # A newer capture with no retail book in it falls back to the one before.
+    older = _pair("g", "betmgm", -2.5, 1.91, 1.91, 300) + _pair("g", "novig", -3.0, 1.91, 1.91, 90)
+    assert ms.main_line(ms.book_fairs(event, older, "SPREAD", limit))[:2] == (START - timedelta(minutes=300), -2.5)
+    assert ms.main_line(ms.book_fairs(event, _pair("g", "novig", -3.0, 1.91, 1.91, 90), "SPREAD", limit)) is None
+    assert ms.main_line({}) is None
+
+
+def test_the_direction_record_counts_each_side_at_the_retail_main_line(monkeypatch):
+    later = START + timedelta(days=1)
+    events = {e["event_id"]: e for e in (_event("fav"), _event("dog"), _event("push"), _event("pickem"),
+                                         _event("no-quote"), _event("ungraded"), _event("next", later))}
+    retail = lambda g, line, **kw: (_pair(g, "draftkings", line, 1.95, 1.87, 90, **kw)
+                                    + _pair(g, "fanduel", line, 1.91, 1.93, 90, **kw))
+    quotes = (retail("fav", -3.0) + retail("dog", -3.0) + retail("push", -4.0) + retail("pickem", 0.0)
+              + retail("ungraded", -3.0) + _pair("no-quote", "novig", -3.0, 1.91, 1.91, 90)
+              + retail("next", 2.5, start=later))
+    scores = [_score("fav", 80, 70), _score("dog", 71, 70), _score("push", 74, 70), _score("pickem", 70, 75),
+              _score("no-quote", 80, 70), _score("next", 70, 71)]
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, scores))
+    away, dog = ms.direction_results("db", "NCAAB", "SPREAD", now=later + timedelta(hours=6))
+    assert (away["first"], away["second"], dog["first"], dog["second"]) == ("Away", "Home", "Underdog", "Favourite")
+    assert (away["books"], away["cutoff_minutes"]) == (list(ms.RETAIL), 60)
+
+    first, second = away["nights"]
+    assert (first["night"], second["night"]) == ("2030-01-01", "2030-01-02")
+    assert (first["games_started"], first["no_quote"], first["ungraded"], first["no_side"]) == (6, 1, 1, 0)
+    # Away covered at +3 after a one-point loss and won the pick'em; it lost when the home side won by ten.
+    assert (first["wins"], first["losses"], first["pushes"]) == (2, 1, 1)
+    assert first["roi_first"] == pytest.approx((-1 + 0.93 + 0 + 0.93) / 4)      # the away side's best price is 1.93
+    assert first["roi_second"] == pytest.approx((0.95 - 1 + 0 - 1) / 4)         # the home side's is 1.95
+    assert (second["wins"], second["losses"], second["roi_first"], second["roi_second"]) == (
+        0, 1, pytest.approx(-1.0), pytest.approx(0.95))
+
+    first, second = dog["nights"]
+    # The pick'em has no favourite, so it is left out of this split.
+    assert (first["games_started"], first["no_side"], first["wins"], first["losses"], first["pushes"]) == (6, 1, 1, 1, 1)
+    assert first["roi_first"] == pytest.approx((-1 + 0.93 + 0) / 3)
+    assert first["roi_second"] == pytest.approx((0.95 - 1 + 0) / 3)
+    # The next night the home side was the underdog at +2.5 and lost by one: the underdog covered.
+    assert (second["wins"], second["losses"], second["roi_first"]) == (1, 0, pytest.approx(0.95))
+    assert (dog["total"]["wins"], dog["total"]["losses"], dog["total"]["pushes"], dog["total"]["games_started"]) == (2, 1, 1, 7)
+
+
+def test_the_direction_record_for_a_total_is_under_against_over(monkeypatch):
+    events = {"low": _event("low"), "high": _event("high"), "exact": _event("exact")}
+    quotes = (_total("low", "betmgm", 150.5, 1.91, 1.95, 90) + _total("high", "betmgm", 150.5, 1.91, 1.95, 90)
+              + _total("exact", "betmgm", 150.0, 1.91, 1.95, 90) + _total("exact", "betmgm", 149.5, 1.91, 1.95, 30))
+    scores = [_score("low", 70, 60), _score("high", 90, 80), _score("exact", 80, 70)]
+    monkeypatch.setattr("app_core.prospective_research_models._read_scope", lambda *a: (events, quotes, scores))
+    out = ms.direction_results("db", "NCAAB", "TOTAL", now=NOW)
+    assert [(r["first"], r["second"]) for r in out] == [("Under", "Over")]
+    total = out[0]["total"]
+    # The line 30 minutes out is never read: 150 an hour before the start is a push on 150 points.
+    assert (total["wins"], total["losses"], total["pushes"], total["games_started"]) == (1, 1, 1, 3)
+    assert total["roi_first"] == pytest.approx((0.95 - 1 + 0) / 3)
+    assert total["roi_second"] == pytest.approx((-1 + 0.91 + 0) / 3)
+
+
+def test_the_report_prints_the_direction_record(tmp_path, monkeypatch):
+    from scripts import market_readiness_report as report
+    night = dict(games_started=5, no_quote=1, ungraded=0, no_side=0, wins=3, losses=1, pushes=0,
+                 roi_first=0.4, roi_first_se=0.5, roi_second=-0.5, roi_second_se=0.45)
+    row = dict(sport="NCAAB", market_family="TOTAL", first="Under", second="Over", books=list(ms.RETAIL),
+               cutoff_minutes=60, nights=[dict(night, night="2030-01-01"), dict(night, night="2030-01-02", pushes=1)],
+               total=dict(night, games_started=10, no_quote=2, wins=6, losses=2, pushes=1))
+    text = "\n".join(report._direction_results_markdown(
+        [row, dict(sport="NBA", market_family="SPREAD", evaluation_error="KeyError: x")]))
+    assert "| NCAAB TOTAL | Under-Over | 3-1 | 3-1 /1 | 6-2 /1 | 75% | +40.0% (50.0%) | -50.0% (45.0%) | 2 / 10 |" in text
+    assert "| NBA SPREAD |  | KeyError: x |" in text
+    assert "A base rate, not a signal" in text and "READS results" in text
+    assert report._direction_results_markdown([dict(row, nights=[], total=dict(night, games_started=0))]) == []
+    store = tmp_path / "s.sqlite3"
+    assert report.direction_results(store) == []                     # no store, no section
+    store.write_bytes(b"")
+    seen = []
+    monkeypatch.setattr(ms, "direction_results", lambda path, sport, family, **k: seen.append(k) or [
+        dict(sport=sport, market_family=family)])
+    assert len(report.direction_results(store, extra={"NHL": ("TOTAL",)})) == 5
+    assert {k["nights"] for k in seen} == {14}
+
+    def boom(*a, **k):
+        raise KeyError("x")
+    monkeypatch.setattr(ms, "direction_results", boom)
+    failed = report.direction_results(store)
+    assert len(failed) == 4 and all(r["evaluation_error"].startswith("KeyError") for r in failed)
+
+
+def test_the_direction_record_is_outside_the_prediction_functions():
+    from app_core import pinnacle_model as pm
+    assert not {"direction_results", "main_line"} & set(pm.PREDICTION_FUNCTIONS)
