@@ -74,7 +74,6 @@ the selection passed the wager-approval checks.
 | `scripts/` | Maintained command-line tools and scheduled workflow entry points |
 | `tests/` | Automated pytest suite used by CI |
 | `data/`, `models/` | Curated datasets, calibration inputs, and model artifacts |
-| `archive/experimental_scripts/` | Historical experiments; not the active application |
 
 Gemini is an optional bounded secondary reviewer. Enabling it does not replace
 quote verification or the deterministic wager checks. See
