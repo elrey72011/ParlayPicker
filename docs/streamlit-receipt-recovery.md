@@ -22,6 +22,11 @@ pregame feeds, verifies a backup before reconciling results, then verifies the
 final backup and publishes its audit. Missing credentials or a failed
 capture/backup cause a classified job failure; they never authorize a wager.
 
+Since 16 November 2026 the scheduled runs do this work only inside the MLB season
+window, 15 March to 15 November (`scripts/mlb_season_window.py`). Outside it a
+scheduled run starts, reads the window and finishes without restoring the store.
+A manual run does the work in any month.
+
 This change keeps the app responsive by deferring receipt collection. New
 interactive MLB rows do not inherit the scheduled runner's receipts; any
 receipt-dependent approval stays blocked until a separately verified binding

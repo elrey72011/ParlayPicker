@@ -17,7 +17,10 @@ concurrency:
 jobs:
   picks:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 120 since 2026-11-15: the build step grew from 3.5 to 55 minutes in nine days as the store
+    # grew (two full Drive listings of 335,000 objects at 8 minutes each, then the replays), and
+    # 3 of the last 10 runs were cut off at the old 60-minute limit, leaving no board for the app.
+    timeout-minutes: 120
     env:
       PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
       PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
