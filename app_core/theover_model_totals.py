@@ -15,6 +15,11 @@ counted as at most ``CAP``; on the other side, one minus that. The blend then we
 the market, Kalshi and the app's own model with the weight it already gives TheOver, so a Kalshi
 price or a model that disagrees pulls the estimate back.
 
+The blend is told where the input came from (``compute_blended_probability``'s ``theover_source``,
+the second value ``blend_input`` returns). For the pick, an NBA total takes the standard weight and
+not the NBA-totals boost: the first live board (16 November 2026) had its NBA totals at 60% to 61%
+under that boost, above every college total, and the pick had gone 9-11 in the NBA.
+
 ``CAP`` is 70% because higher listed rates did no better (80% or more: 30-23). Replayed over the
 nine nights with the blend's own weights the changed prediction went 290-235; the blended estimate
 for TheOver's side averaged 58.5% where those sides won 61.5%.

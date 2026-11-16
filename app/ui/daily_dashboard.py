@@ -307,6 +307,9 @@ THEOVER_MODEL_CAPTION = (
     "eight of the nine, while its totals picks with no hit rate listed went 113-119. Nine nights is not proof: the "
     "record from here decides whether it stays. It cannot fund a stake: every wager still needs the market "
     "authority. It needs the TheOver totals upload.")
+# The words the pipeline puts in place of a pick whose line it rejected (its final_pick_valid check).
+LINE_NOT_VERIFIED = ("unresolved", "missing line", "no line")
+LINE_NOT_VERIFIED_KEY = "line_not_verified"
 
 
 def theover_model_board(candidates):
@@ -317,6 +320,9 @@ def theover_model_board(candidates):
     ``theover_model_hit_rate`` present, still a current pre-game candidate. One row per game, in
     start order, at the app's own line and price with the best price among the stake books beside
     it. The list itself reads the candidates and changes nothing.
+
+    A game whose line the app rejected is left out: its pick reads "Total line unresolved" and is
+    not a pick (first audit, 2026-11-16). ``attrs[LINE_NOT_VERIFIED_KEY]`` counts the games left out.
     """
     needed = {"market_type", "theover_pick_agrees", "theover_model_hit_rate"}
     if candidates is None or getattr(candidates, "empty", True) or not needed <= set(candidates.columns):
@@ -324,7 +330,7 @@ def theover_model_board(candidates):
     wanted = ["market_type", "theover_pick_agrees", "theover_model_hit_rate", "theover_pick_line", "candidate_context",
               "pregame_quote_valid", "matchup_id", "league", "away_team", "home_team", "best_pick", "odds_american",
               "best_line_price", "best_line_price_book", "best_available_selected", "game_start_utc"]
-    rows = []
+    rows, left_out = [], set()
     for row in candidates[[c for c in wanted if c in candidates.columns]].to_dict("records"):
         if str(row.get("market_type") or "").lower() not in {"total_over", "total_under"}:
             continue
@@ -336,32 +342,43 @@ def theover_model_board(candidates):
         if picked != 1 or pd.isna(hit) or not 0 < hit < 1:
             continue
         game = f"{_text(row, 'away_team', default='?')} at {_text(row, 'home_team', default='?')}"
+        key, pick = _text(row, "matchup_id", default=game), _text(row, "best_pick", default="")
+        if any(words in pick.lower() for words in LINE_NOT_VERIFIED):
+            left_out.add(key)
+            continue
         number = lambda key: pd.to_numeric(row.get(key), errors="coerce")
-        rows.append({"key": _text(row, "matchup_id", default=game), "start": _text(row, "game_start_utc", default=""),
-                     "Sport": _text(row, "league", default=""), "Game": game, "Pick": _text(row, "best_pick", default=""),
+        rows.append({"key": key, "start": _text(row, "game_start_utc", default=""),
+                     "Sport": _text(row, "league", default=""), "Game": game, "Pick": pick,
                      "TheOver's line": number("theover_pick_line"), "Odds": number("odds_american"),
                      "Best price": number("best_line_price"), "Best price book": _text(row, "best_line_price_book", default=""),
                      "Model hit rate": float(hit),
                      "Also the app's pick": "Yes" if str(row.get("best_available_selected")).lower() == "true" else ""})
     if not rows:
-        return pd.DataFrame(columns=THEOVER_MODEL_COLUMNS)
-    frame = pd.DataFrame(rows).sort_values(["start", "Game"], kind="mergesort")
-    return frame.drop_duplicates("key")[THEOVER_MODEL_COLUMNS].reset_index(drop=True)
+        board = pd.DataFrame(columns=THEOVER_MODEL_COLUMNS)
+    else:
+        frame = pd.DataFrame(rows).sort_values(["start", "Game"], kind="mergesort")
+        board = frame.drop_duplicates("key")[THEOVER_MODEL_COLUMNS].reset_index(drop=True)
+        left_out -= set(frame["key"])                      # a game listed from another row of its own is not left out
+    board.attrs[LINE_NOT_VERIFIED_KEY] = len(left_out)
+    return board
 
 
 def _render_theover_model(candidates):
     board = theover_model_board(candidates)
+    left_out = int(board.attrs.get(LINE_NOT_VERIFIED_KEY, 0))
     with st.expander(f"TheOver model totals · {len(board)} pick(s)", expanded=False):
-        if board.empty:
+        if board.empty and not left_out:
             st.info("No TheOver totals pick with a listed model hit rate in this analysis. They come from the "
                     "TheOver totals upload under Settings & research.")
-        else:
+        elif not board.empty:
             shown = board.copy()
             shown["Model hit rate"] = shown["Model hit rate"].map(lambda v: f"{v:.0%}")
             number = st.column_config.NumberColumn
             st.dataframe(shown, hide_index=True, width="stretch",
                          column_config={"Odds": number(format="%+.0f"), "Best price": number(format="%+.0f"),
                                         "TheOver's line": number(format="%.1f")})
+        if left_out:
+            st.caption(f"{left_out} game(s) left out: the app could not verify the line, so there is no pick to show.")
         st.caption(THEOVER_MODEL_CAPTION)
 
 

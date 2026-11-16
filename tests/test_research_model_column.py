@@ -250,3 +250,72 @@ def test_trained_scope_reads_trained(tmp_path, clock):  # noqa: F811
     path, _, _ = _store_with_prediction(tmp_path, clock)
     status = column.model_status(path, now=_at(73, 1))
     assert status["NBA:SPREAD"] == {"status": "TRAINED"} and status["NBA:TOTAL"] == {"status": "TRAINED"}
+
+
+# ---- with enough games, the status says what the fit is waiting for (first audit, 2026-11-16) ----
+
+def test_enough_games_and_a_clean_split_reads_due_at_the_next_research_run(tmp_path, clock):  # noqa: F811
+    path = tmp_path / "evidence.sqlite3"
+    for index in range(70):
+        _event(path, clock, "NBA", index)
+    now = _at(71)
+    clock[0] = now
+    status = column.model_status(path, now=now)          # before the research loop has fitted anything
+    entry = status["NBA:SPREAD"]
+    assert entry["status"] == "NOT_TRAINED" and entry["training_games"] >= 60
+    assert entry["waiting_for"] == "NEXT_RESEARCH_RUN" and set(entry) == {"status", "needed", "training_games", "waiting_for"}
+    assert column._not_trained(status, "NBA", "SPREAD") == (
+        f"RESEARCH_MODEL_NOT_TRAINED (NBA SPREAD: {entry['training_games']} of 60 training games; "
+        "enough to fit, due at the next research run)")
+    # The loop's own fit agrees: it fits, and the scope then reads trained.
+    assert models.train_scope(path, "NBA", "SPREAD")["status"] == "FITTED_RESEARCH_ONLY"
+    assert column.model_status(path, now=now)["NBA:SPREAD"] == {"status": "TRAINED"}
+
+
+def test_a_crowded_night_reads_what_the_fit_is_waiting_for(tmp_path, clock, monkeypatch):  # noqa: F811
+    """Thirty games a day apart, then forty on one night a minute apart: enough games to fit on, but with
+    the newest held out to test on, the rest of that night had not ended before they were first captured."""
+    from datetime import timedelta
+    import tests.test_prospective_research_models as fixtures
+
+    def night(days, hours=0):
+        return fixtures.BASE + (timedelta(days=days, hours=hours) if days < 30 else timedelta(days=30, hours=hours, minutes=days))
+
+    monkeypatch.setattr(fixtures, "_at", night)
+    path = tmp_path / "evidence.sqlite3"
+    for index in range(70):
+        _event(path, clock, "NBA", index)
+    now = fixtures.BASE + timedelta(days=40)
+    clock[0] = now
+    fitted = models.train_scope(path, "NBA", "SPREAD")
+    assert fitted["status"] == "INSUFFICIENT_CHRONOLOGICAL_VALIDATION" and fitted["independent_events"] >= 60
+    status = column.model_status(path, now=now)
+    entry = status["NBA:SPREAD"]
+    assert entry["training_games"] == fitted["independent_events"] and entry["needed"] == 60
+    assert (entry["waiting_for"], entry["earlier_needed"], entry["test_games"]) == ("TIME_SPLIT", 42, 18)
+    assert 0 < entry["earlier_games"] < 42
+    assert column._not_trained(status, "NBA", "SPREAD") == (
+        f"RESEARCH_MODEL_NOT_TRAINED (NBA SPREAD: {entry['training_games']} of 60 training games; "
+        f"needs 42 that ended before its newest 18 were first captured, has {entry['earlier_games']})")
+
+
+def test_the_reason_travels_on_the_board_and_an_older_board_reads_as_before():
+    waiting = {"NCAAB:TOTAL": {"status": "NOT_TRAINED", "needed": 60, "training_games": 79, "waiting_for": "TIME_SPLIT",
+                               "earlier_games": 30, "earlier_needed": 42, "test_games": 18},
+               "NCAAB:SPREAD": {"status": "NOT_TRAINED", "needed": 60, "training_games": 79},      # published before the change
+               "NBA:SPREAD": {"status": "NOT_TRAINED", "needed": 60, "training_games": 43},
+               "NBA:TOTAL": {"status": "NOT_TRAINED", "needed": 60, "training_games": 61, "waiting_for": "NEXT_RESEARCH_RUN"}}
+    assert column._decode_models(column._encode_board([], _at(1), waiting)) == waiting
+    board = pd.DataFrame([
+        {"league": "NCAAB", "home_team": "A", "away_team": "B", "market_type": "total_over", "best_pick": "Over 145.5"},
+        {"league": "NCAAB", "home_team": "A", "away_team": "B", "market_type": "spread_home", "best_pick": "A -2.5"},
+        {"league": "NBA", "home_team": "A", "away_team": "B", "market_type": "spread_home", "best_pick": "A -2.5"},
+        {"league": "NBA", "home_team": "A", "away_team": "B", "market_type": "total_over", "best_pick": "Over 202.5"}])
+    out, _ = column.apply(board, setting=lambda k, d=None: d, refresh=lambda s: {"status": "RECENT"},
+                          read=lambda *a, **k: [], models=waiting)
+    assert out["research_model_status"].tolist() == [
+        "RESEARCH_MODEL_NOT_TRAINED (NCAAB TOTAL: 79 of 60 training games; needs 42 that ended before its newest 18 "
+        "were first captured, has 30)",
+        "RESEARCH_MODEL_NOT_TRAINED (NCAAB SPREAD: 79 of 60 training games)",
+        "RESEARCH_MODEL_NOT_TRAINED (NBA SPREAD: 43 of 60 training games)",
+        "RESEARCH_MODEL_NOT_TRAINED (NBA TOTAL: 61 of 60 training games; enough to fit, due at the next research run)"]
