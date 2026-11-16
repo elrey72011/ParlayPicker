@@ -620,6 +620,10 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
         _safe_str_series(out, "market_type"),
         theover_prob.index,
     )
+    # Mirror run_analysis_pipeline: TheOver's model-backed totals pick fills the blend's TheOver
+    # input where the upload carries no probability (owner 2026-11-16).
+    from app_core import theover_model_totals as _theover_model_totals
+    theover_prob_blend, out[_theover_model_totals.SOURCE_COLUMN] = _theover_model_totals.blend_input(out, theover_prob_blend)
 
     # Retain the actual refresh arguments separately from original inference.
     nfl_ui_inputs = {k:v.copy() for k,v in dict(p_market=market_prob, p_kalshi=kalshi_prob,

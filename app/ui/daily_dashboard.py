@@ -301,17 +301,18 @@ THEOVER_MODEL_COLUMNS = ["Sport", "Game", "Pick", "TheOver's line", "Odds", "Bes
                          "Model hit rate", "Also the app's pick"]
 THEOVER_MODEL_CAPTION = (
     "TheOver's totals pick for each game where it lists the recent hit rate of the model behind it, at the app's "
-    "current line and price. Since 16 November 2026 this pick adds 5 points to the app's win estimate for that "
-    "side, so it is the app's pick in most of these games. Taken before the start over nine nights (7 to 15 "
-    "November 2026) these went 147-92, ahead on eight of the nine, while its totals picks with no hit rate listed "
-    "went 113-119. Nine nights is not proof: the record from here decides whether it stays. No stake or wager "
-    "approval comes from it. It needs the TheOver totals upload.")
+    "current line and price. Since 16 November 2026 the app blends this pick into its win estimate with the market, "
+    "Kalshi and its own model (the listed hit rate, counted as at most 70%), so it is the app's pick in most of "
+    "these games. Taken before the start over nine nights (7 to 15 November 2026) these went 147-92, ahead on "
+    "eight of the nine, while its totals picks with no hit rate listed went 113-119. Nine nights is not proof: the "
+    "record from here decides whether it stays. It cannot fund a stake: every wager still needs the market "
+    "authority. It needs the TheOver totals upload.")
 
 
 def theover_model_board(candidates):
     """TheOver's totals pick for each game where it lists its model's hit rate (owner 2026-11-16).
 
-    These are the picks that move the app's win estimate (``app_core.theover_model_totals``). From
+    These are the picks the blend uses as TheOver's input (``app_core.theover_model_totals``). From
     the saved candidates: a total, on the side TheOver picked (``theover_pick_agrees`` 1), with
     ``theover_model_hit_rate`` present, still a current pre-game candidate. One row per game, in
     start order, at the app's own line and price with the best price among the stake books beside

@@ -58,12 +58,12 @@ def test_nothing_to_list_gives_an_empty_board_with_its_columns():
 
 
 def test_the_caption_says_what_it_does_and_what_it_cannot_do():
-    assert "adds 5 points to the app's win estimate" in THEOVER_MODEL_CAPTION
+    assert "blends this pick into its win estimate with the market, Kalshi and its own model" in THEOVER_MODEL_CAPTION
     assert "147-92" in THEOVER_MODEL_CAPTION and "113-119" in THEOVER_MODEL_CAPTION
     assert "Nine nights is not proof" in THEOVER_MODEL_CAPTION
-    assert "No stake or wager approval comes from it." in THEOVER_MODEL_CAPTION
-    from app_core.theover_model_totals import SHIFT
-    assert SHIFT == 0.05                                    # the caption's "5 points"
+    assert "It cannot fund a stake" in THEOVER_MODEL_CAPTION
+    from app_core.theover_model_totals import CAP
+    assert CAP == 0.70                                      # the caption's "at most 70%"
 
 
 def test_the_list_changes_nothing_it_reads():

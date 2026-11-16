@@ -675,9 +675,9 @@ _REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi
                              "best_line_price", "best_line_price_book", "best_line_price_books",
                              "best_line_expected_value", "best_available_tie_count", "best_available_tied_with",
                              "best_available_no_lean",
-                             # Points of win estimate moved by TheOver's model-backed totals pick
-                             # (app_core.theover_model_totals; owner 2026-11-16)
-                             "best_available_theover_model_shift"]
+                             # Where the blend's TheOver input came from: the upload, or TheOver's
+                             # model-backed totals pick (app_core.theover_model_totals; owner 2026-11-16)
+                             "blend_in_theover_source"]
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 
@@ -706,8 +706,8 @@ CANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + _CANONICAL_RE
 # split and the backing model's recent record. Kept per row, oriented to the row's side,
 # for the track record to test; never blended and never turned into a probability.
 # One exception since 2026-11-16 (owner; roadmap D26): TheOver's totals pick with a listed model hit
-# rate moves the selection probability in build_best_picks_df (app_core.theover_model_totals).
-# theover_probability stays empty and the blend is unchanged.
+# rate becomes the blend's TheOver input (app_core.theover_model_totals), weighed with the market,
+# Kalshi and the model. theover_probability itself stays as uploaded (empty).
 THEOVER_RESEARCH_COLUMNS = ["theover_pick_agrees", "theover_pick_line", "theover_public_pct",
                             "theover_model_hit_rate",
                             # From the raw page in the owner's workbook (app_core.theover_signals):
@@ -2798,11 +2798,14 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     from app_core.kalshi_exact import gate as _kalshi_exact
     kalshi_prob, out["kalshi_blend_gate"] = _kalshi_exact(out, kalshi_prob)
 
+    from app_core.theover_model_totals import blend_input as _theover_model_blend_input
     calibrated = compute_blended_probability(
         p_market=out["market_probability"],
         p_kalshi=kalshi_prob,
         p_ml=ml,
-        p_theover=theover,  # Use existing variable
+        # The same TheOver input as the production blend (app_core.theover_model_totals); the
+        # ``theover`` variable and the theover_probability column stay as uploaded.
+        p_theover=_theover_model_blend_input(out, theover)[0],
         p_sentiment=_numeric_series(out, "sentiment_diff", default=0.0).apply(lambda x: 0.5 + x * 0.5),
         league=_string_series(out, "league"),
         market_type=_string_series(out, "market_type")
@@ -4394,24 +4397,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool.loc[pool["best_available_probability_pair_normalized"], "best_available_probability_source"] = "calibrated_probability_pair_normalized"
     pool.loc[pool["best_available_probability"].isna(), "best_available_probability_source"] = "unavailable"
     pool["best_available_selection_policy"] = "probability-first-v1"
-    # TheOver's model-backed totals pick moves the win estimate (owner 2026-11-16;
-    # app_core.theover_model_totals): the side TheOver's model picked gains a few points and the
-    # other side loses them. Selection probability only. ``calibrated_probability`` and
-    # ``expected_value``, which the wager checks read, are not touched, so this changes which
-    # candidate is the game's pick and its win estimate without manufacturing a stake.
-    try:
-        from app_core import theover_model_totals as _theover_model_totals
-        pool["best_available_probability"], pool[_theover_model_totals.COLUMN] = _theover_model_totals.apply(pool)
-        _theover_moved = pool[_theover_model_totals.COLUMN].ne(0)
-        pool.loc[_theover_moved, "best_available_probability_source"] = (
-            pool.loc[_theover_moved, "best_available_probability_source"] + _theover_model_totals.SOURCE_SUFFIX)
-        _theover_model_diagnostic = {"status": "OK", "shift": _theover_model_totals.SHIFT,
-                                     "games_moved": int(pool.loc[pool[_theover_model_totals.COLUMN].gt(0), "matchup_id"].nunique())}
-    except Exception as exc:  # the prediction falls back to the unadjusted estimate
-        pool["best_available_theover_model_shift"] = 0.0
-        _theover_model_diagnostic = {"status": "ERROR", "error": type(exc).__name__}
-    if diagnostics_out is not None:
-        diagnostics_out["theover_model_totals"] = _theover_model_diagnostic
     # The return at the row's own price for the probability the selection actually uses (2026-11-15).
     # ``expected_value`` is deliberately left on the un-rebalanced production probability, which is what
     # the wager checks read; on a pair whose two sides sum above one it reads higher than this does
@@ -5089,10 +5074,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
         "ml_residual_scale", "ml_feature_quality", "ml_unavailable_reason", "theover_probability",
         "orientation_source", "raw_book_odds_diag",
-        "blend_in_kalshi", "blend_in_market", "blend_in_theover", "blend_in_ml", "blend_tier",
+        "blend_in_kalshi", "blend_in_market", "blend_in_theover", "blend_in_theover_source", "blend_in_ml", "blend_tier",
         "best_available_probability", "best_available_probability_source", "best_available_probability_pair_normalized", "best_available_selection_policy",
-        # Points of win estimate moved by TheOver's model-backed totals pick (app_core.theover_model_totals).
-        "best_available_theover_model_shift",
         "selection_probability_used", "selection_probability_source",
         "selection_probability_pair_normalized",
         "model_direction_pre_guard_score",
@@ -10569,6 +10552,12 @@ def run_analysis_pipeline(
         _string_series(merged, "market_type"),
         theover_probability.index,
     )
+    # TheOver's model-backed totals pick fills the blend's TheOver input where the upload carries
+    # no probability (owner 2026-11-16; app_core.theover_model_totals), so the blend weighs it
+    # with the market, Kalshi and the model. ``theover_probability`` itself stays as uploaded.
+    from app_core import theover_model_totals as _theover_model_totals
+    theover_blend_input, merged[_theover_model_totals.SOURCE_COLUMN] = _theover_model_totals.blend_input(
+        merged, theover_blend_input)
 
     ml_probability = _numeric_series(merged, "ml_probability")
 
