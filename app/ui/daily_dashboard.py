@@ -61,25 +61,16 @@ def wager_rejection_summary(board):
     return pd.DataFrame(reasons).groupby(['League', 'Reason'], sort=False).size().reset_index(name='Games')
 
 
-def _candidate_values(result, candidates, columns):
-    """Per board row, the first of ``columns`` (in order) from its saved candidate, or None.
+def _candidate_lookup(result, candidates, values):
+    """Per board row, its saved candidate's entry in ``values`` (a Series on ``candidates``' index).
 
     Matched by ``candidate_id``; board rows built from the final export carry none, so it
     falls back to game + market + pick label when that names exactly one candidate.
     """
-    if candidates is None or getattr(candidates, "empty", True):
-        return None
-    values = None
-    for column in columns:
-        if column in candidates:
-            numbers = pd.to_numeric(candidates[column], errors="coerce")
-            values = numbers if values is None else values.fillna(numbers)
-    if values is None:
-        return None
-    probs = pd.Series(float("nan"), index=result.index)
+    found = pd.Series([None] * len(result), index=result.index, dtype=object)
     if "candidate_id" in result and "candidate_id" in candidates:
         lookup = dict(zip(candidates["candidate_id"].astype(str), values))
-        probs = result["candidate_id"].astype(str).map(lookup).astype("float64")
+        found = result["candidate_id"].astype(str).map(lookup)
     # Board rows built from the final export carry no candidate_id (2026-11-06: every
     # Overall row read "Unavailable"), so fall back to the game, market and pick label,
     # used only when it names exactly one candidate.
@@ -91,7 +82,25 @@ def _candidate_values(result, candidates, columns):
         candidate_keys = key(candidates, "best_pick")
         unique = ~candidate_keys.duplicated(keep=False)
         by_key = dict(zip(candidate_keys[unique], values[unique]))
-        probs = probs.fillna(key(result, "pick").map(by_key).astype("float64"))
+        found = found.where(found.notna(), key(result, "pick").map(by_key))
+    return found
+
+
+def _candidate_values(result, candidates, columns):
+    """Per board row, the first of ``columns`` (in order) from its saved candidate, or None.
+
+    Matched as in ``_candidate_lookup``. Kept only where it is a probability (between 0 and 1).
+    """
+    if candidates is None or getattr(candidates, "empty", True):
+        return None
+    values = None
+    for column in columns:
+        if column in candidates:
+            numbers = pd.to_numeric(candidates[column], errors="coerce")
+            values = numbers if values is None else values.fillna(numbers)
+    if values is None:
+        return None
+    probs = pd.to_numeric(_candidate_lookup(result, candidates, values), errors="coerce").astype("float64")
     return probs.where((probs > 0) & (probs < 1))
 
 
@@ -155,6 +164,42 @@ def research_model_shadow(result, candidates):
     push = push.fillna(0.0) if push is not None else pd.Series(0.0, index=probs.index)
     decimal = pd.to_numeric(result.get("odds"), errors="coerce").map(_decimal).astype("float64")
     return probs, probs * (decimal - 1) - (1 - probs - push)
+
+
+def best_price_shadow(result, candidates):
+    """(best American price at the pick's exact line, the book or books offering it) per board row, or None.
+
+    From ``app_core.pick_notes`` on the saved candidate: the best price for the same side at the
+    same line among Novig, FanDuel, DraftKings and BetMGM in that refresh (owner 2026-11-15). It
+    changes no pick, stake or approval.
+    """
+    if candidates is None or getattr(candidates, "empty", True) or "best_line_price" not in candidates:
+        return None
+    price = pd.to_numeric(_candidate_lookup(result, candidates, candidates["best_line_price"]),
+                          errors="coerce").astype("float64")
+    if not price.notna().any():
+        return None
+    if "best_line_price_book" not in candidates:
+        return price, pd.Series("", index=result.index)
+    book = _candidate_lookup(result, candidates, candidates["best_line_price_book"])
+    return price, book.where(book.notna() & price.notna(), "").astype(str)
+
+
+def tie_notes(result, candidates, family="overall"):
+    """'No lean (tie)' or 'Level with <pick>' per board row from its saved candidate; None when no row tied.
+
+    From ``app_core.pick_notes`` (owner 2026-11-15): an exact tie in win probability is broken by
+    market name, so a tied pick is not a lean. A Sides or Totals board shows one market, so only a
+    tie between that market's two sides is marked there.
+    """
+    needed = ("best_available_tie_count", "best_available_tied_with", "best_available_no_lean")
+    if candidates is None or getattr(candidates, "empty", True) or any(c not in candidates for c in needed):
+        return None
+    from app_core.pick_notes import tie_note
+    count, others, coin_flip = (_candidate_lookup(result, candidates, candidates[c]) for c in needed)
+    notes = pd.Series([tie_note(c, o, f, other_markets=family == "overall")
+                       for c, o, f in zip(count, others, coin_flip)], index=result.index, dtype=object)
+    return notes if notes.ne("").any() else None
 
 
 PINNACLE_MIN_EV = 0.02
@@ -298,6 +343,19 @@ def _render_game_board(board, candidates, family):
         display["Gemini (research)"] = gemini.fillna("Not reviewed")
         at = columns.index("Wager status")
         columns[at:at] = ["Gemini (research)"]
+    best_price = best_price_shadow(result, candidates)
+    if best_price is not None:
+        # Owner 2026-11-15: the best price for the same side at the same line among the books
+        # already fetched, and who has it; changes no pick, stake or approval.
+        display["Best price"], display["Best price book"] = best_price
+        at = columns.index("Odds") + 1
+        columns[at:at] = ["Best price", "Best price book"]
+    ties = tie_notes(result, candidates, family)
+    if ties is not None:
+        # Owner 2026-11-15: a pick whose rank came from a tie-break is marked, not hidden.
+        display["Tie"] = ties
+        at = columns.index("Best pick") + 1
+        columns[at:at] = ["Tie"]
     if 'coverage_decision_state' in result:
         display['Coverage decision'] = result['coverage_decision_state']
         display['Coverage explanation'] = result['coverage_explanation']
@@ -306,7 +364,12 @@ def _render_game_board(board, candidates, family):
     for column in [c for c in ("Win estimate", "EV estimate", "Market estimate", "Market EV", "Pinnacle fair",
                                "EV vs Pinnacle", "Research model", "Research model EV") if c in display]:
         display[column] = display[column].map(lambda v: f"{v:.1%}" if pd.notna(v) else "Unavailable")
-    st.dataframe(display, hide_index=True, width="stretch", height=min(760, 38 * (len(display) + 1)), column_config={"Selection score": st.column_config.NumberColumn(format="%.3f"), "Odds": st.column_config.NumberColumn(format="%+.0f")})
+    st.dataframe(display, hide_index=True, width="stretch", height=min(760, 38 * (len(display) + 1)), column_config={"Selection score": st.column_config.NumberColumn(format="%.3f"), "Odds": st.column_config.NumberColumn(format="%+.0f"), "Best price": st.column_config.NumberColumn(format="%+.0f")})
+    if best_price is not None or ties is not None:
+        st.caption("Best price is the best price for the same side at the same line among Novig, FanDuel, DraftKings "
+                   "and BetMGM at the last refresh; check it at the book before placing anything. Tie marks a pick "
+                   "whose place came from a tie-break: \"No lean (tie)\" means the app rates both sides of that "
+                   "market the same, and \"Level with\" names an equally rated pick in the other market.")
     with st.expander("Selection details and wager explanations", expanded=False):
         st.dataframe(result[["matchup", "pick", "approval_reason", "edge", "selection_score", "probability_basis", "start"]], hide_index=True, width="stretch")
         st.caption("Best Overall, Best Side, and Best Total identify the selected pick for each game. Wager status is separate: PASS means no approved wager. Ranking uses the composite selection score first, followed by probability, tier, EV, and edge as tie-breakers; the highest EV does not necessarily rank first. Selection score is not a win probability. Edge compares the displayed estimate with price break-even. Estimate source is shown for each selection; NFL context-backed estimates retain the prior result and injury-report status in the export. Only exact final tickets carry final production metrics and approval.")
