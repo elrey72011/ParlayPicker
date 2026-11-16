@@ -107,3 +107,56 @@ def test_the_homepage_shows_the_list_under_the_boards():
     # The list only reads: the saved pick above it is shown as saved, and nothing is approved.
     picks = next(d.value for d in app.dataframe if "Wager status" in d.value.columns)
     assert picks.iloc[0]["Best pick"] == "Tulsa +3.5" and picks.iloc[0]["Wager status"] == "PASS"
+
+
+# ---- a game whose line the app rejected is not a pick (first audit, 2026-11-16) ----
+
+def test_a_game_whose_line_the_app_rejected_is_left_out_and_counted():
+    candidates = pd.DataFrame([
+        _candidate("Rice", "total_under", "Under 145.5"),
+        _candidate("Ucla", "total_over", "Total line unresolved", selected=True),      # what the audit showed
+        _candidate("Utah", "total_over", "Over (No Line)"),
+        _candidate("Navy", "total_under", "Under 139.5 MISSING LINE"),
+    ])
+    board = theover_model_board(candidates)
+    assert list(board["Game"]) == ["Tulsa at Rice"] and list(board["Pick"]) == ["Under 145.5"]
+    assert board.attrs["line_not_verified"] == 3
+    only = theover_model_board(candidates.iloc[1:2])
+    assert only.empty and list(only.columns) == THEOVER_MODEL_COLUMNS and only.attrs["line_not_verified"] == 1
+    assert theover_model_board(candidates.iloc[0:1]).attrs["line_not_verified"] == 0
+    # The same game listed from a second row of its own is listed, not counted as left out.
+    twice = pd.DataFrame([_candidate("Rice", "total_under", "Total line unresolved"), _candidate("Rice", "total_under", "Under 145.5")])
+    listed = theover_model_board(twice)
+    assert list(listed["Pick"]) == ["Under 145.5"] and listed.attrs["line_not_verified"] == 0
+
+
+def _app_with_an_unverified_line():
+    import pandas as pd
+    import streamlit as st
+    from app.ui.daily_dashboard import render_daily_dashboard
+    today, details = st.tabs(["Today", "Details"])
+    board = pd.DataFrame([{"league": "NCAAB", "Home": "Rice", "Away": "Tulsa", "best_pick": "Tulsa +3.5",
+                           "market_type": "spread_away", "matchup_id": "g1", "production_win_probability": 0.52,
+                           "production_edge": 0.0, "production_expected_value": -0.02, "odds_american": -110,
+                           "Play_Stake": 0, "production_eligible": False}])
+    base = {"league": "NCAAB", "away_team": "Tulsa", "theover_pick_agrees": 1.0, "theover_model_hit_rate": 0.73,
+            "candidate_context": "CURRENT_PREGAME", "pregame_quote_valid": True, "odds_american": -110.0,
+            "best_line_price": -104.0, "best_line_price_book": "FanDuel", "best_available_selected": False,
+            "game_start_utc": "2026-11-16T23:00:00Z"}
+    candidates = pd.DataFrame([
+        dict(base, matchup_id="g1", home_team="Rice", market_type="total_under", best_pick="Under 145.5", theover_pick_line=146.5),
+        dict(base, matchup_id="g2", home_team="Ucla", market_type="total_over", best_pick="Total line unresolved",
+             theover_pick_line=147.5, best_available_selected=True)])
+    render_daily_dashboard(today.empty(), details.empty(), board, candidates)
+
+
+def test_the_homepage_leaves_the_unverified_game_out_and_says_so():
+    from streamlit.testing.v1 import AppTest
+    app = AppTest.from_function(_app_with_an_unverified_line).run()
+    assert not app.exception
+    assert any(e.label == "TheOver model totals · 1 pick(s)" for e in app.expander)
+    frame = next(d.value for d in app.dataframe if "Model hit rate" in d.value.columns)
+    assert list(frame["Pick"]) == ["Under 145.5"] and list(frame["Game"]) == ["Tulsa at Rice"]
+    assert any(c.value == "1 game(s) left out: the app could not verify the line, so there is no pick to show."
+               for c in app.caption)
+    assert any(c.value == THEOVER_MODEL_CAPTION for c in app.caption)

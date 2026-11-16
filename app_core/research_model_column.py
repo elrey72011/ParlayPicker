@@ -93,15 +93,43 @@ def _encode_board(predictions, now, models=None) -> bytes:
 
 
 def _decode_models(raw) -> dict:
-    """{"NBA:SPREAD": {"status": "TRAINED" | "NOT_TRAINED", "training_games", "needed"}} (older boards: {})."""
+    """{"NBA:SPREAD": {"status": "TRAINED" | "NOT_TRAINED", "training_games", "needed"}} (older boards: {}).
+
+    Once a scope has the games it needs, ``waiting_for`` says what still holds the fit (``model_status``).
+    """
     models = json.loads(raw).get("models")
     return models if isinstance(models, dict) else {}
+
+
+TIME_SPLIT = "TIME_SPLIT"                    # enough games, but too few ended before the newest ones were captured
+NEXT_RESEARCH_RUN = "NEXT_RESEARCH_RUN"      # everything is there: the research loop fits it on its next cycle
+
+
+def _time_split(examples, models) -> tuple[int, bool]:
+    """``(earlier games it can fit on, whether that is enough)``, counted as ``train_scope`` counts them.
+
+    The fit holds out its newest games to test itself on and trains only on games whose result was
+    already in before the first of those was first captured. On a night of many games that leaves
+    few: college basketball stood at 79 usable games against 60 needed on 2026-11-16 and still
+    could not be fitted. This mirrors ``train_scope``'s search and never fits anything.
+    """
+    need = models.MIN_TRAIN_EVENTS - models.MIN_VALIDATION_EVENTS
+    best = 0
+    for split in range(max(need, int(len(examples) * 0.7)), len(examples) - models.MIN_VALIDATION_EVENTS + 1):
+        first_test = models._time(examples[split]["observed_at"])
+        earlier = sum(models._time(row["available_at"]) < first_test for row in examples[:split])
+        best = max(best, earlier)
+        if earlier >= need:
+            return earlier, True
+    return best, False
 
 
 def model_status(path, *, now=None) -> dict:
     """Per research scope: is a model trained, and if not, how many usable training games exist.
 
-    Read-only: counts the examples ``train_scope`` would fit on (``_examples``), never fits.
+    Read-only: counts the examples ``train_scope`` would fit on (``_examples``), never fits. With
+    fewer games than needed the entry is the count alone. With enough games it also says what the
+    fit is waiting for, so the status no longer reads "79 of 60 training games" with no reason.
     """
     from app_core import prospective_research_models as models
     now = now or datetime.now(timezone.utc)
@@ -116,8 +144,17 @@ def model_status(path, *, now=None) -> dict:
                 out[f"{sport}:{family}"] = {"status": "TRAINED"}
                 continue
             events, quotes, scores = models._read_scope(path, sport, family)
-            out[f"{sport}:{family}"] = {"status": "NOT_TRAINED", "needed": models.MIN_TRAIN_EVENTS,
-                                        "training_games": len(models._examples(events, quotes, scores, family, now))}
+            examples = models._examples(events, quotes, scores, family, now)
+            entry = {"status": "NOT_TRAINED", "needed": models.MIN_TRAIN_EVENTS, "training_games": len(examples)}
+            if len(examples) >= models.MIN_TRAIN_EVENTS:
+                earlier, enough = _time_split(examples, models)
+                if enough:
+                    entry["waiting_for"] = NEXT_RESEARCH_RUN
+                else:
+                    entry.update(waiting_for=TIME_SPLIT, earlier_games=earlier,
+                                 earlier_needed=models.MIN_TRAIN_EVENTS - models.MIN_VALIDATION_EVENTS,
+                                 test_games=models.MIN_VALIDATION_EVENTS)
+            out[f"{sport}:{family}"] = entry
     return out
 
 
@@ -323,12 +360,22 @@ def _empty(frame: pd.DataFrame, status: str) -> pd.DataFrame:
 
 
 def _not_trained(models, sport, family):
-    """'RESEARCH_MODEL_NOT_TRAINED (NBA SPREAD: 23 of 60 training games)' when the board says so, else None."""
+    """'RESEARCH_MODEL_NOT_TRAINED (NBA SPREAD: 23 of 60 training games)' when the board says so, else None.
+
+    With enough games the text adds what the fit is waiting for (``model_status``); a board
+    published before that was recorded reads as it always did.
+    """
     entry = (models or {}).get(f"{sport}:{family}")
     if not isinstance(entry, dict) or entry.get("status") != "NOT_TRAINED":
         return None
-    return (f"RESEARCH_MODEL_NOT_TRAINED ({sport} {family}: {entry.get('training_games', '?')} of "
-            f"{entry.get('needed', '?')} training games)")
+    text = (f"RESEARCH_MODEL_NOT_TRAINED ({sport} {family}: {entry.get('training_games', '?')} of "
+            f"{entry.get('needed', '?')} training games")
+    if entry.get("waiting_for") == TIME_SPLIT:
+        text += (f"; needs {entry.get('earlier_needed', '?')} that ended before its newest "
+                 f"{entry.get('test_games', '?')} were first captured, has {entry.get('earlier_games', '?')}")
+    elif entry.get("waiting_for") == NEXT_RESEARCH_RUN:
+        text += "; enough to fit, due at the next research run"
+    return text + ")"
 
 
 def attach(frame: pd.DataFrame, predictions: list[dict], models: dict | None = None) -> pd.DataFrame:

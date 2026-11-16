@@ -2450,11 +2450,18 @@ def compute_blended_probability(
     p_theover: pd.Series,
     p_sentiment: pd.Series,
     league: pd.Series | None = None,
-    market_type: pd.Series | None = None
+    market_type: pd.Series | None = None,
+    theover_source: pd.Series | None = None,
 ) -> pd.Series:
     """
     Vectorized blend using two-tier logic defined in weights_config.
+
+    ``theover_source`` says, per row, where ``p_theover`` came from (``app_core.theover_model_totals``).
+    Where it is TheOver's model-backed pick, an NBA total is weighed like any other league's: the
+    NBA-totals boost was set for a TheOver probability, and over nine nights the pick did no better
+    in the NBA than elsewhere (owner 2026-11-16, roadmap D26). Without it nothing changes.
     """
+    from app_core.theover_model_totals import SOURCE as _theover_model_pick
     market = pd.to_numeric(p_market, errors="coerce")
     kalshi = pd.to_numeric(p_kalshi, errors="coerce")
     ml = pd.to_numeric(p_ml, errors="coerce")
@@ -2465,9 +2472,11 @@ def compute_blended_probability(
     sentiment = pd.to_numeric(p_sentiment, errors="coerce").fillna(0.5)
     m_type = pd.Series(market_type).fillna("").astype(str).str.lower()
 
-    def _blend_row(p_mkt, p_kal, p_ml, p_the, p_sen, m_typ, lg):
+    def _blend_row(p_mkt, p_kal, p_ml, p_the, p_sen, m_typ, lg, the_src=""):
         if pd.isna(p_mkt) and str(lg).upper() not in {"NFL", "NCAAF"}:
             p_mkt = p_ml if pd.notna(p_ml) else 0.5
+        # TheOver's model-backed pick takes the standard weights in the NBA too (see the docstring).
+        nba_total_boost = bool(lg) and lg.upper() == "NBA" and "total" in m_typ and the_src != _theover_model_pick
 
         # Kalshi Probability is already oriented to the pick side before this step
         k_oriented = None
@@ -2511,7 +2520,7 @@ def compute_blended_probability(
                     w_market = MLB_TOTAL_MARKET_WEIGHT
                     w_the = MLB_TOTAL_THEOVER_WEIGHT
                     w_ml = MLB_TOTAL_ML_WEIGHT
-            elif lg and lg.upper() == "NBA" and "total" in m_typ:
+            elif nba_total_boost:
                 # NBA totals: TheOver has pace/defensive-rating context ML lacks.
                 w_the = NBA_TOTAL_THEOVER_WEIGHT
                 w_ml = NBA_TOTAL_ML_WEIGHT
@@ -2557,7 +2566,7 @@ def compute_blended_probability(
                     w_market = MLB_TOTAL_FALLBACK_MARKET_WEIGHT
                     w_the = MLB_TOTAL_FALLBACK_THEOVER_WEIGHT
                     w_ml = MLB_TOTAL_FALLBACK_ML_WEIGHT
-                elif lg.upper() == "NBA":
+                elif nba_total_boost:
                     w_the = NBA_TOTAL_FALLBACK_THEOVER_WEIGHT
                     w_ml = NBA_TOTAL_FALLBACK_ML_WEIGHT
 
@@ -2581,8 +2590,13 @@ def compute_blended_probability(
         lg_series = pd.Series("", index=market.index)
     else:
         lg_series = pd.Series(league).fillna("").astype(str)
-    blended = pd.Series([_blend_row(m, k, l, t, s, typ, lg)
-                         for m, k, l, t, s, typ, lg in zip(market, kalshi, ml, theover, sentiment, m_type, lg_series)],
+    if theover_source is None:
+        source_series = pd.Series("", index=market.index)
+    else:
+        source_series = pd.Series(theover_source).fillna("").astype(str)
+    blended = pd.Series([_blend_row(m, k, l, t, s, typ, lg, src)
+                         for m, k, l, t, s, typ, lg, src in zip(market, kalshi, ml, theover, sentiment, m_type, lg_series,
+                                                                source_series)],
                         index=market.index)
 
     return pd.to_numeric(blended, errors="coerce").clip(0.01, 0.99)
@@ -2799,16 +2813,18 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     kalshi_prob, out["kalshi_blend_gate"] = _kalshi_exact(out, kalshi_prob)
 
     from app_core.theover_model_totals import blend_input as _theover_model_blend_input
+    # The same TheOver input as the production blend (app_core.theover_model_totals); the
+    # ``theover`` variable and the theover_probability column stay as uploaded.
+    _theover_for_blend, _theover_for_blend_source = _theover_model_blend_input(out, theover)
     calibrated = compute_blended_probability(
         p_market=out["market_probability"],
         p_kalshi=kalshi_prob,
         p_ml=ml,
-        # The same TheOver input as the production blend (app_core.theover_model_totals); the
-        # ``theover`` variable and the theover_probability column stay as uploaded.
-        p_theover=_theover_model_blend_input(out, theover)[0],
+        p_theover=_theover_for_blend,
         p_sentiment=_numeric_series(out, "sentiment_diff", default=0.0).apply(lambda x: 0.5 + x * 0.5),
         league=_string_series(out, "league"),
-        market_type=_string_series(out, "market_type")
+        market_type=_string_series(out, "market_type"),
+        theover_source=_theover_for_blend_source,
     )
 
     # Cap calibrated probability for MLB total_over picks â€” TheOver inflates these
@@ -10721,7 +10737,8 @@ def run_analysis_pipeline(
         p_theover=theover_blend_input,
         p_sentiment=sentiment_prob,
         league=_string_series(merged, "league"),
-        market_type=_string_series(merged, "market_type")
+        market_type=_string_series(merged, "market_type"),
+        theover_source=merged[_theover_model_totals.SOURCE_COLUMN],
     )
 
     # Market-anchored over-bias correction for MLB totals â€” PRODUCTION best-picks

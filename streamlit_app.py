@@ -635,7 +635,8 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
         p_theover=theover_prob_blend,
         p_sentiment=sentiment_prob,
         league=_safe_str_series(out, "league"),
-        market_type=_safe_str_series(out, "market_type")
+        market_type=_safe_str_series(out, "market_type"),
+        theover_source=out[_theover_model_totals.SOURCE_COLUMN],
     )
 
     # Update core metrics

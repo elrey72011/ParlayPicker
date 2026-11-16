@@ -220,3 +220,110 @@ def test_the_source_reaches_the_audit_and_the_export_and_stays_out_of_the_hashed
     assert tmt.SOURCE_COLUMN in BEST_PICK_COLUMNS and tmt.SOURCE_COLUMN in REQUIRED_BEST_PICK_EXPORT_COLUMNS
     from app_core import pinnacle_model as pm
     assert not {"blend_input", "derived", "backed"} & set(pm.PREDICTION_FUNCTIONS)
+
+
+# ---- NBA totals: the model pick takes the standard weight (owner 2026-11-16, after the first audit) ----
+
+def _blend_as_the_pipeline_does(frame, kalshi=None, ml=None, uploaded=None):
+    """The blend with the source named, as all three call sites pass it."""
+    from core.streamlit_pipeline import compute_blended_probability
+    empty = pd.Series(float("nan"), index=frame.index)
+    theover, source = tmt.blend_input(frame, uploaded)
+    return compute_blended_probability(p_market=frame["market_probability"], p_kalshi=empty if kalshi is None else kalshi,
+                                       p_ml=empty if ml is None else ml, p_theover=theover,
+                                       p_sentiment=pd.Series(0.5, index=frame.index), league=frame["league"],
+                                       market_type=frame["market_type"], theover_source=source)
+
+
+def test_an_nba_total_weighs_the_model_pick_like_any_other_league():
+    from app_core.weights_config import NBA_TOTAL_FALLBACK_THEOVER_WEIGHT
+    rows = (("g", "total_under", 0.488, 1.0, 0.875), ("g", "total_over", 0.512, 0.0, 0.875))
+    nba = _blend_as_the_pipeline_does(_rows(*rows, league="NBA"))
+    college = _blend_as_the_pipeline_does(_rows(*rows))
+    weight = FALLBACK_MARKET_WEIGHT + FALLBACK_THEOVER_WEIGHT
+    assert nba.iloc[0] == pytest.approx((FALLBACK_MARKET_WEIGHT * 0.488 + FALLBACK_THEOVER_WEIGHT * 0.70) / weight)
+    assert list(nba) == pytest.approx(list(college))
+    assert nba.iloc[0] + nba.iloc[1] == pytest.approx(1.0)
+    # The first audit (16 November) had these NBA totals at 60%, above every college total, under the old weight.
+    old = ((FALLBACK_MARKET_WEIGHT * 0.488 + NBA_TOTAL_FALLBACK_THEOVER_WEIGHT * 0.70)
+           / (FALLBACK_MARKET_WEIGHT + NBA_TOTAL_FALLBACK_THEOVER_WEIGHT))
+    assert old == pytest.approx(0.601, abs=0.001) and nba.iloc[0] == pytest.approx(0.565, abs=0.001)
+
+
+def test_with_kalshi_and_a_model_the_nba_pick_still_takes_the_standard_weights():
+    from app_core.weights_config import FALLBACK_ML_WEIGHT, ML_MODEL_WEIGHT
+    frame = _rows(("g", "total_under", 0.488, 1.0, 0.875), ("g", "total_over", 0.512, 0.0, 0.875), league="NBA")
+    kalshi = pd.Series([0.58, 0.42], index=frame.index)          # Kalshi has the Under at 58%: its weight counts on that row
+    ml = pd.Series([0.53, 0.47], index=frame.index)
+    blended = _blend_as_the_pipeline_does(frame, kalshi, ml)
+    weight = KALSHI_WEIGHT + MARKET_WEIGHT + ML_MODEL_WEIGHT + THEOVER_WEIGHT
+    assert blended.iloc[0] == pytest.approx(
+        (KALSHI_WEIGHT * 0.58 + MARKET_WEIGHT * 0.488 + ML_MODEL_WEIGHT * 0.53 + THEOVER_WEIGHT * 0.70) / weight)
+    fallback = FALLBACK_MARKET_WEIGHT + FALLBACK_ML_WEIGHT + FALLBACK_THEOVER_WEIGHT
+    assert blended.iloc[1] == pytest.approx(
+        (FALLBACK_MARKET_WEIGHT * 0.512 + FALLBACK_ML_WEIGHT * 0.47 + FALLBACK_THEOVER_WEIGHT * 0.30) / fallback)
+
+
+def test_a_theover_probability_from_the_upload_keeps_the_nba_weight():
+    from app_core.weights_config import NBA_TOTAL_FALLBACK_THEOVER_WEIGHT
+    from core.streamlit_pipeline import compute_blended_probability
+    frame = _rows(("g", "total_under", 0.488, None, None), ("g", "total_over", 0.512, None, None), league="NBA")
+    uploaded = pd.Series([0.62, 0.38], index=frame.index)
+    blended = _blend_as_the_pipeline_does(frame, uploaded=uploaded)
+    weight = FALLBACK_MARKET_WEIGHT + NBA_TOTAL_FALLBACK_THEOVER_WEIGHT
+    assert blended.iloc[0] == pytest.approx((FALLBACK_MARKET_WEIGHT * 0.488 + NBA_TOTAL_FALLBACK_THEOVER_WEIGHT * 0.62) / weight)
+    # A caller that names no source gets what it always got, for the upload and for the pick alike.
+    empty = pd.Series(float("nan"), index=frame.index)
+    unnamed = compute_blended_probability(p_market=frame["market_probability"], p_kalshi=empty, p_ml=empty, p_theover=uploaded,
+                                          p_sentiment=pd.Series(0.5, index=frame.index), league=frame["league"],
+                                          market_type=frame["market_type"])
+    assert list(unnamed) == pytest.approx(list(blended))
+
+
+def test_other_leagues_and_nba_sides_are_untouched_by_the_source():
+    from core.streamlit_pipeline import compute_blended_probability
+    for league in ("NCAAB", "NHL", "NFL", "NCAAF", "MLB", "WNBA"):
+        frame = _rows(("g", "total_under", 0.488, 1.0, 0.73), ("g", "total_over", 0.512, 0.0, 0.73), league=league)
+        empty = pd.Series(float("nan"), index=frame.index)
+        theover, source = tmt.blend_input(frame)
+        kalshi = pd.Series([0.58, 0.42], index=frame.index)
+        for k in (empty, kalshi):
+            named = compute_blended_probability(frame["market_probability"], k, empty, theover, pd.Series(0.5, index=frame.index),
+                                                league=frame["league"], market_type=frame["market_type"], theover_source=source)
+            unnamed = compute_blended_probability(frame["market_probability"], k, empty, theover, pd.Series(0.5, index=frame.index),
+                                                  league=frame["league"], market_type=frame["market_type"])
+            assert list(named) == pytest.approx(list(unnamed)), league
+    spread = _rows(("g", "spread_home", 0.52, None, None), ("g", "spread_away", 0.48, None, None), league="NBA")
+    assert list(_blend_as_the_pipeline_does(spread)) == pytest.approx([0.52, 0.48])
+
+
+def test_the_re_blend_and_the_analysis_blend_level_the_nba_too():
+    import streamlit_app as app
+    from core.streamlit_pipeline import _apply_analysis_calculations
+
+    def game(league):
+        return pd.DataFrame([dict(matchup_id="g", league=league, home_team="Boston", away_team="Orlando", market_type=kind,
+                                  market_probability=0.5, odds_american=-110, opposing_odds_american=-110, total_line=212.5,
+                                  spread_line=None, theover_pick_agrees=picked, theover_model_hit_rate=0.875,
+                                  theover_probability=None, ml_probability=None, kalshi_probability=None,
+                                  win_prob_source="not_provided")
+                             for kind, picked in (("total_under", 1.0), ("total_over", 0.0))])
+
+    estimate = (FALLBACK_MARKET_WEIGHT * 0.5 + FALLBACK_THEOVER_WEIGHT * 0.70) / (FALLBACK_MARKET_WEIGHT + FALLBACK_THEOVER_WEIGHT)
+    again = app._recompute_consensus_from_kalshi(game("NBA")).set_index("market_type")
+    assert again.loc["total_under", "calibrated_probability"] == pytest.approx(estimate)
+    assert again.loc["total_under", "blend_in_theover_source"] == tmt.SOURCE
+    nba = _apply_analysis_calculations(game("NBA")).set_index("market_type")
+    college = _apply_analysis_calculations(game("NCAAB")).set_index("market_type")
+    assert nba.loc["total_under", "calibrated_probability"] == pytest.approx(college.loc["total_under", "calibrated_probability"])
+    assert nba.loc["total_under", "calibrated_probability"] == pytest.approx(estimate)
+
+
+def test_all_three_blends_tell_the_blend_where_the_theover_input_came_from():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    pipeline = (root / "core" / "streamlit_pipeline.py").read_text(encoding="utf-8")
+    app = (root / "streamlit_app.py").read_text(encoding="utf-8")
+    assert pipeline.count("theover_source=merged[_theover_model_totals.SOURCE_COLUMN]") == 1     # the production blend
+    assert pipeline.count("theover_source=_theover_for_blend_source") == 1                        # the Analysis-tab blend
+    assert app.count("theover_source=out[_theover_model_totals.SOURCE_COLUMN]") == 1              # the re-blend after Kalshi
