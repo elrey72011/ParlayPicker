@@ -2934,6 +2934,8 @@ def main() -> None:
                 "second_best_probability": "2nd Best Prob",
                 "moneyline_pick": "Moneyline Pick",
                 "moneyline_pick_probability": "Moneyline Prob",
+                "best_line_price": "Best Price",
+                "best_line_price_book": "Best Price Book",
                 "gemini_pick": "Gemini Pick",
                 "gemini_confidence": "Gemini Confidence",
                 "gemini_review_status": "Gemini Verdict",
@@ -2949,11 +2951,19 @@ def main() -> None:
                 "kalshi_match_status": "Kalshi Status",
                 "ml_probability": "ML Prob",
             }
+            if all(c in display_df.columns for c in ("best_available_tie_count", "best_available_tied_with", "best_available_no_lean")):
+                # Owner 2026-11-15: a pick whose place came from a tie-break is marked (app_core.pick_notes).
+                from app_core.pick_notes import tie_note as _tie_note
+                display_df["Tie"] = [
+                    _tie_note(c, o, f) for c, o, f in zip(
+                        display_df["best_available_tie_count"], display_df["best_available_tied_with"],
+                        display_df["best_available_no_lean"])
+                ]
             display_df = display_df.rename(columns=rename_map)
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "2nd Best Pick", "2nd Best Prob", "Moneyline Pick", "Moneyline Prob", "Gemini Pick", "Gemini Confidence", "Gemini Verdict", "Gemini Stake Multiplier", "Gemini Gate Reason", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
+            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Tie", "Best Pick", "2nd Best Pick", "2nd Best Prob", "Moneyline Pick", "Moneyline Prob", "Gemini Pick", "Gemini Confidence", "Gemini Verdict", "Gemini Stake Multiplier", "Gemini Gate Reason", "Prob", "ML Prob", "Odds", "Best Price", "Best Price Book", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
 
@@ -3007,8 +3017,8 @@ def main() -> None:
                     no_edge_view.insert(0, "Why No Production Bet", no_edge_df.apply(_friendly_no_bet_reason, axis=1))
                     compact_cols = [
                         c for c in [
-                            "Bet Decision", "Play Tier", "Play Stake", "Best Pick", "League", "Away Team", "Home Team",
-                            "Game Time (ET)", "Prob", "Odds", "EV", "Edge", "Calibrated Edge", "Consensus",
+                            "Bet Decision", "Play Tier", "Play Stake", "Best Pick", "Tie", "League", "Away Team", "Home Team",
+                            "Game Time (ET)", "Prob", "Odds", "Best Price", "Best Price Book", "EV", "Edge", "Calibrated Edge", "Consensus",
                             "Why No Production Bet", "Pick_Status", "Production Gate Reason",
                         ] if c in no_edge_view.columns
                     ]

@@ -669,7 +669,12 @@ _REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi
                              "gemini_research_reviewed_at", "gemini_research_model",
                              # Research models' view of the pick (app_core.research_model_column)
                              "research_model_probability", "research_model_push_probability", "research_model_ev",
-                             "research_model_predicted_at", "research_model_status"]
+                             "research_model_predicted_at", "research_model_status",
+                             # Best price at the pick's exact line among the stake books, and whether the
+                             # pick tied (app_core.pick_notes; owner 2026-11-15)
+                             "best_line_price", "best_line_price_book", "best_line_price_books",
+                             "best_line_expected_value", "best_available_tie_count", "best_available_tied_with",
+                             "best_available_no_lean"]
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 
@@ -4982,6 +4987,30 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["moneyline_pick_probability"] = pd.to_numeric(
         pd.Series([m[2] for m in moneyline], index=pool.index), errors="coerce"
     )
+    # Best price at each candidate's exact line among the stake books already fetched, and
+    # whether its probability tied with another ranked candidate of the game (owner 2026-11-15;
+    # app_core.pick_notes). Display and audit only: the pick is already chosen above and nothing
+    # reads these back. ``best_line_expected_value`` prices the selection's own probability at
+    # that best price, so it compares directly with ``best_available_expected_value``.
+    try:
+        from app_core import pick_notes as _pick_notes
+        _line_prices, _ties = _pick_notes.prices(pool), _pick_notes.ties(pool)
+        for _field in _pick_notes.PRICE_FIELDS:
+            pool[_field] = _line_prices[_field]
+        for _field in _pick_notes.TIE_FIELDS:
+            pool[_field] = _ties[_field]
+        _best_decimal = pool["best_line_price"].map(_pick_notes.decimal).astype("float64")
+        _own_decimal = pool["odds_american"].map(_pick_notes.decimal).astype("float64")
+        pool["best_line_expected_value"] = (pool["best_available_probability"] * _best_decimal - 1).round(4)
+        _pick_notes_diagnostic = {
+            "status": "OK",
+            "selected_with_better_price": int((pool["best_available_selected"] & (_best_decimal > _own_decimal)).sum()),
+            "selected_no_lean": int((pool["best_available_selected"] & pool["best_available_no_lean"]).sum()),
+        }
+    except Exception as exc:  # a display note must never break Refresh
+        _pick_notes_diagnostic = {"status": "ERROR", "error": type(exc).__name__}
+    if diagnostics_out is not None:
+        diagnostics_out["pick_notes"] = _pick_notes_diagnostic
     pool["best_available_candidate_count"] = (
         pd.to_numeric(pool["matchup_id"].map(candidate_count_by_matchup), errors="coerce")
         .fillna(0)
@@ -5063,6 +5092,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "_market_family", "best_available_rank", "best_available_family_rank",
         "best_available_finalist", "best_available_final_rank",
         "best_available_selected", "best_available_score", "best_available_expected_value",
+        # Best price at this candidate's exact line among the stake books, and whether it tied
+        # (app_core.pick_notes; display and audit only).
+        "best_line_price", "best_line_price_book", "best_line_price_books", "best_line_expected_value",
+        "best_available_tie_count", "best_available_tied_with", "best_available_no_lean",
         "best_available_runner_up_pick", "best_available_runner_up_market_type",
         "best_available_runner_up_score", "best_available_score_gap",
         "second_best_pick", "second_best_probability",
