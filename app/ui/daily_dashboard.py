@@ -300,20 +300,22 @@ def _render_pinnacle_value(candidates):
 THEOVER_MODEL_COLUMNS = ["Sport", "Game", "Pick", "TheOver's line", "Odds", "Best price", "Best price book",
                          "Model hit rate", "Also the app's pick"]
 THEOVER_MODEL_CAPTION = (
-    "Research only: no stake, approval or change to Best picks. TheOver's totals pick for each game where it lists "
-    "the recent hit rate of the model behind it, at the app's current line and price. Taken before the start over "
-    "nine nights (7 to 15 November 2026) these went 147-92, ahead on eight of the nine, while its totals picks "
-    "with no hit rate listed went 113-119. Nine nights is not proof, so it is being tested on the nights that "
-    "follow before it can move any pick. It needs the TheOver totals upload.")
+    "TheOver's totals pick for each game where it lists the recent hit rate of the model behind it, at the app's "
+    "current line and price. Since 16 November 2026 this pick adds 5 points to the app's win estimate for that "
+    "side, so it is the app's pick in most of these games. Taken before the start over nine nights (7 to 15 "
+    "November 2026) these went 147-92, ahead on eight of the nine, while its totals picks with no hit rate listed "
+    "went 113-119. Nine nights is not proof: the record from here decides whether it stays. No stake or wager "
+    "approval comes from it. It needs the TheOver totals upload.")
 
 
 def theover_model_board(candidates):
-    """TheOver's totals pick for each game where it lists its model's hit rate (research only; owner 2026-11-16).
+    """TheOver's totals pick for each game where it lists its model's hit rate (owner 2026-11-16).
 
-    From the saved candidates: a total, on the side TheOver picked (``theover_pick_agrees`` 1), with
+    These are the picks that move the app's win estimate (``app_core.theover_model_totals``). From
+    the saved candidates: a total, on the side TheOver picked (``theover_pick_agrees`` 1), with
     ``theover_model_hit_rate`` present, still a current pre-game candidate. One row per game, in
     start order, at the app's own line and price with the best price among the stake books beside
-    it. It reads the candidates and changes nothing.
+    it. The list itself reads the candidates and changes nothing.
     """
     needed = {"market_type", "theover_pick_agrees", "theover_model_hit_rate"}
     if candidates is None or getattr(candidates, "empty", True) or not needed <= set(candidates.columns):
@@ -348,7 +350,7 @@ def theover_model_board(candidates):
 
 def _render_theover_model(candidates):
     board = theover_model_board(candidates)
-    with st.expander(f"TheOver model totals (research) · {len(board)} pick(s)", expanded=False):
+    with st.expander(f"TheOver model totals · {len(board)} pick(s)", expanded=False):
         if board.empty:
             st.info("No TheOver totals pick with a listed model hit rate in this analysis. They come from the "
                     "TheOver totals upload under Settings & research.")

@@ -327,6 +327,9 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                 probability_field='best_available_probability'
                 probability=number(source, 'best_available_probability')
                 basis='Candidate win estimate (pair-normalized)' if text(source, 'best_available_probability_source') == 'calibrated_probability_pair_normalized' else 'Candidate win estimate'
+                if text(source, 'best_available_probability_source').endswith('+theover_model_total'):
+                    # Owner 2026-11-16: TheOver's model-backed totals pick moved this estimate.
+                    basis='Candidate win estimate, moved by TheOver model total (unvalidated)'
                 odds=number(source, 'odds_american')
                 edge=None;ev=None
                 if probability is None or not 0<=probability<=1: approved=False

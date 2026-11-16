@@ -1,4 +1,4 @@
-"""TheOver's model-backed totals picks as a research list on the homepage (owner 2026-11-16)."""
+"""TheOver's model-backed totals picks listed on the homepage (owner 2026-11-16)."""
 from __future__ import annotations
 
 import pandas as pd
@@ -57,10 +57,13 @@ def test_nothing_to_list_gives_an_empty_board_with_its_columns():
         assert board.empty and list(board.columns) == THEOVER_MODEL_COLUMNS
 
 
-def test_the_caption_says_what_it_is_and_what_it_is_not():
-    assert THEOVER_MODEL_CAPTION.startswith("Research only: no stake, approval or change to Best picks.")
+def test_the_caption_says_what_it_does_and_what_it_cannot_do():
+    assert "adds 5 points to the app's win estimate" in THEOVER_MODEL_CAPTION
     assert "147-92" in THEOVER_MODEL_CAPTION and "113-119" in THEOVER_MODEL_CAPTION
     assert "Nine nights is not proof" in THEOVER_MODEL_CAPTION
+    assert "No stake or wager approval comes from it." in THEOVER_MODEL_CAPTION
+    from app_core.theover_model_totals import SHIFT
+    assert SHIFT == 0.05                                    # the caption's "5 points"
 
 
 def test_the_list_changes_nothing_it_reads():
@@ -89,11 +92,11 @@ def _app():
     render_daily_dashboard(today.empty(), details.empty(), board, candidates)
 
 
-def test_the_homepage_shows_the_research_list_under_the_boards():
+def test_the_homepage_shows_the_list_under_the_boards():
     from streamlit.testing.v1 import AppTest
     app = AppTest.from_function(_app).run()
     assert not app.exception
-    assert any(e.label == "TheOver model totals (research) · 1 pick(s)" for e in app.expander)
+    assert any(e.label == "TheOver model totals · 1 pick(s)" for e in app.expander)
     frame = next(d.value for d in app.dataframe if "Model hit rate" in d.value.columns)
     assert list(frame.columns) == THEOVER_MODEL_COLUMNS
     row = frame.iloc[0]
@@ -101,6 +104,6 @@ def test_the_homepage_shows_the_research_list_under_the_boards():
             row["Model hit rate"], row["Also the app's pick"]) == (
         "Tulsa at Rice", "Under 145.5", 146.5, -110, -104, "FanDuel", "73%", "")
     assert any(c.value == THEOVER_MODEL_CAPTION for c in app.caption)
-    # The pick board above it is unchanged: the app's own pick is still the spread.
+    # The list only reads: the saved pick above it is shown as saved, and nothing is approved.
     picks = next(d.value for d in app.dataframe if "Wager status" in d.value.columns)
     assert picks.iloc[0]["Best pick"] == "Tulsa +3.5" and picks.iloc[0]["Wager status"] == "PASS"
