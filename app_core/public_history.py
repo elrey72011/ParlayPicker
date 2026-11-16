@@ -336,13 +336,34 @@ class History:
         return [active[identity] for identity in sorted(requested)]
 
     def publications(self):
+        return self._publications(self.all('confirmed'))
+
+    def _publications(self, confirmed):
         result=[]
-        for receipt in self.all('confirmed'):
+        for receipt in confirmed:
             package=self.read('packages/'+receipt['package_hash']+'.json')
             if digest(package)!=receipt['package_hash']:
                 raise ValueError('Public history hash mismatch')
             result.append({**receipt,'package':package})
         return result
+
+    def grading_inputs(self):
+        """What the scheduled grader reads, from one complete verified read phase.
+
+        ``publications()``, ``all('imports')``, ``all('scores')``, ``all('locks')`` and
+        ``all('grading_runs')`` each list the whole Drive folder. With some 340,000 objects in it
+        a listing takes about seven minutes, so those five reads were 35 minutes of every research
+        cycle (2026-11-16). This returns the same records from one listing.
+
+        The grader only reads locks, to see which locked picks still need a result. It does not
+        need the lock writer's own membership check (``active_lock_snapshot``), which stays as it
+        is for every write: a lock saved after this listing is graded on the next cycle.
+        """
+        values, _ = self._read_kinds(('confirmed', 'imports', 'scores', 'locks', 'lock_removals', 'grading_runs'))
+        removed = {row['lock_hash'] for row in values['lock_removals']}
+        return dict(publications=self._publications(values['confirmed']), imports=values['imports'],
+                    scores=values['scores'], grading_runs=values['grading_runs'],
+                    locks=[row for row in values['locks'] if digest(row) not in removed])
 
 
 def team_name(value, sport):

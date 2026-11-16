@@ -76,3 +76,33 @@ def test_callers_cache_moves_to_the_kept_cache_and_still_verifies(monkeypatch, t
             path.write_bytes(b"tampered")
     drive.read_cached_objects(Prefix=PREFIX, cache_dir=temporary)
     assert session.downloads == 2                           # checksum mismatch forces a download
+
+
+# ---- one listing has to last a whole research cycle (owner 2026-11-16) ----
+
+def test_a_listing_taken_sixteen_minutes_ago_is_reused_at_the_workflows_setting(monkeypatch):
+    """With some 340,000 objects a listing takes 7 to 9 minutes. At 900 seconds the later sports of a
+    cycle listed the whole folder again; the research workflows now set an hour."""
+    from pathlib import Path
+    import yaml
+    root = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+    loop = (root / "research-loop.yml").read_text(encoding="utf-8")
+    scheduler = (root / "research-scheduler.yml").read_text(encoding="utf-8")
+    line = 'PARLAYPICKER_DRIVE_INVENTORY_REUSE_SECONDS: "3600"'
+    assert loop.count(line) == 1 and scheduler.count(line) == 1
+    assert yaml.safe_load(loop)["jobs"]["research-loop"]["env"]["PARLAYPICKER_DRIVE_INVENTORY_REUSE_SECONDS"] == "3600"
+    clock = [1000.0]
+    monkeypatch.setattr(evidence_drive.time, "monotonic", lambda: clock[0])
+    monkeypatch.setenv(evidence_drive.DRIVE_INVENTORY_REUSE_ENV, "3600")
+    session, drive = _drive()
+    drive.read_objects(Prefix=PREFIX)
+    clock[0] += 16 * 60                                     # the NCAAB restore of 15 November, after NFL, NCAAF and NBA
+    drive.read_objects(Prefix="parlaypicker/public-history-v1/site-1234/imports/")
+    clock[0] += 16 * 60                                     # and the NHL restore after it
+    drive.read_objects(Prefix=PREFIX)
+    assert session.listings == 1                            # three listings at 900 seconds
+    drive.discover_complete_inventory(namespace="lock", coalesce=False)
+    assert session.listings == 2                            # a lock read still lists for itself
+    clock[0] += 3601
+    drive.read_objects(Prefix=PREFIX)
+    assert session.listings == 3                            # and the window still ends

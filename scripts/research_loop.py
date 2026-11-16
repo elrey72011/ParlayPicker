@@ -10,7 +10,12 @@ budgets and audit apply) as a fresh process every ``--interval`` minutes until
 
 * A cycle that fails or is outside the operating window does not end the loop, except that a
   skipped cycle after a successful one (the window has closed) ends it.
-* A new cycle starts only if at least ``MIN_CYCLE_MINUTES`` remain.
+* A new cycle starts only if at least ``MIN_CYCLE_MINUTES`` remain, and only if there is room
+  before the deadline for a cycle as long as the longest this loop has already run (2026-11-16).
+  Cycles had grown to 72 to 109 minutes, so one started with 46 minutes left ran past the job's
+  355-minute limit and was killed part-way through (runs 40 and 43). The job's limit is some
+  13 minutes after this loop's own deadline, which is the room left for a cycle that runs longer
+  than any before it.
 * Before each cycle it checks for a queued or waiting Bound plan / Deployment review
   run (owner steps that share the evidence lock) and, if one is waiting, ends so it can run.
 * Exit status: 0 when at least one cycle succeeded or skipped, else 1.
@@ -27,6 +32,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 MIN_CYCLE_MINUTES = 45
+NO_ROOM = "no_room_for_a_full_cycle"      # ended with time left, but less than its longest cycle took
 YIELD_TO = ("bound-plan.yml", "deployment-review.yml")
 
 
@@ -68,6 +74,7 @@ def loop(minutes, interval, *, out_dir, cycle=None, waiting=owner_run_waiting, c
     out_dir.mkdir(parents=True, exist_ok=True)
     cycle = cycle or (lambda n: run_cycle(n, out_dir=out_dir))
     deadline = clock() + minutes * 60
+    longest = 0.0                         # seconds the longest cycle of this loop took (skipped ones aside)
     totals = {"cycles": 0, "succeeded": 0, "skipped": 0, "failed": 0, "ended": "deadline"}
     while clock() + MIN_CYCLE_MINUTES * 60 <= deadline:
         if waiting():
@@ -79,8 +86,11 @@ def loop(minutes, interval, *, out_dir, cycle=None, waiting=owner_run_waiting, c
         state = (audit or {}).get("execution_state")
         kind = "skipped" if state == "SKIPPED" else "succeeded" if code == 0 else "failed"
         totals[kind] += 1
+        took = clock() - started
+        if kind != "skipped":
+            longest = max(longest, took)
         print(json.dumps({"cycle": totals["cycles"], "exit": code, "execution_state": state,
-                          "minutes": round((clock() - started) / 60, 1)}), flush=True)
+                          "minutes": round(took / 60, 1)}), flush=True)
         if kind == "skipped" and totals["succeeded"]:
             # The operating window closed after this loop had run cycles in it: the rest would
             # only be skipped while holding the research concurrency group (audit 2026-11-09).
@@ -88,6 +98,13 @@ def loop(minutes, interval, *, out_dir, cycle=None, waiting=owner_run_waiting, c
             break
         next_start = max(clock(), started + interval * 60)
         if next_start + MIN_CYCLE_MINUTES * 60 > deadline:
+            break
+        if next_start + longest > deadline:
+            # A cycle as long as the longest so far would still be running at the deadline, and the
+            # job is killed soon after it. Stop cleanly so a queued run can take over.
+            totals["ended"] = NO_ROOM
+            print(json.dumps({"stopped": NO_ROOM, "longest_cycle_minutes": round(longest / 60, 1),
+                              "minutes_left": round((deadline - next_start) / 60, 1)}), flush=True)
             break
         sleep(max(0.0, next_start - clock()))  # the clock moves on; never a negative sleep
     return totals

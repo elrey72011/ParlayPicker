@@ -14,9 +14,11 @@ def run(site, folder, client, sports, *, clock=None, fetch=None):
         return {**result,'status':'outside_operating_window'}
     store=History(site,folder,client)
     # Restore must succeed before any scores are fetched or records changed.
-    pubs=store.publications();imports=store.all('imports');revisions=store.all('scores')
-    locks=store.all('locks')
-    statuses=store.all('grading_runs')
+    # One read phase, so one listing of the Drive folder instead of five (History.grading_inputs).
+    saved=store.grading_inputs()
+    pubs=saved['publications'];imports=saved['imports'];revisions=saved['scores']
+    locks=saved['locks']
+    statuses=saved['grading_runs']
     checked={}
     for status in sorted(statuses,key=lambda r:r['started_at']):
         checked.update(status.get('checked',{}))
