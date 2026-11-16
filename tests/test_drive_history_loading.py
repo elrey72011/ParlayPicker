@@ -398,3 +398,61 @@ def test_on_disk_read_returns_cached_objects_with_the_same_bytes(tmp_path):
     # Without a cache directory there is nowhere to leave a file, so bytes are returned as before.
     loose = drive.read_verified_prefixes(Prefixes=[prefix], inventory=inventory, on_disk=True)
     assert [raw for _, raw in loose[prefix]] == [raw for _, raw in plain[prefix]]
+
+
+# ---- the scheduled grader reads its inputs from one listing (owner 2026-11-16) ----
+
+def test_the_scheduled_grader_reads_its_inputs_from_one_listing(monkeypatch):
+    """Five reads, each listing the whole folder, were 35 minutes of every research cycle."""
+    session = SyntheticDrive(count=3000)
+    prefix = "parlaypicker/public-history-v1/site-1234/"
+    kept, gone = dict(id="lock-kept", date="2026-10-03", legs=[]), dict(id="lock-gone", date="2026-10-03", legs=[])
+    session.add(prefix + "locks/kept.json", kept)
+    session.add(prefix + "locks/gone.json", gone)
+    session.add(prefix + "lock_removals/" + digest(gone) + ".json", dict(lock_hash=digest(gone), lock_id="lock-gone"))
+    store = History("site-1234", "folder", DriveStore("folder", session=session))
+    start = session.listings
+    separately = dict(publications=store.publications(), imports=store.all("imports"), scores=store.all("scores"),
+                      locks=store.all("locks"), grading_runs=store.all("grading_runs"))
+    assert session.listings - start == 5                          # what the grader did before
+    start = session.listings
+    together = store.grading_inputs()
+    assert session.listings - start == 1
+    assert together == separately                                 # the same records, in the same order
+    assert [row["id"] for row in together["locks"]] == ["lock-kept"]          # a removed lock stays removed
+    assert together["publications"][0]["package"]["schema_version"] == 5
+    # A lock saved after that listing is seen by the next read: nothing is cached between phases.
+    session.add(prefix + "locks/late.json", dict(id="lock-late", date="2026-10-03", legs=[]))
+    assert {row["id"] for row in store.grading_inputs()["locks"]} == {"lock-kept", "lock-late"}
+    # The lock writer's own check is untouched: it still lists for itself, never joining another read.
+    start = session.listings
+    assert {row["id"] for row in store.active_lock_snapshot().active} == {"lock-kept", "lock-late"}
+    assert session.listings - start == 1
+
+
+def test_the_grading_run_itself_lists_the_folder_once(monkeypatch):
+    from datetime import datetime, timezone
+    from app_core import public_grading_scheduler as scheduler
+    session = SyntheticDrive(count=3000)
+    drive = DriveStore("folder", session=session)
+    monkeypatch.setattr(scheduler, "is_open", lambda: True)
+    saved = []
+    monkeypatch.setattr(History, "put", lambda self, key, value, **kwargs: saved.append(key) or value)
+    result = scheduler.run("site-1234", "folder", drive, {"MLB"}, clock=lambda: datetime(2026, 10, 4, tzinfo=timezone.utc),
+                           fetch=lambda *args: pytest.fail("nothing is pending in this history"))
+    assert session.listings == 1                                  # five before
+    assert result["status"] == "ok" and result["pending"] == 0
+    assert len(saved) == 1 and saved[0].startswith("grading_runs/")
+
+
+def test_a_failed_read_still_stops_the_grader_before_any_score_request(monkeypatch):
+    from datetime import datetime, timezone
+    from app_core import public_grading_scheduler as scheduler
+    session = SyntheticDrive(count=3000)
+    session.incomplete = True                                     # Drive says the listing is incomplete
+    monkeypatch.setattr(scheduler, "is_open", lambda: True)
+    monkeypatch.setattr(History, "put", lambda *args, **kwargs: pytest.fail("nothing is written after a failed read"))
+    with pytest.raises(Exception, match="incomplete"):
+        scheduler.run("site-1234", "folder", DriveStore("folder", session=session), {"MLB"},
+                      clock=lambda: datetime(2026, 10, 4, tzinfo=timezone.utc),
+                      fetch=lambda *args: pytest.fail("no score request after a failed read"))

@@ -39,7 +39,11 @@ jobs:
       THE_ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       PARLAYPICKER_NETLIFY_SITE_ID: ${{ vars.PARLAYPICKER_NETLIFY_SITE_ID }}
       RESEARCH_SPORTS: ${{ vars.RESEARCH_SPORTS || 'NFL,NCAAF,NBA,NCAAB,MLB,NHL' }}
-      PARLAYPICKER_DRIVE_INVENTORY_REUSE_SECONDS: "900"
+      # One complete Drive listing serves every evidence restore of a cycle (each cycle is a fresh
+      # process, so a listing is never older than its own cycle). At 900 the window ran out part-way
+      # through: a listing now takes 7 to 9 minutes, and the later sports listed the folder again
+      # (2026-11-16). Lock and public-history reads always list fresh.
+      PARLAYPICKER_DRIVE_INVENTORY_REUSE_SECONDS: "3600"
       PARLAYPICKER_CERTIFIED_CLOSE_SPORTS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_SPORTS }}
       PARLAYPICKER_CERTIFIED_CLOSE_MARKETS: ${{ vars.PARLAYPICKER_CERTIFIED_CLOSE_MARKETS }}
       # Whole-game closes (40 credits) may use a quarter of the daily close allowance; the rest is kept for
