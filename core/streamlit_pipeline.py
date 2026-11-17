@@ -8706,7 +8706,8 @@ def _novig_spread_quote_for_favorite(row, requested_side: str, favorite_side: st
     return pd.NA, pd.NA, False
 
 
-def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
+def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None,
+                                  reconciled_names: dict | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
     Expands the wide live_odds_df (1 row per game) into every enabled live market
     candidate. TheOver uploads enrich matching directions but never whitelist the
@@ -8847,6 +8848,11 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 orientation_source = "exact_match"
                 target_markets = theover_rows.loc[matchup_mask, "market_type"].tolist()
                 upload_match_reason = "Matched by exact matchup_id"
+                # A college game whose uploaded names were set to the feed's spelling says so
+                # (owner 2026-11-17; app_core.college_name_key).
+                _renamed = (reconciled_names or {}).get(matchup_id)
+                if _renamed:
+                    upload_match_reason = f"Matched by exact matchup_id after the college name key ({_renamed})"
             else:
                 # 2. Try canonical match (Sorted normalized teams + normalized league + ET Day)
                 if (live_canon_key, et_date) in canon_map:
@@ -8928,6 +8934,11 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 matched_group = theover_rows_with_canon[(theover_rows_with_canon["_canon_key"] == live_canon_key) & (theover_rows_with_canon["_et_day"] == et_date)]
             elif orientation_source == "fuzzy_match":
                 matched_group = matched_rows
+
+        # A college game matched after its uploaded names took the feed's spelling says so in the
+        # match type the export carries: still an exact match, never a fuzzy one.
+        if match_found and orientation_source == "exact_match" and (reconciled_names or {}).get(matchup_id):
+            orientation_source = "exact_match|college_name_key"
 
         orientation_favorite_side = ""
         if matched_group is not None and "orientation_favorite_side" in matched_group.columns:
@@ -9876,7 +9887,17 @@ def run_analysis_pipeline(
         live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day).fillna(today_et_day)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
 
-    master_slate, diag_counts = _expand_live_odds_to_bet_rows(live_odds_df, theover_rows)
+    # College basketball: where TheOver's file and the odds feed spell a school in two standard ways
+    # ("Tennessee State" and "Tennessee St"), the uploaded game takes the feed's names and id, so it
+    # is the same game everywhere below and not a fuzzy match whose line is rejected (owner
+    # 2026-11-17; app_core.college_name_key). Only where exactly one game on each side fits.
+    from app_core import college_name_key as _college_name_key
+    theover_rows, _name_key_report = _college_name_key.reconcile(
+        theover_rows, live_odds_df, day_of=lambda frame: _et_day_string(_game_dates(frame)))
+
+    master_slate, diag_counts = _expand_live_odds_to_bet_rows(
+        live_odds_df, theover_rows, reconciled_names=_college_name_key.notes(_name_key_report))
+    diag_counts["college_name_key"] = _name_key_report
 
     # Graceful fallback if Odds API fails or is empty: use theover_rows directly as the master slate.
     if master_slate.empty and not theover_rows.empty:
