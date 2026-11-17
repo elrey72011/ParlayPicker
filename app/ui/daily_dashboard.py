@@ -202,6 +202,20 @@ def tie_notes(result, candidates, family="overall"):
     return notes if notes.ne("").any() else None
 
 
+def rating_basis_labels(result, candidates):
+    """'Price only' or 'Price + <inputs>' per board row from its saved candidate; None when none is recorded.
+
+    From ``app_core.rating_basis`` (owner 2026-11-17): what the win estimate was built from. Over nine
+    graded nights the estimate was the sportsbook's price alone for 451 of 525 games, so the board
+    says which picks those are. It changes no pick, stake or approval.
+    """
+    if candidates is None or getattr(candidates, "empty", True) or "rating_basis" not in candidates:
+        return None
+    labels = _candidate_lookup(result, candidates, candidates["rating_basis"])
+    labels = labels.where(labels.notna(), "").astype(str)
+    return labels if labels.ne("").any() else None
+
+
 PINNACLE_MIN_EV = 0.02
 
 
@@ -441,6 +455,13 @@ def _render_game_board(board, candidates, family):
         display["Tie"] = ties
         at = columns.index("Best pick") + 1
         columns[at:at] = ["Tie"]
+    built_from = rating_basis_labels(result, candidates)
+    if built_from is not None:
+        # Owner 2026-11-17: say which win estimates are the sportsbook's price alone, and which
+        # also rest on another input; changes no pick, stake or approval.
+        display["Built from"] = built_from.where(built_from.ne(""), "Not recorded")
+        at = columns.index("Win estimate") + 1
+        columns[at:at] = ["Built from"]
     if 'coverage_decision_state' in result:
         display['Coverage decision'] = result['coverage_decision_state']
         display['Coverage explanation'] = result['coverage_explanation']
@@ -455,10 +476,16 @@ def _render_game_board(board, candidates, family):
                    "and BetMGM at the last refresh; check it at the book before placing anything. Tie marks a pick "
                    "whose place came from a tie-break: \"No lean (tie)\" means the app rates both sides of that "
                    "market the same, and \"Level with\" names an equally rated pick in the other market.")
+    if built_from is not None:
+        from app_core.rating_basis import CAPTION as _basis_caption, counts as _basis_counts
+        tally = _basis_counts(built_from)
+        st.caption(f"{tally['price_only']} of {tally['picks']} picks here are built from the price alone. "
+                   + _basis_caption)
     with st.expander("Selection details and wager explanations", expanded=False):
         st.dataframe(result[["matchup", "pick", "approval_reason", "edge", "selection_score", "probability_basis", "start"]], hide_index=True, width="stretch")
         st.caption("Best Overall, Best Side, and Best Total identify the selected pick for each game. Wager status is separate: PASS means no approved wager. Ranking uses the composite selection score first, followed by probability, tier, EV, and edge as tie-breakers; the highest EV does not necessarily rank first. Selection score is not a win probability. Edge compares the displayed estimate with price break-even. Estimate source is shown for each selection; NFL context-backed estimates retain the prior result and injury-report status in the export. Only exact final tickets carry final production metrics and approval.")
-    st.download_button("Download this game board", result.to_csv(index=False), family+"-per-game.csv", "text/csv", key="per_game_export_"+family)
+    export = result if built_from is None else result.assign(rating_basis=built_from)
+    st.download_button("Download this game board", export.to_csv(index=False), family+"-per-game.csv", "text/csv", key="per_game_export_"+family)
 
 
 def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.DataFrame | None = None) -> None:

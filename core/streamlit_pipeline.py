@@ -677,7 +677,10 @@ _REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi
                              "best_available_no_lean",
                              # Where the blend's TheOver input came from: the upload, or TheOver's
                              # model-backed totals pick (app_core.theover_model_totals; owner 2026-11-16)
-                             "blend_in_theover_source"]
+                             "blend_in_theover_source",
+                             # What the win estimate was built from: the book's price alone, or the price
+                             # and the inputs named (app_core.rating_basis; owner 2026-11-17)
+                             "rating_basis"]
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _REFERENCE_EXPORT_COLUMNS))
 
@@ -5036,6 +5039,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         _pick_notes_diagnostic = {"status": "ERROR", "error": type(exc).__name__}
     if diagnostics_out is not None:
         diagnostics_out["pick_notes"] = _pick_notes_diagnostic
+    # What each candidate's win estimate was built from: the book's price alone, or the price and
+    # another input (owner 2026-11-17; app_core.rating_basis). Display and audit only, read from
+    # the blend's own recorded inputs; nothing reads it back.
+    try:
+        from app_core import rating_basis as _rating_basis
+        pool[_rating_basis.COLUMN] = _rating_basis.basis(pool)
+        _rating_basis_diagnostic = {
+            "status": "OK",
+            **_rating_basis.counts(pool.loc[pool["best_available_selected"], _rating_basis.COLUMN]),
+        }
+    except Exception as exc:  # a display note must never break Refresh
+        _rating_basis_diagnostic = {"status": "ERROR", "error": type(exc).__name__}
+    if diagnostics_out is not None:
+        diagnostics_out["rating_basis"] = _rating_basis_diagnostic
     pool["best_available_candidate_count"] = (
         pd.to_numeric(pool["matchup_id"].map(candidate_count_by_matchup), errors="coerce")
         .fillna(0)
@@ -5121,6 +5138,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # (app_core.pick_notes; display and audit only).
         "best_line_price", "best_line_price_book", "best_line_price_books", "best_line_expected_value",
         "best_available_tie_count", "best_available_tied_with", "best_available_no_lean",
+        # What the win estimate was built from: "Price only" or the price and the inputs named
+        # (app_core.rating_basis; display and audit only).
+        "rating_basis",
         "best_available_runner_up_pick", "best_available_runner_up_market_type",
         "best_available_runner_up_score", "best_available_score_gap",
         "second_best_pick", "second_best_probability",
