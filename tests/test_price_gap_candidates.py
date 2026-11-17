@@ -274,3 +274,14 @@ def test_the_panel_can_reload_itself_and_stays_manual_by_default():
     import inspect
     assert "st.fragment(_body, run_every=AUTO_RELOAD_SECONDS if auto else None)(auto)" in inspect.getsource(
         panel.render_price_gap_candidates)
+
+
+# ---- once the watch's end date has passed (2026-11-17) ----
+
+@pytest.fixture(autouse=True)
+def _a_clock_from_while_the_watch_ran(monkeypatch):
+    """The watch ended on 2026-11-17 (``price_watch.UNTIL``). From that moment the test above that runs
+    the shared loop on the real clock found the watch switched off and failed, on main as well. It is
+    about the order of publish and backup, not the end date, so in this file the watch's default clock
+    reads the day before the end (the same fixture as in ``tests/test_price_watch.py``)."""
+    monkeypatch.setattr(pw, "_utcnow", lambda: pw.UNTIL - timedelta(days=1))

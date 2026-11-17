@@ -373,3 +373,24 @@ def test_the_weekend_allowance_is_800_a_day_in_steady_mode_only(monkeypatch):
     monkeypatch.setattr(budgets, "Budget", lambda state, persist, *, clock, limits: seen.update(limits) or "budget")
     assert pw.budget_for({}, None, clock=lambda: saturday, setting=steady) == "budget"
     assert seen["ODDS"] == {"daily": 800, "rolling_31_days": 3600}       # the running watch gets the weekend allowance
+
+
+# ---- once the watch's end date has passed (2026-11-17) ----
+
+@pytest.fixture(autouse=True)
+def _a_clock_from_while_the_watch_ran(monkeypatch):
+    """The watch ended on 2026-11-17 (``UNTIL``). From that moment the tests above that run the loop on
+    the real clock found it switched off and failed, on main as well. They are about the loop's pacing,
+    not the end date, so in this file the watch's default clock reads the day before the end. A test
+    that names its own ``now`` is unaffected; the end date itself is tested with ``now=pw.UNTIL``."""
+    monkeypatch.setattr(pw, "_utcnow", lambda: pw.UNTIL - timedelta(days=1))
+
+
+def test_on_the_real_clock_the_watch_is_off_once_its_end_date_has_passed(tmp_path, monkeypatch):
+    loop = importlib.import_module("scripts.news_capture_loop")
+    assert pw.sports(ON) == ("NBA", "NCAAB") and pw.enabled(ON) is True          # the day before the end
+    monkeypatch.setattr(pw, "_utcnow", lambda: pw.UNTIL + timedelta(seconds=1))
+    assert pw.sports(ON) == () and pw.enabled(ON) is False
+    assert pw.sports({pw.WATCH_ENV: "NBA,NCAAB", pw.EXTRA_ENV: "NHL"}.get) == ()
+    assert loop.run(5, 5, root=tmp_path, client=None, folder="f", key="k", request_get=None, setting=ON,
+                    source=pw)["status"] == "OFF"
