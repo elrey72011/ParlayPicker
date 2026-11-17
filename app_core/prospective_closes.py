@@ -6,6 +6,12 @@ Once a game has started no later pregame price can exist, and the snapshot can b
 fetched again and replayed, so this satisfies the frozen plans' rules
 ``certified_replayable_close_only`` and ``near_start_candidate_is_verified_close: False``.
 
+The start is the one stored when the game was first captured. The snapshot may list it up
+to 15 minutes later (owner 2026-11-17, ``prospective_evidence.CLOSE_LATE_START``): the close
+is still that last snapshot before the stored start, so it can be that much older than the
+start the provider listed. ``record`` counts the closes stored this way
+(``later_start_accepted``). A start listed earlier, or 15 minutes or more later, is refused.
+
 For each recently started event with verified entry quotes and no certified close
 yet, this module makes **one** historical event-odds request. It is limited to
 the quotes' sportsbooks, the spread-side and total markets, and the second before
@@ -327,12 +333,17 @@ def _over_rest_share(budget, sport, credits, share):
         return False
 
 
-def rejection_reason(event, row, error=None):
+def rejection_reason(event, row, error=None, *, late_start_minutes=0):
     """Which check refused a certified close row: a short code for the log, never data.
 
     It repeats ``prospective_evidence.verify_provider_close``'s response-level checks in order
     and names the first that fails; it decides nothing (the row was already refused). Minutes
     are the provider's start minus the stored start.
+
+    ``late_start_minutes`` is how much later a listed start the verifier accepts
+    (``prospective_evidence.CLOSE_LATE_START``, owner 2026-11-17); ``record`` passes it, so a row
+    with such a start that was refused for another reason is given that other reason. With the
+    default of 0 any moved start is named, as it was before the verifier accepted one.
     """
     try:
         if isinstance(error, evidence.EvidenceConflict):
@@ -354,7 +365,7 @@ def rejection_reason(event, row, error=None):
         if data.get("home_team") != event["home_team"] or data.get("away_team") != event["away_team"]:
             return "REJECTED_TEAM_NAMES"
         moved = (_time(data.get("commence_time")) - start).total_seconds() / 60
-        if moved:
+        if moved and not 0 < moved < late_start_minutes:
             size = "UNDER_15" if abs(moved) < 15 else "UNDER_60" if abs(moved) < 60 else "OVER_60"
             return f"REJECTED_START_{'LATER' if moved > 0 else 'EARLIER'}_{size}_MIN"
         books = [b for b in data.get("bookmakers") or [] if b.get("key") == row["sportsbook"]]
@@ -372,6 +383,18 @@ def rejection_reason(event, row, error=None):
         return "REJECTED_OUTCOMES_OR_PRICES"
     except Exception:  # a diagnosis must never break the capture
         return "REJECTED_UNREADABLE"
+
+
+LATE_START_MINUTES = evidence.CLOSE_LATE_START.total_seconds() / 60
+
+
+def _lists_later_start(event, response):
+    """True when the snapshot lists the start later than the stored one. A close stored from it was
+    accepted on ``prospective_evidence.CLOSE_LATE_START``; never raises."""
+    try:
+        return _time((response.get("data") or {}).get("commence_time")) > _time(event["scheduled_start"])
+    except Exception:
+        return False
 
 
 def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.environ.get, max_events=20):
@@ -430,14 +453,18 @@ def record(path, *, now, key, request_get, budget=None, sports=None, setting=os.
         if requested is not None:
             entry = requested.setdefault(event["event_id"], {"start": event["scheduled_start"], "scopes": []})
             entry["scopes"] = sorted(set(entry["scopes"]) | {_scope(q) for q in quotes})
+        later_start = _lists_later_start(event, payload)
         for row in closes_from_snapshot(event, quotes, payload, now):
             try:
                 evidence.insert_certified_close(path, row)
                 report["stored"] += 1
+                if later_start:      # stored on the later-start allowance: counted, so its use shows in the log
+                    report["later_start_accepted"] = report.get("later_start_accepted", 0) + 1
             except (ValueError, evidence.EvidenceConflict) as exc:
                 # The reason code says which check refused the row (2026-11-15: 134 rows were refused
                 # in one night and the log held only their ids).
-                report["errors"].append(f"{row['close_id']}:{rejection_reason(event, row, exc)}:{str(exc)[:80]}")
+                reason = rejection_reason(event, row, exc, late_start_minutes=LATE_START_MINUTES)
+                report["errors"].append(f"{row['close_id']}:{reason}:{str(exc)[:80]}")
         actual = _charged(response)
         if actual is not None and actual > credits:
             # The provider charged more than planned: record the difference, then stop.
@@ -481,6 +508,8 @@ def summary(report, sport=None, budget=None):
     out = {key: int(report.get(key) or 0) for key in ("events", "requests", "credits", "stored", "already_requested")}
     if report.get("held_for_bets"):
         out["held_for_bets"] = int(report["held_for_bets"])
+    if report.get("later_start_accepted"):      # closes stored although the provider listed the start a little later
+        out["later_start_accepted"] = int(report["later_start_accepted"])
     out["skipped"] = [str(code)[:60] for code in report.get("skipped") or []]
     out["errors"] = kinds
     if budget is not None and sport is not None:

@@ -886,6 +886,13 @@ def insert_close(path: str | Path | None, close: Mapping) -> str:
 
 
 HISTORICAL_CLOSE_SOURCE = "THE_ODDS_API_HISTORICAL"
+# How much later than the stored start the closing snapshot may list a game (owner 2026-11-17).
+# The start is stored when the game is first captured, and the provider often lists it a few
+# minutes later by the time it closes (an NBA tip, typically). Every close of such a game was
+# refused until now: 12 NBA rows and 4 NCAAB rows on the night of 2026-11-16, which left three
+# of nine NBA bets with no close. The snapshot is still the last one before the stored start,
+# so an accepted close can be this much older than the start the provider listed.
+CLOSE_LATE_START = timedelta(minutes=15)
 
 
 def certified_close_source_id(provider_event_id: str, sportsbook: str, market_key: str,
@@ -905,7 +912,10 @@ def verify_provider_close(event: Mapping, close: Mapping) -> bool:
       snapshot (``next_timestamp``) is at or after it, so no later pregame
       observation exists;
     - it was retrieved at or after the scheduled start;
-    - its event, teams, start, book, market, selection, line and price match exactly.
+    - its event, teams, book, market, selection, line and price match exactly;
+    - the start it lists is the stored start, or later by less than ``CLOSE_LATE_START``
+      (owner 2026-11-17). An earlier start, or one that much later or more, is refused:
+      the stored start no longer says when the game began.
 
     A live near-start quote is never accepted here: until the game starts, a later
     pregame price can still exist.
@@ -933,7 +943,7 @@ def verify_provider_close(event: Mapping, close: Mapping) -> bool:
         if (not isinstance(data, dict) or data.get("id") != event["provider_event_id"] or
                 data.get("sport_key") != ODDS_API_SPORT_KEYS[sport] or
                 data.get("home_team") != event["home_team"] or data.get("away_team") != event["away_team"] or
-                _time(data.get("commence_time"), "commence_time") != start):
+                not start <= _time(data.get("commence_time"), "commence_time") < start + CLOSE_LATE_START):
             return False
         side = ODDS_API_SIDE_MARKETS[sport]
         if close["market_family"] not in (side, "TOTAL"):
