@@ -210,6 +210,9 @@ _COMPACT_EXPORT_COLUMNS = [
     "gemini_review_status", "gemini_gate_reason", "gemini_stake_multiplier",
     "gemini_outage_allowed", "gemini_outage_cap_fraction", "maturity",
     "Kelly_Bet_Size",
+    # Last, so no earlier column moves: what the win estimate was built from, "Price only" or the
+    # price and the inputs named (app_core.rating_basis; owner 2026-11-17).
+    "rating_basis",
 ]
 
 
@@ -2941,6 +2944,8 @@ def main() -> None:
                 "moneyline_pick_probability": "Moneyline Prob",
                 "best_line_price": "Best Price",
                 "best_line_price_book": "Best Price Book",
+                # Owner 2026-11-17: what the win estimate was built from (app_core.rating_basis).
+                "rating_basis": "Built From",
                 "gemini_pick": "Gemini Pick",
                 "gemini_confidence": "Gemini Confidence",
                 "gemini_review_status": "Gemini Verdict",
@@ -2968,7 +2973,7 @@ def main() -> None:
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Tie", "Best Pick", "2nd Best Pick", "2nd Best Prob", "Moneyline Pick", "Moneyline Prob", "Gemini Pick", "Gemini Confidence", "Gemini Verdict", "Gemini Stake Multiplier", "Gemini Gate Reason", "Prob", "ML Prob", "Odds", "Best Price", "Best Price Book", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
+            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Tie", "Best Pick", "2nd Best Pick", "2nd Best Prob", "Moneyline Pick", "Moneyline Prob", "Gemini Pick", "Gemini Confidence", "Gemini Verdict", "Gemini Stake Multiplier", "Gemini Gate Reason", "Prob", "Built From", "ML Prob", "Odds", "Best Price", "Best Price Book", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
 
