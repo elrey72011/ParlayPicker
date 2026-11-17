@@ -554,3 +554,88 @@ def test_record_logs_the_reason_and_the_http_status(monkeypatch):
     report = pc.record("db", now=None, key="k", request_get=get, sports=("NCAAB",))
     assert report["errors"] and report["errors"][0].startswith("NCAAB:e1:HTTPError:HTTP_422:")
     assert pc.summary(report)["errors"] == {"HTTPError:422": 1}
+
+
+# ---- a start the provider lists a few minutes later (owner 2026-11-17) ----
+
+def _listed(minutes_after_the_stored_start):
+    """The closing snapshot, with the provider listing the start that many minutes from the stored one."""
+    payload = snapshot()
+    payload["data"]["commence_time"] = (BASE + timedelta(hours=1, minutes=minutes_after_the_stored_start)).isoformat()
+    return payload
+
+
+@pytest.mark.parametrize("minutes, counts", [
+    (0, True),                    # the stored start, as before
+    (5, True), (10, True),        # an NBA tip listed ten minutes after the hour
+    (14.98, True),                # just under the allowance
+    (15, False), (40, False),     # 15 minutes or more: the stored start no longer says when the game began
+    (-1, False), (-20, False),    # listed earlier: the snapshot could be from after the real start
+])
+def test_a_close_counts_when_the_start_is_listed_under_15_minutes_later(store, clock, minutes, counts):
+    clock(1, 5)
+    now = BASE + timedelta(hours=1, minutes=5)
+    event = pe.read_records(store, "prospective_event", sport="NBA")[0]
+    quotes = pe.read_records(store, "prospective_quote", sport="NBA")
+    [row] = pc.closes_from_snapshot(event, quotes, _listed(minutes), now)
+    assert pe.verify_provider_close(event, row) is counts
+    if counts:
+        pe.insert_certified_close(store, row)
+        [close] = pe.read_records(store, "prospective_close", sport="NBA")
+        assert close["close_verified"] == 1 and close["close_timestamp"] == at(0, 55)   # still the snapshot before the stored start
+    else:
+        with pytest.raises(ValueError, match="not replayable"):
+            pe.insert_certified_close(store, row)
+        assert pe.read_records(store, "prospective_close", sport="NBA") == []
+    assert pe.CLOSE_LATE_START == timedelta(minutes=15) and pc.LATE_START_MINUTES == 15
+
+
+def test_record_stores_a_later_start_close_and_counts_it(store, clock):
+    """Night of 2026-11-16: 12 NBA and 4 NCAAB close rows were refused for a start listed a few minutes later."""
+    clock(1, 5)                                     # five minutes after the stored start, before the listed one
+    now = BASE + timedelta(hours=1, minutes=5)
+    report = pc.record(store, now=now, key="SYNTHETIC-KEY", request_get=Provider(_listed(10)), sports=("NBA",))
+    assert (report["requests"], report["stored"], report["credits"], report["errors"]) == (1, 1, 10, [])
+    assert report["later_start_accepted"] == 1 and pc.summary(report)["later_start_accepted"] == 1
+    [close] = pe.read_records(store, "prospective_close", sport="NBA")
+    assert close["american_odds"] == -105 and close["close_timestamp"] == at(0, 55)
+
+
+def test_a_close_at_the_stored_start_is_not_counted_as_a_later_start(store, clock):
+    clock(1, 5)
+    report = pc.record(store, now=BASE + timedelta(hours=1, minutes=5), key="SYNTHETIC-KEY",
+                       request_get=Provider(snapshot()), sports=("NBA",))
+    assert report["stored"] == 1 and "later_start_accepted" not in report
+    assert "later_start_accepted" not in pc.summary(report)
+    assert pc.summary({"later_start_accepted": 3})["later_start_accepted"] == 3
+
+
+@pytest.mark.parametrize("minutes, reason", [(15, "REJECTED_START_LATER_UNDER_60_MIN"),
+                                             (90, "REJECTED_START_LATER_OVER_60_MIN"),
+                                             (-2, "REJECTED_START_EARLIER_UNDER_15_MIN")])
+def test_record_still_refuses_other_moved_starts_and_names_them(store, clock, minutes, reason):
+    clock(1, 5)
+    report = pc.record(store, now=BASE + timedelta(hours=1, minutes=5), key="SYNTHETIC-KEY",
+                       request_get=Provider(_listed(minutes)), sports=("NBA",))
+    assert report["stored"] == 0 and "later_start_accepted" not in report
+    assert pc.summary(report)["errors"] == {reason: 1}
+    assert pe.read_records(store, "prospective_close", sport="NBA") == []
+
+
+def test_the_reason_code_follows_the_allowance_when_record_passes_it():
+    late = _refused(data__commence_time="2030-01-02T00:05:00Z")
+    assert pc.rejection_reason(*late) == "REJECTED_START_LATER_UNDER_15_MIN"                 # no allowance named: as before
+    # With the verifier's allowance the start is not what refused this row: its next failing check is named.
+    assert pc.rejection_reason(*late, late_start_minutes=pc.LATE_START_MINUTES) == "REJECTED_OUTCOMES_OR_PRICES"
+    reason = lambda **changes: pc.rejection_reason(*_refused(**changes), late_start_minutes=pc.LATE_START_MINUTES)  # noqa: E731
+    assert reason(data__commence_time="2030-01-02T00:15:00Z") == "REJECTED_START_LATER_UNDER_60_MIN"
+    assert reason(data__commence_time="2030-01-01T23:55:00Z") == "REJECTED_START_EARLIER_UNDER_15_MIN"
+    assert reason(data__commence_time="2030-01-02T00:05:00Z", data__bookmakers=[]) == "REJECTED_BOOK_COUNT"
+
+
+def test_the_close_check_is_outside_what_a_running_plan_hashes():
+    """A frozen plan's hash covers its payload, and its runtime hash the prediction functions: neither reads this check."""
+    from app_core import pinnacle_model as pm
+    assert all(getattr(pm, name).__module__ == "app_core.pinnacle_model" for name in pm.PREDICTION_FUNCTIONS)
+    assert not {"verify_provider_close", "insert_certified_close"} & set(pm.PREDICTION_FUNCTIONS)
+    assert "close" not in " ".join(pe.PLAN_HASH_COLUMNS)
