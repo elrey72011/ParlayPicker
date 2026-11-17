@@ -17,7 +17,7 @@ CollegeBasketballData (CBBD) data, the kind of reason a model could disagree wit
 
 Two more readings need no fitted shrink at all (2026-11-17), so a ``k`` of zero cannot hide them:
 
-* **By disagreement** (``by_disagreement``): when the ratings sit 2, 4 or 6 points or more from the
+* **By disagreement** (``by_disagreement``): when the ratings sit 2, 4, 6 or 8 points or more from the
   line, how the ratings' side of that line finished.
 * **Line moves** (``line_moves``): for games with both lines from one provider (``select_pairs``), how
   far the closing line moved in favour of the side the ratings took at the open. A line that moves
@@ -44,7 +44,8 @@ HCA_PRIOR, HCA_WEIGHT = 3.0, 20.0
 THRESHOLDS = (0.52, 0.55, 0.58)
 WIN = 100 / 110
 SEGMENTS = (("Nov-Dec", (11, 12)), ("Jan-Apr", (1, 2, 3, 4)))
-DISAGREEMENTS = (2.0, 4.0, 6.0)     # points between the ratings and the line
+DISAGREEMENTS = (2.0, 4.0, 6.0, 8.0)     # points between the ratings and the line
+POINT_VALUE = {"SPREAD": 0.036, "TOTAL": 0.024}     # win probability a point of line is worth (``ncaab_point_value.ASSUMED``)
 
 
 def select_lines(rows, order=PROVIDER_ORDER):
@@ -320,16 +321,13 @@ def move_summary(moves):
     return out
 
 
-def run(prior_games, calibration_games, scored_games, calibration_lines, scored_lines, scored_pairs=None):
-    """Priors from the first season, k and sigma from the second, the third scored by segment and line.
+def evaluate(calibration_games, calibration_predictions, scored_games, scored_predictions, calibration_lines,
+             scored_lines, pairs):
+    """Every reading of one model's predictions against the lines: fitted, by disagreement, line moves.
 
-    ``scored_pairs`` (``select_pairs``) gives the line-move reading one provider's opening and closing
-    number per game; without it the pairs are read from ``scored_lines``.
+    ``*_predictions`` are ``{game_id: (margin, total)}`` from any model, each made before its game.
+    ``k`` and ``sigma`` come from the calibration season; the scored season is scored by segment and line.
     """
-    pairs = _pairs_from_lines(scored_lines) if scored_pairs is None else scored_pairs
-    _, priors = season_predictions(prior_games)
-    calibration_predictions, calibration_finals = season_predictions(calibration_games, priors)
-    scored_predictions, _ = season_predictions(scored_games, calibration_finals)
     report = {}
     for market, close_key, open_key in (("SPREAD", "spread", "spread_open"), ("TOTAL", "total", "total_open")):
         entry = {"fits": {}, "lines": {}}
@@ -363,8 +361,22 @@ def run(prior_games, calibration_games, scored_games, calibration_lines, scored_
     return report
 
 
-def markdown(result):
-    lines = ["## NCAAB opponent-adjusted ratings vs archived lines (CBBD)", "",
+def run(prior_games, calibration_games, scored_games, calibration_lines, scored_lines, scored_pairs=None):
+    """Priors from the first season, k and sigma from the second, the third scored by segment and line.
+
+    ``scored_pairs`` (``select_pairs``) gives the line-move reading one provider's opening and closing
+    number per game; without it the pairs are read from ``scored_lines``.
+    """
+    pairs = _pairs_from_lines(scored_lines) if scored_pairs is None else scored_pairs
+    _, priors = season_predictions(prior_games)
+    calibration_predictions, calibration_finals = season_predictions(calibration_games, priors)
+    scored_predictions, _ = season_predictions(scored_games, calibration_finals)
+    return evaluate(calibration_games, calibration_predictions, scored_games, scored_predictions, calibration_lines,
+                    scored_lines, pairs)
+
+
+def markdown(result, title="NCAAB opponent-adjusted ratings vs archived lines (CBBD)"):
+    lines = [f"## {title}", "",
              f"- seasons: priors {result['prior_season']}, calibrate {result['calibration_season']}, "
              f"score {result['scored_season']}",
              f"- finished games: {result['games']}; scored-season games with a closing / opening line: "
@@ -429,5 +441,12 @@ def markdown(result):
                   "share is of each point the ratings sat from the opening line: 0 means the opening line already "
                   "held everything the ratings know. Both numbers of a game come from one provider. An opening "
                   "number is the first one posted, often at low limits and soon gone, so this is the most a bet "
-                  "placed later could have had, not what it would have had."]
+                  "placed later could have had, not what it would have had.",
+              "", f"Break-even: a bet at -110 has to win {110 / 210:.1%}, {110 / 210 - 0.5:.1%} more than a coin flip. "
+                  f"At this project's working value of a point ({POINT_VALUE['SPREAD']:.1%} for a spread, "
+                  f"{POINT_VALUE['TOTAL']:.1%} for a total) that is a number about "
+                  f"{(110 / 210 - 0.5) / POINT_VALUE['SPREAD']:.1f} points better than the close for a spread and "
+                  f"{(110 / 210 - 0.5) / POINT_VALUE['TOTAL']:.1f} for a total. A positive share is expected "
+                  "whenever opening numbers are noisy, even from a model that knows less than the close; what "
+                  "counts is whether the mean move in a row clears that."]
     return "\n".join(lines) + "\n"
