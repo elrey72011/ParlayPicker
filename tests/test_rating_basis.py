@@ -146,11 +146,15 @@ def test_marking_the_basis_changes_no_pick_estimate_or_wager_field(_pregame, mon
     monkeypatch.setattr(rb, "basis", lambda pool: (_ for _ in ()).throw(RuntimeError("unreadable")))
     plain, quiet = _run(frame)                                             # the marker fails: Refresh still completes
     assert quiet["rating_basis"] == {"status": "ERROR", "error": "RuntimeError"}
-    same = [c for c in best.columns if c != "rating_basis"]
+    # export_run_id is each run's own time stamp to the second, so two runs can differ in it and in
+    # nothing else; every other column must be identical with and without the marker.
+    same = [c for c in best.columns if c not in ("rating_basis", "export_run_id")]
+    assert len(same) == len(best.columns) - 2
     pd.testing.assert_frame_equal(best[same].reset_index(drop=True), plain[same].reset_index(drop=True))
     audit, bare = diagnostics["candidate_audit_df"], quiet["candidate_audit_df"]
     assert "rating_basis" not in bare.columns
-    pd.testing.assert_frame_equal(audit.drop(columns=["rating_basis"]).reset_index(drop=True), bare.reset_index(drop=True))
+    pd.testing.assert_frame_equal(audit.drop(columns=["rating_basis", "export_run_id"]).reset_index(drop=True),
+                                  bare.drop(columns=["export_run_id"]).reset_index(drop=True))
     assert not audit["wager_approved"].any() and (best["production_bet_amount"] == 0).all()
 
 
