@@ -24,6 +24,15 @@ under that boost, above every college total, and the pick had gone 9-11 in the N
 nine nights with the blend's own weights the changed prediction went 290-235; the blended estimate
 for TheOver's side averaged 58.5% where those sides won 61.5%.
 
+Not every league's pick is used (owner 2026-11-17). Taken before the start over ten graded nights (7 to
+16 November) the pick went 81-45 in college basketball and 10-15 in the NBA, so the NBA's picks are kept
+for the record and no longer enter the blend (``RESEARCH_ONLY_LEAGUES``). The upload reader marks each pick's row when it
+reads the file (``mark``, into ``IN_BLEND_COLUMN``: 1 may feed the blend, 0 for the record only), the
+production pipeline marks it again once each game's league is settled, and ``derived`` leaves a
+marked-off game empty. The mark travels with the pick's hit rate through every merge; a row with no
+mark is treated as before, so an analysis saved earlier is unchanged until it is refreshed. The NBA's
+picks stay on the homepage list and in the exports, which is what lets their record be kept.
+
 This is the blended ``calibrated_probability``, so the expected value the wager checks read moves
 with it and a pick can be labelled a qualified lean. It cannot fund a stake: every wager still has
 to pass the terminal market authority (``core.sport_market_gate``), which candidate fields cannot
@@ -40,6 +49,10 @@ SOURCE = "theover_model_pick"
 UPLOAD = "theover_upload"
 SOURCE_COLUMN = "blend_in_theover_source"
 OTHER_SIDE = {"total_over": "total_under", "total_under": "total_over"}
+# Leagues whose model pick is kept for the record and not blended (owner 2026-11-17: the NBA's went
+# 10-15 over ten nights). Empty this set to blend every league's pick again.
+RESEARCH_ONLY_LEAGUES = frozenset({"NBA"})
+IN_BLEND_COLUMN = "theover_model_in_blend"      # set by the upload reader: 1.0 may feed the blend, 0.0 record only
 
 
 def _market(frame) -> pd.Series:
@@ -55,14 +68,44 @@ def backed(frame) -> pd.Series:
     return (_market(frame).isin(list(OTHER_SIDE)) & picked.eq(1) & hit.gt(0) & hit.lt(1)).fillna(False).astype(bool)
 
 
+def in_blend_mark(league, index=None) -> pd.Series:
+    """The upload reader's mark for a pick's row: 0.0 where its league is research only, else 1.0."""
+    if league is None:
+        return pd.Series(1.0, index=index, dtype="float64")
+    names = pd.Series(league, index=index).fillna("").astype(str).str.strip().str.upper()
+    return (~names.isin(RESEARCH_ONLY_LEAGUES)).astype("float64")
+
+
+def mark(frame) -> pd.Series:
+    """``IN_BLEND_COLUMN`` for ``frame``: on both sides of each total TheOver's model picked, 1.0 or 0.0
+    from the row's league; empty everywhere else. The upload reader stamps it, and the production
+    pipeline stamps it again once each game's league is settled."""
+    empty = pd.Series(np.nan, index=getattr(frame, "index", None), dtype="float64")
+    if frame is None or not {"market_type", "theover_pick_agrees", "theover_model_hit_rate"} <= set(frame.columns):
+        return empty
+    hit = pd.to_numeric(frame["theover_model_hit_rate"], errors="coerce")
+    listed = (_market(frame).isin(list(OTHER_SIDE)) & pd.to_numeric(frame["theover_pick_agrees"], errors="coerce").notna()
+              & hit.gt(0) & hit.lt(1)).fillna(False)
+    league = frame["league"] if "league" in frame.columns else None
+    return in_blend_mark(league, index=frame.index).where(listed)
+
+
+def in_blend(frame) -> pd.Series:
+    """True on each row whose pick may feed the blend: every row, except one the upload reader marked 0."""
+    if frame is None or IN_BLEND_COLUMN not in getattr(frame, "columns", ()):
+        return pd.Series(True, index=getattr(frame, "index", None), dtype=bool)
+    return pd.to_numeric(frame[IN_BLEND_COLUMN], errors="coerce").ne(0).astype(bool)
+
+
 def derived(frame, cap=CAP) -> pd.Series:
     """TheOver's probability for each totals row from its model pick, on ``frame``'s index; NaN where it has none.
 
     The picked side gets the listed hit rate, at most ``cap``; the other side of the same game gets
-    one minus that. A game is left empty when there is no such pick or the upload names both sides.
+    one minus that. A game is left empty when there is no such pick, the upload names both sides, or
+    the pick's row is marked research only (``in_blend``).
     """
     out = pd.Series(np.nan, index=frame.index, dtype="float64")
-    flag = backed(frame)
+    flag = backed(frame) & in_blend(frame)
     if not cap or not flag.any() or "matchup_id" not in frame.columns:
         return out
     market = _market(frame)
