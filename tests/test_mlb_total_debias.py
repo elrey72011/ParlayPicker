@@ -68,7 +68,7 @@ def test_recompute_consensus_reapplies_mlb_total_debias():
         "ml_probability": [0.72] * n,
         "model_probability": [0.72] * n,
         "theover_probability": [float("nan")] * n,
-        "sentiment_diff": [0.5] * n,
+        "sentiment_diff": [0.0] * n,        # no sentiment (the old re-blend read a raw 0.5, the value here before, as neutral)
         "league": ["MLB"] * n,
         "market_type": ["total_over"] * n,
     })

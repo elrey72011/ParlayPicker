@@ -605,7 +605,11 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
 
     # Extract the missing features required for the new Tiered Weight system
     theover_prob = _safe_numeric_series(out, "theover_probability")
-    sentiment_prob = _safe_numeric_series(out, "sentiment_diff", default=0.5)
+    # Mirror run_analysis_pipeline: the blend takes sentiment as a probability, 0.5 + sentiment_diff * 0.5,
+    # where 0.5 means no signal, and a missing sentiment_diff counts as 0.0. Passed as it comes, a
+    # sentiment_diff of 0.0 ("no sentiment") would be read as a 0% vote and drag this final estimate.
+    _raw_sentiment = _safe_numeric_series(out, "sentiment_diff", default=0.0)
+    sentiment_prob = (0.5 + _raw_sentiment * 0.5).clip(0.0, 1.0)
 
     # FADE genuine-but-cold TheOver sources (model_hit_rate_flipped) in this re-blend,
     # mirroring run_analysis_pipeline. This post-Kalshi refresh recomputes
