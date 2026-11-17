@@ -312,7 +312,8 @@ def _render_pinnacle_value(candidates):
 
 
 THEOVER_MODEL_COLUMNS = ["Sport", "Game", "Pick", "TheOver's line", "Odds", "Best price", "Best price book",
-                         "Model hit rate", "Also the app's pick"]
+                         "Model hit rate", "Used in the estimate", "Also the app's pick"]
+RECORD_ONLY = "No: record only"
 THEOVER_MODEL_CAPTION = (
     "TheOver's totals pick for each game where it lists the recent hit rate of the model behind it, at the app's "
     "current line and price. Since 16 November 2026 the app blends this pick into its win estimate with the market, "
@@ -320,7 +321,8 @@ THEOVER_MODEL_CAPTION = (
     "these games. Taken before the start over nine nights (7 to 15 November 2026) these went 147-92, ahead on "
     "eight of the nine, while its totals picks with no hit rate listed went 113-119. Nine nights is not proof: the "
     "record from here decides whether it stays. It cannot fund a stake: every wager still needs the market "
-    "authority. It needs the TheOver totals upload.")
+    "authority. It needs the TheOver totals upload. From 17 November 2026 its NBA picks are listed for the record "
+    "only and no longer move the estimate: over ten nights they went 10-15, against 81-45 in college basketball.")
 # The words the pipeline puts in place of a pick whose line it rejected (its final_pick_valid check).
 LINE_NOT_VERIFIED = ("unresolved", "missing line", "no line")
 LINE_NOT_VERIFIED_KEY = "line_not_verified"
@@ -329,7 +331,8 @@ LINE_NOT_VERIFIED_KEY = "line_not_verified"
 def theover_model_board(candidates):
     """TheOver's totals pick for each game where it lists its model's hit rate (owner 2026-11-16).
 
-    These are the picks the blend uses as TheOver's input (``app_core.theover_model_totals``). From
+    These are the picks the blend uses as TheOver's input (``app_core.theover_model_totals``), except
+    those of a league kept for the record only (the NBA since 2026-11-17), which are listed and marked. From
     the saved candidates: a total, on the side TheOver picked (``theover_pick_agrees`` 1), with
     ``theover_model_hit_rate`` present, still a current pre-game candidate. One row per game, in
     start order, at the app's own line and price with the best price among the stake books beside
@@ -343,7 +346,8 @@ def theover_model_board(candidates):
         return pd.DataFrame(columns=THEOVER_MODEL_COLUMNS)
     wanted = ["market_type", "theover_pick_agrees", "theover_model_hit_rate", "theover_pick_line", "candidate_context",
               "pregame_quote_valid", "matchup_id", "league", "away_team", "home_team", "best_pick", "odds_american",
-              "best_line_price", "best_line_price_book", "best_available_selected", "game_start_utc"]
+              "best_line_price", "best_line_price_book", "best_available_selected", "game_start_utc",
+              "theover_model_in_blend"]
     rows, left_out = [], set()
     for row in candidates[[c for c in wanted if c in candidates.columns]].to_dict("records"):
         if str(row.get("market_type") or "").lower() not in {"total_over", "total_under"}:
@@ -366,6 +370,9 @@ def theover_model_board(candidates):
                      "TheOver's line": number("theover_pick_line"), "Odds": number("odds_american"),
                      "Best price": number("best_line_price"), "Best price book": _text(row, "best_line_price_book", default=""),
                      "Model hit rate": float(hit),
+                     # 0 on the candidate means its league's picks are kept for the record only
+                     # (app_core.theover_model_totals, owner 2026-11-17); no mark means it was used.
+                     "Used in the estimate": RECORD_ONLY if number("theover_model_in_blend") == 0 else "Yes",
                      "Also the app's pick": "Yes" if str(row.get("best_available_selected")).lower() == "true" else ""})
     if not rows:
         board = pd.DataFrame(columns=THEOVER_MODEL_COLUMNS)

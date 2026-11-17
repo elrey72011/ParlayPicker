@@ -661,6 +661,7 @@ BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _NFL_CONTEXT_COLUMNS)
 # the pick's exact line, the pick's EV against it, and why Kalshi was left out of the blend.
 _REFERENCE_EXPORT_COLUMNS = ["pinnacle_fair_probability", "pinnacle_ev", "kalshi_blend_gate",
                              "theover_pick_agrees", "theover_pick_line", "theover_public_pct", "theover_model_hit_rate",
+                             "theover_model_in_blend",
                              "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star", "theover_fade_public",
                              "theover_money_pct",
                              # Gemini research review of the top picks (app_core.gemini_research_review)
@@ -713,6 +714,9 @@ CANONICAL_BET_COLUMNS = list(dict.fromkeys(CANONICAL_BET_COLUMNS + _CANONICAL_RE
 # Kalshi and the model. theover_probability itself stays as uploaded (empty).
 THEOVER_RESEARCH_COLUMNS = ["theover_pick_agrees", "theover_pick_line", "theover_public_pct",
                             "theover_model_hit_rate",
+                            # Whether the model-backed totals pick may feed the blend (owner 2026-11-17;
+                            # app_core.theover_model_totals.IN_BLEND_COLUMN): 0 = kept for the record only.
+                            "theover_model_in_blend",
                             # From the raw page in the owner's workbook (app_core.theover_signals):
                             "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star",
                             "theover_fade_public", "theover_money_pct"]
@@ -3186,6 +3190,12 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     hit_rate = _theover_fraction(_first_existing_numeric(normalized, ["modelhitrate", "model_hit_rate"], default=pd.NA))
     total_over["theover_model_hit_rate"] = hit_rate.where(resolved)
     total_under["theover_model_hit_rate"] = hit_rate.where(resolved)
+    # Whether this model-backed pick may feed the blend, decided here where the upload is read
+    # (owner 2026-11-17; app_core.theover_model_totals): 1 it may, 0 its league is kept for the
+    # record only (the NBA, 10-15 over ten nights). Empty where there is no such pick.
+    from app_core.theover_model_totals import IN_BLEND_COLUMN as _in_blend_column, mark as _in_blend_mark
+    for frame in (total_over, total_under):
+        frame[_in_blend_column] = _in_blend_mark(frame)
 
     return [total_over, total_under]
 
@@ -5156,6 +5166,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # (shown on the Pinnacle value board; changes no pick).
         "pinnacle_fair_probability", "pinnacle_ev",
         "theover_pick_agrees", "theover_pick_line", "theover_public_pct", "theover_model_hit_rate",
+        "theover_model_in_blend",
         "theover_sharp_agrees", "theover_sharp_plays", "theover_purple_star", "theover_fade_public", "theover_money_pct",
         # Why Kalshi was left out of this candidate's blend (app_core.kalshi_exact); '' = used.
         "kalshi_blend_gate",
@@ -10592,6 +10603,10 @@ def run_analysis_pipeline(
     # no probability (owner 2026-11-16; app_core.theover_model_totals), so the blend weighs it
     # with the market, Kalshi and the model. ``theover_probability`` itself stays as uploaded.
     from app_core import theover_model_totals as _theover_model_totals
+    # Which of those picks may feed the blend, now that each game's league is settled (owner
+    # 2026-11-17): the NBA's are kept for the record only. The upload reader stamped the same mark
+    # from the league as uploaded; this is the one the blend below and every later re-blend read.
+    merged[_theover_model_totals.IN_BLEND_COLUMN] = _theover_model_totals.mark(merged)
     theover_blend_input, merged[_theover_model_totals.SOURCE_COLUMN] = _theover_model_totals.blend_input(
         merged, theover_blend_input)
 

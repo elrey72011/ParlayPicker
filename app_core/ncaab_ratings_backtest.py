@@ -15,6 +15,16 @@ CollegeBasketballData (CBBD) data, the kind of reason a model could disagree wit
 * **Scored season**, split into November-December and January on, against **closing** lines and,
   where CBBD has them, **opening** lines (early lines are where public ratings can still be ahead).
 
+Two more readings need no fitted shrink at all (2026-11-17), so a ``k`` of zero cannot hide them:
+
+* **By disagreement** (``by_disagreement``): when the ratings sit 2, 4 or 6 points or more from the
+  line, how the ratings' side of that line finished.
+* **Line moves** (``line_moves``): for games with both lines from one provider (``select_pairs``), how
+  far the closing line moved in favour of the side the ratings took at the open. A line that moves
+  toward the ratings is a better number than the close, the same thing closing-line value measures,
+  and it is far less noisy than results. ``move_slope`` puts it in one number: of each point the
+  ratings sat from the opening line, the share of a point the close then moved their way.
+
 Three seasons: the first only sets the priors, the second calibrates ``k`` and ``sigma``, the
 third is scored. Prices are assumed at -110 (archived lines have spreads and totals, not their
 prices). Archived lines carry no quote timestamp, so this screens the idea; it is not plan evidence.
@@ -34,6 +44,7 @@ HCA_PRIOR, HCA_WEIGHT = 3.0, 20.0
 THRESHOLDS = (0.52, 0.55, 0.58)
 WIN = 100 / 110
 SEGMENTS = (("Nov-Dec", (11, 12)), ("Jan-Apr", (1, 2, 3, 4)))
+DISAGREEMENTS = (2.0, 4.0, 6.0)     # points between the ratings and the line
 
 
 def select_lines(rows, order=PROVIDER_ORDER):
@@ -52,6 +63,45 @@ def select_lines(rows, order=PROVIDER_ORDER):
                     found[key] = _number(_first(line, *names))
             found["provider"] = found["provider"] or line.get("provider")
         if game_id is not None and (found["spread"] is not None or found["total"] is not None):
+            out[game_id] = found
+    return out
+
+
+def select_pairs(rows, order=PROVIDER_ORDER):
+    """{game_id: {"SPREAD": (open, close), "TOTAL": (open, close)}}, each pair from ONE provider.
+
+    ``select_lines`` may take a game's opening number from one book and its closing number from
+    another: fine for grading a bet at either line, wrong for measuring how far a line moved. Here
+    each market's pair comes from the first provider in ``order`` that quotes both numbers.
+    """
+    rank = {name: i for i, name in enumerate(order)}
+    out = {}
+    for row in rows:
+        game_id = _first(row, "gameId", "id")
+        found = {}
+        for line in sorted((l for l in row.get("lines") or [] if isinstance(l, dict)),
+                           key=lambda l: rank.get(l.get("provider"), len(order))):
+            for market, close_names, open_names in (
+                    ("SPREAD", ("spread",), ("spreadOpen", "spread_open")),
+                    ("TOTAL", ("overUnder", "over_under", "total"), ("overUnderOpen", "over_under_open", "totalOpen"))):
+                if market in found:
+                    continue
+                opened, closed = _number(_first(line, *open_names)), _number(_first(line, *close_names))
+                if opened is not None and closed is not None:
+                    found[market] = (opened, closed)
+        if game_id is not None and found:
+            out[game_id] = found
+    return out
+
+
+def _pairs_from_lines(lines):
+    """The ``select_pairs`` shape from ``select_lines`` output, for a caller with nothing better."""
+    out = {}
+    for game_id, line in lines.items():
+        found = {market: (line.get(open_key), line.get(close_key))
+                 for market, open_key, close_key in (("SPREAD", "spread_open", "spread"), ("TOTAL", "total_open", "total"))
+                 if line.get(open_key) is not None and line.get(close_key) is not None}
+        if found:
             out[game_id] = found
     return out
 
@@ -199,8 +249,84 @@ def score(cases, fit):
     return out
 
 
-def run(prior_games, calibration_games, scored_games, calibration_lines, scored_lines):
-    """Priors from the first season, k and sigma from the second, the third scored by segment and line."""
+def by_disagreement(cases):
+    """With no fitted shrink: how the ratings' side finished where they sit N or more points from the line.
+
+    ``cases`` are ``_cases`` tuples. Graded at -110; a push is neither a win nor a loss.
+    """
+    out = {}
+    for points in DISAGREEMENTS:
+        picks = [(edge, target) for edge, target, _ in cases if abs(edge) >= points]
+        wins = sum(1 for edge, target in picks if abs(target) > 1e-9 and (target > 0) == (edge > 0))
+        losses = sum(1 for edge, target in picks if abs(target) > 1e-9 and (target > 0) != (edge > 0))
+        out[f"{points:g}"] = {"picks": len(picks), "wins": wins, "losses": losses,
+                              "hit_rate": wins / (wins + losses) if wins + losses else None,
+                              "roi_per_pick": (wins * WIN - losses) / len(picks) if picks else None}
+    return out
+
+
+def line_moves(games, predictions, pairs, market):
+    """[(points the ratings sit from the opening line, points the close moved in their side's favour, game)].
+
+    ``pairs`` is ``select_pairs`` output: only games with an opening and a closing number. For a
+    spread the ratings take the home side when their margin beats the opening spread; a home bet at
+    the open has the better number when the home spread closed lower. For a total they take the Over
+    when their total is above the opening line; an Over at the open has the better number when the
+    total closed higher.
+    """
+    out = []
+    for game in games:
+        pair = (pairs.get(game["id"]) or {}).get(market)
+        if pair is None or game["id"] not in predictions:
+            continue
+        opened, closed = pair
+        margin, total = predictions[game["id"]]
+        edge = margin + opened if market == "SPREAD" else total - opened
+        if edge == 0:
+            continue
+        toward_home_or_over = (opened - closed) if market == "SPREAD" else (closed - opened)
+        out.append((abs(edge), toward_home_or_over if edge > 0 else -toward_home_or_over, game))
+    return out
+
+
+def move_slope(moves):
+    """Of each point the ratings sat from the opening line, the share of a point the close moved their way.
+
+    Least squares through the origin of the move on the disagreement, with its standard error. 0 says
+    the opening line already held everything the ratings know; 1 says the close moved all the way to them.
+    """
+    n = len(moves)
+    if n < 3:
+        return {"games": n, "slope": None, "se": None, "t": None}
+    edge = np.array([m[0] for m in moves], dtype=float)
+    moved = np.array([m[1] for m in moves], dtype=float)
+    sxx = float(edge @ edge)
+    slope = float(edge @ moved) / sxx
+    residual = moved - slope * edge
+    se = math.sqrt(float(residual @ residual) / (n - 1) / sxx)
+    return {"games": n, "slope": slope, "se": se, "t": slope / se if se > 0 else None}
+
+
+def move_summary(moves):
+    """By disagreement at the open: games, mean points the close moved the ratings' way (with SE), and the split."""
+    out = {}
+    for points in (0.0,) + DISAGREEMENTS:
+        moved = np.array([m for edge, m, _ in moves if edge >= points], dtype=float)
+        n = len(moved)
+        out[f"{points:g}"] = {
+            "games": n, "mean_points": float(moved.mean()) if n else None,
+            "se": float(moved.std(ddof=1) / math.sqrt(n)) if n > 1 else None,
+            "toward": int((moved > 0).sum()), "against": int((moved < 0).sum()), "unchanged": int((moved == 0).sum())}
+    return out
+
+
+def run(prior_games, calibration_games, scored_games, calibration_lines, scored_lines, scored_pairs=None):
+    """Priors from the first season, k and sigma from the second, the third scored by segment and line.
+
+    ``scored_pairs`` (``select_pairs``) gives the line-move reading one provider's opening and closing
+    number per game; without it the pairs are read from ``scored_lines``.
+    """
+    pairs = _pairs_from_lines(scored_lines) if scored_pairs is None else scored_pairs
     _, priors = season_predictions(prior_games)
     calibration_predictions, calibration_finals = season_predictions(calibration_games, priors)
     scored_predictions, _ = season_predictions(scored_games, calibration_finals)
@@ -214,14 +340,24 @@ def run(prior_games, calibration_games, scored_games, calibration_lines, scored_
             entry["fits"][label] = fit
             cases = _cases(scored_games, scored_predictions, scored_lines, market, key)
             entry["lines"][label] = {"games": len(cases)}
+            # Needs no fit, so it is reported even where the calibration season had too few such lines.
+            entry.setdefault("disagreement", {})[label] = {
+                "all": by_disagreement(cases),
+                **{name: by_disagreement([c for c in cases if c[2]["start"].month in months]) for name, months in SEGMENTS}}
             if fit is None:
                 entry["lines"][label]["blocker"] = "TOO_FEW_CALIBRATION_GAMES"
                 continue
             for name, months in SEGMENTS:
                 part = [c for c in cases if c[2]["start"].month in months]
                 entry["lines"][label][name] = score(part, fit) if part else {"games": 0}
+        moves = line_moves(scored_games, scored_predictions, pairs, market)
+        by_segment = {"all": moves,
+                      **{name: [m for m in moves if m[2]["start"].month in months] for name, months in SEGMENTS}}
+        entry["line_moves"] = {name: move_summary(part) for name, part in by_segment.items()}
+        entry["line_move_slope"] = {name: move_slope(part) for name, part in by_segment.items()}
         if not any(entry["fits"].values()):
-            report[market] = {"blocker": "TOO_FEW_CALIBRATION_GAMES"}
+            report[market] = {"blocker": "TOO_FEW_CALIBRATION_GAMES", "disagreement": entry["disagreement"],
+                              "line_moves": entry["line_moves"], "line_move_slope": entry["line_move_slope"]}
             continue
         report[market] = entry
     return report
@@ -260,4 +396,38 @@ def markdown(result):
                                  f"{row['picks']} | {hit} | {roi} |")
     lines += ["", "A pick is the side whose probability clears the threshold, graded at -110. Archived lines "
                   "have no quote timestamp; this screens the idea and is not plan evidence."]
+    lines += ["", "### Where the ratings disagree with the line (no fitted shrink)", "",
+              "| market | line | segment | points apart | picks | wins - losses | hit rate | ROI/pick |",
+              "|---|---|---|---|---|---|---|---|"]
+    for market, entry in result["report"].items():
+        for label, by_segment in (entry.get("disagreement") or {}).items():
+            for segment, rows in by_segment.items():
+                for points, row in rows.items():
+                    hit = "" if row["hit_rate"] is None else f"{row['hit_rate']:.1%}"
+                    roi = "" if row["roi_per_pick"] is None else f"{row['roi_per_pick']:+.3f}"
+                    lines.append(f"| {market} | {label} | {segment} | {points}+ | {row['picks']} | "
+                                 f"{row['wins']} - {row['losses']} | {hit} | {roi} |")
+    lines += ["", "### Did the closing line move toward the ratings? (side taken at the opening line)", "",
+              "| market | segment | points apart at the open | games | mean move their way (SE) | toward / against / unchanged |",
+              "|---|---|---|---|---|---|"]
+    for market, entry in result["report"].items():
+        for segment, rows in (entry.get("line_moves") or {}).items():
+            for points, row in rows.items():
+                mean = "" if row["mean_points"] is None else f"{row['mean_points']:+.2f}"
+                se = "" if row["se"] is None else f" ({row['se']:.2f})"
+                lines.append(f"| {market} | {segment} | {points}+ | {row['games']} | {mean}{se} | "
+                             f"{row['toward']} / {row['against']} / {row['unchanged']} |")
+    lines += ["", "| market | segment | games | share of the disagreement the close gave back (SE) | t |",
+              "|---|---|---|---|---|"]
+    for market, entry in result["report"].items():
+        for segment, row in (entry.get("line_move_slope") or {}).items():
+            slope = "" if row["slope"] is None else f"{row['slope']:+.3f} ({row['se']:.3f})"
+            t = "" if row["t"] is None else f"{row['t']:+.1f}"
+            lines.append(f"| {market} | {segment} | {row['games']} | {slope} | {t} |")
+    lines += ["", "A positive mean move says a bet on the ratings' side at the opening line held a better number "
+                  "than the close. Results are noisy; line moves are not, so read these two tables first. The "
+                  "share is of each point the ratings sat from the opening line: 0 means the opening line already "
+                  "held everything the ratings know. Both numbers of a game come from one provider. An opening "
+                  "number is the first one posted, often at low limits and soon gone, so this is the most a bet "
+                  "placed later could have had, not what it would have had."]
     return "\n".join(lines) + "\n"
