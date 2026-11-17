@@ -914,8 +914,10 @@ def verify_provider_close(event: Mapping, close: Mapping) -> bool:
     - it was retrieved at or after the scheduled start;
     - its event, teams, book, market, selection, line and price match exactly;
     - the start it lists is the stored start, or later by less than ``CLOSE_LATE_START``
-      (owner 2026-11-17). An earlier start, or one that much later or more, is refused:
-      the stored start no longer says when the game began.
+      (owner 2026-11-17). With a later listed start the close is still the last snapshot
+      before the stored start, so it is up to that much older than the listed start.
+      A start listed earlier (the snapshot could be from after the real start), or that
+      much later or more, is refused.
 
     A live near-start quote is never accepted here: until the game starts, a later
     pregame price can still exist.
