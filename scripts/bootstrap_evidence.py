@@ -63,6 +63,11 @@ def main():
     if a.restore:
         from app_core.evidence_remote import restore
         result['restored_snapshots'] = stage('restore', lambda: restore(a.database))
+        # How the remote files were found, and whether this run wrote and checked the day's evidence index
+        # (app_core/evidence_index.py, 2026-11-18). Counts and dates only.
+        from app_core import evidence_remote
+        result['evidence_inventory'] = evidence_remote.inventory_status()
+        print(json.dumps({'stage': 'evidence_inventory', 'state': result['evidence_inventory']}), flush=True)
 
     def backup(name):
         from app_core.evidence_remote import remote_status, sync

@@ -178,10 +178,17 @@ def register_bundle(version, frozen, manifest):
     return _put(_client(), "bundles", (version, frozen, manifest), choose_existing=True)[1]
 
 
-def restore(path=None, *, client=None, full_verification=False, ids=None):
+def restore(path=None, *, client=None, full_verification=False, ids=None, prefer_index=False):
+    """Merge the remote evidence into the local store.
+
+    ``prefer_index`` (2026-11-18): start from the daily evidence index when one can be relied on, and list only
+    the files created since, in place of listing the whole folder (``app_core/evidence_index.py``). The app's own
+    start-up asks for it; an explicit restore keeps the complete listing and leaves the day's index behind.
+    """
     result, shared = singleflight(
-        ("evidence_restore", _scope(path, client), full_verification),
-        lambda: _restore_guarded(path, client=client, full_verification=full_verification, ids=ids))
+        ("evidence_restore", _scope(path, client), full_verification, prefer_index),
+        lambda: _restore_guarded(path, client=client, full_verification=full_verification, ids=ids,
+                                 prefer_index=prefer_index))
     if shared:
         with PerformanceSpan("evidence_restore_join", ids=ids) as span:
             span.set(listing_traversals=0, objects_downloaded=0, cache_hits=1,
@@ -189,14 +196,15 @@ def restore(path=None, *, client=None, full_verification=False, ids=None):
     return result
 
 
-def _restore_guarded(path=None, *, client=None, full_verification=False, ids=None):
+def _restore_guarded(path=None, *, client=None, full_verification=False, ids=None, prefer_index=False):
     # Successful explicit restores satisfy initialization too; failed audits
     # invalidate it so the next required caller retries.
     with _lock:
         identity = _scope(path, client)
         _restored.discard(identity)
         try:
-            result = _restore(path, client=client, full_verification=full_verification, ids=ids)
+            result = _restore(path, client=client, full_verification=full_verification, ids=ids,
+                              prefer_index=prefer_index)
             current = _scope(path, client)
             if identity[:-1] != current[:-1] or (identity[-1] != "missing" and identity[-1] != current[-1]):
                 raise EvidenceStorageError("Evidence scope or database generation changed during restore; retry initialization.")
@@ -211,26 +219,72 @@ def _restore_guarded(path=None, *, client=None, full_verification=False, ids=Non
             raise
 
 
-def _restore(path=None, *, client=None, full_verification=False, ids=None):
-    from app_core.prediction_evidence import connect, database_path
+def inventory_status():
+    """How the last restore in this process found the remote files, for a job's log. No file names or ids."""
+    return _status.get("inventory")
+
+
+def _restore(path=None, *, client=None, full_verification=False, ids=None, prefer_index=False):
+    from app_core.prediction_evidence import database_path
+    from app_core import evidence_index
     if not settings()[0]:
         return 0
     client = client or _client()
     bucket, prefix = settings()
     database = Path(path or database_path()).resolve()
     ids = ids or operation_ids(refresh_run_id=os.urandom(8).hex())
-    rows = {table: [] for table in TABLES}
     prefixes = {table: f"{prefix}/{table}/" for table in TABLES}
     scope_hash = opaque_hash(client.storage_scope_hash() if callable(getattr(client, "storage_scope_hash", None)) else id(client), bucket, prefix, os.environ.get("PARLAYPICKER_NETLIFY_SITE_ID", ""))
+    optimized = (_shared_inventory_enabled()
+                 and callable(getattr(client, "discover_complete_inventory", None))
+                 and callable(getattr(client, "read_verified_prefixes", None)))
+    namespace = opaque_hash(prefix, os.environ.get("PARLAYPICKER_NETLIFY_SITE_ID", ""))
+    tables = tuple(prefixes.values())
+    indexing = optimized and evidence_index.enabled() and evidence_index.supported(client)
+    read = dict(client=client, database=database, bucket=bucket, prefixes=prefixes, full_verification=full_verification,
+                ids=ids, scope_hash=scope_hash, optimized=optimized)
+    rows, note = None, {"source": "complete_listing"}
+    if indexing and prefer_index and not full_verification:
+        # The short route (2026-11-18): the day's index and the files created since. Anything that goes wrong on
+        # it, from finding the index to the last decoded row, falls back to the complete listing below.
+        with PerformanceSpan("evidence_index", ids=ids, storage_scope_hash=scope_hash) as span:
+            index, reason = evidence_index.choose(client, prefix, tables)
+            span.set(verification_status=reason, table_or_kind=index.day if index else None,
+                     records_returned=len(index.files) if index else None)
+        note["index"] = reason
+        if index is not None:
+            try:
+                rows, _ = _read_remote(**read, discover=lambda: evidence_index.inventory(
+                    client, index, tables, operation_id=ids["action_id"], namespace=namespace, ids=ids))
+                note = {"source": "index", "index": index.day, "indexed_files": len(index.files)}
+            except Exception as exc:
+                rows, note["index"] = None, "failed:" + type(exc).__name__
+    planned = None
+    if rows is None:
+        planned = evidence_index.plan(client, prefix, tables) if indexing else None
+        watch = {} if planned is None or planned.watch is None else {"watch": planned.watch}
+        rows, listing = _read_remote(**read, discover=lambda: client.discover_complete_inventory(
+            operation_id=ids["action_id"], namespace=namespace, ids=ids, **watch))
+    imported = _merge(path, client, database, rows, ids, scope_hash)
+    if planned is not None:
+        # Whoever lists the whole folder leaves the day's index for the next restart. The restore is already done.
+        with PerformanceSpan("evidence_index_write", ids=ids, storage_scope_hash=scope_hash) as span:
+            note["written"] = evidence_index.write(client, prefix, tables, listing, planned, ids=ids)
+            span.set(verification_status=str(note["written"].get("written") or note["written"].get("reason")),
+                     records_returned=note["written"].get("files"))
+    _status["inventory"] = note
+    return imported
+
+
+def _read_remote(*, client, database, bucket, prefixes, full_verification, ids, scope_hash, optimized, discover):
+    """Read and verify every remote row. ``discover`` gives the inventory the optimized read works from."""
+    rows = {table: [] for table in TABLES}
+    inventory = None
     with PerformanceSpan("evidence_restore", ids=ids, database_generation=_database_generation(database),
                          storage_scope_hash=scope_hash) as restore_span:
-        optimized = (_shared_inventory_enabled()
-                     and callable(getattr(client, "discover_complete_inventory", None))
-                     and callable(getattr(client, "read_verified_prefixes", None)))
         if optimized:
             _status["operation"] = "restore:discover"
-            inventory = client.discover_complete_inventory(
-                operation_id=ids["action_id"], namespace=opaque_hash(prefix, os.environ.get("PARLAYPICKER_NETLIFY_SITE_ID", "")), ids=ids)
+            inventory = discover()
             reader = client.read_verified_prefixes
             cache = database.with_name(database.name + ".remote-cache")
             try:
@@ -289,6 +343,12 @@ def _restore(path=None, *, client=None, full_verification=False, ids=None):
             cache_misses=getattr(getattr(client, "last_read_report", None), "cache_misses", None),
             records_returned=sum(len(entries) for entries in rows.values()),
             verification_status="full_bytes_verified" if full_verification else "verified")
+    return rows, inventory
+
+
+def _merge(path, client, database, rows, ids, scope_hash):
+    """Store the verified rows in the local database, in one transaction."""
+    from app_core.prediction_evidence import connect
     imported = 0
     unchanged = 0
     with PerformanceSpan("evidence_local_merge", ids=ids, database_generation=_database_generation(database),
@@ -337,7 +397,7 @@ def restore_once(path=None, *, full_verification=False):
         if full_verification or identity not in _restored:
             _restored.discard(identity)
             try:
-                restore(path, full_verification=full_verification)
+                restore(path, full_verification=full_verification, prefer_index=not full_verification)
                 _restored.add(_scope(path))
             except Exception as exc:
                 _status.update(status="error", error=safe_error(exc, "Restore"))
