@@ -314,6 +314,7 @@ def _render_pinnacle_value(candidates):
 THEOVER_MODEL_COLUMNS = ["Sport", "Game", "Pick", "TheOver's line", "Odds", "Best price", "Best price book",
                          "Model hit rate", "Used in the estimate", "Also the app's pick"]
 RECORD_ONLY = "No: record only"
+SIMILAR_NAME_ONLY = "No: matched by a similar name only"
 THEOVER_MODEL_CAPTION = (
     "TheOver's totals pick for each game where it lists the recent hit rate of the model behind it, at the app's "
     "current line and price. Since 16 November 2026 the app blends this pick into its win estimate with the market, "
@@ -322,7 +323,9 @@ THEOVER_MODEL_CAPTION = (
     "eight of the nine, while its totals picks with no hit rate listed went 113-119. Nine nights is not proof: the "
     "record from here decides whether it stays. It cannot fund a stake: every wager still needs the market "
     "authority. It needs the TheOver totals upload. From 17 November 2026 its NBA picks are listed for the record "
-    "only and no longer move the estimate: over ten nights they went 10-15, against 81-45 in college basketball.")
+    "only and no longer move the estimate: over ten nights they went 10-15, against 81-45 in college basketball. "
+    "From 18 November 2026 the same holds for a game the upload matched only by a similar team name: its pick is "
+    "listed and does not move the estimate, because the game is not certainly the one TheOver picked.")
 # The words the pipeline puts in place of a pick whose line it rejected (its final_pick_valid check).
 LINE_NOT_VERIFIED = ("unresolved", "missing line", "no line")
 LINE_NOT_VERIFIED_KEY = "line_not_verified"
@@ -347,7 +350,7 @@ def theover_model_board(candidates):
     wanted = ["market_type", "theover_pick_agrees", "theover_model_hit_rate", "theover_pick_line", "candidate_context",
               "pregame_quote_valid", "matchup_id", "league", "away_team", "home_team", "best_pick", "odds_american",
               "best_line_price", "best_line_price_book", "best_available_selected", "game_start_utc",
-              "theover_model_in_blend"]
+              "theover_model_in_blend", "orientation_source"]
     rows, left_out = [], set()
     for row in candidates[[c for c in wanted if c in candidates.columns]].to_dict("records"):
         if str(row.get("market_type") or "").lower() not in {"total_over", "total_under"}:
@@ -365,6 +368,8 @@ def theover_model_board(candidates):
             left_out.add(key)
             continue
         number = lambda key: pd.to_numeric(row.get(key), errors="coerce")
+        # A game the upload did not match carries TheOver's pick by name similarity alone (owner 2026-11-18).
+        unmatched = _text(row, "orientation_source", default="").lower().startswith("default")
         rows.append({"key": key, "start": _text(row, "game_start_utc", default=""),
                      "Sport": _text(row, "league", default=""), "Game": game, "Pick": pick,
                      "TheOver's line": number("theover_pick_line"), "Odds": number("odds_american"),
@@ -372,7 +377,8 @@ def theover_model_board(candidates):
                      "Model hit rate": float(hit),
                      # 0 on the candidate means its league's picks are kept for the record only
                      # (app_core.theover_model_totals, owner 2026-11-17); no mark means it was used.
-                     "Used in the estimate": RECORD_ONLY if number("theover_model_in_blend") == 0 else "Yes",
+                     "Used in the estimate": ("Yes" if number("theover_model_in_blend") != 0
+                                              else SIMILAR_NAME_ONLY if unmatched else RECORD_ONLY),
                      "Also the app's pick": "Yes" if str(row.get("best_available_selected")).lower() == "true" else ""})
     if not rows:
         board = pd.DataFrame(columns=THEOVER_MODEL_COLUMNS)
