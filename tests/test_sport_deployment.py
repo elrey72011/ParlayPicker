@@ -1,7 +1,7 @@
 """Deployment state is sport-local and never inferred from an APPROVED label."""
 from dataclasses import replace
 import pytest
-from test_wager_integrity_rules import candidate,policy,NOW
+from test_wager_integrity_audit import candidate,policy,NOW
 from core.wager_decisions import candidate_decision
 from core.sport_policy import research_policies
 

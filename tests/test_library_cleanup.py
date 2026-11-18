@@ -2,10 +2,11 @@
 asks for them.
 
 Second pass: the runner behind the removed Run Player Props button, the scoring behind the removed Strategy Lab tab, and
-code from July that no entry point reached. Third pass (the owner's word, because safety tests ran through them): the
-grading behind the removed Results tab, an old feature builder, the football evidence freeze, and the operations module of
-the shadow pipeline retired under D10. Files the pipeline loads through a package import stay, and so does anything a
-binding names.
+code from July that no entry point reached. Third pass (the owner's word, because a safety test ran through it): the
+grading behind the removed Results tab, and the operations module of the shadow pipeline retired under D10. Files the
+pipeline loads through a package import stay, and so does anything a binding names. An old feature builder and the
+football evidence freeze stay too: tests/test_wager_integrity_audit.py runs through them, and that file must keep its
+name because a frozen browser test imports a helper from it.
 """
 import ast
 import importlib.util
@@ -18,7 +19,7 @@ REMOVED = ("app_core.prop_analysis", "app_core.strategy_lab_realized", "app_core
            "core.models.game_models", "core.models.prediction_models",
            # third pass
            "app_core.performance_pipeline", "app_core.results_ingestion", "app_core.export_utils", "app_core.results_fetcher",
-           "app_core.feature_engine", "core.football_evidence", "app_core.pipeline.operations")
+           "app_core.pipeline.operations")
 # Every place tracked Python lives, except the archive of retired tests.
 CODE = ("app", "app_core", "core", "scripts", "services", "integrations", "parlaypicker", "tools", "tests", "docs")
 

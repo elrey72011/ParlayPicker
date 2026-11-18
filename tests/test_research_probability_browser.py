@@ -105,7 +105,7 @@ def test_actual_browser_missing_target_inference_and_zero(monkeypatch,tmp_path,u
 
 def test_actual_browser_approved_and_trial_labels_preserve_contracts(monkeypatch,tmp_path):
     from test_current_wagers_trace_and_release import _approved_source
-    from test_wager_integrity_rules import NOW as approved_clock
+    from test_wager_integrity_audit import NOW as approved_clock
     raw=_approved_source();frame=pd.DataFrame([raw])
     approved=build_package(frame.copy(),frame.copy(),frame.copy());validate_package(approved)
     result=inspect_browser(approved,tmp_path/"approved",approved_clock)

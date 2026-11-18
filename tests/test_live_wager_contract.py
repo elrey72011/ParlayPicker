@@ -3,7 +3,7 @@ from copy import deepcopy
 from datetime import timedelta
 import pandas as pd
 import pytest
-from test_wager_integrity_rules import candidate, policy, NOW
+from test_wager_integrity_audit import candidate, policy, NOW
 from core.wager_decisions import candidate_decision
 from core.live_wager_contract import snapshot, enforce_frame, finalize_live_wagers
 from app_core.production_parlays import production_parlay_leg_eligible, canonical_funnel, build_production_parlays
