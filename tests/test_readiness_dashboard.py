@@ -9,7 +9,7 @@ import pytest
 
 from app.ui import readiness_dashboard as panel
 from core.run_readiness import build_readiness
-from test_prediction_evidence import fixture_frames
+from test_prediction_evidence_store import fixture_frames
 from test_slate_coverage import inventory, report as coverage_report
 
 
@@ -182,7 +182,7 @@ def test_malformed_coverage_still_fails_validation(monkeypatch):
 def test_real_streamlit_surface_renders_both_schemas_and_empty_reports(scenario, rows):
     from streamlit.testing.v1 import AppTest
     source = "\n".join([
-        "from test_prediction_evidence import fixture_frames",
+        "from test_prediction_evidence_store import fixture_frames",
         "from test_slate_coverage import report as coverage_report",
         "from app.ui.readiness_dashboard import render_readiness_dashboard",
         "audit, final = fixture_frames()" if scenario in {"legacy", "coverage"} else "audit = final = None",

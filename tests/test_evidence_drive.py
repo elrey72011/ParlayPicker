@@ -5,7 +5,7 @@ import pytest
 
 from app_core.evidence_drive import API, AlreadyExists, DriveStore
 from app_core import evidence_remote as remote
-from test_prediction_evidence import frozen
+from test_prediction_evidence_store import frozen
 from test_evidence_remote import save_fixture
 from app_core import prediction_evidence as evidence
 

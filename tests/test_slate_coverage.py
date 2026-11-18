@@ -7,7 +7,7 @@ import pytest
 
 from app_core.game_coverage import publication_games
 from test_provider_caller_health import caller
-from test_prediction_evidence import frozen
+from test_prediction_evidence_store import frozen
 
 RUN = '20261007T160000.000000Z'
 AT = '2026-10-07T16:00:00+00:00'

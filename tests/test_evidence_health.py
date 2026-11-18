@@ -5,7 +5,7 @@ import sys
 
 from app_core.evidence_health import evidence_health
 from app_core import prediction_evidence as evidence
-from test_prediction_evidence import frozen, fixture_frames
+from test_prediction_evidence_store import frozen, fixture_frames
 
 
 def test_missing_probe_does_not_create_store(tmp_path):
