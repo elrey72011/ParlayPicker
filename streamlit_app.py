@@ -216,36 +216,23 @@ _COMPACT_EXPORT_COLUMNS = [
 ]
 
 
+# The app's sections after the clean-up of 2026-11-18 (owner): the Results tab, the Odds, Analysis and
+# Strategy Lab workspace tabs, player props, the Sweet Spot Filter, the Performance Tracker and the
+# Ranked Games play card were removed because nothing used them.
+MAIN_TABS = ["Today", "Pick Details", "Workspace"]
+WORKSPACE_TABS = ["Full Pick Board", "Parlays", "Portfolio", "Diagnostics", "Preview & Publish"]
+
+
 def _render_main_tabs():
-    """Keep the selected section through filter and download reruns."""
+    """Keep the selected section through filter and download reruns.
+
+    A session that still remembers the removed Results tab, under either of its names, opens on
+    Today; any other name it no longer knows opens on Workspace.
+    """
     legacy = st.session_state.get("main_navigation")
-    if legacy and legacy not in {"Today", "Pick Details", "Results", "Workspace"}:
-        st.session_state["main_navigation"] = "Results" if legacy == "Performance Recap" else "Workspace"
-    return st.tabs(
-        ["Today", "Pick Details", "Results", "Workspace"],
-        key="main_navigation",
-        on_change="rerun",
-    )
-
-
-def _prepare_sweet_spot_card(frame: pd.DataFrame, *, unit: float = 1.0) -> pd.DataFrame:
-    """Retain the filter's candidates while publishing their final wager state."""
-    from app_core.export_scope import label_wager_export
-    from app_core.lean_card import attach_play_stakes, score_best_picks_rows
-
-    out = ensure_best_pick_export_columns(frame)
-    for column in out.select_dtypes(include="category").columns:
-        out[column] = out[column].astype(object)
-    out["Model_Pick_Status"] = out["Pick_Status"].astype("string")
-    scored = attach_play_stakes(score_best_picks_rows(out), unit=unit)
-    for target, source in {
-        "Play_Tier": "Tier", "Play_Stake": "Play_Stake",
-        "Bet_Decision": "Bet_Decision", "Absolute_Edge": "Absolute_Edge",
-        "Production_Gate_Reason": "Production_Gate_Reason",
-    }.items():
-        if source in scored:
-            out[target] = scored[source]
-    return label_wager_export(out)
+    if legacy and legacy not in MAIN_TABS:
+        st.session_state["main_navigation"] = "Today" if legacy in {"Results", "Performance Recap"} else "Workspace"
+    return st.tabs(MAIN_TABS, key="main_navigation", on_change="rerun")
 
 
 def _compact_bool_series(df: pd.DataFrame, column: str) -> pd.Series:
@@ -1927,7 +1914,6 @@ def _publication_candidates(diagnostics):
 
 
 def main() -> None:
-    from app.ui.analysis_dashboard import render_analysis
     try:
         from app.ui.data_diagnostics import show_data_diagnostics
     except Exception:  # pragma: no cover
@@ -1936,9 +1922,7 @@ def main() -> None:
     from app.ui.debug_panel import render_debug, render_debug_panel
     from app.ui.kalshi_diagnostics import render_kalshi_diagnostics
     from app.ui.layout import setup_page
-    from app.ui.odds_dashboard import render_odds_table
     from app.ui.sidebar_controls import render_sidebar
-    from app.ui.strategy_lab_dashboard import render_strategy_lab
 
     setup_page()
 
@@ -2009,23 +1993,6 @@ def main() -> None:
             # CRITICAL: Always release the pipeline lock so future runs are not blocked
             st.session_state["pipeline_running"] = False
 
-    if controls.get("run_player_props") and not st.session_state.get("pipeline_running", False):
-        from app_core.prop_analysis import run_prop_analysis
-        st.session_state["pipeline_running"] = True
-        try:
-            with st.status("Running player props...", expanded=True) as prop_status:
-                def prop_progress(stage):
-                    prop_status.write(stage)
-                updates = run_prop_analysis(controls, st.session_state,
-                    st.session_state.get("best_picks_df"), progress=prop_progress)
-                st.session_state.update(updates)
-                seconds = sum(updates["props_diagnostics"]["stage_seconds"].values())
-                prop_status.update(label=f"Player props completed in {seconds:.0f}s", state="complete")
-        except Exception as exc:
-            st.error("Player prop analysis did not complete. Previous game and prop results were retained. " + type(exc).__name__)
-        finally:
-            st.session_state["pipeline_running"] = False
-
     analysis_df = st.session_state["analysis_df"]
 
     parlays_df = st.session_state["parlays_df"]
@@ -2034,12 +2001,10 @@ def main() -> None:
     theover_df = st.session_state["theover_df"]
     kalshi_df = st.session_state["kalshi_df"]
     gemini_df = st.session_state["gemini_df"]
-    simulation_results = st.session_state["simulation_results"]
 
     best_picks_df = st.session_state["best_picks_df"]
 
     diagnostics = dict(st.session_state.get("diagnostics", {}))
-    diagnostics.update({k: v for k, v in st.session_state.get("props_diagnostics", {}).items() if k != "stage_seconds"})
 
     if _analysis_inputs_stale(st.session_state, controls):
         st.error(
@@ -2068,15 +2033,15 @@ def main() -> None:
 
     publication_games = pd.DataFrame()
     coverage_games = pd.DataFrame()
-    publication_props = st.session_state.get("strikeout_prop_card", pd.DataFrame()).copy()
+    publication_props = pd.DataFrame()             # player props left the app on 2026-11-18; the publish panel still takes the frame
     publication_dfs = {}
-    today_tab, details_tab, tab_performance, workspace_tab = _render_main_tabs()
+    today_tab, details_tab, workspace_tab = _render_main_tabs()
     with workspace_tab:
         st.caption("Research, exports, and operational diagnostics. These tools retain the existing approval rules.")
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, publish_tab = st.tabs(
-            ["Odds", "Analysis", "Full Pick Board", "Parlays", "Portfolio", "Diagnostics", "Strategy Lab", "Preview & Publish"],
-            key="workspace_navigation", on_change="rerun",
-        )
+        if st.session_state.get("workspace_navigation") not in WORKSPACE_TABS:
+            st.session_state.pop("workspace_navigation", None)          # a session still on a removed tab
+        # The names keep their old numbers: tab1, tab2 and tab7 were Odds, Analysis and Strategy Lab.
+        tab3, tab4, tab5, tab6, publish_tab = st.tabs(WORKSPACE_TABS, key="workspace_navigation", on_change="rerun")
     # Research only: live gaps against Pinnacle, marked unproven and never a wager (owner 2026-11-10).
     # Above Best picks (owner 2026-11-13): Best picks is the market's lean; this is the list to read.
     with today_tab.container():
@@ -2087,39 +2052,7 @@ def main() -> None:
     from app.ui.daily_dashboard import render_daily_dashboard
     render_daily_dashboard(today_content, details_content, pd.DataFrame())
 
-    with tab_performance:
-        from app_core.performance_pipeline import run_performance_pipeline
-        from app.ui.results_dashboard import render_results_dashboard
-
-        st.subheader("Results")
-        st.caption("Review settled outcomes and distinguish research selections from funded wagers. Refresh scores when you need an update.")
-        if st.button(
-            "Refresh / Backfill Final Scores",
-            key="refresh_performance_results",
-            help="Re-query every league and fill games that were not final during the first grading pass.",
-        ):
-             with st.spinner("Refreshing final scores for every league..."):
-                  st.session_state["performance_df"] = run_performance_pipeline()
-
-        perf_df = st.session_state.get("performance_df")
-        if perf_df is None:
-             from datetime import datetime, timedelta
-             yesterday = (datetime.now() - timedelta(days=1)).date()
-             st.info("Load a results export below, or refresh final scores to retrieve available results.")
-
-        # We still want to call render_results_dashboard to show the file uploader
-        # even if perf_df is None
-        render_results_dashboard(perf_df)
-        from app.ui.scoreboard_panel import render_scoreboard
-        render_scoreboard()
-
     with tab6:
-        with st.expander("Last player-prop stage timings", expanded=False):
-            prop_timings = st.session_state.get("props_diagnostics", {}).get("stage_seconds", {})
-            if prop_timings:
-                st.dataframe(pd.DataFrame([{"Stage": k, "Seconds": v} for k,v in prop_timings.items()]), hide_index=True)
-            else:
-                st.caption("Run Player Props to collect timings.")
         with st.expander("Last analysis stage timings", expanded=False):
             stage_seconds = st.session_state.get("diagnostics", {}).get("stage_seconds", {})
             if stage_seconds:
@@ -2169,12 +2102,6 @@ def main() -> None:
         with publish_tab:
             from app.ui.publish_panel import render_publish_panel
             render_publish_panel(publication_games, _publication_candidates(diagnostics), publication_props, publication_dfs)
-        saved_props = st.session_state.get("strikeout_prop_card", pd.DataFrame())
-        if not saved_props.empty:
-            with tab3:
-                st.subheader("Saved player props")
-                st.caption("Run Game Analysis to prepare the game boards and combined publishing preview.")
-                st.dataframe(saved_props, hide_index=True)
         return
 
 
@@ -2257,33 +2184,6 @@ def main() -> None:
 
 
 
-    with tab1:
-        render_odds_table(analysis_df)
-
-    with tab2:
-        if analysis_df is not None and not analysis_df.empty:
-            render_analysis(analysis_df)
-        if analysis_df is not None and not analysis_df.empty:
-            analysis_export_df = analysis_df.copy()
-            if "best_pick" in analysis_export_df.columns:
-                export_priority = [
-                    "league", "home_team", "away_team", "game_date", "game_time_est", "matchup",
-                    "market", "pick", "pickteam", "line", "winprobability", "theover_probability",
-                    "market_type", "spread_line", "total_line",
-                    "expected_value", "edge", "calibrated_probability",
-                    "kalshi_probability", "kalshi_market_title", "kalshi_market_ticker", "kalshi_event_ticker", "kalshi_line",
-                ]
-                ordered_cols = [c for c in export_priority if c in analysis_export_df.columns]
-                trailing_cols = [c for c in analysis_export_df.columns if c not in ordered_cols]
-                analysis_export_df = analysis_export_df[ordered_cols + trailing_cols]
-            analysis_csv = analysis_export_df.to_csv(index=False)
-            st.download_button(
-                "Export Analysis",
-                analysis_csv,
-                "analysis_export.csv",
-                mime="text/csv",
-            )
-
     with tab3:
         st.subheader("Best Picks")
 
@@ -2294,7 +2194,7 @@ def main() -> None:
             from app_core.weights_config import MIN_STAKE_WIN_PROBABILITY
 
             _potd = select_pick_of_the_day(
-                best_picks_df, st.session_state.get("strikeout_prop_card")
+                best_picks_df, None
             )
         except Exception as _potd_exc:  # never let the banner break the tab
             _potd = None
@@ -2302,7 +2202,7 @@ def main() -> None:
         if _potd is not None:
             _odds = _potd["odds_american"]
             _odds_txt = "" if _odds is None else f" ({'+' if _odds > 0 else ''}{_odds:.0f})"
-            _src = "⚾ MLB Player Prop" if _potd["board"] == "prop" else f"🏟️ {_potd['league']} Game"
+            _src = f"🏟️ {_potd['league']} Game"
             st.success(
                 f"🏆 **Best Overall Pick of the Day** — {_src}\n\n"
                 f"**{_potd['pick']}**{_odds_txt} · {_potd['detail']}\n\n"
@@ -2322,18 +2222,18 @@ def main() -> None:
                 )
         else:
             st.info(
-                "No production Pick of the Day — no funded game or player-prop "
+                "No production Pick of the Day — no funded game "
                 "ticket cleared every model, calibration, and portfolio guard."
             )
 
-        # 🎫 Best Duos — likeliest 2-leg parlays across games + props, no shared
+        # 🎫 Best Duos — likeliest 2-leg parlays across games, no shared
         # games between legs, no leg reused across duos (owner request, 8 Jul).
         try:
             from app_core.best_duos import build_best_duos
 
             _duos = build_best_duos(
                 best_picks_df,
-                st.session_state.get("strikeout_prop_card"),
+                None,
                 strict=True,
             )
         except Exception as _duo_exc:  # additive; never break the tab
@@ -2352,21 +2252,6 @@ def main() -> None:
                     f"**{_d['combined_probability']:.1%} combined** · EV {_d.get('parlay_ev', 0.0):+.1%} — "
                     f"{_d['leg1']} ({_d['leg1_prob']:.0%}) **+** {_d['leg2']} ({_d['leg2_prob']:.0%}){_pay}"
                 )
-            # Owner's ticket (8 Jul): one GAME leg + one PROP leg, best combo.
-            try:
-                _mixed = build_best_duos(
-                    best_picks_df, st.session_state.get("strikeout_prop_card"),
-                    max_duos=1, require_mixed=True, strict=True,
-                )
-            except Exception:
-                _mixed = None
-            if _mixed is not None and not _mixed.empty:
-                _m = _mixed.iloc[0]
-                _mpay = f" · pays ${_m['payout_per_10']:.2f} per $10" if pd.notna(_m.get("payout_per_10")) else ""
-                st.markdown(
-                    f"🎯 **Best Game + Prop duo:** {_m['combined_probability']:.1%} combined · EV {_m.get('parlay_ev', 0.0):+.1%} — "
-                    f"{_m['leg1']} ({_m['leg1_prob']:.0%}) **+** {_m['leg2']} ({_m['leg2_prob']:.0%}){_mpay}"
-                )
             st.download_button(
                 "Export Best Duos",
                 _duos.to_csv(index=False, encoding="utf-8-sig"),
@@ -2374,216 +2259,6 @@ def main() -> None:
                 mime="text/csv",
                 key="export_best_duos",
             )
-
-        # Phase: Sweet Spot Filter Implementation
-        with st.expander("🎯 Sweet Spot Filter", expanded=False):
-            use_sweet_spot = st.checkbox("Enable Sweet Spot Filter", value=False, key="use_sweet_spot")
-
-            ss_col1, ss_col2, ss_col3 = st.columns(3)
-            with ss_col1:
-                include_fallback = st.checkbox("Include fallback_novig rows", value=False, key="ss_include_fallback")
-                ss_consensus = st.selectbox(
-                    "Consensus Requirement",
-                    options=["All", "Agrees Only", "Agrees or Neutral"],
-                    index=0,
-                    key="ss_consensus"
-                )
-                ss_family = st.selectbox(
-                    "Market Family",
-                    options=["All", "Overs only", "Unders only", "Sides only"],
-                    index=0,
-                    key="ss_family"
-                )
-            with ss_col2:
-                ss_min_prob = st.number_input("Min Win Probability", value=0.54, step=0.01, format="%.2f", key="ss_min_prob")
-                ss_max_prob = st.number_input("Max Win Probability", value=0.85, step=0.01, format="%.2f", key="ss_max_prob")
-                ss_min_edge = st.number_input("Min Edge", value=0.03, step=0.01, format="%.2f", key="ss_min_edge")
-            with ss_col3:
-                ss_max_edge = st.number_input("Max Edge", value=0.30, step=0.01, format="%.2f", key="ss_max_edge")
-                ss_min_ev = st.number_input("Min EV", value=0.04, step=0.01, format="%.2f", key="ss_min_ev")
-                ss_max_ev = st.number_input("Max EV", value=0.50, step=0.01, format="%.2f", key="ss_max_ev")
-
-            if use_sweet_spot and best_picks_df is not None and not best_picks_df.empty:
-                # Apply filters
-                sweet_spot_df = best_picks_df.copy()
-
-                # 1. Actionable + High Variance — Below Threshold explicitly failed
-                #    the confidence gate and shouldn't surface as a sweet spot pick.
-                sweet_spot_df = sweet_spot_df[
-                    sweet_spot_df["Pick_Status"].isin(["Actionable", "High Variance/Speculative"])
-                ]
-                actionable_count = len(sweet_spot_df)
-
-                # 2. Odds Source
-                if not include_fallback:
-                    sweet_spot_df = sweet_spot_df[sweet_spot_df["odds_source"] != "fallback_novig"]
-                source_count = len(sweet_spot_df)
-
-                # 3. Probability Band
-                prob_mask = (sweet_spot_df["calibrated_probability"] >= ss_min_prob) & (sweet_spot_df["calibrated_probability"] <= ss_max_prob)
-                sweet_spot_df = sweet_spot_df[prob_mask]
-                prob_count = len(sweet_spot_df)
-
-                # 4. Edge Band
-                edge_mask = (sweet_spot_df["edge"] >= ss_min_edge) & (sweet_spot_df["edge"] <= ss_max_edge)
-                sweet_spot_df = sweet_spot_df[edge_mask]
-                edge_count = len(sweet_spot_df)
-
-                # 5. EV Band
-                ev_mask = (sweet_spot_df["expected_value"] >= ss_min_ev) & (sweet_spot_df["expected_value"] <= ss_max_ev)
-                sweet_spot_df = sweet_spot_df[ev_mask]
-                ev_count = len(sweet_spot_df)
-
-                # 6. Consensus Filter
-                if ss_consensus == "Agrees Only":
-                    sweet_spot_df = sweet_spot_df[sweet_spot_df["consensus_agreement"] == "Agrees"]
-                elif ss_consensus == "Agrees or Neutral":
-                    sweet_spot_df = sweet_spot_df[sweet_spot_df["consensus_agreement"].isin(["Agrees", "Neutral"])]
-
-                # 7. Family Filter
-                if not sweet_spot_df.empty:
-                    if ss_family == "Overs only":
-                        sweet_spot_df = sweet_spot_df[sweet_spot_df["market_type"] == "total_over"]
-                    elif ss_family == "Unders only":
-                        sweet_spot_df = sweet_spot_df[sweet_spot_df["market_type"] == "total_under"]
-                    elif ss_family == "Sides only":
-                        sweet_spot_df = sweet_spot_df[sweet_spot_df["market_type"].str.contains("spread|h2h", na=False)]
-
-                final_count = len(sweet_spot_df)
-
-                st.markdown("#### Diagnostics")
-                diag_col1, diag_col2, diag_col3, diag_col4 = st.columns(4)
-
-                diag_col1.metric("Total Best Picks", len(best_picks_df))
-                diag_col1.metric("Model status candidates", actionable_count)
-                diag_col1.metric("After Source Filter", source_count)
-
-                diag_col2.metric("After Prob Band", prob_count)
-                diag_col2.metric("After Edge Band", edge_count)
-                diag_col2.metric("After EV Band", ev_count)
-
-                diag_col3.metric("Final Sweet Spot", final_count)
-                avg_ev = sweet_spot_df["expected_value"].mean() if not sweet_spot_df.empty else 0.0
-                avg_edge = sweet_spot_df["edge"].mean() if not sweet_spot_df.empty else 0.0
-                diag_col3.metric("Avg EV", f"{avg_ev:.3f}")
-
-                diag_col4.metric("Avg Edge", f"{avg_edge:.3f}")
-                min_p = sweet_spot_df["calibrated_probability"].min() if not sweet_spot_df.empty else 0.0
-                max_p = sweet_spot_df["calibrated_probability"].max() if not sweet_spot_df.empty else 0.0
-                diag_col4.metric("Prob Range", f"{min_p:.2f} - {max_p:.2f}")
-
-                if not sweet_spot_df.empty:
-                    m_counts = sweet_spot_df["market_type"].value_counts().to_dict()
-                    st.write("**Market Types:**", m_counts)
-                    public_sweet_spot = _prepare_sweet_spot_card(
-                        sweet_spot_df,
-                        unit=float(st.session_state.get("lean_play_unit", 1.0) or 1.0),
-                    )
-                    st.caption(
-                        "Sweet Spot filters model candidates. Final wager checks still apply: "
-                        "only Bettable rows with a positive Play_Stake are approved wagers."
-                    )
-
-                    # Ensure export logic uses string columns for status and categorical to prevent issues
-                    target_export_cols = [
-                        "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
-                        "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "WinProbability", "expected_value",
-                        "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
-                        "kalshi_probability", "ml_probability", "gemini_pick", "gemini_explanation", "gemini_risk_notes"
-                    ]
-
-                    csv_rename_map = {
-                        "home_team": "Home",
-                        "away_team": "Away",
-                        "game_date": "Local Date",
-                        "game_time_est": "Commence (Local)",
-                        "calibrated_probability": "WinProbability"
-                    }
-                    export_prep_ss = public_sweet_spot.rename(columns=csv_rename_map)
-                    scope_cols = ["Wager_Instruction", "Export_Scope", "Bettable", "Play_Stake"]
-                    final_export_cols = scope_cols + [c for c in target_export_cols if c in export_prep_ss.columns]
-                    final_export_cols += [c for c in export_prep_ss.columns if c not in final_export_cols]
-                    ss_export_csv = export_prep_ss[final_export_cols].to_csv(index=False, encoding="utf-8-sig")
-
-                    st.download_button(
-                        "Export Sweet Spot Card",
-                        ss_export_csv,
-                        "sweet_spot_export.csv",
-                        mime="text/csv",
-                    )
-
-                    st.markdown("#### Sweet Spot Picks")
-                    display_ss = public_sweet_spot.copy()
-                    display_ss = display_ss.rename(columns={
-                        "Triple_Filter_Rank": "Triple Filter Rank",
-                        "Pick_Quality": "Pick Quality",
-                        "league": "League",
-                        "away_team": "Away Team",
-                        "home_team": "Home Team",
-                        "game_date": "Game Date",
-                        "game_time_est": "Game Time (ET)",
-                        "best_pick": "Best Pick",
-                        "calibrated_probability": "Prob",
-                        "expected_value": "EV",
-                        "edge": "Edge",
-                        "odds_american": "Odds",
-                        "odds_source": "Source",
-                        "consensus_agreement": "Consensus",
-                        "kalshi_match_status": "Kalshi Status",
-                        "ml_probability": "ML Prob",
-                    })
-                    preferred = ["Wager_Instruction", "Bettable", "Play_Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status"]
-                    ordered = [c for c in preferred if c in display_ss.columns] + [c for c in display_ss.columns if c not in preferred]
-                    st.dataframe(display_ss[ordered], width="stretch")
-
-                    # --- Sweet Spot Parlays ---
-                    st.markdown("---")
-                    st.markdown("#### 🎯 Sweet Spot Parlays")
-                    if len(sweet_spot_df) >= 2:
-                        try:
-                            from core.probability_calibration import load_calibration
-                            from core.smart_parlay_engine import generate_smart_parlays
-                            ss_parlays = generate_smart_parlays(
-                                sweet_spot_df, num_rr_candidates=5, calibration=load_calibration()
-                            )
-                            if ss_parlays is not None and not ss_parlays.empty:
-                                for leg_count in [2, 3]:
-                                    leg_df = ss_parlays[ss_parlays["legs"] == leg_count].head(5).copy()
-                                    if leg_df.empty:
-                                        continue
-                                    st.markdown(f"**Top {len(leg_df)} — {leg_count}-Leg Parlays**")
-                                    disp_cols = [c for c in ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "min_leg_prob", "has_actionable_anchor", "best_payout_book", "Conviction_Score"] if c in leg_df.columns]
-                                    disp = leg_df[disp_cols].copy()
-                                    rename_map = {
-                                        "parlay_legs": "Parlay",
-                                        "combined_probability": "Hit %",
-                                        "combined_decimal_odds": "Payout",
-                                        "parlay_ev": "EV",
-                                        "min_leg_prob": "Weakest Leg",
-                                        "has_actionable_anchor": "Has Actionable",
-                                        "best_payout_book": "Book",
-                                        "Conviction_Score": "Conviction",
-                                    }
-                                    disp = disp.rename(columns={k: v for k, v in rename_map.items() if k in disp.columns})
-                                    if "Hit %" in disp.columns:
-                                        disp["Hit %"] = disp["Hit %"].apply(lambda x: f"{x:.1%}" if pd.notna(x) else "")
-                                    if "Payout" in disp.columns:
-                                        disp["Payout"] = disp["Payout"].apply(lambda x: f"{x:.2f}x" if pd.notna(x) else "")
-                                    if "EV" in disp.columns:
-                                        disp["EV"] = disp["EV"].apply(lambda x: f"{x:.3f}" if pd.notna(x) else "")
-                                    if "Weakest Leg" in disp.columns:
-                                        disp["Weakest Leg"] = disp["Weakest Leg"].apply(lambda x: f"{x:.1%}" if pd.notna(x) else "")
-                                    if "Conviction" in disp.columns:
-                                        disp["Conviction"] = disp["Conviction"].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "")
-                                    st.dataframe(disp, use_container_width=True)
-                            else:
-                                st.info("No +EV parlays found from Sweet Spot picks — try loosening the filters.")
-                        except Exception as e:
-                            st.warning(f"Could not generate parlays: {e}")
-                    else:
-                        st.info("Need at least 2 Sweet Spot picks to build parlays.")
-                else:
-                    st.info("No picks match the Sweet Spot criteria.")
 
         with st.expander("Pipeline Debug", expanded=False):
             st.json({
@@ -2750,111 +2425,6 @@ def main() -> None:
                     st.write("Side vs Total Finalist Preview:")
                     st.dataframe(preview_df, width="stretch")
 
-        with st.expander("📊 Performance Tracker", expanded=False):
-            st.markdown("Upload one or more performance recap files (CSV or Excel) to track win rates by status tier over time.")
-            recap_files = st.file_uploader(
-                "Upload recap file(s)",
-                type=["csv", "xlsx", "xls"],
-                accept_multiple_files=True,
-                key="perf_tracker_uploads",
-            )
-            if recap_files:
-                recap_frames = []
-                for f in recap_files:
-                    try:
-                        if f.name.lower().endswith(".csv"):
-                            rdf = pd.read_csv(f)
-                        else:
-                            rdf = pd.read_excel(f, engine="openpyxl")
-                        rdf.columns = [c.strip() for c in rdf.columns]
-                        recap_frames.append(rdf)
-                    except Exception as e:
-                        st.warning(f"Could not parse {f.name}: {e}")
-                if recap_frames:
-                    recap = pd.concat(recap_frames, ignore_index=True)
-
-                    # Normalise column names — handle both recap format and export format
-                    col_map = {c: c for c in recap.columns}
-                    if "Pick_Status" in recap.columns and "Status" not in recap.columns:
-                        recap = recap.rename(columns={"Pick_Status": "Status"})
-                    if "W/L" in recap.columns and "Outcome" not in recap.columns:
-                        recap = recap.rename(columns={"W/L": "Outcome"})
-                    if "best_pick" in recap.columns and "Pick Taken" not in recap.columns:
-                        recap = recap.rename(columns={"best_pick": "Pick Taken"})
-                    if "league" in recap.columns and "League" not in recap.columns:
-                        recap = recap.rename(columns={"league": "League"})
-
-                    required = {"Outcome", "Status"}
-                    missing = required - set(recap.columns)
-                    if missing:
-                        st.error(
-                            f"Uploaded file(s) are missing required columns: {', '.join(sorted(missing))}. "
-                            f"Please upload the Performance Recap files (not the Best Picks export). "
-                            f"Detected columns: {', '.join(recap.columns.tolist()[:10])}"
-                        )
-                    else:
-                        recap["Outcome"] = recap["Outcome"].astype(str).str.strip().str.upper()
-                        recap["Status"] = recap["Status"].astype(str).str.strip()
-                        # Drop blank/header rows
-                        recap = recap[~recap["Status"].isin(["", "NAN", "STATUS", "NONE"])]
-                        recap = recap[recap["Outcome"].isin(["WIN", "LOSS", "W", "L"])]
-                        # Normalise W→WIN, L→LOSS
-                        recap["Outcome"] = recap["Outcome"].replace({"W": "WIN", "L": "LOSS"})
-                        recap["Win"] = recap["Outcome"].eq("WIN")
-
-                        st.markdown(f"**{len(recap)} picks across {len(recap_frames)} recap file(s)**")
-
-                        # --- Staked performance by tier (the headline) ---
-                        # The all-rows hit rate blends in Below Threshold / No Play picks the
-                        # system declined to stake (≈50% by construction), masking the staked
-                        # card. Surface the staked tiers first so good staked days aren't read
-                        # as mediocre all-rows days.
-                        from app_core.strategy_lab_realized import summarize_recap_tiers
-                        tiers = summarize_recap_tiers(recap)
-                        st.markdown("#### Staked Performance by Tier")
-                        _tcols = st.columns(3)
-                        for _col, (_, _row) in zip(_tcols, tiers.iterrows()):
-                            _col.metric(
-                                _row["Tier"],
-                                f"{_row['Hit Rate']:.1%}",
-                                f"{int(_row['Wins'])}-{int(_row['Losses'])} ({int(_row['Total'])})",
-                            )
-                        st.caption(
-                            "Judge the system by the Actionable / Actionable+HV tiers. "
-                            "'All graded rows' includes Below Threshold and No Play picks that "
-                            "were not staked, so it trends toward ~50% by construction."
-                        )
-
-                        # Win rate by status
-                        status_summary = (
-                            recap.groupby("Status")["Win"]
-                            .agg(Wins="sum", Total="count")
-                            .assign(WinPct=lambda x: x["Wins"] / x["Total"])
-                            .reset_index()
-                            .sort_values("WinPct", ascending=False)
-                        )
-                        status_summary["Win %"] = status_summary["WinPct"].map(lambda x: f"{x:.1%}")
-                        st.markdown("#### Win Rate by Status")
-                        st.dataframe(status_summary[["Status", "Wins", "Total", "Win %"]], use_container_width=True)
-
-                        # Win rate by direction (Over / Under / other)
-                        if "Pick Taken" in recap.columns:
-                            recap["Direction"] = recap["Pick Taken"].astype(str).apply(
-                                lambda p: "Over" if "over" in p.lower() else ("Under" if "under" in p.lower() else "Side")
-                            )
-                            dir_summary = (
-                                recap.groupby(["Direction", "League"])["Win"]
-                                .agg(Wins="sum", Total="count")
-                                .assign(WinPct=lambda x: x["Wins"] / x["Total"])
-                                .reset_index()
-                                .sort_values(["League", "Direction"])
-                            )
-                            dir_summary["Win %"] = dir_summary["WinPct"].map(lambda x: f"{x:.1%}")
-                            st.markdown("#### Win Rate by Direction & League")
-                            st.dataframe(dir_summary[["League", "Direction", "Wins", "Total", "Win %"]], use_container_width=True)
-            else:
-                st.info("No recap files uploaded yet.")
-
         # Reconcile retained inputs for the selected date without analysis or I/O.
         retained_coverage = diagnostics.get('slate_coverage')
         if isinstance(diagnostics, dict):
@@ -3010,7 +2580,7 @@ def main() -> None:
                     f"at current prices, so the Kelly bankroll sits out. The table still shows the "
                     f"top-ranked best pick for every game; BEST AVAILABLE - PASS means that direction "
                     f"does not clear the wager gate. Best action: "
-                    f"the 🏆 Pick of the Day above and the ⚾ strikeout props below."
+                    f"the 🏆 Pick of the Day above."
                 )
 
             if not no_edge_df.empty:
@@ -3277,215 +2847,12 @@ def main() -> None:
                             hide_index=True, width="stretch",
                         )
 
-            # ── Ranked-game lean view; unranked schedule games are shown above. ──
-            # Re-presents the same card (no new staking) so a bettor who wants the whole
-            # board sees the model's side + confidence + a straight risk label per game.
-            try:
-                from app_core.lean_card import attach_play_stakes, build_all_games_lean_card
-                lean_card = build_all_games_lean_card(best_picks_export)
-                if not lean_card.empty:
-                    counts = lean_card["Tier"].value_counts().to_dict()
-                    st.subheader("🎲 Ranked Games — Play Card")
-                    st.caption(
-                        f"BET {counts.get('BET', 0)} · LEAN {counts.get('LEAN', 0)} · "
-                        f"AVOID {counts.get('AVOID', 0)}.  Ranked by Emp_Edge — the bucket-REALIZED "
-                        f"edge (calibrated win vs break-even), NOT model EV (which graded out "
-                        f"anti-informative). BET = positive model EV plus at least a 2-point "
-                        f"calibrated edge over the exact price. LEAN = its "
-                        f"calibrated win beats break-even (your call). AVOID = negative-EV, fading "
-                        f"Kalshi, or calibrated win below break-even. Calib_Win% = the model's "
-                        f"probability after the bucket-conditional calibration correction. Every game "
-                        f"with a verified current candidate shows its top-ranked best available pick; "
-                        f"only absolute-gate BET rows receive "
-                        f"a stake."
-                    )
-                    # Keep unit control for qualified BET rows only. LEAN/AVOID
-                    # rows stay visible but the absolute gate holds them at $0.
-                    play_unit = st.number_input(
-                        "Production play unit ($)",
-                        min_value=1.0, max_value=100.0, value=1.0, step=1.0,
-                        key="lean_play_unit",
-                    )
-                    lean_card = attach_play_stakes(lean_card, unit=float(play_unit))
-                    _play_total = float(lean_card["Play_Stake"].sum())
-                    _play_count = int(pd.to_numeric(lean_card["Play_Stake"], errors="coerce").fillna(0).gt(0).sum())
-                    st.caption(
-                        f"Play_Stake puts ${_play_total:.2f} on {_play_count}/{len(lean_card)} "
-                        f"absolute-gate BET rows at a ${play_unit:.0f} unit. Qualified leans remain "
-                        f"$0 research rows; best-available passes stay visible with their gate reasons."
-                    )
-                    st.dataframe(lean_card, width="stretch")
-                    st.download_button(
-                        "Export All-Games Play Card",
-                        lean_card.to_csv(index=False, encoding="utf-8-sig"),
-                        "all_games_play_card.csv",
-                        mime="text/csv",
-                    )
-            except Exception as exc:  # never let the lean view break the main card
-                logger.warning("all-games lean card failed: %s", exc)
-
             from app.ui.draftkings import render_draftkings_builders
 
             render_draftkings_builders(publication_dfs)
 
-            prop_parlays = st.session_state.get("prop_parlays_df", pd.DataFrame())
-            if not prop_parlays.empty:
-                st.subheader("Player-prop parlays")
-                st.caption("From the saved player-prop run; separate from the game-parlay card.")
-                st.dataframe(prop_parlays, hide_index=True)
-            # ── MLB player props (separate softer-market card) ──
-            prop_card = st.session_state.get("strikeout_prop_card")
-            if prop_card is not None and not prop_card.empty:
-                # Keep the original prop run ID, build and timestamps on navigation.
-                prop_card = prop_card.copy()
-                from app_core.export_scope import label_wager_export
-
-                prop_card = label_wager_export(prop_card)
-                publication_props = prop_card.copy()
-                _prop_status = prop_card.get(
-                    "Stake_Status", pd.Series("", index=prop_card.index)
-                ).astype(str).str.strip()
-                funded_prop_card = prop_card[_prop_status.eq("Funded")].copy()
-                research_prop_card = prop_card[~_prop_status.eq("Funded")].copy()
-
-                _precision_mask = _compact_bool_series(
-                    prop_card, "Prop_Precision_Shortlist"
-                )
-                precision_prop_card = prop_card[_precision_mask].copy()
-                if not precision_prop_card.empty:
-                    precision_prop_card = precision_prop_card.sort_values(
-                        "Prop_Precision_Rank", ascending=True, kind="mergesort"
-                    )
-                    st.subheader("🎯 Accuracy-First Prop Shortlist")
-                    st.caption(
-                        "Up to eight props ranked by calibration-adjusted probability. "
-                        "This is a display shortlist only: conservative probability still "
-                        "controls eligibility and stake, and research rows remain $0."
-                    )
-                    st.dataframe(precision_prop_card, width="stretch")
-
-                _prop_league = prop_card.get(
-                    "league", pd.Series("MLB", index=prop_card.index)
-                ).fillna("MLB").astype(str).str.upper()
-                mlb_prop_card = prop_card[_prop_league.eq("MLB")].copy()
-                nfl_prop_card = prop_card[_prop_league.eq("NFL")].copy()
-
-                _prop_diagnostics = st.session_state.get("diagnostics", {})
-                if (
-                    bool(_prop_diagnostics.get("nfl_prop_requested"))
-                    and int(_prop_diagnostics.get("nfl_selected_game_count", 0) or 0) > 0
-                    and nfl_prop_card.empty
-                ):
-                    from app_core.nfl_prop_pipeline import nfl_prop_feed_message
-
-                    st.warning(nfl_prop_feed_message(_prop_diagnostics))
-
-                st.subheader("Player Props")
-                st.caption(
-                    "MLB's controlled rollout currently funds only approved batter-hit Overs and Unders. "
-                    "Each pilot ticket is capped at $1 until its direction records 50 new settled picks "
-                    "with at least 55% accuracy and positive price-adjusted ROI. Core props require at "
-                    "least 62% conservative calibrated win probability; Extended props cover the 60–62% "
-                    "band. Both tiers also require at least 3% expected value, a 0.50-stat model advantage, "
-                    "valid odds of -150 or better, and sufficient directional calibration. Batter total-base "
-                    "and pitcher markets remain research-only. The card funds at most two props per game "
-                    "and five total. DraftKings NFL passing, rushing, receiving-yard, and reception props "
-                    "are collected and ranked in a separate research-only model; they stay at $0 until NFL's "
-                    "own market/direction history earns production eligibility. Parlays use funded rows only."
-                )
-                if funded_prop_card.empty:
-                    st.info("No player props qualify for a production wager today.")
-                else:
-                    st.dataframe(funded_prop_card, width="stretch")
-                    st.download_button(
-                        "Export Funded Player Props",
-                        funded_prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                        "player_props_export.csv",
-                        mime="text/csv",
-                    )
-
-                st.download_button(
-                    "PRIMARY — Export Combined Player Props for Next-Day Grading",
-                    prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                    "player_props_all_export.csv",
-                    mime="text/csv",
-                    key="download_all_player_props_for_grading",
-                )
-
-                if not mlb_prop_card.empty:
-                    st.download_button(
-                        "Optional Diagnostic — Export MLB-Only Player Props",
-                        mlb_prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                        "mlb_player_props_all_export.csv",
-                        mime="text/csv",
-                        key="download_mlb_props_for_grading",
-                    )
-                if not nfl_prop_card.empty:
-                    st.download_button(
-                        "Optional Diagnostic — Export NFL-Only Player Props",
-                        nfl_prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                        "nfl_player_props_all_export.csv",
-                        mime="text/csv",
-                        key="download_nfl_props_for_grading",
-                    )
-
-                if not research_prop_card.empty:
-                    with st.expander(
-                        f"Research-only props — do not bet ({len(research_prop_card)})",
-                        expanded=False,
-                    ):
-                        st.caption(
-                            "These rows remain available for grading and calibration. They are "
-                            "not funded and cannot enter recommended parlays."
-                        )
-                        st.dataframe(research_prop_card, width="stretch")
-                        st.download_button(
-                            "Export Research-Only Player Props",
-                            research_prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                            "player_props_research_export.csv",
-                            mime="text/csv",
-                        )
-            elif st.session_state.get("diagnostics", {}).get("strikeout_prop_error"):
-                _prop_err_type = st.session_state.get("diagnostics", {}).get(
-                    "strikeout_prop_error_detail",
-                    st.session_state.get("diagnostics", {}).get(
-                        "strikeout_prop_feed_error_type", "unexpected error"
-                    ),
-                )
-                st.caption(
-                    f"Player props unavailable after retry ({_prop_err_type}). "
-                    "Run the slate again; the game card remains valid."
-                )
-            elif st.session_state.get("diagnostics", {}).get("strikeout_prop_feed_status") in {
-                "event_list_failed", "prop_fetch_failed"
-            }:
-                _prop_stage = st.session_state.get("diagnostics", {}).get("strikeout_prop_feed_status")
-                st.caption(
-                    f"Player-prop feed did not respond after retry ({_prop_stage}). "
-                    "Run the slate again; no stale props were used."
-                )
-            elif (
-                st.session_state.get("diagnostics", {}).get("nfl_prop_requested")
-                and int(
-                    st.session_state.get("diagnostics", {}).get(
-                        "nfl_selected_game_count", 0
-                    )
-                    or 0
-                )
-                > 0
-                and st.session_state.get("diagnostics", {}).get("nfl_prop_feed_status")
-                != "ready"
-            ):
-                from app_core.nfl_prop_pipeline import nfl_prop_feed_message
-
-                st.warning(
-                    nfl_prop_feed_message(st.session_state.get("diagnostics", {}))
-                )
-            else:
-                st.caption("No player props were available for the selected sport today.")
-
             # Compact export (.xlsx): a readable Excel table with only the columns
-            # needed to scan a slate left-to-right, matching the Strategy Lab layout.
+            # needed to scan a slate left-to-right.
             # Win Amount is auto-computed from the approved Play_Stake and odds; W/L is left
             # blank for manual entry; Total Amount is a P&L formula that resolves
             # once W/L is filled in (+Win Amount on a win, -stake on a loss).
@@ -3633,7 +3000,7 @@ def main() -> None:
                     )
 
                 # 🏆 Pick of the Day line so the export carries the day's single
-                # best cross-board pick (games + props) alongside the table.
+                # best pick alongside the table.
                 if _potd is not None:
                     _potd_cell = ws.cell(
                         row=last_row + 4 if stake_L else last_row + 2,
@@ -3842,14 +3209,6 @@ def main() -> None:
                     else:
                         st.dataframe(failures_df[visible_cols], width="stretch")
 
-    with tab7:
-        render_strategy_lab(
-            analysis_df=analysis_df,
-            best_picks_df=best_picks_df,
-            portfolio_df=portfolio_df if portfolio_df is not None else analysis_df.iloc[0:0],
-            parlays_df=parlays_df if parlays_df is not None else analysis_df.iloc[0:0],
-            simulation_results=simulation_results or {},
-        )
 
 
 if __name__ == "__main__":

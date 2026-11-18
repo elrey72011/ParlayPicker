@@ -1,0 +1,339 @@
+# Re-issued 2026-11-18 without the tests of panels the owner removed from the app; the original is in tests_archive/, unchanged.
+import pandas as pd
+
+from app_core.strategy_lab_realized import (
+    REALIZED_MODE_ACTIONABLE_ONLY,
+    REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE,
+    REALIZED_MODE_ALL_GRADED,
+    REALIZED_MODE_PRODUCTION_CARD,
+    build_realized_strategy_lab,
+)
+
+
+def _graded_with_statuses():
+    return pd.DataFrame(
+        [
+            {"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 1.91, "Stake": 100, "actual_home_score": 5, "actual_away_score": 4, "Status": "Actionable"},
+            {"league": "MLB", "home_team": "C", "away_team": "D", "Pick Taken": "C -1.5", "Pick_Outcome": "LOSS", "decimal_odds": 2.00, "Stake": 50, "actual_home_score": 2, "actual_away_score": 5, "Status": "High Variance/Speculative"},
+            {"league": "MLB", "home_team": "E", "away_team": "F", "Pick Taken": "Under 7.5", "Pick_Outcome": "WIN", "decimal_odds": 2.00, "Stake": 25, "actual_home_score": 6, "actual_away_score": 4, "Status": "Below Threshold"},
+            {"league": "MLB", "home_team": "G", "away_team": "H", "Pick Taken": "G ML", "Pick_Outcome": "LOSS", "decimal_odds": 2.50, "Stake": 10, "actual_home_score": 1, "actual_away_score": 3, "Status": "No Play"},
+        ]
+    )
+
+
+def test_realized_pnl_computation_win_loss_push():
+    graded = pd.DataFrame(
+        [
+            {"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 1.91, "Stake": 100, "actual_home_score": 5, "actual_away_score": 4},
+            {"league": "MLB", "home_team": "C", "away_team": "D", "Pick Taken": "C -1.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.80, "Stake": 50, "actual_home_score": 2, "actual_away_score": 5},
+            {"league": "MLB", "home_team": "E", "away_team": "F", "Pick Taken": "Under 7.5", "Pick_Outcome": "PUSH", "decimal_odds": 2.00, "Stake": 20, "actual_home_score": 4, "actual_away_score": 4},
+        ]
+    )
+
+    realized, summary, _ = build_realized_strategy_lab(graded)
+
+    assert realized.loc[0, "Gross Return"] == 191
+    assert realized.loc[0, "Net Profit"] == 91
+    assert realized.loc[1, "Gross Return"] == 0
+    assert realized.loc[1, "Net Profit"] == -50
+    assert realized.loc[2, "Gross Return"] == 20
+    assert realized.loc[2, "Net Profit"] == 0
+
+    assert summary["Total Staked"] == 170
+    assert summary["Gross Returned"] == 211
+    assert summary["Net P/L"] == 41
+
+
+def test_default_realized_mode_is_actionable_only():
+    realized, summary, diagnostics = build_realized_strategy_lab(_graded_with_statuses())
+
+    assert summary["Strategy Mode"] == REALIZED_MODE_ACTIONABLE_ONLY
+    assert set(realized.loc[realized["Include In Totals"], "Status Bucket"]) == {"Actionable"}
+    assert diagnostics["outside_mode_count"] == 3
+
+
+def test_default_excludes_no_play_from_bankroll_and_summary():
+    realized, summary, _ = build_realized_strategy_lab(_graded_with_statuses())
+
+    no_play_row = realized[realized["Status Bucket"] == "No Play"].iloc[0]
+    assert not bool(no_play_row["Include In Totals"])
+    assert summary["Bet Count"] == 1
+    assert summary["Total Staked"] == 100
+
+
+def test_actionable_plus_high_variance_mode_selection():
+    realized, summary, _ = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE,
+    )
+
+    included_statuses = set(realized.loc[realized["Include In Totals"], "Status Bucket"])
+    assert included_statuses == {"Actionable", "High Variance/Speculative"}
+    assert summary["Bet Count"] == 2
+
+
+def test_all_graded_mode_includes_all_status_buckets():
+    realized, summary, _ = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ALL_GRADED,
+    )
+
+    assert summary["Bet Count"] == 4
+    assert realized["Include In Totals"].sum() == 4
+
+
+def test_status_bucket_summary_aggregates_each_bucket():
+    _, _, diagnostics = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ACTIONABLE_ONLY,
+    )
+    summary_df = diagnostics["status_bucket_summary"].set_index("Status Bucket")
+
+    assert int(summary_df.loc["Actionable", "Bet Count"]) == 1
+    assert int(summary_df.loc["High Variance/Speculative", "Bet Count"]) == 1
+    assert int(summary_df.loc["Below Threshold", "Bet Count"]) == 1
+    assert int(summary_df.loc["No Play", "Bet Count"]) == 1
+    assert float(summary_df.loc["Actionable", "Net P/L"]) == 91
+    assert float(summary_df.loc["No Play", "Net P/L"]) == -10
+
+
+def test_roi_and_net_pl_change_by_mode():
+    _, actionable_summary, _ = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ACTIONABLE_ONLY,
+    )
+    _, all_summary, _ = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ALL_GRADED,
+    )
+
+    assert actionable_summary["Net P/L"] != all_summary["Net P/L"]
+    assert actionable_summary["ROI"] != all_summary["ROI"]
+
+
+def test_mismatched_picks_are_detected_and_excluded():
+    graded = pd.DataFrame(
+        [
+            {"league": "MLB", "home_team": "Baltimore", "away_team": "Boston", "Pick Taken": "Under 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 2, "actual_away_score": 1},
+        ]
+    )
+    strategy = pd.DataFrame(
+        [
+            {"league": "MLB", "home_team": "Baltimore", "away_team": "Boston", "best_pick": "Boston -5.5"},
+        ]
+    )
+
+    realized, summary, diagnostics = build_realized_strategy_lab(graded, strategy)
+
+    assert realized.loc[0, "Result"] == "MISMATCH"
+    assert not realized.loc[0, "Include In Totals"]
+    assert summary["Total Staked"] == 0
+    assert summary["Mismatch Count"] == 1
+    assert len(diagnostics["pick_mismatches"]) == 1
+
+
+def test_realized_outcome_comes_from_recap_source_not_strategy_override():
+    graded = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Saint Louis",
+                "away_team": "Seattle",
+                "Pick Taken": "Under 7.5",
+                "Pick_Outcome": "LOSS",
+                "decimal_odds": 1.91,
+                "Stake": 10,
+                "actual_home_score": 5,
+                "actual_away_score": 4,
+            }
+        ]
+    )
+    strategy = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Saint Louis",
+                "away_team": "Seattle",
+                "Pick Taken": "Under 7.5",
+                "Result": "WIN",  # ignored, canonical recap source controls outcome
+            }
+        ]
+    )
+
+    realized, summary, _ = build_realized_strategy_lab(graded, strategy)
+
+    assert realized.loc[0, "Result"] == "LOSS"
+    assert summary["Loss Count"] == 1
+    assert summary["Win Count"] == 0
+
+
+def test_same_matchup_different_total_line_is_not_auto_graded():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "Texas", "away_team": "New York", "Pick Taken": "Over 4.5", "Pick_Outcome": "WIN", "decimal_odds": 1.9, "actual_home_score": 5, "actual_away_score": 2}])
+    strategy = pd.DataFrame([{"league": "MLB", "home_team": "Texas", "away_team": "New York", "Pick Taken": "Over 9.5"}])
+    realized, summary, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "Result"] == "MISMATCH"
+    assert "Line mismatch" in realized.loc[0, "Excluded Reason"]
+    assert summary["Bet Count"] == 0
+
+
+def test_same_matchup_different_spread_line_is_not_auto_graded():
+    graded = pd.DataFrame([{"league": "NBA", "home_team": "LAL", "away_team": "BOS", "Pick Taken": "LAL -2.5", "Pick_Outcome": "WIN", "decimal_odds": 1.9, "actual_home_score": 110, "actual_away_score": 101}])
+    strategy = pd.DataFrame([{"league": "NBA", "home_team": "LAL", "away_team": "BOS", "Pick Taken": "LAL -6.5"}])
+    realized, summary, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "Result"] == "MISMATCH"
+    assert summary["ROI"] == 0
+
+
+def test_same_matchup_opposite_direction_is_not_auto_graded():
+    graded = pd.DataFrame([{"league": "NBA", "home_team": "Los Angeles", "away_team": "Houston", "Pick Taken": "Over 207.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "actual_home_score": 105, "actual_away_score": 98}])
+    strategy = pd.DataFrame([{"league": "NBA", "home_team": "Los Angeles", "away_team": "Houston", "Pick Taken": "Under 207.5"}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "Result"] == "MISMATCH"
+    assert "Direction mismatch" in realized.loc[0, "Excluded Reason"]
+
+
+def test_exact_pick_identity_match_grades_normally():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "Toronto", "away_team": "Boston", "Pick Taken": "Over 7.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 8, "actual_away_score": 4}])
+    strategy = pd.DataFrame([{"league": "MLB", "home_team": "Toronto", "away_team": "Boston", "Pick Taken": "Over 7.5"}])
+    realized, summary, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "pick_identity_match"]
+    assert realized.loc[0, "Result"] == "WIN"
+    assert summary["Bet Count"] == 1
+
+
+def test_export_run_id_mismatch_excludes_row_from_realized():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "Toronto", "away_team": "Boston", "Pick Taken": "Over 7.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 8, "actual_away_score": 4, "export_run_id": "run_a"}])
+    strategy = pd.DataFrame([{"league": "MLB", "home_team": "Toronto", "away_team": "Boston", "Pick Taken": "Over 7.5", "export_run_id": "run_b"}])
+    realized, summary, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "Excluded Reason"] == "Export run mismatch"
+    assert summary["Bet Count"] == 0
+
+
+def test_no_play_defaults_to_zero_bet_amount():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "No Play"}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED, default_stake=10)
+    assert realized.loc[0, "Stake"] == 0
+
+
+def test_high_variance_defaults_to_zero_in_production_card_mode():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "High Variance/Speculative"}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_PRODUCTION_CARD, default_stake=10)
+    assert realized.loc[0, "Stake"] == 0
+
+
+def test_below_threshold_defaults_to_zero_in_production_card_mode():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "Below Threshold"}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_PRODUCTION_CARD, default_stake=10)
+    assert realized.loc[0, "Stake"] == 0
+
+
+def test_manual_non_production_stake_is_flagged():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "No Play", "Stake": 15}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_PRODUCTION_CARD, default_stake=10)
+    assert bool(realized.loc[0, "manual_non_production_stake_flag"]) is True
+    assert realized.loc[0, "stake_warning"] == "Non-production row has manual stake"
+    assert not bool(realized.loc[0, "production_pnl_included"])
+
+
+def test_strategy_lab_preserves_pick_identity_fields():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4}])
+    strategy = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "pick_id": "pick-1", "canonical_pick_key": "k1", "market_line_used": 8.5, "market_line_source": "live", "line_consistency_flag": True, "line_event_identity_match_flag": True}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "pick_id"] == "pick-1"
+    assert realized.loc[0, "canonical_pick_key"] == "k1"
+    assert float(realized.loc[0, "market_line_used"]) == 8.5
+
+
+def test_total_slate_exposure_cap_works():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": f"H{i}", "away_team": f"A{i}", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "Actionable"} for i in range(10)])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED, default_stake=100, starting_bankroll=1000)
+    assert realized["Stake"].max() <= 40.0 + 1e-9
+    assert realized["Stake"].sum() <= 250.0 + 1e-9
+
+
+def test_realized_summary_by_league_market_family():
+    graded = pd.DataFrame([
+        {"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 6, "actual_away_score": 4, "Status": "Actionable"},
+        {"league": "MLB", "home_team": "C", "away_team": "D", "Pick Taken": "C ML", "Pick_Outcome": "LOSS", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 1, "actual_away_score": 3, "Status": "Actionable"},
+    ])
+    _, _, diagnostics = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED)
+    summary_df = diagnostics["league_market_family_summary"]
+    assert set(summary_df["market_family"]) >= {"total", "moneyline"}
+    assert "status_summary" in diagnostics
+    assert "league_summary" in diagnostics
+    assert "market_family_summary" in diagnostics
+
+
+def test_conflict_result_is_flagged_and_overwritten_from_recap():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "Tampa Bay", "away_team": "San Francisco", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "Result": "LOSS", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 6, "actual_away_score": 4}])
+    realized, _, _ = build_realized_strategy_lab(graded)
+    assert realized.loc[0, "Result"] == "WIN"
+    assert bool(realized.loc[0, "grading_conflict_flag"]) is True
+    assert "overwritten" in realized.loc[0, "grading_conflict_reason"].lower()
+
+
+def test_production_vs_research_pnl_are_separate():
+    graded = _graded_with_statuses()
+    _, _, diagnostics = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED)
+    assert diagnostics["production_pnl_summary"]["Bet Count"] == 1
+    assert diagnostics["research_pnl_summary"]["Bet Count"] == 3
+    assert diagnostics["all_rows_pnl_summary"]["Bet Count"] == 4
+
+
+def test_performance_guard_warns_without_block_when_sample_below_threshold():
+    graded = pd.DataFrame([
+        {"league": "NBA", "home_team": "A", "away_team": "B", "Pick Taken": "Over 210.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "Kelly_Bet_Size": 12, "actual_home_score": 90, "actual_away_score": 88, "Status": "Actionable"},
+        {"league": "NBA", "home_team": "C", "away_team": "D", "Pick Taken": "Over 211.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "Kelly_Bet_Size": 12, "actual_home_score": 91, "actual_away_score": 87, "Status": "Actionable"},
+    ])
+    realized, _, diagnostics = build_realized_strategy_lab(graded, min_guard_sample_size=5)
+    assert (diagnostics["performance_guard_summary"]["performance_guard_warning"] == "Insufficient sample, monitor only").any()
+    assert float(realized["Kelly_Bet_Size"].sum()) > 0
+
+
+def test_performance_guard_zeroes_kelly_when_thresholds_fail_and_sample_sufficient():
+    graded = pd.DataFrame([
+        {"league": "NHL", "home_team": f"H{i}", "away_team": f"A{i}", "Pick Taken": "Over 6.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "Kelly_Bet_Size": 20, "actual_home_score": 2, "actual_away_score": 1, "Status": "Actionable"}
+        for i in range(5)
+    ])
+    realized, _, diagnostics = build_realized_strategy_lab(graded, min_guard_sample_size=5, performance_guard_min_win_rate=0.5, performance_guard_min_roi=0.0)
+    assert (diagnostics["performance_guard_summary"]["performance_guard_flag"]).any()
+    assert float(realized["Kelly_Bet_Size"].sum()) == 0.0
+
+
+def test_performance_guard_is_direction_aware_for_totals():
+    # 5 MLB total_over losses + 3 MLB total_under wins. Pooled into one "total" family
+    # this is 3-8 and the old guard would zero BOTH directions. Direction-aware, only the
+    # losing Over bucket is flagged; the winning Under bucket keeps its Kelly.
+    over_rows = [
+        {"league": "MLB", "home_team": f"HO{i}", "away_team": f"AO{i}", "Pick Taken": "Over 8.5",
+         "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "Kelly_Bet_Size": 10,
+         "actual_home_score": 1, "actual_away_score": 1, "Status": "Actionable"}
+        for i in range(5)
+    ]
+    under_rows = [
+        {"league": "MLB", "home_team": f"HU{i}", "away_team": f"AU{i}", "Pick Taken": "Under 8.5",
+         "Pick_Outcome": "WIN", "decimal_odds": 1.9, "Kelly_Bet_Size": 10,
+         "actual_home_score": 1, "actual_away_score": 1, "Status": "Actionable"}
+        for i in range(3)
+    ]
+    graded = pd.DataFrame(over_rows + under_rows)
+    realized, _, diagnostics = build_realized_strategy_lab(
+        graded,
+        min_guard_sample_size=5,
+        performance_guard_min_win_rate=0.5,
+        performance_guard_min_roi=0.0,
+    )
+
+    guard = diagnostics["performance_guard_summary"]
+    over_flagged = guard.loc[guard["market_direction"] == "total_over", "performance_guard_flag"]
+    under_flagged = guard.loc[guard["market_direction"] == "total_under", "performance_guard_flag"]
+    assert bool(over_flagged.any())
+    assert not bool(under_flagged.any())
+
+    is_over = realized["Recap Pick"].astype(str).str.contains("Over")
+    assert float(realized.loc[is_over, "Kelly_Bet_Size"].sum()) == 0.0
+    assert float(realized.loc[~is_over, "Kelly_Bet_Size"].sum()) > 0.0
+    # The direction-resolved summary is surfaced for diagnostics.
+    assert "league_market_direction_summary" in diagnostics
+
+

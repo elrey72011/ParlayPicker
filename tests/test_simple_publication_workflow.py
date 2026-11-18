@@ -94,7 +94,7 @@ def test_empty_analysis_app_branch_grades_and_publishes_saved_board(monkeypatch)
     tree=ast.parse(Path('streamlit_app.py').read_text(encoding='utf-8'))
     branch=next(node for node in ast.walk(tree) if isinstance(node,ast.If)
                 and ast.unparse(node.test)=='analysis_df is None or analysis_df.empty'
-                and 'saved_props' in ast.unparse(node))
+                and 'render_publish_panel' in ast.unparse(node))
     source="""
 import pandas as pd
 import streamlit as st

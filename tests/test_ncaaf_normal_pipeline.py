@@ -13,7 +13,7 @@ from app_core.research_estimate_trace import encode
 from core import streamlit_pipeline as pipeline
 from scripts.benchmark_drive_history_loading import blocked_network
 from test_ncaaf_research_contract import captured, selection, review
-from test_ncaaf_prospective import NOW
+from test_ncaaf_prospective_library import NOW
 from test_source_contract_pipeline import exported
 from test_research_probability_browser import inspect_browser
 

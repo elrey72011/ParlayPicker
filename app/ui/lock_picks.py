@@ -82,7 +82,7 @@ def render_lock_picks(package, setting):
             clear_review_state(st.session_state)
             blocked = {r['Lock status'] for r in audit}
             if blocked & {'Stale quote', 'Stale analysis'}:
-                st.info('No new eligible picks to lock. Some saved prices or analysis are stale; click Refresh picks, then return here. Refresh preview and Run Player Props do not refresh game quotes. See Why games cannot be locked for each reason.')
+                st.info('No new eligible picks to lock. Some saved prices or analysis are stale; click Refresh picks, then return here. Refresh preview does not refresh game quotes. See Why games cannot be locked for each reason.')
             else:
                 st.info('No new eligible picks to lock. See Why games cannot be locked for the current breakdown. Existing locks remain saved; started games cannot be locked, and other-date games must wait until their game day.')
             st.button('Lock selected picks', key='lock_picks_action', disabled=True)
