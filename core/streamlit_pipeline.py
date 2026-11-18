@@ -3421,6 +3421,13 @@ def _apply_team_name_overrides(df: pd.DataFrame) -> pd.DataFrame:
     out["home_team"] = [_fix(t, lg) for t, lg in zip(_string_series(out, "home_team"), leagues)]
     out["away_team"] = [_fix(t, lg) for t, lg in zip(_string_series(out, "away_team"), leagues)]
     return out
+# Leagues whose teams are schools. The last word of a school's name is part of the name, so the schedule
+# file must not complete an uploaded name from it: "Houston" is not a short "Houston Christian", nor "Ohio" a
+# short "Ohio State". Uploaded college names stay as written and are matched to the live feed (owner
+# 2026-11-18: Houston at Florida and Morehead State at Ohio found no match that day).
+SCHOOL_NAME_LEAGUES = frozenset({"NCAAB", "NCAAF"})
+
+
 def _resolve_team_names_from_base(df: pd.DataFrame, base_df: pd.DataFrame) -> pd.DataFrame:
     """Resolve city-only/alias team names to canonical full names using base schedule by league."""
     if df is None or df.empty or base_df is None or base_df.empty:
@@ -3457,6 +3464,8 @@ def _resolve_team_names_from_base(df: pd.DataFrame, base_df: pd.DataFrame) -> pd
 
     def _resolve(league: str, team: str) -> str:
         league_norm = str(league or "").upper()
+        if league_norm in SCHOOL_NAME_LEAGUES:
+            return team
         team_norm = str(team or "").strip()
         key = (league_norm, team_norm.upper())
         direct = alias_map.get(key)
