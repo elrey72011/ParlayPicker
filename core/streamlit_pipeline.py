@@ -10627,6 +10627,8 @@ def run_analysis_pipeline(
     # Which of those picks may feed the blend, now that each game's league is settled (owner
     # 2026-11-17): the NBA's are kept for the record only. The upload reader stamped the same mark
     # from the league as uploaded; this is the one the blend below and every later re-blend read.
+    # A game the upload did not match (orientation_source "default") got its TheOver columns from the
+    # similarity fallback above, so its pick is for the record only too (owner 2026-11-18).
     merged[_theover_model_totals.IN_BLEND_COLUMN] = _theover_model_totals.mark(merged)
     theover_blend_input, merged[_theover_model_totals.SOURCE_COLUMN] = _theover_model_totals.blend_input(
         merged, theover_blend_input)

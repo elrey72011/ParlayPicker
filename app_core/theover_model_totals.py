@@ -33,6 +33,13 @@ marked-off game empty. The mark travels with the pick's hit rate through every m
 mark is treated as before, so an analysis saved earlier is unchanged until it is refreshed. The NBA's
 picks stay on the homepage list and in the exports, which is what lets their record be kept.
 
+Nor is a pick used when its game is not certainly the uploaded one (owner 2026-11-18). For a game the
+upload did not match (its ``orientation_source`` starts with ``default``) the pipeline still attaches
+TheOver's columns from the uploaded game with the most similar team names, at a similarity of 65 in
+100. On 18 November 2026 that moved the rating of Texas Southern at San Diego State from 48.5% to
+56.3%. ``mark`` gives such a pick 0 as well: listed and exported for the record, never blended. A
+game matched exactly, or by its teams under another id, is unaffected.
+
 This is the blended ``calibrated_probability``, so the expected value the wager checks read moves
 with it and a pick can be labelled a qualified lean. It cannot fund a stake: every wager still has
 to pass the terminal market authority (``core.sport_market_gate``), which candidate fields cannot
@@ -53,10 +60,21 @@ OTHER_SIDE = {"total_over": "total_under", "total_under": "total_over"}
 # 10-15 over ten nights). Empty this set to blend every league's pick again.
 RESEARCH_ONLY_LEAGUES = frozenset({"NBA"})
 IN_BLEND_COLUMN = "theover_model_in_blend"      # set by the upload reader: 1.0 may feed the blend, 0.0 record only
+MATCH_COLUMN = "orientation_source"             # how the pipeline matched the game to the upload
+UNMATCHED = "default"                           # its value, or the start of it, for a game the upload did not match
 
 
 def _market(frame) -> pd.Series:
     return frame["market_type"].astype(str).str.strip().str.lower()
+
+
+def by_similarity_only(frame) -> pd.Series:
+    """True on each row of a game the upload did not match: any TheOver column it carries came from the
+    uploaded game with the most similar names, which is not certainly this one. False where the frame
+    does not say how its games were matched (the upload itself, an analysis saved before the column)."""
+    if frame is None or MATCH_COLUMN not in getattr(frame, "columns", ()):
+        return pd.Series(False, index=getattr(frame, "index", None), dtype=bool)
+    return frame[MATCH_COLUMN].fillna("").astype(str).str.strip().str.lower().str.startswith(UNMATCHED).astype(bool)
 
 
 def backed(frame) -> pd.Series:
@@ -78,8 +96,9 @@ def in_blend_mark(league, index=None) -> pd.Series:
 
 def mark(frame) -> pd.Series:
     """``IN_BLEND_COLUMN`` for ``frame``: on both sides of each total TheOver's model picked, 1.0 or 0.0
-    from the row's league; empty everywhere else. The upload reader stamps it, and the production
-    pipeline stamps it again once each game's league is settled."""
+    from the row's league, and 0.0 where the game was matched by name similarity alone
+    (``by_similarity_only``); empty everywhere else. The upload reader stamps it, and the production
+    pipeline stamps it again once each game's league and match are settled."""
     empty = pd.Series(np.nan, index=getattr(frame, "index", None), dtype="float64")
     if frame is None or not {"market_type", "theover_pick_agrees", "theover_model_hit_rate"} <= set(frame.columns):
         return empty
@@ -87,7 +106,7 @@ def mark(frame) -> pd.Series:
     listed = (_market(frame).isin(list(OTHER_SIDE)) & pd.to_numeric(frame["theover_pick_agrees"], errors="coerce").notna()
               & hit.gt(0) & hit.lt(1)).fillna(False)
     league = frame["league"] if "league" in frame.columns else None
-    return in_blend_mark(league, index=frame.index).where(listed)
+    return in_blend_mark(league, index=frame.index).where(~by_similarity_only(frame), 0.0).where(listed)
 
 
 def in_blend(frame) -> pd.Series:
