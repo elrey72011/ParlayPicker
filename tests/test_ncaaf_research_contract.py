@@ -12,7 +12,7 @@ from app_core import ncaaf_prospective as p, ncaaf_prospective_store as store
 from app_core import ncaaf_research as research, ncaaf_research_contract as contract
 from app_core.market_probability_model import predict_market_probabilities
 from scripts.benchmark_drive_history_loading import blocked_network
-from test_ncaaf_prospective import inputs, event, response, NOW
+from test_ncaaf_prospective_library import inputs, event, response, NOW
 
 
 class FrozenDateTime(datetime):

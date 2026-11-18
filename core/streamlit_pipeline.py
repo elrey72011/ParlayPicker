@@ -5204,7 +5204,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     candidate_audit_df["wager_approved"] = False
     candidate_audit_df["export_role"] = "RANKING CANDIDATE - BACKTEST ONLY"
     candidate_audit_df["wager_instruction"] = (
-        "NOT A BETTING CARD; upload this file to Performance Recap for candidate grading."
+        "NOT A BETTING CARD; ranking candidates kept for grading, not wagers."
     )
     candidate_audit_df["final_pick_valid"] = False
     candidate_audit_df["final_pick_valid_reason"] = "not_selected"
