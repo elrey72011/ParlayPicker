@@ -1,6 +1,7 @@
 """Create/read-only evidence objects in a Google Workspace Shared Drive folder."""
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from threading import local
 from app_core.scoped_reads import singleflight
 from io import BytesIO
@@ -68,6 +69,17 @@ def _checksum(item):
     return checksum
 
 
+def _created_epoch(value):
+    """Drive's ``createdTime`` as epoch seconds; ``None`` when it is missing or unreadable."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)).timestamp()
+
+
 class AlreadyExists(Exception):
     response = {"Error": {"Code": "PreconditionFailed"}}
 
@@ -78,6 +90,13 @@ class DriveInventory:
 
     The object is deliberately immutable and is never kept as global authority.
     Callers must discover a new inventory at each required action boundary.
+
+    ``covers`` (2026-11-18): the name prefixes the inventory is complete for; ``None`` is the whole
+    folder. One built from the evidence index and a listing of newer files is complete for the
+    evidence tables only and cannot answer for any other name. ``listed_from`` is the clock just
+    before the listing began. ``recent_ids`` are the files the listing saw created after the moment
+    its caller asked it to watch (``None``: not asked), and ``recent_unknown`` counts the files whose
+    creation time Drive did not give.
     """
     scope_hash: str
     operation_id: str
@@ -86,6 +105,10 @@ class DriveInventory:
     listing_pages: int
     metadata_items_seen: int
     complete: bool = True
+    covers: tuple | None = None
+    listed_from: float | None = None
+    recent_ids: frozenset | None = None
+    recent_unknown: int = 0
 
 
 @dataclass(frozen=True)
@@ -211,15 +234,29 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         return getattr(self, "_authenticated_scope", None) or opaque_hash("google_workspace_shared_drive", identity, subject, principal,
                            getattr(self, "drive", "injected"), getattr(self, "folder", "injected"))
 
-    def _files(self, name=None, stats=None):
+    def _files(self, name=None, stats=None, created_after=None, watch=None):
+        """Files in the folder: all of them, those with one exact name, or those created after a moment.
+
+        ``created_after`` (2026-11-18) is a date Drive compares with each file's creation time. ``watch``
+        (epoch seconds) asks a listing to note in ``stats`` which of its files were created after that
+        moment; the creation times themselves are not kept.
+        """
         query = f"'{self.folder}' in parents and trashed = false"
+        fields = "id,name,sha256Checksum"
         if name is not None:
             escaped = name.replace("\\", "\\\\").replace("'", "\\'")
             query += f" and name = '{escaped}'"
+        elif created_after is not None:
+            query += f" and createdTime > '{created_after}'"
+        if created_after is not None or watch is not None:
+            fields += ",createdTime"
+        if watch is not None and stats is not None:
+            stats.setdefault("recent_ids", set())
+            stats.setdefault("recent_unknown", 0)
         token = None
         seen_tokens = set()
         while True:
-            params = {"q": query, "fields": "nextPageToken,incompleteSearch,files(id,name,sha256Checksum)", "pageSize": 1000,
+            params = {"q": query, "fields": f"nextPageToken,incompleteSearch,files({fields})", "pageSize": 1000,
                       "supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "corpora": "drive", "driveId": self.drive}
             if token:
                 params["pageToken"] = token
@@ -237,6 +274,13 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
                 raise EvidenceStorageError("Drive listing was incomplete; restore cannot be verified")
             if stats is not None:
                 stats["metadata_items_seen"] = stats.get("metadata_items_seen", 0) + len(files)
+            if watch is not None and stats is not None:
+                for item in files:
+                    created = _created_epoch(item.pop("createdTime", None))
+                    if created is None:
+                        stats["recent_unknown"] += 1
+                    elif created > watch:
+                        stats["recent_ids"].add(item["id"])
             yield from files
             token = data.get("nextPageToken")
             if not token:
@@ -320,40 +364,67 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
             for session in sessions:
                 session.close()
 
-    def discover_complete_inventory(self, *, operation_id=None, namespace=None, ids=None, coalesce=True):
+    def discover_complete_inventory(self, *, operation_id=None, namespace=None, ids=None, coalesce=True, watch=None):
         if not coalesce:
-            return self._discover_complete_inventory(operation_id=operation_id, namespace=namespace, ids=ids)
+            return self._discover_complete_inventory(operation_id=operation_id, namespace=namespace, ids=ids, watch=watch)
         inventory, shared = singleflight(
-            ("inventory", self.storage_scope_hash(), namespace),
-            lambda: self._discover_complete_inventory(operation_id=operation_id, namespace=namespace, ids=ids))
+            ("inventory", self.storage_scope_hash(), namespace) + (() if watch is None else (watch,)),
+            lambda: self._discover_complete_inventory(operation_id=operation_id, namespace=namespace, ids=ids, watch=watch))
         if shared:
             with PerformanceSpan("drive_inventory_join", ids=ids, storage_scope_hash=self.storage_scope_hash()) as span:
                 span.set(listing_traversals=0, cache_hits=1, verification_status="inflight_complete_inventory")
         return inventory
 
-    def _discover_complete_inventory(self, *, operation_id=None, namespace=None, ids=None):
+    def _discover_complete_inventory(self, *, operation_id=None, namespace=None, ids=None, watch=None):
         """List the entire folder exactly once for one bounded read phase."""
         ids = ids or operation_ids(action_id=operation_id)
         operation_id = operation_id or ids["action_id"]
         stats = {"listing_pages": 0, "metadata_items_seen": 0, "retries": 0, "retry_wait_ms": 0}
+        listed_from = time.time()
         with PerformanceSpan("drive_inventory", ids=ids, storage_scope_hash=self.storage_scope_hash()) as span:
             try:
-                files = list(self._files(stats=stats))
+                files = list(self._files(stats=stats) if watch is None else self._files(stats=stats, watch=watch))
             except TypeError:
                 # Compatibility for deterministic injected stores that override
                 # _files() without the optional instrumentation argument.
                 files = list(self._files())
                 stats["metadata_items_seen"] = len(files)
                 stats["listing_pages"] = None
+                stats.pop("recent_ids", None)
             span.set(listing_traversals=1, listing_pages=stats["listing_pages"],
                      metadata_items_seen=stats["metadata_items_seen"], retries=stats["retries"],
                      retry_wait_ms=stats["retry_wait_ms"], verification_status="complete")
+        recent = stats.get("recent_ids")
         return DriveInventory(self.storage_scope_hash(), operation_id, namespace, tuple(files),
-                              stats["listing_pages"], stats["metadata_items_seen"])
+                              stats["listing_pages"], stats["metadata_items_seen"], listed_from=listed_from,
+                              recent_ids=None if recent is None else frozenset(recent),
+                              recent_unknown=stats.get("recent_unknown", 0))
+
+    def created_since(self, moment, *, ids=None):
+        """Every file in the folder created after ``moment`` (epoch seconds): one complete listing, with its counts.
+
+        The date is written in UTC, which is what Drive assumes for a date that carries no zone. An
+        incomplete listing raises, as every listing does.
+        """
+        stamp = datetime.fromtimestamp(int(moment), timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        stats = {"listing_pages": 0, "metadata_items_seen": 0, "retries": 0, "retry_wait_ms": 0}
+        with PerformanceSpan("drive_inventory_newer", ids=ids, storage_scope_hash=self.storage_scope_hash()) as span:
+            files = list(self._files(stats=stats, created_after=stamp))
+            span.set(listing_traversals=1, listing_pages=stats["listing_pages"],
+                     metadata_items_seen=stats["metadata_items_seen"], retries=stats["retries"],
+                     retry_wait_ms=stats["retry_wait_ms"], verification_status="complete")
+        return files, stats
+
+    def named_files(self, name):
+        """The bytes of every file with exactly this name, each checked against Drive's own checksum."""
+        return [self._read_files([item]) for item in self._files(name)]
 
     def _inventory_groups(self, inventory, prefixes):
         if not inventory.complete or inventory.scope_hash != self.storage_scope_hash():
             raise EvidenceStorageError("Drive inventory is incomplete or belongs to a different storage scope")
+        covers = getattr(inventory, "covers", None)
+        if covers is not None and any(not prefix.startswith(tuple(covers)) for prefix in prefixes):
+            raise EvidenceStorageError("Drive inventory does not cover the requested prefix")
         grouped = {prefix: {} for prefix in prefixes}
         for item in inventory.files:
             for prefix in prefixes:
