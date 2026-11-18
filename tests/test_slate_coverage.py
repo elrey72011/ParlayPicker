@@ -7,7 +7,7 @@ import pytest
 
 from app_core.game_coverage import publication_games
 from test_provider_caller_health import caller
-from test_prediction_evidence import frozen
+from test_prediction_evidence_store import frozen
 
 RUN = '20261007T160000.000000Z'
 AT = '2026-10-07T16:00:00+00:00'
@@ -222,7 +222,7 @@ def test_actual_boards_public_schema_and_no_borrowed_aliases():
 
 def test_actual_finalizer_observations_do_not_create_approval(tmp_path, frozen, monkeypatch):
     from activation_fixture import setup
-    from test_wager_integrity_audit import NOW
+    from test_wager_integrity_rules import NOW
     from core.live_wager_contract import finalize_live_wagers
     base,p,config=setup(tmp_path/'ledger.db')
     base.update(candidate_id='SYNTHETIC-finalizer',best_pick='Home -2.5',

@@ -1,8 +1,11 @@
-"""The second clean-up pass of 18 November 2026 (owner): library files nothing used are gone, and nothing asks for them.
+"""The second and third clean-up passes of 18 November 2026 (owner): library files nothing used are gone, and nothing
+asks for them.
 
-Removed: the runner behind the removed Run Player Props button, the scoring behind the removed Strategy Lab tab, and code
-from July that no entry point reached. Files the pipeline loads through a package import stay, and so does anything a
-binding names or a safety test still runs through.
+Second pass: the runner behind the removed Run Player Props button, the scoring behind the removed Strategy Lab tab, and
+code from July that no entry point reached. Third pass (the owner's word, because safety tests ran through them): the
+grading behind the removed Results tab, an old feature builder, the football evidence freeze, and the operations module of
+the shadow pipeline retired under D10. Files the pipeline loads through a package import stay, and so does anything a
+binding names.
 """
 import ast
 import importlib.util
@@ -12,7 +15,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REMOVED = ("app_core.prop_analysis", "app_core.strategy_lab_realized", "app_core.diagnostics", "app_core.new_summary_logic",
            "app_core.moneyline_parlay", "core.ev_engine", "core.models", "core.models.analysis_models",
-           "core.models.game_models", "core.models.prediction_models")
+           "core.models.game_models", "core.models.prediction_models",
+           # third pass
+           "app_core.performance_pipeline", "app_core.results_ingestion", "app_core.export_utils", "app_core.results_fetcher",
+           "app_core.feature_engine", "core.football_evidence", "app_core.pipeline.operations")
 # Every place tracked Python lives, except the archive of retired tests.
 CODE = ("app", "app_core", "core", "scripts", "services", "integrations", "parlaypicker", "tools", "tests", "docs")
 
@@ -54,3 +60,13 @@ def test_the_schema_files_the_pipeline_loads_through_its_package_stay():
     assert {"core.schema.schema_registry", "core.schema.schema_utils", "core.schema.schema_validator"} <= set(sys.modules)
     for name in ("schema_registry", "schema_utils", "schema_validator"):
         assert (ROOT / "core" / "schema" / f"{name}.py").exists(), name
+
+
+def test_the_evidence_store_is_still_graded_by_the_daily_job():
+    # The removed Results code also wrote final scores into the prediction evidence store. The route that remains is the
+    # daily Activation grading job: bootstrap_evidence.py --grade calls the store's own refresh_outcomes.
+    from app_core import prediction_evidence
+    assert callable(prediction_evidence.refresh_outcomes) and callable(prediction_evidence.record_scores)
+    assert "refresh_outcomes" in (ROOT / "scripts" / "bootstrap_evidence.py").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "activation-grading.yml").read_text(encoding="utf-8")
+    assert "scripts/bootstrap_evidence.py --restore --grade --backup" in workflow and "schedule:" in workflow

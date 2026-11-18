@@ -5,7 +5,7 @@ import pytest
 
 from app_core import evidence_remote as remote
 from app_core import prediction_evidence as evidence
-from test_prediction_evidence import frozen, fixture_frames
+from test_prediction_evidence_store import frozen, fixture_frames
 
 
 class PreconditionFailed(Exception):

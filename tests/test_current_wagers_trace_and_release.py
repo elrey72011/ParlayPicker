@@ -19,7 +19,7 @@ from core.probability_semantics import unconditional_from_conditional
 from scripts.publish_board import assets_from_html, render
 from scripts.trace_current_wagers import write_artifacts
 from test_live_wager_contract import leg
-from test_wager_integrity_audit import NOW
+from test_wager_integrity_rules import NOW
 
 
 class FrozenDateTime(datetime):

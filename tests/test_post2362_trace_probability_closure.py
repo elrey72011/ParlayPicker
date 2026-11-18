@@ -19,7 +19,7 @@ from test_current_wagers_trace_and_release import (
     _research_rows,
 )
 from test_per_game_boards import final
-from test_wager_integrity_audit import NOW
+from test_wager_integrity_rules import NOW
 
 
 def _collision_sources():

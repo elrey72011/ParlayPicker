@@ -4,7 +4,7 @@ import pytest
 from app_core.total_signal_quality import assess, attach, counters, VERSION
 from app_core.price_value_display import display
 from app_core.total_quality_report import read_candidates, summarize
-from test_prediction_evidence import frozen, fixture_frames
+from test_prediction_evidence_store import frozen, fixture_frames
 from app_core import prediction_evidence as evidence
 
 
