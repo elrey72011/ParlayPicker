@@ -9,6 +9,10 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# The provider's own counters from its latest answer: what that request cost ("last") and the account's
+# month so far ("used", "remaining"). Read by jobs that report their spend; never used for a decision.
+last_usage: Dict[str, str] = {}
+
 
 def _eastern():
     """America/New_York that yields a real UTC offset for every date.
@@ -168,6 +172,8 @@ class TheOddsAPIClient:
             else:
                 return games_data
 
+            last_usage.update(sport=sport_key, **{name: resp.headers.get("x-requests-" + name)
+                                                  for name in ("last", "used", "remaining")})
             # Check for pagination (cursor-based or page-based)
             total_results = int(resp.headers.get("x-total-results", len(all_data)))
             next_page_token = resp.headers.get("x-next-page") or (data.get('next_page') if isinstance(data, dict) else None)

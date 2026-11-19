@@ -2,8 +2,10 @@ name: Closing-line capture (slate loop)
 # G8: a close is saved only within 30 minutes of kickoff, but GitHub starts scheduled runs
 # hours apart, so the 30-minute "Closing-line capture" workflow never landed in that window
 # and no close was ever recorded. This restores the evidence store once and checks every
-# 5 minutes through the slate (scripts/closing_capture_loop.py). Odds are fetched only
-# when a saved pick is inside its closing window. Public repository: runner minutes are free.
+# 10 minutes through the slate (scripts/closing_capture_loop.py). Odds are fetched only
+# when a saved best pick starts within 12 minutes, so each pick is read once, just before
+# its game. The run ends at 300 estimated Odds API credits. Public repository: runner
+# minutes are free.
 on:
   workflow_dispatch:
     inputs:
@@ -49,7 +51,7 @@ jobs:
             MINUTES=$(python -c "import datetime as d; n=d.datetime.now(d.timezone.utc); e=n.replace(hour=4,minute=30,second=0,microsecond=0); e=e+d.timedelta(days=1) if e<=n else e; print(max(0,min(340,int((e-n).total_seconds()//60))))")
           fi
           echo "capturing for $MINUTES minutes"
-          python -u scripts/closing_capture_loop.py --minutes "$MINUTES" --interval 5
+          python -u scripts/closing_capture_loop.py --minutes "$MINUTES" --interval 10 --window 12 --max-credits 300
       - name: Report evidence health
         if: ${{ !cancelled() }}
         run: python -u scripts/prediction_evidence.py status --database data/prediction_evidence/evidence.sqlite3
