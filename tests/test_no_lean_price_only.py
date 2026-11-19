@@ -110,10 +110,14 @@ def _approved_board_app():
         {"league": "NCAAB", "matchup": "Brown at Yale", "start": "", "pick": "Brown +2.5", "selection_label": "Best Overall",
          "status": "APPROVED", "approval_reason": "", "odds": -108.0, "win_probability": 0.51, "edge": 0.0, "ev": 0.0,
          "selection_score": 0.5, "probability_basis": "", "matchup_id": "g2", "market_type": "spread_away"}])
-    boards.per_game_board = lambda board, candidates, family: result
     from app.ui.daily_dashboard import _render_game_board
     candidates = pd.DataFrame([{"matchup_id": "g2", "market_type": "spread_away", "best_pick": "Brown +2.5", "rating_basis": "Price only"}])
-    _render_game_board(pd.DataFrame([{"x": 1}]), candidates, "overall")
+    original = boards.per_game_board                 # the page runs in this process: put the real builder back
+    boards.per_game_board = lambda board, candidates, family: result
+    try:
+        _render_game_board(pd.DataFrame([{"x": 1}]), candidates, "overall")
+    finally:
+        boards.per_game_board = original
 
 
 def test_an_approved_wager_is_never_withheld_on_the_board():
