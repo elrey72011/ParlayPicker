@@ -18,6 +18,12 @@ It names what it finds and judges nothing: Kalshi is another market's price, and
 model-backed totals pick has a graded record behind it so far (``app_core.theover_model_totals``).
 Display and audit only. It changes no probability, pick, expected value, gate or stake, and a
 column it cannot read is treated as an input that was not there.
+
+**No lean (owner 2026-11-19).** A pick whose estimate is the price alone is no longer shown as a pick:
+the boards, the pick details and the compact workbook read ``NO_LEAN`` in its place (``withhold``).
+Price-only picks were 279-261 over the graded nights to 18 November. The selection is unchanged, and
+the candidate audit, the full best-picks export and the saved evidence still hold every candidate
+with its label, so those games keep being graded as the baseline they are.
 """
 from __future__ import annotations
 
@@ -30,6 +36,9 @@ KALSHI_MIN = 0.55                  # the blend's first tier: Kalshi is used only
 SENTIMENT_DEAD_BAND = 0.02         # the blend ignores sentiment within this of neutral (0.5)
 KALSHI, MODEL, SENTIMENT = "Kalshi", "model", "sentiment"
 THEOVER_MODEL_PICK, THEOVER_PROBABILITY = "TheOver model pick", "TheOver probability"
+NO_LEAN = "No lean (price only)"
+NO_LEAN_CAPTION = ("A game whose pick would rest on the price alone shows \"" + NO_LEAN + "\" in place of a pick. "
+                   "Every candidate is still in the candidate audit.")
 CAPTION = ("Built from says what the win estimate rests on. \"Price only\" means it is the sportsbook's own "
            "price with the book's margin removed and nothing else, so it holds no view the price does not. "
            "Anything after \"Price +\" is an input that also moved the estimate; naming it does not mean it "
@@ -95,6 +104,23 @@ def basis(frame) -> pd.Series:
 def price_only(labels) -> pd.Series:
     """True where a ``basis`` label says the estimate is the price alone."""
     return pd.Series(labels).fillna("").astype(str).eq(PRICE_ONLY)
+
+
+def withhold(frame, labels, pick, describing=()) -> pd.DataFrame:
+    """A copy of ``frame`` that shows no pick where the estimate is the price alone.
+
+    On those rows column ``pick`` reads ``NO_LEAN`` and the ``describing`` columns, which tell of the
+    pick withheld (its price, its estimate), are emptied. ``labels`` are the rows' ``basis`` labels, by
+    position; a row with no label, or any other label, is left as it is.
+    """
+    out = frame.copy()
+    hide = price_only(labels).set_axis(out.index)
+    if not hide.any():
+        return out
+    for column in [c for c in describing if c in out.columns and c != pick]:
+        out[column] = out[column].where(~hide, float("nan") if pd.api.types.is_numeric_dtype(out[column]) else "")
+    out[pick] = out[pick].where(~hide, NO_LEAN)
+    return out
 
 
 def counts(labels) -> dict:

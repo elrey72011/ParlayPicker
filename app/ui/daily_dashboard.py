@@ -216,6 +216,10 @@ def rating_basis_labels(result, candidates):
     return labels if labels.ne("").any() else None
 
 
+# What a "No lean (price only)" row of a game board still shows; its other cells describe the pick it withholds.
+NO_LEAN_KEEPS = ("Game", "Best pick", "Built from", "Wager status", "Coverage decision", "Coverage explanation")
+
+
 PINNACLE_MIN_EV = 0.02
 
 
@@ -483,6 +487,15 @@ def _render_game_board(board, candidates, family):
     for column in [c for c in ("Win estimate", "EV estimate", "Market estimate", "Market EV", "Pinnacle fair",
                                "EV vs Pinnacle", "Research model", "Research model EV") if c in display]:
         display[column] = display[column].map(lambda v: f"{v:.1%}" if pd.notna(v) else "Unavailable")
+    shown = result
+    if built_from is not None:
+        # Owner 2026-11-19: a game whose pick would rest on the price alone shows no pick. The cells that
+        # describe that pick are left empty; the game, its status and its basis stay.
+        # An approved or trial wager is never withheld: approval, not this label, decides what may be bet.
+        from app_core.rating_basis import withhold
+        passes = built_from.where(result["status"].astype(str).eq("PASS"), "")
+        display = withhold(display, passes, "Best pick", [c for c in display if c not in NO_LEAN_KEEPS])
+        shown = withhold(result, passes, "pick", ("edge", "selection_score", "probability_basis"))
     st.dataframe(display, hide_index=True, width="stretch", height=min(760, 38 * (len(display) + 1)), column_config={"Selection score": st.column_config.NumberColumn(format="%.3f"), "Odds": st.column_config.NumberColumn(format="%+.0f"), "Best price": st.column_config.NumberColumn(format="%+.0f")})
     if best_price is not None or ties is not None:
         st.caption("Best price is the best price for the same side at the same line among Novig, FanDuel, DraftKings "
@@ -492,12 +505,13 @@ def _render_game_board(board, candidates, family):
     if built_from is not None:
         from app_core.rating_basis import CAPTION as _basis_caption, counts as _basis_counts
         tally = _basis_counts(built_from)
+        from app_core.rating_basis import NO_LEAN_CAPTION
         st.caption(f"{tally['price_only']} of {tally['picks']} picks here are built from the price alone. "
-                   + _basis_caption)
+                   + _basis_caption + " " + NO_LEAN_CAPTION)
     with st.expander("Selection details and wager explanations", expanded=False):
-        st.dataframe(result[["matchup", "pick", "approval_reason", "edge", "selection_score", "probability_basis", "start"]], hide_index=True, width="stretch")
+        st.dataframe(shown[["matchup", "pick", "approval_reason", "edge", "selection_score", "probability_basis", "start"]], hide_index=True, width="stretch")
         st.caption("Best Overall, Best Side, and Best Total identify the selected pick for each game. Wager status is separate: PASS means no approved wager. Ranking uses the composite selection score first, followed by probability, tier, EV, and edge as tie-breakers; the highest EV does not necessarily rank first. Selection score is not a win probability. Edge compares the displayed estimate with price break-even. Estimate source is shown for each selection; NFL context-backed estimates retain the prior result and injury-report status in the export. Only exact final tickets carry final production metrics and approval.")
-    export = result if built_from is None else result.assign(rating_basis=built_from)
+    export = result if built_from is None else result.assign(rating_basis=built_from, pick=shown["pick"])
     st.download_button("Download this game board", export.to_csv(index=False), family+"-per-game.csv", "text/csv", key="per_game_export_"+family)
 
 
@@ -540,7 +554,13 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.D
         if board.empty:
             st.info("Run an analysis to inspect game selections and their final decisions.")
             return
-        labels = [f"{_text(row, 'league')} · {_text(row, 'Away')} at {_text(row, 'Home')} · {_text(row, 'display_pick', 'best_pick')}" for _, row in board.iterrows()]
+        from app_core.rating_basis import NO_LEAN, NO_LEAN_CAPTION, price_only
+        # Owner 2026-11-19: no pick is shown on the price alone. An approved wager is never withheld.
+        withheld = ((price_only(board["rating_basis"]).to_numpy() & ~board["Bettable"].astype(bool).to_numpy())
+                    if "rating_basis" in board else [False] * len(board))
+        labels = [f"{_text(row, 'league')} · {_text(row, 'Away')} at {_text(row, 'Home')} · "
+                  + (NO_LEAN if hidden else _text(row, 'display_pick', 'best_pick'))
+                  for (_, row), hidden in zip(board.iterrows(), withheld)]
         if st.session_state.get("daily_game_selection", 0) not in range(len(board)):
             st.session_state["daily_game_selection"] = 0
         selected = st.selectbox("Game selection", range(len(board)), format_func=lambda i: labels[i], key="daily_game_selection")
@@ -551,6 +571,11 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.D
             st.write(_text(row, "Production_Gate_Reason", "Status_Reason", "qualification_reason"))
             st.caption("Scheduled: " + _text(row, "Commence (Local)", "Local Date"))
             st.caption("Quote captured: " + _text(row, "odds_recorded_at"))
+        if withheld[selected]:
+            st.info(NO_LEAN + ". The win estimate for this game is the sportsbook's own price with the book's margin "
+                    "removed and nothing else, so the app has no view here that the price does not already hold. "
+                    + NO_LEAN_CAPTION)
+            return
         field_labels = {"best_pick": "Selection", "odds_american": "American odds", "odds_source": "Quote source",
                   "Play_Stake": "Approved stake ($)", "production_win_probability": "Production win estimate",
                   "production_expected_value": "Production expected return per dollar", "production_edge": "Production edge"}
