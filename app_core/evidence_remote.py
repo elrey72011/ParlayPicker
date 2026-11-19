@@ -292,13 +292,20 @@ def _read_remote(*, client, database, bucket, prefixes, full_verification, ids, 
                 on_disk = "on_disk" in inspect.signature(reader).parameters
             except (TypeError, ValueError):
                 on_disk = False
-            if on_disk:
-                # Leave each verified file in the cache and read it when its row is stored (2026-11-13).
-                objects_by_prefix = reader(Prefixes=list(prefixes.values()), inventory=inventory, cache_dir=cache,
-                                           full_verify=full_verification, ids=ids, on_disk=True)
-            else:
-                objects_by_prefix = reader(Prefixes=list(prefixes.values()), inventory=inventory, cache_dir=cache,
-                                           full_verify=full_verification, ids=ids)
+            try:
+                if on_disk:
+                    # Leave each verified file in the cache and read it when its row is stored (2026-11-13).
+                    objects_by_prefix = reader(Prefixes=list(prefixes.values()), inventory=inventory, cache_dir=cache,
+                                               full_verify=full_verification, ids=ids, on_disk=True)
+                else:
+                    objects_by_prefix = reader(Prefixes=list(prefixes.values()), inventory=inventory, cache_dir=cache,
+                                               full_verify=full_verification, ids=ids)
+            except EvidenceStorageError:
+                # Before refusing, say which files (2026-11-19): the refusal names none, and on the night of
+                # 18 November nobody could tell which two of 370,000 files had stopped every restore.
+                from app_core import evidence_conflicts
+                evidence_conflicts.describe(client, inventory, prefixes, TABLES, _decode)
+                raise
             read_report = getattr(client, "last_read_report", None)
             if read_report is not None:
                 _status["read_report"] = dict(read_report.__dict__)
