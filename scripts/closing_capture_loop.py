@@ -7,7 +7,9 @@ but GitHub starts scheduled runs hours apart, so the 30-minute workflow almost n
 landed in that window and no close was ever saved. This restores the evidence store once,
 then calls the same ``capture_live`` every ``--interval`` minutes until ``--minutes`` have
 passed, backing up after each capture that saved something. The Odds API is called only
-when a saved pick is inside its closing window.
+when a saved pick is inside its closing window. Before each cycle it asks Drive for the
+evidence files created since it began and merges any newly saved run, so the picks of a
+Refresh made while it runs get their closes too.
 
 ``--window`` narrows that window (minutes before the start). With a window just longer than the
 interval each pick is read once, in the last cycle before its game, not in every cycle of its last
@@ -33,12 +35,25 @@ CREDITS = {"NFL": 8, "NCAAF": 13, "MLB": 6}
 DEFAULT_CREDITS = 3
 
 
+# How far before the loop's own start the "saved since" listing reaches: a file can take a while to show
+# in Drive's listings, and the first restore may have passed its page before the file was written.
+REFRESH_MARGIN_SECONDS = 15 * 60
+
+
 def run(database, minutes, interval, *, capture=None, restore=None, backup=None,
-        clock=time.monotonic, sleep=time.sleep, window=None, max_credits=0, fetch=None):
+        clock=time.monotonic, sleep=time.sleep, window=None, max_credits=0, fetch=None, refresh=None):
     if capture is None:
         from app_core.activation_closing import capture_live as capture
     if restore is None:
         from app_core.evidence_remote import restore
+        if refresh is None:
+            # The store is restored once; a Refresh made while the loop runs is picked up before each cycle
+            # (2026-11-19: without it the loop read closes for an earlier run's picks, never the last one's).
+            from app_core.evidence_remote import restore_newer
+            began = time.time() - REFRESH_MARGIN_SECONDS
+
+            def refresh(path):
+                return restore_newer(path, began)
     if backup is None:
         from app_core.evidence_remote import sync
 
@@ -88,6 +103,16 @@ def run(database, minutes, interval, *, capture=None, restore=None, backup=None,
         totals["cycles"] += 1
         unmatched = {}
         fetched.clear()
+        if refresh is not None:
+            try:
+                added = refresh(database)
+            except Exception as exc:  # the picks already held are still read
+                totals["refresh_errors"] = totals.get("refresh_errors", 0) + 1
+                print(json.dumps({"cycle": totals["cycles"], "refresh_error": type(exc).__name__}), flush=True)
+            else:
+                if added:
+                    totals["runs_added"] = totals.get("runs_added", 0) + added
+                    fetched["runs_added"] = added
         try:
             result = capture(database, **({"unmatched": unmatched} if "unmatched" in accepted else {}), **options)
         except Exception as exc:  # one failed cycle must not end the slate
