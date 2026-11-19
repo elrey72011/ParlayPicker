@@ -18,6 +18,8 @@ def record_close(database,candidate,quote,*,captured_at):
     # Exact direction is market_type, selected-team identity is immutable game ID + direction.
     if decimal_price(quote.get('price')) is None or finite(quote.get('line')) is None:raise ValueError('Invalid close')
     opening=finite(candidate.get('market_line_used'))
+    if opening is None:  # the bound quote's own line: capture_run refuses a binding whose two lines differ
+        opening=finite(candidate.get('total_line' if str(candidate.get('market_type')).startswith('total') else 'spread_line'))
     value={'snapshot_id':candidate['snapshot_id'],'candidate_id':candidate['candidate_id'],'quote':quote,'closing_capture_at':capture.isoformat(),
         'line_clv':line_clv(candidate['market_type'],opening,quote['line']),
         'price_clv':price_clv(candidate.get('odds_american'),quote['price']) if opening==quote['line'] else None,'quote_verified':True}
@@ -38,41 +40,64 @@ def observations(database):
     return out
 
 
-def capture_live(database, *, fetch=None, now=None, unmatched=None):
+def capture_live(database, *, fetch=None, now=None, unmatched=None, within_seconds=1800):
     """Explicit job; never called by rendering. Missing provider identity blocks.
 
-    ``unmatched``: an optional dict filled with why each unmatched pick found no single
-    live quote (``_why_unmatched``); diagnostic only, the result is unchanged.
+    A close is recorded for each game's saved best pick, from the newest saved run that holds one:
+    the pick the paper track record counts (``core.research_performance.accepted_rows``). TheOver's
+    model pick is read as well where it feeds the blend, whether or not it is the game's best pick:
+    it is the bet of the plan the owner approved on 2026-11-19
+    (``docs/roadmap/THEOVER-COLLEGE-TOTALS-PLAN-2026-11-19.md``). Every candidate of every run would
+    be a few hundred new evidence files a night for nothing that reads them. A saved run that does
+    not mark its best picks is taken whole, as before.
+
+    ``unmatched``: an optional dict filled with why each unmatched pick found no single live quote
+    (``_why_unmatched``) and why a found quote was refused (``_why_refused``); diagnostic only, the
+    result is unchanged. ``within_seconds``: how near its start a game must be; ``record_close``
+    accepts 30 minutes at most.
     """
     from datetime import datetime, timezone
+    from app_core import theover_model_totals as theover
     from app_core.prediction_evidence import load_snapshots
     current = now or datetime.now(timezone.utc)
-    candidates = []
-    for _, audit, _ in load_snapshots(database):
-        for r in audit.astype(object).where(audit.notna(), None).to_dict('records'):
+    window = min(float(within_seconds), 1800.0)
+    candidates, picks = [], {}
+    for _, audit, _ in load_snapshots(database):  # oldest first
+        marked = 'selected_as_best_pick' in audit
+        model_pick = (theover.backed(audit) & theover.in_blend(audit)).to_numpy() if marked else ()
+        chosen = {}
+        for position, r in enumerate(audit.astype(object).where(audit.notna(), None).to_dict('records')):
             start = aware(r.get('game_start_utc'))
-            if start and 0 < (start-current).total_seconds() <= 1800:
+            if not start or not 0 < (start-current).total_seconds() <= window:
+                continue
+            if not marked:
                 candidates.append(r)
+            elif str(r.get('selected_as_best_pick')).lower() in {'true', '1'} or model_pick[position]:
+                chosen.setdefault((r.get('sport', r.get('league')), r.get('matchup_id')), []).append(r)
+        picks.update(chosen)  # a later run's picks for a game replace an earlier run's
+    candidates += [r for rows in picks.values() for r in rows]
     if not candidates:
         return {'verified':0, 'unavailable':0, 'reason':'no_candidates_in_closing_window'}
     if fetch is None:
         from core.streamlit_pipeline import fetch_live_odds_dataframe
         fetch = fetch_live_odds_dataframe
     live = fetch(sorted({r.get('sport',r.get('league')) for r in candidates}))
+    # The capture time is read after the answer. Loading the saved runs and the request take seconds, and
+    # a quote the book updated meanwhile would otherwise read as recorded after its own capture.
+    captured = now or datetime.now(timezone.utc)
     saved = 0; blocked = {}; detail = {} if unmatched is None else unmatched
     rows = live.to_dict('records')
+    quotes = [json.loads(row['provider_quotes']) if isinstance(row.get('provider_quotes'), str) and row['provider_quotes'] else []
+              for row in rows]
     for r in candidates:
-        matching = []
-        for row in rows:
-            if row.get('matchup_id') != r.get('matchup_id'): continue
-            for q in json.loads(row.get('provider_quotes') or '[]'):
-                if (q.get('provider_namespace') and q.get('provider_namespace') == r.get('provider_namespace')
-                    and q.get('provider_event_id') == r.get('provider_event_id')
-                    and canonical_book_label(q.get('book')) == canonical_book_label(r.get('quote_bookmaker')) and q.get('market_type') == r.get('market_type')):
-                    matching.append(q)
+        game = [i for i, row in enumerate(rows) if _same_game(row, r)]
+        matching = [q for i in game for q in quotes[i]
+                    if (q.get('provider_namespace') and q.get('provider_namespace') == r.get('provider_namespace')
+                        and q.get('provider_event_id') == r.get('provider_event_id')
+                        and canonical_book_label(q.get('book')) == canonical_book_label(r.get('quote_bookmaker')) and q.get('market_type') == r.get('market_type'))]
         if len(matching) != 1:
             blocked['missing_or_ambiguous_exact_quote'] = blocked.get('missing_or_ambiguous_exact_quote',0)+1
-            why = _why_unmatched(r, rows, len(matching))
+            why = _why_unmatched(r, [dict(rows[i], matchup_id=r.get('matchup_id')) for i in game], len(matching))
             detail[why] = detail.get(why, 0) + 1
             continue
         q = matching[0]
@@ -81,10 +106,41 @@ def capture_live(database, *, fetch=None, now=None, unmatched=None):
                      provider_namespace=q['provider_namespace'], quote_recorded_at=q.get('recorded_at'),
                      line=q.get('point'), price=q.get('price'))
         try:
-            record_close(database,r,quote,captured_at=current.isoformat()); saved += 1
-        except ValueError:
+            record_close(database,r,quote,captured_at=captured.isoformat()); saved += 1
+        except ValueError as exc:
             blocked['invalid_or_stale_close'] = blocked.get('invalid_or_stale_close',0)+1
+            why = _why_refused(r, quote, captured, exc)
+            detail[why] = detail.get(why, 0) + 1
     return {'verified':saved, 'unavailable':sum(blocked.values()), 'reasons':blocked}
+
+
+def _same_game(row, pick):
+    """Whether a live row is the saved pick's game: the same game key, or the provider's own event.
+
+    The live frame keys a game by its two provider team names; a saved pick is keyed by date and
+    normalised names, or by ESPN's event. The two keys of one game never agree, so until 2026-11-19
+    every pick read "game_not_in_live_odds" and no close was ever saved. A live row also carries the
+    provider's event id as its ``game_id``, the id a saved pick's bound quote was read from.
+    """
+    if row.get('matchup_id') == pick.get('matchup_id'):
+        return True
+    feed = row.get('odds_feed_source') or 'the_odds_api'
+    return (bool(pick.get('provider_event_id')) and row.get('game_id') == pick.get('provider_event_id')
+            and ('odds_api' if feed == 'the_odds_api' else feed) == pick.get('provider_namespace'))
+
+
+def _why_refused(pick, quote, captured, error):
+    """Which rule of ``record_close`` a found quote failed (diagnostic only)."""
+    start, at = aware(pick.get('game_start_utc')), aware(quote.get('quote_recorded_at'))
+    if str(error) != 'Not a verified pregame closing observation':
+        return 'refused_' + str(error).lower().replace(' ', '_').replace('/', '_')
+    if at is None:
+        return 'refused_quote_has_no_time'
+    if at > captured:
+        return 'refused_quote_recorded_after_capture'
+    if start is None or captured >= start:
+        return 'refused_captured_at_or_after_start'
+    return 'refused_quote_older_than_30_minutes_before_start'
 
 
 def _why_unmatched(pick, rows, matches):

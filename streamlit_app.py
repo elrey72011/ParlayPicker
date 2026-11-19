@@ -254,6 +254,8 @@ def _build_compact_export_frame(best_picks_export: pd.DataFrame) -> pd.DataFrame
     Kelly column must never show money unless the same row is explicitly bettable,
     carries a positive approved play stake, and is not labeled DO NOT BET. It must
     also show the rank-one pick for every game; wager approval remains separate.
+    Where that pick's estimate is the sportsbook's price alone the row reads
+    "No lean (price only)" with no pick price (owner 2026-11-19).
     """
     if best_picks_export is None:
         best_picks_export = pd.DataFrame()
@@ -316,6 +318,13 @@ def _build_compact_export_frame(best_picks_export: pd.DataFrame) -> pd.DataFrame
             ~approved_wager & ~unavailable & ~scope.eq("QUALIFIED LEAN / RESEARCH"),
             "Play_Tier",
         ] = "AVOID"
+
+    if "rating_basis" in compact_export.columns and "best_pick" in compact_export.columns:
+        # Owner 2026-11-19: no pick, and no price for one, where the estimate is the price alone. A row
+        # with an approved stake keeps its pick: approval, not this label, decides what may be bet.
+        from app_core.rating_basis import withhold
+        labels = compact_export["rating_basis"].where(~approved_wager, "")
+        compact_export = withhold(compact_export, labels, "best_pick", ("Pick Price",))
 
     compact_export["Win Amount"] = ""
     compact_export["W/L"] = ""
@@ -2599,6 +2608,12 @@ def main() -> None:
                 ):
                     no_edge_view = no_edge_df.copy()
                     no_edge_view.insert(0, "Why No Production Bet", no_edge_df.apply(_friendly_no_bet_reason, axis=1))
+                    if "Built From" in no_edge_view.columns and "Best Pick" in no_edge_view.columns:
+                        # Owner 2026-11-19: no pick is shown where the estimate is the price alone.
+                        from app_core.rating_basis import withhold as _withhold
+                        no_edge_view = _withhold(
+                            no_edge_view, no_edge_view["Built From"], "Best Pick",
+                            ("Tie", "Prob", "Odds", "Best Price", "Best Price Book", "EV", "Edge", "Calibrated Edge"))
                     compact_cols = [
                         c for c in [
                             "Bet Decision", "Play Tier", "Play Stake", "Best Pick", "Tie", "League", "Away Team", "Home Team",
@@ -2608,7 +2623,8 @@ def main() -> None:
                     ]
                     st.dataframe(no_edge_view[compact_cols], width="stretch")
                     st.caption(
-                        "Every game shows its rank-one model direction. BEST AVAILABLE - PASS and "
+                        "Every game shows its rank-one model direction, or \"No lean (price only)\" where "
+                        "that direction rests on the sportsbook's price alone. BEST AVAILABLE - PASS and "
                         "QUALIFIED LEAN - PASS are directional research reads, not wagers. BET rows "
                         "are either strict Premium picks or explicitly labelled, small-stake Controlled "
                         "Value picks selected only when the Premium card is empty."

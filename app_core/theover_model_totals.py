@@ -31,7 +31,10 @@ reads the file (``mark``, into ``IN_BLEND_COLUMN``: 1 may feed the blend, 0 for 
 production pipeline marks it again once each game's league is settled, and ``derived`` leaves a
 marked-off game empty. The mark travels with the pick's hit rate through every merge; a row with no
 mark is treated as before, so an analysis saved earlier is unchanged until it is refreshed. The NBA's
-picks stay on the homepage list and in the exports, which is what lets their record be kept.
+picks stay on the homepage list and in the exports, which is what lets their record be kept. The NHL's
+picks joined them on 19 November 2026 (owner): 30-28 over twelve graded nights and 2-4 since the pick went
+live. That leaves college totals, which the owner put under a formal test the same day
+(``docs/roadmap/THEOVER-COLLEGE-TOTALS-PLAN-2026-11-19.md``).
 
 Nor is a pick used when its game is not certainly the uploaded one (owner 2026-11-18). For a game the
 upload did not match (its ``orientation_source`` starts with ``default``) the pipeline still attaches
@@ -57,8 +60,10 @@ UPLOAD = "theover_upload"
 SOURCE_COLUMN = "blend_in_theover_source"
 OTHER_SIDE = {"total_over": "total_under", "total_under": "total_over"}
 # Leagues whose model pick is kept for the record and not blended (owner 2026-11-17: the NBA's went
-# 10-15 over ten nights). Empty this set to blend every league's pick again.
-RESEARCH_ONLY_LEAGUES = frozenset({"NBA"})
+# 10-15 over ten nights; owner 2026-11-19: the NHL's went 30-28 over twelve nights and 2-4 once live, and
+# its line sat a full goal from the board's on 5 of 58 picks). Empty this set to blend every league's
+# pick again.
+RESEARCH_ONLY_LEAGUES = frozenset({"NBA", "NHL"})
 IN_BLEND_COLUMN = "theover_model_in_blend"      # set by the upload reader: 1.0 may feed the blend, 0.0 record only
 MATCH_COLUMN = "orientation_source"             # how the pipeline matched the game to the upload
 UNMATCHED = "default"                           # its value, or the start of it, for a game the upload did not match
