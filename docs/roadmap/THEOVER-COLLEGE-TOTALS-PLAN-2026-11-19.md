@@ -88,15 +88,21 @@ the close. An edge the market never notices would fail it even while winning. Th
 wins and losses as well, so that case would be seen, but 200 to 280 bets cannot prove a 57% pick
 on results alone: its interval would still reach below the break-even rate.
 
-## What is built, and what is next
+## What is built
 
 - **Built in pull request 2578:** the closing-capture job reads a close for TheOver's side on every
   such game, also where it is not the board's pick; the rules file above.
-- **Next:** one read-only report, run by the morning grading job: the plan's tally (bets, record,
-  units, closes read, average move toward the pick and its standard errors) from the saved runs,
-  printing the rules file's fingerprint each day so a changed rule cannot pass unnoticed. It
-  changes no rating, pick or stake, and needs no Odds API credits beyond the closing capture
-  (about 80 a day on a 46-game night).
+- **Built in pull request 2579:** the read-only report, printed by the morning grading job with the
+  paper track record (`core/theover_plan.py`): the plan's tally (bets, record, units, closes read,
+  average move toward the pick and its standard errors) from the saved runs, with the rules file's
+  fingerprint each day so a changed rule cannot pass unnoticed. It changes no rating, pick or stake,
+  and needs no Odds API credits beyond the closing capture (about 80 a day on a 46-game night).
+  Two readings it had to make, stated here because the rules file does not spell them out: a game
+  that starts before 5 AM Eastern is counted with the night before; and a close is matched to a bet
+  by provider event, side and the book the pick was bound to, whichever saved run the capture
+  recorded it against, with the move counted from the bet's own line.
+- **Also in pull request 2579:** the closing-capture job picks up a run saved after it started, so
+  the last Refresh before a game is the one whose picks get their closes.
 
 ## Decided by the owner, 19 November 2026
 
