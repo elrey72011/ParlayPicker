@@ -329,7 +329,9 @@ THEOVER_MODEL_CAPTION = (
     "authority. It needs the TheOver totals upload. From 17 November 2026 its NBA picks are listed for the record "
     "only and no longer move the estimate: over ten nights they went 10-15, against 81-45 in college basketball. "
     "From 18 November 2026 the same holds for a game the upload matched only by a similar team name: its pick is "
-    "listed and does not move the estimate, because the game is not certainly the one TheOver picked.")
+    "listed and does not move the estimate, because the game is not certainly the one TheOver picked. "
+    "From 19 November 2026 its NHL picks are listed for the record only as well: over twelve nights they went "
+    "30-28, and 2-4 once they moved the estimate.")
 # The words the pipeline puts in place of a pick whose line it rejected (its final_pick_valid check).
 LINE_NOT_VERIFIED = ("unresolved", "missing line", "no line")
 LINE_NOT_VERIFIED_KEY = "line_not_verified"
@@ -339,7 +341,7 @@ def theover_model_board(candidates):
     """TheOver's totals pick for each game where it lists its model's hit rate (owner 2026-11-16).
 
     These are the picks the blend uses as TheOver's input (``app_core.theover_model_totals``), except
-    those of a league kept for the record only (the NBA since 2026-11-17), which are listed and marked. From
+    those of a league kept for the record only (the NBA since 2026-11-17, the NHL since 2026-11-19), which are listed and marked. From
     the saved candidates: a total, on the side TheOver picked (``theover_pick_agrees`` 1), with
     ``theover_model_hit_rate`` present, still a current pre-game candidate. One row per game, in
     start order, at the app's own line and price with the best price among the stake books beside

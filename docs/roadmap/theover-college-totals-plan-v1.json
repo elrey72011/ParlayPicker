@@ -1,0 +1,51 @@
+{
+  "plan_id": "theover-college-totals-v1",
+  "approved": "2026-11-19, owner: \"Yes to all six\"",
+  "claim": "On a college basketball total where TheOver lists the hit rate of the model behind its pick, TheOver's side beats the number the sportsbooks close at.",
+  "scope": {
+    "sport": "NCAAB",
+    "market": "TOTAL",
+    "pick": "TheOver's model pick that feeds the blend (theover_model_totals.backed and in_blend)",
+    "game_match": "exact; a game matched by similar names only is left out",
+    "also_reported_without_a_bar": ["NCAAF TOTAL"]
+  },
+  "bet": {
+    "saved_run": "the last run the app saved before the game started",
+    "side": "TheOver's side of the total",
+    "line_and_price": "the board's line and its best price at that line in that run",
+    "units": 1,
+    "push": "counts as a bet with zero return"
+  },
+  "close": {
+    "source": "closing_observations of the prediction evidence store",
+    "book": "the same sportsbook as the bet",
+    "read_within_minutes_before_start": 30,
+    "measure": "points the total moved toward the pick between the bet and the close"
+  },
+  "windows": {
+    "slate_dates_eastern": {
+      "validation": ["2026-11-21", "2026-12-04"],
+      "holdout": ["2026-12-05", "2026-12-18"]
+    },
+    "a_window_short_of_min_bets": "is extended one night at a time until it has them",
+    "if_the_closing_capture_has_not_run_on_main_by_2026-11-21": "both windows move later by whole nights, as a new version of this file"
+  },
+  "bar_in_each_window": {
+    "min_bets": 100,
+    "min_share_of_bets_with_a_close": 0.80,
+    "min_standard_errors_of_mean_line_move_above_zero": 2.0,
+    "min_units_per_bet": -0.25,
+    "max_brier": 0.26,
+    "max_calibration_error": 0.15
+  },
+  "both_windows_must_pass": true,
+  "reported_never_deciding": [
+    "wins and losses with a 95% interval against the break-even rate",
+    "units won",
+    "Unders and Overs apart",
+    "picks where the board's line differs from TheOver's own"
+  ],
+  "on_pass": "the owner reviews the result; funding a stake needs the research-store plan and the staking terms of 2026-11-08, a separate decision",
+  "on_failure": "TheOver's college pick becomes record only (validation failed, or holdout failed after validation passed)",
+  "changes_no": ["rating", "pick", "stake"]
+}

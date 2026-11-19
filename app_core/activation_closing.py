@@ -44,9 +44,12 @@ def capture_live(database, *, fetch=None, now=None, unmatched=None, within_secon
     """Explicit job; never called by rendering. Missing provider identity blocks.
 
     A close is recorded for each game's saved best pick, from the newest saved run that holds one:
-    the pick the paper track record counts (``core.research_performance.accepted_rows``). Every
-    candidate of every run would be a few hundred new evidence files a night for nothing that reads
-    them. A saved run that does not mark its best picks is taken whole, as before.
+    the pick the paper track record counts (``core.research_performance.accepted_rows``). TheOver's
+    model pick is read as well where it feeds the blend, whether or not it is the game's best pick:
+    it is the bet of the plan the owner approved on 2026-11-19
+    (``docs/roadmap/THEOVER-COLLEGE-TOTALS-PLAN-2026-11-19.md``). Every candidate of every run would
+    be a few hundred new evidence files a night for nothing that reads them. A saved run that does
+    not mark its best picks is taken whole, as before.
 
     ``unmatched``: an optional dict filled with why each unmatched pick found no single live quote
     (``_why_unmatched``) and why a found quote was refused (``_why_refused``); diagnostic only, the
@@ -54,22 +57,24 @@ def capture_live(database, *, fetch=None, now=None, unmatched=None, within_secon
     accepts 30 minutes at most.
     """
     from datetime import datetime, timezone
+    from app_core import theover_model_totals as theover
     from app_core.prediction_evidence import load_snapshots
     current = now or datetime.now(timezone.utc)
     window = min(float(within_seconds), 1800.0)
     candidates, picks = [], {}
     for _, audit, _ in load_snapshots(database):  # oldest first
         marked = 'selected_as_best_pick' in audit
+        model_pick = (theover.backed(audit) & theover.in_blend(audit)).to_numpy() if marked else ()
         chosen = {}
-        for r in audit.astype(object).where(audit.notna(), None).to_dict('records'):
+        for position, r in enumerate(audit.astype(object).where(audit.notna(), None).to_dict('records')):
             start = aware(r.get('game_start_utc'))
             if not start or not 0 < (start-current).total_seconds() <= window:
                 continue
             if not marked:
                 candidates.append(r)
-            elif str(r.get('selected_as_best_pick')).lower() in {'true', '1'}:
+            elif str(r.get('selected_as_best_pick')).lower() in {'true', '1'} or model_pick[position]:
                 chosen.setdefault((r.get('sport', r.get('league')), r.get('matchup_id')), []).append(r)
-        picks.update(chosen)  # a later run's pick for a game replaces an earlier run's
+        picks.update(chosen)  # a later run's picks for a game replace an earlier run's
     candidates += [r for rows in picks.values() for r in rows]
     if not candidates:
         return {'verified':0, 'unavailable':0, 'reason':'no_candidates_in_closing_window'}

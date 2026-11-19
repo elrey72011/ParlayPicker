@@ -143,6 +143,27 @@ def test_each_game_gets_one_close_for_the_newest_runs_best_pick(tmp_path, monkey
         ("run-1", "b-total-over")}     # game b: the newest run that holds a pick for it
 
 
+def test_theovers_model_pick_gets_a_close_even_when_it_is_not_the_games_best_pick(tmp_path, monkeypatch):
+    """The bet of the plan approved on 2026-11-19 is TheOver's side, whichever candidate the board ranks first."""
+    rows = _candidates(pick="spread-home")                      # the board's pick is the spread
+    for row in rows:
+        row.update(theover_model_hit_rate=0.73, theover_model_in_blend=1.0,
+                   theover_pick_agrees={"total_under": 1.0, "total_over": 0.0}.get(row["market_type"]))
+    record_only = _candidates(pick="spread-home", game="2026-09-14|ottawa|boston", event="event-h", prefix="h-", sport="NHL",
+                              league="NHL", theover_model_hit_rate=0.62, theover_model_in_blend=0.0)
+    for row in record_only:
+        row["theover_pick_agrees"] = {"total_under": 1.0, "total_over": 0.0}.get(row["market_type"])
+    _snapshots(monkeypatch, ("run-1", rows + record_only))
+    quotes_h = [_quote(market, point, -110, book, event="event-h") for market, point, book in
+                (("total_under", 5.5, "novig"), ("spread_home", -1.5, "draftkings"))]
+    live = pd.concat([_live(), _live(key="Boston Bruins_Ottawa Senators", game_id="event-h", quotes=quotes_h).tail(1)], ignore_index=True)
+    database = tmp_path / "evidence.db"
+    assert ac.capture_live(database, fetch=lambda sports: live, now=NOW) == {"verified": 3, "unavailable": 0, "reasons": {}}
+    assert {o["candidate_id"] for o in ac.observations(database)} == {
+        "spread-home", "total-under",       # the board's pick, and TheOver's side beside it
+        "h-spread-home"}                    # a record-only league: the board's pick alone
+
+
 def test_a_game_with_no_saved_best_pick_costs_no_request(tmp_path, monkeypatch):
     _snapshots(monkeypatch, ("run-1", _candidates(pick="none")))
     out = ac.capture_live(tmp_path / "evidence.db", fetch=lambda sports: pytest.fail("no request is due"), now=NOW)
