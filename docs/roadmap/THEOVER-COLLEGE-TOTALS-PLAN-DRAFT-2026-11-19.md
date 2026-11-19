@@ -1,0 +1,115 @@
+# TheOver's college totals pick: plan for a formal test
+
+**DRAFT for the owner's review, 19 November 2026. Nothing here is frozen or switched on.**
+Requested by the owner on 19 November ("yes to all three").
+
+## In short
+
+TheOver's model-backed totals pick is the only input on the board with a winning record, and that
+record has not held since the pick went live: 131-82 on college games over twelve nights, 24-29
+on the three nights since 16 November. This plan fixes, before any more games are played, what
+"it works" will mean: which picks count, how long the test runs, and the bar it must clear on
+closing prices. It changes no rating and approves no stake.
+
+The plan needs six decisions from you; they are listed at the end with my recommendation for each.
+
+## What is tested
+
+**The claim:** on a college basketball total where TheOver lists the recent hit rate of the model
+behind its pick, TheOver's side beats the number the sportsbooks close at.
+
+| | |
+|---|---|
+| Games | College basketball totals, every game the app matches exactly to TheOver's file. A game matched only by similar names is left out, as it is from the blend today. |
+| The bet | TheOver's side of the total, at the line and the best price the board shows, in the last run the app saved before the game started. One bet a game, one unit each. |
+| The price | The best price at that line among Novig, FanDuel, DraftKings and BetMGM in that run. |
+| The close | The same sportsbook's line and price for the same side, read within 12 minutes before the start by the closing-capture job (fixed in pull request 2578). |
+| The result | The final score from the grading job that already grades the saved picks each morning. A push returns the unit and counts as a bet with zero return. |
+| College football | Counted and reported the same way, with no bar this season: 46 picks in twelve nights, and too few games left for two test windows. |
+
+## The bar
+
+The same market-skill rules the college basketball spread plan is judged by (decision D26 of
+9 November), in each of two windows:
+
+| Rule | Bar | Why |
+|---|---|---|
+| Bets | At least 100 | Fewer cannot tell an edge from luck |
+| Closing prices | Read for at least 80% of the bets | Without them the test below is not measured |
+| Beat the close | The average move of the total toward the pick, in points, at least 2 standard errors above zero | The one measure precise enough to settle in weeks, not seasons |
+| Loss floor | Units won no worse than 25% below zero | Catches a broken plan, not bad luck |
+| Probability sanity | Brier score at most 0.26, calibration error at most 15 points | A coin flip plus room for noise |
+
+Reported beside these, never deciding: wins and losses with a 95% interval against the break-even
+rate, units won, Unders and Overs apart (79-44 and 52-38 on college games over the twelve nights), and the picks
+where the board's line differs from TheOver's own.
+
+**Both windows must pass.** The first (validation) shows whether the bar is met; the second
+(holdout) shows it was not a lucky stretch. No rule is changed after the first window starts.
+
+## Windows
+
+Between 10 and 23 picks a night have fed the blend in college basketball over the last week, so 14
+nights should give 200 to 280 bets a window, at least twice the minimum.
+
+| Window | Nights | If approved and merged by 20 November |
+|---|---|---|
+| Validation | 14 | 21 November to 4 December |
+| Holdout | 14 | 5 to 18 December |
+
+A window with fewer than 100 bets is extended a night at a time until it has them.
+
+## What the record says today
+
+| Period | College totals, TheOver's side | Note |
+|---|---|---|
+| 7 to 15 November (nine nights) | 107-53 | The nights that made the case for using the pick. A signal always looks best on the nights that suggested it |
+| 16 to 18 November (three nights, live) | 24-29 | Since the pick has moved the rating |
+| Twelve nights | 131-82 (college basketball 96-71, college football 35-11) | |
+
+None of the twelve nights has a closing price, so none of them can be judged on the bar above.
+That is why the test starts fresh.
+
+## What happens at the end
+
+- **Passes both windows:** I bring you the result for review. The step after that is the route
+  that can fund a stake: TheOver's picks recorded in the research store under a bound plan, with
+  the staking terms you approved on 8 November. That is a separate decision.
+- **Fails the validation window:** TheOver's college pick becomes record only, as its NBA pick
+  did on 17 November. Those games then rest on the price alone and read "No lean".
+- **Passes validation, fails holdout:** the same as a failure.
+
+One limit to know before you approve: this bar asks the market to move toward TheOver's side by
+the close. An edge the market never notices would fail it even while winning. The report shows
+wins and losses as well, so you would see that case, but 200 to 280 bets cannot prove a 57% pick on
+results alone: its interval would still reach below the break-even rate.
+
+## What has to be built
+
+One read-only report, run by the morning grading job: the plan's tally (bets, record, units,
+closes read, average move toward the pick and its standard errors) from the saved runs. The plan's
+rules go into one small file whose fingerprint the report prints each day, so a changed rule
+cannot pass unnoticed. No rating, pick or stake changes. No extra Odds API credits beyond the
+closing capture (about 80 a day on a 46-game night).
+
+## Decisions for you
+
+1. **Scope.** College basketball totals now; college football counted with no bar this season.
+   *Recommended.*
+2. **Which pick is the bet.** The pick in the last run saved before the game. *Recommended:* it
+   is the one the closing capture and the paper track record already use. The alternative is the
+   first run of the day.
+3. **The bar.** The market-skill rules above, with 100 bets a window. *Recommended.*
+4. **Windows.** 14 nights and 14 nights. *Recommended.* Shorter (10 and 10, about 150 to 200 bets
+   each) would end on 10 December and settle less.
+5. **On failure.** TheOver's college pick becomes record only. *Recommended.*
+6. **Hockey, now.** Make TheOver's NHL pick record only from the next Refresh: it is 30-28 over
+   twelve nights and 2-4 since it went live, and its line often sits a full goal from the board's.
+   This one does change NHL totals ratings, so it needs its own yes.
+
+## Where the numbers come from
+
+Twelve graded nights, 7 to 18 November 2026: the owner's audit exports, each pick at the line of
+the last export before its game, graded from final scores. Picks with an unresolved line are left
+out. The 24-29 is the forward record kept since 16 November against the 57% review line agreed
+that day; this plan would replace that informal line.
